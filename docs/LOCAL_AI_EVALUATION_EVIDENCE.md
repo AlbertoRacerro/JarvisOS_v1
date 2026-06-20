@@ -17,8 +17,8 @@ Accepted local AI position:
 ## Stable Role Split
 
 ```text
-Gemma = local planner / context router / cheap classifier candidate
-JarvisOS = state, memory, policy, validation, execution, audit
+Gemma = local semantic brain inside bounded forms and protocols
+JarvisOS = deterministic structure, schemas, permissions, persistence, execution, audit
 External APIs = specialist reasoning providers
 Workbench = design interface
 Foundry = model-capital system
@@ -28,11 +28,13 @@ Debate Mode = advanced critical reasoning layer
 For the next local AI phase, interpret this as:
 
 - Gemma may produce small structured proposals.
-- JarvisOS validates every proposal.
+- JarvisOS validates proposal structure, not semantic truth.
 - Gemma does not execute tools.
 - Gemma does not retrieve files or database records directly.
 - Gemma does not authorize external provider calls.
 - Gemma does not become a user-facing chat product.
+
+Structural validation includes schemas, required fields, enums, source IDs, path rules, permissions, and obvious hard safety overrides. It does not prove semantic fidelity, strategic correctness, source interpretation quality, or subtle sensitivity correctness. Those are Gemma reliability and review-policy questions.
 
 ## Evidence Timeline
 
@@ -237,16 +239,47 @@ Current implementation status:
 - 1B adds explicit classification budget diagnostics: input/prompt length, `num_predict`, timeout, temperature, latency, empty-content detection, thinking detection, `done_reason`, schema validity, and structured fallback reason.
 - 1B keeps the fixed default policy for `gemma4:12b-it-qat`: 1200 input chars, 2000 prompt chars, `num_predict=256`, temperature `0`, and an explicit local timeout. Later manual diagnostics may compare `num_predict` values `128`, `256`, `384`, and `512`, but runtime classification must fail closed rather than silently expanding the budget.
 - 1B-R adds a CLI-only manual live budget probe. It defaults to localhost, is never run in automated tests, emits JSON diagnostics without raw prompt or case text, and avoids routes, frontend code, provider modules, external APIs, memory runtime, retrieval runtime, Context Pack Broker runtime, local gatekeeper runtime, chat, autonomous tools, and BlueRev modeling.
+- The corrected architecture is form-driven local intelligence: Gemma performs semantic reasoning locally; JarvisOS provides showcase files, form schemas, structural validation, retries, persistence, promotion policy, and audit.
+- Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
 The accepted next local AI sequence is:
 
 ```text
-1A  Classification-only Gemma 12B utility
-1B  Thinking/token budget control
-1C  Flat schema reliability harness
-1D  Context request reliability
-1E  Sensitivity check reliability
-1F  Tool proposal reliability
+1A         Classification-only Gemma 12B utility
+1B         Thinking/token budget control
+1B-R       CLI-only classification budget probe
+1B-R-LIVE  Manual Gemma 12B classification probe
+1C         Classification live probe analysis and roadmap rebase
+1D         Gemma-facing showcase files design
+1E         Form protocol catalog design
+1F         Structural validator + retry loop design
+1G         Gemma form-fill smoke test harness
+1H         Showcase files generator design
+1I         Context access from showcase files
+1J         Provider/tool intent form design
 ```
 
-Do not start Context Pack Broker runtime, local gatekeeper runtime, provider routing, chat, memory runtime, retrieval runtime, or BlueRev modeling before the classification-only utility and reliability gates prove stable.
+Then:
+
+```text
+2A         Source-grounded review protocol
+2B         Optional 31B/API sampling review
+2C         Memory promotion policy
+2D         Memory index generation
+2E         Context package assembly
+```
+
+Then external provider hardening:
+
+```text
+3A         External prompt package format
+3B         Redaction/sensitivity policy
+3C         Provider abstraction hardening
+3D         DeepSeek
+3E         Grok
+3F         Gemini
+3G         GPT-5.5
+3H         Provider selection policy
+```
+
+Do not start Context Pack Broker runtime, local gatekeeper runtime, provider routing, chat, memory runtime, retrieval runtime, tool execution, or BlueRev modeling before the form/protocol/memory foundation and reliability gates prove stable.

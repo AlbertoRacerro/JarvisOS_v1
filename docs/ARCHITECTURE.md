@@ -4,18 +4,22 @@ This is the canonical architecture source for JarvisOS. Milestone reports remain
 
 ## Architecture Principle
 
-JarvisOS is a local-first system for building engineering model capital. The backend owns durable state and policy. The frontend is an operator interface. AI models propose; JarvisOS validates, records, executes, and audits.
+JarvisOS is a local-first system for building engineering model capital. The backend owns durable state and policy. The frontend is an operator interface. AI models propose; JarvisOS validates structure, records, executes, and audits.
 
-Stable role split:
+Corrected local intelligence principle:
 
 ```text
-Gemma = local planner / context router / cheap classifier candidate
-JarvisOS = state, memory, policy, validation, execution, audit
+Gemma = local semantic brain inside bounded forms and protocols
+JarvisOS = deterministic structure, schemas, permissions, persistence, execution, audit
 External APIs = specialist reasoning providers
 Workbench = design interface
 Foundry = model-capital system
 Debate Mode = advanced critical reasoning layer
 ```
+
+This is a form-driven local intelligence architecture. JarvisOS makes the system readable to Gemma through showcase files, indexes, forms, and source IDs. Gemma performs semantic reasoning locally inside those forms. JarvisOS validates structure only and decides what can be saved, retried, promoted, or executed.
+
+Structural validation is not semantic validation. JarvisOS may validate schemas, required fields, enum values, booleans, field lengths, status values, source IDs, path existence, allowed roots, permitted save locations, valid state transitions, and obvious secrets. JarvisOS must not claim to validate semantic fidelity, strategic correctness, summary quality, technical truth of a design assumption, completeness of a memory card, or subtle sensitivity classification.
 
 BlueRev modeling does not start until AI infrastructure, external API escalation, and the Modeling Workbench are strong enough to support real design work.
 
@@ -116,14 +120,15 @@ Future intended order:
 ```text
 User input
 -> deterministic local hard rules
--> optional local Gemma classifier
--> GateDecision
+-> Gemma form fill inside bounded schemas
+-> structural validation, retry, or clarification
+-> policy decision
 -> external tier/provider adapter only if allowed
 -> AIResponse
 -> event/audit
 ```
 
-Cloud providers must not be used as the first privacy classifier. JarvisOS remains authoritative for policy.
+Cloud providers must not be used as the first privacy classifier. JarvisOS remains authoritative for policy and execution, but Gemma performs semantic assessment locally where deterministic hard rules are insufficient.
 
 Future logical gates include:
 
@@ -153,7 +158,32 @@ Current conclusion:
 - `gemma4:31b-it-qat` is only an occasional heavy local expert candidate.
 - FunctionGemma remains future-track until tool catalog and dataset work exists.
 
-Gemma may eventually propose small structured objects. JarvisOS validates those objects and decides what happens next.
+Gemma may eventually propose small structured objects through forms such as classification, context access, memory cards, source cards, decision cards, sensitivity assessments, tool intent, provider intent, and clarification requests. JarvisOS validates those forms structurally, applies hard policy overrides, retries with machine-readable errors, saves proposed objects, and decides what happens next.
+
+Canonical form-driven design lives in:
+
+```text
+docs/FORM_DRIVEN_LOCAL_INTELLIGENCE.md
+```
+
+### Gemma-Facing Showcase Files
+
+Future JarvisOS should maintain a small set of Gemma-facing showcase files, such as:
+
+```text
+GEMMA_START_HERE.md
+CURRENT_STATE.md
+SYSTEM_MAP.md
+MEMORY_INDEX.md
+PROJECT_INDEX.md
+FILE_CATALOG.md
+DECISION_INDEX.md
+OPEN_CLARIFICATIONS.md
+TOOL_AND_PROVIDER_CATALOG.md
+SAFETY_POLICY.md
+```
+
+Gemma should read these small files first, use them to request the right source files or context packages, and tolerate moderate over-fetch. Under-fetch on important tasks is a serious failure mode.
 
 ## Context Pack Broker Future Role
 
@@ -257,6 +287,19 @@ Current secret handling is intentionally narrow.
 
 A persistent Windows credential store or DPAPI-backed store requires a separate design/review milestone.
 
+## Memory Staging
+
+Future memory should move through explicit stages:
+
+```text
+raw_source
+proposed_memory
+accepted_memory
+canonical_state
+```
+
+Gemma may fill proposed memory cards. JarvisOS validates the card structure and source links, then promotion is controlled by explicit policy such as smoke-test reliability, sampling review, stronger local 31B or API review, direct user decision, repeated use without contradiction, or source-grounded verification. The user should not be required to personally review every routine mechanical memory card once reliability evidence supports more autonomy.
+
 ## Current Roadmap
 
 ```text
@@ -264,25 +307,30 @@ A persistent Windows credential store or DPAPI-backed store requires a separate 
 
 1A    Classification-only Gemma 12B utility
 1B    Thinking/token budget control
-1C    Flat schema reliability harness
-1D    Context request reliability
-1E    Sensitivity check reliability
-1F    Tool proposal reliability
+1B-R-LIVE  Manual Gemma 12B classification probe
+1C         Classification live probe analysis and roadmap rebase
+1D         Gemma-facing showcase files design
+1E         Form protocol catalog design
+1F         Structural validator + retry loop design
+1G         Gemma form-fill smoke test harness
+1H         Showcase files generator design
+1I         Context access from showcase files
+1J         Provider/tool intent form design
 
-2A    Context Pack taxonomy
-2B    Source vault structure
-2C    Context Pack Broker V0
-2D    Evidence/provenance layer
-2E    Gaps/contradictions/stale evidence detection
+2A         Source-grounded review protocol
+2B         Optional 31B/API sampling review
+2C         Memory promotion policy
+2D         Memory index generation
+2E         Context package assembly
 
-3A    External prompt package format
-3B    Redaction/sensitivity policy
-3C    Provider abstraction hardening
-3D    DeepSeek
-3E    Grok
-3F    Gemini Pro 3
-3G    GPT-5.5
-3H    Provider selection policy
+3A         External prompt package format
+3B         Redaction/sensitivity policy
+3C         Provider abstraction hardening
+3D         DeepSeek
+3E         Grok
+3F         Gemini
+3G         GPT-5.5
+3H         Provider selection policy
 
 4A    Modeling Workbench architecture
 4B    Structured model design input
@@ -308,6 +356,7 @@ A persistent Windows credential store or DPAPI-backed store requires a separate 
 - Decisions: `docs/DECISIONS.md`
 - Runbooks: `docs/RUNBOOKS.md`
 - Local AI evidence: `docs/LOCAL_AI_EVALUATION_EVIDENCE.md`
+- Form-driven local intelligence: `docs/FORM_DRIVEN_LOCAL_INTELLIGENCE.md`
 - UI startup: `docs/UI_START.md`
 
 Milestone documents remain historical evidence. If a milestone document conflicts with this file or `DECISIONS.md`, prefer the canonical docs.

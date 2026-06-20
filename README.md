@@ -5,7 +5,8 @@ JarvisOS is a local-first AI co-engineering foundation for building engineering 
 Current product direction:
 
 - JarvisOS owns state, memory, policy, validation, execution, and audit.
-- Gemma is only a future local planner/context-router/classifier candidate.
+- Gemma is the local semantic brain inside bounded forms and protocols.
+- JarvisOS is the deterministic structure around Gemma: schemas, indexes, permissions, retries, persistence, and audit.
 - External APIs are future specialist reasoning providers behind explicit policy gates.
 - The Modeling Workbench is the future design interface.
 - BlueRev Foundry is the future model-capital system, not the current implementation focus.
@@ -32,6 +33,7 @@ The current local Gemma conclusion is:
 - `gemma4:12b-it-qat` is viable only for narrow classification-style local utilities.
 - 12B is not approved for orchestration, local gatekeeping, chat, memory, retrieval, Context Pack Broker runtime, provider routing, or BlueRev modeling.
 - `gemma4:31b-it-qat` remains only an occasional heavy local expert candidate.
+- Future Gemma work should be form-driven: Gemma performs local semantic reasoning, while JarvisOS validates structure only and decides what can be saved, retried, promoted, or executed.
 
 ## Canonical Docs
 
@@ -40,6 +42,7 @@ The current local Gemma conclusion is:
 - Runbooks: `docs/RUNBOOKS.md`
 - UI start guide: `docs/UI_START.md`
 - Local AI evidence: `docs/LOCAL_AI_EVALUATION_EVIDENCE.md`
+- Form-driven local intelligence: `docs/FORM_DRIVEN_LOCAL_INTELLIGENCE.md`
 
 Milestone docs remain in `docs/` as historical evidence. Do not treat older milestone docs as current canon when they conflict with the files above.
 
@@ -140,7 +143,7 @@ npm run build
 Recommended next milestone:
 
 ```text
-0F-F - AI/local_ai module boundary audit
+1B-R-LIVE - Manual Gemma 12B classification probe
 ```
 
-Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, or broad Gemma orchestration before the local AI utility and reliability gates are complete.
+Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.
