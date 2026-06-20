@@ -256,3 +256,21 @@ Current rule:
 - Do not paste large JSON reports into docs.
 - Do not delete D10B, D10B-R, or D10C evidence during documentation cleanup.
 - Zero-byte stderr files may be removed only in a later cleanup milestone after confirming they contain no unique diagnostic information.
+
+## Manual Local Classification Budget Probe
+
+Use this only when explicitly validating local Ollama behavior for the backend-only classification utility. It is manual, CLI-only, localhost-only, and not part of automated tests or application startup.
+
+From `backend/`:
+
+```powershell
+.\.venv\Scripts\python -m app.modules.local_ai.classification.probe_classification_budget
+```
+
+The probe uses `gemma4:12b-it-qat`, temperature `0`, the localhost Ollama chat endpoint, and `num_predict` variants `128`, `256`, `384`, and `512`. It writes a timestamped JSON report under:
+
+```text
+backend/local_eval_reports/
+```
+
+The report records diagnostic metadata only. It must not include raw prompts, raw case text, secrets, proprietary BlueRev details, routes, frontend behavior, provider routing, memory runtime, retrieval runtime, Context Pack Broker runtime, local gatekeeper runtime, chat, autonomous tools, or Python Runner behavior.

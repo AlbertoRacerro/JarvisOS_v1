@@ -236,7 +236,7 @@ Current implementation status:
 - 1A is implemented as a backend-only classification utility. It is not exposed through routes and does not authorize actions.
 - 1B adds explicit classification budget diagnostics: input/prompt length, `num_predict`, timeout, temperature, latency, empty-content detection, thinking detection, `done_reason`, schema validity, and structured fallback reason.
 - 1B keeps the fixed default policy for `gemma4:12b-it-qat`: 1200 input chars, 2000 prompt chars, `num_predict=256`, temperature `0`, and an explicit local timeout. Later manual diagnostics may compare `num_predict` values `128`, `256`, `384`, and `512`, but runtime classification must fail closed rather than silently expanding the budget.
-- 1B-R should add a CLI-only manual live budget probe if needed. It should default to localhost, never run in automated tests, emit JSON diagnostics, and avoid routes, frontend code, provider modules, external APIs, memory runtime, retrieval runtime, Context Pack Broker runtime, local gatekeeper runtime, chat, autonomous tools, and BlueRev modeling.
+- 1B-R adds a CLI-only manual live budget probe. It defaults to localhost, is never run in automated tests, emits JSON diagnostics without raw prompt or case text, and avoids routes, frontend code, provider modules, external APIs, memory runtime, retrieval runtime, Context Pack Broker runtime, local gatekeeper runtime, chat, autonomous tools, and BlueRev modeling.
 
 The accepted next local AI sequence is:
 

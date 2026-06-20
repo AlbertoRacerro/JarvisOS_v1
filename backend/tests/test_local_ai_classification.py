@@ -1,4 +1,6 @@
 import json
+from datetime import UTC, datetime
+from pathlib import Path
 
 import httpx
 import pytest
@@ -31,6 +33,13 @@ from app.modules.local_ai.classification.contracts import (
 )
 from app.modules.local_ai.classification.parser import ClassificationParseError, parse_classification_output
 from app.modules.local_ai.classification.prompts import MAX_CLASSIFICATION_PROMPT_CHARS, build_classification_prompt
+from app.modules.local_ai.classification.probe_classification_budget import (
+    REPORT_SCHEMA_VERSION,
+    build_budget_probe_report,
+    default_probe_cases,
+    summary_lines,
+    write_probe_report,
+)
 from app.modules.local_ai.classification.service import classify_text, deterministic_classify
 
 
@@ -116,6 +125,45 @@ class FakeClassificationAdapter:
             model_name=DEFAULT_CLASSIFICATION_MODEL,
             runtime_endpoint="http://localhost:11434/api/chat",
             diagnostics=_diagnostics(prompt=prompt, input_chars=input_chars, raw_content_empty=content.strip() == ""),
+            response_text=content,
+        )
+
+
+class FakeProbeAdapter:
+    def __init__(self, config: ClassificationAdapterConfig) -> None:
+        self.config = config
+
+    def complete(self, prompt: str, *, input_chars: int = 0) -> ClassificationAdapterResult:
+        content = json.dumps(
+            _output_payload(
+                task_type="documentation",
+                project_area="documentation",
+                complexity_hint="low",
+                sensitivity_hint="internal",
+                allowed_next_step="request_bounded_context",
+                confidence=0.9,
+            )
+        )
+        return ClassificationAdapterResult(
+            success=True,
+            model_name=self.config.model_name,
+            runtime_endpoint=self.config.endpoint_url,
+            diagnostics=ClassificationAttemptDiagnostics(
+                model_name=self.config.model_name,
+                endpoint=self.config.endpoint_url,
+                prompt_chars=len(prompt),
+                input_chars=input_chars,
+                max_output_tokens=self.config.max_output_tokens,
+                temperature=self.config.temperature,
+                timeout_seconds=self.config.timeout_seconds,
+                latency_ms=12,
+                raw_content_empty=False,
+                thinking_present=False,
+                done_reason="stop",
+                schema_valid=False,
+                fallback_used=False,
+                fallback_reason=None,
+            ),
             response_text=content,
         )
 
@@ -495,6 +543,63 @@ def test_service_applies_deterministic_next_step_override_for_external_api_reque
     assert result.diagnostics.schema_valid is True
     assert result.diagnostics.fallback_used is False
     assert result.diagnostics.fallback_reason == ClassificationFailureCode.deterministic_override
+
+
+def test_probe_report_uses_fixed_variants_and_omits_raw_case_text() -> None:
+    cases = default_probe_cases()
+    report = build_budget_probe_report(
+        adapter_factory=FakeProbeAdapter,
+        created_at_utc=datetime(2026, 6, 20, 12, 0, tzinfo=UTC),
+    )
+
+    assert report.schema_version == REPORT_SCHEMA_VERSION
+    assert report.num_predict_variants == CLASSIFICATION_DIAGNOSTIC_NUM_PREDICT_CANDIDATES
+    assert report.case_ids == tuple(case.case_id for case in cases)
+    assert len(report.results) == len(cases) * len(CLASSIFICATION_DIAGNOSTIC_NUM_PREDICT_CANDIDATES)
+    assert {result.num_predict for result in report.results} == set(CLASSIFICATION_DIAGNOSTIC_NUM_PREDICT_CANDIDATES)
+    assert all(result.schema_valid for result in report.results)
+    assert all(result.fallback_used is False for result in report.results)
+    assert all(result.task_type == TaskType.documentation for result in report.results)
+
+    serialized = report.model_dump_json()
+    for case in cases:
+        assert case.case_id in serialized
+        assert case.request.text not in serialized
+    assert "messages" not in serialized
+    assert "prompt" not in serialized
+
+
+def test_probe_rejects_non_local_endpoint_and_noncanonical_variants() -> None:
+    with pytest.raises((ClassificationAdapterConfigurationError, ValidationError)):
+        build_budget_probe_report(
+            endpoint_url="https://localhost:11434/api/chat",
+            adapter_factory=FakeProbeAdapter,
+        )
+
+    with pytest.raises(ValueError, match="128/256/384/512"):
+        build_budget_probe_report(
+            num_predict_variants=(256,),
+            adapter_factory=FakeProbeAdapter,
+        )
+
+
+def test_probe_writes_timestamped_report_and_summary_without_live_call(tmp_path: Path) -> None:
+    report = build_budget_probe_report(
+        cases=(default_probe_cases()[0],),
+        adapter_factory=FakeProbeAdapter,
+        created_at_utc=datetime(2026, 6, 20, 12, 30, tzinfo=UTC),
+    )
+
+    path = write_probe_report(report, tmp_path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    lines = summary_lines(report, path)
+
+    assert path.parent == tmp_path
+    assert path.name == "classification_budget_probe_20260620T123000.json"
+    assert payload["schema_version"] == REPORT_SCHEMA_VERSION
+    assert payload["case_ids"] == ["jarvisos_code_task"]
+    assert "results=4" in lines[1]
+    assert "schema_valid=4" in lines[2]
 
 
 @pytest.mark.parametrize(
