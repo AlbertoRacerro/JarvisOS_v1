@@ -2,6 +2,40 @@
 
 These runbooks are for the local Windows-first developer build. They do not make JarvisOS a hosted service, installer, or production system.
 
+## Recreate Backend Virtual Environment
+
+Use this after generated cleanup removes `backend/.venv`.
+
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\python -m pip install --upgrade pip
+.\.venv\Scripts\pip install -r requirements.txt
+```
+
+Run backend tests after recreating the environment:
+
+```powershell
+.\.venv\Scripts\python -m pytest -q
+```
+
+## Recreate Frontend Dependencies
+
+Use this after generated cleanup removes `frontend/node_modules`.
+
+```powershell
+cd frontend
+npm install
+```
+
+Run the frontend build after dependencies are installed:
+
+```powershell
+npm run build
+```
+
+Node.js LTS and npm are required for normal frontend use.
+
 ## Bootstrap And Status Check
 
 From the repository root:
@@ -10,7 +44,7 @@ From the repository root:
 .\scripts\init-database.ps1
 ```
 
-This initializes the configured SQLite database and seeds the default BlueRev workspace if needed. The default data root is:
+This initializes SQLite and seeds the default BlueRev workspace if needed. The default data root is:
 
 ```text
 C:\JarvisOS
@@ -34,46 +68,55 @@ Check system status:
 Invoke-RestMethod http://localhost:8000/system/info
 ```
 
-Expected storage fields after initialization:
-
-- `database.initialized = true`
-- `database.ready = true`
-- `database.schema.current_migration_id = 0002_data_infrastructure_hardening`
-- `database.bootstrap_required = false`
-
 If the database is not initialized, call:
 
 ```powershell
 Invoke-RestMethod -Method Post http://localhost:8000/system/initialize
 ```
 
-## Scaleway API Key Entry
+Expected storage fields after initialization:
 
-Use this only for the narrow Scaleway smoke-test paths. Do not paste secrets into chat, docs, logs, smoke prompts, model fields, or Python runner inputs.
+- `database.initialized = true`
+- `database.ready = true`
+- `database.bootstrap_required = false`
 
-### UI Flow
+## Start Local UI
 
-1. Start the backend and frontend.
-2. Open:
+From File Explorer, double-click:
+
+```text
+Start-JarvisOS.cmd
+```
+
+Or start services separately:
+
+```text
+Start-JarvisOS-Backend.cmd
+Start-JarvisOS-Frontend.cmd
+```
+
+Open:
 
 ```text
 http://localhost:5173
 ```
 
+Detailed UI startup notes live in `docs/UI_START.md`.
+
+## Scaleway API Key Entry
+
+Use this only for narrow Scaleway smoke-test paths. Do not paste secrets into chat, docs, logs, smoke prompts, model fields, or Python runner inputs.
+
+### UI Flow
+
+1. Start backend and frontend.
+2. Open `http://localhost:5173`.
 3. Go to the AI Draft page.
 4. Paste the key into `Scaleway API Key`.
 5. Click `Save Key`.
 6. Confirm `Key present = true`.
 
-The app-entered key is stored only in backend runtime memory for the current backend process. It is forgotten after backend restart. The API returns only metadata:
-
-- `key_present`;
-- `source`;
-- `masked_preview`;
-- `last_updated_at`;
-- `storage_mode`.
-
-The raw key is not stored in SQLite AI settings and is not returned by the API.
+The app-entered key is stored only in backend runtime memory for the current backend process. It is forgotten after backend restart. The raw key is not stored in SQLite AI settings and is not returned by the API.
 
 ### Delete The App-Entered Key
 
@@ -94,9 +137,7 @@ Source priority:
 2. App-entered runtime-memory key.
 3. Missing key.
 
-Runtime-memory storage avoids silently writing plaintext secrets to disk. A future milestone can add a Windows Credential Manager or DPAPI-backed store after a separate design/review step.
-
-## 0D-B Batch-Growth Manual Validation
+## Python Runner V0 Batch-Growth Validation
 
 This validates the architecture path for Python Runner V0. It is not scientific BlueRev validation.
 
@@ -163,7 +204,7 @@ Expected:
 
 - `runner_job.status = queued`
 - `simulation_run.status = queued`
-- no run logs yet
+- no model execution until the explicit run call
 
 ### 4. Execute Explicitly
 
@@ -180,12 +221,6 @@ Expected:
 - `output.outputs.point_count = 25`
 - `output.outputs.final_biomass_concentration = 269111.2158909318`
 
-The expected final biomass comes from:
-
-```text
-0.15 * exp(0.6 * 24)
-```
-
 ### 5. Read Back Run, Logs, And Artifacts
 
 ```powershell
@@ -194,7 +229,7 @@ $logs = Invoke-RestMethod "http://localhost:8000/workspaces/bluerev/simulation-r
 $artifacts = Invoke-RestMethod "http://localhost:8000/workspaces/bluerev/simulation-runs/$($job.simulation_run.id)/artifacts"
 ```
 
-Expected logs:
+Expected log:
 
 ```text
 Batch growth completed with 25 points.
@@ -205,48 +240,19 @@ Expected artifact metadata:
 - one CSV artifact;
 - `filename = timeseries.csv`;
 - `under_data_root = true`;
-- `size_bytes` is nonzero;
-- path is under `C:\JarvisOS`.
+- path under `C:\JarvisOS`.
 
 ### 6. Negative Check
 
-`dt = 0` should fail before execution:
+`dt = 0` should fail before execution with HTTP `400` and code `runner_input_invalid`.
 
-```powershell
-Invoke-RestMethod `
-  -Method Post `
-  -Uri "http://localhost:8000/workspaces/bluerev/runner-jobs" `
-  -ContentType "application/json" `
-  -Body (@{
-    model_version_id = $implementation.id
-    run_label = "manual-negative-dt-zero"
-    timeout_seconds = 10
-    input_set = @{
-      schema_version = 1
-      parameters = @{
-        mu_max = 0.6
-        X0 = 0.15
-        t_final = 24
-        dt = 0
-      }
-      input_artifact_ids = @()
-    }
-  } | ConvertTo-Json -Depth 8)
-```
+## Local Evaluation Report Retention
 
-Expected HTTP status:
+Raw local Gemma evaluation reports are evidence artifacts.
 
-```text
-400
-```
+Current rule:
 
-Expected error:
-
-```json
-{
-  "detail": {
-    "code": "runner_input_invalid",
-    "message": "dt must be greater than zero."
-  }
-}
-```
+- Keep raw D9, D9R, D10B, D10B-R, and D10C reports until their conclusions are preserved in `docs/LOCAL_AI_EVALUATION_EVIDENCE.md` and `docs/DECISIONS.md`.
+- Do not paste large JSON reports into docs.
+- Do not delete D10B, D10B-R, or D10C evidence during documentation cleanup.
+- Zero-byte stderr files may be removed only in a later cleanup milestone after confirming they contain no unique diagnostic information.

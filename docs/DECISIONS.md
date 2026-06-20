@@ -245,3 +245,15 @@ Milestone 0E-D10B-R showed that empty Ollama `message.content` can occur while `
 Status: Accepted
 
 Milestone 0E-D10C replaced the misleading D10B probe path with flat schemas, thinking-aware diagnostics, 12B-first probing, repeatability checks, and a limited 31B comparison. `gemma4:12b-it-qat` passed and repeated only task classification and sensitivity classification; it failed context request, TODO extraction, decision extraction, and evidence selection due to thinking budget exhaustion. `gemma4:31b-it-qat` passed the limited comparison on task classification, context request, and sensitivity check but remained too slow for routine orchestration. JarvisOS should not proceed to local Gemma orchestration, local gatekeeping, memory runtime, retrieval runtime, context broker runtime, chat, provider routing, autonomous tools, frontend UI, or BlueRev modeling. If local Gemma work continues, it should be limited to classification-style utility design with JarvisOS policy remaining authoritative.
+
+## ADR-041: 0F Cleanup Requires Source Protection Before Deleting Generated Files
+
+Status: Accepted
+
+Milestone 0F found that the active `JarvisOS_v1` folder was small, but Git initially had no tracked source files. JarvisOS source must be protected by a baseline commit before generated folders such as `backend/.venv`, `frontend/node_modules`, Python caches, frontend build outputs, or local package caches are removed. Cleanup must be explicit and path-validated; broad destructive commands such as `git clean -fd` are not an acceptable first cleanup step while source protection is uncertain.
+
+## ADR-042: Canonical Documentation Hierarchy Replaces Milestone-Doc Sprawl
+
+Status: Accepted
+
+Milestone 0F-E establishes the canonical documentation hierarchy: `docs/ARCHITECTURE.md` for stable architecture, `docs/DECISIONS.md` for durable ADRs, `docs/RUNBOOKS.md` for current operating instructions, `README.md` for top-level orientation, and `docs/LOCAL_AI_EVALUATION_EVIDENCE.md` for local Gemma evidence. Milestone docs remain historical evidence and must not override current canonical docs. D10C remains the current local Gemma conclusion: 12B is a classification-only utility candidate, 31B is an occasional heavy expert candidate, and BlueRev modeling remains paused until AI infrastructure, external API escalation, and Modeling Workbench support are ready.
