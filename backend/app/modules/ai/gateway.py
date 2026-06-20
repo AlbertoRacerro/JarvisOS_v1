@@ -45,14 +45,14 @@ class AIGateway:
         return run_smoke_console(request)
 
     def run_provider_smoke(self, request: ProviderSmokeRequest) -> ProviderSmokeResponse:
-        from app.modules.ai.provider_smoke import run_provider_smoke
+        from app.modules.ai import deepseek_provider_smoke
 
-        return run_provider_smoke(request)
+        return deepseek_provider_smoke.run_provider_smoke(request)
 
     def run_supervisor_public_test(self, request: SupervisorPublicTestRequest) -> SupervisorPublicTestResponse:
-        from app.modules.ai.supervisor import run_supervisor_public_test
+        from app.modules.ai import supervisor_public_test
 
-        return run_supervisor_public_test(request)
+        return supervisor_public_test.run_supervisor_public_test(request)
 
     def create_modeling_draft(self, request: ModelingDraftRequest) -> ModelingDraftResponse:
         workspace = get_workspace(request.workspace_id)

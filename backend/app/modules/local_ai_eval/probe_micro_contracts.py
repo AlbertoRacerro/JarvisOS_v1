@@ -1,3 +1,5 @@
+"""CLI/report probes for local Gemma micro-contract evaluation only."""
+
 import argparse
 import json
 import time

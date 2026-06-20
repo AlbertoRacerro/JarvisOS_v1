@@ -1,3 +1,5 @@
+"""CLI/report runner for D7/D8 local Gemma evaluation only."""
+
 import argparse
 import json
 from collections import Counter
@@ -6,17 +8,17 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.local_ai.adapter import LocalGemmaAdapter, LocalGemmaAdapterResult
+from app.modules.local_ai.eval_adapter import LocalGemmaEvalAdapter, LocalGemmaEvalAdapterResult
 from app.modules.local_ai.config import LocalGemmaConfig
 from app.modules.local_ai.errors import LocalGemmaFailureCode
-from app.modules.local_ai.prompt_builder import build_gemma_eval_prompt
+from app.modules.local_ai_eval.eval_prompt_builder import build_gemma_eval_prompt
 from app.modules.local_ai_eval.loader import load_golden_cases
 from app.modules.local_ai_eval.models import GEMMA_EVAL_SCHEMA_VERSION, GoldenTestCase
 from app.modules.local_ai_eval.scoring import EvaluationScore, score_output
 
 
 class GemmaEvalAdapter(Protocol):
-    def complete(self, prompt: str) -> LocalGemmaAdapterResult:
+    def complete(self, prompt: str) -> LocalGemmaEvalAdapterResult:
         """Return one local Gemma dry-run result for a built prompt."""
 
 
@@ -60,10 +62,10 @@ class StaticGemmaEvalAdapter:
     def register_prompt(self, prompt: str, case: GoldenTestCase) -> None:
         self._cases_by_prompt[prompt] = case
 
-    def complete(self, prompt: str) -> LocalGemmaAdapterResult:
+    def complete(self, prompt: str) -> LocalGemmaEvalAdapterResult:
         case = self._cases_by_prompt[prompt]
         output = _fake_output_for_case(case, correct=self.mode == "correct")
-        return LocalGemmaAdapterResult(
+        return LocalGemmaEvalAdapterResult(
             success=True,
             model_name=self.config.model_name,
             runtime_endpoint=self.config.endpoint_url,
@@ -83,7 +85,7 @@ def run_gemma_eval(
 ) -> GemmaEvalReport:
     cases = _select_cases(load_golden_cases(), limit=limit, case_ids=case_ids)
     selected_adapter = adapter or (
-        StaticGemmaEvalAdapter(config=config, mode=fake_mode) if fake_mode else LocalGemmaAdapter(config)
+        StaticGemmaEvalAdapter(config=config, mode=fake_mode) if fake_mode else LocalGemmaEvalAdapter(config)
     )
     results: list[GemmaEvalCaseResult] = []
     score_sum = 0.0

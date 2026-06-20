@@ -3,6 +3,7 @@ from pydantic import ValidationError
 
 from app.modules.local_ai.contracts import (
     MICRO_CONTRACT_SCHEMA_VERSION,
+    ContextPackage,
     ContextRequestOutput,
     DecisionExtractionOutput,
     DecisionItem,
@@ -13,6 +14,7 @@ from app.modules.local_ai.contracts import (
     ExternalPromptDraftOutput,
     ProjectArea,
     RiskLevel,
+    EvalSensitivity,
     SensitivityCheckOutput,
     TaskClassificationOutput,
     TaskType,
@@ -20,7 +22,6 @@ from app.modules.local_ai.contracts import (
     TodoItem,
     ToolCallProposalOutput,
 )
-from app.modules.local_ai_eval.models import ContextPackage, EvalSensitivity
 
 
 def test_task_classification_contract_accepts_minimal_valid_output() -> None:

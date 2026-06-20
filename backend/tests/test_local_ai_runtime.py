@@ -5,10 +5,10 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
-from app.modules.local_ai.adapter import LocalGemmaAdapter
 from app.modules.local_ai.config import LocalGemmaConfig
+from app.modules.local_ai.eval_adapter import LocalGemmaEvalAdapter
 from app.modules.local_ai.errors import LocalGemmaConfigurationError, LocalGemmaFailureCode
-from app.modules.local_ai.prompt_builder import build_gemma_eval_prompt
+from app.modules.local_ai_eval.eval_prompt_builder import build_gemma_eval_prompt
 from app.modules.local_ai_eval.loader import load_golden_cases
 from app.modules.local_ai_eval.run_gemma_eval import run_gemma_eval
 
@@ -70,7 +70,7 @@ def test_prompt_builder_includes_protocol_case_context_and_schema() -> None:
     case = _case("context_request_planning_001")
     prompt = build_gemma_eval_prompt(case)
 
-    assert "candidate local operating brain" in prompt
+    assert "evaluation-only local Gemma schema producer" in prompt
     assert case.input in prompt
     assert "provided_context" in prompt
     assert "output_schema" in prompt
@@ -92,7 +92,7 @@ def test_adapter_handles_runtime_unavailable() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("not running", request=request)
 
-    adapter = LocalGemmaAdapter(LocalGemmaConfig(), client=httpx.Client(transport=httpx.MockTransport(handler)))
+    adapter = LocalGemmaEvalAdapter(LocalGemmaConfig(), client=httpx.Client(transport=httpx.MockTransport(handler)))
 
     result = adapter.complete("prompt")
 
@@ -104,7 +104,7 @@ def test_adapter_handles_timeout() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ReadTimeout("too slow", request=request)
 
-    adapter = LocalGemmaAdapter(LocalGemmaConfig(), client=httpx.Client(transport=httpx.MockTransport(handler)))
+    adapter = LocalGemmaEvalAdapter(LocalGemmaConfig(), client=httpx.Client(transport=httpx.MockTransport(handler)))
 
     result = adapter.complete("prompt")
 
@@ -113,7 +113,7 @@ def test_adapter_handles_timeout() -> None:
 
 
 def test_adapter_handles_prose_output() -> None:
-    adapter = LocalGemmaAdapter(LocalGemmaConfig(), client=_mock_client_for_content("I need more context first."))
+    adapter = LocalGemmaEvalAdapter(LocalGemmaConfig(), client=_mock_client_for_content("I need more context first."))
 
     result = adapter.complete("prompt")
 
@@ -122,7 +122,7 @@ def test_adapter_handles_prose_output() -> None:
 
 
 def test_adapter_handles_invalid_json_output() -> None:
-    adapter = LocalGemmaAdapter(LocalGemmaConfig(), client=_mock_client_for_content('{"task_type":'))
+    adapter = LocalGemmaEvalAdapter(LocalGemmaConfig(), client=_mock_client_for_content('{"task_type":'))
 
     result = adapter.complete("prompt")
 
@@ -131,7 +131,7 @@ def test_adapter_handles_invalid_json_output() -> None:
 
 
 def test_adapter_handles_schema_invalid_json() -> None:
-    adapter = LocalGemmaAdapter(LocalGemmaConfig(), client=_mock_client_for_content(json.dumps({"task_type": "continue_conversation"})))
+    adapter = LocalGemmaEvalAdapter(LocalGemmaConfig(), client=_mock_client_for_content(json.dumps({"task_type": "continue_conversation"})))
 
     result = adapter.complete("prompt")
 
@@ -154,7 +154,7 @@ def test_adapter_revalidates_constructed_config_before_http_call() -> None:
         max_output_tokens=1200,
         temperature=0,
     )
-    adapter = LocalGemmaAdapter(config, client=httpx.Client(transport=httpx.MockTransport(handler)))
+    adapter = LocalGemmaEvalAdapter(config, client=httpx.Client(transport=httpx.MockTransport(handler)))
 
     result = adapter.complete("prompt")
 

@@ -1,3 +1,9 @@
+"""DeepSeek-only provider smoke path.
+
+This is a diagnostic smoke surface, not provider routing or a general AI
+gateway policy implementation.
+"""
+
 from app.core.database import open_sqlite_connection
 from app.modules.ai.contracts import AIPrivacyClass, AIRequest, AIPolicyMode, AITaskType
 from app.modules.ai.models import AISettingsRead, ProviderSmokeRequest, ProviderSmokeResponse

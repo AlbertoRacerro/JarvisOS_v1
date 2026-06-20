@@ -2,8 +2,6 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.modules.local_ai_eval.models import ContextPackage, EvalSensitivity
-
 
 MICRO_CONTRACT_SCHEMA_VERSION = "local_gemma_micro_contract_v1"
 
@@ -58,6 +56,36 @@ class ExternalCapability(StrEnum):
     scientific_reasoning = "scientific_reasoning"
     summarization = "summarization"
     prompt_review = "prompt_review"
+
+
+class ContextPackage(StrEnum):
+    CURRENT_TASK = "CURRENT_TASK"
+    CURRENT_MILESTONE = "CURRENT_MILESTONE"
+    RECENT_CONVERSATION_SUMMARY = "RECENT_CONVERSATION_SUMMARY"
+    ACTIVE_PROJECT_STATE = "ACTIVE_PROJECT_STATE"
+    RECENT_DECISIONS = "RECENT_DECISIONS"
+    OPEN_DECISIONS = "OPEN_DECISIONS"
+    CANONICAL_ROADMAP = "CANONICAL_ROADMAP"
+    CODEX_LAST_LOG = "CODEX_LAST_LOG"
+    FILES_CHANGED_SUMMARY = "FILES_CHANGED_SUMMARY"
+    TEST_RESULTS_SUMMARY = "TEST_RESULTS_SUMMARY"
+    RELEVANT_DOCS = "RELEVANT_DOCS"
+    RELEVANT_EVENTS = "RELEVANT_EVENTS"
+    RELEVANT_ARTIFACTS = "RELEVANT_ARTIFACTS"
+    ENTITY_GRAPH_SNIPPET = "ENTITY_GRAPH_SNIPPET"
+    MEMORY_SNIPPETS = "MEMORY_SNIPPETS"
+    SENSITIVITY_RULES = "SENSITIVITY_RULES"
+    PROVIDER_TIER_MAP = "PROVIDER_TIER_MAP"
+    LOCAL_TOOL_CATALOG = "LOCAL_TOOL_CATALOG"
+
+
+class EvalSensitivity(StrEnum):
+    public = "public"
+    internal = "internal"
+    confidential = "confidential"
+    sensitive_ip = "sensitive_ip"
+    secret = "secret"
+    unknown = "unknown"
 
 
 class DecisionStatus(StrEnum):

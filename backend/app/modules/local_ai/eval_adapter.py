@@ -1,3 +1,9 @@
+"""Evaluation-only local Gemma adapter for D8 schema dry runs.
+
+This module is not an approved local AI runtime, router, chat surface, or
+gatekeeper. It exists only to feed local model output into evaluation harnesses.
+"""
+
 import json
 from typing import Any
 
@@ -9,7 +15,7 @@ from app.modules.local_ai.errors import LocalGemmaConfigurationError, LocalGemma
 from app.modules.local_ai_eval.models import GemmaEvalOutput
 
 
-class LocalGemmaAdapterResult(BaseModel):
+class LocalGemmaEvalAdapterResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     success: bool
@@ -22,14 +28,14 @@ class LocalGemmaAdapterResult(BaseModel):
     failure_message: str | None = None
 
 
-class LocalGemmaAdapter:
+class LocalGemmaEvalAdapter:
     """Small local-only OpenAI-compatible adapter for D8 evaluation dry runs."""
 
     def __init__(self, config: LocalGemmaConfig, *, client: httpx.Client | None = None) -> None:
         self.config = config
         self._client = client
 
-    def complete(self, prompt: str) -> LocalGemmaAdapterResult:
+    def complete(self, prompt: str) -> LocalGemmaEvalAdapterResult:
         try:
             payload = self._payload(prompt)
         except (LocalGemmaConfigurationError, ValidationError) as exc:
@@ -76,7 +82,7 @@ class LocalGemmaAdapter:
             "response_format": {"type": "json_object"},
         }
 
-    def _parse_response_text(self, response_text: str) -> LocalGemmaAdapterResult:
+    def _parse_response_text(self, response_text: str) -> LocalGemmaEvalAdapterResult:
         try:
             parsed = json.loads(response_text)
         except json.JSONDecodeError as exc:
@@ -99,7 +105,7 @@ class LocalGemmaAdapter:
                 response_text=response_text,
                 parsed_json=parsed,
             )
-        return LocalGemmaAdapterResult(
+        return LocalGemmaEvalAdapterResult(
             success=True,
             model_name=self.config.model_name,
             runtime_endpoint=self.config.endpoint_url,
@@ -115,8 +121,8 @@ class LocalGemmaAdapter:
         *,
         response_text: str | None = None,
         parsed_json: dict[str, Any] | None = None,
-    ) -> LocalGemmaAdapterResult:
-        return LocalGemmaAdapterResult(
+    ) -> LocalGemmaEvalAdapterResult:
+        return LocalGemmaEvalAdapterResult(
             success=False,
             model_name=self.config.model_name,
             runtime_endpoint=self.config.endpoint_url,

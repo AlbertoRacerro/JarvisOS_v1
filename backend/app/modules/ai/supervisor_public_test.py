@@ -1,3 +1,9 @@
+"""Backend-only Supervisor public-test slice.
+
+This module backs the existing /ai/supervisor/public-test route and is not the
+full Supervisor AI product, chat, memory, retrieval, or routing layer.
+"""
+
 from dataclasses import dataclass
 from uuid import uuid4
 
