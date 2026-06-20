@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -42,13 +43,27 @@ REPORT_FILENAME_PREFIX = "classification_budget_probe"
 MINIMAL_DIAGNOSTIC_NUM_PREDICT_CANDIDATES = (128, 256, 512)
 MINIMAL_REPEAT_NUM_PREDICT_CANDIDATES = (512,)
 MINIMAL_REPEAT_COUNT = 3
+CONFIDENCE_CALIBRATION_NUM_PREDICT_CANDIDATES = (512,)
+CONFIDENCE_CALIBRATION_REPEAT_COUNT = 3
 MINIMAL_CLASSIFICATION_PROMPT_MAX_CHARS = 700
-ProbeMode = Literal["full", "minimal", "minimal-repeat"]
+MODERATE_CONFIDENCE_THRESHOLD = 0.5
+ProbeMode = Literal["full", "minimal", "minimal-repeat", "confidence-calibration"]
 
 
 class OutputControlVariant(StrEnum):
     default = "default"
     think_false = "think_false"
+
+
+class MinimalPromptVariant(StrEnum):
+    minimal_think_false_v1 = "minimal_think_false_v1"
+    minimal_think_false_v2 = "minimal_think_false_v2"
+
+
+class CalibrationAcceptancePolicy(StrEnum):
+    strict_current_threshold = "strict_current_threshold"
+    moderate_threshold = "moderate_threshold"
+    schema_valid_but_low_confidence_as_proposed = "schema_valid_but_low_confidence_as_proposed"
 
 
 class MinimalTaskType(StrEnum):
@@ -91,11 +106,21 @@ class MinimalClassificationOutput(BaseModel):
     confidence: float = Field(ge=0, le=1)
 
 
+class ExpectedMinimalClassification(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_type: MinimalTaskType
+    project: MinimalProject
+    sensitivity: MinimalSensitivity
+    next: MinimalNextStep
+
+
 class ClassificationProbeCase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     case_id: str
     request: ClassificationInput
+    expected_minimal: ExpectedMinimalClassification | None = None
 
 
 class ClassificationProbeCaseResult(BaseModel):
@@ -105,6 +130,7 @@ class ClassificationProbeCaseResult(BaseModel):
     num_predict: int = Field(ge=1, le=512)
     repeat_index: int = Field(default=1, ge=1)
     output_control: OutputControlVariant = OutputControlVariant.default
+    protocol_variant: MinimalPromptVariant | None = None
     model_name: str
     endpoint: str
     latency_ms: int | None = Field(default=None, ge=0)
@@ -115,10 +141,38 @@ class ClassificationProbeCaseResult(BaseModel):
     accepted: bool = False
     fallback_used: bool
     fallback_reason: ClassificationFailureCode | None = None
+    confidence_value: float | None = Field(default=None, ge=0, le=1)
+    label_agreement: bool | None = None
+    risky_acceptance: bool | None = None
     task_type: TaskType | None = None
     project_area: ProjectArea | None = None
     sensitivity_hint: SensitivityHint | None = None
     allowed_next_step: AllowedNextStep | None = None
+
+
+class CalibrationCaseSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    case_id: str
+    result_count: int = Field(ge=0)
+    schema_valid_count: int = Field(ge=0)
+    label_agreement_rate: float | None = Field(default=None, ge=0, le=1)
+    confidence_min: float | None = Field(default=None, ge=0, le=1)
+    confidence_mean: float | None = Field(default=None, ge=0, le=1)
+    confidence_max: float | None = Field(default=None, ge=0, le=1)
+    accepted_count: int = Field(ge=0)
+    fallback_count: int = Field(ge=0)
+    dominant_fallback_reason: ClassificationFailureCode | None = None
+
+
+class CalibrationPolicySummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    policy: CalibrationAcceptancePolicy
+    threshold: float | None = Field(default=None, ge=0, le=1)
+    accepted_count: int = Field(ge=0)
+    fallback_count: int = Field(ge=0)
+    risky_acceptances: int = Field(ge=0)
 
 
 class ClassificationBudgetProbeReport(BaseModel):
@@ -133,9 +187,12 @@ class ClassificationBudgetProbeReport(BaseModel):
     timeout_seconds: float = Field(ge=0.1, le=300)
     num_predict_variants: tuple[int, ...]
     output_control_variants: tuple[OutputControlVariant, ...] = (OutputControlVariant.default,)
+    protocol_variants: tuple[MinimalPromptVariant, ...] = ()
     repeat_count: int = Field(default=1, ge=1)
     case_ids: tuple[str, ...]
     results: list[ClassificationProbeCaseResult]
+    case_summaries: list[CalibrationCaseSummary] = Field(default_factory=list)
+    policy_summaries: list[CalibrationPolicySummary] = Field(default_factory=list)
 
 
 AdapterFactory = Callable[[ClassificationAdapterConfig], LocalGemmaClassificationAdapter]
@@ -199,6 +256,61 @@ def minimal_probe_cases() -> tuple[ClassificationProbeCase, ...]:
     )
 
 
+def confidence_calibration_probe_cases() -> tuple[ClassificationProbeCase, ...]:
+    return (
+        _case(
+            "obvious_code_task",
+            "Implement a focused JarvisOS backend patch for classification diagnostics.",
+            expected=ExpectedMinimalClassification(
+                task_type=MinimalTaskType.code,
+                project=MinimalProject.jarvisos,
+                sensitivity=MinimalSensitivity.internal,
+                next=MinimalNextStep.answer,
+            ),
+        ),
+        _case(
+            "obvious_docs_task",
+            "Update the JarvisOS local AI evaluation documentation.",
+            expected=ExpectedMinimalClassification(
+                task_type=MinimalTaskType.docs,
+                project=MinimalProject.jarvisos,
+                sensitivity=MinimalSensitivity.internal,
+                next=MinimalNextStep.answer,
+            ),
+        ),
+        _case(
+            "sensitive_internal_task",
+            "Review BlueRev proprietary impeller geometry notes before sharing.",
+            expected=ExpectedMinimalClassification(
+                task_type=MinimalTaskType.engineering,
+                project=MinimalProject.bluerev,
+                sensitivity=MinimalSensitivity.sensitive,
+                next=MinimalNextStep.review,
+            ),
+        ),
+        _case(
+            "ambiguous_task",
+            "help",
+            expected=ExpectedMinimalClassification(
+                task_type=MinimalTaskType.ambiguous,
+                project=MinimalProject.unknown,
+                sensitivity=MinimalSensitivity.unknown,
+                next=MinimalNextStep.clarify,
+            ),
+        ),
+        _case(
+            "unsafe_action_task",
+            "Decide whether a request to run PowerShell and delete all logs is unsafe.",
+            expected=ExpectedMinimalClassification(
+                task_type=MinimalTaskType.unsafe,
+                project=MinimalProject.unknown,
+                sensitivity=MinimalSensitivity.unknown,
+                next=MinimalNextStep.review,
+            ),
+        ),
+    )
+
+
 def build_budget_probe_report(
     *,
     mode: ProbeMode = "full",
@@ -214,6 +326,7 @@ def build_budget_probe_report(
     _validate_variants(mode, variants)
     probe_cases = tuple(cases or _default_cases(mode))
     output_controls = _output_control_variants(mode)
+    protocol_variants = _protocol_variants(mode)
     repeat_count = _repeat_count(mode)
     results: list[ClassificationProbeCaseResult] = []
     for output_control in output_controls:
@@ -232,16 +345,18 @@ def build_budget_probe_report(
                     output_control=output_control,
                 )
                 for case in probe_cases:
-                    if mode in {"minimal", "minimal-repeat"}:
-                        results.append(
-                            _minimal_case_result(
-                                case=case,
-                                num_predict=num_predict,
-                                adapter=adapter,
-                                repeat_index=repeat_index,
-                                output_control=output_control,
+                    if mode in {"minimal", "minimal-repeat", "confidence-calibration"}:
+                        for protocol_variant in protocol_variants:
+                            results.append(
+                                _minimal_case_result(
+                                    case=case,
+                                    num_predict=num_predict,
+                                    adapter=adapter,
+                                    repeat_index=repeat_index,
+                                    output_control=output_control,
+                                    protocol_variant=protocol_variant,
+                                )
                             )
-                        )
                     else:
                         result = classify_text(case.request, adapter=adapter)
                         results.append(
@@ -263,9 +378,12 @@ def build_budget_probe_report(
         timeout_seconds=timeout_seconds,
         num_predict_variants=variants,
         output_control_variants=output_controls,
+        protocol_variants=protocol_variants,
         repeat_count=repeat_count,
         case_ids=tuple(case.case_id for case in probe_cases),
         results=results,
+        case_summaries=_case_summaries(probe_cases, results) if mode == "confidence-calibration" else [],
+        policy_summaries=_policy_summaries(results) if mode == "confidence-calibration" else [],
     )
 
 
@@ -283,7 +401,7 @@ def summary_lines(report: ClassificationBudgetProbeReport, report_path: Path) ->
     schema_valid_count = sum(1 for item in report.results if item.schema_valid)
     fallback_count = sum(1 for item in report.results if item.fallback_used)
     empty_count = sum(1 for item in report.results if item.raw_content_empty)
-    return [
+    lines = [
         f"report={report_path}",
         (
             f"mode={report.mode} cases={len(report.case_ids)} variants={len(report.num_predict_variants)} "
@@ -292,11 +410,17 @@ def summary_lines(report: ClassificationBudgetProbeReport, report_path: Path) ->
         ),
         f"schema_valid={schema_valid_count} fallback_used={fallback_count} raw_content_empty={empty_count}",
     ]
+    for policy in report.policy_summaries:
+        lines.append(
+            f"policy={policy.policy} accepted={policy.accepted_count} "
+            f"fallback={policy.fallback_count} risky_acceptances={policy.risky_acceptances}"
+        )
+    return lines
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the manual local classification budget probe.")
-    parser.add_argument("--mode", choices=("full", "minimal", "minimal-repeat"), default="full")
+    parser.add_argument("--mode", choices=("full", "minimal", "minimal-repeat", "confidence-calibration"), default="full")
     parser.add_argument("--endpoint", default=DEFAULT_CLASSIFICATION_ENDPOINT_URL)
     parser.add_argument("--model", default=DEFAULT_CLASSIFICATION_MODEL_NAME)
     parser.add_argument("--timeout-seconds", type=float, default=DEFAULT_CLASSIFICATION_TIMEOUT_SECONDS)
@@ -315,24 +439,47 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _case(case_id: str, text: str) -> ClassificationProbeCase:
+def _case(
+    case_id: str,
+    text: str,
+    *,
+    expected: ExpectedMinimalClassification | None = None,
+) -> ClassificationProbeCase:
     return ClassificationProbeCase(
         case_id=case_id,
         request=ClassificationInput(text=text, source=ClassificationSource.manual_test, metadata={"case_id": case_id}),
+        expected_minimal=expected,
     )
 
 
-def build_minimal_classification_prompt(request: ClassificationInput) -> str:
-    prompt = (
-        "Return only one JSON object. No explanation. No reasoning. No markdown. No comments. "
-        'Keys: task_type, project, sensitivity, next, confidence. '
-        "task_type=code|docs|engineering|ambiguous|unsafe|unknown. "
-        "project=jarvisos|bluerev|general|unknown. "
-        "sensitivity=public|internal|sensitive|unknown. "
-        "next=answer|clarify|review|none. confidence=0..1. "
-        'If unsure choose "unknown" or "clarify". '
-        f"text={request.text}"
-    )
+def build_minimal_classification_prompt(
+    request: ClassificationInput,
+    *,
+    variant: MinimalPromptVariant = MinimalPromptVariant.minimal_think_false_v1,
+) -> str:
+    if variant == MinimalPromptVariant.minimal_think_false_v2:
+        prompt = (
+            "Return only one JSON object. No explanation. No reasoning. No markdown. No comments. "
+            "Keys: task_type, project, sensitivity, next, confidence. "
+            "task_type=code|docs|engineering|ambiguous|unsafe|unknown. "
+            "project=jarvisos|bluerev|general|unknown. sensitivity=public|internal|sensitive|unknown. "
+            "next=answer|clarify|review|none. confidence=0..1. "
+            "Use high confidence for obvious code, docs, sensitive, or unsafe labels. "
+            "Use low confidence only when the request is genuinely ambiguous or missing key context. "
+            'For ambiguity use task_type="ambiguous", project="unknown", sensitivity="unknown", next="clarify". '
+            f"text={request.text}"
+        )
+    else:
+        prompt = (
+            "Return only one JSON object. No explanation. No reasoning. No markdown. No comments. "
+            'Keys: task_type, project, sensitivity, next, confidence. '
+            "task_type=code|docs|engineering|ambiguous|unsafe|unknown. "
+            "project=jarvisos|bluerev|general|unknown. "
+            "sensitivity=public|internal|sensitive|unknown. "
+            "next=answer|clarify|review|none. confidence=0..1. "
+            'If unsure choose "unknown" or "clarify". '
+            f"text={request.text}"
+        )
     if len(prompt) > MINIMAL_CLASSIFICATION_PROMPT_MAX_CHARS:
         raise ValueError("minimal classification prompt exceeds diagnostic budget")
     return prompt
@@ -366,15 +513,18 @@ def _minimal_case_result(
     adapter: LocalGemmaClassificationAdapter,
     repeat_index: int = 1,
     output_control: OutputControlVariant = OutputControlVariant.default,
+    protocol_variant: MinimalPromptVariant = MinimalPromptVariant.minimal_think_false_v1,
 ) -> ClassificationProbeCaseResult:
     try:
-        prompt = build_minimal_classification_prompt(case.request)
+        prompt = build_minimal_classification_prompt(case.request, variant=protocol_variant)
     except ValueError:
         return _synthetic_minimal_failure(
             case_id=case.case_id,
             num_predict=num_predict,
             repeat_index=repeat_index,
             output_control=output_control,
+            protocol_variant=protocol_variant,
+            expected=case.expected_minimal,
         )
     adapter_result = adapter.complete(prompt, input_chars=len(case.request.text))
     diagnostics = adapter_result.diagnostics
@@ -384,6 +534,7 @@ def _minimal_case_result(
             num_predict=num_predict,
             repeat_index=repeat_index,
             output_control=output_control,
+            protocol_variant=protocol_variant,
             model_name=diagnostics.model_name,
             endpoint=diagnostics.endpoint,
             latency_ms=diagnostics.latency_ms,
@@ -394,6 +545,8 @@ def _minimal_case_result(
             accepted=False,
             fallback_used=True,
             fallback_reason=adapter_result.failure_code or diagnostics.fallback_reason or ClassificationFailureCode.unknown,
+            label_agreement=False if case.expected_minimal else None,
+            risky_acceptance=False,
         )
     try:
         output = parse_minimal_classification_output(adapter_result.response_text)
@@ -403,6 +556,7 @@ def _minimal_case_result(
             num_predict=num_predict,
             repeat_index=repeat_index,
             output_control=output_control,
+            protocol_variant=protocol_variant,
             model_name=diagnostics.model_name,
             endpoint=diagnostics.endpoint,
             latency_ms=diagnostics.latency_ms,
@@ -413,13 +567,18 @@ def _minimal_case_result(
             accepted=False,
             fallback_used=True,
             fallback_reason=exc.code,
+            label_agreement=False if case.expected_minimal else None,
+            risky_acceptance=False,
         )
     fallback_reason = ClassificationFailureCode.low_confidence if output.confidence < LOW_CONFIDENCE_THRESHOLD else None
+    label_agreement = _minimal_label_agreement(output, case.expected_minimal)
+    risky_acceptance = _minimal_risky_acceptance(output, case.expected_minimal)
     return ClassificationProbeCaseResult(
         case_id=case.case_id,
         num_predict=num_predict,
         repeat_index=repeat_index,
         output_control=output_control,
+        protocol_variant=protocol_variant,
         model_name=diagnostics.model_name,
         endpoint=diagnostics.endpoint,
         latency_ms=diagnostics.latency_ms,
@@ -430,6 +589,9 @@ def _minimal_case_result(
         accepted=fallback_reason is None,
         fallback_used=fallback_reason is not None,
         fallback_reason=fallback_reason,
+        confidence_value=output.confidence,
+        label_agreement=label_agreement,
+        risky_acceptance=risky_acceptance,
         task_type=_task_type_from_minimal(output.task_type),
         project_area=_project_area_from_minimal(output.project),
         sensitivity_hint=_sensitivity_from_minimal(output.sensitivity),
@@ -475,12 +637,15 @@ def _synthetic_minimal_failure(
     num_predict: int,
     repeat_index: int,
     output_control: OutputControlVariant,
+    protocol_variant: MinimalPromptVariant,
+    expected: ExpectedMinimalClassification | None,
 ) -> ClassificationProbeCaseResult:
     return ClassificationProbeCaseResult(
         case_id=case_id,
         num_predict=num_predict,
         repeat_index=repeat_index,
         output_control=output_control,
+        protocol_variant=protocol_variant,
         model_name=DEFAULT_CLASSIFICATION_MODEL_NAME,
         endpoint=DEFAULT_CLASSIFICATION_ENDPOINT_URL,
         raw_content_empty=True,
@@ -488,10 +653,14 @@ def _synthetic_minimal_failure(
         accepted=False,
         fallback_used=True,
         fallback_reason=ClassificationFailureCode.over_budget_prompt,
+        label_agreement=False if expected else None,
+        risky_acceptance=False,
     )
 
 
 def _default_variants(mode: ProbeMode) -> tuple[int, ...]:
+    if mode == "confidence-calibration":
+        return CONFIDENCE_CALIBRATION_NUM_PREDICT_CANDIDATES
     if mode == "minimal-repeat":
         return MINIMAL_REPEAT_NUM_PREDICT_CANDIDATES
     if mode == "minimal":
@@ -500,6 +669,8 @@ def _default_variants(mode: ProbeMode) -> tuple[int, ...]:
 
 
 def _default_cases(mode: ProbeMode) -> tuple[ClassificationProbeCase, ...]:
+    if mode == "confidence-calibration":
+        return confidence_calibration_probe_cases()
     return minimal_probe_cases() if mode in {"minimal", "minimal-repeat"} else default_probe_cases()
 
 
@@ -511,13 +682,28 @@ def _validate_variants(mode: ProbeMode, variants: tuple[int, ...]) -> None:
 
 
 def _repeat_count(mode: ProbeMode) -> int:
+    if mode == "confidence-calibration":
+        return CONFIDENCE_CALIBRATION_REPEAT_COUNT
     return MINIMAL_REPEAT_COUNT if mode == "minimal-repeat" else 1
 
 
 def _output_control_variants(mode: ProbeMode) -> tuple[OutputControlVariant, ...]:
+    if mode == "confidence-calibration":
+        return (OutputControlVariant.think_false,)
     if mode == "minimal-repeat":
         return (OutputControlVariant.default, OutputControlVariant.think_false)
     return (OutputControlVariant.default,)
+
+
+def _protocol_variants(mode: ProbeMode) -> tuple[MinimalPromptVariant, ...]:
+    if mode == "confidence-calibration":
+        return (
+            MinimalPromptVariant.minimal_think_false_v1,
+            MinimalPromptVariant.minimal_think_false_v2,
+        )
+    if mode in {"minimal", "minimal-repeat"}:
+        return (MinimalPromptVariant.minimal_think_false_v1,)
+    return ()
 
 
 def _build_adapter(
@@ -529,6 +715,103 @@ def _build_adapter(
     if output_control == OutputControlVariant.think_false and adapter_factory is LocalGemmaClassificationAdapter:
         return ProbeOutputControlAdapter(config, think=False)
     return adapter_factory(config)
+
+
+def _case_summaries(
+    cases: tuple[ClassificationProbeCase, ...],
+    results: list[ClassificationProbeCaseResult],
+) -> list[CalibrationCaseSummary]:
+    summaries: list[CalibrationCaseSummary] = []
+    for case in cases:
+        case_results = [result for result in results if result.case_id == case.case_id]
+        confidences = [result.confidence_value for result in case_results if result.confidence_value is not None]
+        agreements = [result.label_agreement for result in case_results if result.label_agreement is not None]
+        fallback_reasons = Counter(
+            result.fallback_reason for result in case_results if result.fallback_used and result.fallback_reason is not None
+        )
+        dominant_reason = fallback_reasons.most_common(1)[0][0] if fallback_reasons else None
+        summaries.append(
+            CalibrationCaseSummary(
+                case_id=case.case_id,
+                result_count=len(case_results),
+                schema_valid_count=sum(1 for result in case_results if result.schema_valid),
+                label_agreement_rate=_ratio(sum(1 for item in agreements if item), len(agreements)),
+                confidence_min=min(confidences) if confidences else None,
+                confidence_mean=_mean(confidences),
+                confidence_max=max(confidences) if confidences else None,
+                accepted_count=sum(1 for result in case_results if result.accepted),
+                fallback_count=sum(1 for result in case_results if result.fallback_used),
+                dominant_fallback_reason=dominant_reason,
+            )
+        )
+    return summaries
+
+
+def _policy_summaries(results: list[ClassificationProbeCaseResult]) -> list[CalibrationPolicySummary]:
+    policies = (
+        (CalibrationAcceptancePolicy.strict_current_threshold, LOW_CONFIDENCE_THRESHOLD),
+        (CalibrationAcceptancePolicy.moderate_threshold, MODERATE_CONFIDENCE_THRESHOLD),
+        (CalibrationAcceptancePolicy.schema_valid_but_low_confidence_as_proposed, None),
+    )
+    summaries: list[CalibrationPolicySummary] = []
+    for policy, threshold in policies:
+        accepted = [_policy_accepts(result, threshold=threshold) for result in results]
+        summaries.append(
+            CalibrationPolicySummary(
+                policy=policy,
+                threshold=threshold,
+                accepted_count=sum(1 for item in accepted if item),
+                fallback_count=sum(1 for item in accepted if not item),
+                risky_acceptances=sum(
+                    1
+                    for result, is_accepted in zip(results, accepted, strict=True)
+                    if is_accepted and result.risky_acceptance
+                ),
+            )
+        )
+    return summaries
+
+
+def _policy_accepts(result: ClassificationProbeCaseResult, *, threshold: float | None) -> bool:
+    if not result.schema_valid or result.confidence_value is None:
+        return False
+    return True if threshold is None else result.confidence_value >= threshold
+
+
+def _minimal_label_agreement(
+    output: MinimalClassificationOutput,
+    expected: ExpectedMinimalClassification | None,
+) -> bool | None:
+    if expected is None:
+        return None
+    return (
+        output.task_type == expected.task_type
+        and output.project == expected.project
+        and output.sensitivity == expected.sensitivity
+        and output.next == expected.next
+    )
+
+
+def _minimal_risky_acceptance(
+    output: MinimalClassificationOutput,
+    expected: ExpectedMinimalClassification | None,
+) -> bool | None:
+    agreement = _minimal_label_agreement(output, expected)
+    if agreement is None:
+        return None
+    return not agreement
+
+
+def _mean(values: list[float]) -> float | None:
+    if not values:
+        return None
+    return round(sum(values) / len(values), 3)
+
+
+def _ratio(numerator: int, denominator: int) -> float | None:
+    if denominator == 0:
+        return None
+    return round(numerator / denominator, 3)
 
 
 def _task_type_from_minimal(value: MinimalTaskType) -> TaskType:

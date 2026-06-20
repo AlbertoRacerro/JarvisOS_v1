@@ -34,12 +34,17 @@ from app.modules.local_ai.classification.contracts import (
 from app.modules.local_ai.classification.parser import ClassificationParseError, parse_classification_output
 from app.modules.local_ai.classification.prompts import MAX_CLASSIFICATION_PROMPT_CHARS, build_classification_prompt
 from app.modules.local_ai.classification.probe_classification_budget import (
+    CONFIDENCE_CALIBRATION_NUM_PREDICT_CANDIDATES,
+    CONFIDENCE_CALIBRATION_REPEAT_COUNT,
     MINIMAL_DIAGNOSTIC_NUM_PREDICT_CANDIDATES,
     MINIMAL_REPEAT_NUM_PREDICT_CANDIDATES,
+    CalibrationAcceptancePolicy,
+    MinimalPromptVariant,
     OutputControlVariant,
     REPORT_SCHEMA_VERSION,
     build_minimal_classification_prompt,
     build_budget_probe_report,
+    confidence_calibration_probe_cases,
     default_probe_cases,
     minimal_probe_cases,
     parse_minimal_classification_output,
@@ -210,6 +215,78 @@ class FakeMinimalProbeAdapter:
             ),
             response_text=content,
         )
+
+
+class FakeConfidenceCalibrationAdapter:
+    def __init__(self, config: ClassificationAdapterConfig) -> None:
+        self.config = config
+
+    def complete(self, prompt: str, *, input_chars: int = 0) -> ClassificationAdapterResult:
+        content = json.dumps(_minimal_payload_for_prompt(prompt))
+        return ClassificationAdapterResult(
+            success=True,
+            model_name=self.config.model_name,
+            runtime_endpoint=self.config.endpoint_url,
+            diagnostics=ClassificationAttemptDiagnostics(
+                model_name=self.config.model_name,
+                endpoint=self.config.endpoint_url,
+                prompt_chars=len(prompt),
+                input_chars=input_chars,
+                max_output_tokens=self.config.max_output_tokens,
+                temperature=self.config.temperature,
+                timeout_seconds=self.config.timeout_seconds,
+                latency_ms=9,
+                raw_content_empty=False,
+                thinking_present=False,
+                done_reason="stop",
+                schema_valid=False,
+                fallback_used=False,
+                fallback_reason=None,
+            ),
+            response_text=content,
+        )
+
+
+def _minimal_payload_for_prompt(prompt: str) -> dict[str, object]:
+    if "text=help" in prompt:
+        return {
+            "task_type": "ambiguous",
+            "project": "unknown",
+            "sensitivity": "unknown",
+            "next": "clarify",
+            "confidence": 0.44,
+        }
+    if "delete all logs" in prompt:
+        return {
+            "task_type": "unsafe",
+            "project": "unknown",
+            "sensitivity": "unknown",
+            "next": "review",
+            "confidence": 0.58,
+        }
+    if "BlueRev proprietary" in prompt:
+        return {
+            "task_type": "engineering",
+            "project": "bluerev",
+            "sensitivity": "sensitive",
+            "next": "review",
+            "confidence": 0.62,
+        }
+    if "documentation" in prompt:
+        return {
+            "task_type": "docs",
+            "project": "jarvisos",
+            "sensitivity": "internal",
+            "next": "answer",
+            "confidence": 0.72,
+        }
+    return {
+        "task_type": "code",
+        "project": "jarvisos",
+        "sensitivity": "internal",
+        "next": "answer",
+        "confidence": 0.9,
+    }
 
 
 def test_classification_input_contract_is_strict_and_bounded() -> None:
@@ -592,6 +669,10 @@ def test_service_applies_deterministic_next_step_override_for_external_api_reque
 def test_minimal_prompt_and_parser_are_output_only_and_flat() -> None:
     request = ClassificationInput(text="Implement JarvisOS tests.", source=ClassificationSource.manual_test)
     prompt = build_minimal_classification_prompt(request)
+    repaired_prompt = build_minimal_classification_prompt(
+        request,
+        variant=MinimalPromptVariant.minimal_think_false_v2,
+    )
     output = parse_minimal_classification_output(
         json.dumps(
             {
@@ -608,6 +689,9 @@ def test_minimal_prompt_and_parser_are_output_only_and_flat() -> None:
     assert "Return only one JSON object" in prompt
     assert "No reasoning" in prompt
     assert "No markdown" in prompt
+    assert len(repaired_prompt) <= 700
+    assert "high confidence for obvious" in repaired_prompt
+    assert "genuinely ambiguous" in repaired_prompt
     assert output.task_type == "code"
     assert output.project == "jarvisos"
 
@@ -733,6 +817,63 @@ def test_minimal_repeat_probe_repeats_512_with_output_controls() -> None:
     assert "prompt" not in serialized
 
 
+def test_confidence_calibration_probe_uses_think_false_and_policy_summaries() -> None:
+    cases = confidence_calibration_probe_cases()
+    report = build_budget_probe_report(
+        mode="confidence-calibration",
+        adapter_factory=FakeConfidenceCalibrationAdapter,
+        created_at_utc=datetime(2026, 6, 20, 15, 0, tzinfo=UTC),
+    )
+
+    assert report.mode == "confidence-calibration"
+    assert report.num_predict_variants == CONFIDENCE_CALIBRATION_NUM_PREDICT_CANDIDATES
+    assert report.num_predict_variants == (512,)
+    assert report.output_control_variants == (OutputControlVariant.think_false,)
+    assert report.protocol_variants == (
+        MinimalPromptVariant.minimal_think_false_v1,
+        MinimalPromptVariant.minimal_think_false_v2,
+    )
+    assert report.repeat_count == CONFIDENCE_CALIBRATION_REPEAT_COUNT
+    assert report.repeat_count == 3
+    assert len(cases) == 5
+    assert len(report.results) == len(cases) * 3 * 2
+    assert {result.output_control for result in report.results} == {OutputControlVariant.think_false}
+    assert {result.protocol_variant for result in report.results} == set(report.protocol_variants)
+    assert all(result.num_predict == 512 for result in report.results)
+    assert all(result.schema_valid for result in report.results)
+    assert all(result.label_agreement is True for result in report.results)
+    assert all(result.risky_acceptance is False for result in report.results)
+
+    policy_by_name = {summary.policy: summary for summary in report.policy_summaries}
+    assert set(policy_by_name) == {
+        CalibrationAcceptancePolicy.strict_current_threshold,
+        CalibrationAcceptancePolicy.moderate_threshold,
+        CalibrationAcceptancePolicy.schema_valid_but_low_confidence_as_proposed,
+    }
+    assert policy_by_name[CalibrationAcceptancePolicy.strict_current_threshold].accepted_count == 12
+    assert policy_by_name[CalibrationAcceptancePolicy.strict_current_threshold].fallback_count == 18
+    assert policy_by_name[CalibrationAcceptancePolicy.moderate_threshold].accepted_count == 24
+    assert policy_by_name[CalibrationAcceptancePolicy.moderate_threshold].fallback_count == 6
+    assert policy_by_name[CalibrationAcceptancePolicy.schema_valid_but_low_confidence_as_proposed].accepted_count == 30
+    assert policy_by_name[CalibrationAcceptancePolicy.schema_valid_but_low_confidence_as_proposed].fallback_count == 0
+    assert all(summary.risky_acceptances == 0 for summary in report.policy_summaries)
+
+    case_by_id = {summary.case_id: summary for summary in report.case_summaries}
+    assert case_by_id["ambiguous_task"].confidence_min == 0.44
+    assert case_by_id["ambiguous_task"].confidence_mean == 0.44
+    assert case_by_id["ambiguous_task"].confidence_max == 0.44
+    assert case_by_id["ambiguous_task"].fallback_count == 6
+    assert case_by_id["obvious_code_task"].accepted_count == 6
+    assert all(summary.label_agreement_rate == 1 for summary in report.case_summaries)
+
+    serialized = report.model_dump_json()
+    for case in cases:
+        assert case.case_id in serialized
+        assert case.request.text not in serialized
+    assert "messages" not in serialized
+    assert "prompt" not in serialized
+
+
 def test_probe_rejects_non_local_endpoint_and_noncanonical_variants() -> None:
     with pytest.raises((ClassificationAdapterConfigurationError, ValidationError)):
         build_budget_probe_report(
@@ -758,6 +899,13 @@ def test_probe_rejects_non_local_endpoint_and_noncanonical_variants() -> None:
             mode="minimal-repeat",
             num_predict_variants=(256,),
             adapter_factory=FakeMinimalProbeAdapter,
+        )
+
+    with pytest.raises(ValueError, match="512"):
+        build_budget_probe_report(
+            mode="confidence-calibration",
+            num_predict_variants=(256,),
+            adapter_factory=FakeConfidenceCalibrationAdapter,
         )
 
 

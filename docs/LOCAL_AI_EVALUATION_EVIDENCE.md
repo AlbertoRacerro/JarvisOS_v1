@@ -281,6 +281,38 @@ Interpretation:
 - `gemma4:12b-it-qat` remains unapproved for runtime classification because accepted output is still only 6/9 in this small run and confidence behavior needs repair.
 - The next repair should focus on confidence calibration and repeatability under `think:false`, not broader architecture expansion.
 
+### 1C-S - Minimal Confidence Calibration Under think:false
+
+1C-S added a bounded manual `--mode confidence-calibration` diagnostic. It uses local Ollama only, `gemma4:12b-it-qat`, `think:false`, `num_predict=512`, five synthetic classification cases, three repeats, and two manual-only minimal protocol variants. The report records confidence values, label agreement, policy comparisons, and case-level summaries without raw prompts or raw case text.
+
+Observed confidence-calibration result:
+
+- 30 total attempts.
+- 30/30 schema-valid outputs.
+- 24/30 accepted under the current strict threshold.
+- 6/30 fallbacks, all `low_confidence`.
+- 0 empty final contents.
+- 0 thinking outputs.
+- 0 `done_reason=length` outputs.
+- Strict current threshold accepted 24, fell back 6, and would have accepted 15 detectable risky label mismatches.
+- Moderate threshold accepted 27, fell back 3, and would have accepted 18 detectable risky label mismatches.
+- Accepting every schema-valid proposal would have accepted all 30 attempts and 18 detectable risky label mismatches.
+
+Case-level interpretation:
+
+- The obvious documentation case was stable and label-correct.
+- The obvious code case was stable only under the first minimal protocol variant; the repaired variant mislabeled it with high confidence.
+- The sensitive/internal and unsafe/action-like cases were schema-valid and high-confidence but consistently label-mismatched.
+- The ambiguous case stayed low-confidence; the repaired variant improved its labels but correctly remained below the current threshold.
+
+Decision:
+
+- Do not lower the runtime confidence threshold.
+- Do not accept schema-valid but low-confidence outputs as authoritative proposals.
+- Confidence calibration alone is insufficient because the larger failure mode is overconfident label mismatch, especially on sensitive and unsafe-style cases.
+- `gemma4:12b-it-qat` remains unapproved for runtime classification.
+- The next classification repair should focus on label agreement, safety-oriented validators, and tighter minimal label definitions before any route, UI, memory, retrieval, provider routing, or tool behavior is considered.
+
 ## Raw Report Retention Rule
 
 Do not delete raw D9, D9R, D10B, D10B-R, or D10C reports until this document and the ADR log are deliberately updated to preserve their conclusions.
@@ -315,6 +347,7 @@ Current implementation status:
 - 1B-R-LIVE showed that the current full classification prompt/schema/budget path fails systematically with thinking-budget exhaustion and no final content. `gemma4:12b-it-qat` is not approved for the classification utility yet.
 - 1C adds a minimal output-only diagnostic mode. The first minimal live result showed partial improvement at `num_predict=512`, but not enough reliability to approve the classification utility.
 - 1C-R shows `think:false` is a useful local Ollama output-control diagnostic: it produced 9/9 schema-valid outputs and 6/9 accepted outputs in the first bounded repeatability run. 12B still remains unapproved until confidence and repeatability improve.
+- 1C-S shows confidence calibration is not enough: `think:false` produced 30/30 schema-valid outputs, but high-confidence label mismatches on sensitive and unsafe-style cases mean 12B remains unapproved for runtime classification.
 - The corrected architecture is form-driven local intelligence: Gemma performs semantic reasoning locally; JarvisOS provides showcase files, form schemas, structural validation, retries, persistence, promotion policy, and audit.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
