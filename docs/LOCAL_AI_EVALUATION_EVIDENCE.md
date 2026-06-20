@@ -313,6 +313,38 @@ Decision:
 - `gemma4:12b-it-qat` remains unapproved for runtime classification.
 - The next classification repair should focus on label agreement, safety-oriented validators, and tighter minimal label definitions before any route, UI, memory, retrieval, provider routing, or tool behavior is considered.
 
+### 1C-T - Minimal Label Agreement Under think:false
+
+1C-T added a bounded manual `--mode label-agreement` diagnostic. It keeps local Ollama only, `gemma4:12b-it-qat`, `think:false`, `num_predict=512`, temperature `0`, eight fixed synthetic case IDs, three repeats, and two split-field protocol variants. The diagnostic separates `task`, `project`, `sensitivity`, `risk`, and `next` instead of forcing safety and sensitivity into one compressed minimal label.
+
+Observed label-agreement result:
+
+- 48 total attempts.
+- 48/48 schema-valid outputs.
+- 48/48 accepted under the current confidence threshold.
+- 0 fallbacks.
+- 0 empty final contents.
+- 0 thinking outputs.
+- 0 `done_reason=length` outputs.
+- Field agreement: `task` 75%, `project` 50%, `sensitivity` 37.5%, `risk` 50%, `next` 31.2%.
+- Only the generic public question case reached full-field agreement across both protocol variants.
+- Splitting fields improved some safety signals: the sensitive BlueRev-style case returned `sensitive`, and the destructive-command-style case returned `unsafe`/`block`.
+- Splitting did not make the output reliable: 27/48 accepted outputs still had risky mismatches, including review-vs-answer failures and unstable project/sensitivity labels.
+- The second split-field variant reduced risky mismatches from 15 to 12 in this small run, but not enough to justify runtime use.
+
+Safety interpretation:
+
+- The diagnostic recorded 27 accepted risky mismatches.
+- 6 risky mismatches were plausibly catchable through deterministic provider-name detection.
+- 21 risky mismatches were not covered by the simple deterministic hard-override estimate and would require a better model, a stronger protocol, 31B/API review, or narrower non-critical use.
+- Safety-critical fields such as `risk` and `next` must not be delegated to 12B classification for runtime decisions.
+
+Decision:
+
+- `gemma4:12b-it-qat` remains unapproved for runtime classification.
+- It may continue only toward non-critical classification diagnostics where JarvisOS treats output as advisory metadata and never as safety, routing, permission, memory, retrieval, provider, or tool authority.
+- The next repair should either split safety-sensitive classification into separate micro-contracts with deterministic validators and review gates, or restrict 12B to low-stakes semantic labels that cannot authorize action.
+
 ## Raw Report Retention Rule
 
 Do not delete raw D9, D9R, D10B, D10B-R, or D10C reports until this document and the ADR log are deliberately updated to preserve their conclusions.
@@ -348,6 +380,7 @@ Current implementation status:
 - 1C adds a minimal output-only diagnostic mode. The first minimal live result showed partial improvement at `num_predict=512`, but not enough reliability to approve the classification utility.
 - 1C-R shows `think:false` is a useful local Ollama output-control diagnostic: it produced 9/9 schema-valid outputs and 6/9 accepted outputs in the first bounded repeatability run. 12B still remains unapproved until confidence and repeatability improve.
 - 1C-S shows confidence calibration is not enough: `think:false` produced 30/30 schema-valid outputs, but high-confidence label mismatches on sensitive and unsafe-style cases mean 12B remains unapproved for runtime classification.
+- 1C-T shows split-field labels improve some sensitivity/risk signals but still leave too many accepted risky mismatches. 12B must not own safety-critical `risk` or `next` decisions.
 - The corrected architecture is form-driven local intelligence: Gemma performs semantic reasoning locally; JarvisOS provides showcase files, form schemas, structural validation, retries, persistence, promotion policy, and audit.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 

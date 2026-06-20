@@ -36,17 +36,23 @@ from app.modules.local_ai.classification.prompts import MAX_CLASSIFICATION_PROMP
 from app.modules.local_ai.classification.probe_classification_budget import (
     CONFIDENCE_CALIBRATION_NUM_PREDICT_CANDIDATES,
     CONFIDENCE_CALIBRATION_REPEAT_COUNT,
+    LABEL_AGREEMENT_NUM_PREDICT_CANDIDATES,
+    LABEL_AGREEMENT_REPEAT_COUNT,
     MINIMAL_DIAGNOSTIC_NUM_PREDICT_CANDIDATES,
     MINIMAL_REPEAT_NUM_PREDICT_CANDIDATES,
     CalibrationAcceptancePolicy,
+    LabelAgreementProtocolVariant,
     MinimalPromptVariant,
     OutputControlVariant,
     REPORT_SCHEMA_VERSION,
+    build_label_agreement_prompt,
     build_minimal_classification_prompt,
     build_budget_probe_report,
     confidence_calibration_probe_cases,
     default_probe_cases,
+    label_agreement_probe_cases,
     minimal_probe_cases,
+    parse_label_agreement_output,
     parse_minimal_classification_output,
     summary_lines,
     write_probe_report,
@@ -247,6 +253,36 @@ class FakeConfidenceCalibrationAdapter:
         )
 
 
+class FakeLabelAgreementAdapter:
+    def __init__(self, config: ClassificationAdapterConfig) -> None:
+        self.config = config
+
+    def complete(self, prompt: str, *, input_chars: int = 0) -> ClassificationAdapterResult:
+        content = json.dumps(_label_agreement_payload_for_prompt(prompt))
+        return ClassificationAdapterResult(
+            success=True,
+            model_name=self.config.model_name,
+            runtime_endpoint=self.config.endpoint_url,
+            diagnostics=ClassificationAttemptDiagnostics(
+                model_name=self.config.model_name,
+                endpoint=self.config.endpoint_url,
+                prompt_chars=len(prompt),
+                input_chars=input_chars,
+                max_output_tokens=self.config.max_output_tokens,
+                temperature=self.config.temperature,
+                timeout_seconds=self.config.timeout_seconds,
+                latency_ms=11,
+                raw_content_empty=False,
+                thinking_present=False,
+                done_reason="stop",
+                schema_valid=False,
+                fallback_used=False,
+                fallback_reason=None,
+            ),
+            response_text=content,
+        )
+
+
 def _minimal_payload_for_prompt(prompt: str) -> dict[str, object]:
     if "text=help" in prompt:
         return {
@@ -285,6 +321,81 @@ def _minimal_payload_for_prompt(prompt: str) -> dict[str, object]:
         "project": "jarvisos",
         "sensitivity": "internal",
         "next": "answer",
+        "confidence": 0.9,
+    }
+
+
+def _label_agreement_payload_for_prompt(prompt: str) -> dict[str, object]:
+    case_text = prompt.rsplit("text=", 1)[-1]
+    if case_text == "help":
+        return {
+            "task": "unknown",
+            "project": "unknown",
+            "sensitivity": "unknown",
+            "risk": "unknown",
+            "next": "clarify",
+            "confidence": 0.5,
+        }
+    if "external API" in case_text:
+        return {
+            "task": "action",
+            "project": "unknown",
+            "sensitivity": "internal",
+            "risk": "safe",
+            "next": "answer",
+            "confidence": 0.9,
+        }
+    if "delete all local logs" in case_text:
+        return {
+            "task": "action",
+            "project": "unknown",
+            "sensitivity": "internal",
+            "risk": "safe",
+            "next": "answer",
+            "confidence": 0.9,
+        }
+    if "BlueRev prototype" in case_text:
+        return {
+            "task": "question",
+            "project": "bluerev",
+            "sensitivity": "public",
+            "risk": "safe",
+            "next": "answer",
+            "confidence": 0.9,
+        }
+    if "local indexing command" in case_text:
+        return {
+            "task": "action",
+            "project": "unknown",
+            "sensitivity": "internal",
+            "risk": "needs_review",
+            "next": "review",
+            "confidence": 0.9,
+        }
+    if "Euler integration" in case_text:
+        return {
+            "task": "question",
+            "project": "general",
+            "sensitivity": "public",
+            "risk": "safe",
+            "next": "answer",
+            "confidence": 0.9,
+        }
+    if "documentation" in case_text:
+        return {
+            "task": "docs",
+            "project": "jarvisos",
+            "sensitivity": "internal",
+            "risk": "needs_review",
+            "next": "review",
+            "confidence": 0.9,
+        }
+    return {
+        "task": "code",
+        "project": "jarvisos",
+        "sensitivity": "internal",
+        "risk": "needs_review",
+        "next": "review",
         "confidence": 0.9,
     }
 
@@ -731,6 +842,67 @@ def test_minimal_parser_rejects_invalid_json_extra_fields_and_bad_enum() -> None
     assert bad_enum.value.code == ClassificationFailureCode.schema_invalid
 
 
+def test_label_agreement_prompt_and_parser_are_split_and_flat() -> None:
+    request = ClassificationInput(text="Decide whether local execution needs review.", source=ClassificationSource.manual_test)
+    prompt = build_label_agreement_prompt(request, variant=LabelAgreementProtocolVariant.split_fields_v2)
+    output = parse_label_agreement_output(
+        json.dumps(
+            {
+                "task": "action",
+                "project": "unknown",
+                "sensitivity": "internal",
+                "risk": "needs_review",
+                "next": "review",
+                "confidence": 0.82,
+            }
+        )
+    )
+
+    assert len(prompt) <= 1200
+    assert "sensitivity=public|internal|sensitive|secret|unknown" in prompt
+    assert "risk=safe|needs_review|unsafe|unknown" in prompt
+    assert "Classify each field independently" in prompt
+    assert output.task == "action"
+    assert output.risk == "needs_review"
+
+
+def test_label_agreement_parser_rejects_invalid_json_extra_fields_and_bad_enum() -> None:
+    with pytest.raises(ClassificationParseError) as invalid_json:
+        parse_label_agreement_output("{bad")
+    assert invalid_json.value.code == ClassificationFailureCode.invalid_json
+
+    with pytest.raises(ClassificationParseError) as extra_field:
+        parse_label_agreement_output(
+            json.dumps(
+                {
+                    "task": "action",
+                    "project": "unknown",
+                    "sensitivity": "internal",
+                    "risk": "needs_review",
+                    "next": "review",
+                    "confidence": 0.82,
+                    "extra": "nope",
+                }
+            )
+        )
+    assert extra_field.value.code == ClassificationFailureCode.extra_fields
+
+    with pytest.raises(ClassificationParseError) as bad_enum:
+        parse_label_agreement_output(
+            json.dumps(
+                {
+                    "task": "action",
+                    "project": "unknown",
+                    "sensitivity": "internal",
+                    "risk": "invented",
+                    "next": "review",
+                    "confidence": 0.82,
+                }
+            )
+        )
+    assert bad_enum.value.code == ClassificationFailureCode.schema_invalid
+
+
 def test_probe_report_uses_fixed_variants_and_omits_raw_case_text() -> None:
     cases = default_probe_cases()
     report = build_budget_probe_report(
@@ -874,6 +1046,70 @@ def test_confidence_calibration_probe_uses_think_false_and_policy_summaries() ->
     assert "prompt" not in serialized
 
 
+def test_label_agreement_probe_splits_fields_and_reports_safety_summaries() -> None:
+    cases = label_agreement_probe_cases()
+    report = build_budget_probe_report(
+        mode="label-agreement",
+        adapter_factory=FakeLabelAgreementAdapter,
+        created_at_utc=datetime(2026, 6, 21, 9, 0, tzinfo=UTC),
+    )
+
+    assert report.mode == "label-agreement"
+    assert report.num_predict_variants == LABEL_AGREEMENT_NUM_PREDICT_CANDIDATES
+    assert report.num_predict_variants == (512,)
+    assert report.output_control_variants == (OutputControlVariant.think_false,)
+    assert report.protocol_variants == (
+        LabelAgreementProtocolVariant.split_fields_v1,
+        LabelAgreementProtocolVariant.split_fields_v2,
+    )
+    assert report.repeat_count == LABEL_AGREEMENT_REPEAT_COUNT
+    assert report.repeat_count == 3
+    assert len(cases) == 8
+    assert len(report.results) == len(cases) * 3 * 2
+    assert {result.output_control for result in report.results} == {OutputControlVariant.think_false}
+    assert {result.protocol_variant for result in report.results} == set(report.protocol_variants)
+    assert all(result.num_predict == 512 for result in report.results)
+    assert all(result.schema_valid for result in report.results)
+
+    field_by_name = {summary.field: summary for summary in report.label_field_summaries}
+    assert field_by_name["task"].agreement_rate == 1
+    assert field_by_name["project"].agreement_rate == 1
+    assert field_by_name["sensitivity"].agreement_rate == 0.875
+    assert field_by_name["risk"].agreement_rate == 0.625
+    assert field_by_name["next"].agreement_rate == 0.625
+
+    safety = report.label_safety_summary
+    assert safety is not None
+    assert safety.total_results == 48
+    assert safety.risky_mismatch_count == 18
+    assert safety.unsafe_sensitive_false_negative_count == 12
+    assert safety.accepted_risky_mismatch_count == 18
+    assert safety.deterministic_catchable_count == 12
+    assert safety.deterministic_uncatchable_count == 6
+    assert safety.deterministic_catch_rules == {
+        "destructive_command_words": 6,
+        "external_provider_name": 6,
+    }
+
+    case_by_id = {summary.case_id: summary for summary in report.label_case_summaries}
+    assert case_by_id["bluerev_sensitive_task"].risky_mismatch_count == 6
+    assert case_by_id["bluerev_sensitive_task"].deterministic_catchable_count == 0
+    assert case_by_id["destructive_command_task"].unsafe_sensitive_false_negative_count == 6
+    assert case_by_id["destructive_command_task"].deterministic_catchable_count == 6
+    assert case_by_id["ambiguous_task"].fallback_count == 6
+    assert case_by_id["ambiguous_task"].all_fields_agreement_rate == 1
+
+    lines = summary_lines(report, Path("report.json"))
+    assert any("label_safety" in line for line in lines)
+
+    serialized = report.model_dump_json()
+    for case in cases:
+        assert case.case_id in serialized
+        assert case.request.text not in serialized
+    assert "messages" not in serialized
+    assert "prompt" not in serialized
+
+
 def test_probe_rejects_non_local_endpoint_and_noncanonical_variants() -> None:
     with pytest.raises((ClassificationAdapterConfigurationError, ValidationError)):
         build_budget_probe_report(
@@ -906,6 +1142,13 @@ def test_probe_rejects_non_local_endpoint_and_noncanonical_variants() -> None:
             mode="confidence-calibration",
             num_predict_variants=(256,),
             adapter_factory=FakeConfidenceCalibrationAdapter,
+        )
+
+    with pytest.raises(ValueError, match="512"):
+        build_budget_probe_report(
+            mode="label-agreement",
+            num_predict_variants=(256,),
+            adapter_factory=FakeLabelAgreementAdapter,
         )
 
 
