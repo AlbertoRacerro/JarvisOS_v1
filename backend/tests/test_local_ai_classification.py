@@ -12,10 +12,13 @@ from app.modules.local_ai.classification.adapter import (
     LocalGemmaClassificationAdapter,
 )
 from app.modules.local_ai.classification.contracts import (
+    CLASSIFICATION_DIAGNOSTIC_NUM_PREDICT_CANDIDATES,
     CLASSIFICATION_INPUT_SCHEMA_VERSION,
     CLASSIFICATION_OUTPUT_SCHEMA_VERSION,
     LOW_CONFIDENCE_THRESHOLD,
     AllowedNextStep,
+    ClassificationAttemptDiagnostics,
+    ClassificationBudgetPolicy,
     ClassificationFailureCode,
     ClassificationInput,
     ClassificationOutput,
@@ -47,6 +50,35 @@ def _output_payload(**overrides: object) -> dict[str, object]:
     return payload
 
 
+def _diagnostics(
+    *,
+    prompt: str = "",
+    input_chars: int = 0,
+    raw_content_empty: bool = False,
+    thinking_present: bool | None = None,
+    done_reason: str | None = None,
+    schema_valid: bool = False,
+    fallback_used: bool = False,
+    fallback_reason: ClassificationFailureCode | None = None,
+) -> ClassificationAttemptDiagnostics:
+    return ClassificationAttemptDiagnostics(
+        model_name=DEFAULT_CLASSIFICATION_MODEL,
+        endpoint="http://localhost:11434/api/chat",
+        prompt_chars=len(prompt),
+        input_chars=input_chars,
+        max_output_tokens=256,
+        temperature=0,
+        timeout_seconds=15,
+        latency_ms=1,
+        raw_content_empty=raw_content_empty,
+        thinking_present=thinking_present,
+        done_reason=done_reason,
+        schema_valid=schema_valid,
+        fallback_used=fallback_used,
+        fallback_reason=fallback_reason,
+    )
+
+
 class FakeClassificationAdapter:
     def __init__(
         self,
@@ -58,15 +90,24 @@ class FakeClassificationAdapter:
         self.failure_code = failure_code
         self.called = False
         self.prompt = ""
+        self.config = ClassificationAdapterConfig()
 
-    def complete(self, prompt: str) -> ClassificationAdapterResult:
+    def complete(self, prompt: str, *, input_chars: int = 0) -> ClassificationAdapterResult:
         self.called = True
         self.prompt = prompt
+        content = json.dumps(_output_payload()) if self.content is None else self.content
         if self.failure_code:
             return ClassificationAdapterResult(
                 success=False,
                 model_name=DEFAULT_CLASSIFICATION_MODEL,
                 runtime_endpoint="http://localhost:11434/api/chat",
+                diagnostics=_diagnostics(
+                    prompt=prompt,
+                    input_chars=input_chars,
+                    raw_content_empty=True,
+                    fallback_used=True,
+                    fallback_reason=self.failure_code,
+                ),
                 failure_code=self.failure_code,
                 failure_message=self.failure_code.value,
             )
@@ -74,7 +115,8 @@ class FakeClassificationAdapter:
             success=True,
             model_name=DEFAULT_CLASSIFICATION_MODEL,
             runtime_endpoint="http://localhost:11434/api/chat",
-            response_text=self.content or json.dumps(_output_payload()),
+            diagnostics=_diagnostics(prompt=prompt, input_chars=input_chars, raw_content_empty=content.strip() == ""),
+            response_text=content,
         )
 
 
@@ -111,6 +153,19 @@ def test_classification_output_contract_forbids_extra_fields_and_wrong_schema() 
         ClassificationOutput.model_validate(_output_payload(confidence=1.1))
 
 
+def test_classification_budget_policy_is_explicit_and_bounded() -> None:
+    policy = ClassificationBudgetPolicy()
+
+    assert policy.model_name == DEFAULT_CLASSIFICATION_MODEL
+    assert policy.max_input_chars == 1200
+    assert policy.max_prompt_chars == MAX_CLASSIFICATION_PROMPT_CHARS
+    assert policy.max_output_tokens == 256
+    assert policy.diagnostic_num_predict_candidates == CLASSIFICATION_DIAGNOSTIC_NUM_PREDICT_CANDIDATES
+    assert policy.diagnostic_num_predict_candidates == (128, 256, 384, 512)
+    assert policy.temperature == 0
+    assert policy.timeout_seconds == 15
+
+
 def test_prompt_is_bounded_json_only_instruction() -> None:
     request = ClassificationInput(text="x" * 1200, source=ClassificationSource.manual_test)
     prompt = build_classification_prompt(request)
@@ -136,7 +191,7 @@ def test_parser_accepts_valid_output_and_rejects_invalid_shapes() -> None:
 
     with pytest.raises(ClassificationParseError) as extra_field:
         parse_classification_output(json.dumps(_output_payload(extra="nope")))
-    assert extra_field.value.code == ClassificationFailureCode.schema_invalid
+    assert extra_field.value.code == ClassificationFailureCode.extra_fields
 
 
 def test_parser_rejects_authority_claims_and_impossible_combinations() -> None:
@@ -144,7 +199,7 @@ def test_parser_rejects_authority_claims_and_impossible_combinations() -> None:
         parse_classification_output(
             json.dumps(_output_payload(refusal_or_uncertainty_reason="I will execute the requested tool."))
         )
-    assert authority.value.code == ClassificationFailureCode.authority_claim
+    assert authority.value.code == ClassificationFailureCode.model_claimed_authority
 
     with pytest.raises(ClassificationParseError) as impossible:
         parse_classification_output(
@@ -185,13 +240,22 @@ def test_adapter_uses_local_mocked_http_client_without_live_model_call() -> None
         assert payload["stream"] is False
         assert payload["format"] == "json"
         assert payload["options"]["temperature"] == 0
+        assert payload["options"]["num_predict"] == 256
         return httpx.Response(200, json={"message": {"content": json.dumps(_output_payload())}}, request=request)
 
     adapter = LocalGemmaClassificationAdapter(client=httpx.Client(transport=httpx.MockTransport(handler)))
-    result = adapter.complete(build_classification_prompt(ClassificationInput(text="Implement JarvisOS tests.")))
+    prompt = build_classification_prompt(ClassificationInput(text="Implement JarvisOS tests."))
+    result = adapter.complete(prompt, input_chars=len("Implement JarvisOS tests."))
 
     assert result.success is True
     assert result.response_text is not None
+    assert result.diagnostics.prompt_chars == len(prompt)
+    assert result.diagnostics.input_chars == len("Implement JarvisOS tests.")
+    assert result.diagnostics.max_output_tokens == 256
+    assert result.diagnostics.timeout_seconds == 15
+    assert result.diagnostics.raw_content_empty is False
+    assert result.diagnostics.schema_valid is False
+    assert result.diagnostics.fallback_used is False
 
 
 def test_adapter_reports_thinking_budget_exhaustion() -> None:
@@ -207,6 +271,61 @@ def test_adapter_reports_thinking_budget_exhaustion() -> None:
 
     assert result.success is False
     assert result.failure_code == ClassificationFailureCode.thinking_budget_exhausted
+    assert result.diagnostics.raw_content_empty is True
+    assert result.diagnostics.thinking_present is True
+    assert result.diagnostics.done_reason == "length"
+    assert result.diagnostics.fallback_reason == ClassificationFailureCode.thinking_budget_exhausted
+
+
+def test_adapter_reports_done_reason_length_without_valid_content() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"message": {"content": ""}, "done_reason": "length"},
+            request=request,
+        )
+
+    adapter = LocalGemmaClassificationAdapter(client=httpx.Client(transport=httpx.MockTransport(handler)))
+    result = adapter.complete(build_classification_prompt(ClassificationInput(text="Classify this.")))
+
+    assert result.success is False
+    assert result.failure_code == ClassificationFailureCode.done_reason_length
+    assert result.diagnostics.raw_content_empty is True
+    assert result.diagnostics.thinking_present is None
+    assert result.diagnostics.done_reason == "length"
+
+
+def test_adapter_reports_timeout_http_error_and_invalid_endpoint() -> None:
+    request = ClassificationInput(text="Implement JarvisOS tests.")
+    prompt = build_classification_prompt(request)
+
+    def timeout_handler(http_request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("slow local model", request=http_request)
+
+    timeout_adapter = LocalGemmaClassificationAdapter(client=httpx.Client(transport=httpx.MockTransport(timeout_handler)))
+    timeout_result = timeout_adapter.complete(prompt, input_chars=len(request.text))
+
+    assert timeout_result.success is False
+    assert timeout_result.failure_code == ClassificationFailureCode.timeout
+    assert timeout_result.diagnostics.fallback_reason == ClassificationFailureCode.timeout
+
+    def http_error_handler(http_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"error": "local failure"}, request=http_request)
+
+    http_error_adapter = LocalGemmaClassificationAdapter(client=httpx.Client(transport=httpx.MockTransport(http_error_handler)))
+    http_error_result = http_error_adapter.complete(prompt, input_chars=len(request.text))
+
+    assert http_error_result.success is False
+    assert http_error_result.failure_code == ClassificationFailureCode.http_error
+    assert http_error_result.diagnostics.fallback_reason == ClassificationFailureCode.http_error
+
+    invalid_endpoint_adapter = LocalGemmaClassificationAdapter()
+    invalid_endpoint_adapter.config.endpoint_url = "https://localhost:11434/api/chat"
+    invalid_endpoint_result = invalid_endpoint_adapter.complete(prompt, input_chars=len(request.text))
+
+    assert invalid_endpoint_result.success is False
+    assert invalid_endpoint_result.failure_code == ClassificationFailureCode.invalid_endpoint
+    assert invalid_endpoint_result.diagnostics.fallback_reason == ClassificationFailureCode.invalid_endpoint
 
 
 def test_service_accepts_valid_model_output() -> None:
@@ -229,6 +348,11 @@ def test_service_accepts_valid_model_output() -> None:
     assert result.source == ClassificationResultSource.model
     assert result.model_output_accepted is True
     assert result.classification.task_type == TaskType.documentation
+    assert result.diagnostics is not None
+    assert result.diagnostics.schema_valid is True
+    assert result.diagnostics.fallback_used is False
+    assert result.diagnostics.fallback_reason is None
+    assert result.diagnostics.raw_content_empty is False
     assert adapter.called is True
 
 
@@ -244,9 +368,85 @@ def test_service_falls_back_on_invalid_json_and_low_confidence() -> None:
 
     assert invalid.source == ClassificationResultSource.fallback
     assert invalid.fallback_reasons == [ClassificationFailureCode.invalid_json]
+    assert invalid.diagnostics is not None
+    assert invalid.diagnostics.schema_valid is False
+    assert invalid.diagnostics.fallback_used is True
+    assert invalid.diagnostics.fallback_reason == ClassificationFailureCode.invalid_json
     assert low_confidence.source == ClassificationResultSource.fallback
     assert low_confidence.fallback_reasons == [ClassificationFailureCode.low_confidence]
     assert low_confidence.classification.allowed_next_step == AllowedNextStep.ask_clarification
+    assert low_confidence.diagnostics is not None
+    assert low_confidence.diagnostics.schema_valid is True
+    assert low_confidence.diagnostics.fallback_reason == ClassificationFailureCode.low_confidence
+
+
+def test_service_falls_back_on_empty_content_timeout_http_error_and_done_reason_length() -> None:
+    empty = classify_text(
+        ClassificationInput(text="Implement backend tests for JarvisOS."),
+        adapter=FakeClassificationAdapter(content=""),
+    )
+    timeout = classify_text(
+        ClassificationInput(text="Implement backend tests for JarvisOS."),
+        adapter=FakeClassificationAdapter(failure_code=ClassificationFailureCode.timeout),
+    )
+    http_error = classify_text(
+        ClassificationInput(text="Implement backend tests for JarvisOS."),
+        adapter=FakeClassificationAdapter(failure_code=ClassificationFailureCode.http_error),
+    )
+    done_reason_length = classify_text(
+        ClassificationInput(text="Implement backend tests for JarvisOS."),
+        adapter=FakeClassificationAdapter(failure_code=ClassificationFailureCode.done_reason_length),
+    )
+
+    assert empty.source == ClassificationResultSource.fallback
+    assert empty.fallback_reasons == [ClassificationFailureCode.empty_content]
+    assert empty.diagnostics is not None
+    assert empty.diagnostics.raw_content_empty is True
+    assert empty.diagnostics.fallback_reason == ClassificationFailureCode.empty_content
+    assert timeout.fallback_reasons == [ClassificationFailureCode.timeout]
+    assert timeout.diagnostics is not None
+    assert timeout.diagnostics.fallback_reason == ClassificationFailureCode.timeout
+    assert http_error.fallback_reasons == [ClassificationFailureCode.http_error]
+    assert http_error.diagnostics is not None
+    assert http_error.diagnostics.fallback_reason == ClassificationFailureCode.http_error
+    assert done_reason_length.fallback_reasons == [ClassificationFailureCode.done_reason_length]
+    assert done_reason_length.diagnostics is not None
+    assert done_reason_length.diagnostics.fallback_reason == ClassificationFailureCode.done_reason_length
+
+
+def test_service_rejects_over_budget_prompt_without_calling_adapter() -> None:
+    adapter = FakeClassificationAdapter()
+    request = ClassificationInput(
+        text="x" * 1200,
+        source=ClassificationSource.manual_test,
+        metadata={f"k{i}": "y" * 200 for i in range(10)},
+    )
+
+    result = classify_text(request, adapter=adapter)
+
+    assert result.source == ClassificationResultSource.fallback
+    assert result.fallback_reasons == [ClassificationFailureCode.over_budget_prompt]
+    assert result.diagnostics is not None
+    assert result.diagnostics.prompt_chars == 0
+    assert result.diagnostics.input_chars == 1200
+    assert result.diagnostics.fallback_reason == ClassificationFailureCode.over_budget_prompt
+    assert adapter.called is False
+
+
+def test_diagnostic_metadata_does_not_include_raw_prompt_text() -> None:
+    marker = "SENSITIVE_MARKER_123"
+    adapter = FakeClassificationAdapter()
+
+    result = classify_text(
+        ClassificationInput(text=f"Implement JarvisOS tests with {marker}.", source=ClassificationSource.codex_task),
+        adapter=adapter,
+    )
+
+    assert result.diagnostics is not None
+    assert marker in adapter.prompt
+    diagnostics_json = result.diagnostics.model_dump_json()
+    assert marker not in diagnostics_json
+    assert "Implement JarvisOS tests" not in diagnostics_json
 
 
 def test_service_deterministic_hard_checks_prevent_model_downgrade() -> None:
@@ -291,6 +491,10 @@ def test_service_applies_deterministic_next_step_override_for_external_api_reque
     assert result.source == ClassificationResultSource.model_with_deterministic_override
     assert result.classification.allowed_next_step == AllowedNextStep.deterministic_review
     assert result.model_output_accepted is True
+    assert result.diagnostics is not None
+    assert result.diagnostics.schema_valid is True
+    assert result.diagnostics.fallback_used is False
+    assert result.diagnostics.fallback_reason == ClassificationFailureCode.deterministic_override
 
 
 @pytest.mark.parametrize(

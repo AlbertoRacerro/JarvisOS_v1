@@ -5,6 +5,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 CLASSIFICATION_INPUT_SCHEMA_VERSION = "local_ai_classification_input_v1"
 CLASSIFICATION_OUTPUT_SCHEMA_VERSION = "local_ai_classification_output_v1"
+DEFAULT_CLASSIFICATION_MODEL_NAME = "gemma4:12b-it-qat"
+DEFAULT_CLASSIFICATION_ENDPOINT_URL = "http://localhost:11434/api/chat"
+DEFAULT_CLASSIFICATION_MAX_OUTPUT_TOKENS = 256
+DEFAULT_CLASSIFICATION_TIMEOUT_SECONDS = 15.0
+DEFAULT_CLASSIFICATION_TEMPERATURE = 0.0
+CLASSIFICATION_DIAGNOSTIC_NUM_PREDICT_CANDIDATES = (128, 256, 384, 512)
 LOW_CONFIDENCE_THRESHOLD = 0.65
 
 
@@ -72,16 +78,19 @@ class ClassificationFailureCode(StrEnum):
     invalid_json = "invalid_json"
     non_object_json = "non_object_json"
     empty_content = "empty_content"
-    output_too_verbose = "output_too_verbose"
+    extra_fields = "extra_fields"
     schema_invalid = "schema_invalid"
-    authority_claim = "authority_claim"
+    model_claimed_authority = "model_claimed_authority"
     impossible_combination = "impossible_combination"
     low_confidence = "low_confidence"
-    local_endpoint_invalid = "local_endpoint_invalid"
-    runtime_unavailable = "runtime_unavailable"
+    invalid_endpoint = "invalid_endpoint"
+    over_budget_prompt = "over_budget_prompt"
     timeout = "timeout"
-    unexpected_local_http_error = "unexpected_local_http_error"
+    http_error = "http_error"
     thinking_budget_exhausted = "thinking_budget_exhausted"
+    done_reason_length = "done_reason_length"
+    deterministic_override = "deterministic_override"
+    unknown = "unknown"
 
 
 class ClassificationResultSource(StrEnum):
@@ -89,6 +98,38 @@ class ClassificationResultSource(StrEnum):
     model = "model"
     fallback = "fallback"
     model_with_deterministic_override = "model_with_deterministic_override"
+
+
+class ClassificationBudgetPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    model_name: str = DEFAULT_CLASSIFICATION_MODEL_NAME
+    endpoint_url: str = DEFAULT_CLASSIFICATION_ENDPOINT_URL
+    max_input_chars: int = Field(default=1200, ge=1, le=1200)
+    max_prompt_chars: int = Field(default=2000, ge=1, le=2000)
+    max_output_tokens: int = Field(default=DEFAULT_CLASSIFICATION_MAX_OUTPUT_TOKENS, ge=1, le=512)
+    diagnostic_num_predict_candidates: tuple[int, ...] = CLASSIFICATION_DIAGNOSTIC_NUM_PREDICT_CANDIDATES
+    temperature: float = Field(default=DEFAULT_CLASSIFICATION_TEMPERATURE, ge=0, le=0)
+    timeout_seconds: float = Field(default=DEFAULT_CLASSIFICATION_TIMEOUT_SECONDS, ge=0.1, le=60)
+
+
+class ClassificationAttemptDiagnostics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    model_name: str
+    endpoint: str
+    prompt_chars: int = Field(ge=0)
+    input_chars: int = Field(ge=0)
+    max_output_tokens: int = Field(ge=1, le=512)
+    temperature: float = Field(ge=0, le=0)
+    timeout_seconds: float = Field(ge=0.1, le=300)
+    latency_ms: int | None = Field(default=None, ge=0)
+    raw_content_empty: bool
+    thinking_present: bool | None = None
+    done_reason: str | None = None
+    schema_valid: bool
+    fallback_used: bool
+    fallback_reason: ClassificationFailureCode | None = None
 
 
 class ClassificationInput(BaseModel):
@@ -152,6 +193,7 @@ class ClassificationServiceResult(BaseModel):
     model_output_accepted: bool = False
     fallback_reasons: list[ClassificationFailureCode] = Field(default_factory=list)
     deterministic_reasons: list[str] = Field(default_factory=list)
+    diagnostics: ClassificationAttemptDiagnostics | None = None
 
 
 def make_output(

@@ -2,6 +2,7 @@ from app.modules.local_ai.classification.adapter import LocalGemmaClassification
 from app.modules.local_ai.classification.contracts import (
     LOW_CONFIDENCE_THRESHOLD,
     AllowedNextStep,
+    ClassificationAttemptDiagnostics,
     ClassificationFailureCode,
     ClassificationInput,
     ClassificationOutput,
@@ -53,21 +54,45 @@ def classify_text(
     try:
         prompt = build_classification_prompt(request)
     except ClassificationPromptError:
-        return _fallback(deterministic, ClassificationFailureCode.output_too_verbose, deterministic_reasons)
+        return _fallback(
+            deterministic,
+            ClassificationFailureCode.over_budget_prompt,
+            deterministic_reasons,
+            diagnostics=_diagnostics_without_adapter_response(
+                request=request,
+                adapter=adapter,
+                fallback_reason=ClassificationFailureCode.over_budget_prompt,
+            ),
+        )
 
-    adapter_result = adapter.complete(prompt)
+    adapter_result = adapter.complete(prompt, input_chars=len(request.text))
     if not adapter_result.success or adapter_result.response_text is None:
         return _fallback(
             deterministic,
-            adapter_result.failure_code or ClassificationFailureCode.unexpected_local_http_error,
+            adapter_result.failure_code or ClassificationFailureCode.unknown,
             deterministic_reasons,
+            diagnostics=adapter_result.diagnostics,
         )
     try:
         model_output = parse_classification_output(adapter_result.response_text)
     except ClassificationParseError as exc:
-        return _fallback(deterministic, exc.code, deterministic_reasons)
+        return _fallback(
+            deterministic,
+            exc.code,
+            deterministic_reasons,
+            diagnostics=_with_diagnostics_outcome(adapter_result.diagnostics, schema_valid=False, fallback_reason=exc.code),
+        )
     if model_output.confidence < LOW_CONFIDENCE_THRESHOLD:
-        return _fallback(deterministic, ClassificationFailureCode.low_confidence, deterministic_reasons)
+        return _fallback(
+            deterministic,
+            ClassificationFailureCode.low_confidence,
+            deterministic_reasons,
+            diagnostics=_with_diagnostics_outcome(
+                adapter_result.diagnostics,
+                schema_valid=True,
+                fallback_reason=ClassificationFailureCode.low_confidence,
+            ),
+        )
 
     merged, override_reasons = apply_deterministic_overrides(model_output, deterministic)
     source = (
@@ -81,6 +106,12 @@ def classify_text(
         model_output_accepted=True,
         fallback_reasons=[],
         deterministic_reasons=deterministic_reasons + override_reasons,
+        diagnostics=_with_diagnostics_outcome(
+            adapter_result.diagnostics,
+            schema_valid=True,
+            fallback_reason=ClassificationFailureCode.deterministic_override if override_reasons else None,
+            fallback_used=False,
+        ),
     )
 
 
@@ -243,6 +274,8 @@ def _fallback(
     deterministic: ClassificationOutput,
     reason: ClassificationFailureCode,
     deterministic_reasons: list[str],
+    *,
+    diagnostics: ClassificationAttemptDiagnostics | None = None,
 ) -> ClassificationServiceResult:
     classification = deterministic
     if reason == ClassificationFailureCode.low_confidence and deterministic.task_type in {TaskType.unknown, TaskType.ambiguous}:
@@ -259,6 +292,47 @@ def _fallback(
         model_output_accepted=False,
         fallback_reasons=[reason],
         deterministic_reasons=deterministic_reasons,
+        diagnostics=diagnostics,
+    )
+
+
+def _with_diagnostics_outcome(
+    diagnostics: ClassificationAttemptDiagnostics,
+    *,
+    schema_valid: bool,
+    fallback_reason: ClassificationFailureCode | None,
+    fallback_used: bool = True,
+) -> ClassificationAttemptDiagnostics:
+    return diagnostics.model_copy(
+        update={
+            "schema_valid": schema_valid,
+            "fallback_used": fallback_used,
+            "fallback_reason": fallback_reason,
+        }
+    )
+
+
+def _diagnostics_without_adapter_response(
+    *,
+    request: ClassificationInput,
+    adapter: LocalGemmaClassificationAdapter,
+    fallback_reason: ClassificationFailureCode,
+) -> ClassificationAttemptDiagnostics:
+    return ClassificationAttemptDiagnostics(
+        model_name=adapter.config.model_name,
+        endpoint=adapter.config.endpoint_url,
+        prompt_chars=0,
+        input_chars=len(request.text),
+        max_output_tokens=adapter.config.max_output_tokens,
+        temperature=adapter.config.temperature,
+        timeout_seconds=adapter.config.timeout_seconds,
+        latency_ms=None,
+        raw_content_empty=True,
+        thinking_present=None,
+        done_reason=None,
+        schema_valid=False,
+        fallback_used=True,
+        fallback_reason=fallback_reason,
     )
 
 

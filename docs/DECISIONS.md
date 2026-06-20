@@ -257,3 +257,9 @@ Milestone 0F found that the active `JarvisOS_v1` folder was small, but Git initi
 Status: Accepted
 
 Milestone 0F-E establishes the canonical documentation hierarchy: `docs/ARCHITECTURE.md` for stable architecture, `docs/DECISIONS.md` for durable ADRs, `docs/RUNBOOKS.md` for current operating instructions, `README.md` for top-level orientation, and `docs/LOCAL_AI_EVALUATION_EVIDENCE.md` for local Gemma evidence. Milestone docs remain historical evidence and must not override current canonical docs. D10C remains the current local Gemma conclusion: 12B is a classification-only utility candidate, 31B is an occasional heavy expert candidate, and BlueRev modeling remains paused until AI infrastructure, external API escalation, and Modeling Workbench support are ready.
+
+## ADR-043: Classification Utility Requires Budget Diagnostics Before Broader Reliability Work
+
+Status: Accepted
+
+Milestone 1A added a backend-only classification utility for `gemma4:12b-it-qat`. Milestone 1B hardens that utility with explicit prompt/input/output budget policy, local-adapter latency and thinking diagnostics, schema/fallback metadata, and structured failure mapping. This remains a local utility only: no route, frontend UI, chat, provider routing, local gatekeeper runtime, memory runtime, retrieval runtime, Context Pack Broker runtime, autonomous tool path, or BlueRev modeling behavior is added. Gemma may propose labels, JarvisOS validates them, and JarvisOS decides. A manual live budget probe is deferred to a separate 1B-R diagnostic milestone so automated tests never call Ollama and 1B does not silently expand output budgets beyond the fixed classification policy.

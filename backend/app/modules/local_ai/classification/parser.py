@@ -37,10 +37,10 @@ def parse_classification_output(response_text: str) -> ClassificationOutput:
     if not text:
         raise ClassificationParseError(ClassificationFailureCode.empty_content, "model output was empty")
     if len(text) > MAX_CLASSIFICATION_RESPONSE_CHARS:
-        raise ClassificationParseError(ClassificationFailureCode.output_too_verbose, "model output exceeded response budget")
+        raise ClassificationParseError(ClassificationFailureCode.over_budget_prompt, "model output exceeded response budget")
     lowered = text.lower()
     if any(marker in lowered for marker in AUTHORITY_CLAIM_MARKERS):
-        raise ClassificationParseError(ClassificationFailureCode.authority_claim, "model output claimed authority")
+        raise ClassificationParseError(ClassificationFailureCode.model_claimed_authority, "model output claimed authority")
     try:
         parsed = json.loads(text)
     except json.JSONDecodeError as exc:
@@ -50,7 +50,8 @@ def parse_classification_output(response_text: str) -> ClassificationOutput:
     try:
         output = ClassificationOutput.model_validate(parsed)
     except ValidationError as exc:
-        raise ClassificationParseError(ClassificationFailureCode.schema_invalid, exc.errors()[0]["msg"]) from exc
+        code = ClassificationFailureCode.extra_fields if _has_extra_field_error(exc) else ClassificationFailureCode.schema_invalid
+        raise ClassificationParseError(code, exc.errors()[0]["msg"]) from exc
     validate_classification_combination(output)
     return output
 
@@ -101,3 +102,7 @@ def response_indicates_thinking_budget_exhausted(response_json: dict[str, Any]) 
     content = message.get("content")
     thinking = message.get("thinking")
     return content == "" and bool(thinking) and response_json.get("done_reason") == "length"
+
+
+def _has_extra_field_error(exc: ValidationError) -> bool:
+    return any(error.get("type") == "extra_forbidden" for error in exc.errors())
