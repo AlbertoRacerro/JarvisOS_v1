@@ -257,6 +257,30 @@ Interpretation:
 - Reliability is still far below an acceptable classification utility bar.
 - `gemma4:12b-it-qat` remains unapproved for classification utility use until repeatability and schema-valid rates improve materially.
 
+### 1C-R - Minimal Repeatability And Thinking Control
+
+1C-R added a bounded manual `--mode minimal-repeat` diagnostic. It repeats the same three synthetic minimal cases three times at `num_predict=512` and compares the default local `/api/chat` path with a local `think:false` output-control variant.
+
+Confirmed local output-control finding:
+
+- Local Ollama `0.30.10` exposes a thinking control in the CLI.
+- The manual probe can add top-level `think:false` to the local `/api/chat` payload.
+- In the first repeatability run, `think:false` removed thinking output and avoided `done_reason=length`.
+
+Observed repeatability result:
+
+- 18 total attempts.
+- Default path: 5/9 schema-valid, 2/9 accepted, 4 empty final contents, 8 responses with thinking present, 3 `done_reason=length`, and 1 timeout.
+- `think:false` path: 9/9 schema-valid, 6/9 accepted, 0 empty final contents, 0 responses with thinking present, 0 `done_reason=length`.
+- Remaining `think:false` fallbacks were low confidence.
+
+Interpretation:
+
+- The earlier 1 accepted result was not fully repeatable on the default path.
+- The local `think:false` diagnostic materially improves JSON completion and latency behavior.
+- `gemma4:12b-it-qat` remains unapproved for runtime classification because accepted output is still only 6/9 in this small run and confidence behavior needs repair.
+- The next repair should focus on confidence calibration and repeatability under `think:false`, not broader architecture expansion.
+
 ## Raw Report Retention Rule
 
 Do not delete raw D9, D9R, D10B, D10B-R, or D10C reports until this document and the ADR log are deliberately updated to preserve their conclusions.
@@ -290,6 +314,7 @@ Current implementation status:
 - 1B-R adds a CLI-only manual live budget probe. It defaults to localhost, is never run in automated tests, emits JSON diagnostics without raw prompt or case text, and avoids routes, frontend code, provider modules, external APIs, memory runtime, retrieval runtime, Context Pack Broker runtime, local gatekeeper runtime, chat, autonomous tools, and BlueRev modeling.
 - 1B-R-LIVE showed that the current full classification prompt/schema/budget path fails systematically with thinking-budget exhaustion and no final content. `gemma4:12b-it-qat` is not approved for the classification utility yet.
 - 1C adds a minimal output-only diagnostic mode. The first minimal live result showed partial improvement at `num_predict=512`, but not enough reliability to approve the classification utility.
+- 1C-R shows `think:false` is a useful local Ollama output-control diagnostic: it produced 9/9 schema-valid outputs and 6/9 accepted outputs in the first bounded repeatability run. 12B still remains unapproved until confidence and repeatability improve.
 - The corrected architecture is form-driven local intelligence: Gemma performs semantic reasoning locally; JarvisOS provides showcase files, form schemas, structural validation, retries, persistence, promotion policy, and audit.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 

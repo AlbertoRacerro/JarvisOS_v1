@@ -35,6 +35,8 @@ from app.modules.local_ai.classification.parser import ClassificationParseError,
 from app.modules.local_ai.classification.prompts import MAX_CLASSIFICATION_PROMPT_CHARS, build_classification_prompt
 from app.modules.local_ai.classification.probe_classification_budget import (
     MINIMAL_DIAGNOSTIC_NUM_PREDICT_CANDIDATES,
+    MINIMAL_REPEAT_NUM_PREDICT_CANDIDATES,
+    OutputControlVariant,
     REPORT_SCHEMA_VERSION,
     build_minimal_classification_prompt,
     build_budget_probe_report,
@@ -654,10 +656,13 @@ def test_probe_report_uses_fixed_variants_and_omits_raw_case_text() -> None:
 
     assert report.schema_version == REPORT_SCHEMA_VERSION
     assert report.num_predict_variants == CLASSIFICATION_DIAGNOSTIC_NUM_PREDICT_CANDIDATES
+    assert report.output_control_variants == (OutputControlVariant.default,)
+    assert report.repeat_count == 1
     assert report.case_ids == tuple(case.case_id for case in cases)
     assert len(report.results) == len(cases) * len(CLASSIFICATION_DIAGNOSTIC_NUM_PREDICT_CANDIDATES)
     assert {result.num_predict for result in report.results} == set(CLASSIFICATION_DIAGNOSTIC_NUM_PREDICT_CANDIDATES)
     assert all(result.schema_valid for result in report.results)
+    assert all(result.accepted for result in report.results)
     assert all(result.fallback_used is False for result in report.results)
     assert all(result.task_type == TaskType.documentation for result in report.results)
 
@@ -679,14 +684,46 @@ def test_minimal_probe_report_uses_small_variants_and_omits_raw_case_text() -> N
 
     assert report.mode == "minimal"
     assert report.num_predict_variants == MINIMAL_DIAGNOSTIC_NUM_PREDICT_CANDIDATES
+    assert report.output_control_variants == (OutputControlVariant.default,)
+    assert report.repeat_count == 1
     assert report.num_predict_variants == (128, 256, 512)
     assert report.case_ids == tuple(case.case_id for case in cases)
     assert len(cases) == 3
     assert len(report.results) == len(cases) * len(MINIMAL_DIAGNOSTIC_NUM_PREDICT_CANDIDATES)
     assert all(result.schema_valid for result in report.results)
+    assert all(result.accepted for result in report.results)
     assert all(result.task_type == TaskType.code_change for result in report.results)
     assert all(result.project_area == ProjectArea.jarvisos for result in report.results)
     assert all(result.allowed_next_step == AllowedNextStep.answer_locally for result in report.results)
+
+    serialized = report.model_dump_json()
+    for case in cases:
+        assert case.case_id in serialized
+        assert case.request.text not in serialized
+    assert "messages" not in serialized
+    assert "prompt" not in serialized
+
+
+def test_minimal_repeat_probe_repeats_512_with_output_controls() -> None:
+    cases = minimal_probe_cases()
+    report = build_budget_probe_report(
+        mode="minimal-repeat",
+        adapter_factory=FakeMinimalProbeAdapter,
+        created_at_utc=datetime(2026, 6, 20, 14, 0, tzinfo=UTC),
+    )
+
+    assert report.mode == "minimal-repeat"
+    assert report.num_predict_variants == MINIMAL_REPEAT_NUM_PREDICT_CANDIDATES
+    assert report.num_predict_variants == (512,)
+    assert report.output_control_variants == (OutputControlVariant.default, OutputControlVariant.think_false)
+    assert report.repeat_count == 3
+    assert len(report.results) == len(cases) * 3 * 2
+    assert {result.repeat_index for result in report.results} == {1, 2, 3}
+    assert {result.output_control for result in report.results} == {
+        OutputControlVariant.default,
+        OutputControlVariant.think_false,
+    }
+    assert all(result.accepted for result in report.results)
 
     serialized = report.model_dump_json()
     for case in cases:
@@ -716,6 +753,13 @@ def test_probe_rejects_non_local_endpoint_and_noncanonical_variants() -> None:
             adapter_factory=FakeMinimalProbeAdapter,
         )
 
+    with pytest.raises(ValueError, match="512"):
+        build_budget_probe_report(
+            mode="minimal-repeat",
+            num_predict_variants=(256,),
+            adapter_factory=FakeMinimalProbeAdapter,
+        )
+
 
 def test_probe_writes_timestamped_report_and_summary_without_live_call(tmp_path: Path) -> None:
     report = build_budget_probe_report(
@@ -732,6 +776,8 @@ def test_probe_writes_timestamped_report_and_summary_without_live_call(tmp_path:
     assert path.name == "classification_budget_probe_20260620T123000.json"
     assert payload["schema_version"] == REPORT_SCHEMA_VERSION
     assert payload["case_ids"] == ["jarvisos_code_task"]
+    assert "output_controls=1" in lines[1]
+    assert "repeats=1" in lines[1]
     assert "results=4" in lines[1]
     assert "schema_valid=4" in lines[2]
 
@@ -752,7 +798,31 @@ def test_minimal_probe_writes_mode_specific_report_name(tmp_path: Path) -> None:
     assert payload["mode"] == "minimal"
     assert payload["case_ids"] == ["jarvisos_code_task"]
     assert "mode=minimal" in lines[1]
+    assert "output_controls=1" in lines[1]
+    assert "repeats=1" in lines[1]
     assert "results=3" in lines[1]
+
+
+def test_minimal_repeat_probe_writes_mode_specific_report_name(tmp_path: Path) -> None:
+    report = build_budget_probe_report(
+        mode="minimal-repeat",
+        cases=(minimal_probe_cases()[0],),
+        adapter_factory=FakeMinimalProbeAdapter,
+        created_at_utc=datetime(2026, 6, 20, 14, 30, tzinfo=UTC),
+    )
+
+    path = write_probe_report(report, tmp_path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    lines = summary_lines(report, path)
+
+    assert path.name == "classification_budget_probe_minimal-repeat_20260620T143000.json"
+    assert payload["mode"] == "minimal-repeat"
+    assert payload["output_control_variants"] == ["default", "think_false"]
+    assert payload["repeat_count"] == 3
+    assert "mode=minimal-repeat" in lines[1]
+    assert "output_controls=2" in lines[1]
+    assert "repeats=3" in lines[1]
+    assert "results=6" in lines[1]
 
 
 @pytest.mark.parametrize(

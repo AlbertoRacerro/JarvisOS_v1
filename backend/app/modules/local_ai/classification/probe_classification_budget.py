@@ -40,8 +40,15 @@ from app.modules.local_ai.classification.service import classify_text
 REPORT_SCHEMA_VERSION = "classification_budget_probe_report_v1"
 REPORT_FILENAME_PREFIX = "classification_budget_probe"
 MINIMAL_DIAGNOSTIC_NUM_PREDICT_CANDIDATES = (128, 256, 512)
+MINIMAL_REPEAT_NUM_PREDICT_CANDIDATES = (512,)
+MINIMAL_REPEAT_COUNT = 3
 MINIMAL_CLASSIFICATION_PROMPT_MAX_CHARS = 700
-ProbeMode = Literal["full", "minimal"]
+ProbeMode = Literal["full", "minimal", "minimal-repeat"]
+
+
+class OutputControlVariant(StrEnum):
+    default = "default"
+    think_false = "think_false"
 
 
 class MinimalTaskType(StrEnum):
@@ -96,6 +103,8 @@ class ClassificationProbeCaseResult(BaseModel):
 
     case_id: str
     num_predict: int = Field(ge=1, le=512)
+    repeat_index: int = Field(default=1, ge=1)
+    output_control: OutputControlVariant = OutputControlVariant.default
     model_name: str
     endpoint: str
     latency_ms: int | None = Field(default=None, ge=0)
@@ -103,6 +112,7 @@ class ClassificationProbeCaseResult(BaseModel):
     raw_content_empty: bool
     thinking_present: bool | None = None
     schema_valid: bool
+    accepted: bool = False
     fallback_used: bool
     fallback_reason: ClassificationFailureCode | None = None
     task_type: TaskType | None = None
@@ -122,11 +132,25 @@ class ClassificationBudgetProbeReport(BaseModel):
     temperature: float = Field(ge=0, le=0)
     timeout_seconds: float = Field(ge=0.1, le=300)
     num_predict_variants: tuple[int, ...]
+    output_control_variants: tuple[OutputControlVariant, ...] = (OutputControlVariant.default,)
+    repeat_count: int = Field(default=1, ge=1)
     case_ids: tuple[str, ...]
     results: list[ClassificationProbeCaseResult]
 
 
 AdapterFactory = Callable[[ClassificationAdapterConfig], LocalGemmaClassificationAdapter]
+
+
+class ProbeOutputControlAdapter(LocalGemmaClassificationAdapter):
+    def __init__(self, config: ClassificationAdapterConfig, *, think: bool | None = None) -> None:
+        super().__init__(config=config)
+        self._think = think
+
+    def _payload(self, prompt: str) -> dict[str, object]:
+        payload = super()._payload(prompt)
+        if self._think is not None:
+            payload["think"] = self._think
+        return payload
 
 
 def default_probe_cases() -> tuple[ClassificationProbeCase, ...]:
@@ -189,22 +213,46 @@ def build_budget_probe_report(
     variants = tuple(num_predict_variants or _default_variants(mode))
     _validate_variants(mode, variants)
     probe_cases = tuple(cases or _default_cases(mode))
+    output_controls = _output_control_variants(mode)
+    repeat_count = _repeat_count(mode)
     results: list[ClassificationProbeCaseResult] = []
-    for num_predict in variants:
-        config = ClassificationAdapterConfig(
-            endpoint_url=endpoint_url,
-            model_name=model_name,
-            timeout_seconds=timeout_seconds,
-            max_output_tokens=num_predict,
-            temperature=DEFAULT_CLASSIFICATION_TEMPERATURE,
-        )
-        adapter = adapter_factory(config)
-        for case in probe_cases:
-            if mode == "minimal":
-                results.append(_minimal_case_result(case=case, num_predict=num_predict, adapter=adapter))
-            else:
-                result = classify_text(case.request, adapter=adapter)
-                results.append(_case_result(case_id=case.case_id, num_predict=num_predict, result=result))
+    for output_control in output_controls:
+        for num_predict in variants:
+            config = ClassificationAdapterConfig(
+                endpoint_url=endpoint_url,
+                model_name=model_name,
+                timeout_seconds=timeout_seconds,
+                max_output_tokens=num_predict,
+                temperature=DEFAULT_CLASSIFICATION_TEMPERATURE,
+            )
+            for repeat_index in range(1, repeat_count + 1):
+                adapter = _build_adapter(
+                    config=config,
+                    adapter_factory=adapter_factory,
+                    output_control=output_control,
+                )
+                for case in probe_cases:
+                    if mode in {"minimal", "minimal-repeat"}:
+                        results.append(
+                            _minimal_case_result(
+                                case=case,
+                                num_predict=num_predict,
+                                adapter=adapter,
+                                repeat_index=repeat_index,
+                                output_control=output_control,
+                            )
+                        )
+                    else:
+                        result = classify_text(case.request, adapter=adapter)
+                        results.append(
+                            _case_result(
+                                case_id=case.case_id,
+                                num_predict=num_predict,
+                                result=result,
+                                repeat_index=repeat_index,
+                                output_control=output_control,
+                            )
+                        )
     created_at = created_at_utc or datetime.now(UTC)
     return ClassificationBudgetProbeReport(
         mode=mode,
@@ -214,6 +262,8 @@ def build_budget_probe_report(
         temperature=DEFAULT_CLASSIFICATION_TEMPERATURE,
         timeout_seconds=timeout_seconds,
         num_predict_variants=variants,
+        output_control_variants=output_controls,
+        repeat_count=repeat_count,
         case_ids=tuple(case.case_id for case in probe_cases),
         results=results,
     )
@@ -235,14 +285,18 @@ def summary_lines(report: ClassificationBudgetProbeReport, report_path: Path) ->
     empty_count = sum(1 for item in report.results if item.raw_content_empty)
     return [
         f"report={report_path}",
-        f"mode={report.mode} cases={len(report.case_ids)} variants={len(report.num_predict_variants)} results={len(report.results)}",
+        (
+            f"mode={report.mode} cases={len(report.case_ids)} variants={len(report.num_predict_variants)} "
+            f"output_controls={len(report.output_control_variants)} repeats={report.repeat_count} "
+            f"results={len(report.results)}"
+        ),
         f"schema_valid={schema_valid_count} fallback_used={fallback_count} raw_content_empty={empty_count}",
     ]
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the manual local classification budget probe.")
-    parser.add_argument("--mode", choices=("full", "minimal"), default="full")
+    parser.add_argument("--mode", choices=("full", "minimal", "minimal-repeat"), default="full")
     parser.add_argument("--endpoint", default=DEFAULT_CLASSIFICATION_ENDPOINT_URL)
     parser.add_argument("--model", default=DEFAULT_CLASSIFICATION_MODEL_NAME)
     parser.add_argument("--timeout-seconds", type=float, default=DEFAULT_CLASSIFICATION_TIMEOUT_SECONDS)
@@ -310,17 +364,26 @@ def _minimal_case_result(
     case: ClassificationProbeCase,
     num_predict: int,
     adapter: LocalGemmaClassificationAdapter,
+    repeat_index: int = 1,
+    output_control: OutputControlVariant = OutputControlVariant.default,
 ) -> ClassificationProbeCaseResult:
     try:
         prompt = build_minimal_classification_prompt(case.request)
     except ValueError:
-        return _synthetic_minimal_failure(case_id=case.case_id, num_predict=num_predict)
+        return _synthetic_minimal_failure(
+            case_id=case.case_id,
+            num_predict=num_predict,
+            repeat_index=repeat_index,
+            output_control=output_control,
+        )
     adapter_result = adapter.complete(prompt, input_chars=len(case.request.text))
     diagnostics = adapter_result.diagnostics
     if not adapter_result.success or adapter_result.response_text is None:
         return ClassificationProbeCaseResult(
             case_id=case.case_id,
             num_predict=num_predict,
+            repeat_index=repeat_index,
+            output_control=output_control,
             model_name=diagnostics.model_name,
             endpoint=diagnostics.endpoint,
             latency_ms=diagnostics.latency_ms,
@@ -328,6 +391,7 @@ def _minimal_case_result(
             raw_content_empty=diagnostics.raw_content_empty,
             thinking_present=diagnostics.thinking_present,
             schema_valid=False,
+            accepted=False,
             fallback_used=True,
             fallback_reason=adapter_result.failure_code or diagnostics.fallback_reason or ClassificationFailureCode.unknown,
         )
@@ -337,6 +401,8 @@ def _minimal_case_result(
         return ClassificationProbeCaseResult(
             case_id=case.case_id,
             num_predict=num_predict,
+            repeat_index=repeat_index,
+            output_control=output_control,
             model_name=diagnostics.model_name,
             endpoint=diagnostics.endpoint,
             latency_ms=diagnostics.latency_ms,
@@ -344,6 +410,7 @@ def _minimal_case_result(
             raw_content_empty=diagnostics.raw_content_empty,
             thinking_present=diagnostics.thinking_present,
             schema_valid=False,
+            accepted=False,
             fallback_used=True,
             fallback_reason=exc.code,
         )
@@ -351,6 +418,8 @@ def _minimal_case_result(
     return ClassificationProbeCaseResult(
         case_id=case.case_id,
         num_predict=num_predict,
+        repeat_index=repeat_index,
+        output_control=output_control,
         model_name=diagnostics.model_name,
         endpoint=diagnostics.endpoint,
         latency_ms=diagnostics.latency_ms,
@@ -358,6 +427,7 @@ def _minimal_case_result(
         raw_content_empty=diagnostics.raw_content_empty,
         thinking_present=diagnostics.thinking_present,
         schema_valid=True,
+        accepted=fallback_reason is None,
         fallback_used=fallback_reason is not None,
         fallback_reason=fallback_reason,
         task_type=_task_type_from_minimal(output.task_type),
@@ -372,12 +442,16 @@ def _case_result(
     case_id: str,
     num_predict: int,
     result: ClassificationServiceResult,
+    repeat_index: int = 1,
+    output_control: OutputControlVariant = OutputControlVariant.default,
 ) -> ClassificationProbeCaseResult:
     diagnostics = result.diagnostics
     schema_valid = diagnostics.schema_valid if diagnostics else False
     return ClassificationProbeCaseResult(
         case_id=case_id,
         num_predict=num_predict,
+        repeat_index=repeat_index,
+        output_control=output_control,
         model_name=diagnostics.model_name if diagnostics else DEFAULT_CLASSIFICATION_MODEL_NAME,
         endpoint=diagnostics.endpoint if diagnostics else DEFAULT_CLASSIFICATION_ENDPOINT_URL,
         latency_ms=diagnostics.latency_ms if diagnostics else None,
@@ -385,6 +459,7 @@ def _case_result(
         raw_content_empty=diagnostics.raw_content_empty if diagnostics else True,
         thinking_present=diagnostics.thinking_present if diagnostics else None,
         schema_valid=schema_valid,
+        accepted=schema_valid and not (diagnostics.fallback_used if diagnostics else True),
         fallback_used=diagnostics.fallback_used if diagnostics else True,
         fallback_reason=diagnostics.fallback_reason if diagnostics else ClassificationFailureCode.unknown,
         task_type=result.classification.task_type if schema_valid else None,
@@ -394,25 +469,38 @@ def _case_result(
     )
 
 
-def _synthetic_minimal_failure(*, case_id: str, num_predict: int) -> ClassificationProbeCaseResult:
+def _synthetic_minimal_failure(
+    *,
+    case_id: str,
+    num_predict: int,
+    repeat_index: int,
+    output_control: OutputControlVariant,
+) -> ClassificationProbeCaseResult:
     return ClassificationProbeCaseResult(
         case_id=case_id,
         num_predict=num_predict,
+        repeat_index=repeat_index,
+        output_control=output_control,
         model_name=DEFAULT_CLASSIFICATION_MODEL_NAME,
         endpoint=DEFAULT_CLASSIFICATION_ENDPOINT_URL,
         raw_content_empty=True,
         schema_valid=False,
+        accepted=False,
         fallback_used=True,
         fallback_reason=ClassificationFailureCode.over_budget_prompt,
     )
 
 
 def _default_variants(mode: ProbeMode) -> tuple[int, ...]:
-    return MINIMAL_DIAGNOSTIC_NUM_PREDICT_CANDIDATES if mode == "minimal" else CLASSIFICATION_DIAGNOSTIC_NUM_PREDICT_CANDIDATES
+    if mode == "minimal-repeat":
+        return MINIMAL_REPEAT_NUM_PREDICT_CANDIDATES
+    if mode == "minimal":
+        return MINIMAL_DIAGNOSTIC_NUM_PREDICT_CANDIDATES
+    return CLASSIFICATION_DIAGNOSTIC_NUM_PREDICT_CANDIDATES
 
 
 def _default_cases(mode: ProbeMode) -> tuple[ClassificationProbeCase, ...]:
-    return minimal_probe_cases() if mode == "minimal" else default_probe_cases()
+    return minimal_probe_cases() if mode in {"minimal", "minimal-repeat"} else default_probe_cases()
 
 
 def _validate_variants(mode: ProbeMode, variants: tuple[int, ...]) -> None:
@@ -420,6 +508,27 @@ def _validate_variants(mode: ProbeMode, variants: tuple[int, ...]) -> None:
     if variants != expected:
         label = "/".join(str(item) for item in expected)
         raise ValueError(f"{mode} classification budget probe must use variants {label}")
+
+
+def _repeat_count(mode: ProbeMode) -> int:
+    return MINIMAL_REPEAT_COUNT if mode == "minimal-repeat" else 1
+
+
+def _output_control_variants(mode: ProbeMode) -> tuple[OutputControlVariant, ...]:
+    if mode == "minimal-repeat":
+        return (OutputControlVariant.default, OutputControlVariant.think_false)
+    return (OutputControlVariant.default,)
+
+
+def _build_adapter(
+    *,
+    config: ClassificationAdapterConfig,
+    adapter_factory: AdapterFactory,
+    output_control: OutputControlVariant,
+) -> LocalGemmaClassificationAdapter:
+    if output_control == OutputControlVariant.think_false and adapter_factory is LocalGemmaClassificationAdapter:
+        return ProbeOutputControlAdapter(config, think=False)
+    return adapter_factory(config)
 
 
 def _task_type_from_minimal(value: MinimalTaskType) -> TaskType:
