@@ -34,9 +34,13 @@ from app.modules.local_ai.classification.contracts import (
 from app.modules.local_ai.classification.parser import ClassificationParseError, parse_classification_output
 from app.modules.local_ai.classification.prompts import MAX_CLASSIFICATION_PROMPT_CHARS, build_classification_prompt
 from app.modules.local_ai.classification.probe_classification_budget import (
+    MINIMAL_DIAGNOSTIC_NUM_PREDICT_CANDIDATES,
     REPORT_SCHEMA_VERSION,
+    build_minimal_classification_prompt,
     build_budget_probe_report,
     default_probe_cases,
+    minimal_probe_cases,
+    parse_minimal_classification_output,
     summary_lines,
     write_probe_report,
 )
@@ -157,6 +161,44 @@ class FakeProbeAdapter:
                 temperature=self.config.temperature,
                 timeout_seconds=self.config.timeout_seconds,
                 latency_ms=12,
+                raw_content_empty=False,
+                thinking_present=False,
+                done_reason="stop",
+                schema_valid=False,
+                fallback_used=False,
+                fallback_reason=None,
+            ),
+            response_text=content,
+        )
+
+
+class FakeMinimalProbeAdapter:
+    def __init__(self, config: ClassificationAdapterConfig) -> None:
+        self.config = config
+
+    def complete(self, prompt: str, *, input_chars: int = 0) -> ClassificationAdapterResult:
+        content = json.dumps(
+            {
+                "task_type": "code",
+                "project": "jarvisos",
+                "sensitivity": "internal",
+                "next": "answer",
+                "confidence": 0.86,
+            }
+        )
+        return ClassificationAdapterResult(
+            success=True,
+            model_name=self.config.model_name,
+            runtime_endpoint=self.config.endpoint_url,
+            diagnostics=ClassificationAttemptDiagnostics(
+                model_name=self.config.model_name,
+                endpoint=self.config.endpoint_url,
+                prompt_chars=len(prompt),
+                input_chars=input_chars,
+                max_output_tokens=self.config.max_output_tokens,
+                temperature=self.config.temperature,
+                timeout_seconds=self.config.timeout_seconds,
+                latency_ms=7,
                 raw_content_empty=False,
                 thinking_present=False,
                 done_reason="stop",
@@ -545,6 +587,64 @@ def test_service_applies_deterministic_next_step_override_for_external_api_reque
     assert result.diagnostics.fallback_reason == ClassificationFailureCode.deterministic_override
 
 
+def test_minimal_prompt_and_parser_are_output_only_and_flat() -> None:
+    request = ClassificationInput(text="Implement JarvisOS tests.", source=ClassificationSource.manual_test)
+    prompt = build_minimal_classification_prompt(request)
+    output = parse_minimal_classification_output(
+        json.dumps(
+            {
+                "task_type": "code",
+                "project": "jarvisos",
+                "sensitivity": "internal",
+                "next": "answer",
+                "confidence": 0.8,
+            }
+        )
+    )
+
+    assert len(prompt) <= 700
+    assert "Return only one JSON object" in prompt
+    assert "No reasoning" in prompt
+    assert "No markdown" in prompt
+    assert output.task_type == "code"
+    assert output.project == "jarvisos"
+
+
+def test_minimal_parser_rejects_invalid_json_extra_fields_and_bad_enum() -> None:
+    with pytest.raises(ClassificationParseError) as invalid_json:
+        parse_minimal_classification_output("{bad")
+    assert invalid_json.value.code == ClassificationFailureCode.invalid_json
+
+    with pytest.raises(ClassificationParseError) as extra_field:
+        parse_minimal_classification_output(
+            json.dumps(
+                {
+                    "task_type": "code",
+                    "project": "jarvisos",
+                    "sensitivity": "internal",
+                    "next": "answer",
+                    "confidence": 0.8,
+                    "extra": "nope",
+                }
+            )
+        )
+    assert extra_field.value.code == ClassificationFailureCode.extra_fields
+
+    with pytest.raises(ClassificationParseError) as bad_enum:
+        parse_minimal_classification_output(
+            json.dumps(
+                {
+                    "task_type": "invented",
+                    "project": "jarvisos",
+                    "sensitivity": "internal",
+                    "next": "answer",
+                    "confidence": 0.8,
+                }
+            )
+        )
+    assert bad_enum.value.code == ClassificationFailureCode.schema_invalid
+
+
 def test_probe_report_uses_fixed_variants_and_omits_raw_case_text() -> None:
     cases = default_probe_cases()
     report = build_budget_probe_report(
@@ -569,6 +669,33 @@ def test_probe_report_uses_fixed_variants_and_omits_raw_case_text() -> None:
     assert "prompt" not in serialized
 
 
+def test_minimal_probe_report_uses_small_variants_and_omits_raw_case_text() -> None:
+    cases = minimal_probe_cases()
+    report = build_budget_probe_report(
+        mode="minimal",
+        adapter_factory=FakeMinimalProbeAdapter,
+        created_at_utc=datetime(2026, 6, 20, 13, 0, tzinfo=UTC),
+    )
+
+    assert report.mode == "minimal"
+    assert report.num_predict_variants == MINIMAL_DIAGNOSTIC_NUM_PREDICT_CANDIDATES
+    assert report.num_predict_variants == (128, 256, 512)
+    assert report.case_ids == tuple(case.case_id for case in cases)
+    assert len(cases) == 3
+    assert len(report.results) == len(cases) * len(MINIMAL_DIAGNOSTIC_NUM_PREDICT_CANDIDATES)
+    assert all(result.schema_valid for result in report.results)
+    assert all(result.task_type == TaskType.code_change for result in report.results)
+    assert all(result.project_area == ProjectArea.jarvisos for result in report.results)
+    assert all(result.allowed_next_step == AllowedNextStep.answer_locally for result in report.results)
+
+    serialized = report.model_dump_json()
+    for case in cases:
+        assert case.case_id in serialized
+        assert case.request.text not in serialized
+    assert "messages" not in serialized
+    assert "prompt" not in serialized
+
+
 def test_probe_rejects_non_local_endpoint_and_noncanonical_variants() -> None:
     with pytest.raises((ClassificationAdapterConfigurationError, ValidationError)):
         build_budget_probe_report(
@@ -580,6 +707,13 @@ def test_probe_rejects_non_local_endpoint_and_noncanonical_variants() -> None:
         build_budget_probe_report(
             num_predict_variants=(256,),
             adapter_factory=FakeProbeAdapter,
+        )
+
+    with pytest.raises(ValueError, match="128/256/512"):
+        build_budget_probe_report(
+            mode="minimal",
+            num_predict_variants=(256,),
+            adapter_factory=FakeMinimalProbeAdapter,
         )
 
 
@@ -600,6 +734,25 @@ def test_probe_writes_timestamped_report_and_summary_without_live_call(tmp_path:
     assert payload["case_ids"] == ["jarvisos_code_task"]
     assert "results=4" in lines[1]
     assert "schema_valid=4" in lines[2]
+
+
+def test_minimal_probe_writes_mode_specific_report_name(tmp_path: Path) -> None:
+    report = build_budget_probe_report(
+        mode="minimal",
+        cases=(minimal_probe_cases()[0],),
+        adapter_factory=FakeMinimalProbeAdapter,
+        created_at_utc=datetime(2026, 6, 20, 13, 30, tzinfo=UTC),
+    )
+
+    path = write_probe_report(report, tmp_path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    lines = summary_lines(report, path)
+
+    assert path.name == "classification_budget_probe_minimal_20260620T133000.json"
+    assert payload["mode"] == "minimal"
+    assert payload["case_ids"] == ["jarvisos_code_task"]
+    assert "mode=minimal" in lines[1]
+    assert "results=3" in lines[1]
 
 
 @pytest.mark.parametrize(

@@ -208,6 +208,55 @@ Canonical current evidence doc and report:
 - `docs/0E_D10C_FLAT_SCHEMA_MICRO_CONTRACT_PROBE_HARNESS.md`
 - `backend/local_eval_reports/d10c_flat_schema_micro_contract_probe_20260620_164129.json`
 
+### 1B-R-LIVE - Classification Budget Probe Failed Current Protocol
+
+1B-R-LIVE ran the manual classification budget probe against `gemma4:12b-it-qat`.
+
+Observed result:
+
+- 24 total attempts across `num_predict` values `128`, `256`, `384`, and `512`.
+- 0 schema-valid outputs.
+- 24 fallbacks.
+- 24 empty final contents.
+- 24 responses with thinking present.
+- 24 responses with `done_reason=length`.
+- Dominant fallback: `thinking_budget_exhausted`.
+
+Interpretation:
+
+- The current full classification prompt/schema/budget path is not viable.
+- Increasing `num_predict` through `512` increased latency but did not produce final schema-valid JSON.
+- The failure is consistent with excessive reasoning pressure from the verbose prompt and full schema, plus the native Ollama response spending the output budget on thinking without final content.
+- This does not approve `gemma4:12b-it-qat` for the classification utility yet.
+
+Next correction:
+
+- Add a minimal output-only diagnostic protocol with a much smaller flat JSON object and closed short enums.
+- Keep it manual-only and local-only.
+- Continue measuring before treating 12B as reliable for any classification utility path.
+
+### 1C - Minimal Output-Only Classification Protocol
+
+1C added a manual `--mode minimal` diagnostic branch to the classification budget probe. It uses three synthetic cases, short closed enums, and a much smaller output-only JSON object.
+
+Observed first minimal result:
+
+- 9 total attempts across `num_predict` values `128`, `256`, and `512`.
+- 2 schema-valid outputs.
+- 1 accepted output.
+- 8 fallbacks.
+- 7 empty final contents.
+- 9 responses with thinking present.
+- 7 responses with `done_reason=length`.
+- `128` and `256` still produced 0 schema-valid outputs.
+- `512` produced 2 schema-valid outputs, with one low-confidence fallback and one accepted output.
+
+Interpretation:
+
+- The minimal protocol proves 12B can sometimes produce final classification JSON under the local Ollama path.
+- Reliability is still far below an acceptable classification utility bar.
+- `gemma4:12b-it-qat` remains unapproved for classification utility use until repeatability and schema-valid rates improve materially.
+
 ## Raw Report Retention Rule
 
 Do not delete raw D9, D9R, D10B, D10B-R, or D10C reports until this document and the ADR log are deliberately updated to preserve their conclusions.
@@ -239,6 +288,8 @@ Current implementation status:
 - 1B adds explicit classification budget diagnostics: input/prompt length, `num_predict`, timeout, temperature, latency, empty-content detection, thinking detection, `done_reason`, schema validity, and structured fallback reason.
 - 1B keeps the fixed default policy for `gemma4:12b-it-qat`: 1200 input chars, 2000 prompt chars, `num_predict=256`, temperature `0`, and an explicit local timeout. Later manual diagnostics may compare `num_predict` values `128`, `256`, `384`, and `512`, but runtime classification must fail closed rather than silently expanding the budget.
 - 1B-R adds a CLI-only manual live budget probe. It defaults to localhost, is never run in automated tests, emits JSON diagnostics without raw prompt or case text, and avoids routes, frontend code, provider modules, external APIs, memory runtime, retrieval runtime, Context Pack Broker runtime, local gatekeeper runtime, chat, autonomous tools, and BlueRev modeling.
+- 1B-R-LIVE showed that the current full classification prompt/schema/budget path fails systematically with thinking-budget exhaustion and no final content. `gemma4:12b-it-qat` is not approved for the classification utility yet.
+- 1C adds a minimal output-only diagnostic mode. The first minimal live result showed partial improvement at `num_predict=512`, but not enough reliability to approve the classification utility.
 - The corrected architecture is form-driven local intelligence: Gemma performs semantic reasoning locally; JarvisOS provides showcase files, form schemas, structural validation, retries, persistence, promotion policy, and audit.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
