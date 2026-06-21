@@ -1,0 +1,158 @@
+Thinking...
+*   Input Text: "For BlueRev, polycarbonate tubes might be easier to protot[6D[K
+prototype than ETFE, but I have not decided the material and I do not want [K
+this saved as an accepted assumption."
+    *   Task: Fill a bounded JarvisOS JSON form (smoke test).
+    *   Key Context: Fast secretary context pack. Rules for `bluerev` engin[5D[K
+engineering assumptions apply.
+    *   Constraint: Output JSON only, no markdown, no explanation.
+
+    *   Project: BlueRev.
+    *   Domain: Reactor design / Materials (specifically prototyping materi[6D[K
+materials).
+    *   Content: Comparison between polycarbonate and ETFE for tubes.
+    *   Certainty: Explicitly "not decided" ("I have not decided the materi[6D[K
+material").
+    *   Action requested: Do not save as accepted assumption.
+
+    *   `project_bucket`: `bluerev` (Matches recipe).
+    *   `summary`: Comparison of polycarbonate vs ETFE for BlueRev prototyp[8D[K
+prototyping; undecided.
+    *   `primary_domain`: `reactor_design` (Matches recipe).
+    *   `domain_tags`: [`reactor_design`, `not_decided`, `materials`, `prot[5D[K
+`prototype`] (Follows recipe instructions to include concrete topics).
+    *   `domain_bucket`: `reactor_design`.
+    *   `storage_relevance`: `high` (Recipe says high for unresolved engine[6D[K
+engineering assumptions).
+    *   `lifecycle_status_proposal`: `proposed_memory` (Recipe says propose[7D[K
+proposed_memory for unresolved assumptions).
+    *   `lifecycle_status`: `raw_input` or `unknown`. Since it's an input, [K
+and the recipe emphasizes "not marking as accepted", let's see. Recipe impl[4D[K
+implies keeping it as a proposal. Actually, usually, for raw inputs that ar[2D[K
+are tentative, `raw_input` is safe or follow the `lifecycle_status_proposal[26D[K
+`lifecycle_status_proposal` logic if they align. The prompt says "Use propo[5D[K
+proposed_memory for useful new information".
+    *   `sensitivity_bucket_proposal`: `internal`.
+    *   `sensitivity_bucket`: `internal`.
+    *   `source_class_policy_proposal`: `review_only`.
+    *   `source_class_policy`: `default_allowed` or `review_only`. Recipe s[1D[K
+says `review_only`.
+    *   `retrieval_behavior_proposal`: `review_gate_required`.
+    *   `retrieval_behavior`: `none` (or follow proposal). The recipe speci[5D[K
+specifies `review_gate_required`.
+    *   `flags`: [].
+    *   `not_decided`: `true` (Explicitly stated by user and required by re[2D[K
+recipe for unresolved assumptions).
+    *   `clarification_required`: `false`.
+    *   `clarification`: `false`.
+    *   `api_or_model_escalation_recommended`: `true` (Recipe requires this[4D[K
+this for unresolved engineering assumptions).
+    *   `reasoning_route_proposal`: `local_senior_model` (Recipe requires t[1D[K
+this).
+    *   `brief_rationale`: "Unresolved material choice for BlueRev prototyp[8D[K
+prototyping."
+
+    *Refining fields based on recipe rules:*
+    - project_bucket: bluerev
+    - primary_domain: reactor_design
+    - domain_tags: ["reactor_design", "not_decided", "materials", "prototyp[9D[K
+"prototype"]
+    - storage_relevance: high
+    - lifecycle_status_proposal: proposed_memory
+    - sensitivity_bucket_proposal: internal
+    - source_class_policy_proposal: review_only
+    - retrieval_behavior_proposal: review_gate_required
+    - not_decided: true
+    - api_or_model_escalation_recommended: true
+    - reasoning_route_proposal: local_senior_model
+
+    *Note on lifecycle_status vs lifecycle_status_proposal:* The prompt doe[3D[K
+doesn't strictly define the difference if both are present, but usually `li[3D[K
+`lifecycle_status` is the current state. Since it's a first draft of an inp[3D[K
+input that isn't yet "accepted", I'll stick to matching the recipe where po[2D[K
+possible.
+
+    - project_bucket: bluerev
+    - summary: Polycarbonate vs ETFE for BlueRev prototyping; material unde[4D[K
+undecided.
+    - primary_domain: reactor_design
+    - domain_tags: ["reactor_design", "not_decided", "materials", "prototyp[9D[K
+"prototype"]
+    - domain_bucket: reactor_design
+    - storage_relevance: high
+    - lifecycle_status_proposal: proposed_memory
+    - lifecycle_status: raw_input (as it is the current state of the input)[6D[K
+input)
+    - sensitivity_bucket_proposal: internal
+    - sensitivity_bucket: internal
+    - source_class_policy_proposal: review_only
+    - source_class_policy: review_only
+    - retrieval_behavior_proposal: review_gate_required
+    - retrieval_behavior: review_gate_required
+    - flags: []
+    - not_decided: true
+    - clarification_required: false
+    - clarification: false
+    - api_or_model_escalation_recommended: true
+    - reasoning_route_proposal: local_senior_model
+    - brief_rationale: Input contains an unresolved engineering assumption [K
+regarding materials.
+
+    Check against allowed enums:
+    - project_bucket: bluerev (Ok)
+    - domain_bucket: reactor_design (Ok)
+    - storage_relevance: high (Ok)
+    - lifecycle_status_proposal: proposed_memory (Ok)
+    - lifecycle_status: raw_input (Ok)
+    - sensitivity_bucket_proposal: internal (Ok)
+    - sensitivity_bucket: internal (Ok)
+    - source_class_policy_proposal: review_only (Ok)
+    - source_class_policy: review_only (Ok)
+    - retrieval_behavior_proposal: review_gate_required (Ok)
+    - retrieval_behavior: review_gate_required (Ok)
+    - reasoning_route_proposal: local_senior_model (Ok)
+
+    Wait, `lifecycle_status` should probably be the same as proposal if no [K
+update is made. I'll use `proposed_memory`. Actually, let's stick to exactl[6D[K
+exactly what the recipe says for those specific fields.
+    Recipe says:
+    - lifecycle_status_proposal = proposed_memory
+    - not_decided = true
+    - sensitivity_bucket_proposal = internal
+    - source_class_policy_proposal = review_only
+    - retrieval_behavior_proposal = review_gate_required
+
+    Let's adjust the JSON.
+...done thinking.
+
+{
+  "case_id": "HG-006",
+  "project_bucket": "bluerev",
+  "summary": "Comparison of polycarbonate vs ETFE tubes for BlueRev prototy[7D[K
+prototyping; material undecided.",
+  "primary_domain": "reactor_design",
+  "domain_tags": [
+    "reactor_design",
+    "not_decided",
+    "materials",
+    "prototype"
+  ],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "raw_input",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Input contains an unresolved engineering assumption r[1D[K
+regarding material choice for BlueRev."
+}

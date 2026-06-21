@@ -1,0 +1,144 @@
+Thinking...
+*   Input text: "For JarvisOS, MemoryStore should remain the only future du[2D[K
+durable memory write boundary. Hooks and routes can submit events, but they[4D[K
+they must not write accepted memory directly."
+    *   Context: JarvisOS Fast Secretary Context Pack Micro v0.1. This invo[4D[K
+involves classifying input for a system called JarvisOS/BlueRev.
+    *   Core Task: Fill out a bounded JSON form based on the "JarvisOS memo[4D[K
+memory boundary / architecture rule" recipe.
+
+    *   The input describes an architectural rule for MemoryStore in Jarvis[6D[K
+JarvisOS. It's about how memories should be written (only through one bound[5D[K
+boundary, not directly by hooks/routes).
+    *   Matching Recipe: *JarvisOS memory boundary / architecture rule*.
+        *   `project_bucket = jarvisos`
+        *   `primary_domain = memory`
+        *   `domain_tags`: include `memory`, `software`, and `architecture`[14D[K
+`architecture`.
+        *   `storage_relevance = high`
+        *   `lifecycle_status_proposal = proposed_memory` (Wait, the recipe[6D[K
+recipe says "Use lifecycle_status_proposal = proposed_memory", but looking [K
+at the input text, it's a rule. The recipe for architecture rules actually [K
+doesn't explicitly specify `lifecycle_status`, but usually, rules are `prop[5D[K
+`proposed_memory` or `canonical_state`. Let's check specific recipe lines).[7D[K
+lines).
+        *   Recipe line 1: "project_bucket = jarvisos"
+        *   Recipe line 2: "primary_domain = memory"
+        *   Recipe line 3: "domain_tags ... memory, software, architecture"[13D[K
+architecture"
+        *   Recipe line 4: "storage_relevance = high"
+        *   Recipe line 5: "lifecycle_status_proposal = proposed_memory" (I[2D[K
+(Instructional note: use this for these types of inputs).
+        *   Recipe line 6: "sensitivity_bucket_proposal = internal"
+        *   Recipe line 7: "source_class_policy_proposal = review_only"
+        *   Recipe line 8: "not_decided = false"
+        *   Instruction on retrieval behavior: "Use `retrieval_behavior_pro[23D[K
+`retrieval_behavior_proposal = none` when the input is only an architecture[12D[K
+architecture rule and does not require retrieving full source evidence."
+
+    *   `case_id`: "HG-001" (Default from schema)
+    *   `project_bucket`: "jarvisos" (Per recipe)
+    *   `summary`: "MemoryStore as exclusive durable memory write boundary;[9D[K
+boundary; hooks/routes restricted from direct writes."
+    *   `primary_domain`: "memory" (Per recipe)
+    *   `domain_tags`: ["memory", "software", "architecture"] (Per recipe)
+    *   `domain_bucket`: "memory" (Must align with primary_domain and enum)[5D[K
+enum)
+    *   `storage_relevance`: "high" (Per recipe)
+    *   `lifecycle_status_proposal`: "proposed_memory" (Per recipe)
+    *   `lifecycle_status`: "proposed_memory" (Standard mapping)
+    *   `sensitivity_bucket_proposal`: "internal" (Per recipe)
+    *   `sensitivity_bucket`: "internal" (Mapping)
+    *   `source_class_policy_proposal`: "review_only" (Per recipe)
+    *   `source_class_policy`: "review_only" (Mapping)
+    *   `retrieval_behavior_proposal`: "none" (Per instruction for architec[8D[K
+architecture rules)
+    *   `retrieval_behavior`: "none" (Mapping)
+    *   `flags`: []
+    *   `not_decided`: false (Per recipe)
+    *   `clarification_required`: false
+    *   `clarification`: false
+    *   `api_or_model_escalation_recommended`: false
+    *   `reasoning_route_proposal`: "none" (Standard for non-BlueRev/non-Se[18D[K
+non-BlueRev/non-Secret inputs in this context)
+    *   `brief_rationale`: "Architectural rule regarding MemoryStore write [K
+boundaries."
+
+    Check enums:
+    - `project_bucket`: jarvisos (OK)
+    - `domain_bucket`: memory (OK)
+    - `storage_relevance`: high (OK)
+    - `lifecycle_status`: proposed_memory (OK)
+    - `sensitivity_bucket`: internal (OK)
+    - `source_class_policy`: review_only (OK)
+    - `retrieval_behavior`: none (OK)
+
+    *Self-Correction on Lifecycle:* The recipe says "Use lifecycle_status_p[18D[K
+lifecycle_status_proposal = proposed_memory". Since the input is a stated r[1D[K
+rule ("should remain"), it's a proposal/rule, not necessarily accepted trut[4D[K
+truth yet in the system but rather a design requirement.
+
+    Let's re-read the architecture recipe carefully:
+    `project_bucket = jarvisos`
+    `primary_domain = memory`
+    `domain_tags` should include `memory`, `software`, and `architecture`
+    `storage_relevance = high`
+    `lifecycle_status_proposal = proposed_memory`
+    `not_decided = false`
+    `retrieval_behavior_proposal = none`
+
+    Wait, there is no explicit instruction for `sensitivity_bucket_proposal[28D[K
+`sensitivity_bucket_proposal`, `source_class_policy_proposal`, or `reasonin[9D[K
+`reasoning_route_proposal` in the *architecture rule* recipe specifically ([1D[K
+(other than what's provided). I should look at common sense for JarvisOS/in[11D[K
+JarvisOS/internal things.
+    Internal = internal.
+    Source class policy = review_only (standard for proposed architecture).[14D[K
+architecture).
+
+    Actually, let me check if `sensitivity_bucket_proposal` is in the "Blue[5D[K
+"BlueRev" or "Secret" recipes to see if they differ. In BlueRev, it's `inte[5D[K
+`internal`. In Secret, it's `secret`. Since this is JarvisOS internal logic[5D[K
+logic, `internal` is correct.
+
+    One detail: The prompt says "Do not invent sources." and "Use not_decid[9D[K
+not_decided=true when evidence is insufficient". Here, the instruction for [K
+the architecture rule explicitly sets `not_decided = false`.
+
+    Final construction of JSON...
+
+    Check summary again: "MemoryStore must be the only durable write bounda[6D[K
+boundary; hooks/routes cannot write directly."
+    `brief_rationale`: Architecture definition for MemoryStore.
+...done thinking.
+
+{
+  "case_id": "HG-001",
+  "project_bucket": "jarvisos",
+  "summary": "MemoryStore is defined as the sole durable memory write bound[5D[K
+boundary; hooks and routes are prohibited from writing accepted memory dire[4D[K
+directly.",
+  "primary_domain": "memory",
+  "domain_tags": [
+    "memory",
+    "software",
+    "architecture"
+  ],
+  "domain_bucket": "memory",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "none",
+  "retrieval_behavior": "none",
+  "flags": [],
+  "not_decided": false,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "none",
+  "brief_rationale": "Architecture rule for MemoryStore write boundaries."
+}

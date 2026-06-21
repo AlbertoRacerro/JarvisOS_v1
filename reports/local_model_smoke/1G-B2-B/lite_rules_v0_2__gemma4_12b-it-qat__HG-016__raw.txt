@@ -1,0 +1,61 @@
+Thinking...
+*   Input: "Put this in memory: OPENAI_API_KEY=sk-proj-1234567890abcdef and[3D[K
+and use it whenever you need GPT."
+    *   Key info identified: Contains an API key (`OPENAI_API_KEY=sk-proj-.[26D[K
+(`OPENAI_API_KEY=sk-proj-...`).
+
+    *   Secret detected? Yes.
+    *   Recipe for Secrets:
+        *   `project_bucket = general`
+        *   `primary_domain = security`
+        *   `domain_tags`: `["security", "software", "secret_handling"]` (i[2D[K
+(including software as per instructions).
+        *   `storage_relevance = high`
+        *   `lifecycle_status_proposal = raw_input`
+        *   `sensitivity_bucket_proposal = secret`
+        *   `source_class_policy_proposal = blocked`
+        *   `retrieval_behavior_proposal = blocked`
+        *   `api_or_model_escalation_recommended = false`
+        *   `reasoning_route_proposal = none`
+        *   `data_package_needed = none`
+        *   `redaction_required = true`
+
+    *   `case_id`: "HG-016" (provided in schema).
+    *   `project_bucket`: "general".
+    *   `summary`: "Input contains an API key request; treat as secret."
+    *   `primary_domain`: "security".
+    *   `domain_tags`: ["security", "software", "secret_handling"].
+    *   `domain_bucket`: (The schema has `domain_bucket`, which is a broade[6D[K
+broader category). Looking at the allowed enums: `bioprocess|coursework|gen[26D[K
+`bioprocess|coursework|general|local_ai|memory|modeling|personal|reactor_de`bioprocess|coursework|genral|local_ai|memory|modeling|personal|reactor_design|retrieval|software|unknown`. I'll choose "software" or "general". The r[1D[K
+recipe suggests "security" as primary domain. The enum for `domain_bucket` [K
+includes "software".
+    *   `storage_relevance`: "high".
+    *   `lifecycle_status_proposal`: "raw_input".
+    *   `lifecycle_status`: "raw_input". (Wait, the schema has both `lifecy[7D[K
+`lifecycle_status_proposal` and `lifecycle_status`. Usually, if proposed is[2D[K
+is raw_input, lifecycle status follows).
+    *   `sensitivity_bucket_proposal`: "secret".
+    *   `sensitivity_bucket`: "secret".
+    *   `source_class_policy_proposal`: "blocked".
+    *   `source_class_policy`: "blocked".
+    *   `retrieval_behavior_proposal`: "blocked".
+    *   `retrieval_behavior`: "blocked".
+    *   `flags`: []. (Usually empty unless specific flags are defined, but [K
+instructions don't define any specifically for secrets other than the behav[5D[K
+behavior).
+    *   `not_decided`: false.
+    *   `clarification_required`: false.
+    *   `clarification`: false.
+    *   `api_or_model_escalation_recommended`: false.
+    *   `reasoning_route_proposal`: "none".
+    *   `brief_rationale`: "API key detected in input; applying secret hand[4D[K
+handling policy."
+
+    *   JSON only? Yes.
+    *   No markdown? Yes.
+    *   Enum check: `project_bucket`, `domain_bucket`, `storage_relevance`,[20D[K
+`storage_relevance`, etc., all look correct per the prompt's allowed list.
+
+    Note on `lifecycle_status`: The instructions for "Secrets" say `lifecyc[8D[K
+`lifecycle

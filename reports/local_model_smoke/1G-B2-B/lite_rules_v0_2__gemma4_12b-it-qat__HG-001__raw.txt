@@ -1,0 +1,61 @@
+Thinking...
+*   Task: Fill a bounded JarvisOS form for a smoke test.
+    *   Context: Fast secretary draft worker for JarvisOS/BlueRev.
+    *   Input Text: "For JarvisOS, MemoryStore should remain the only futur[5D[K
+future durable memory write boundary. Hooks and routes can submit events, b[1D[K
+but they must not write accepted memory directly."
+    *   Constraints: JSON output only, no markdown, follow specific rules ([1D[K
+(JarvisOS architecture rule).
+
+    *   Subject: JarvisOS MemoryStore/Architecture.
+    *   Core Instruction: Only `MemoryStore` is the durable memory write bo[2D[K
+boundary. Events can be submitted but not direct writes to accepted memory.[7D[K
+memory.
+    *   Context Classification: This falls under "JarvisOS memory bo[2D[K
+boundary / architecture rule".
+
+    *   *Recipe Checklist:*
+        *   `project_bucket = jarvisos`
+        *   `primary_domain = memory`
+        *   `domain_tags` include `memory`, `software`, `architecture`.
+        *   `storage_relevance = high`
+        *   `lifecycle_status_proposal = proposed_memory` (Actually, the pr[2D[K
+prompt says "proposed_memory" for architecture rules usually, let's check r[1D[K
+rule). Rule says: "Use `lifecycle_status_proposal = proposed_memory`, `sens[5D[K
+`sensitivity_bucket_proposal = internal`, `source_class_policy_proposal = r[1D[K
+review_only`, `not_decided = false`".
+        *   Wait, looking at the recipe for JarvisOS architecture rule:
+            - `project_bucket`: jarvisos
+            - `primary_domain`: memory
+            - `domain_tags`: [memory, software, architecture]
+            - `storage_relevance`: high
+            - `lifecycle_status_proposal`: proposed_memory
+            - `sensitivity_bucket_proposal`: internal
+            - `source_class_policy_proposal`: review_only
+            - `not_decided`: false
+            - `retrieval_behavior_proposal`: none (if only architecture rul[3D[K
+rule and no source retrieval needed).
+
+    *   `case_id`: "HG-001" (from prompt structure)
+    *   `project_bucket`: "jarvisos"
+    *   `summary`: "MemoryStore is the exclusive durable memory write bound[5D[K
+boundary for JarvisOS; hooks/routes submit events but cannot write accepted[8D[K
+accepted memory directly."
+    *   `primary_domain`: "memory"
+    *   `domain_tags`: ["memory", "software", "architecture"]
+    *   `domain_bucket`: "memory"
+    *   `storage_relevance`: "high"
+    *   `lifecycle_status_proposal`: "proposed_memory"
+    *   `lifecycle_status`: "unknown" (or leave as proposal/default? The pr[2D[K
+prompt structure has both status and status\_proposal. Usually, if it's a d[1D[K
+draft, proposed is set). Let's stick to the recipe logic. If not specified [K
+for lifecycle_status specifically in recipe other than proposal, I'll use `[1D[K
+`unknown`. Actually, the prompt says "Use only...". I will map based on the[3D[K
+the architecture rule provided.
+    *   `sensitivity_bucket_proposal`: "internal"
+    *   `sensitivity_bucket`: "unknown" (Usually internal if suggested). Le[2D[K
+Let's keep consistency with props. Wait, the recipe doesn't specify `lifecy[7D[K
+`lifecycle_status` (just proposal), so I'll set status to `unknown`.
+    *   `source_class_policy_proposal`: "review_only"
+    *   `source_class_policy`: "unknown" (Wait, enum is blocked|default_all[19D[K
+blocked|default_allowed|not_applicable|review_only). Let's put "review_only

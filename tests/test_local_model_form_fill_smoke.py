@@ -1,3 +1,4 @@
+import json
 import sys
 import unittest
 from contextlib import redirect_stdout
@@ -27,6 +28,12 @@ class LocalModelFormFillSmokeTests(unittest.TestCase):
         cls.config_path = ROOT / smoke.DEFAULT_CONFIG
         cls.micro_pack_path = (
             ROOT / "docs/context_packs/JARVISOS_FAST_SECRETARY_MICRO_v0_1.md"
+        )
+        cls.micro_rules_pack_path = (
+            ROOT / "docs/context_packs/JARVISOS_FAST_SECRETARY_MICRO_RULES_v0_2.md"
+        )
+        cls.lite_rules_pack_path = (
+            ROOT / "docs/context_packs/JARVISOS_FAST_SECRETARY_LITE_RULES_v0_2.md"
         )
         cls.cases = smoke.load_jsonl_holdout(cls.holdout_path)
         cls.config = smoke.load_candidate_config(cls.config_path)
@@ -176,6 +183,13 @@ class LocalModelFormFillSmokeTests(unittest.TestCase):
     def test_raw_output_report_format_strips_trailing_whitespace(self):
         self.assertEqual("a\nb\n", smoke.format_raw_output_for_report("a  \nb\t\n\n"))
 
+    def test_v02_pack_files_exist_and_load(self):
+        for path in [self.micro_rules_pack_path, self.lite_rules_pack_path]:
+            self.assertTrue(path.exists())
+            pack = smoke.load_context_pack(path)
+            self.assertIn("Case Routing Recipes", pack["content"])
+            self.assertIn("Output Discipline", pack["content"])
+
     def test_context_pack_loading(self):
         pack = smoke.load_context_pack(self.micro_pack_path)
         self.assertGreater(pack["char_count"], 0)
@@ -187,6 +201,27 @@ class LocalModelFormFillSmokeTests(unittest.TestCase):
         self.assertEqual("micro", pack["label"])
         self.assertEqual(str(self.micro_pack_path), pack["path"])
         self.assertGreater(pack["approx_token_estimate"], 0)
+
+    def test_pack_label_preserved_in_result(self):
+        case = next(case for case in self.cases if case["case_id"] == "HG-001")
+        model = smoke.select_models(self.config, ["qwen3:8b"])[0]
+        pack = smoke.load_context_pack(self.micro_rules_pack_path)
+        pack["label"] = "micro_rules_v0_2"
+        raw_path = Path("reports/local_model_smoke/test/raw.txt")
+        result = smoke.build_result_record(
+            model=model,
+            case=case,
+            raw_path=raw_path,
+            ollama_result={
+                "stdout": '{"case_id": "HG-001"}',
+                "stderr": "",
+                "duration_seconds": 0.1,
+                "returncode": 0,
+                "timed_out": False,
+            },
+            context_pack=pack,
+        )
+        self.assertEqual("micro_rules_v0_2", result["context_pack_label"])
 
     def test_soft_hard_score_separation(self):
         case = next(case for case in self.cases if case["case_id"] == "HG-006")
@@ -209,6 +244,57 @@ class LocalModelFormFillSmokeTests(unittest.TestCase):
         self.assertEqual(5, score["soft"]["matched"])
         self.assertEqual(8, score["hard"]["matched"])
         self.assertEqual([], score["critical_gates"]["failures"])
+
+    def test_domain_tags_aware_soft_scoring(self):
+        case = next(case for case in self.cases if case["case_id"] == "HG-001")
+        parsed = {
+            "project_bucket": "jarvisos",
+            "primary_domain": "software",
+            "domain_tags": ["software", "memory", "architecture"],
+            "storage_relevance": "high",
+            "brief_rationale": "architecture rule",
+        }
+        score = smoke.score_soft_fields(parsed, case)
+        self.assertFalse(score["fields"]["primary_domain"]["exact_matched"])
+        self.assertTrue(score["fields"]["domain_tags"]["tolerant_matched"])
+
+    def test_secret_security_tolerant_soft_scoring(self):
+        case = next(case for case in self.cases if case["case_id"] == "HG-016")
+        parsed = {
+            "project_bucket": "general",
+            "primary_domain": "security",
+            "domain_tags": ["security", "software", "secret_handling"],
+            "storage_relevance": "high",
+            "brief_rationale": "secret handling",
+            "lifecycle_status_proposal": "raw_input",
+            "sensitivity_bucket_proposal": "secret",
+            "source_class_policy_proposal": "blocked",
+            "retrieval_behavior_proposal": "blocked",
+            "api_or_model_escalation_recommended": False,
+            "reasoning_route_proposal": "none",
+        }
+        score = smoke.score_soft_fields(parsed, case)
+        self.assertFalse(score["fields"]["primary_domain"]["exact_matched"])
+        self.assertTrue(score["fields"]["primary_domain"]["tolerant_matched"])
+        self.assertGreater(score["tolerant_matched"], score["exact_matched"])
+
+    def test_exact_and_tolerant_soft_scores_both_reported(self):
+        case = next(case for case in self.cases if case["case_id"] == "HG-016")
+        score = smoke.score_output(
+            {
+                "primary_domain": "security",
+                "domain_tags": ["software", "secret_handling"],
+                "sensitivity_bucket_proposal": "secret",
+                "source_class_policy_proposal": "blocked",
+                "retrieval_behavior_proposal": "blocked",
+                "api_or_model_escalation_recommended": False,
+                "reasoning_route_proposal": "none",
+            },
+            case,
+            secretary_mode=True,
+        )
+        self.assertIn("exact_matched", score["soft"])
+        self.assertIn("tolerant_matched", score["soft"])
 
     def test_legacy_field_compatibility(self):
         case = next(case for case in self.cases if case["case_id"] == "HG-016")
@@ -242,6 +328,20 @@ class LocalModelFormFillSmokeTests(unittest.TestCase):
         self.assertIn("secret_implies_secret_blocked_blocked", gates["failures"])
         self.assertIn("no_external_provider_for_raw_secret", gates["failures"])
 
+    def test_critical_gates_still_fail_when_secret_not_blocked(self):
+        case = next(case for case in self.cases if case["case_id"] == "HG-016")
+        gates = smoke.critical_gate_checks(
+            {
+                "sensitivity_bucket_proposal": "secret",
+                "source_class_policy_proposal": "review_only",
+                "retrieval_behavior_proposal": "full_body_required",
+                "api_or_model_escalation_recommended": False,
+                "reasoning_route_proposal": "none",
+            },
+            case,
+        )
+        self.assertIn("secret_implies_secret_blocked_blocked", gates["failures"])
+
     def test_dry_run_with_context_pack_still_works(self):
         output = StringIO()
         with redirect_stdout(output):
@@ -259,6 +359,35 @@ class LocalModelFormFillSmokeTests(unittest.TestCase):
             )
         self.assertEqual(0, result)
         self.assertIn("context pack label: micro", output.getvalue())
+
+    def test_dry_run_with_v02_context_pack_still_works(self):
+        output = StringIO()
+        with redirect_stdout(output):
+            result = smoke.main(
+                [
+                    "--dry-run",
+                    "--include-disabled",
+                    "--max-cases",
+                    "1",
+                    "--context-pack",
+                    str(self.micro_rules_pack_path),
+                    "--pack-label",
+                    "micro_rules_v0_2",
+                ]
+            )
+        self.assertEqual(0, result)
+        self.assertIn("context pack label: micro_rules_v0_2", output.getvalue())
+
+    def test_legacy_v01_report_compatibility_preserved(self):
+        report_path = (
+            ROOT
+            / "reports/local_model_smoke/1G-B2-A/micro__local_model_form_fill_smoke_summary.json"
+        )
+        data = json.loads(report_path.read_text(encoding="utf-8"))
+        row = data["core_field_exact_matches_by_run"][0]
+        self.assertIn("exact_matches", row)
+        self.assertIn("soft_matches", row)
+        self.assertIn("hard_matches", row)
 
 
 if __name__ == "__main__":

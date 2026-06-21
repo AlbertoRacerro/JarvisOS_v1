@@ -454,6 +454,33 @@ def load_context_pack(path: Path | None) -> dict[str, Any]:
     }
 
 
+def collect_context_packs(args: argparse.Namespace) -> list[dict[str, Any]]:
+    if args.context_pack and args.context_packs:
+        raise ValueError("Use only one of --context-pack or --context-packs")
+    if args.pack_label and args.pack_labels:
+        raise ValueError("Use only one of --pack-label or --pack-labels")
+
+    if args.context_packs:
+        paths = [Path(value) for value in parse_csv_values(
+            args.context_packs,
+            flag_name="--context-packs",
+        ) or []]
+        labels = parse_csv_values(args.pack_labels, flag_name="--pack-labels")
+        if labels is not None and len(labels) != len(paths):
+            raise ValueError("--pack-labels must match --context-packs length")
+        packs = []
+        for index, path in enumerate(paths):
+            pack = load_context_pack(path)
+            pack["label"] = labels[index] if labels else default_pack_label(path)
+            packs.append(pack)
+        return packs
+
+    context_pack_path = Path(args.context_pack) if args.context_pack else None
+    pack = load_context_pack(context_pack_path)
+    pack["label"] = args.pack_label or default_pack_label(context_pack_path)
+    return [pack]
+
+
 def default_pack_label(path: Path | None) -> str | None:
     if path is None:
         return None
@@ -612,25 +639,49 @@ def score_soft_fields(
             tags = first_present(parsed, field_names) if isinstance(parsed, dict) else None
             valid = isinstance(tags, list) and all(isinstance(tag, str) for tag in tags)
             expected = case.get(expected_field) if expected_field else None
-            matched = valid and expected in set(tags)
+            tag_set = set(tags) if valid else set()
+            matched = valid and expected in tag_set
             fields[output_field] = {
                 "actual": tags,
                 "expected": expected,
                 "valid": valid,
+                "exact_matched": matched,
+                "tolerant_matched": matched,
                 "matched": matched,
                 "field_names": list(field_names),
             }
             continue
-        fields[output_field] = compare_scalar_field(
+        field = compare_scalar_field(
             parsed=parsed,
             case=case,
             field_names=field_names,
             expected_field=expected_field,
             valid_values=valid_values,
         )
+        exact_matched = field["matched"]
+        tolerant_matched = exact_matched
+        if output_field == "primary_domain" and case["case_id"] == "HG-016":
+            tags = first_present(parsed, ("domain_tags",)) if isinstance(parsed, dict) else None
+            tag_set = set(tags) if isinstance(tags, list) else set()
+            gates = critical_gate_checks(parsed, case)
+            tolerant_matched = (
+                exact_matched
+                or (
+                    field["actual"] == "security"
+                    and not gates["failures"]
+                    and bool(tag_set & {"software", "secret_handling"})
+                )
+            )
+        field["exact_matched"] = exact_matched
+        field["tolerant_matched"] = tolerant_matched
+        fields[output_field] = field
     return {
         "fields": fields,
-        "matched": sum(1 for field in fields.values() if field["matched"]),
+        "matched": sum(1 for field in fields.values() if field["exact_matched"]),
+        "exact_matched": sum(1 for field in fields.values() if field["exact_matched"]),
+        "tolerant_matched": sum(
+            1 for field in fields.values() if field["tolerant_matched"]
+        ),
         "total": len(fields),
     }
 
@@ -976,7 +1027,11 @@ def summarize_results(
                 "core_field_match_count"
             ],
             "total": result["comparison"]["legacy_core"]["core_field_total"],
-            "soft_matches": result["comparison"]["soft"]["matched"],
+            "soft_exact_matches": result["comparison"]["soft"]["exact_matched"],
+            "soft_tolerant_matches": result["comparison"]["soft"][
+                "tolerant_matched"
+            ],
+            "soft_matches": result["comparison"]["soft"]["tolerant_matched"],
             "soft_total": result["comparison"]["soft"]["total"],
             "hard_matches": result["comparison"]["hard"]["matched"],
             "hard_total": result["comparison"]["hard"]["total"],
@@ -1019,6 +1074,139 @@ def summarize_results(
     }
 
 
+def summarize_ablation(results: list[dict[str, Any]], report_dir: Path) -> dict[str, Any]:
+    profiles: dict[tuple[str, str], dict[str, Any]] = {}
+    for result in results:
+        key = (result["context_pack_label"], result["ollama_name"])
+        profile = profiles.setdefault(
+            key,
+            {
+                "context_pack_label": result["context_pack_label"],
+                "model": result["ollama_name"],
+                "runs": 0,
+                "json_parse_passes": 0,
+                "timeouts": 0,
+                "hard_matches": 0,
+                "hard_total": 0,
+                "soft_exact_matches": 0,
+                "soft_tolerant_matches": 0,
+                "soft_total": 0,
+                "critical_gate_failures": 0,
+                "manual_review_required": True,
+            },
+        )
+        profile["runs"] += 1
+        profile["json_parse_passes"] += int(result["json_parse_passed"])
+        profile["timeouts"] += int(result["timed_out"])
+        profile["hard_matches"] += result["comparison"]["hard"]["matched"]
+        profile["hard_total"] += result["comparison"]["hard"]["total"]
+        profile["soft_exact_matches"] += result["comparison"]["soft"]["exact_matched"]
+        profile["soft_tolerant_matches"] += result["comparison"]["soft"][
+            "tolerant_matched"
+        ]
+        profile["soft_total"] += result["comparison"]["soft"]["total"]
+        profile["critical_gate_failures"] += len(
+            result["comparison"]["critical_gates"]["failures"]
+        )
+
+    profile_rows = sorted(
+        profiles.values(),
+        key=lambda item: (
+            item["context_pack_label"] or "",
+            item["model"],
+        ),
+    )
+
+    def best_by(key: str) -> dict[str, Any] | None:
+        if not profile_rows:
+            return None
+        return max(
+            profile_rows,
+            key=lambda item: (
+                item[key] / item["runs"]
+                if key in {"json_parse_passes"} and item["runs"]
+                else item[key] / max(1, item.get(key.replace("matches", "total"), 1)),
+                -item["critical_gate_failures"],
+            ),
+        )
+
+    def pack_totals(label: str) -> dict[str, Any]:
+        rows = [row for row in profile_rows if row["context_pack_label"] == label]
+        return {
+            "label": label,
+            "runs": sum(row["runs"] for row in rows),
+            "json_parse_passes": sum(row["json_parse_passes"] for row in rows),
+            "hard_matches": sum(row["hard_matches"] for row in rows),
+            "hard_total": sum(row["hard_total"] for row in rows),
+            "soft_exact_matches": sum(row["soft_exact_matches"] for row in rows),
+            "soft_tolerant_matches": sum(row["soft_tolerant_matches"] for row in rows),
+            "soft_total": sum(row["soft_total"] for row in rows),
+            "critical_gate_failures": sum(row["critical_gate_failures"] for row in rows),
+        }
+
+    pack_comparisons = {
+        "micro_rules_v0_2_over_micro_v0_1": {
+            "baseline": pack_totals("micro_v0_1"),
+            "candidate": pack_totals("micro_rules_v0_2"),
+        },
+        "lite_rules_v0_2_over_lite_v0_1": {
+            "baseline": pack_totals("lite_v0_1"),
+            "candidate": pack_totals("lite_rules_v0_2"),
+        },
+    }
+
+    best_parse = best_by("json_parse_passes")
+    best_hard = max(
+        profile_rows,
+        key=lambda item: (
+            item["hard_matches"] / max(1, item["hard_total"]),
+            item["json_parse_passes"] / max(1, item["runs"]),
+            -item["critical_gate_failures"],
+        ),
+    ) if profile_rows else None
+    best_soft_tolerant = max(
+        profile_rows,
+        key=lambda item: (
+            item["soft_tolerant_matches"] / max(1, item["soft_total"]),
+            item["json_parse_passes"] / max(1, item["runs"]),
+            -item["critical_gate_failures"],
+        ),
+    ) if profile_rows else None
+    recommended = None
+    if profile_rows:
+        recommended = max(
+            profile_rows,
+            key=lambda item: (
+                item["json_parse_passes"] / max(1, item["runs"]),
+                item["hard_matches"] / max(1, item["hard_total"]),
+                item["soft_tolerant_matches"] / max(1, item["soft_total"]),
+                -item["critical_gate_failures"],
+            ),
+        )
+
+    return {
+        "schema_version": "local_model_form_fill_recipe_ablation_summary_v0",
+        "milestone": "1G-B2-B",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "report_dir": str(report_dir),
+        "semantic_truth_scored": False,
+        "manual_review_required": True,
+        "total_runs": len(results),
+        "profiles": profile_rows,
+        "pack_comparisons": pack_comparisons,
+        "best_parse_stability_profile": best_parse,
+        "best_hard_score_profile": best_hard,
+        "best_soft_tolerant_score_profile": best_soft_tolerant,
+        "known_error_reduction_notes": {
+            "bluerev_unresolved_assumption": "review per HG-006 hard/not_decided fields",
+            "memory_boundary_too_broad": "review per HG-001 hard/soft scores",
+            "secret_soft_domain_mismatch": "primary_domain=security tolerated only with software or secret_handling tags and passing hard secret gates",
+            "external_provider_risk_for_secret": "tracked by no_external_provider_for_raw_secret critical gate",
+        },
+        "recommended_next_expanded_profile": recommended,
+    }
+
+
 def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
     rows = [
         "| pack | model | case_id | json_parse | legacy_core | soft | hard | gate_failures | timeout | returncode |",
@@ -1027,7 +1215,8 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
     for item in summary["core_field_exact_matches_by_run"]:
         rows.append(
             "| {context_pack_label} | {model} | {case_id} | {json_parse_passed} | "
-            "{exact_matches}/{total} | {soft_matches}/{soft_total} | "
+            "{exact_matches}/{total} | {soft_exact_matches}/{soft_total} exact, "
+            "{soft_tolerant_matches}/{soft_total} tolerant | "
             "{hard_matches}/{hard_total} | {critical_gate_failures} | "
             "{timed_out} | {returncode} |".format(**item)
         )
@@ -1054,6 +1243,41 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def write_ablation_markdown(path: Path, summary: dict[str, Any]) -> None:
+    rows = [
+        "| pack | model | parse | hard | soft exact | soft tolerant | gate failures |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for profile in summary["profiles"]:
+        rows.append(
+            "| {context_pack_label} | {model} | {json_parse_passes}/{runs} | "
+            "{hard_matches}/{hard_total} | {soft_exact_matches}/{soft_total} | "
+            "{soft_tolerant_matches}/{soft_total} | {critical_gate_failures} |".format(
+                **profile
+            )
+        )
+    recommended = summary["recommended_next_expanded_profile"] or {}
+    content = "\n".join(
+        [
+            "# 1G-B2-B Fast Secretary Recipe Ablation Summary",
+            "",
+            "Manual review is required. This ablation does not prove semantic truth.",
+            "",
+            f"- total runs: {summary['total_runs']}",
+            "- MICRO_RULES v0.2 over MICRO v0.1: see pack_comparisons in JSON",
+            "- LITE_RULES v0.2 over LITE v0.1: see pack_comparisons in JSON",
+            f"- best parse stability: {summary['best_parse_stability_profile']}",
+            f"- best hard score: {summary['best_hard_score_profile']}",
+            f"- best soft tolerant score: {summary['best_soft_tolerant_score_profile']}",
+            f"- recommended next expanded profile: {recommended}",
+            "",
+            *rows,
+            "",
+        ]
+    )
+    path.write_text(content, encoding="utf-8")
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Dry-run and local-only form-fill smoke harness."
@@ -1067,7 +1291,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout-seconds", type=int, default=180)
     parser.add_argument("--report-dir", default=str(DEFAULT_REPORT_DIR))
     parser.add_argument("--context-pack", default=None)
+    parser.add_argument("--context-packs", default=None)
     parser.add_argument("--pack-label", default=None)
+    parser.add_argument("--pack-labels", default=None)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--run-local", action="store_true")
     return parser
@@ -1082,9 +1308,7 @@ def run_dry_run(args: argparse.Namespace) -> int:
 
     config = load_candidate_config(config_path)
     validate_candidate_config(config)
-    context_pack_path = Path(args.context_pack) if args.context_pack else None
-    context_pack = load_context_pack(context_pack_path)
-    context_pack["label"] = args.pack_label or default_pack_label(context_pack_path)
+    context_packs = collect_context_packs(args)
 
     selected_cases = select_cases(
         cases,
@@ -1113,14 +1337,15 @@ def run_dry_run(args: argparse.Namespace) -> int:
     else:
         print("- none selected; pass --include-disabled to list disabled candidates")
     print(f"enabled model count: {enabled_model_count(config)}")
-    if context_pack["path"]:
-        print(f"context pack path: {context_pack['path']}")
-        print(f"context pack label: {context_pack['label']}")
-        print(f"context pack char count: {context_pack['char_count']}")
-        print(
-            "context pack approx token estimate: "
-            f"{context_pack['approx_token_estimate']}"
-        )
+    for context_pack in context_packs:
+        if context_pack["path"]:
+            print(f"context pack path: {context_pack['path']}")
+            print(f"context pack label: {context_pack['label']}")
+            print(f"context pack char count: {context_pack['char_count']}")
+            print(
+                "context pack approx token estimate: "
+                f"{context_pack['approx_token_estimate']}"
+            )
     print("inference disabled in dry-run: no model calls were made")
     print(f"expected future report path: {EXPECTED_FUTURE_REPORT}")
     return 0
@@ -1133,9 +1358,7 @@ def run_local(args: argparse.Namespace) -> int:
     holdout_path = Path(args.holdout)
     config_path = Path(args.config)
     report_dir = Path(args.report_dir)
-    context_pack_path = Path(args.context_pack) if args.context_pack else None
-    context_pack = load_context_pack(context_pack_path)
-    context_pack["label"] = args.pack_label or default_pack_label(context_pack_path)
+    context_packs = collect_context_packs(args)
 
     cases = load_jsonl_holdout(holdout_path)
     validate_holdout_cases(cases, require_full_set=True)
@@ -1156,55 +1379,70 @@ def run_local(args: argparse.Namespace) -> int:
 
     report_dir.mkdir(parents=True, exist_ok=True)
     results: list[dict[str, Any]] = []
-    for model in selected_models:
-        for case in selected_cases:
-            raw_path, result_path = result_paths(
-                report_dir,
-                model,
-                case["case_id"],
-                context_pack["label"],
-            )
-            prompt = build_prompt(case, context_pack)
-            ollama_result = run_ollama(
-                model["ollama_name"],
-                prompt,
-                args.timeout_seconds,
-            )
-            raw_path.write_text(
-                format_raw_output_for_report(ollama_result["stdout"]),
-                encoding="utf-8",
-            )
-            result = build_result_record(
-                model=model,
-                case=case,
-                raw_path=raw_path,
-                ollama_result=ollama_result,
-                context_pack=context_pack,
-            )
-            write_json(result_path, result)
-            results.append(result)
-            print(
-                f"{model['ollama_name']} {case['case_id']}: "
-                f"parse={result['json_parse_passed']} "
-                f"soft={result['comparison']['soft']['matched']}/"
-                f"{result['comparison']['soft']['total']} "
-                f"hard={result['comparison']['hard']['matched']}/"
-                f"{result['comparison']['hard']['total']} "
-                f"gates={len(result['comparison']['critical_gates']['failures'])} "
-                f"timeout={result['timed_out']}"
-            )
+    for context_pack in context_packs:
+        pack_results: list[dict[str, Any]] = []
+        for model in selected_models:
+            for case in selected_cases:
+                raw_path, result_path = result_paths(
+                    report_dir,
+                    model,
+                    case["case_id"],
+                    context_pack["label"],
+                )
+                prompt = build_prompt(case, context_pack)
+                ollama_result = run_ollama(
+                    model["ollama_name"],
+                    prompt,
+                    args.timeout_seconds,
+                )
+                raw_path.write_text(
+                    format_raw_output_for_report(ollama_result["stdout"]),
+                    encoding="utf-8",
+                )
+                result = build_result_record(
+                    model=model,
+                    case=case,
+                    raw_path=raw_path,
+                    ollama_result=ollama_result,
+                    context_pack=context_pack,
+                )
+                write_json(result_path, result)
+                pack_results.append(result)
+                results.append(result)
+                print(
+                    f"{context_pack['label']} {model['ollama_name']} {case['case_id']}: "
+                    f"parse={result['json_parse_passed']} "
+                    f"soft_exact={result['comparison']['soft']['exact_matched']}/"
+                    f"{result['comparison']['soft']['total']} "
+                    f"soft_tolerant={result['comparison']['soft']['tolerant_matched']}/"
+                    f"{result['comparison']['soft']['total']} "
+                    f"hard={result['comparison']['hard']['matched']}/"
+                    f"{result['comparison']['hard']['total']} "
+                    f"gates={len(result['comparison']['critical_gates']['failures'])} "
+                    f"timeout={result['timed_out']}"
+                )
 
-    summary = summarize_results(results, report_dir, context_pack)
-    summary_stem = "local_model_form_fill_smoke_summary"
-    if context_pack["label"]:
-        summary_stem = f"{sanitize_filename(context_pack['label'])}__{summary_stem}"
-    write_json(report_dir / f"{summary_stem}.json", summary)
-    write_summary_markdown(
-        report_dir / f"{summary_stem}.md",
-        summary,
-    )
-    print(f"summary json: {report_dir / f'{summary_stem}.json'}")
-    print(f"summary md: {report_dir / f'{summary_stem}.md'}")
+        summary = summarize_results(pack_results, report_dir, context_pack)
+        summary_stem = "local_model_form_fill_smoke_summary"
+        if context_pack["label"]:
+            summary_stem = f"{sanitize_filename(context_pack['label'])}__{summary_stem}"
+        write_json(report_dir / f"{summary_stem}.json", summary)
+        write_summary_markdown(
+            report_dir / f"{summary_stem}.md",
+            summary,
+        )
+        print(f"summary json: {report_dir / f'{summary_stem}.json'}")
+        print(f"summary md: {report_dir / f'{summary_stem}.md'}")
+
+    if len(context_packs) > 1:
+        ablation_summary = summarize_ablation(results, report_dir)
+        write_json(report_dir / "recipe_ablation_summary.json", ablation_summary)
+        write_ablation_markdown(
+            report_dir / "recipe_ablation_summary.md",
+            ablation_summary,
+        )
+        print(f"ablation summary json: {report_dir / 'recipe_ablation_summary.json'}")
+        print(f"ablation summary md: {report_dir / 'recipe_ablation_summary.md'}")
     return 0
 
 

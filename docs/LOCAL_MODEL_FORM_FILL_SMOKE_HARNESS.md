@@ -5,6 +5,7 @@ Milestones:
 - 1G-A - Local model form-fill smoke harness skeleton
 - 1G-B1 - Installed local model form-fill smoke run
 - 1G-B2-A - Fast secretary context pack compression and scoring refinement
+- 1G-B2-B - Fast secretary recipe ablation
 
 ## Purpose
 
@@ -185,6 +186,58 @@ The harness now separates:
 This is still smoke evidence only. It does not prove semantic truth or approve
 runtime use.
 
+## 1G-B2-B Recipe Ablation
+
+1G-B2-B adds compact recipe variants without overwriting v0.1 packs:
+
+- `docs/context_packs/JARVISOS_FAST_SECRETARY_MICRO_RULES_v0_2.md`
+- `docs/context_packs/JARVISOS_FAST_SECRETARY_LITE_RULES_v0_2.md`
+
+The v0.2 packs add compact case routing recipes for:
+
+- JarvisOS memory boundary / architecture rules;
+- BlueRev unresolved engineering assumptions;
+- API key / credential / secret handling;
+- output discipline for JSON-only responses.
+
+The ablation matrix remains bounded:
+
+```text
+packs: micro_v0_1, micro_rules_v0_2, lite_v0_1, lite_rules_v0_2
+models: qwen3:8b, gemma4:12b-it-qat
+cases: HG-001, HG-006, HG-016
+total: 24 local Ollama runs
+```
+
+Reports are written under:
+
+```text
+reports/local_model_smoke/1G-B2-B/
+```
+
+Summary files:
+
+- `reports/local_model_smoke/1G-B2-B/recipe_ablation_summary.json`
+- `reports/local_model_smoke/1G-B2-B/recipe_ablation_summary.md`
+
+High-level result:
+
+```text
+micro_v0_1:       6/6 parse, 43/48 hard, 22/30 soft tolerant, 0 gates
+micro_rules_v0_2: 5/6 parse, 39/48 hard, 25/30 soft tolerant, 1 gate
+lite_v0_1:        4/6 parse, 24/48 hard, 15/30 soft tolerant, 4 gates
+lite_rules_v0_2:  1/6 parse,  7/48 hard,  5/30 soft tolerant, 5 gates
+```
+
+Best profile for the next expanded run:
+
+```text
+micro_rules_v0_2 + qwen3:8b
+```
+
+That profile produced 3/3 parse, 23/24 hard, 15/15 soft tolerant, and 0
+critical gate failures. This is still smoke evidence only.
+
 ## Dry-Run Behavior
 
 Example:
@@ -203,6 +256,7 @@ Dry-run output includes:
 - enabled model count;
 - note that inference is disabled in 1G-A;
 - context pack metadata when `--context-pack` is provided;
+- multiple context packs when `--context-packs` and `--pack-labels` are provided;
 - expected future report path.
 
 Dry-run mode does not write a report.
@@ -244,23 +298,28 @@ The tests cover:
 - legacy field compatibility;
 - critical gate detection;
 - dry-run with a context pack.
+- v0.2 recipe pack loading;
+- domain-tags-aware tolerant soft scoring;
+- secret/security soft-domain tolerance;
+- multi-pack label preservation;
+- legacy v0.1 report compatibility.
 
 ## Future 1G-B
 
-After 1G-B2-A, the next milestone is:
+After 1G-B2-B, the next milestone is:
 
 ```text
-1G-B2-B - Expanded installed local secretary smoke run
+1G-B2-C - Expanded profiled secretary smoke run
 ```
 
-1G-B2-B may decide whether to expand the installed local secretary smoke scope.
+1G-B2-C may decide whether to expand the installed local secretary smoke scope.
 Any live run must remain local, explicit, bounded, auditable, and separate from
 runtime memory, retrieval, provider routing, tool execution, and BlueRev
 modeling.
 
 ## Milestone Boundary Confirmation
 
-1G-B2-A adds context-pack comparison support, scoring refinement, generated
+1G-B2-B adds recipe pack ablation support, tolerant soft scoring, generated
 local smoke reports, docs, and `unittest` coverage.
 
 It adds no:
@@ -286,4 +345,4 @@ It adds no:
 - external reference audit;
 - vendored code.
 
-This milestone does not start `1G-B2-B - Expanded installed local secretary smoke run`.
+This milestone does not start `1G-B2-C - Expanded profiled secretary smoke run`.

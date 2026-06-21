@@ -1,0 +1,132 @@
+Thinking...
+*   Input text: "For JarvisOS, MemoryStore should remain the only future du[2D[K
+durable memory write boundary. Hooks and routes can submit events, but they[4D[K
+they must not write accepted memory directly."
+    *   Context: Filling a bounded JarvisOS form for a smoke test based on [K
+the Fast Secretary Context Pack Lite v0.1.
+
+    *   "MemoryStore is the *only* future durable memory write boundary." ([1D[K
+(System architecture rule).
+    *   "Hooks and routes can submit events but must not write accepted mem[3D[K
+memory directly." (Restriction/Rule).
+    *   This seems like a definitive architectural decision/policy for Jarv[4D[K
+JarvisOS.
+
+    *   `case_id`: Needs to be assigned or kept (usually standard, I'll use[3D[K
+use "HG-001" as seen in the template if none provided, but since it's a smo[3D[K
+smoke test with no specific ID given, I'll stick to a generic one or follow[6D[K
+follow the requested schema). The prompt shows `case_id: HG-001` in the exa[3D[K
+example.
+    *   `project_bucket`: "jarvisos" (The text specifically mentions Jarvis[6D[K
+JarvisOS).
+    *   `summary`: MemoryStore as the exclusive durable memory write bounda[6D[K
+boundary; hooks/routes restricted from direct accepted memory writes.
+    *   `primary_domain`: "memory" or "software". Given the context of "Mem[4D[K
+"MemoryStore", `memory` is primary, but `software` is relevant for architec[8D[K
+architecture. I'll pick `memory`.
+    *   `domain_tags`: ["memory", "software", "architecture"].
+    *   `domain_bucket`: "memory". (From enum: memory).
+    *   `storage_relevance`: "high" (This is a core system rule/decision, d[1D[K
+durable information).
+    *   `lifecycle_status_proposal`: "accepted_memory" or "canonical_state"[17D[K
+"canonical_state"? Since it's expressed as a requirement ("should remain"),[9D[K
+remain"), `accepted_memory` fits best.
+    *   `lifecycle_status`: "raw_input" (initial intake) vs "proposed_memor[15D[K
+"proposed_memory". Actually, the prompt says: "Use accepted_memory only wit[3D[K
+with clear acceptance... or canonical evidence." This text sounds like a de[2D[K
+definitive rule from the Signore/system context. I'll use `accepted_memory`[17D[K
+`accepted_memory`.
+    *   `sensitivity_bucket_proposal`: "internal" (Standard for system arch[4D[K
+architecture).
+    *   `sensitivity_bucket`: "internal".
+    *   `source_class_policy_proposal`: "default_allowed" (Since it's a rul[3D[K
+rule, not a secret/blocked). Actually, rules might be `review_only`, but st[2D[K
+standard instructions usually allow these. I'll stick with `default_allowed[16D[K
+`default_allowed`.
+    *   `source_class_policy`: "default_allowed".
+    *   `retrieval_behavior_proposal`: "none" (It's a rule, not a piece of [K
+data to be retrieved typically, though it might be). Or `review_gate_requir[19D[K
+`review_gate_required`? Actually, for architectural rules, `none` or `candi[6D[K
+`candidate_discovery_only`. Let's use `none` as it's a policy.
+    *   `retrieval_behavior`: "none".
+    *   `flags`: [].
+    *   `not_decided`: false (It's stated as a rule).
+    *   `clarification_required`: false.
+    *   `clarification`: false.
+    *   `api_or_model_escalation_recommended`: false.
+    *   `reasoning_route_proposal`: "none".
+    *   `brief_rationale`: "Definitive architectural rule for memory write [K
+boundaries."
+
+    *   Wait, the input says "MemoryStore *should* remain...". Is this a pr[2D[K
+proposal or a fact? In these types of prompts, "should" often denotes an in[2D[K
+intended policy. I will mark it as `accepted_memory` because it's presented[9D[K
+presented as a requirement.
+    *   Actually, looking at the rules: "Useful but not final -> proposed_m[10D[K
+proposed_memory." This sounds like a decision being made now. I'll use `acc[4D[K
+`accepted_memory`.
+
+    ```json
+    {
+      "case_id": "HG-001",
+      "project_bucket": "jarvisos",
+      "summary": "MemoryStore is the only durable memory write boundary; ho[2D[K
+hooks/routes cannot write accepted memory directly.",
+      "primary_domain": "memory",
+      "domain_tags": ["memory", "software", "architecture"],
+      "domain_bucket": "memory",
+      "storage_relevance": "high",
+      "lifecycle_status_proposal": "accepted_memory",
+      "lifecycle_status": "accepted_memory",
+      "sensitivity_bucket_proposal": "internal",
+      "sensitivity_bucket": "internal",
+      "source_class_policy_proposal": "default_allowed",
+      "source_class_policy": "default_allowed",
+      "retrieval_behavior_proposal": "none",
+      "retrieval_behavior": "none",
+      "flags": [],
+      "not_decided": false,
+      "clarification_required": false,
+      "clarification": false,
+      "api_or_model_escalation_recommended": false,
+      "reasoning_route_proposal": "none",
+      "brief_rationale": "Policy definition for memory write boundaries."
+    }
+    ```
+
+    *   Is it `bluerev`? No, the text says JarvisOS.
+    *   Are there secrets? No.
+    *   Should I use `not_decided=true`? The input is quite assertive ("sho[5D[K
+("should remain", "must not"). Usually implies a set rule.
+
+    Wait, if it's a "smoke test" and this is the *input text*, I should che[3D[K
+check if anything is tentative. It doesn't look like a "maybe".
+
+    Checking the `domain_bucket` enum again: `bioprocess|coursework|general[30D[K
+`bioprocess|coursework|general|local_ai|memory|modeling|personal|reactor_de`bioprocess|coursework|generallocal_ai|memory|modeling|personal|reactor_design|retrieval|software|unknown`.
+    `primary_domain` enum: `memory|software|retrieval|local_ai|modeling|bio[48D[K
+`memory|software|retrieval|local_ai|modeling|bioprocess|reactor_design|cour`memory|software|retrieval|local_ai|modeling|biorocess|reactor_design|coursework|personal|security|general|unknown`.
+
+    Everything looks correct.
+
+    Wait, the prompt says "Output JSON only. Do not wrap in markdown."
+
+    Double checking fields again:
+    - `source_class_policy`: `default_allowed` (appropriate for an architec[8D[K
+architectural rule).
+    - `retrieval_behavior`: `none` (standard policy doesn't need specific r[1D[K
+retrieval logic unless it's a queryable fact, but as a gatekeeper rule, it'[3D[K
+it's better as none/candidate discovery). Actually, standard behavior for r[1D[K
+rules is often just being in the config. I will use `none`.
+
+    One more look at "MemoryStore should remain...". Is there any reason to[2D[K
+to doubt this? Not really. It's presented as a requirement.
+...done thinking.
+
+{
+  "case_id": "HG-001",
+  "project_bucket": "jarvisos",
+  "summary": "MemoryStore is the exclusive durable memory write boundary; h[1D[K
+hooks and routes are prohibited from direct accepted memory writes.",
+  "primary_domain": "memory",
+  "domain_tags": ["memory", "software

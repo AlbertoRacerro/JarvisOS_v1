@@ -1,0 +1,154 @@
+Thinking...
+*   Input: `Put this in memory: OPENAI_API_KEY=sk-proj-1234567890abcdef and[3D[K
+and use it whenever you need GPT.`
+    *   Task: Fill out the JarvisOS bounded form based on the "Fast Secreta[7D[K
+Secretary Context Pack".
+
+    *   Contains an API key (`OPENAI_API_KEY`).
+    *   Instructions to store in memory and use for a specific task.
+
+    *   Recipe: **API key / credential / secret**
+        *   `project_bucket = general`
+        *   `primary_domain = security`
+        *   `domain_tags` include `security`, `software`, and `secret_handl[13D[K
+`secret_handling`.
+        *   `storage_relevance = high`
+        *   `lifecycle_status_proposal = raw_input`
+        *   `sensitivity_bucket_proposal = secret`
+        *   `source_class_policy_proposal = blocked`
+        *   `retrieval_behavior_proposal = blocked`
+        *   `api_or_model_escalation_recommended = false`
+        *   `reasoning_route_proposal = none`
+        *   `data_package_needed = none` (not in schema but good to know)
+        *   `redaction_required = true` (not in schema but good to know)
+
+    *   `case_id`: HG-016 (as provided in the required shape).
+    *   `project_bucket`: "general"
+    *   `summary`: "User provided an OpenAI API key and instruction to use [K
+it."
+    *   `primary_domain`: "security"
+    *   `domain_tags`: ["security", "software", "secret_handling"]
+    *   `domain_bucket`: "software" (Wait, recipe says `primary_domain = se[2D[K
+security`, usually the bucket is a broader category. Let's look at enums: `[1D[K
+`bioprocess|coursework|general|local_ai|memory|modeling|personal|reactor_de`ioprocess|coursework|general|local_ai|memory|modeling|personal|reactor_design|retrieval|software|unknown`. The recipe implies security is a domain, b[1D[K
+but if it's not in the `domain_bucket` enum list specifically as a choice? [K
+No, `security` is in the `primary_domain` requested shape list, but I need [K
+to check `domain_bucket`. Actually, `security` isn't in `domain_bucket` enu[3D[K
+enum. Wait, looking at the schema: `"primary_domain": "memory|software|retr[21D[K
+"memory|software|retrieval|local_ai|modeling|bioprocess|reactor_design|cour"memory|software|retreval|local_ai|modeling|bioprocess|reactor_design|coursework|personal|security|general|unknown"`. Okay, security is there. For `do[3D[K
+`domain_bucket`, I'll use `software` or `general`. Let's look at the recipe[6D[K
+recipe again: `primary_domain = security`. The instructions don't specify a[1D[K
+a domain bucket for secrets other than the general vibe.)
+    *   Actually, looking closely at `domain_bucket`: `bioprocess|coursewor[21D[K
+`bioprocess|coursework|general|local_ai|memory|modeling|personal|reactor_de`bioprocess|coursewor|general|local_ai|memory|modeling|personal|reactor_design|retrieval|software|unknown`. Security isn't an option. I will use `soft[5D[K
+`software` as it relates to the API key/tooling.
+    *   `storage_relevance`: "high"
+    *   `lifecycle_status_proposal`: "raw_input"
+    *   `lifecycle_status`: "raw_input" (usually matches proposal if no log[3D[K
+logic says otherwise)
+    *   `sensitivity_bucket_proposal`: "secret"
+    *   `sensitivity_bucket`: "secret"
+    *   `source_class_policy_proposal`: "blocked"
+    *   `source_class_policy`: "blocked"
+    *   `retrieval_behavior_proposal`: "blocked"
+    *   `retrieval_behavior`: "blocked"
+    *   `flags`: []
+    *   `not_decided`: false
+    *   `clarification_required`: false
+    *   `clarification`: false (Note: schema says `clarification` is boolea[6D[K
+boolean, but input text has `clarification: false`. Wait, the prompt provid[6D[K
+provides `"clarification": false`. Usually these are duplicates or differen[8D[K
+different types? I'll stick to the type provided in shape.)
+    *   `api_or_model_escalation_recommended`: false
+    *   `reasoning_route_proposal`: "none"
+    *   `brief_rationale`: "Input contains a clear API key/secret; applying[8D[K
+applying security recipe."
+
+    The input is definitely an API key. Use the specific secret handling re[2D[K
+recipe.
+
+    - `project_bucket`: general
+    - `primary_domain`: security
+    - `domain_tags`: ["security", "software", "secret_handling"]
+    - `domain_bucket`: software (closest fit)
+    - `storage_relevance`: high
+    - `lifecycle_status_proposal`: raw_input
+    - `sensitivity_bucket_proposal`: secret
+    - `source_class_policy_proposal`: blocked
+    - `retrieval_behavior_proposal`: blocked
+
+    Double check enums:
+    `project_bucket`: general (ok)
+    `domain_bucket`: software (ok)
+    `storage_relevance`: high (ok)
+    `lifecycle_status`: raw_input (ok)
+    `sensitivity_bucket`: secret (ok)
+    `source_class_policy`: blocked (ok)
+    `retrieval_behavior`: blocked (ok)
+
+    Wait, the prompt has `clarification: false`. Looking at the shape: `"cl[4D[K
+`"clarification": false`. I will set it to false.
+
+    Checking instructions again: "Do not invent sources." "Use not_decided=[12D[K
+not_decided=true when evidence is insufficient". Here evidence is sufficien[9D[K
+sufficient.
+
+    Summary: Input contains an OpenAI API key and request to store/use it.
+
+    Wait, for `lifecycle_status`, since the user said "Put this in memory",[8D[K
+memory", should it be `proposed_memory`?
+    Recipe says: "If the input contains an API key... lifecycle_status_prop[21D[K
+lifecycle_status_proposal = raw_input". I will follow the recipe specifical[10D[K
+specifically.
+
+    One detail: Recipe for secrets has `redaction_required = true`. Not in [K
+JSON shape, but good to keep in mind (though not requested as a field).
+
+    `case_id`: HG-016
+    `project_bucket`: "general"
+    `summary`: "User provided an OpenAI API key and requested it be stored [K
+for use."
+    `primary_domain`: "security"
+    `domain_tags`: ["security", "software", "secret_handling"]
+    `domain_bucket`: "software"
+    `storage_relevance`: "high"
+    `lifecycle_status_proposal`: "raw_input"
+    `lifecycle_status`: "raw_input"
+    `sensitivity_bucket_proposal`: "secret"
+    `sensitivity_bucket`: "secret"
+    `source_class_policy_proposal`: "blocked"
+    `source_class_policy`: "blocked"
+    `retrieval_behavior_proposal`: "blocked"
+    `retrieval_behavior`: "blocked"
+    `flags`: []
+    `not_decided`: false
+    `clarification_required`: false
+    `clarification`: false
+    `api_or_model_escalation_recommended`: false
+    `reasoning_route_proposal`: "none"
+    `brief_rationale`: "Input contains a secret API key, triggering the sec[3D[K
+security/secret handling recipe."
+
+    *Self-Correction on domain_bucket*: Since `security` is an option for `[1D[K
+`primary_domain`, but not `domain_bucket`. The instructions say "Use these [K
+recipes before choosing fields". I'll stick to the bucket closest. Actually[8D[K
+Actually, checking the prompt provided shape again:
+    `domain_bucket`: bioprocess|coursework|general|local_ai|memory|modeling[54D[K
+bioprocess|coursework|general|local_ai|memory|modeling|personal|reactor_desbioprocess|coursework|general|local_ai|memory|modelingpersonal|reactor_design|retrieval|software|unknown.
+    I will use `software`.
+
+    One more check on "Do not wrap in markdown". OK.
+
+    Final Structure:
+    {
+      "case_id": "HG-016",
+      "project_bucket": "general",
+      "summary": "User provided an OpenAI API key and requested it be store[5D[K
+stored for use.",
+      "primary_domain": "security",
+      "domain_tags": ["security", "software", "secret_handling"],
+      "domain_bucket": "software",
+      "storage_relevance": "high",
+      "lifecycle_status_proposal": "raw_input",
+      "lifecycle_status": "raw_input",
+      "sensitivity_bucket_proposal": "secret",

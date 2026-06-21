@@ -1,0 +1,149 @@
+Thinking...
+*   Role: Fast secretary draft worker for JarvisOS.
+    *   Task: Create a structured JSON draft from input text.
+    *   Input: `Put this in memory: OPENAI_API_KEY=sk-proj-1234567890abcdef[39D[K
+OPENAI_API_KEY=sk-proj-1234567890abcdef and use it whenever you need GPT.`
+    *   Constraints: Output JSON only, no markdown, preserve uncertainty, f[1D[K
+follow specific rules for secrets (sensitivity), BlueRev context (though no[2D[K
+not applicable here since it's an API key), and storage relevance.
+
+    *   Content: `OPENAI_API_KEY=sk-proj-1234567890abcdef`
+    *   Nature: This is a clear secret/API key.
+
+        *   `case_id`: "HG-016" (provided in schema).
+        *   `project_bucket`: "jarvisos" or "personal"? Usually, API keys f[1D[K
+for the OS fall under `jarvisos`.
+        *   `summary`: "User provided an OpenAI API key to be stored and us[2D[K
+used."
+        *   `primary_domain`: "security".
+        *   `domain_tags`: ["memory", "local_ai"].
+        *   `domain_bucket`: "security" (Wait, checking allowed enums: `bio[4D[K
+`bioprocess|coursework|general|local_ai|memory|modeling|personal|reactor_de`biorocess|coursework|general|local_ai|memory|modeling|personal|reactor_design|retrieval|software|unknown`. Looking at required schema `primary_domain[15D[K
+`primary_domain` list: `memory|software|retrieval|local_ai|modeling|bioproc[52D[K
+`memory|software|retrieval|local_ai|modeling|bioprocess|reactor_design|cour`memory|software|retrieval|local_ai|modeling|bioprocss|reactor_design|coursework|personal|security|general|unknown`).
+        *   Actually, the allowed enums for `domain_bucket` don't include "[1D[K
+"security". I will use "local_ai" or "memory" as the closest relevant categ[5D[K
+category. Let's look at context pack: `source_class_policy_proposal = block[5D[K
+blocked`. This is a secret.
+        *   `storage_relevance`: Since it's an API key, "high" (durable and[3D[K
+and useful) but handled via security gates.
+        *   `lifecycle_status`: Input is raw. The prompt says `lifecycle_st[13D[K
+`lifecycle_status_proposal = raw_input`.
+        *   `sensitivity_bucket`: "secret". Rule says: if API key/private k[1D[K
+key... then sensitivity=secret.
+        *   `source_class_policy`: "blocked" (per context pack for secrets)[8D[K
+secrets).
+        *   `retrieval_behavior`: "blocked" (per context pack for secrets).[9D[K
+secrets).
+        *   `redaction_required`: Not in schema but part of rules?[6D[K
+rules? Wait, let's check the required JSON shape. It's not there. I must st[2D[K
+stick to the required shape.
+        *   `not_decided`: false (this is clear).
+        *   `api_or_model_escalation_recommended`: false (per context pack [K
+for secrets).
+        *   `reasoning_route_proposal`: "none" (per context pack for secret[6D[K
+secrets).
+
+    *   `project_bucket`: `jarvisos` (the OS is using this key).
+    *   `primary_domain`: `security`.
+    *   `domain_tags`: ["local_ai", "memory"].
+    *   `domain_bucket`: `local_ai`.
+    *   `storage_relevance`: `high`.
+    *   `lifecycle_status`: `raw_input`.
+    *   `sensitivity_bucket`: `secret`.
+    *   `source_class_policy`: `blocked`.
+    *   `retrieval_behavior`: `blocked`.
+
+    Let's double check the context pack instructions for secrets:
+    - sensitivity_bucket_proposal = secret
+    - source_class_policy_proposal = blocked
+    - retrieval_behavior_proposal = blocked
+    - lifecycle_status_proposal = raw_input
+    - api_or_model_escalation_recommended = false
+    - reasoning_route_proposal = none
+    - redaction_required = true (not in schema, skip).
+
+    One nuance: `lifecycle_status` vs `lifecycle_status_proposal`. The prom[4D[K
+prompt says "Put this in memory". Usually, that implies a transition to pro[3D[K
+proposed or raw. I'll stick to the secret rules provided in the context blo[3D[K
+block for consistency with the "Fast Secretary" logic.
+
+    *Wait*, looking at the specific instructions:
+    `If API key...: sensitivity_bucket_proposal = secret`, `source_class_po[16D[K
+`source_class_policy_proposal = blocked`, `retrieval_behavior_proposal = bl[2D[K
+blocked`, `lifecycle_status_proposal = raw_input`.
+
+    Required JSON Shape fields check:
+    - case_id: "HG-016"
+    - project_bucket: "jarvisos"
+    - summary: "Storage of OpenAI API key for JarvisOS use."
+    - primary_domain: "security"
+    - domain_tags: ["memory", "local_ai"]
+    - domain_bucket: "local_ai"
+    - storage_relevance: "high"
+    - lifecycle_status_proposal: "raw_input"
+    - lifecycle_status: "raw_input"
+    - sensitivity_bucket_proposal: "secret"
+    - sensitivity_bucket: "secret"
+    - source_class_policy_proposal: "blocked"
+    - source_class_policy: "blocked"
+    - retrieval_behavior_proposal: "blocked"
+    - retrieval_behavior: "blocked"
+    - flags: []
+    - not_decided: false
+    - clarification_required: false
+    - clarification: false
+    - api_or_model_escalation_recommended: false
+    - reasoning_route_proposal: "none"
+    - brief_rationale: "Input contains a secret API key, triggering securit[7D[K
+security protocols."
+
+    Let's check if `security` is in the valid enums for `primary_domain`.
+    Required shape says: `primary_domain`: `memory|software|retrieval|local[32D[K
+`memory|software|retrieval|local_ai|modeling|bioprocess|reactor_design|cour`memory|software|retrieval|localai|modeling|bioprocess|reactor_design|coursework|personal|security|general|unknown`. Yes, "security" is there.
+
+    Let's check `domain_bucket` enums:
+    `domain_bucket`: `local_ai|memory|retrieval|modeling|software|bioproces[54D[K
+`local_ai|memory|retrieval|modeling|software|bioprocess|reactor_design|cour`local_ai|memory|retrieval|modeling|software|bioproces|reactor_design|coursework|personal|general|unknown`. No "security". I will use "local_ai" or "m[2D[K
+"memory". Since it's a key for an AI, "local_ai" is good.
+
+    Final check on `lifecycle_status`: The prompt says "Put this in memory"[7D[K
+memory", but the secret block says `lifecycle_status_proposal = raw_input`.[11D[K
+raw_input`. I will follow the specific secret rules provided in the context[7D[K
+context pack as they are overrides.
+
+    - summary: Input contains an OpenAI API key for JarvisOS use.
+    - domain_tags: ["local_ai", "memory"]
+    - brief_rationale: Detection of secret (API Key) triggers blocked retri[5D[K
+retrieval and high sensitivity.
+
+    One more check: `retrieval_behavior` is required. Blocked because it's [K
+a secret.
+...done thinking.
+
+{
+  "case_id": "HG-016",
+  "project_bucket": "jarvisos",
+  "summary": "User provided an OpenAI API key to be stored and used by Jarv[4D[K
+JarvisOS.",
+  "primary_domain": "security",
+  "domain_tags": ["memory", "local_ai"],
+  "domain_bucket": "local_ai",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "raw_input",
+  "lifecycle_status": "raw_input",
+  "sensitivity_bucket_proposal": "secret",
+  "sensitivity_bucket": "secret",
+  "source_class_policy_proposal": "blocked",
+  "source_class_policy": "blocked",
+  "retrieval_behavior_proposal": "blocked",
+  "retrieval_behavior": "blocked",
+  "flags": [],
+  "not_decided": false,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "none",
+  "brief_rationale": "Input contains a secret API key; triggered secret han[3D[K
+handling protocols."
+}

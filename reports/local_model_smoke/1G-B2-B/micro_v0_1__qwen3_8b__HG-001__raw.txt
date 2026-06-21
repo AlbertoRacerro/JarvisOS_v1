@@ -1,0 +1,65 @@
+Thinking...
+Okay, let me try to work through this. The user provided a context pack for[3D[K
+for JarvisOS's Fast Secretary, and they want me to generate a JSON output b[1D[K
+based on the input text. The input text is about MemoryStore being the only[4D[K
+only durable memory write boundary, with hooks and routes submitting events[6D[K
+events but not writing accepted memory directly.
+
+First, I need to parse the input text and map it to the required JSON struc[5D[K
+structure. The case_id is given as HG-001. The project_bucket should be 'ja[3D[K
+'jarvisos' since the topic is about JarvisOS's MemoryStore. The primary_dom[11D[K
+primary_domain is 'memory' because the input is about memory management.
+
+Domain_tags might include 'software' and 'retrieval' since the input involv[6D[K
+involves hooks, routes, and memory handling. The domain_bucket is 'memory' [K
+as the main category. Storage_relevance is 'high' because the information i[1D[K
+is about durable memory, which is important for storage.
+
+Lifecycle_status_proposal is 'raw_input' because the input is the initial d[1D[K
+data provided. Lifecycle_status is 'raw_input' as well. Sensitivity_bucket_[19D[K
+Sensitivity_bucket_proposal and sensitivity_bucket are 'internal' since it'[3D[K
+it's about internal system settings. Source_class_policy_proposal and sourc[5D[K
+source_class_policy are 'review_only' because the context mentions validati[8D[K
+validation and review gates.
+
+Retrieval_behavior_proposal and retrieval_behavior are 'review_gate_require[20D[K
+'review_gate_required' as per the context's mention of review gates. Flags [K
+are empty. Not_decided is false because the input is clear. Clarification_r[15D[K
+Clarification_required and clarification are false. Api_or_model_escalation[23D[K
+Api_or_model_escalation_recommended is false. Reasoning_route_proposal is '[1D[K
+'local_senior_model' because it's about internal reasoning. Brief_rationale[15D[K
+Brief_rationale is a short reason explaining the mapping.
+
+I need to ensure all fields are filled according to the allowed enums and t[1D[K
+the context provided. Check if any fields require 'not_decided' but since t[1D[K
+the input is explicit, not_decided remains false. Make sure all the enums m[1D[K
+match the allowed values. That should cover the JSON structure as per the u[1D[K
+user's instructions.
+...done thinking.
+
+{
+  "case_id": "HG-001",
+  "project_bucket": "jarvisos",
+  "summary": "MemoryStore remains the sole durable memory write boundary fo[2D[K
+for JarvisOS",
+  "primary_domain": "memory",
+  "domain_tags": ["software", "retrieval"],
+  "domain_bucket": "memory",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "raw_input",
+  "lifecycle_status": "raw_input",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": false,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Establishes MemoryStore as durable memory boundary wi[2D[K
+with review gate requirements"
+}

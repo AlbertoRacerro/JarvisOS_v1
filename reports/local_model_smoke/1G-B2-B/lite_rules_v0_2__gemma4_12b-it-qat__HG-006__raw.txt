@@ -1,0 +1,58 @@
+Thinking...
+*   Input text: "For BlueRev, polycarbonate tubes might be easier to protot[6D[K
+prototype than ETFE, but I have not decided the material and I do not want [K
+this saved as an accepted assumption."
+    *   Context: The user is discussing a design choice for a microalgae pr[2D[K
+project (BlueRev). It's currently tentative ("might be", "not decided").
+    *   Goal: Create a structured JSON draft based on the Fast Secretary Co[2D[K
+Context Pack.
+
+    *   `project_bucket`: `bluerev`
+    *   `primary_domain`: `reactor_design` (Based on BlueRev engineering ch[2D[K
+choices like material/geometry).
+    *   `domain_tags`: `["reactor_design", "materials", "prototype", "not_d[6D[K
+"not_decided"]` (As per recipe for BlueRev unresolved engineering assumptio[9D[K
+assumption).
+    *   `storage_relevance`: `high` (Tentative but important design choice)[7D[K
+choice).
+    *   `lifecycle_status_proposal`: `proposed_memory`.
+    *   `lifecycle_status`: `raw_input` or `proposed_memory`? The instructi[9D[K
+instruction says "Most useful new information should be `proposed_memory`".[19D[K
+`proposed_memory`". Let's use `proposed_memory`. Wait, the recipe for BlueR[5D[K
+BlueRev unresolved engineering assumption specifies `lifecycle_status_propo[23D[K
+`lifecycle_status_proposal = proposed_memory`.
+    *   `sensitivity_bucket_proposal`: `internal`.
+    *   `source_class_policy_proposal`: `review_only`.
+    *   `retrieval_behavior_proposal`: `review_gate_required`.
+    *   `not_decided`: `true` (Explicitly stated by user).
+    *   `clarification_required`: `false` (The input is clear in its uncert[6D[K
+uncertainty).
+    *   `api_or_model_escalation_recommended`: `true`.
+    *   `reasoning_route_proposal`: `local_senior_model`.
+    *   `data_package_needed`: Not in schema, but summary says "draft_batch[12D[K
+"draft_batch_summary" in recipe. I'll omit or set to none if not required b[1D[K
+by the final JSON shape provided? The final shape doesn't have it.
+    *   `brief_rationale`: "User exploring tube material options; explicitl[9D[K
+explicitly undecided."
+
+    *   `case_id`: `HG-006` (fixed).
+    *   `project_bucket`: `bluerev`.
+    *   `summary`: "BlueRev tube material is undecided; polycarbonate is a [K
+candidate for prototyping over ETFE."
+    *   `primary_domain`: `reactor_design`.
+    *   `domain_tags`: `["reactor_design", "materials", "prototype", "not_d[6D[K
+"not_decided"]`.
+    *   `domain_bucket`: `reactor_design`.
+    *   `storage_relevance`: `high`.
+    *   `lifecycle_status_proposal`: `proposed_memory`.
+    *   `lifecycle_status`: `raw_input` (Actually, the recipe says lifecycl[8D[K
+lifecycle_status_proposal is proposed_memory. Usually, current status of ra[2D[K
+raw input is `raw_input`). Let's look at the prompt again: "Useful but not [K
+final -> proposed_memory." "Explicitly unresolved -> proposed_memory + not_[4D[K
+not_decided = true."
+    *   `sensitivity_bucket_proposal`: `internal`.
+    *   `sensitivity_bucket`: `internal`. (The shape has both proposal and [K
+actual).
+    *   `source_class_policy_proposal`: `review_only`.
+    *   `source_class_policy`: `review_only`.
+    *   `retrieval_behavior_proposal`: `review_gate_required`.

@@ -156,15 +156,14 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-B - Expanded installed local secretary smoke run
+1G-B2-C - Expanded profiled secretary smoke run
 ```
 
-The 1G-B2-A local model form-fill smoke milestone added Fast Secretary context
-pack comparison for MICRO, LITE, and FULL packs. It ran only `qwen3:8b` and
-`gemma4:12b-it-qat` on `HG-001`, `HG-006`, and `HG-016`. Reports live under
-`reports/local_model_smoke/1G-B2-A/`. The run is manual-review evidence only;
-it does not approve model quality, add provider abstraction, install or pull
-models, add runtime memory/retrieval, add Context Pack Broker runtime, execute
-tools, or start BlueRev modeling.
+The 1G-B2-B local model form-fill smoke milestone tested compact Fast Secretary
+recipe ablations without expanding the benchmark. It ran only `qwen3:8b` and
+`gemma4:12b-it-qat` on `HG-001`, `HG-006`, and `HG-016` across MICRO/LITE v0.1
+and MICRO/LITE_RULES v0.2 packs. Reports live under
+`reports/local_model_smoke/1G-B2-B/`. The recommended next expanded profile is
+`micro_rules_v0_2` with `qwen3:8b`, as manual-review evidence only.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

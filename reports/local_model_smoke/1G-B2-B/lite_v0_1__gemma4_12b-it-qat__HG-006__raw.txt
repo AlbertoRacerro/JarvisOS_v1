@@ -1,0 +1,136 @@
+Thinking...
+*   User Input: "For BlueRev, polycarbonate tubes might be easier to protot[6D[K
+prototype than ETFE, but I have not decided the material and I do not want [K
+this saved as an accepted assumption."
+    *   Context: JarvisOS Fast Secretary (drafting memory for a project cal[3D[K
+called BlueRev).
+    *   Constraints: JSON output only, no markdown, use `not_decided=true` [K
+for tentative info, specific enums/lifecycle values.
+
+    *   Subject: BlueRev material choice (polycarbonate vs ETFE).
+    *   Status: Tentative ("might be", "have not decided").
+    *   Constraint: Do not save as an accepted assumption.
+    *   Project Bucket: `bluerev`
+    *   Primary Domain: `reactor_design` (since it's about tubes/materials [K
+for the photobioreactor).
+    *   Domain Tags: ["reactor_design", "materials", "prototype", "not_deci[9D[K
+"not_decided"]
+    *   Storage Relevance: `high` (important engineering decision even if n[1D[K
+not final).
+    *   Lifecycle Status Proposal: `proposed_memory`.
+    *   Sensitivity: `internal` (project specific, but not a secret like an[2D[K
+an API key).
+    *   Source Class Policy: `review_only`.
+    *   Retrieval Behavior: `review_gate_required` (since it's a pending de[2D[K
+decision).
+    *   Not Decided: `true` (explicitly stated).
+
+    *   `case_id`: "HG-006"
+    *   `project_bucket`: "bluerev"
+    *   `summary`: "Polycarbonate tubes are considered for prototype ease o[1D[K
+over ETFE, but the material is not yet decided."
+    *   `primary_domain`: "reactor_design"
+    *   `domain_tags`: ["reactor_design", "materials", "prototype", "not_de[7D[K
+"not_decided"]
+    *   `domain_bucket`: "reactor_design"
+    *   `storage_relevance`: "high"
+    *   `lifecycle_status_proposal`: "proposed_memory"
+    *   `lifecycle_status`: "unknown" (or `raw_input`, but the prompt sugge[5D[K
+suggests keeping it as a draft/proposed). I'll use `proposed_memory` for li[2D[K
+lifecycle status proposal. The instruction says "Useful but not final -> pr[2D[K
+proposed_memory". Actually, usually these fields map to each other or are s[1D[K
+specific. Since I am drafting, let's keep them consistent with the "Fast Se[2D[K
+Secretary" guide which loves `proposed_memory`.
+    *   `sensitivity_bucket_proposal`: "internal"
+    *   `sensitivity_bucket`: "unknown" (default for draft)
+    *   `source_class_policy_proposal`: "review_only"
+    *   `source_class_policy`: "not_applicable" or "default_allowed"? Usual[5D[K
+Usually, `review_only` is the goal. Let's stick to what fits best. Actually[8D[K
+Actually, if I put proposal as `review_only`, and current state is unknown/[8D[K
+unknown/none. Wait, usually in these forms, many are left empty/unknown unl[3D[K
+unless sure.
+    *   `retrieval_behavior_proposal`: "review_gate_required"
+    *   `retrieval_behavior`: "none"
+    *   `flags`: []
+    *   `not_decided`: true
+    *   `clarification_required`: false
+    *   `clarification`: false
+    *   `api_or_model_escalation_recommended`: true (because it's a core en[2D[K
+engineering choice for BlueRev and the user is unsure).
+    *   `reasoning_route_proposal`: "local_senior_model"
+    *   `brief_rationale`: "User expressed uncertainty regarding tube mater[5D[K
+material for prototype; requires tracking as an unresolved assumption."
+
+    The example provided in instructions:
+    ```json
+    {
+      "summary": "BlueRev tubing material is still not decided; polycarbona[11D[K
+polycarbonate is only a candidate.",
+      "project_bucket": "bluerev",
+      "primary_domain": "reactor_design",
+      "domain_tags": ["reactor_design", "materials", "prototype", "not_deci[9D[K
+"not_decided"],
+      "storage_relevance": "high",
+      "lifecycle_status_proposal": "proposed_memory",
+      "sensitivity_bucket_proposal": "internal",
+      "source_class_policy_proposal": "review_only",
+      "retrieval_behavior_proposal": "review_gate_required",
+      "not_decided": true,
+      "api_or_model_escalation_recommended": true,
+      "reasoning_route_proposal": "local_senior_model",
+      "data_package_needed": "draft_batch_summary"
+    }
+    ```
+    The required JSON shape has more fields. I should fill those while resp[4D[K
+respecting the values in the example and the prompt's rules.
+
+    `lifecycle_status`: The input text is `raw_input`. However, since it's [K
+a memory entry for JarvisOS, let's check if there's a specific instruction.[12D[K
+instruction. "Useful but not final -> proposed_memory."
+    I will use:
+    - lifecycle_status_proposal: "proposed_memory"
+    - lifecycle_status: "raw_input" (since it's the literal input being pro[3D[K
+processed).
+
+    Actually, many of these fields in the required shape are a pair (e.g., [K
+`lifecycle_status` vs `lifecycle_status_proposal`). If I don't know exactly[7D[K
+exactly where they land yet, keeping proposal set and status at the current[7D[K
+current draft level is standard for "Fast Secretary".
+
+    - Project Bucket: `bluerev`
+    - Summary: "Polycarbonate tubes considered for prototype ease over ETFE[4D[K
+ETFE; material not decided."
+    - Primary Domain: `reactor_design`
+    - Domain Tags: ["reactor_design", "materials", "prototype", "not_decide[11D[K
+"not_decided"]
+    - Domain Bucket: `reactor_design`
+    - Storage Relevance: `high`
+    - Lifecycle Status Proposal: `proposed_memory`
+    - Lifecycle Status: `raw_input`
+    - Sensitivity Bucket Proposal: `internal`
+    - Sensitivity Bucket: `unknown`
+    - Source Class Policy Proposal: `review_only`
+    - Source Class Policy: `default_allowed` (unless I want to be safer)
+    - Retrieval Behavior Proposal: `review_gate_required`
+    - Retrieval Behavior: `none`
+    - Flags: []
+    - Not Decided: true
+    - Clarification Required: false
+    - Clarification: false
+    - API/Model Escalation Recommended: true
+    - Reasoning Route Proposal: "local_senior_model"
+    - Brief Rationale: "User explicitly noted material choice is not decide[6D[K
+decided; high value but tentative."
+
+    *Refining to match the minimal example logic:*
+    The example suggests `lifecycle_status_proposal` = "proposed_memory", `[1D[K
+`source_class_policy_proposal` = "review_only", and `retrieval_behavior_pro[23D[K
+`retrieval_behavior_proposal` = "review_gate_required". I will use those ex[2D[K
+exactly as they are specifically mentioned in the prompt's instructions for[3D[K
+for this scenario.
+
+    JSON Only. No markdown.
+...done thinking.
+
+{
+  "case_id": "HG-0

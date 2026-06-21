@@ -713,6 +713,14 @@ Current implementation status:
   JSON parse passes, LITE produced 5/6, and FULL produced 2/6; all runs had 0
   timeouts. This suggests context length/format affects parse reliability, but
   remains manual-review evidence only.
+- 1G-B2-B added compact recipe ablations for MICRO and LITE packs without
+  expanding models or cases. Reports are under `reports/local_model_smoke/1G-B2-B/`.
+  `micro_rules_v0_2` improved soft tolerant score versus `micro_v0_1`
+  (25/30 vs 22/30) but reduced parse passes from 6/6 to 5/6. `lite_rules_v0_2`
+  degraded versus `lite_v0_1` on this small run. The strongest profile was
+  `micro_rules_v0_2` with `qwen3:8b`: 3/3 parse, 23/24 hard, 15/15 soft
+  tolerant, and 0 critical gate failures. This is the recommended next
+  expanded secretary profile, still manual-review evidence only.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
 The accepted next local AI sequence is:
@@ -743,7 +751,8 @@ The accepted next local AI sequence is:
 1G-A       Local model form-fill smoke harness skeleton
 1G-B1      Installed local model form-fill smoke run
 1G-B2-A    Fast secretary context pack compression and scoring refinement
-1G-B2-B    Expanded installed local secretary smoke run
+1G-B2-B    Fast secretary recipe ablation
+1G-B2-C    Expanded profiled secretary smoke run
 1H         Showcase files generator design
 1I         Context access from showcase files
 1J         Provider/tool intent form design

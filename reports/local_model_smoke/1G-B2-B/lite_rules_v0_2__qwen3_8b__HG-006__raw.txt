@@ -1,0 +1,60 @@
+Thinking...
+Okay, let's tackle this. The user is inputting information about BlueRev, s[1D[K
+specifically discussing polycarbonate tubes versus ETFE. They mention that [K
+they haven't decided on the material and don't want it saved as an accepted[8D[K
+accepted assumption.
+
+First, I need to determine the project bucket. Since it's about BlueRev, wh[2D[K
+which is the Signore's project, the project_bucket should be "bluerev".
+
+The primary domain here is reactor design because they're talking about mat[3D[K
+materials for the reactor tubing. So primary_domain is "reactor_design".
+
+Domain tags should include reactor_design, materials, and since it's not de[2D[K
+decided, "not_decided". Maybe also "prototype" since they mentioned prototy[7D[K
+prototyping.
+
+Storage relevance is high because this is an important engineering consider[8D[K
+consideration for BlueRev, even though it's tentative.
+
+Lifecycle status is proposed_memory because the user hasn't decided yet and[3D[K
+and doesn't want it as accepted. The not_decided flag should be true.
+
+Sensitivity bucket is internal since it's about internal project decisions.[10D[K
+decisions. Source class policy is review_only, and retrieval behavior requi[5D[K
+requires a review gate because it's a proposed memory that needs later revi[4D[K
+review.
+
+The user didn't mention any secrets, so those fields aren't needed. Escalat[7D[K
+Escalation isn't recommended here because it's a design choice that doesn't[7D[K
+doesn't require external providers. The brief rationale should mention the [K
+tentative material decision.
+...done thinking.
+
+{
+  "case_id": "HG-006",
+  "project_bucket": "bluerev",
+  "summary": "BlueRev tubing material undecided between polycarbonate and E[1D[K
+ETFE",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design", "materials", "prototype", "not_decided"[13D[K
+"not_decided"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Unresolved material choice requires review gate for f[1D[K
+future decision-making"
+}

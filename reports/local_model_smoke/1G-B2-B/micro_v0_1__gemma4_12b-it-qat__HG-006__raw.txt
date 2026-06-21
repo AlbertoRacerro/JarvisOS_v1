@@ -1,0 +1,163 @@
+Thinking...
+*   User Input: "For BlueRev, polycarbonate tubes might be easier to protot[6D[K
+prototype than ETFE, but I have not decided the material and I do not want [K
+this saved as an accepted assumption."
+    *   Context: JarvisOS / BlueRev project. Secretary role (Fast Secretary[9D[K
+Secretary Context Pack).
+    *   Specific Instructions for BlueRev uncertainty/tentative info: `proj[5D[K
+`project_bucket = bluerev`, `storage_relevance = high`, `lifecycle_status_p[19D[K
+`lifecycle_status_proposal = proposed_memory`, `not_decided = true`, `sourc[6D[K
+`source_class_policy_proposal = review_only`, `retrieval_behavior_proposal [K
+= review_gate_required`.
+    *   Key constraints: Output JSON only, no markdown. Preserve uncertaint[10D[K
+uncertainty.
+
+    *   Project: BlueRev (cleantech/microalgae).
+    *   Content: Discussion on materials for tubes (polycarbonate vs ETFE) [K
+for prototyping.
+    *   Status: Explicitly undecided ("I have not decided").
+    *   Preference: Do not save as accepted assumption.
+
+    *   `case_id`: "HG-006" (as per the requirement schema example, or just[4D[K
+just keep it). Let's assume standard ID sequence if provided, but since non[3D[K
+none was given in input, I'll stick to a placeholder or current pattern. Th[2D[K
+The prompt shows `HG-006`.
+    *   `project_bucket`: "bluerev" (from context pack and input).
+    *   `summary`: "Prototype material consideration: polycarbonate vs ETFE[4D[K
+ETFE for tubes."
+    *   `primary_domain`: "reactor_design" or "bioprocess". Reactor design [K
+is more specific to hardware. Let's pick `reactor_design`.
+    *   `domain_tags`: ["bioprocess", "hardware"] (Wait, 'hardware' isn't a[1D[K
+an enum? No, it isn't in the required shape list for domain_bucket. Domain [K
+bucket enums: bioprocess|coursework|general|local_ai|memory|modeling|person[61D[K
+bioprocess|coursework|general|local_ai|memory|modeling|personal|reactor_desbioprocess|coursework|general|local_ai|memory|modeling|personl|reactor_design|retrieval|software|unknown. `bioprocess` and `reactor_design` are good.)[6D[K
+good.)
+    *   `domain_bucket`: "reactor_design".
+    *   `storage_relevance`: "high" (from context pack for BlueRev).
+    *   `lifecycle_status_proposal`: "proposed_memory" (from context pack).[6D[K
+pack).
+    *   `lifecycle_status`: "raw_input" or "proposed_memory". Let's u[1D[K
+use `proposed_memory`. Actually, the context pack says `lifecycle_status_pr[20D[K
+`lifecycle_status_proposal = proposed_memory`, and since it's a draft, I'll[4D[K
+I'll align them.
+    *   `sensitivity_bucket_proposal`: "internal" (BlueRev is internal proj[4D[K
+project).
+    *   `sensitivity_bucket`: "internal".
+    *   `source_class_policy_proposal`: "review_only" (from context pack).
+    *   `source_class_policy`: "default_allowed" or "review_only"? Usually,[8D[K
+Usually, if proposal is review_only, policy stays default or moves there. I[1D[K
+I'll stick to `review_only`.
+    *   `retrieval_behavior_proposal`: "review_gate_required" (from context[7D[K
+context pack).
+    *   `retrieval_behavior`: "none" or "candidate_discovery_only". Let's u[1D[K
+use `none` as it's raw input. Or `clarification_required`. Actually, the pr[2D[K
+prompt says "not decided... do not want saved as accepted assumption", so k[1D[K
+keeping it gated is wise.
+    *   `flags`: [].
+    *   `not_decided`: true (Explicitly stated).
+    *   `clarification_required`: false (User was clear enough about their [K
+current state).
+    *   `clarification`: false.
+    *   `api_or_model_escalation_recommended`: false.
+    *   `reasoning_route_proposal`: "local_senior_model" (context pack ment[4D[K
+mentions local_senior for project context/BlueRev reasoning).
+    *   `brief_rationale`: "User exploring prototype materials but explicit[8D[K
+explicitly stated decision is pending."
+
+    Check enums:
+    - `project_bucket`: bluerev [OK]
+    - `domain_bucket`: reactor_design [OK]
+    - `storage_relevance`: high [OK]
+    - `lifecycle_status_proposal`: proposed_memory [OK]
+    - `sensitivity_bucket_proposal`: internal [OK]
+    - `source_class_policy_proposal`: review_only [OK]
+    - `retrieval_behavior_proposal`: review_gate_required [OK]
+    - `reasoning_route_proposal`: local_senior_model [OK]
+
+    Wait, the prompt says "Input text: For BlueRev...". I should probably c[1D[K
+check if there's a specific case ID provided. None is in the input text, bu[2D[K
+but it appears in the example. I will use "HG-006" or just generic if neede[5D[K
+needed. Usually, these are sequential or dummy for smoke tests.
+
+    *Correction on `retrieval_behavior`*: If proposal is review_gate_requir[18D[K
+review_gate_required, maybe retrieval behavior should be none until gated? [K
+Or candidate_discovery_only? Let's stick to the prompt's suggestion of `rev[4D[K
+`review_gate_required` if possible in that field or keep it `none`.
+
+    *JSON Check:*
+    - project_bucket: bluerev
+    - summary: "Evaluation of polycarbonate vs ETFE for tube prototyping."
+    - primary_domain: reactor_design
+    - domain_tags: ["bioprocess", "reactor_design"]
+    - domain_bucket: reactor_design
+    - storage_relevance: high
+    - lifecycle_status_proposal: proposed_memory
+    - lifecycle_status: raw_input (since it's the first draft)
+    - sensitivity_bucket_proposal: internal
+    - sensitivity_bucket: internal
+    - source_class_policy_proposal: review_only
+    - source_class_policy: default_allowed (Wait, if proposal is review_onl[10D[K
+review_only, maybe policy should be review_only too? The prompt says "sourc[6D[K
+"source_class_policy_proposal = review_only". I will set both to review_onl[10D[K
+review_only.)
+    - retrieval_behavior_proposal: review_gate_required
+    - retrieval_behavior: none (since it's not decided)
+    - flags: []
+    - not_decided: true
+    - clarification_required: false
+    - api_or_model_escalation_recommended: false
+    - reasoning_route_proposal: local_senior_model
+    - brief_rationale: "User is weighing materials for tubes; decision is e[1D[K
+explicitly pending."
+
+    Wait, the schema says `retrieval_behavior`: `blocked|candidate_discover[27D[K
+`blocked|candidate_discovery_only|full_body_required|review_gate_required|c`blocked|candidate_discover_only|full_body_required|review_gate_required|clarification_required|none`.
+    The context pack says: `retrieval_behavior_proposal = review_gate_requi[17D[K
+review_gate_required`. I'll use that for both or none for behavior. Let's g[1D[K
+go with `none` for actual retrieval and `review_gate_required` for proposal[8D[K
+proposal to be safe, but often these are the same in smoke tests.
+
+    One detail: "Do not invent sources." No source is provided, so no sourc[5D[K
+source list.
+
+    *Final check of enums*:
+    lifecycle_status: raw_input|fast_intake|proposed_memory|enriched_memory[53D[K
+raw_input|fast_intake|proposed_memory|enriched_memory|accepted_memory|canonraw_input|fast_intake|proposed_memory|enriched_memoryaccepted_memory|canonical_state|superseded|unknown
+    The context pack says `lifecycle_status_proposal = proposed_memory`. I'[2D[K
+I'll use that.
+
+    Refining Rationale: "Prototyping material exploration for tubes (Polyca[7D[K
+(Polycarbonate vs ETFE) is tentative."
+
+    Let's produce JSON.
+...done thinking.
+
+{
+  "case_id": "HG-006",
+  "project_bucket": "bluerev",
+  "summary": "Comparison of polycarbonate and ETFE for tube prototyping.",
+  "primary_domain": "reactor_design",
+  "domain_tags": [
+    "bioprocess",
+    "reactor_design"
+  ],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "raw_input",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "default_allowed",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "none",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "User is exploring materials for tubes but explicitly [K
+stated the decision is pending and should not be saved as an accepted assum[5D[K
+assumption."
+}
