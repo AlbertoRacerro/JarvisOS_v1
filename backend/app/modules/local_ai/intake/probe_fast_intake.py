@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from math import ceil
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -30,17 +31,67 @@ from app.modules.local_ai.classification.contracts import (
 REPORT_SCHEMA_VERSION = "fast_intake_probe_report_v1"
 REPORT_FILENAME_PREFIX = "fast_intake_probe"
 FAST_INTAKE_SCHEMA_VERSION = "fast_intake_v0"
+FAST_INTAKE_FLAT_SCHEMA_VERSION = "fast_intake_flat_v0"
 FAST_INTAKE_MODE = "smoke"
+FAST_INTAKE_FLAT_MODE = "smoke-flat"
 FAST_INTAKE_NUM_PREDICT = 512
 FAST_INTAKE_TIMEOUT_SECONDS = 15.0
-FAST_INTAKE_PROMPT_MAX_CHARS = 1800
+FAST_INTAKE_PROMPT_MAX_CHARS = 5000
 FAST_INTAKE_REPEAT_COUNT = 1
 FAST_INTAKE_CANDIDATE_MODELS = ("qwen3:8b", "gemma4:12b-it-qat")
 HIGH_CONFIDENCE_THRESHOLD = 0.8
+FAST_INTAKE_FLAT_TOP_LEVEL_FIELDS = (
+    "schema_version",
+    "contains_user_preference",
+    "contains_user_decision",
+    "contains_assumption",
+    "contains_design_constraint",
+    "contains_open_question",
+    "contains_action_request",
+    "contains_test_result",
+    "contains_numbers_or_metrics",
+    "mentions_previous_context",
+    "mentions_project_or_artifact",
+    "mentions_code_or_command",
+    "mentions_source_or_literature",
+    "storage_relevance",
+    "record_bucket",
+    "project_bucket",
+    "domain_bucket",
+    "sensitivity_bucket",
+    "status_bucket",
+    "needs_enrichment",
+    "needs_user_confirmation",
+    "uncertainty_reason",
+    "confidence_observable",
+    "confidence_bucket_assignment",
+    "uncertain_fields",
+    "advisory_note",
+)
 
 
 class OutputControlVariant(StrEnum):
     think_false = "think_false"
+
+
+class OutputRootType(StrEnum):
+    object = "object"
+    list = "list"
+    string = "string"
+    empty = "empty"
+    invalid_json = "invalid_json"
+
+
+class LikelyFailureCategory(StrEnum):
+    extra_fields = "extra_fields"
+    missing_fields = "missing_fields"
+    enum_mismatch = "enum_mismatch"
+    type_mismatch = "type_mismatch"
+    non_object_json = "non_object_json"
+    invalid_json = "invalid_json"
+    timeout = "timeout"
+    empty_output = "empty_output"
+    unknown = "unknown"
 
 
 class StorageRelevance(StrEnum):
@@ -111,6 +162,32 @@ class UncertaintyReason(StrEnum):
     important_decision = "important_decision"
     weak_tags = "weak_tags"
     unknown = "unknown"
+
+
+class UncertainField(StrEnum):
+    contains_user_preference = "contains_user_preference"
+    contains_user_decision = "contains_user_decision"
+    contains_assumption = "contains_assumption"
+    contains_design_constraint = "contains_design_constraint"
+    contains_open_question = "contains_open_question"
+    contains_action_request = "contains_action_request"
+    contains_test_result = "contains_test_result"
+    contains_numbers_or_metrics = "contains_numbers_or_metrics"
+    mentions_previous_context = "mentions_previous_context"
+    mentions_project_or_artifact = "mentions_project_or_artifact"
+    mentions_code_or_command = "mentions_code_or_command"
+    mentions_source_or_literature = "mentions_source_or_literature"
+    storage_relevance = "storage_relevance"
+    record_bucket = "record_bucket"
+    project_bucket = "project_bucket"
+    domain_bucket = "domain_bucket"
+    sensitivity_bucket = "sensitivity_bucket"
+    status_bucket = "status_bucket"
+    needs_enrichment = "needs_enrichment"
+    needs_user_confirmation = "needs_user_confirmation"
+    uncertainty_reason = "uncertainty_reason"
+    confidence_observable = "confidence_observable"
+    confidence_bucket_assignment = "confidence_bucket_assignment"
 
 
 class FastIntakeSuitability(StrEnum):
@@ -232,6 +309,61 @@ class FastIntakeSignalForm(BaseModel):
         return value
 
 
+class FastIntakeFlatSignalV0(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: str
+    contains_user_preference: bool
+    contains_user_decision: bool
+    contains_assumption: bool
+    contains_design_constraint: bool
+    contains_open_question: bool
+    contains_action_request: bool
+    contains_test_result: bool
+    contains_numbers_or_metrics: bool
+    mentions_previous_context: bool
+    mentions_project_or_artifact: bool
+    mentions_code_or_command: bool
+    mentions_source_or_literature: bool
+    storage_relevance: StorageRelevance
+    record_bucket: RecordBucket
+    project_bucket: ProjectBucket
+    domain_bucket: DomainBucket
+    sensitivity_bucket: SensitivityBucket
+    status_bucket: StatusBucket
+    needs_enrichment: bool
+    needs_user_confirmation: bool
+    uncertainty_reason: UncertaintyReason
+    confidence_observable: float = Field(ge=0, le=1)
+    confidence_bucket_assignment: float = Field(ge=0, le=1)
+    uncertain_fields: tuple[UncertainField, ...] = Field(default_factory=tuple, max_length=5)
+    advisory_note: str = Field(default="", max_length=160)
+
+    @field_validator("schema_version")
+    @classmethod
+    def schema_version_must_match(cls, value: str) -> str:
+        if value != FAST_INTAKE_FLAT_SCHEMA_VERSION:
+            raise ValueError(f"schema_version must be {FAST_INTAKE_FLAT_SCHEMA_VERSION}")
+        return value
+
+
+class FastIntakeValidationDiagnostics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    output_root_type: OutputRootType
+    json_parse_ok: bool
+    top_level_keys: tuple[str, ...] = ()
+    missing_top_level_fields: tuple[str, ...] = ()
+    extra_top_level_fields: tuple[str, ...] = ()
+    pydantic_error_paths: tuple[str, ...] = ()
+    pydantic_error_types: tuple[str, ...] = ()
+    enum_error_paths: tuple[str, ...] = ()
+    type_error_paths: tuple[str, ...] = ()
+    missing_field_paths: tuple[str, ...] = ()
+    extra_field_paths: tuple[str, ...] = ()
+    likely_failure_category: LikelyFailureCategory
+
+
 class ExpectedFastIntake(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -295,6 +427,10 @@ class FastIntakeCaseResult(BaseModel):
     returned_uncertainty: dict[str, str | bool] = Field(default_factory=dict)
     short_description_present: bool = False
     phrasing_count: int = Field(default=0, ge=0)
+    uncertain_fields: tuple[str, ...] = ()
+    advisory_note_present: bool = False
+    advisory_note_chars: int = Field(default=0, ge=0, le=160)
+    validation_diagnostics: FastIntakeValidationDiagnostics | None = None
     overconfident_wrong: bool = False
     runtime_approved: bool = False
 
@@ -324,6 +460,8 @@ class FastIntakeProfileSummary(BaseModel):
     sensitivity_bucket_accuracy: float | None = Field(default=None, ge=0, le=1)
     status_bucket_accuracy: float | None = Field(default=None, ge=0, le=1)
     overconfident_wrong_count: int = Field(ge=0)
+    uncertain_fields_frequency: dict[str, int] = Field(default_factory=dict)
+    advisory_note_present_count: int = Field(ge=0)
     dominant_fallback_reason: ClassificationFailureCode | None = None
     fallback_reason_counts: dict[str, int] = Field(default_factory=dict)
     suitability_label: FastIntakeSuitability
@@ -356,10 +494,27 @@ InstalledModelFetcher = Callable[[str, float], Iterable[str]]
 
 class FastIntakeOutputControlAdapter(LocalGemmaClassificationAdapter):
     def _payload(self, prompt: str) -> dict[str, object]:
-        payload = super()._payload(prompt)
-        if self.config.endpoint_url.endswith("/api/chat"):
-            payload["think"] = False
-        return payload
+        ClassificationAdapterConfig.model_validate(self.config.model_dump())
+        if len(prompt) > FAST_INTAKE_PROMPT_MAX_CHARS:
+            raise ValueError("fast intake prompt exceeds bounded prompt budget")
+        parsed = urlparse(self.config.endpoint_url)
+        if parsed.path == "/api/chat":
+            return {
+                "model": self.config.model_name,
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False,
+                "format": "json",
+                "think": False,
+                "options": {"temperature": self.config.temperature, "num_predict": self.config.max_output_tokens},
+            }
+        return {
+            "model": self.config.model_name,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": self.config.temperature,
+            "max_tokens": self.config.max_output_tokens,
+            "stream": False,
+            "response_format": {"type": "json_object"},
+        }
 
 
 def build_fast_intake_prompt(case: FastIntakeProbeCase) -> str:
@@ -399,6 +554,92 @@ Input:
     return prompt
 
 
+def build_fast_intake_flat_prompt(case: FastIntakeProbeCase) -> str:
+    prompt = f"""You are a local JSON extraction model inside JarvisOS.
+
+Return exactly one JSON object.
+Do not use markdown.
+Do not explain outside JSON.
+Do not add extra keys.
+Do not nest objects.
+Use exactly the keys shown in the template.
+Use only the enum values shown.
+
+Your output is advisory only.
+It cannot authorize tools, providers, retrieval, memory writes, actions, routes, final sensitivity, or canonical promotion.
+
+If you are unsure about specific fields, list those field names in uncertain_fields.
+If you need to add one short non-authoritative observation, use advisory_note.
+Do not create any other note/reasoning/analysis fields.
+
+Fill this flat JSON template:
+
+{{
+  "schema_version": "fast_intake_flat_v0",
+
+  "contains_user_preference": false,
+  "contains_user_decision": false,
+  "contains_assumption": false,
+  "contains_design_constraint": false,
+  "contains_open_question": false,
+  "contains_action_request": false,
+  "contains_test_result": false,
+  "contains_numbers_or_metrics": false,
+  "mentions_previous_context": false,
+  "mentions_project_or_artifact": false,
+  "mentions_code_or_command": false,
+  "mentions_source_or_literature": false,
+
+  "storage_relevance": "none",
+  "record_bucket": "unknown",
+  "project_bucket": "unknown",
+  "domain_bucket": "unknown",
+  "sensitivity_bucket": "unknown",
+  "status_bucket": "raw",
+
+  "needs_enrichment": false,
+  "needs_user_confirmation": false,
+  "uncertainty_reason": "none",
+
+  "confidence_observable": 0.0,
+  "confidence_bucket_assignment": 0.0,
+
+  "uncertain_fields": [],
+  "advisory_note": ""
+}}
+
+Allowed enum values:
+storage_relevance = none | low | medium | high
+record_bucket = request | note | decision | assumption | evidence | result | preference | issue | parameter | source | unknown
+project_bucket = jarvisos | bluerev | coursework | personal | general | unknown
+domain_bucket = local_ai | memory | retrieval | software | modeling | bioprocess | reactor_design | coursework | personal | general | unknown
+sensitivity_bucket = public | internal | sensitive | secret | unknown
+status_bucket = raw | proposed | accepted | not_decided | unknown
+uncertainty_reason = none | ambiguous | missing_context | sensitive | important_decision | weak_tags | unknown
+
+Allowed uncertain_fields values:
+contains_user_preference, contains_user_decision, contains_assumption, contains_design_constraint, contains_open_question, contains_action_request, contains_test_result, contains_numbers_or_metrics, mentions_previous_context, mentions_project_or_artifact, mentions_code_or_command, mentions_source_or_literature, storage_relevance, record_bucket, project_bucket, domain_bucket, sensitivity_bucket, status_bucket, needs_enrichment, needs_user_confirmation, uncertainty_reason, confidence_observable, confidence_bucket_assignment
+
+Guidance:
+- If the input is casual and not worth memory, use storage_relevance = none or low.
+- If the input contains a durable user preference, use record_bucket = preference.
+- If the input says something is decided, use record_bucket = decision.
+- If the input says something is possible, candidate, tentative, or not final, use record_bucket = assumption and status_bucket = not_decided or proposed.
+- If the input reports test results, commits, metrics, or run outcomes, use record_bucket = result.
+- If the input asks to do something, use record_bucket = request and contains_action_request = true.
+- If the input asks a question, use contains_open_question = true.
+- If unsure, use unknown and lower confidence.
+- Never invent project names or source references.
+- Keep advisory_note under 160 characters. Empty string is allowed.
+
+Input:
+{case.text}
+"""
+    if len(prompt) > FAST_INTAKE_PROMPT_MAX_CHARS:
+        raise ValueError("fast intake flat prompt exceeds bounded prompt budget")
+    return prompt
+
+
 def parse_fast_intake_output(response_text: str) -> FastIntakeSignalForm:
     try:
         raw = json.loads(response_text)
@@ -415,8 +656,73 @@ def parse_fast_intake_output(response_text: str) -> FastIntakeSignalForm:
         raise ValueError(ClassificationFailureCode.schema_invalid.value) from exc
 
 
+def parse_fast_intake_flat_output(response_text: str) -> FastIntakeFlatSignalV0:
+    try:
+        raw = json.loads(response_text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(ClassificationFailureCode.invalid_json.value) from exc
+    if not isinstance(raw, dict):
+        raise ValueError(ClassificationFailureCode.non_object_json.value)
+    try:
+        return FastIntakeFlatSignalV0.model_validate(raw)
+    except ValidationError as exc:
+        errors = exc.errors()
+        if any(error.get("type") == "extra_forbidden" for error in errors):
+            raise ValueError(ClassificationFailureCode.extra_fields.value) from exc
+        raise ValueError(ClassificationFailureCode.schema_invalid.value) from exc
+
+
+def normalize_flat_to_fast_intake_form(
+    flat_output: FastIntakeFlatSignalV0,
+    case: FastIntakeProbeCase,
+) -> FastIntakeSignalForm:
+    return FastIntakeSignalForm(
+        schema_version=FAST_INTAKE_SCHEMA_VERSION,
+        source=FastIntakeSource(
+            input_id=case.input_id,
+            conversation_id=case.conversation_id,
+            timestamp=case.timestamp,
+            raw_text_preserved=True,
+        ),
+        observable_flags=ObservableFlags(
+            contains_user_preference=flat_output.contains_user_preference,
+            contains_user_decision=flat_output.contains_user_decision,
+            contains_assumption=flat_output.contains_assumption,
+            contains_design_constraint=flat_output.contains_design_constraint,
+            contains_open_question=flat_output.contains_open_question,
+            contains_action_request=flat_output.contains_action_request,
+            contains_test_result=flat_output.contains_test_result,
+            contains_numbers_or_metrics=flat_output.contains_numbers_or_metrics,
+            mentions_previous_context=flat_output.mentions_previous_context,
+            mentions_project_or_artifact=flat_output.mentions_project_or_artifact,
+            mentions_code_or_command=flat_output.mentions_code_or_command,
+            mentions_source_or_literature=flat_output.mentions_source_or_literature,
+        ),
+        broad_storage_buckets=BroadStorageBuckets(
+            storage_relevance=flat_output.storage_relevance,
+            record_bucket=flat_output.record_bucket,
+            project_bucket=flat_output.project_bucket,
+            domain_bucket=flat_output.domain_bucket,
+            sensitivity_bucket=flat_output.sensitivity_bucket,
+            status_bucket=flat_output.status_bucket,
+        ),
+        explicit_mentions=ExplicitMentions(),
+        short_description=ShortDescription(surface_summary="", preserved_user_phrasing=()),
+        uncertainty=Uncertainty(
+            needs_enrichment=flat_output.needs_enrichment,
+            needs_user_confirmation=flat_output.needs_user_confirmation,
+            reason=flat_output.uncertainty_reason,
+        ),
+        confidence=IntakeConfidence(
+            observable=flat_output.confidence_observable,
+            bucket_assignment=flat_output.confidence_bucket_assignment,
+        ),
+    )
+
+
 def build_fast_intake_smoke_report(
     *,
+    mode: str = FAST_INTAKE_MODE,
     endpoint_url: str = DEFAULT_CLASSIFICATION_ENDPOINT_URL,
     timeout_seconds: float = FAST_INTAKE_TIMEOUT_SECONDS,
     installed_model_names: Iterable[str] | None = None,
@@ -426,6 +732,8 @@ def build_fast_intake_smoke_report(
     adapter_factory: AdapterFactory = FastIntakeOutputControlAdapter,
     created_at_utc: datetime | None = None,
 ) -> FastIntakeProbeReport:
+    if mode not in {FAST_INTAKE_MODE, FAST_INTAKE_FLAT_MODE}:
+        raise ValueError("fast intake mode must be smoke or smoke-flat")
     installed = tuple(installed_model_names) if installed_model_names is not None else tuple(
         (installed_model_fetcher or _ollama_installed_model_names)(endpoint_url, timeout_seconds)
     )
@@ -444,11 +752,11 @@ def build_fast_intake_smoke_report(
                     temperature=DEFAULT_CLASSIFICATION_TEMPERATURE,
                 )
             )
-            results.append(_case_result(case, profile, adapter))
+            results.append(_case_result(case, profile, adapter, mode=mode))
     summaries = [_profile_summary(profile, results) for profile in runnable_profiles]
     created = created_at_utc or datetime.now(UTC)
     return FastIntakeProbeReport(
-        mode=FAST_INTAKE_MODE,
+        mode=mode,
         created_at_utc=created.isoformat(),
         endpoint=ClassificationAdapterConfig(endpoint_url=endpoint_url).endpoint_url,
         temperature=DEFAULT_CLASSIFICATION_TEMPERATURE,
@@ -685,8 +993,13 @@ def summary_lines(report: FastIntakeProbeReport, report_path: Path) -> list[str]
                 f"fallback_rate={summary.fallback_rate} observable_flags={summary.observable_flag_agreement_rate} "
                 f"buckets={summary.bucket_agreement_rate} mentions={summary.explicit_mentions_partial_match_rate} "
                 f"mean_latency_ms={summary.mean_latency_ms} p95_latency_ms={summary.p95_latency_ms} "
-                f"overconfident_wrong={summary.overconfident_wrong_count} suitability={summary.suitability_label}"
+                f"overconfident_wrong={summary.overconfident_wrong_count} "
+                f"advisory_note_present={summary.advisory_note_present_count} "
+                f"dominant_fallback={summary.dominant_fallback_reason} suitability={summary.suitability_label}"
             )
+        )
+        lines.append(
+            f"profile={summary.profile_id} uncertain_fields={summary.uncertain_fields_frequency}"
         )
         lines.append(
             (
@@ -705,9 +1018,9 @@ def default_report_dir() -> Path:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Manual local FastIntakeSignalForm smoke probe.")
-    parser.add_argument("--mode", choices=(FAST_INTAKE_MODE,), default=FAST_INTAKE_MODE)
+    parser.add_argument("--mode", choices=(FAST_INTAKE_MODE, FAST_INTAKE_FLAT_MODE), default=FAST_INTAKE_MODE)
     args = parser.parse_args(argv)
-    report = build_fast_intake_smoke_report()
+    report = build_fast_intake_smoke_report(mode=args.mode)
     path = write_probe_report(report)
     for line in summary_lines(report, path):
         print(line)
@@ -718,17 +1031,36 @@ def _case_result(
     case: FastIntakeProbeCase,
     profile: FastIntakeProfile,
     adapter: LocalGemmaClassificationAdapter,
+    *,
+    mode: str,
 ) -> FastIntakeCaseResult:
-    prompt = build_fast_intake_prompt(case)
+    prompt = build_fast_intake_flat_prompt(case) if mode == FAST_INTAKE_FLAT_MODE else build_fast_intake_prompt(case)
     result = adapter.complete(prompt, input_chars=len(case.text))
     diagnostics = result.diagnostics
     if not result.success or not result.response_text:
-        return _failure_case_result(case, profile, diagnostics, result.failure_code or ClassificationFailureCode.unknown)
+        return _failure_case_result(
+            case,
+            profile,
+            diagnostics,
+            result.failure_code or ClassificationFailureCode.unknown,
+            validation_diagnostics=_diagnostics_for_adapter_failure(result.failure_code, diagnostics),
+        )
+    uncertain_fields: tuple[str, ...] = ()
+    advisory_note_present = False
+    advisory_note_chars = 0
     try:
-        output = parse_fast_intake_output(result.response_text)
+        if mode == FAST_INTAKE_FLAT_MODE:
+            flat_output = parse_fast_intake_flat_output(result.response_text)
+            output = normalize_flat_to_fast_intake_form(flat_output, case)
+            uncertain_fields = tuple(item.value for item in flat_output.uncertain_fields)
+            advisory_note_present = bool(flat_output.advisory_note.strip())
+            advisory_note_chars = len(flat_output.advisory_note)
+        else:
+            output = parse_fast_intake_output(result.response_text)
     except ValueError as exc:
         reason = _failure_code_from_value_error(exc)
-        return _failure_case_result(case, profile, diagnostics, reason)
+        validation_diagnostics = _sanitized_validation_diagnostics(result.response_text)
+        return _failure_case_result(case, profile, diagnostics, reason, validation_diagnostics=validation_diagnostics)
     flag_rate = _observable_flag_agreement(output, case.expected)
     bucket_matches = _bucket_matches(output, case.expected)
     bucket_rate = _ratio(sum(1 for item in bucket_matches.values() if item), len(bucket_matches))
@@ -767,6 +1099,9 @@ def _case_result(
         returned_uncertainty=output.uncertainty.model_dump(),
         short_description_present=bool(output.short_description.surface_summary.strip()),
         phrasing_count=len(output.short_description.preserved_user_phrasing),
+        uncertain_fields=uncertain_fields,
+        advisory_note_present=advisory_note_present,
+        advisory_note_chars=advisory_note_chars,
         overconfident_wrong=overconfident_wrong,
         runtime_approved=False,
     )
@@ -777,6 +1112,8 @@ def _failure_case_result(
     profile: FastIntakeProfile,
     diagnostics: ClassificationAttemptDiagnostics,
     fallback_reason: ClassificationFailureCode,
+    *,
+    validation_diagnostics: FastIntakeValidationDiagnostics | None = None,
 ) -> FastIntakeCaseResult:
     return FastIntakeCaseResult(
         case_id=case.case_id,
@@ -792,6 +1129,7 @@ def _failure_case_result(
         accepted=False,
         fallback_used=True,
         fallback_reason=fallback_reason,
+        validation_diagnostics=validation_diagnostics,
         runtime_approved=False,
     )
 
@@ -838,6 +1176,8 @@ def _profile_summary(profile: FastIntakeProfile, results: list[FastIntakeCaseRes
         sensitivity_bucket_accuracy=_bool_accuracy(group, "sensitivity_bucket_match"),
         status_bucket_accuracy=_bool_accuracy(group, "status_bucket_match"),
         overconfident_wrong_count=sum(1 for result in group if result.overconfident_wrong),
+        uncertain_fields_frequency=_uncertain_fields_frequency(group),
+        advisory_note_present_count=sum(1 for result in group if result.advisory_note_present),
         dominant_fallback_reason=dominant_reason,
         fallback_reason_counts=dict(sorted((reason.value, count) for reason, count in fallback_reasons.items())),
         suitability_label=FastIntakeSuitability.needs_more_testing,
@@ -870,6 +1210,121 @@ def _suitability(summary: FastIntakeProfileSummary) -> FastIntakeSuitability:
     if (summary.observable_flag_agreement_rate or 0) >= 0.7 and (summary.bucket_agreement_rate or 0) >= 0.5:
         return FastIntakeSuitability.needs_more_testing
     return FastIntakeSuitability.needs_prompt_repair
+
+
+def _sanitized_validation_diagnostics(response_text: str | None) -> FastIntakeValidationDiagnostics:
+    if response_text is None or response_text.strip() == "":
+        return FastIntakeValidationDiagnostics(
+            output_root_type=OutputRootType.empty,
+            json_parse_ok=False,
+            missing_top_level_fields=FAST_INTAKE_FLAT_TOP_LEVEL_FIELDS,
+            likely_failure_category=LikelyFailureCategory.empty_output,
+        )
+    try:
+        raw = json.loads(response_text)
+    except json.JSONDecodeError:
+        return FastIntakeValidationDiagnostics(
+            output_root_type=OutputRootType.invalid_json,
+            json_parse_ok=False,
+            likely_failure_category=LikelyFailureCategory.invalid_json,
+        )
+    if not isinstance(raw, dict):
+        root_type = OutputRootType.list if isinstance(raw, list) else OutputRootType.string
+        return FastIntakeValidationDiagnostics(
+            output_root_type=root_type,
+            json_parse_ok=True,
+            likely_failure_category=LikelyFailureCategory.non_object_json,
+        )
+    top_level_keys = tuple(sorted(_sanitize_path_part(key) for key in raw))
+    missing = tuple(field for field in FAST_INTAKE_FLAT_TOP_LEVEL_FIELDS if field not in raw)
+    extra = tuple(sorted(_sanitize_path_part(key) for key in raw if key not in FAST_INTAKE_FLAT_TOP_LEVEL_FIELDS))
+    try:
+        FastIntakeFlatSignalV0.model_validate(raw)
+    except ValidationError as exc:
+        errors = exc.errors()
+        paths = tuple(_error_path(error) for error in errors)
+        types = tuple(str(error.get("type", "unknown")) for error in errors)
+        enum_paths = tuple(path for path, error_type in zip(paths, types, strict=True) if error_type == "enum")
+        type_paths = tuple(
+            path
+            for path, error_type in zip(paths, types, strict=True)
+            if error_type.endswith("_type") or error_type.endswith("_parsing")
+        )
+        missing_paths = tuple(path for path, error_type in zip(paths, types, strict=True) if error_type == "missing")
+        extra_paths = tuple(path for path, error_type in zip(paths, types, strict=True) if error_type == "extra_forbidden")
+        return FastIntakeValidationDiagnostics(
+            output_root_type=OutputRootType.object,
+            json_parse_ok=True,
+            top_level_keys=top_level_keys,
+            missing_top_level_fields=missing,
+            extra_top_level_fields=extra,
+            pydantic_error_paths=paths,
+            pydantic_error_types=types,
+            enum_error_paths=enum_paths,
+            type_error_paths=type_paths,
+            missing_field_paths=missing_paths,
+            extra_field_paths=extra_paths,
+            likely_failure_category=_likely_validation_failure(missing_paths, extra_paths, enum_paths, type_paths),
+        )
+    return FastIntakeValidationDiagnostics(
+        output_root_type=OutputRootType.object,
+        json_parse_ok=True,
+        top_level_keys=top_level_keys,
+        missing_top_level_fields=missing,
+        extra_top_level_fields=extra,
+        likely_failure_category=LikelyFailureCategory.unknown,
+    )
+
+
+def _diagnostics_for_adapter_failure(
+    failure_code: ClassificationFailureCode | None,
+    diagnostics: ClassificationAttemptDiagnostics,
+) -> FastIntakeValidationDiagnostics:
+    if failure_code == ClassificationFailureCode.timeout:
+        category = LikelyFailureCategory.timeout
+    elif diagnostics.raw_content_empty:
+        category = LikelyFailureCategory.empty_output
+    else:
+        category = LikelyFailureCategory.unknown
+    return FastIntakeValidationDiagnostics(
+        output_root_type=OutputRootType.empty if diagnostics.raw_content_empty else OutputRootType.invalid_json,
+        json_parse_ok=False,
+        missing_top_level_fields=FAST_INTAKE_FLAT_TOP_LEVEL_FIELDS,
+        likely_failure_category=category,
+    )
+
+
+def _likely_validation_failure(
+    missing_paths: tuple[str, ...],
+    extra_paths: tuple[str, ...],
+    enum_paths: tuple[str, ...],
+    type_paths: tuple[str, ...],
+) -> LikelyFailureCategory:
+    if extra_paths:
+        return LikelyFailureCategory.extra_fields
+    if missing_paths:
+        return LikelyFailureCategory.missing_fields
+    if enum_paths:
+        return LikelyFailureCategory.enum_mismatch
+    if type_paths:
+        return LikelyFailureCategory.type_mismatch
+    return LikelyFailureCategory.unknown
+
+
+def _error_path(error: dict[str, object]) -> str:
+    loc = error.get("loc")
+    if not isinstance(loc, tuple):
+        return "unknown"
+    return ".".join(_sanitize_path_part(str(part)) for part in loc)
+
+
+def _sanitize_path_part(value: str) -> str:
+    return _redact_mention(value)
+
+
+def _uncertain_fields_frequency(results: list[FastIntakeCaseResult]) -> dict[str, int]:
+    counter = Counter(field for result in results for field in result.uncertain_fields)
+    return dict(sorted(counter.items()))
 
 
 def _observable_flag_agreement(output: FastIntakeSignalForm, expected: ExpectedFastIntake) -> float:

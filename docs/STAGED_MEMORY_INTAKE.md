@@ -184,6 +184,27 @@ Rules:
 - This form must never authorize actions.
 - A valid form does not prove semantic truth.
 
+### AI-Facing Flat Smoke Contract
+
+The nested `FastIntakeSignalForm` remains the canonical internal normalized
+envelope. Local models should not be required to generate the full nested
+envelope directly during smoke diagnostics.
+
+`FastIntakeFlatSignalV0` is an AI-facing smoke/adapter contract. It flattens the
+observable booleans, broad buckets, uncertainty fields, and confidence fields
+into one JSON object. JarvisOS validates the flat object, then normalizes it
+into the canonical nested `FastIntakeSignalForm` by attaching deterministic
+source metadata from the case/input.
+
+The flat smoke contract may include only two advisory channels:
+
+- `uncertain_fields`: bounded list of known field names, max 5 items.
+- `advisory_note`: bounded string, max 160 characters.
+
+These channels are diagnostic only. They must not be copied into canonical
+memory, and they cannot authorize tools, providers, retrieval, memory writes,
+actions, routes, final sensitivity, or canonical promotion.
+
 ## Later Memory Card Types
 
 The following cards are later enrichment targets, not write-time requirements:

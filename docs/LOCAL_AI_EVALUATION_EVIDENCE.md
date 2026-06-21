@@ -528,6 +528,45 @@ Decision:
 - Do not wire `FastIntakeSignalForm` into routes, UI, memory runtime, retrieval runtime, Context Pack Broker runtime, provider routing, tool execution, automatic memory writes, or safety decisions.
 - The next work should repair the smoke contract before moving to broader memory foundations: flatten or simplify the form, reduce nested objects, consider deterministic observable extraction first, and keep explicit mentions redacted.
 
+### 1C-Z-R - Flat FastIntake Smoke Contract Repair
+
+1C-Z-R repaired the AI-facing smoke contract without changing the canonical nested `FastIntakeSignalForm`. The model now emits a flat `FastIntakeFlatSignalV0` object; JarvisOS validates that flat object, attaches deterministic source metadata, and normalizes it into the canonical nested intake envelope before scoring. The flat schema keeps `extra="forbid"` and gives the model only two bounded advisory channels: `uncertain_fields` and `advisory_note`. Reports store advisory-note presence and length only, not raw advisory text.
+
+Report:
+
+- `backend/local_eval_reports/fast_intake_probe_smoke-flat_20260621T104619.json`
+
+Observed flat smoke result:
+
+| Profile | Model | Attempts | Schema-valid | Accepted | Fallback | Observable flags | Buckets | Storage | Record | Project | Domain | Sensitivity | Status | Overconfident wrong | Advisory notes | Suitability |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `qwen8_fast_intake_think_false` | `qwen3:8b` | 12 | 91.7% | 91.7% | 8.3% | 90.2% | 47.0% | 27.3% | 63.6% | 72.7% | 27.3% | 27.3% | 63.6% | 6 | 5 | needs prompt repair |
+| `gemma12_fast_intake_think_false` | `gemma4:12b-it-qat` | 12 | 91.7% | 91.7% | 8.3% | 90.2% | 62.1% | 36.4% | 63.6% | 63.6% | 72.7% | 72.7% | 63.6% | 10 | 11 | needs prompt repair |
+
+Sanitized failure diagnostics:
+
+- Qwen3 8B had one schema-invalid output caused by `uncertain_fields` exceeding the bounded list length.
+- Gemma 12B had one timeout/empty-output failure.
+- The report stores safe structural metadata only: root type, parse status, top-level keys, missing/extra fields, pydantic paths/types, and likely failure category. It does not store raw prompt text, raw case text, raw model output, messages, secret placeholder values, or raw advisory notes.
+
+Interpretation:
+
+- The flat schema materially repaired structural validity versus 1C-Z: both allowed profiles improved from 0% to 91.7% schema-valid.
+- Observable boolean flags became measurable and were the strongest signal at 90.2% agreement for both profiles.
+- Broad buckets became measurable but remain noisy.
+- Qwen3 8B was stronger on `project_bucket`; Gemma 12B was stronger on `domain_bucket` and `sensitivity_bucket`.
+- `storage_relevance` remains weak for both models.
+- Overconfident wrong outputs remain too high, especially for Gemma 12B.
+- `uncertain_fields` was useful for Qwen3 8B but needs a stricter prompt reminder about the max-5 bound.
+- `advisory_note` was frequently used, especially by Gemma 12B, but remains diagnostic only and is not persisted raw.
+
+Decision:
+
+- No model is approved for fast-intake runtime authority.
+- Do not wire `FastIntakeFlatSignalV0` or normalized `FastIntakeSignalForm` output into routes, UI, memory runtime, retrieval runtime, Context Pack Broker runtime, provider routing, tool execution, automatic memory writes, canonical promotion, or safety decisions.
+- Continue evaluating observable-flag extraction separately from broad bucket assignment.
+- Consider deterministic heuristics for cheap observable intake and reserve AI for lazy enrichment or reviewed proposed memory until bucket agreement improves.
+
 ## Raw Report Retention Rule
 
 Do not delete raw D9, D9R, D10B, D10B-R, or D10C reports until this document and the ADR log are deliberately updated to preserve their conclusions.
@@ -570,6 +609,7 @@ Current implementation status:
 - 1C-X keeps one canonical non-critical hint form and compares model-specific prompt profiles. Structural validity improved to 100%, but topic/context agreement and overconfident wrong hints still require profile and validator repair before runtime use.
 - 1C-Y pauses classifier repair as the main memory foundation and moves to fast staged memory intake: preserve raw input and cheap broad signals first, then enrich only when retrieval, decisions, conflicts, sensitivity, promotion, or full context packs justify deeper reasoning.
 - 1C-Z tests the documented `FastIntakeSignalForm` live against Qwen3 8B and Gemma 12B. Both profiles were rejected with 0% schema-valid output, so observable flags and broad buckets remain unmeasured until the smoke contract is simplified or repaired.
+- 1C-Z-R repairs the smoke contract with a flat AI-facing schema normalized into the canonical nested form. Schema validity improves to 91.7% for both Qwen3 8B and Gemma 12B, and observable flags become measurable at 90.2% agreement, but broad buckets and overconfident wrong outputs still need repair before runtime use.
 - The corrected architecture is form-driven local intelligence: Gemma performs semantic reasoning locally; JarvisOS provides showcase files, form schemas, structural validation, retries, persistence, promotion policy, and audit.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
@@ -586,6 +626,7 @@ The accepted next local AI sequence is:
 1C-X       Canonical non-critical hint form with model-specific prompt profiles
 1C-Y       Fast staged memory intake design
 1C-Z       FastIntakeSignalForm smoke test
+1C-Z-R     Flat FastIntake smoke contract repair
 1D         Gemma-facing showcase files design
 1E         Form protocol catalog design
 1F         Structural validator + retry loop design
