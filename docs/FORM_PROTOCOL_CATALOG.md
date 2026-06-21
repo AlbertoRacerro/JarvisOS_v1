@@ -1072,8 +1072,15 @@ errors, and decides when retry is safe.
 model output advisory and preserve JarvisOS authority over policy, persistence,
 promotion, retrieval, providers, tools, audit, and final decisions.
 
-This 1E catalog gives 1F the conceptual form families and common envelope. It
-does not implement validators or retry logic.
+Canonical 1F design lives in:
+
+```text
+docs/STRUCTURAL_VALIDATOR_RETRY_LOOP_DESIGN.md
+```
+
+This 1E catalog gives 1F the conceptual form families and common envelope. The
+1F design defines structural checks and bounded retry outcomes. Neither
+document implements validators or retry logic.
 
 ### `1G - Gemma form-fill smoke test harness`
 

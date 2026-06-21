@@ -45,6 +45,7 @@ The current local Gemma conclusion is:
 - Local AI evidence: `docs/LOCAL_AI_EVALUATION_EVIDENCE.md`
 - Form-driven local intelligence: `docs/FORM_DRIVEN_LOCAL_INTELLIGENCE.md`
 - Form protocol catalog: `docs/FORM_PROTOCOL_CATALOG.md`
+- Structural validator retry loop design: `docs/STRUCTURAL_VALIDATOR_RETRY_LOOP_DESIGN.md`
 - Staged memory intake: `docs/STAGED_MEMORY_INTAKE.md`
 - Cavemem/Caveman reference audit: `docs/CAVEMEM_CAVEMAN_REFERENCE_AUDIT.md`
 - Local-model-facing showcase files: `docs/LOCAL_MODEL_SHOWCASE_FILES.md`
@@ -154,13 +155,13 @@ npm run build
 Recommended next milestone:
 
 ```text
-1F - Structural validator + retry loop design
+1G - Gemma form-fill smoke test harness
 ```
 
-The 1E form protocol catalog milestone is docs-only. It defines conceptual
-bounded form families and authority boundaries; it does not add Pydantic models,
-runtime validators, retry loops, model calls, memory runtime, retrieval runtime,
-Context Pack Broker runtime, provider/tool execution, routes, UI, model
-authority, or BlueRev modeling.
+The 1F structural validator and retry-loop milestone is docs-only. It defines
+future structure checks, bounded retry outcomes, and authority limits; it does
+not add validator runtime, Pydantic models, scorer, harness, model calls, memory
+runtime, retrieval runtime, Context Pack Broker runtime, provider/tool
+execution, routes, UI, model authority, or BlueRev modeling.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

@@ -201,6 +201,17 @@ boundaries, not Pydantic models, runtime validators, retry loops, model calls,
 provider/tool execution, retrieval runtime, memory runtime, or BlueRev
 modeling.
 
+Canonical structural validator and retry-loop design lives in:
+
+```text
+docs/STRUCTURAL_VALIDATOR_RETRY_LOOP_DESIGN.md
+```
+
+The validator design is documentation only. It defines future structural checks
+and bounded retry outcomes; it does not add validator runtime, Pydantic models,
+model calls, provider/tool execution, retrieval runtime, memory runtime, or
+BlueRev modeling.
+
 ### Gemma-Facing Showcase Files
 
 Canonical showcase-file design lives in:
@@ -487,6 +498,7 @@ docs/PROGRESSIVE_RETRIEVAL_CONTRACT_DESIGN.md
 - Local AI evidence: `docs/LOCAL_AI_EVALUATION_EVIDENCE.md`
 - Form-driven local intelligence: `docs/FORM_DRIVEN_LOCAL_INTELLIGENCE.md`
 - Form protocol catalog: `docs/FORM_PROTOCOL_CATALOG.md`
+- Structural validator retry loop design: `docs/STRUCTURAL_VALIDATOR_RETRY_LOOP_DESIGN.md`
 - Cavemem/Caveman reference audit: `docs/CAVEMEM_CAVEMAN_REFERENCE_AUDIT.md`
 - Local-model-facing showcase files: `docs/LOCAL_MODEL_SHOWCASE_FILES.md`
 - Micro-context design: `docs/MICRO_CONTEXT_DESIGN.md`

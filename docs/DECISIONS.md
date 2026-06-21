@@ -439,3 +439,21 @@ implementation gates decide what may happen.
 The form catalog is docs-only. It adds no Pydantic models, runtime validator,
 retry loop, model calls, memory runtime, retrieval runtime, Context Pack Broker
 runtime, provider calls, tool execution, or BlueRev modeling.
+
+## ADR-055: Structural validation and retry loops enforce form structure, not semantic truth
+
+Status: Accepted
+
+Structural validation checks schemas, required fields, enum values, field
+lengths, source refs, scope fields, confidence bounds, allowed effects, and
+authority constraints.
+
+Structural validation does not prove semantic fidelity, factual truth,
+strategic correctness, sensitivity correctness, or BlueRev technical validity.
+
+Retry loops are bounded and machine-readable. Retry failures must end in review,
+clarification, `not_decided`, or block.
+
+This milestone adds no validator runtime, Pydantic models, scorer, harness,
+model calls, memory runtime, retrieval runtime, Context Pack Broker runtime,
+provider calls, tool execution, or BlueRev modeling.

@@ -174,6 +174,16 @@ it does not add Pydantic models, runtime validators, retry loops, model calls,
 memory runtime, retrieval runtime, Context Pack Broker runtime, provider calls,
 tool execution, or BlueRev modeling.
 
+Canonical structural validator and retry-loop design lives in:
+
+```text
+docs/STRUCTURAL_VALIDATOR_RETRY_LOOP_DESIGN.md
+```
+
+The validator design is docs-only. It defines future structure checks and
+bounded retry outcomes; it does not add runtime validators, Pydantic models,
+scorers, harnesses, model calls, or runtime behavior.
+
 | Form | Purpose | Filled By | JarvisOS Structural Checks | Semantic Limit | Effect |
 | --- | --- | --- | --- | --- | --- |
 | `ClassificationForm` | Produce non-critical semantic hints for a prompt or task. | Gemma or deterministic fallback. | Schema, enums, confidence bounds, hard overrides. | Does not prove the label is semantically correct and does not own safety-critical fields. | Can provide task, project, topic, context-need, and confidence hints only. |
