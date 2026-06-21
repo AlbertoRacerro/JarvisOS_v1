@@ -695,6 +695,11 @@ Current implementation status:
 - 1C-Z-S defines hybrid intake field ownership and adds a deterministic baseline report mode. Deterministic rules own provenance, runtime authority, hard observable overrides, obvious secret detection, and obvious status phrases; AI remains advisory for semantic hints and hybrid bucket suggestions.
 - 1C-Z-T audits Cavemem/Caveman implementation patterns before 1D. The ideas are adapted, not vendored, and no runtime memory, retrieval, compression, MCP, hooks, worker, viewer, route, UI, or model authority is added.
 - The corrected architecture is form-driven local intelligence: Gemma performs semantic reasoning locally; JarvisOS provides showcase files, form schemas, structural validation, retries, persistence, promotion policy, and audit.
+- 1G-A adds a dry-run-only local model form-fill smoke harness skeleton using
+  supplied installed Ollama model names. It validates local holdout/config
+  files and fake output records with Python stdlib only, but does not call
+  Ollama, pull models, run inference, score real model quality, write memory,
+  run retrieval, or approve any model.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
 The accepted next local AI sequence is:
@@ -722,7 +727,8 @@ The accepted next local AI sequence is:
 1D-G       Holdout intake generalization set
 1E         Form protocol catalog design
 1F         Structural validator + retry loop design
-1G         Gemma form-fill smoke test harness
+1G-A       Local model form-fill smoke harness skeleton
+1G-B       Installed local model form-fill smoke run
 1H         Showcase files generator design
 1I         Context access from showcase files
 1J         Provider/tool intent form design

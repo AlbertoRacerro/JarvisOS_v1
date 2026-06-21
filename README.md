@@ -46,6 +46,7 @@ The current local Gemma conclusion is:
 - Form-driven local intelligence: `docs/FORM_DRIVEN_LOCAL_INTELLIGENCE.md`
 - Form protocol catalog: `docs/FORM_PROTOCOL_CATALOG.md`
 - Structural validator retry loop design: `docs/STRUCTURAL_VALIDATOR_RETRY_LOOP_DESIGN.md`
+- Local model form-fill smoke harness: `docs/LOCAL_MODEL_FORM_FILL_SMOKE_HARNESS.md`
 - Staged memory intake: `docs/STAGED_MEMORY_INTAKE.md`
 - Cavemem/Caveman reference audit: `docs/CAVEMEM_CAVEMAN_REFERENCE_AUDIT.md`
 - Local-model-facing showcase files: `docs/LOCAL_MODEL_SHOWCASE_FILES.md`
@@ -155,13 +156,13 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G - Gemma form-fill smoke test harness
+1G-B - Installed local model form-fill smoke run
 ```
 
-The 1F structural validator and retry-loop milestone is docs-only. It defines
-future structure checks, bounded retry outcomes, and authority limits; it does
-not add validator runtime, Pydantic models, scorer, harness, model calls, memory
-runtime, retrieval runtime, Context Pack Broker runtime, provider/tool
-execution, routes, UI, model authority, or BlueRev modeling.
+The 1G-A local model form-fill smoke harness milestone adds a dry-run skeleton,
+candidate config, docs, and `unittest` coverage only. It does not call Ollama,
+pull models, install packages, call providers, run model inference, add backend
+routes, add runtime memory/retrieval, add Context Pack Broker runtime, execute
+tools, or start BlueRev modeling.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.
