@@ -369,3 +369,19 @@ BlueRev material/geometry/process terms.
 Sensitive or secret inputs must be refused or gated before compression.
 External compression providers are not approved for JarvisOS memory. This
 milestone adds no compression runtime.
+
+## ADR-051: Staged memory schema uses SQLite/FTS behind MemoryStore
+
+Status: Accepted
+
+Future SQLite/FTS memory tables sit behind MemoryStore. MemoryStore remains the
+write boundary for staged memory records, source links, raw/original body
+references, promotion, supersession, and audit.
+
+FTS is for compact scoped candidate retrieval, not full evidence authority.
+Raw/original body references remain required, and secret or sensitive content
+must not be blindly indexed.
+
+This milestone adds no migration, table, runtime query, retrieval API, memory
+runtime, compression runtime, provider calls, tool execution, hooks, MCP,
+worker, viewer, or BlueRev modeling.

@@ -66,6 +66,9 @@ Future durable writes and state transitions for this lifecycle must pass through
 the `MemoryStore` facade documented in `docs/MEMORYSTORE_FACADE_DESIGN.md`.
 This design does not add memory runtime, retrieval runtime, or database schema.
 
+Future SQLite/FTS schema concepts for these stages are documented in
+`docs/SQLITE_FTS_MEMORY_SCHEMA_DESIGN.md`.
+
 ### `raw_input`
 
 The original text or source payload is preserved with an input ID, timestamp,

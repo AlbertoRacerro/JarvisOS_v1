@@ -139,7 +139,8 @@ before runtime use. The policy test design lives in
 
 Storage schema design is separate. `MemoryStore` describes the facade boundary
 and lifecycle authority before tables, indexes, FTS, migrations, or storage
-repositories exist.
+repositories exist. Future SQLite/FTS schema concepts are documented in
+`docs/SQLITE_FTS_MEMORY_SCHEMA_DESIGN.md`.
 
 ### Future Retrieval Contract
 

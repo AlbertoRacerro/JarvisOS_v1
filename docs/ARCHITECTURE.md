@@ -76,6 +76,10 @@ Future durable memory writes must pass through a `MemoryStore` facade before any
 memory runtime or storage schema exists. The facade design is documented in
 `docs/MEMORYSTORE_FACADE_DESIGN.md`; this is not current runtime behavior.
 
+Future SQLite/FTS memory schema design lives in
+`docs/SQLITE_FTS_MEMORY_SCHEMA_DESIGN.md`. It is conceptual only and does not
+add migrations, tables, runtime queries, or memory/retrieval runtime.
+
 ## Domain Foundation
 
 Current persistent objects include:
@@ -385,6 +389,12 @@ docs/INTERNAL_COMPRESSION_POLICY_TESTS.md
 Compression is optional and later. Compressed text must not replace raw/original
 evidence.
 
+Future SQLite/FTS memory schema design lives in:
+
+```text
+docs/SQLITE_FTS_MEMORY_SCHEMA_DESIGN.md
+```
+
 ## Current Roadmap
 
 ```text
@@ -455,6 +465,7 @@ evidence.
 - Micro-context design: `docs/MICRO_CONTEXT_DESIGN.md`
 - MemoryStore facade design: `docs/MEMORYSTORE_FACADE_DESIGN.md`
 - Internal compression policy tests: `docs/INTERNAL_COMPRESSION_POLICY_TESTS.md`
+- SQLite/FTS memory schema design: `docs/SQLITE_FTS_MEMORY_SCHEMA_DESIGN.md`
 - UI startup: `docs/UI_START.md`
 
 Milestone documents remain historical evidence. If a milestone document conflicts with this file or `DECISIONS.md`, prefer the canonical docs.

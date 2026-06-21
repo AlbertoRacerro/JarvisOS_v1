@@ -350,6 +350,9 @@ needs workspace/project scoping, migration design, audit fields, raw body
 retention, source IDs, staged memory status, and policy fields aligned with
 `FastIntakeSignalForm` and future memory cards.
 
+JarvisOS future SQLite/FTS schema design is documented in
+`docs/SQLITE_FTS_MEMORY_SCHEMA_DESIGN.md`.
+
 ### Retrieval
 
 Cavemem's retrieval surface is a good progressive disclosure pattern:

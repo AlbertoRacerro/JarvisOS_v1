@@ -254,6 +254,10 @@ assumptions, provider use, or tool execution.
 
 Retrieval runtime remains deferred.
 
+Future SQLite/FTS schema concepts are documented in
+`docs/SQLITE_FTS_MEMORY_SCHEMA_DESIGN.md`; FTS must index compact snippets only,
+not raw/original evidence.
+
 ## Failure Modes
 
 Mutated numbers or units:
