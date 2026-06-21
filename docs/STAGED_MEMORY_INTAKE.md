@@ -47,8 +47,9 @@ At write time, JarvisOS should preserve:
 
 Heavy contextual interpretation happens later only when the memory is retrieved
 for reasoning, used in a decision, conflicts with another memory, becomes
-high-value, is sensitive, is promoted from raw/proposed to accepted/canonical,
-or has a full project context pack available.
+high-value, is sensitive, is promoted from `raw_input` or `proposed_memory` to
+`accepted_memory` or `canonical_state`, or has a full project context pack
+available.
 
 ## Staged Lifecycle
 
@@ -157,7 +158,7 @@ Raw text must be preserved separately and linked by `source.input_id`.
     "project_bucket": "jarvisos | bluerev | coursework | personal | general | unknown",
     "domain_bucket": "local_ai | memory | retrieval | modeling | software | bioprocess | reactor_design | coursework | personal | general | unknown",
     "sensitivity_bucket": "public | internal | sensitive | secret | unknown",
-    "status_bucket": "raw | proposed | accepted | not_decided | unknown"
+    "lifecycle_status": "raw_input | fast_intake | proposed_memory | enriched_memory | accepted_memory | canonical_state | superseded | unknown"
   },
   "explicit_mentions": {
     "entities": [],
@@ -295,7 +296,7 @@ Micro-context exists to make fast intake less blind without forcing full
 project interpretation on every input. It is bounded, non-authoritative
 orientation context regenerated from canonical sources and accepted state; it is
 not memory runtime, retrieval runtime, Context Pack Broker runtime, model
-authority, or a full context pack.
+authority, evidence authority, or a full context pack.
 
 Canonical micro-context design lives in:
 
@@ -310,6 +311,18 @@ metadata.
 
 Fast intake should not require a full context pack.
 
+### Progressive Retrieval Contract
+
+Canonical progressive retrieval design lives in:
+
+- `docs/PROGRESSIVE_RETRIEVAL_CONTRACT_DESIGN.md`
+
+`reason deeply only on retrieval` means scoped candidate discovery followed by
+full evidence by stable ID or source reference when decisions, promotion,
+provider use, tool use, final sensitivity, or BlueRev assumptions are affected.
+It does not mean trusting snippets, compressed text, micro-context, showcase
+files, `raw_input`, or `proposed_memory` records as normal model context.
+
 ## Enrichment Triggers
 
 JarvisOS should trigger contextual enrichment when:
@@ -319,7 +332,8 @@ JarvisOS should trigger contextual enrichment when:
 - memory conflicts with another memory;
 - memory becomes high-value;
 - memory is sensitive or secret;
-- memory is promoted from raw/proposed to accepted/canonical;
+- memory is promoted from `raw_input` or `proposed_memory` to
+  `accepted_memory` or `canonical_state`;
 - a full project context pack is available;
 - user confirmation is required;
 - repeated related intake suggests a durable pattern.
@@ -390,7 +404,7 @@ Expected fast intake:
 - `record_bucket = decision` or `preference`
 - `project_bucket = jarvisos`
 - `domain_bucket = memory`
-- `status_bucket = proposed`
+- `lifecycle_status = proposed_memory`
 - `needs_enrichment = true`
 - `reason = important_decision`
 
@@ -410,7 +424,8 @@ Expected fast intake:
 - `record_bucket = assumption`
 - `project_bucket = bluerev`
 - `domain_bucket = reactor_design`
-- `status_bucket = not_decided`
+- `lifecycle_status = proposed_memory`
+- the underlying BlueRev assumption remains `not_decided`
 - `sensitivity_bucket = internal` or `sensitive`
 - `needs_enrichment = true`
 
@@ -440,7 +455,8 @@ but it does not need to create a proposed memory card.
 - A valid form does not prove semantic truth.
 - Raw text and source links are preserved so later enrichment can reinterpret
   weak or stale signals.
-- Ambiguous memory can be stored as raw/proposed without being accepted.
+- Ambiguous memory can be stored as `raw_input` or `proposed_memory` without
+  being accepted.
 - BlueRev internal assumptions should not be promoted automatically.
 - JarvisOS owns validation, persistence, promotion, execution, audit, and
   policy.

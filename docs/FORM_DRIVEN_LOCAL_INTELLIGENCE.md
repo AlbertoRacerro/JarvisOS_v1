@@ -68,6 +68,10 @@ memory runtime, or model authority. Its design is documented in
 `docs/MICRO_CONTEXT_DESIGN.md`. It must not require a full context pack on every
 write.
 
+Future retrieval is a progressive scoped read contract, not model-controlled
+storage access. Its design is documented in
+`docs/PROGRESSIVE_RETRIEVAL_CONTRACT_DESIGN.md`.
+
 ## Gemma-Facing Showcase Files
 
 JarvisOS should maintain a small set of always-readable showcase files for
@@ -162,8 +166,8 @@ proposes from what JarvisOS is allowed to save, promote, or execute.
 | Form | Purpose | Filled By | JarvisOS Structural Checks | Semantic Limit | Effect |
 | --- | --- | --- | --- | --- | --- |
 | `ClassificationForm` | Produce non-critical semantic hints for a prompt or task. | Gemma or deterministic fallback. | Schema, enums, confidence bounds, hard overrides. | Does not prove the label is semantically correct and does not own safety-critical fields. | Can provide task, project, topic, context-need, and confidence hints only. |
-| `FastIntakeSignalForm` | Preserve cheap write-time signals for possible memory. | Deterministic extraction, Gemma, or hybrid. | Schema, enums, booleans, source ID, confidence bounds, raw-text-preserved flag, obvious secret overrides. | Does not prove the input is important, true, canonical, or fully understood. | Can save a source-linked raw/proposed intake envelope only. |
-| `ContextAccessRequest` | Ask for bounded context. | Gemma. | Allowed package/source IDs, reason length, max count. | Does not prove the requested context is sufficient. | Can trigger bounded context assembly. |
+| `FastIntakeSignalForm` | Preserve cheap write-time signals for possible memory. | Deterministic extraction, Gemma, or hybrid. | Schema, enums, booleans, source ID, confidence bounds, raw-text-preserved flag, obvious secret overrides. | Does not prove the input is important, true, canonical, or fully understood. | Can save a source-linked `raw_input` or `proposed_memory` intake envelope only. |
+| `ContextAccessRequest` | Ask for bounded context or scoped progressive retrieval. | Gemma. | Allowed package/source IDs, scope, reason length, max count. | Does not prove the requested context is sufficient and does not query storage directly. | Can propose bounded context assembly or candidate discovery after JarvisOS policy checks. |
 | `MemoryCard` | Propose a memory item. | Gemma. | Required fields, source IDs, tags, status. | Does not prove the memory is complete or true. | Can save as proposed memory. |
 | `FileCard` | Summarize a file or file role. | Gemma. | Existing path/source ID, allowed root, summary length. | Does not prove summary quality. | Can update an index after policy allows. |
 | `SourceCard` | Describe an evidence source. | Gemma. | Source ID, citation fields, freshness fields. | Does not prove source interpretation is correct. | Can save source metadata. |

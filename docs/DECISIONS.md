@@ -385,3 +385,27 @@ must not be blindly indexed.
 This milestone adds no migration, table, runtime query, retrieval API, memory
 runtime, compression runtime, provider calls, tool execution, hooks, MCP,
 worker, viewer, or BlueRev modeling.
+
+## ADR-052: Progressive retrieval is scoped candidate discovery before full evidence
+
+Status: Accepted
+
+Progressive retrieval starts from orientation, then scoped compact candidates,
+then full body by stable ID or source reference. Retrieval output is
+non-authoritative until grounded in full evidence and source provenance.
+
+FTS snippets, compressed text, showcase files, and micro-context cannot
+authorize decisions. Retrieval cannot authorize memory promotion, provider
+calls, tool calls, route selection, final sensitivity, BlueRev assumptions, or
+canonical state.
+
+Default retrieval source classes are conservative. `raw_input`,
+`proposed_memory`, and `superseded` records are review-only retrieval targets
+and require explicit purpose, scope, sensitivity checks, and audit.
+
+Models may propose retrieval requests but cannot query storage or authorize
+full-body access directly. External providers and tools cannot query retrieval
+directly.
+
+Context Pack Broker runtime, retrieval APIs, DB queries, memory runtime,
+provider calls, and tool execution are not added in this milestone.

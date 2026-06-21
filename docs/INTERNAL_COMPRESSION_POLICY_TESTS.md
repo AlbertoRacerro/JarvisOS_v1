@@ -254,6 +254,9 @@ assumptions, provider use, or tool execution.
 
 Retrieval runtime remains deferred.
 
+Canonical progressive retrieval contract design lives in
+`docs/PROGRESSIVE_RETRIEVAL_CONTRACT_DESIGN.md`.
+
 Future SQLite/FTS schema concepts are documented in
 `docs/SQLITE_FTS_MEMORY_SCHEMA_DESIGN.md`; FTS must index compact snippets only,
 not raw/original evidence.

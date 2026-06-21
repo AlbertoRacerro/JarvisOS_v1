@@ -80,6 +80,11 @@ Future SQLite/FTS memory schema design lives in
 `docs/SQLITE_FTS_MEMORY_SCHEMA_DESIGN.md`. It is conceptual only and does not
 add migrations, tables, runtime queries, or memory/retrieval runtime.
 
+Future progressive retrieval contract design lives in
+`docs/PROGRESSIVE_RETRIEVAL_CONTRACT_DESIGN.md`. It is a scoped read contract
+for compact candidates and full evidence by stable ID/source reference only; it
+does not add retrieval runtime.
+
 ## Domain Foundation
 
 Current persistent objects include:
@@ -249,7 +254,11 @@ It should:
 - detect gaps, contradictions, and stale evidence;
 - feed validated context into local or external AI paths.
 
-Gemma may request context packages from a controlled vocabulary only after reliability work proves that behavior. It must not retrieve arbitrary files or database records directly.
+Future progressive retrieval may provide scoped candidates, source references,
+and full evidence to the Context Pack Broker after policy checks. Gemma may
+request context packages from a controlled vocabulary only after reliability
+work proves that behavior. It must not retrieve arbitrary files or database
+records directly.
 
 ## External API Role
 
@@ -395,6 +404,12 @@ Future SQLite/FTS memory schema design lives in:
 docs/SQLITE_FTS_MEMORY_SCHEMA_DESIGN.md
 ```
 
+Future progressive retrieval contract design lives in:
+
+```text
+docs/PROGRESSIVE_RETRIEVAL_CONTRACT_DESIGN.md
+```
+
 ## Current Roadmap
 
 ```text
@@ -466,6 +481,7 @@ docs/SQLITE_FTS_MEMORY_SCHEMA_DESIGN.md
 - MemoryStore facade design: `docs/MEMORYSTORE_FACADE_DESIGN.md`
 - Internal compression policy tests: `docs/INTERNAL_COMPRESSION_POLICY_TESTS.md`
 - SQLite/FTS memory schema design: `docs/SQLITE_FTS_MEMORY_SCHEMA_DESIGN.md`
+- Progressive retrieval contract design: `docs/PROGRESSIVE_RETRIEVAL_CONTRACT_DESIGN.md`
 - UI startup: `docs/UI_START.md`
 
 Milestone documents remain historical evidence. If a milestone document conflicts with this file or `DECISIONS.md`, prefer the canonical docs.

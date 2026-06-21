@@ -51,6 +51,7 @@ The current local Gemma conclusion is:
 - MemoryStore facade design: `docs/MEMORYSTORE_FACADE_DESIGN.md`
 - Internal compression policy tests: `docs/INTERNAL_COMPRESSION_POLICY_TESTS.md`
 - SQLite/FTS memory schema design: `docs/SQLITE_FTS_MEMORY_SCHEMA_DESIGN.md`
+- Progressive retrieval contract design: `docs/PROGRESSIVE_RETRIEVAL_CONTRACT_DESIGN.md`
 
 Milestone docs remain in `docs/` as historical evidence. Do not treat older milestone docs as current canon when they conflict with the files above.
 
@@ -151,14 +152,14 @@ npm run build
 Recommended next milestone:
 
 ```text
-1D-F - Progressive retrieval contract design
+1D-G - Holdout intake generalization set
 ```
 
-The 1D-E SQLite/FTS schema milestone is design-only. SQLite/FTS is future
-storage/index design behind MemoryStore; raw/original evidence remains
-authoritative. It does not add migrations, tables, runtime models, repositories,
-FTS queries, memory runtime, retrieval runtime, compression runtime, hooks,
-workers, MCP, viewer, provider routing, tool execution, routes, UI, model
+The 1D-F progressive retrieval milestone is design-only. Retrieval is a future
+scoped read contract: orientation first, compact candidates second, and full
+evidence by stable ID/source reference only after policy checks. It does not add
+retrieval runtime, RAG runtime, Context Pack Broker runtime, database queries,
+FTS indexes, memory runtime, provider calls, tool execution, routes, UI, model
 authority, or BlueRev modeling.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

@@ -20,6 +20,10 @@ runtime, provider routing, tool execution, model authority, or BlueRev modeling.
 If micro-context contradicts canonical docs or source files, the canonical
 source wins.
 
+Micro-context may orient future retrieval requests, but it does not satisfy
+evidence requirements. Canonical progressive retrieval design lives in
+`docs/PROGRESSIVE_RETRIEVAL_CONTRACT_DESIGN.md`.
+
 This milestone designs the shape only. It does not create event tables, hooks,
 generator scripts, runtime micro-context snapshots, model calls, MCP, workers,
 viewers, memory runtime, retrieval runtime, provider routing, tool execution, or
@@ -305,9 +309,10 @@ Boundary meanings:
   clarifications.
 - `EventCaptureBoundary`: validates event shape, scope, source reference, and
   allowed effect before anything reaches storage or regeneration.
-- `FastIntake or future MemoryStore`: controlled write boundary for raw/proposed
-  intake or accepted durable memory after the MemoryStore design exists. The
-  facade design lives in `docs/MEMORYSTORE_FACADE_DESIGN.md`.
+- `FastIntake or future MemoryStore`: controlled write boundary for `raw_input`
+  or `proposed_memory` intake or accepted durable memory after the MemoryStore
+  design exists. The facade design lives in
+  `docs/MEMORYSTORE_FACADE_DESIGN.md`.
 - `canonical storage / accepted state`: durable source of truth, not model
   output.
 - `MicroContextAssembler`: future component that reads only allowed canonical

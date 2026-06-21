@@ -144,9 +144,14 @@ repositories exist. Future SQLite/FTS schema concepts are documented in
 
 ### Future Retrieval Contract
 
-Retrieval remains deferred. The design direction is compact candidates first,
-then full body by stable ID or source reference only. This milestone does not
-create retrieval APIs or runtime retrieval.
+Retrieval remains a future read contract. Progressive retrieval design lives in
+`docs/PROGRESSIVE_RETRIEVAL_CONTRACT_DESIGN.md`: compact candidates first, then
+full body by stable ID or source reference only after policy checks. This
+milestone does not create retrieval APIs or runtime retrieval.
+
+`MemoryStore` remains the future write boundary. Retrieval output must not
+write memory, promote memory, patch canonical state, or authorize provider/tool
+execution.
 
 ### Future Hooks/Events
 
@@ -207,8 +212,8 @@ The following input classes may reach `MemoryStore` in the future:
 - future hook/event records.
 
 Each input must carry scope, provenance, source reference, and allowed effect.
-Unscoped inputs should fail closed or remain raw/proposed until scope is
-resolved.
+Unscoped inputs should fail closed or remain `raw_input` or
+`proposed_memory` until scope is resolved.
 
 ## Conceptual Facade Responsibilities
 
@@ -363,7 +368,8 @@ Scope rules:
 - no cross-project leakage;
 - no CWD-only authority;
 - no BlueRev assumption acceptance from unscoped or model-only inputs;
-- unknown scope fails closed or remains raw/proposed pending review.
+- unknown scope fails closed or remains `raw_input` or `proposed_memory`
+  pending review.
 
 ## Failure Modes
 

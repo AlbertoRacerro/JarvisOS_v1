@@ -13,7 +13,8 @@ Showcase files and micro-context are separate orientation surfaces. Showcase
 files are small model-readable files and indexes. Micro-context is a future
 bounded snapshot regenerated from canonical sources and accepted state, designed
 in `docs/MICRO_CONTEXT_DESIGN.md`. Neither surface is authoritative runtime
-memory or retrieval.
+memory or retrieval. They may orient future progressive retrieval requests, but
+they do not satisfy full-evidence requirements.
 
 V0 designs a small documentation-facing showcase set:
 
@@ -670,8 +671,8 @@ successfully.
 
 1. Read `GEMMA_START_HERE.md` first.
 2. Inspect relevant showcase files for orientation.
-3. Request bounded source files or context packs when the task needs canonical
-   detail.
+3. Request bounded source files, progressive retrieval, or context packs when
+   the task needs canonical detail.
 4. Use canonical docs and source files for final grounding.
 5. Leave fields as `not_decided` when context is insufficient.
 6. Ask a clarification when a substantial missing choice blocks safe progress.

@@ -92,9 +92,10 @@ Canonical design:
 
 ### Future Retrieval Contract
 
-Retrieval design remains future work. This schema concept supports compact
-candidate retrieval first and full body by ID/source reference second. It does
-not add retrieval runtime.
+Progressive retrieval contract design lives in
+`docs/PROGRESSIVE_RETRIEVAL_CONTRACT_DESIGN.md`. This schema concept supports
+compact candidate retrieval first and full body by ID/source reference second.
+It does not add retrieval runtime, database queries, or FTS indexes.
 
 ### Future Context Pack Broker
 
@@ -323,7 +324,8 @@ Controls:
 - no global recent memory injection;
 - no cross-project leakage;
 - scope filters before candidate retrieval;
-- unknown scope fails closed or remains raw/proposed pending review.
+- unknown scope fails closed or remains `raw_input` or `proposed_memory`
+  pending review.
 
 ## Audit Requirements
 
