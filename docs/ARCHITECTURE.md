@@ -179,22 +179,42 @@ docs/FORM_DRIVEN_LOCAL_INTELLIGENCE.md
 
 ### Gemma-Facing Showcase Files
 
-Future JarvisOS should maintain a small set of Gemma-facing showcase files, such as:
+Canonical showcase-file design lives in:
+
+```text
+docs/LOCAL_MODEL_SHOWCASE_FILES.md
+```
+
+Showcase files are synthetic, non-authoritative, regenerable views over
+canonical sources. They orient local models before source/context requests.
+They are not canonical memory, source of truth, runtime retrieval, Context Pack
+Broker runtime, memory runtime, model authority, provider routing, tool
+execution, automatic memory writing, or BlueRev modeling.
+
+The V0 showcase set is:
 
 ```text
 GEMMA_START_HERE.md
 CURRENT_STATE.md
 SYSTEM_MAP.md
-MEMORY_INDEX.md
 PROJECT_INDEX.md
 FILE_CATALOG.md
 DECISION_INDEX.md
 OPEN_CLARIFICATIONS.md
-TOOL_AND_PROVIDER_CATALOG.md
 SAFETY_POLICY.md
 ```
 
-Gemma should read these small files first, use them to request the right source files or context packages, and tolerate moderate over-fetch. Under-fetch on important tasks is a serious failure mode.
+`MEMORY_INDEX.md` is deferred until MemoryStore, memory runtime, retrieval
+runtime, promotion policy, and memory indexing are designed.
+
+`TOOL_AND_PROVIDER_CATALOG.md` is deferred until provider/tool intent forms,
+provider routing, and tool execution policy are ready.
+
+Gemma should read `GEMMA_START_HERE.md` first, inspect relevant showcase files,
+request bounded source files or context packages, and tolerate moderate
+over-fetch. Under-fetch on important tasks is a serious failure mode. If a
+showcase file conflicts with canonical docs or source code, the canonical source
+wins.
 
 ## Context Pack Broker Future Role
 
@@ -399,6 +419,7 @@ MCP, hooks, worker, or viewer behavior from that audit.
 - Local AI evidence: `docs/LOCAL_AI_EVALUATION_EVIDENCE.md`
 - Form-driven local intelligence: `docs/FORM_DRIVEN_LOCAL_INTELLIGENCE.md`
 - Cavemem/Caveman reference audit: `docs/CAVEMEM_CAVEMAN_REFERENCE_AUDIT.md`
+- Local-model-facing showcase files: `docs/LOCAL_MODEL_SHOWCASE_FILES.md`
 - UI startup: `docs/UI_START.md`
 
 Milestone documents remain historical evidence. If a milestone document conflicts with this file or `DECISIONS.md`, prefer the canonical docs.

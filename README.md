@@ -46,6 +46,7 @@ The current local Gemma conclusion is:
 - Form-driven local intelligence: `docs/FORM_DRIVEN_LOCAL_INTELLIGENCE.md`
 - Staged memory intake: `docs/STAGED_MEMORY_INTAKE.md`
 - Cavemem/Caveman reference audit: `docs/CAVEMEM_CAVEMAN_REFERENCE_AUDIT.md`
+- Local-model-facing showcase files: `docs/LOCAL_MODEL_SHOWCASE_FILES.md`
 
 Milestone docs remain in `docs/` as historical evidence. Do not treat older milestone docs as current canon when they conflict with the files above.
 
@@ -146,11 +147,13 @@ npm run build
 Recommended next milestone:
 
 ```text
-1D-A - Local-model-facing showcase files design
+1D-B - Micro-context design
 ```
 
-The 1C-Z-T Cavemem/Caveman audit is design evidence only: ideas are adapted,
-not vendored, and no runtime memory, retrieval, compression, MCP, hooks, worker,
-viewer, route, UI, provider integration, or model authority was added.
+The 1D-A showcase files milestone is design-only. Showcase files are synthetic,
+non-authoritative, regenerable views over canonical sources. They orient local
+models before source/context requests, but they do not add runtime retrieval,
+memory runtime, Context Pack Broker runtime, provider routing, tool execution,
+routes, UI, model authority, or BlueRev modeling.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

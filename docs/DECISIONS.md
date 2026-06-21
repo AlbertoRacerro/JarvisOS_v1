@@ -290,3 +290,29 @@ provider integrations, Context Pack Broker runtime, local gatekeeper runtime, or
 model authority is added. JarvisOS will adapt useful patterns with
 Python-native implementation unless a specific licensed snippet is explicitly
 approved later with MIT license and copyright notices preserved.
+
+## ADR-047: Local-model-facing showcase files are non-authoritative regenerable views
+
+Status: Accepted
+
+Local-model-facing showcase files are orientation and index artifacts. They are
+synthetic, non-authoritative, regenerable views over canonical sources such as
+`README.md`, `docs/ARCHITECTURE.md`, `docs/FORM_DRIVEN_LOCAL_INTELLIGENCE.md`,
+`docs/STAGED_MEMORY_INTAKE.md`, `docs/HYBRID_INTAKE_FIELD_OWNERSHIP.md`,
+`docs/LOCAL_AI_EVALUATION_EVIDENCE.md`,
+`docs/CAVEMEM_CAVEMAN_REFERENCE_AUDIT.md`, `docs/DECISIONS.md`, and source
+files.
+
+Canonical docs and source files remain the source of truth. Showcase files help
+local models orient themselves before requesting bounded source files or context
+packs, but they cannot authorize runtime action, memory promotion, retrieval,
+provider calls, tool calls, safety decisions, or BlueRev assumptions. They also
+cannot make Gemma, Qwen, or any model runtime-approved.
+
+The V0 showcase set is `GEMMA_START_HERE.md`, `CURRENT_STATE.md`,
+`SYSTEM_MAP.md`, `PROJECT_INDEX.md`, `FILE_CATALOG.md`, `DECISION_INDEX.md`,
+`OPEN_CLARIFICATIONS.md`, and `SAFETY_POLICY.md`. `MEMORY_INDEX.md` is deferred
+until MemoryStore, memory runtime, retrieval runtime, promotion policy, and
+memory indexing are designed. `TOOL_AND_PROVIDER_CATALOG.md` is deferred until
+provider/tool intent forms, provider routing, and tool execution policy are
+ready.

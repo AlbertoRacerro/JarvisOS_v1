@@ -67,32 +67,48 @@ summary. It must not require a full context pack on every write.
 
 ## Gemma-Facing Showcase Files
 
-Future JarvisOS should maintain a small set of always-readable showcase files for
-Gemma. These files are synthetic system maps and indexes, not a replacement for
-source files.
+JarvisOS should maintain a small set of always-readable showcase files for
+Gemma. These files are synthetic, non-authoritative, regenerable views over
+canonical sources. They orient the model before it requests source files or
+context packs, but they do not replace canonical docs, source files, schemas,
+tests, or reviewed decisions.
 
-Example showcase files:
+Canonical showcase-file design lives in:
+
+```text
+docs/LOCAL_MODEL_SHOWCASE_FILES.md
+```
+
+V0 showcase files:
 
 ```text
 GEMMA_START_HERE.md
 CURRENT_STATE.md
 SYSTEM_MAP.md
-MEMORY_INDEX.md
 PROJECT_INDEX.md
 FILE_CATALOG.md
 DECISION_INDEX.md
 OPEN_CLARIFICATIONS.md
-TOOL_AND_PROVIDER_CATALOG.md
 SAFETY_POLICY.md
 ```
 
 Intent:
 
-- Gemma reads these small files first.
+- Gemma reads `GEMMA_START_HERE.md` first.
 - Showcase files summarize what important sources contain.
 - Gemma uses them to request the right files or context packages.
 - Moderate over-fetch is acceptable.
 - Under-fetch on important tasks is a serious failure mode.
+- If a showcase file conflicts with canonical docs or source code, the
+  canonical source wins.
+- The model leaves fields as `not_decided` when context is insufficient.
+
+Deferred showcase files:
+
+- `MEMORY_INDEX.md` is deferred until MemoryStore, memory runtime, retrieval
+  runtime, promotion policy, and memory indexing are designed.
+- `TOOL_AND_PROVIDER_CATALOG.md` is deferred until provider/tool intent forms,
+  provider routing, and tool execution policy are ready.
 
 Simple indexes, backlinks, tags, and source IDs come before any graph or
 Obsidian-like implementation. A graph view may become useful later only after
