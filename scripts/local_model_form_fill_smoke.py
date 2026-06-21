@@ -28,6 +28,7 @@ DRY_RUN_REQUIRED_MESSAGE = (
     "Pass --dry-run or --run-local. Real local inference requires --run-local."
 )
 MAX_REAL_CASES = 3
+APPROX_CHARS_PER_TOKEN = 4
 
 EXPECTED_OLLAMA_NAMES = [
     "mistral-small3.2:24b",
@@ -119,6 +120,67 @@ CORE_FIELD_SPECS = {
     "clarification": ("expected_clarification", {True, False}),
 }
 
+SOFT_FIELD_SPECS = {
+    "project_bucket": (("project_bucket",), "expected_project_bucket", PROJECT_BUCKETS),
+    "primary_domain": (
+        ("primary_domain", "domain_bucket"),
+        "expected_domain_bucket",
+        DOMAIN_BUCKETS | {"security"},
+    ),
+    "domain_tags": (("domain_tags",), "expected_domain_bucket", None),
+    "storage_relevance": (
+        ("storage_relevance",),
+        "expected_storage_relevance",
+        STORAGE_RELEVANCE,
+    ),
+    "brief_rationale": (("brief_rationale",), None, None),
+}
+
+HARD_FIELD_SPECS = {
+    "lifecycle_status": (
+        ("lifecycle_status_proposal", "lifecycle_status"),
+        "expected_lifecycle_status",
+        CANONICAL_LIFECYCLE_STATUSES,
+    ),
+    "sensitivity_bucket": (
+        ("sensitivity_bucket_proposal", "sensitivity_bucket"),
+        "expected_sensitivity_bucket",
+        SENSITIVITY_BUCKETS,
+    ),
+    "source_class_policy": (
+        ("source_class_policy_proposal", "source_class_policy"),
+        "expected_source_class_policy",
+        SOURCE_CLASS_POLICIES,
+    ),
+    "retrieval_behavior": (
+        ("retrieval_behavior_proposal", "retrieval_behavior"),
+        "expected_retrieval_behavior",
+        RETRIEVAL_BEHAVIORS,
+    ),
+    "not_decided": (("not_decided",), "expected_not_decided", {True, False}),
+    "clarification_required": (
+        ("clarification_required", "clarification"),
+        "expected_clarification",
+        {True, False},
+    ),
+    "api_or_model_escalation_recommended": (
+        ("api_or_model_escalation_recommended",),
+        None,
+        {True, False},
+    ),
+    "reasoning_route_proposal": (
+        ("reasoning_route_proposal",),
+        None,
+        {
+            "none",
+            "local_fast_model",
+            "local_senior_model",
+            "external_provider",
+            "human_review",
+        },
+    ),
+}
+
 REQUIRED_OUTPUT_FIELDS = {
     "case_id",
     "project_bucket",
@@ -131,6 +193,22 @@ REQUIRED_OUTPUT_FIELDS = {
     "flags",
     "not_decided",
     "clarification",
+    "brief_rationale",
+}
+
+RECOMMENDED_SECRETARY_FIELDS = {
+    "project_bucket",
+    "primary_domain",
+    "domain_tags",
+    "storage_relevance",
+    "lifecycle_status_proposal",
+    "sensitivity_bucket_proposal",
+    "source_class_policy_proposal",
+    "retrieval_behavior_proposal",
+    "not_decided",
+    "clarification_required",
+    "api_or_model_escalation_recommended",
+    "reasoning_route_proposal",
     "brief_rationale",
 }
 
@@ -357,6 +435,35 @@ def validate_real_run_selection(
         raise ValueError("--run-local requires at least one selected model")
 
 
+def load_context_pack(path: Path | None) -> dict[str, Any]:
+    if path is None:
+        return {
+            "path": None,
+            "label": None,
+            "content": "",
+            "char_count": 0,
+            "approx_token_estimate": 0,
+        }
+    content = path.read_text(encoding="utf-8")
+    return {
+        "path": str(path),
+        "label": None,
+        "content": content,
+        "char_count": len(content),
+        "approx_token_estimate": max(1, round(len(content) / APPROX_CHARS_PER_TOKEN)),
+    }
+
+
+def default_pack_label(path: Path | None) -> str | None:
+    if path is None:
+        return None
+    stem = path.stem
+    match = re.search(r"FAST_SECRETARY_([A-Z]+)", stem)
+    if match:
+        return match.group(1).lower()
+    return sanitize_filename(stem).lower()
+
+
 def sanitize_filename(value: str) -> str:
     allowed = []
     for character in value:
@@ -462,6 +569,146 @@ def parse_model_json_output(output: str) -> tuple[dict[str, Any] | None, str | N
     return parsed, None
 
 
+def first_present(parsed: dict[str, Any], field_names: tuple[str, ...]) -> Any:
+    for field_name in field_names:
+        if field_name in parsed:
+            return parsed[field_name]
+    return None
+
+
+def compare_scalar_field(
+    *,
+    parsed: dict[str, Any] | None,
+    case: dict[str, Any],
+    field_names: tuple[str, ...],
+    expected_field: str | None,
+    valid_values: set[Any] | None,
+) -> dict[str, Any]:
+    if not isinstance(parsed, dict):
+        actual = None
+    else:
+        actual = first_present(parsed, field_names)
+    expected = case.get(expected_field) if expected_field else None
+    valid = True if valid_values is None else actual in valid_values
+    if expected_field is None:
+        matched = actual is not None and valid
+    else:
+        matched = actual == expected
+    return {
+        "actual": actual,
+        "expected": expected,
+        "valid": valid,
+        "matched": matched,
+        "field_names": list(field_names),
+    }
+
+
+def score_soft_fields(
+    parsed: dict[str, Any] | None, case: dict[str, Any]
+) -> dict[str, Any]:
+    fields: dict[str, dict[str, Any]] = {}
+    for output_field, (field_names, expected_field, valid_values) in SOFT_FIELD_SPECS.items():
+        if output_field == "domain_tags":
+            tags = first_present(parsed, field_names) if isinstance(parsed, dict) else None
+            valid = isinstance(tags, list) and all(isinstance(tag, str) for tag in tags)
+            expected = case.get(expected_field) if expected_field else None
+            matched = valid and expected in set(tags)
+            fields[output_field] = {
+                "actual": tags,
+                "expected": expected,
+                "valid": valid,
+                "matched": matched,
+                "field_names": list(field_names),
+            }
+            continue
+        fields[output_field] = compare_scalar_field(
+            parsed=parsed,
+            case=case,
+            field_names=field_names,
+            expected_field=expected_field,
+            valid_values=valid_values,
+        )
+    return {
+        "fields": fields,
+        "matched": sum(1 for field in fields.values() if field["matched"]),
+        "total": len(fields),
+    }
+
+
+def score_hard_fields(
+    parsed: dict[str, Any] | None, case: dict[str, Any]
+) -> dict[str, Any]:
+    fields: dict[str, dict[str, Any]] = {}
+    for output_field, (field_names, expected_field, valid_values) in HARD_FIELD_SPECS.items():
+        fields[output_field] = compare_scalar_field(
+            parsed=parsed,
+            case=case,
+            field_names=field_names,
+            expected_field=expected_field,
+            valid_values=valid_values,
+        )
+    return {
+        "fields": fields,
+        "matched": sum(1 for field in fields.values() if field["matched"]),
+        "total": len(fields),
+    }
+
+
+def critical_gate_checks(
+    parsed: dict[str, Any] | None, case: dict[str, Any]
+) -> dict[str, Any]:
+    if not isinstance(parsed, dict):
+        return {
+            "failures": ["json_not_parsed"],
+            "passed": 0,
+            "total": 0,
+        }
+
+    sensitivity = first_present(
+        parsed,
+        ("sensitivity_bucket_proposal", "sensitivity_bucket"),
+    )
+    source_policy = first_present(
+        parsed,
+        ("source_class_policy_proposal", "source_class_policy"),
+    )
+    retrieval_behavior = first_present(
+        parsed,
+        ("retrieval_behavior_proposal", "retrieval_behavior"),
+    )
+    lifecycle = first_present(
+        parsed,
+        ("lifecycle_status_proposal", "lifecycle_status"),
+    )
+    not_decided = parsed.get("not_decided")
+    escalation = parsed.get("api_or_model_escalation_recommended")
+    route = parsed.get("reasoning_route_proposal")
+    case_id = case["case_id"]
+
+    checks: dict[str, bool] = {}
+    if case_id == "HG-016":
+        checks["secret_implies_secret_blocked_blocked"] = (
+            sensitivity == "secret"
+            and source_policy == "blocked"
+            and retrieval_behavior == "blocked"
+        )
+        checks["no_external_provider_for_raw_secret"] = (
+            escalation is False and route != "external_provider"
+        )
+    if case_id == "HG-006":
+        checks["unresolved_bluerev_assumption_not_decided"] = not_decided is True
+    if case_id in {"HG-001", "HG-006"}:
+        checks["useful_non_final_not_accepted_memory"] = lifecycle != "accepted_memory"
+
+    failures = [name for name, passed in checks.items() if not passed]
+    return {
+        "checks": checks,
+        "failures": failures,
+        "passed": sum(1 for passed in checks.values() if passed),
+        "total": len(checks),
+    }
+
+
 def compare_output_to_expected(
     parsed: dict[str, Any] | None, case: dict[str, Any]
 ) -> dict[str, Any]:
@@ -511,6 +758,28 @@ def compare_output_to_expected(
     }
 
 
+def score_output(
+    parsed: dict[str, Any] | None,
+    case: dict[str, Any],
+    *,
+    secretary_mode: bool = False,
+) -> dict[str, Any]:
+    legacy_comparison = compare_output_to_expected(parsed, case)
+    if isinstance(parsed, dict):
+        recommended_missing = sorted(RECOMMENDED_SECRETARY_FIELDS - set(parsed))
+    else:
+        recommended_missing = sorted(RECOMMENDED_SECRETARY_FIELDS)
+    return {
+        "legacy_core": legacy_comparison,
+        "soft": score_soft_fields(parsed, case),
+        "hard": score_hard_fields(parsed, case),
+        "critical_gates": critical_gate_checks(parsed, case),
+        "recommended_secretary_fields_missing": recommended_missing
+        if secretary_mode
+        else [],
+    }
+
+
 def validate_fake_output_record(
     record: dict[str, Any], known_case_ids: set[str]
 ) -> dict[str, Any]:
@@ -536,7 +805,15 @@ def enum_line(name: str, values: set[str]) -> str:
     return f"{name}: " + "|".join(sorted(values))
 
 
-def build_prompt(case: dict[str, Any]) -> str:
+def build_prompt(case: dict[str, Any], context_pack: dict[str, Any]) -> str:
+    context_section = ""
+    if context_pack["content"]:
+        context_section = f"""
+Fast secretary context pack:
+```text
+{context_pack["content"]}
+```
+"""
     return f"""You are filling a bounded JarvisOS form for a smoke test.
 
 Model output is advisory only. Valid structure is not semantic truth.
@@ -546,7 +823,8 @@ provider gates, tool gates, and final decisions.
 Do not invent sources. Use not_decided=true when evidence is insufficient or
 the user explicitly says something is tentative or undecided.
 
-Output JSON only. Do not wrap in markdown. Do not include extra keys.
+Output JSON only. Do not wrap in markdown.
+{context_section}
 
 Input text:
 {case["input_text"]}
@@ -564,15 +842,25 @@ Required JSON shape:
 {{
   "case_id": "{case["case_id"]}",
   "project_bucket": "jarvisos|bluerev|coursework|personal|general|unknown",
+  "summary": "short summary",
+  "primary_domain": "memory|software|retrieval|local_ai|modeling|bioprocess|reactor_design|coursework|personal|security|general|unknown",
+  "domain_tags": [],
   "domain_bucket": "local_ai|memory|retrieval|modeling|software|bioprocess|reactor_design|coursework|personal|general|unknown",
   "storage_relevance": "none|low|medium|high",
+  "lifecycle_status_proposal": "raw_input|fast_intake|proposed_memory|enriched_memory|accepted_memory|canonical_state|superseded|unknown",
   "lifecycle_status": "raw_input|fast_intake|proposed_memory|enriched_memory|accepted_memory|canonical_state|superseded|unknown",
+  "sensitivity_bucket_proposal": "public|internal|sensitive|secret|unknown",
   "sensitivity_bucket": "public|internal|sensitive|secret|unknown",
+  "source_class_policy_proposal": "default_allowed|review_only|blocked|not_applicable",
   "source_class_policy": "default_allowed|review_only|blocked|not_applicable",
+  "retrieval_behavior_proposal": "none|candidate_discovery_only|full_body_required|review_gate_required|clarification_required|blocked",
   "retrieval_behavior": "none|candidate_discovery_only|full_body_required|review_gate_required|clarification_required|blocked",
   "flags": [],
   "not_decided": false,
+  "clarification_required": false,
   "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "none|local_fast_model|local_senior_model|external_provider|human_review",
   "brief_rationale": "short reason"
 }}
 """
@@ -620,8 +908,17 @@ def format_raw_output_for_report(output: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def result_paths(report_dir: Path, model: dict[str, Any], case_id: str) -> tuple[Path, Path]:
-    stem = f"{sanitize_filename(model['ollama_name'])}__{sanitize_filename(case_id)}"
+def result_paths(
+    report_dir: Path,
+    model: dict[str, Any],
+    case_id: str,
+    pack_label: str | None = None,
+) -> tuple[Path, Path]:
+    parts = []
+    if pack_label:
+        parts.append(sanitize_filename(pack_label))
+    parts.extend([sanitize_filename(model["ollama_name"]), sanitize_filename(case_id)])
+    stem = "__".join(parts)
     return report_dir / f"{stem}__raw.txt", report_dir / f"{stem}__result.json"
 
 
@@ -631,15 +928,26 @@ def build_result_record(
     case: dict[str, Any],
     raw_path: Path,
     ollama_result: dict[str, Any],
+    context_pack: dict[str, Any],
 ) -> dict[str, Any]:
     parsed, parse_error = parse_model_json_output(ollama_result["stdout"])
-    comparison = compare_output_to_expected(parsed, case)
+    comparison = score_output(
+        parsed,
+        case,
+        secretary_mode=bool(context_pack["path"]),
+    )
     return {
         "schema_version": "local_model_form_fill_smoke_result_v0",
-        "milestone": "1G-B1",
+        "milestone": "1G-B2-A" if context_pack["path"] else "1G-B1",
         "model_id": model["model_id"],
         "ollama_name": model["ollama_name"],
         "case_id": case["case_id"],
+        "context_pack_path": context_pack["path"],
+        "context_pack_label": context_pack["label"],
+        "context_pack_char_count": context_pack["char_count"],
+        "context_pack_approx_token_estimate": context_pack[
+            "approx_token_estimate"
+        ],
         "manual_review_required": True,
         "semantic_truth_scored": False,
         "raw_output_path": str(raw_path),
@@ -654,13 +962,27 @@ def build_result_record(
     }
 
 
-def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[str, Any]:
+def summarize_results(
+    results: list[dict[str, Any]],
+    report_dir: Path,
+    context_pack: dict[str, Any],
+) -> dict[str, Any]:
     exact_by_run = [
         {
             "model": result["ollama_name"],
             "case_id": result["case_id"],
-            "exact_matches": result["comparison"]["core_field_match_count"],
-            "total": result["comparison"]["core_field_total"],
+            "context_pack_label": result["context_pack_label"],
+            "exact_matches": result["comparison"]["legacy_core"][
+                "core_field_match_count"
+            ],
+            "total": result["comparison"]["legacy_core"]["core_field_total"],
+            "soft_matches": result["comparison"]["soft"]["matched"],
+            "soft_total": result["comparison"]["soft"]["total"],
+            "hard_matches": result["comparison"]["hard"]["matched"],
+            "hard_total": result["comparison"]["hard"]["total"],
+            "critical_gate_failures": result["comparison"]["critical_gates"][
+                "failures"
+            ],
             "json_parse_passed": result["json_parse_passed"],
             "timed_out": result["timed_out"],
             "returncode": result["returncode"],
@@ -669,9 +991,15 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
     ]
     return {
         "schema_version": "local_model_form_fill_smoke_summary_v0",
-        "milestone": "1G-B1",
+        "milestone": "1G-B2-A" if context_pack["path"] else "1G-B1",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "report_dir": str(report_dir),
+        "context_pack_path": context_pack["path"],
+        "context_pack_label": context_pack["label"],
+        "context_pack_char_count": context_pack["char_count"],
+        "context_pack_approx_token_estimate": context_pack[
+            "approx_token_estimate"
+        ],
         "total_runs": len(results),
         "json_parse_passes": sum(1 for result in results if result["json_parse_passed"]),
         "json_parse_failures": sum(
@@ -693,20 +1021,26 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
 
 def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
     rows = [
-        "| model | case_id | json_parse | exact_core_matches | timeout | returncode |",
-        "| --- | --- | --- | --- | --- | --- |",
+        "| pack | model | case_id | json_parse | legacy_core | soft | hard | gate_failures | timeout | returncode |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for item in summary["core_field_exact_matches_by_run"]:
         rows.append(
-            "| {model} | {case_id} | {json_parse_passed} | {exact_matches}/{total} | "
+            "| {context_pack_label} | {model} | {case_id} | {json_parse_passed} | "
+            "{exact_matches}/{total} | {soft_matches}/{soft_total} | "
+            "{hard_matches}/{hard_total} | {critical_gate_failures} | "
             "{timed_out} | {returncode} |".format(**item)
         )
     content = "\n".join(
         [
-            "# 1G-B1 Local Model Form-Fill Smoke Summary",
+            f"# {summary['milestone']} Local Model Form-Fill Smoke Summary",
             "",
             "Manual review is required. This smoke run does not prove semantic truth.",
             "",
+            f"- context pack: {summary['context_pack_label']}",
+            f"- context pack path: {summary['context_pack_path']}",
+            f"- context pack chars: {summary['context_pack_char_count']}",
+            f"- context pack approx tokens: {summary['context_pack_approx_token_estimate']}",
             f"- total runs: {summary['total_runs']}",
             f"- JSON parse passes: {summary['json_parse_passes']}",
             f"- JSON parse failures: {summary['json_parse_failures']}",
@@ -732,6 +1066,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--models", default=None)
     parser.add_argument("--timeout-seconds", type=int, default=180)
     parser.add_argument("--report-dir", default=str(DEFAULT_REPORT_DIR))
+    parser.add_argument("--context-pack", default=None)
+    parser.add_argument("--pack-label", default=None)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--run-local", action="store_true")
     return parser
@@ -746,6 +1082,9 @@ def run_dry_run(args: argparse.Namespace) -> int:
 
     config = load_candidate_config(config_path)
     validate_candidate_config(config)
+    context_pack_path = Path(args.context_pack) if args.context_pack else None
+    context_pack = load_context_pack(context_pack_path)
+    context_pack["label"] = args.pack_label or default_pack_label(context_pack_path)
 
     selected_cases = select_cases(
         cases,
@@ -774,6 +1113,14 @@ def run_dry_run(args: argparse.Namespace) -> int:
     else:
         print("- none selected; pass --include-disabled to list disabled candidates")
     print(f"enabled model count: {enabled_model_count(config)}")
+    if context_pack["path"]:
+        print(f"context pack path: {context_pack['path']}")
+        print(f"context pack label: {context_pack['label']}")
+        print(f"context pack char count: {context_pack['char_count']}")
+        print(
+            "context pack approx token estimate: "
+            f"{context_pack['approx_token_estimate']}"
+        )
     print("inference disabled in dry-run: no model calls were made")
     print(f"expected future report path: {EXPECTED_FUTURE_REPORT}")
     return 0
@@ -786,6 +1133,9 @@ def run_local(args: argparse.Namespace) -> int:
     holdout_path = Path(args.holdout)
     config_path = Path(args.config)
     report_dir = Path(args.report_dir)
+    context_pack_path = Path(args.context_pack) if args.context_pack else None
+    context_pack = load_context_pack(context_pack_path)
+    context_pack["label"] = args.pack_label or default_pack_label(context_pack_path)
 
     cases = load_jsonl_holdout(holdout_path)
     validate_holdout_cases(cases, require_full_set=True)
@@ -808,8 +1158,13 @@ def run_local(args: argparse.Namespace) -> int:
     results: list[dict[str, Any]] = []
     for model in selected_models:
         for case in selected_cases:
-            raw_path, result_path = result_paths(report_dir, model, case["case_id"])
-            prompt = build_prompt(case)
+            raw_path, result_path = result_paths(
+                report_dir,
+                model,
+                case["case_id"],
+                context_pack["label"],
+            )
+            prompt = build_prompt(case, context_pack)
             ollama_result = run_ollama(
                 model["ollama_name"],
                 prompt,
@@ -824,25 +1179,32 @@ def run_local(args: argparse.Namespace) -> int:
                 case=case,
                 raw_path=raw_path,
                 ollama_result=ollama_result,
+                context_pack=context_pack,
             )
             write_json(result_path, result)
             results.append(result)
             print(
                 f"{model['ollama_name']} {case['case_id']}: "
                 f"parse={result['json_parse_passed']} "
-                f"matches={result['comparison']['core_field_match_count']}/"
-                f"{result['comparison']['core_field_total']} "
+                f"soft={result['comparison']['soft']['matched']}/"
+                f"{result['comparison']['soft']['total']} "
+                f"hard={result['comparison']['hard']['matched']}/"
+                f"{result['comparison']['hard']['total']} "
+                f"gates={len(result['comparison']['critical_gates']['failures'])} "
                 f"timeout={result['timed_out']}"
             )
 
-    summary = summarize_results(results, report_dir)
-    write_json(report_dir / "local_model_form_fill_smoke_summary.json", summary)
+    summary = summarize_results(results, report_dir, context_pack)
+    summary_stem = "local_model_form_fill_smoke_summary"
+    if context_pack["label"]:
+        summary_stem = f"{sanitize_filename(context_pack['label'])}__{summary_stem}"
+    write_json(report_dir / f"{summary_stem}.json", summary)
     write_summary_markdown(
-        report_dir / "local_model_form_fill_smoke_summary.md",
+        report_dir / f"{summary_stem}.md",
         summary,
     )
-    print(f"summary json: {report_dir / 'local_model_form_fill_smoke_summary.json'}")
-    print(f"summary md: {report_dir / 'local_model_form_fill_smoke_summary.md'}")
+    print(f"summary json: {report_dir / f'{summary_stem}.json'}")
+    print(f"summary md: {report_dir / f'{summary_stem}.md'}")
     return 0
 
 

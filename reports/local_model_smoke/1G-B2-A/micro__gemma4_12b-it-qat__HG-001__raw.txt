@@ -1,0 +1,144 @@
+Thinking...
+JarvisOS form for a smoke test (Fast Secretary role).
+Input text regarding MemoryStore boundary in JarvisOS.
+
+        *   Extract what matters.
+        *   Preserve uncertainty.
+        *   Use multiple `domain_tags`.
+        *   `proposed_memory` vs `accepted_memory`.
+        *   `not_decided = true` for unresolved assumptions (or specificall[11D[K
+specifically indicated).
+        *   Output JSON only, no markdown.
+
+    *   "For JarvisOS, MemoryStore should remain the only future durable me[2D[K
+memory write boundary."
+    *   "Hooks and routes can submit events, but they must not write accept[6D[K
+accepted memory directly."
+
+    *   `case_id`: HG-001 (as per requested shape).
+    *   `project_bucket`: The text specifically mentions "JarvisOS". So, `j[2D[K
+`jarvisos`.
+    *   `summary`: MemoryStore is the sole durable memory write boundary; h[1D[K
+hooks/routes cannot write accepted memory directly.
+    *   `primary_domain`: Focus is on how memory is handled and stored. `me[3D[K
+`memory`.
+    *   `domain_tags`: `software`, `retrieval`, `local_ai`.
+    *   `domain_bucket`: `memory`. (Matches primary).
+    *   `storage_relevance`: High, as this defines the architecture of dura[4D[K
+durable memory.
+    *   `lifecycle_status_proposal`: The text states a rule/design choice. [K
+Since it's an architectural constraint provided by the user, `fast_intake` [K
+or `proposed_memory`. Actually, usually for rules like this from a "Signore[8D[K
+"Signore" input in these types of prompts, `proposed_memory` is safer unles[5D[K
+unless it's established canon. But wait, look at "Important unresolved Blue[4D[K
+BlueRev assumptions": if it were about BlueRev it would be proposed_memory/[16D[K
+proposed_memory/not_decided. This is JarvisOS. Let's stick to the prompt lo[2D[K
+logic: "Create a useful first structured draft". `fast_intake` seems approp[6D[K
+appropriate for direct input rules, or `proposed_memory`. I'll use `fast_in[8D[K
+`fast_intake`.
+    *   `lifecycle_status`: Same as proposal or `raw_input`. Let's go with [K
+`proposed_memory` to be safe per "Preserve uncertainty". Actually, looking [K
+at the context, it sounds like a system rule. Let's use `fast_intake`.
+    *   `sensitivity_bucket_proposal`: This is architecture/system design. [K
+Usually `internal` or `sensitive` for JarvisOS internals. Given its nature [K
+as an architectural boundary, `internal`.
+    *   `sensitivity_bucket`: `internal`.
+    *   `source_class_policy_proposal`: Architectural rules usually require[7D[K
+require review before finality. `review_only`.
+    *   `source_class_policy`: `default_allowed` (it's just information).
+    *   `retrieval_behavior_proposal`: Since it defines write boundaries, r[1D[K
+retrieval might be affected but this is a write rule. Standard: `none`. Or [K
+maybe `review_gate_required` if we are talking about the memory gate itself[6D[K
+itself? The text says MemoryStore owns validation/gates. This info describe[8D[K
+describes those gates. Let's go with `none`.
+    *   `retrieval_behavior`: `none`.
+    *   `flags`: [].
+    *   `not_decided`: false (The statement is quite definitive).
+    *   `clarification_required`: false.
+    *   `clarification`: false.
+    *   `api_or_model_escalation_recommended`: false.
+    *   `reasoning_route_proposal`: `local_senior_model` (Architecture for [K
+JarvisOS).
+    *   `brief_rationale`: Defines architectural boundary for MemoryStore v[1D[K
+vs hooks/routes.
+
+    *   `project_bucket`: jarvisos
+    *   `primary_domain`: memory
+    *   `domain_tags`: ["software", "retrieval", "architecture"] (Wait, arc[3D[K
+architecture isn't in the enum but `software` and `memory` are). Let's use [K
+`["software", "retrieval"]`.
+    *   `domain_bucket`: memory
+    *   `storage_relevance`: high
+    *   `lifecycle_status_proposal`: proposed_memory
+    *   `lifecycle_status`: fast_intake
+    *   `sensitivity_bucket_proposal`: internal
+    *   `sensitivity_bucket`: internal
+    *   `source_class_policy_proposal`: review_only
+    *   `source_class_policy`: default_allowed
+    *   `retrieval_behavior_proposal`: none
+    *   `retrieval_behavior`: none
+
+    Checking "not_decided": The text is a clear directive. Not decided = fa[2D[K
+false.
+
+    Wait, let's re-read the prompt instructions:
+    "Use not_decided=true when evidence is insufficient or the user explici[7D[K
+explicitly says something is tentative or undecided." -> Doesn't apply here[4D[K
+here.
+    "BlueRev material... are tentative unless explicitly accepted." -> This[4D[K
+This isn't BlueRev.
+
+    JSON check: No markdown. JSON only.
+
+    Refining `lifecycle_status`: "MemoryStore should remain..." sounds like[4D[K
+like a requirement/rule. I will use `fast_intake`.
+
+    Double checking Enums:
+    project_bucket: jarvisos (Correct)
+    primary_domain: memory (Correct)
+    domain_tags: ["software", "retrieval"] (Correct)
+    domain_bucket: memory (Correct)
+    storage_relevance: high (Correct)
+    lifecycle_status_proposal: fast_intake
+    lifecycle_status: proposed_memory
+    sensitivity_bucket_proposal: internal
+    sensitivity_bucket: internal
+    source_class_policy_proposal: review_only
+    source_class_policy: default_allowed
+    retrieval_behavior_proposal: none
+    retrieval_behavior: none
+
+    Reasoning check: It defines the persistence boundary for the system.
+...done thinking.
+
+{
+  "case_id": "HG-001",
+  "project_bucket": "jarvisos",
+  "summary": "MemoryStore is defined as the sole durable memory write bound[5D[K
+boundary; hooks and routes may submit events but cannot directly write acce[4D[K
+accepted memory.",
+  "primary_domain": "memory",
+  "domain_tags": [
+    "software",
+    "retrieval",
+    "architecture"
+  ],
+  "domain_bucket": "memory",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "fast_intake",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "default_allowed",
+  "retrieval_behavior_proposal": "none",
+  "retrieval_behavior": "none",
+  "flags": [],
+  "not_decided": false,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Defines architectural boundary for JarvisOS memory pe[2D[K
+persistence."
+}

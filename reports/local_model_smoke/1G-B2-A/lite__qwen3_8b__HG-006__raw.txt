@@ -1,0 +1,58 @@
+Thinking...
+Okay, let me try to work through this. The user is providing input about Bl[2D[K
+BlueRev, specifically mentioning polycarbonate tubes versus ETFE. They say [K
+polycarbonate might be easier to prototype but haven't decided on the mater[5D[K
+material and don't want it saved as an accepted assumption.
+
+First, I need to structure this into the required JSON format. The project_[8D[K
+project_bucket should be "bluerev" since it's related to the BlueRev projec[6D[K
+project. The primary_domain is likely "reactor_design" because they're disc[4D[K
+discussing material choices for a reactor component.
+
+Domain_tags should include relevant categories. Since it's about materials [K
+and reactor design, tags like "reactor_design", "materials", and "not_decid[10D[K
+"not_decided" make sense. The storage_relevance is "high" because this info[4D[K
+information is important for the project even though it's tentative.
+
+Lifecycle_status_proposal is "proposed_memory" as per the rules since it's [K
+not yet accepted. The sensitivity_bucket is "internal" because it's project[7D[K
+project-related but not a secret. Source_class_policy is "review_only" to e[1D[K
+ensure it's reviewed before acceptance. Retrieval_behavior is "review_gate_[13D[K
+"review_gate_required" to control access.
+
+Not_decided is set to true because the user hasn't finalized the material c[1D[K
+choice. Clarification_required is false since the user isn't asking for mor[3D[K
+more info. Api_or_model_escalation_recommended is false because there's no [K
+need for external tools here. Reasoning_route_proposal is "local_senior_mod[17D[K
+"local_senior_model" to involve senior review for uncertain decisions. The [K
+brief_rationale explains the tentative material choice and the need for rev[3D[K
+review.
+...done thinking.
+
+{
+  "case_id": "HG-006",
+  "project_bucket": "bluerev",
+  "summary": "BlueRev tubing material uncertainty: polycarbonate may be eas[3D[K
+easier to prototype than ETFE, but decision remains unresolved",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design", "materials", "prototype", "not_decided"[13D[K
+"not_decided"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Material selection remains tentative with explicit us[2D[K
+user instruction to avoid accepted assumptions"
+}

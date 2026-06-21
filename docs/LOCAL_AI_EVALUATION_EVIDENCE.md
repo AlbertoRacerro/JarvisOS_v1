@@ -707,6 +707,12 @@ Current implementation status:
   manual-review evidence only and does not approve model quality, semantic
   truth, memory runtime, retrieval runtime, provider/tool routing, or BlueRev
   assumptions.
+- 1G-B2-A added prepared Fast Secretary context packs at MICRO, LITE, and FULL
+  compression levels, then ran the same local-only 2-model x 3-case comparison.
+  Reports are under `reports/local_model_smoke/1G-B2-A/`. MICRO produced 6/6
+  JSON parse passes, LITE produced 5/6, and FULL produced 2/6; all runs had 0
+  timeouts. This suggests context length/format affects parse reliability, but
+  remains manual-review evidence only.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
 The accepted next local AI sequence is:
@@ -736,7 +742,8 @@ The accepted next local AI sequence is:
 1F         Structural validator + retry loop design
 1G-A       Local model form-fill smoke harness skeleton
 1G-B1      Installed local model form-fill smoke run
-1G-B2      Installed local model expanded smoke run
+1G-B2-A    Fast secretary context pack compression and scoring refinement
+1G-B2-B    Expanded installed local secretary smoke run
 1H         Showcase files generator design
 1I         Context access from showcase files
 1J         Provider/tool intent form design

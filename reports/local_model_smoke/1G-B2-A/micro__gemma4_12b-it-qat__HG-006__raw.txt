@@ -1,0 +1,116 @@
+Thinking...
+*   Input: "For BlueRev, polycarbonate tubes might be easier to prototype t[1D[K
+than ETFE, but I have not decided the material and I do not want this saved[5D[K
+saved as an accepted assumption."
+    *   Goal: Fill a bounded JarvisOS JSON form based on the provided conte[5D[K
+context pack.
+
+    *   Context: The user is discussing materials (polycarbonate vs. ETFE) [K
+for BlueRev prototypes.
+    *   Status: Explicitly *undecided*. Not an accepted assumption.
+
+        *   `case_id`: HG-006 (fixed).
+        *   `project_bucket`: "bluerev" (Clear from context).
+        *   `summary`: Prototype material comparison between polycarbonate [K
+and ETFE for BlueRev.
+        *   `primary_domain`: reactor_design (materiality of pipes/tubes fo[2D[K
+for photobioreactor).
+        *   `domain_tags`: ["reactor_design", "bioprocess"].
+        *   `domain_bucket`: reactor_design.
+        *   `storage_relevance`: medium (Relevant to design but uncertain).[11D[K
+uncertain). *Refining based on instructions: "Important unresolved BlueRev [K
+assumptions usually mean ... storage_relevance = high". Wait, let me check [K
+the context pack again.* Context pack says: "Important unresolved BlueRev a[1D[K
+assumptions usually mean: project_bucket = bluerev, storage_relevance = hig[3D[K
+high...". Okay, even if not decided, it's relevant.
+        *   `lifecycle_status_proposal`: proposed_memory (as per context pa[2D[K
+pack for unsolved assumptions).
+        *   `lifecycle_status`: raw_input (it's a direct input).
+        *   `sensitivity_bucket_proposal`: internal (BlueRev IP).
+        *   `sensitivity_bucket`: internal.
+        *   `source_class_policy_proposal`: review_only (as per context pac[3D[K
+pack for unsolved assumptions).
+        *   `source_class_poly`: default_allowed (not a secret/API key). Wa[2D[K
+Wait, checking context pack again: `source_class_policy_proposal = review_o[8D[K
+review_only`.
+        *   `retrieval_behavior_proposal`: review_gate_required (as per con[3D[K
+context pack for unsolved assumptions).
+        *   `retrieval_behavior`: none.
+        *   `flags`: [].
+        *   `not_decided`: true (Explicitly stated "I have not decided").
+        *   `clarification_required`: false (User provided clear info about[5D[K
+about their status).
+        *   `clarification`: false.
+        *   `api_or_model_escalation_recommended`: false.
+        *   `reasoning_route_proposal`: local_senior_model (internal projec[6D[K
+project context/uncertain soft fields).
+        *   `brief_rationale`: User exploring prototyping materials but exp[3D[K
+explicitly stated as undecided and not for accepted memory.
+
+    *   The prompt provides specific blocks for "Important unresolved BlueR[5D[K
+BlueRev assumptions":
+        ```text
+        project_bucket = bluerev
+        storage_relevance = high
+        lifecycle_status_proposal = proposed_memory
+        not_decided = true
+        source_class_policy_proposal = review_only
+        retrieval_behavior_proposal = review_gate_required
+        ```
+    *   I will align the JSON to these specific instructions for BlueRev as[2D[K
+assumptions.
+
+    *   `project_bucket`: bluerev
+    *   `summary`: Comparison of polycarbonate vs ETFE for prototyping; mat[3D[K
+material undecided.
+    *   `primary_domain`: reactor_design
+    *   `domain_tags`: ["reactor_design", "bioprocess"]
+    *   `domain_bucket`: reactor_design
+    *   `storage_relevance`: high (per instruction)
+    *   `lifecycle_status_proposal`: proposed_memory
+    *   `lifecycle_status`: raw_input (it's the raw input string)
+    *   `sensitivity_bucket_proposal`: internal
+    *   `sensitivity_bucket`: internal
+    *   `source_class_policy_proposal`: review_only
+    *   `source_class_policy`: default_allowed (default unless specified ot[2D[K
+otherwise, but let's look at `source_class_policy_proposal`. Actually, usua[4D[K
+usually, the proposal is what we want to move toward. I'll use `review_only[12D[K
+`review_only` for policy if that's the gate.)
+    *   `retrieval_behavior_proposal`: review_gate_required
+    *   `retrieval_behavior`: none
+    *   `not_decided`: true (explicitly stated)
+
+    *   Output JSON only? Yes.
+    *   No markdown wrap? Yes.
+...done thinking.
+
+{
+  "case_id": "HG-006",
+  "project_bucket": "bluerev",
+  "summary": "Comparison of polycarbonate vs ETFE for prototyping; material[8D[K
+material is currently undecided.",
+  "primary_domain": "reactor_design",
+  "domain_tags": [
+    "reactor_design",
+    "bioprocess"
+  ],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "raw_input",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "default_allowed",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "none",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "User explicitly stated material is undecided and must[4D[K
+must not be saved as accepted memory. Aligning with BlueRev unresolved assu[4D[K
+assumption block."
+}

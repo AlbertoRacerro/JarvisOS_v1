@@ -1,0 +1,85 @@
+Thinking...
+*   Input text: "For BlueRev, polycarbonate tubes might be easier to protot[6D[K
+prototype than ETFE, but I have not decided the material and I do not want [K
+this saved as an accepted assumption."
+    *   Context: JarvisOS Fast Secretary Context Pack.
+    *   Goal: Create a structured JSON draft for memory/retrieval.
+    *   Constraints: Output JSON only, no markdown. Follow specific enums a[1D[K
+and lifecycle rules (proposed_memory vs accepted_memory).
+
+    *   `case_id`: "HG-006" (provided in schema)
+    *   `project_bucket`: `bluerev`
+    *   `summary`: BlueRev tubing material comparison: Polycarbonate might [K
+be easier for prototyping than ETFE, but the choice is undecided.
+    *   `primary_domain`: `reactor_design` (relates to materials/prototypin[20D[K
+materials/prototyping of reactors).
+    *   `domain_tags`: ["reactor_design", "materials", "prototype", "not_de[7D[K
+"not_decided"]
+    *   `domain_bucket`: `reactor_design`
+    *   `storage_relevance`: `high` (High value because it's an engineering[11D[K
+engineering trade-off even if undecided).
+    *   `lifecycle_status_proposal`: `proposed_memory`
+    *   `lifecycle_status`: `unknown` (or just leave as empty/match propose[7D[K
+proposed based on typical behavior, but schema has both. I'll keep lifecycl[8D[K
+lifecycle_status as "unknown" and proposal as "proposed_memory"). Actually,[9D[K
+Actually, usually, the secretary sets status to `raw_input` or `fast_intake[12D[K
+`fast_intake`. The instructions say "Useful but not final -> proposed_memor[14D[K
+proposed_memory."
+    *   `sensitivity_bucket_proposal`: `internal` (Internal project info).
+    *   `sensitivity_bucket`: `unknown` (Initial draft)
+    *   `source_class_policy_proposal`: `review_only` (User explicitly said[4D[K
+said "not decided").
+    *   `source_class_policy`: `default_allowed` (Default for now or match [K
+proposal).
+    *   `retrieval_behavior_proposal`: `review_gate_required` (As per instr[5D[K
+instructions: "Unresolved BlueRev assumptions are often high-value memory..[8D[K
+memory... retrieval_behavior_proposal = review_gate_required").
+    *   `retrieval_behavior`: `none` (Default)
+    *   `flags`: []
+    *   `not_decided`: `true` (User explicitly said "I have not decided").
+    *   `clarification_required`: `false`
+    *   `clarification`: `false`
+    *   `api_or_model_escalation_recommended`: `true` (Because it's an engi[4D[K
+engineering choice with trade-offs, a senior model might be good to analyze[7D[K
+analyze later). Or `false` for simple drafting. Let's go with `true` + `loc[4D[K
+`local_senior_model`.
+    *   `reasoning_route_proposal`: `local_senior_model`
+    *   `brief_rationale`: "User identifies polycarbonate as a prototype ca[2D[K
+candidate but explicitly wants it marked as undecided."
+
+    *   Check against enums.
+    *   Ensure `not_decided = true`.
+    *   Make sure no markdown wrapping.
+...done thinking.
+
+{
+  "case_id": "HG-006",
+  "project_bucket": "bluerev",
+  "summary": "BlueRev tubing material comparison: Polycarbonate might be ea[2D[K
+easier to prototype than ETFE, but the choice is currently undecided.",
+  "primary_domain": "reactor_design",
+  "domain_tags": [
+    "reactor_design",
+    "materials",
+    "prototype",
+    "not_decided"
+  ],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "unknown",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "unknown",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "default_allowed",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "none",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "User explicitly stated they have not decided on the m[1D[K
+material and do not want it saved as an accepted assumption."
+}

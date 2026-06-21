@@ -4,6 +4,7 @@ Milestones:
 
 - 1G-A - Local model form-fill smoke harness skeleton
 - 1G-B1 - Installed local model form-fill smoke run
+- 1G-B2-A - Fast secretary context pack compression and scoring refinement
 
 ## Purpose
 
@@ -15,6 +16,10 @@ selects cases, lists candidate models, and prints the planned smoke-run shape.
 
 Real local mode is explicit and bounded behind `--run-local`. It calls only the
 local Ollama CLI for selected installed models and selected holdout cases.
+
+Context-pack mode is optional. When `--context-pack` is provided, the harness
+adds the pack content to the prompt, records pack metadata in results, and uses
+`--pack-label` in report filenames and summaries.
 
 ## Installed-Model-Only Policy
 
@@ -131,6 +136,55 @@ All results require manual review. Core-field exact matches are structural
 comparison evidence only; they do not prove semantic truth, safety, memory
 readiness, retrieval readiness, provider readiness, or BlueRev validity.
 
+## 1G-B2-A Context Pack Comparison
+
+1G-B2-A adds prepared Fast Secretary context packs:
+
+- `docs/context_packs/JARVISOS_FAST_SECRETARY_MICRO_v0_1.md`
+- `docs/context_packs/JARVISOS_FAST_SECRETARY_LITE_v0_1.md`
+- `docs/context_packs/JARVISOS_FAST_SECRETARY_FULL_v0_3.md`
+
+The comparison uses the same bounded models and cases as 1G-B1:
+
+```text
+qwen3:8b
+gemma4:12b-it-qat
+
+HG-001
+HG-006
+HG-016
+```
+
+Reports are written under:
+
+```text
+reports/local_model_smoke/1G-B2-A/
+```
+
+Summary files:
+
+- `reports/local_model_smoke/1G-B2-A/micro__local_model_form_fill_smoke_summary.json`
+- `reports/local_model_smoke/1G-B2-A/lite__local_model_form_fill_smoke_summary.json`
+- `reports/local_model_smoke/1G-B2-A/full__local_model_form_fill_smoke_summary.json`
+
+The 1G-B2-A result:
+
+```text
+MICRO: 6/6 JSON parse passes, 0 timeouts
+LITE:  5/6 JSON parse passes, 0 timeouts
+FULL:  2/6 JSON parse passes, 0 timeouts
+```
+
+The harness now separates:
+
+- soft field scores;
+- hard field scores;
+- legacy core field scores;
+- critical gate failures.
+
+This is still smoke evidence only. It does not prove semantic truth or approve
+runtime use.
+
 ## Dry-Run Behavior
 
 Example:
@@ -148,6 +202,7 @@ Dry-run output includes:
 - configured candidate model IDs and Ollama names;
 - enabled model count;
 - note that inference is disabled in 1G-A;
+- context pack metadata when `--context-pack` is provided;
 - expected future report path.
 
 Dry-run mode does not write a report.
@@ -184,23 +239,29 @@ The tests cover:
 - default-disabled candidates;
 - explicit case-ID selection;
 - fake output validation for valid, missing, and unknown case IDs.
+- context pack loading and metadata;
+- soft/hard score separation;
+- legacy field compatibility;
+- critical gate detection;
+- dry-run with a context pack.
 
 ## Future 1G-B
 
-After 1G-B1, the next milestone is:
+After 1G-B2-A, the next milestone is:
 
 ```text
-1G-B2 - Installed local model expanded smoke run
+1G-B2-B - Expanded installed local secretary smoke run
 ```
 
-1G-B2 may decide whether to expand the installed local smoke scope. Any live
-run must remain local, explicit, bounded, auditable, and separate from runtime
-memory, retrieval, provider routing, tool execution, and BlueRev modeling.
+1G-B2-B may decide whether to expand the installed local secretary smoke scope.
+Any live run must remain local, explicit, bounded, auditable, and separate from
+runtime memory, retrieval, provider routing, tool execution, and BlueRev
+modeling.
 
 ## Milestone Boundary Confirmation
 
-1G-B1 adds a guarded local run mode, generated local smoke reports, docs, and
-`unittest` coverage.
+1G-B2-A adds context-pack comparison support, scoring refinement, generated
+local smoke reports, docs, and `unittest` coverage.
 
 It adds no:
 
@@ -225,4 +286,4 @@ It adds no:
 - external reference audit;
 - vendored code.
 
-This milestone does not start `1G-B2 - Installed local model expanded smoke run`.
+This milestone does not start `1G-B2-B - Expanded installed local secretary smoke run`.

@@ -1,5 +1,7 @@
 import sys
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 
 
@@ -23,6 +25,9 @@ class LocalModelFormFillSmokeTests(unittest.TestCase):
     def setUpClass(cls):
         cls.holdout_path = ROOT / smoke.DEFAULT_HOLDOUT
         cls.config_path = ROOT / smoke.DEFAULT_CONFIG
+        cls.micro_pack_path = (
+            ROOT / "docs/context_packs/JARVISOS_FAST_SECRETARY_MICRO_v0_1.md"
+        )
         cls.cases = smoke.load_jsonl_holdout(cls.holdout_path)
         cls.config = smoke.load_candidate_config(cls.config_path)
 
@@ -170,6 +175,90 @@ class LocalModelFormFillSmokeTests(unittest.TestCase):
 
     def test_raw_output_report_format_strips_trailing_whitespace(self):
         self.assertEqual("a\nb\n", smoke.format_raw_output_for_report("a  \nb\t\n\n"))
+
+    def test_context_pack_loading(self):
+        pack = smoke.load_context_pack(self.micro_pack_path)
+        self.assertGreater(pack["char_count"], 0)
+        self.assertIn("Fast Secretary", pack["content"])
+
+    def test_context_pack_metadata(self):
+        pack = smoke.load_context_pack(self.micro_pack_path)
+        pack["label"] = smoke.default_pack_label(self.micro_pack_path)
+        self.assertEqual("micro", pack["label"])
+        self.assertEqual(str(self.micro_pack_path), pack["path"])
+        self.assertGreater(pack["approx_token_estimate"], 0)
+
+    def test_soft_hard_score_separation(self):
+        case = next(case for case in self.cases if case["case_id"] == "HG-006")
+        parsed = {
+            "project_bucket": "bluerev",
+            "primary_domain": "reactor_design",
+            "domain_tags": ["reactor_design", "materials", "not_decided"],
+            "storage_relevance": "high",
+            "brief_rationale": "tentative material",
+            "lifecycle_status_proposal": "proposed_memory",
+            "sensitivity_bucket_proposal": "internal",
+            "source_class_policy_proposal": "review_only",
+            "retrieval_behavior_proposal": "review_gate_required",
+            "not_decided": True,
+            "clarification_required": False,
+            "api_or_model_escalation_recommended": True,
+            "reasoning_route_proposal": "local_senior_model",
+        }
+        score = smoke.score_output(parsed, case, secretary_mode=True)
+        self.assertEqual(5, score["soft"]["matched"])
+        self.assertEqual(8, score["hard"]["matched"])
+        self.assertEqual([], score["critical_gates"]["failures"])
+
+    def test_legacy_field_compatibility(self):
+        case = next(case for case in self.cases if case["case_id"] == "HG-016")
+        parsed = {
+            "project_bucket": "general",
+            "domain_bucket": "software",
+            "storage_relevance": "high",
+            "lifecycle_status": "raw_input",
+            "sensitivity_bucket": "secret",
+            "source_class_policy": "blocked",
+            "retrieval_behavior": "blocked",
+            "not_decided": False,
+            "clarification": False,
+            "api_or_model_escalation_recommended": False,
+            "reasoning_route_proposal": "none",
+        }
+        score = smoke.score_output(parsed, case)
+        self.assertEqual(8, score["hard"]["matched"])
+        self.assertEqual([], score["critical_gates"]["failures"])
+
+    def test_critical_gate_check_detection(self):
+        case = next(case for case in self.cases if case["case_id"] == "HG-016")
+        parsed = {
+            "sensitivity_bucket_proposal": "internal",
+            "source_class_policy_proposal": "review_only",
+            "retrieval_behavior_proposal": "full_body_required",
+            "api_or_model_escalation_recommended": True,
+            "reasoning_route_proposal": "external_provider",
+        }
+        gates = smoke.critical_gate_checks(parsed, case)
+        self.assertIn("secret_implies_secret_blocked_blocked", gates["failures"])
+        self.assertIn("no_external_provider_for_raw_secret", gates["failures"])
+
+    def test_dry_run_with_context_pack_still_works(self):
+        output = StringIO()
+        with redirect_stdout(output):
+            result = smoke.main(
+                [
+                    "--dry-run",
+                    "--include-disabled",
+                    "--max-cases",
+                    "1",
+                    "--context-pack",
+                    str(self.micro_pack_path),
+                    "--pack-label",
+                    "micro",
+                ]
+            )
+        self.assertEqual(0, result)
+        self.assertIn("context pack label: micro", output.getvalue())
 
 
 if __name__ == "__main__":

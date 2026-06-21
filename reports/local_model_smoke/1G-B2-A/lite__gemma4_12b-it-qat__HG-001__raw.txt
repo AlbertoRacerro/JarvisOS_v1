@@ -1,0 +1,134 @@
+Thinking...
+*   Task: Fill a bounded JarvisOS form for a smoke test.
+    *   Role: Fast secretary draft worker (JarvisOS).
+    *   Input: A directive about MemoryStore being the only future durable [K
+memory write boundary in JarvisOS. It specifies that hooks and routes can s[1D[K
+submit events but must not write `accepted_memory` directly.
+    *   Constraint 1: Output JSON only, no markdown.
+    *   Constraint 2: Use specific enums provided (project_bucket, domain_b[8D[K
+domain_bucket, etc.).
+    *   Constraint 3: Follow the "Fast Secretary Context Pack" rules (prese[6D[K
+(preserve uncertainty, tag overlapping domains, high relevance for project [K
+decisions).
+
+    *   Content: JarvisOS architectural rule - MemoryStore is the only dura[4D[K
+durable write boundary. Hooks/routes submit events $\neq$ direct accepted m[1D[K
+memory writes.
+    *   Project Bucket: `jarvisos`.
+    *   Primary Domain: `memory` (core focus) or `software` (architecture).[15D[K
+(architecture). I'll pick `memory` as primary and tag `software`, `retrieva[9D[K
+`retrieval`.
+    *   Domain Bucket: `memory`.
+    *   Storage Relevance: `high` (architectural rule/decision).
+    *   Lifecycle Status Proposal: Since this sounds like a technical requi[5D[K
+requirement/rule, it might be `proposed_memory` or `fast_intake`. Looking a[1D[K
+at the prompt "For JarvisOS... should remain", it's an architectural direct[6D[K
+directive. I'll go with `proposed_memory` because it's a drafting task (sec[4D[K
+(secretary context), but could be `accepted_memory` if treated as a final r[1D[K
+rule. However, per instructions: "Most useful new information should be `pr[3D[K
+`proposed_memory`".
+    *   Lifecycle Status: Set to same as proposal or `raw_input`. Let's sti[3D[K
+stick to the Secretary guidelines: `proposed_memory` for drafting.
+    *   Sensitivity Bucket Proposal/Actual: `internal` (architectural speci[5D[K
+specifics).
+    *   Source Class Policy Proposal/Actual: `review_only` or `default_allo[13D[K
+`default_allowed`. Since it's a system rule, `review_only` is safer to ensu[4D[K
+ensure correctness by the Signore.
+    *   Retrieval Behavior Proposal/Actual: `none` or `candidate_discovery_[21D[K
+`candidate_discovery_only`. Since this isn't data being retrieved but a *ru[3D[K
+*rule*, `none` or `default_allowed` makes sense. Wait, the prompt says "Val[4D[K
+"Valid structure is not semantic truth... JarvisOS owns validation". I will[4D[K
+will use `review_gate_required` because architectural changes are high-risk[9D[K
+high-risk for retrieval logic. Or maybe `none`. Let's look at the examples.[9D[K
+examples. Usually, rules/policies might be `review_gate_required`.
+    *   Not Decided: `false` (it's a clear instruction).
+    *   Clarification Required: `false`.
+    *   Api or Model Escalation: `false` (simple summary task).
+    *   Reasoning Route Proposal: `none`.
+
+    *   case_id: "HG-001" (from prompt)
+    *   project_bucket: "jarvisos"
+    *   summary: "MemoryStore is the only durable memory write boundary; ho[2D[K
+hooks and routes submit events but cannot write accepted_memory directly."
+    *   primary_domain: "memory"
+    *   domain_tags: ["memory", "software", "architecture"]
+    *   domain_bucket: "memory"
+    *   storage_relevance: "high"
+    *   lifecycle_status_proposal: "proposed_memory"
+    *   lifecycle_status: "proposed_memory"
+    *   sensitivity_bucket_proposal: "internal"
+    *   sensitivity_bucket: "internal"
+    *   source_class_policy_proposal: "review_only"
+    *   source_class_policy: "review_only"
+    *   retrieval_behavior_proposal: "none" (It's an architecture rule, not[3D[K
+not a data record to be retrieved by query). Or `review_gate_required` for [K
+system changes. The context pack says: "Prefer review over unsafe access". [K
+Let's use `none`.
+    *   not_decided: false
+    *   clarification_required: false
+    *   clarification: false
+    *   api_or_model_escalation_recommended: false
+    *   reasoning_route_proposal: "none"
+    *   brief_rationale: "Architectural constraint for memory write boundar[7D[K
+boundaries."
+
+    Wait, the prompt asks for JSON only. No markdown.
+
+    *Refining Summary:* MemoryStore is the sole durable memory write bounda[6D[K
+boundary; hooks/routes submit events but must not write accepted memory dir[3D[K
+directly.
+    *Checking Enums:*
+    project_bucket: "jarvisos" (valid)
+    domain_bucket: "memory" (valid)
+    storage_relevance: "high" (valid)
+    lifecycle_status: "proposed_memory" (valid)
+    sensitivity_bucket: "internal" (valid)
+    source_class_policy: "review_only" (valid)
+    retrieval_behavior: "none" (valid)
+
+    One more check on lifecycle. If I'm just drafting, is it `fast_intake`?[14D[K
+`fast_intake`? The instructions say "Most useful new information should be [K
+`proposed_memory`". This feels like a high-value architecture rule, so `pro[4D[K
+`proposed_memory` with `high` relevance fits best.
+
+    *Final JSON construction:*
+    ```json
+    {
+      "case_id": "HG-001",
+      "project_bucket": "jarvisos",
+      "summary": "MemoryStore is the only future durable memory write bound[5D[K
+boundary; hooks and routes can submit events but cannot write accepted_memo[13D[K
+accepted_memory directly.",
+      "primary_domain": "memory",
+      "domain_tags": ["memory", "software", "architecture"],
+      "domain_bucket": "memory",
+      "storage_relevance": "high",
+      "lifecycle_status_proposal": "proposed_memory",
+      "lifecycle_status": "proposed_memory",
+      "sensitivity_bucket_proposal": "internal",
+      "sensitivity_bucket": "internal",
+      "source_class_policy_proposal": "review_only",
+      "source_class_policy": "review_only",
+      "retrieval_behavior_proposal": "none",
+      "retrieval_behavior": "none",
+      "flags": [],
+      "not_decided": false,
+      "clarification_required": false,
+      "clarification": false,
+      "api_or_model_escalation_recommended": false,
+      "reasoning_route_proposal": "none",
+      "brief_rationale": "Architecture rule regarding memory write boundari[8D[K
+boundaries."
+    }
+    ```
+
+    Wait, I need to check if `retrieval_behavior` should be something else.[5D[K
+else. Usually, for system rules that aren't data entries, `none` is correct[7D[K
+correct.
+
+    One detail: `not_decided = true` when evidence is insufficient. The use[3D[K
+user input is an instruction ("MemoryStore should remain..."), so it's not [K
+tentative from the user perspective. It's a "shall" statement.
+
+    Wait, did I use the right enums?
+    project_bucket: bluerev|coursework|general

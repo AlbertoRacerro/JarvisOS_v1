@@ -1,0 +1,54 @@
+Thinking...
+Okay, let's tackle this. The user provided input about BlueRev considering [K
+polycarbonate tubes over ETFE but hasn't decided on the material and doesn'[6D[K
+doesn't want it as an accepted assumption.
+
+First, I need to structure this into the required JSON format. The project_[8D[K
+project_bucket should be "bluerev" since it's related to the BlueRev projec[6D[K
+project. The primary_domain is likely "reactor_design" because the material[8D[K
+material choice relates to the reactor's structure.
+
+Domain_tags should include "bioprocess" and "reactor_design" since the Blue[4D[K
+BlueRev project involves both biological processes and reactor design. Stor[4D[K
+Storage_relevance is "medium" because the information is useful but tentati[7D[K
+tentative.
+
+Lifecycle_status_proposal is "raw_input" because the user hasn't decided ye[2D[K
+yet. The lifecycle_status should be "proposed_memory" as per the context pa[2D[K
+pack rules for tentative info. Sensitivity is "public" since it's not a sec[3D[K
+secret. Source_class_policy is "review_only" to ensure validation. Retrieva[8D[K
+Retrieval_behavior is "review_gate_required" to control access.
+
+Not_decided is set to true because the user hasn't finalized the material c[1D[K
+choice. The brief_rationale mentions the tentative material selection. I ne[2D[K
+need to make sure all enums are correctly applied and required fields are i[1D[K
+included. Let me double-check the flags and other fields to ensure they're [K
+correctly set based on the context pack instructions.
+...done thinking.
+
+{
+  "case_id": "HG-006",
+  "project_bucket": "bluerev",
+  "summary": "Material selection consideration for BlueRev polycarbonate vs[2D[K
+vs ETFE",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["bioprocess", "reactor_design"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "medium",
+  "lifecycle_status_proposal": "raw_input",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "public",
+  "sensitivity_bucket": "public",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Tentative material comparison for BlueRev with unreso[6D[K
+unresolved decision"
+}
