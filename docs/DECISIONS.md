@@ -423,3 +423,19 @@ This milestone adds no model calls, scorer, harness, memory runtime, retrieval
 runtime, Context Pack Broker runtime, provider/tool execution, routes, APIs,
 database migrations, runtime models, storage classes, hooks, MCP, workers,
 viewers, BlueRev modeling, external reference audit, or vendored code.
+
+## ADR-054: Form protocols separate model proposals from JarvisOS authority
+
+Status: Accepted
+
+Local models fill bounded forms only. Valid form structure does not prove
+semantic truth.
+
+JarvisOS owns validation, retry, policy, persistence, promotion, execution,
+retrieval gates, provider/tool gates, audit, and final decisions. Model output
+remains advisory until JarvisOS policy, source grounding, review, and future
+implementation gates decide what may happen.
+
+The form catalog is docs-only. It adds no Pydantic models, runtime validator,
+retry loop, model calls, memory runtime, retrieval runtime, Context Pack Broker
+runtime, provider calls, tool execution, or BlueRev modeling.

@@ -190,6 +190,17 @@ Canonical form-driven design lives in:
 docs/FORM_DRIVEN_LOCAL_INTELLIGENCE.md
 ```
 
+Canonical form protocol catalog design lives in:
+
+```text
+docs/FORM_PROTOCOL_CATALOG.md
+```
+
+The catalog is documentation only. It defines conceptual forms and authority
+boundaries, not Pydantic models, runtime validators, retry loops, model calls,
+provider/tool execution, retrieval runtime, memory runtime, or BlueRev
+modeling.
+
 ### Gemma-Facing Showcase Files
 
 Canonical showcase-file design lives in:
@@ -475,6 +486,7 @@ docs/PROGRESSIVE_RETRIEVAL_CONTRACT_DESIGN.md
 - Runbooks: `docs/RUNBOOKS.md`
 - Local AI evidence: `docs/LOCAL_AI_EVALUATION_EVIDENCE.md`
 - Form-driven local intelligence: `docs/FORM_DRIVEN_LOCAL_INTELLIGENCE.md`
+- Form protocol catalog: `docs/FORM_PROTOCOL_CATALOG.md`
 - Cavemem/Caveman reference audit: `docs/CAVEMEM_CAVEMAN_REFERENCE_AUDIT.md`
 - Local-model-facing showcase files: `docs/LOCAL_MODEL_SHOWCASE_FILES.md`
 - Micro-context design: `docs/MICRO_CONTEXT_DESIGN.md`

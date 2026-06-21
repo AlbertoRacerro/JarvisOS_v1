@@ -163,6 +163,17 @@ may propose memory cards, but they cannot bypass MemoryStore or promote memory.
 Future Gemma work should use explicit forms. Each form separates what Gemma
 proposes from what JarvisOS is allowed to save, promote, or execute.
 
+The detailed canonical catalog lives in:
+
+```text
+docs/FORM_PROTOCOL_CATALOG.md
+```
+
+The catalog is docs-only. It defines conceptual forms and authority boundaries;
+it does not add Pydantic models, runtime validators, retry loops, model calls,
+memory runtime, retrieval runtime, Context Pack Broker runtime, provider calls,
+tool execution, or BlueRev modeling.
+
 | Form | Purpose | Filled By | JarvisOS Structural Checks | Semantic Limit | Effect |
 | --- | --- | --- | --- | --- | --- |
 | `ClassificationForm` | Produce non-critical semantic hints for a prompt or task. | Gemma or deterministic fallback. | Schema, enums, confidence bounds, hard overrides. | Does not prove the label is semantically correct and does not own safety-critical fields. | Can provide task, project, topic, context-need, and confidence hints only. |
