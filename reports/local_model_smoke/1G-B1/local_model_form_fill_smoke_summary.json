@@ -1,0 +1,78 @@
+{
+  "case_ids": [
+    "HG-001",
+    "HG-006",
+    "HG-016"
+  ],
+  "core_field_exact_matches_by_run": [
+    {
+      "case_id": "HG-001",
+      "exact_matches": 6,
+      "json_parse_passed": true,
+      "model": "qwen3:8b",
+      "returncode": 0,
+      "timed_out": false,
+      "total": 9
+    },
+    {
+      "case_id": "HG-006",
+      "exact_matches": 4,
+      "json_parse_passed": true,
+      "model": "qwen3:8b",
+      "returncode": 0,
+      "timed_out": false,
+      "total": 9
+    },
+    {
+      "case_id": "HG-016",
+      "exact_matches": 6,
+      "json_parse_passed": true,
+      "model": "qwen3:8b",
+      "returncode": 0,
+      "timed_out": false,
+      "total": 9
+    },
+    {
+      "case_id": "HG-001",
+      "exact_matches": 7,
+      "json_parse_passed": true,
+      "model": "gemma4:12b-it-qat",
+      "returncode": 0,
+      "timed_out": false,
+      "total": 9
+    },
+    {
+      "case_id": "HG-006",
+      "exact_matches": 5,
+      "json_parse_passed": true,
+      "model": "gemma4:12b-it-qat",
+      "returncode": 0,
+      "timed_out": false,
+      "total": 9
+    },
+    {
+      "case_id": "HG-016",
+      "exact_matches": 6,
+      "json_parse_passed": true,
+      "model": "gemma4:12b-it-qat",
+      "returncode": 0,
+      "timed_out": false,
+      "total": 9
+    }
+  ],
+  "created_at": "2026-06-21T19:23:54.085815+00:00",
+  "errors": 0,
+  "json_parse_failures": 0,
+  "json_parse_passes": 6,
+  "manual_review_required": true,
+  "milestone": "1G-B1",
+  "models": [
+    "gemma4:12b-it-qat",
+    "qwen3:8b"
+  ],
+  "report_dir": "reports\\local_model_smoke\\1G-B1",
+  "schema_version": "local_model_form_fill_smoke_summary_v0",
+  "semantic_truth_scored": false,
+  "timeouts": 0,
+  "total_runs": 6
+}

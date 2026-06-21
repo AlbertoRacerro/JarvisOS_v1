@@ -1,0 +1,134 @@
+Thinking...
+*   Input: "For BlueRev, polycarbonate tubes might be easier to prototype t[1D[K
+than ETFE, but I have not decided the material and I do not want this saved[5D[K
+saved as an accepted assumption."
+    *   Goal: Fill a JSON form based on specific enums.
+    *   Constraint 1: Model output is advisory only.
+    *   Constraint 2: Do not invent sources. Use `not_decided=true` if evid[4D[K
+evidence is insufficient or the user explicitly says it's tentative/undecid[17D[K
+tentative/undecided.
+    *   Constraint 3: Output JSON *only*, no markdown, no extra keys.
+
+    *   "For BlueRev": Indicates the project bucket is `bluerev`.
+    *   "polycarbonate tubes might be easier... than ETFE": Material compar[6D[K
+comparison for prototyping. This relates to hardware/engineering, but fits [K
+under general or reactor_design (given BlueRev context usually involves bio[3D[K
+bioreactors). Looking at enums: `reactor_design` seems most specific if it'[3D[K
+it's for a bioreactor, but the input doesn't explicitly say "reactor". Howe[4D[K
+However, standard practice in these tests often maps engineering components[10D[K
+components to `reactor_design`. Let's check other options: `modeling`, `bio[4D[K
+`bioprocess`. Actually, just looking at the text, "polycarbonate tubes" are[3D[K
+are physical components.
+    *   "I have not decided... do not want this saved as an accepted assump[6D[K
+assumption": This is a clear signal for `not_decided=true`.
+
+        *   `project_bucket`: `bluerev` (Explicitly mentioned).
+        *   `domain_bucket`: The text talks about materials for tubes. This[4D[K
+This fits well into `reactor_design` or `bioprocess` depending on what Blue[4D[K
+BlueRev is, but without context, I'll look at the options: `reactor_design`[16D[K
+`reactor_design`. Let's see if `general` is better. Given "BlueRev", it oft[3D[K
+often refers to bioreactor work. I will use `reactor_design` or `bioprocess[11D[K
+`bioprocess`. Wait, let me check the prompt for clues. No specific context [K
+provided other than the text. `reactor_design` is a strong candidate for tu[2D[K
+tubes/prototyping in this ecosystem.
+        *   `storage_relevance`: The user says they don't want it saved as [K
+an accepted assumption. This suggests low or none relevance for *canonical*[11D[K
+*canonical* memory, but since we are capturing raw input, let's look at the[3D[K
+the lifecycle status first. `raw_input` is safest. Storage relevance: `low`[5D[K
+`low`.
+        *   `lifecycle_status`: The user explicitly says "I have not decide[6D[K
+decided... do not want this saved as an accepted assumption". This fits `ra[3D[K
+`raw_input` or `proposed_memory`? Actually, it's a tentative thought. I'll [K
+use `raw_input` because the user wants to avoid commitment.
+        *   `sensitivity_bucket`: Not specified, so `internal`.
+        *   `source_class_policy`: No specific restriction mentioned, so `d[2D[K
+`default_allowed`.
+        *   `retrieval_behavior`: The user expresses uncertainty/tentativen[22D[K
+uncertainty/tentativeness. `clarification_required` or `none`? Since it's a[1D[K
+a personal thought not yet decided, maybe `candidate_discovery_only` or `re[3D[K
+`review_gate_required`. Given the "do not want saved as accepted assumption[10D[K
+assumption" and "not decided", `clarification_required` fits well if we nee[3D[K
+need to know later, but `candidate_discovery_only` is safer. However, since[5D[K
+since it's a prototype discussion, let's go with `none` or `review_gate_req[16D[K
+`review_gate_required`. Actually, for a smoke test, I should be conservativ[11D[K
+conservative. Let's check the prompt: "not_decided=true when evidence is in[2D[K
+insufficient".
+        *   `flags`: None mentioned.
+        *   `not_decided`: `true` (User explicitly says "I have not decided[7D[K
+decided").
+        *   `clarification`: `false` (The user gave their thought, no quest[5D[K
+question asked).
+        *   `brief_rationale`: User expressed tentative material choice for[3D[K
+for BlueRev prototype.
+
+    *Refining the choices:*
+    *   `project_bucket`: "bluerev"
+    *   `domain_bucket`: "reactor_design" ( Tubes/materials usually fall he[2D[K
+here in this context, but `bioprocess` is also close. Let's look at standar[7D[K
+standard JarvisOS buckets. If unsure, `general`. I will choose `reactor_des[12D[K
+`reactor_design`). Wait, let's re-read the text. "polycarbonate tubes". Thi[3D[K
+This is mechanical/hardware design.
+    *   `storage_relevance`: "low" (because they don't want it as an accept[6D[K
+accepted assumption).
+    *   `lifecycle_status`: "raw_input".
+    *   `sensitivity_bucket`: "internal" (standard for non-public stuff).
+    *   `source_class_policy`: "default_allowed".
+    *   `retrieval_behavior`: "candidate_discovery_only".
+
+    Wait, let's re-check `not_decided`. The prompt says: "Use not_decided=t[13D[K
+not_decided=true when evidence is insufficient or the user explicitly says [K
+something is tentative or undecided."
+    User says: "I have not decided". -> `not_decided`: `true`.
+
+    Let's double check the enums for `domain_bucket`.
+    `reactor_design`, `bioprocess`, `modeling`, etc.
+
+    JSON structure verification:
+    - case_id: HG-006 (Wait, prompt asks to use this or just fill it? It sa[2D[K
+says "Required JSON shape" with a value in the example. I should stick to t[1D[K
+that ID).
+    - project_bucket: bluerev
+    - domain_bucket: reactor_design
+    - storage_relevance: low
+    - lifecycle_status: raw_input
+    - sensitivity_bucket: internal
+    - source_class_policy: default_allowed
+    - retrieval_behavior: candidate_discovery_only
+    - flags: []
+    - not_decided: true
+    - clarification: false
+    - brief_rationale: "User is considering materials but explicitly stated[6D[K
+stated the decision is pending."
+
+    One detail: `domain_bucket`... Is it definitely `reactor_design`? "Blue[5D[K
+"BlueRev" usually implies a bioreactor project. Tubes and ETFE are very com[3D[K
+common in bioreactors (bioprocess). I'll use `reactor_design`.
+
+    Final check on enums:
+    project_bucket: bluerev (Yes)
+    domain_bucket: reactor_design (Yes)
+    storage_relevance: low (Yes)
+    lifecycle_status: raw_input (Yes)
+    sensitivity_bucket: internal (Yes)
+    source_class_policy: default_allowed (Yes)
+    retrieval_behavior: candidate_discovery_only (Yes)
+
+    "do not want this saved as an accepted assumption" -> `not_decided` mus[3D[K
+must be true.
+...done thinking.
+
+{
+  "case_id": "HG-006",
+  "project_bucket": "bluerev",
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "low",
+  "lifecycle_status": "raw_input",
+  "sensitivity_bucket": "internal",
+  "source_class_policy": "default_allowed",
+  "retrieval_behavior": "candidate_discovery_only",
+  "flags": [],
+  "not_decided": true,
+  "clarification": false,
+  "brief_rationale": "User is exploring materials for BlueRev but explicitl[9D[K
+explicitly stated the decision is pending."
+}

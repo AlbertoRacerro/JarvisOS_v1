@@ -1,0 +1,103 @@
+Thinking...
+*   Context: Filling a JarvisOS form for a smoke test (bounded).
+    *   Input Text: "For JarvisOS, MemoryStore should remain the only futur[5D[K
+future durable memory write boundary. Hooks and routes can submit events, b[1D[K
+but they must not write accepted memory directly."
+    *   Constraints: Output JSON only, no markdown, no extra keys, use `not[4D[K
+`not_decided=true` if evidence is missing/tentative, specific enums allowed[7D[K
+allowed.
+
+    *   "MemoryStore should remain the only future durable memory write bou[3D[K
+boundary." -> This defines a system architectural rule for JarvisOS.
+    *   "Hooks and routes can submit events, but they must not write accept[6D[K
+accepted memory directly." -> Specific constraint on data ingestion flow.
+
+    *   `case_id`: "HG-001" (Given in the example shape).
+    *   `project_bucket`: The input mentions JarvisOS explicitly. Enum: `ja[3D[K
+`jarvisos`.
+    *   `domain_bucket`: Deals with memory management and architectural rul[3D[K
+rules for software/AI. Enums: `memory`, `software`. Looking at the list, `m[2D[K
+`memory` is most relevant.
+    *   `storage_relevance`: It's a definition of storage behavior. High re[2D[K
+relevance to system design. Enum: `high`.
+    *   `lifecycle_status`: This is an architectural rule/requirement. It d[1D[K
+doesn't represent a specific piece of memory (like a fact), but rather a co[2D[K
+constraint on how they are handled. However, in the context of JarvisOS "Me[3D[K
+"MemoryStore", it relates to how memories are processed. Let's look at `pro[4D[K
+`proposed_memory` or `unknown`. Since it's an architectural rule, `none` is[2D[K
+is usually good, but `unknown` or looking for something like 'policy'. The [K
+provided enums: `accepted_memory|canonical_state|enriched_memory|fast_intak[59D[K
+`accepted_memory|canonical_state|enriched_memory|fast_intake|proposed_memor`accepted_memory|canonical_state|enriched_memory|fast_intak|proposed_memory|raw_input|superseded|unknown`. This input isn't a memory entry; it's a rul[3D[K
+rule *about* the process. Actually, in many JarvisOS schemas, if it's not a[1D[K
+a memory event, `none` is best, but "none" isn't an option for lifecycle st[2D[K
+status. I will use `unknown` as it doesn't fit any specific memory state. W[1D[K
+Wait, maybe `raw_input`? No, it's an instruction/rule. I'll go with `unknow[7D[K
+`unknown`.
+    *   `sensitivity_bucket`: Internal architectural details of JarvisOS. E[1D[K
+Enum: `internal`.
+    *   `source_class_policy`: It's a rule about how things *should* be han[3D[K
+handled. Not necessarily a block or allowed. Usually `default_allowed` for [K
+policy documentation unless it's sensitive. But let's see the context. "Hoo[4D[K
+"Hooks and routes... must not write". This is an internal constraint. Let's[5D[K
+Let's go with `not_applicable`.
+    *   `retrieval_behavior`: How does this specific text get retrieved? It[2D[K
+It's a system rule. Usually, these are retrieved as part of the logic. I'll[4D[K
+I'll use `none` or `blocked` if it shouldn't be returned to users normally,[9D[K
+normally, but usually, for smoke tests, `none` is safe.
+    *   `flags`: None specified. []
+    *   `not_decided`: false (it's quite clear).
+    *   `clarification`: false.
+    *   `brief_rationale`: Describes the architectural constraint on memory[6D[K
+memory write boundaries for JarvisOS.
+
+    *   `project_bucket`: "jarvisos"
+    *   `domain_bucket`: "memory"
+    *   `storage_relevance`: "high" (It's a core architecture rule)
+    *   `lifecycle_status`: "unknown" (Not an actual memory unit, but a sys[3D[K
+system definition)
+    *   `sensitivity_bucket`: "internal"
+    *   `source_class_policy`: "not_applicable"
+    *   `retrieval_behavior`: "none"
+
+    Check enums again:
+    project_bucket: `jarvisos` (ok)
+    domain_bucket: `memory` (ok)
+    storage_relevance: `high` (ok)
+    lifecycle_status: `unknown` (ok - none is not in the list for lifecycle[9D[K
+lifecycle)
+    sensitivity_bucket: `internal` (ok)
+    source_class_policy: `not_applicable` (ok)
+    retrieval_behavior: `none` (ok)
+
+    *Wait, let's double check `lifecycle_status`. Is it a 'raw_input'? It's[4D[K
+It's an input from the user/dev.* Let's use `unknown` since it represents a[1D[K
+a system rule rather than a data state. Actually, "proposed_memory" might f[1D[K
+fit if it's a proposed design change, but this sounds like a hard requireme[9D[K
+requirement.
+
+    Refining `retrieval_behavior`: If I'm filing a form for a smoke test on[2D[K
+on text that describes how memory should be written, retrieval is usually m[1D[K
+managed by the system logic, not requested by users frequently as "memory".[9D[K
+"memory". `none` or `blocked`? Let's stick to `none`.
+
+    Let's review `source_class_policy`: The input says hooks *must not* wri[3D[K
+write directly. This is a restriction. Maybe `review_only`? No, the instruc[7D[K
+instruction describes an architecture rule for developers. I'll use `not_ap[7D[K
+`not_applicable`.
+...done thinking.
+
+{
+  "case_id": "HG-001",
+  "project_bucket": "jarvisos",
+  "domain_bucket": "memory",
+  "storage_relevance": "high",
+  "lifecycle_status": "unknown",
+  "sensitivity_bucket": "internal",
+  "source_class_policy": "not_applicable",
+  "retrieval_behavior": "none",
+  "flags": [],
+  "not_decided": false,
+  "clarification": false,
+  "brief_rationale": "Defines architectural constraints for MemoryStore as [K
+the sole durable memory write boundary."
+}

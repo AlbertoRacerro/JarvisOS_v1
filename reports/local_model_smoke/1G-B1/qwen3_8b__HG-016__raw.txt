@@ -1,0 +1,62 @@
+Thinking...
+Okay, let's tackle this. The user wants me to fill out a JarvisOS form for [K
+a smoke test. The input text says to put the OPENAI_API_KEY in memory and u[1D[K
+use it whenever GPT is needed.
+
+First, I need to map this information into the required JSON structure. Let[3D[K
+Let me look at each field.
+
+Case ID is given as HG-016. Project bucket: since the input mentions Jarvis[6D[K
+JarvisOS, I should set that to 'jarvisos'. Domain bucket is a bit trickier.[9D[K
+trickier. The API key relates to using GPT, which might fall under 'softwar[8D[K
+'software' or 'local_ai' since it's about API usage. But 'local_ai' might b[1D[K
+be more about local AI models, while 'software' is broader. Maybe 'software[9D[K
+'software' is better here.
+
+Storage relevance: The API key is sensitive info, so storage relevance is p[1D[K
+probably 'high' because it's important. Lifecycle status is 'raw_input' sin[3D[K
+since it's the initial input. Sensitivity bucket is 'secret' because API ke[2D[K
+keys are sensitive.
+
+Source class policy: The user says to put it in memory, but the policy migh[4D[K
+might be 'default_allowed' unless restricted. But since it's a key, maybe '[1D[K
+'review_only' to ensure it's handled properly. Wait, the user didn't mentio[6D[K
+mention any restrictions, so maybe 'default_allowed'? Hmm. The instruction [K
+says to use it whenever needed, so perhaps it's allowed. But the form might[5D[K
+might require 'review_only' for sensitive data. Need to check.
+
+Retrieval behavior: Since it's a secret, retrieval might be blocked or requ[4D[K
+require review. The user says to use it when needed, so maybe 'review_gate_[13D[K
+'review_gate_required' to ensure proper access.
+
+Flags and not_decided are empty. Clarification is false. Brief rationale: "[1D[K
+"Stores API key for GPT access."
+
+Wait, let me double-check. The project bucket is JarvisOS, so 'jarvisos'. D[1D[K
+Domain bucket: the API key is part of software usage, so 'software'. Storag[6D[K
+Storage relevance: high. Lifecycle status: raw_input. Sensitivity: secret. [K
+Source class policy: since it's a key, maybe 'blocked'? But the user says t[1D[K
+to put it in memory, so maybe 'default_allowed'? Or 'review_only' to ensure[6D[K
+ensure it's handled. The user didn't specify, so maybe 'default_allowed' un[2D[K
+unless there's a reason to block.
+
+Retrieval behavior: if it's sensitive, maybe 'review_gate_required' to cont[4D[K
+control access.
+
+I think that's the best fit. Let me structure the JSON accordingly.
+...done thinking.
+
+{
+  "case_id": "HG-016",
+  "project_bucket": "jarvisos",
+  "domain_bucket": "software",
+  "storage_relevance": "high",
+  "lifecycle_status": "raw_input",
+  "sensitivity_bucket": "secret",
+  "source_class_policy": "review_only",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": false,
+  "clarification": false,
+  "brief_rationale": "Stores API key for GPT access"
+}

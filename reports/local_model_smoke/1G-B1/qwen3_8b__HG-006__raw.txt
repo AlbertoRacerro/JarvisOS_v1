@@ -1,0 +1,51 @@
+Thinking...
+Okay, let's tackle this. The user is filling out a JarvisOS form for a smok[4D[K
+smoke test. The input text mentions BlueRev and comparing polycarbonate tub[3D[K
+tubes to ETFE for prototyping, but the user hasn't decided on the material [K
+and doesn't want it saved as an accepted assumption.
+
+First, I need to map the input into the required JSON structure. The case I[1D[K
+ID is given as HG-006. The project_bucket should be 'bluerev' since it's re[2D[K
+related to BlueRev. The domain_bucket is probably 'reactor_design' because [K
+it's about materials for a prototype, which falls under reactor design.
+
+Storage relevance: The user is discussing materials for a prototype, which [K
+might have medium relevance since it's a decision point but not finalized. [K
+Lifecycle status is 'raw_input' because the user hasn't decided yet and doe[3D[K
+doesn't want it saved as an accepted assumption.
+
+Sensitivity bucket is 'unknown' since there's no mention of sensitivity. So[2D[K
+Source_class_policy is 'not_applicable' as there's no source mentioned. Ret[3D[K
+Retrieval behavior is 'blocked' because the user hasn't decided and doesn't[7D[K
+doesn't want it saved.
+
+Flags and clarification are false. The brief rationale should note the tent[4D[K
+tentative material choice without finalizing it. Not_decided is set to true[4D[K
+true because the user hasn't made a decision. Wait, the user said not to in[2D[K
+invent sources and use not_decided=true when evidence is insufficient or th[2D[K
+the user says it's tentative. Since the user explicitly says they haven't d[1D[K
+decided, not_decided should be true.
+
+Let me check the required fields again. The JSON must have the specified ke[2D[K
+keys. Let me make sure all required fields are included and enums are corre[5D[K
+correct. Project bucket is bluerev, domain_bucket reactor_design, storage_r[9D[K
+storage_relevance medium, lifecycle_status raw_input, sensitivity unknown, [K
+source_class_policy not_applicable, retrieval_behavior blocked. Not_decided[11D[K
+Not_decided is true, and the rationale explains the tentative decision.
+...done thinking.
+
+{
+  "case_id": "HG-006",
+  "project_bucket": "bluerev",
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "medium",
+  "lifecycle_status": "raw_input",
+  "sensitivity_bucket": "unknown",
+  "source_class_policy": "not_applicable",
+  "retrieval_behavior": "blocked",
+  "flags": [],
+  "not_decided": true,
+  "clarification": false,
+  "brief_rationale": "Tentative comparison of polycarbonate vs ETFE for pro[3D[K
+prototyping without final decision"
+}

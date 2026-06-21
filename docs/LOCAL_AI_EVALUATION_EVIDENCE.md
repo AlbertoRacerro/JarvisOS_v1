@@ -700,6 +700,13 @@ Current implementation status:
   files and fake output records with Python stdlib only, but does not call
   Ollama, pull models, run inference, score real model quality, write memory,
   run retrieval, or approve any model.
+- 1G-B1 performed a narrow local-only Ollama smoke run for `qwen3:8b` and
+  `gemma4:12b-it-qat` on `HG-001`, `HG-006`, and `HG-016`. Reports are under
+  `reports/local_model_smoke/1G-B1/`. The run produced 6/6 JSON parse passes,
+  0 timeouts, and core-field exact matches from 4/9 to 7/9. This is
+  manual-review evidence only and does not approve model quality, semantic
+  truth, memory runtime, retrieval runtime, provider/tool routing, or BlueRev
+  assumptions.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
 The accepted next local AI sequence is:
@@ -728,7 +735,8 @@ The accepted next local AI sequence is:
 1E         Form protocol catalog design
 1F         Structural validator + retry loop design
 1G-A       Local model form-fill smoke harness skeleton
-1G-B       Installed local model form-fill smoke run
+1G-B1      Installed local model form-fill smoke run
+1G-B2      Installed local model expanded smoke run
 1H         Showcase files generator design
 1I         Context access from showcase files
 1J         Provider/tool intent form design

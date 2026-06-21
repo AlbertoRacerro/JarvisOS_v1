@@ -1,17 +1,20 @@
 # Local Model Form-Fill Smoke Harness
 
-Milestone: 1G-A - Local model form-fill smoke harness skeleton
+Milestones:
+
+- 1G-A - Local model form-fill smoke harness skeleton
+- 1G-B1 - Installed local model form-fill smoke run
 
 ## Purpose
 
-This document describes the local model form-fill smoke harness skeleton.
+This document describes the local model form-fill smoke harness.
 
-The harness is model-agnostic and dry-run only in 1G-A. It loads the holdout
-intake generalization set, loads a local candidate-model config, validates both
-files, selects cases, lists candidate models, and prints the planned future
-smoke-run shape.
+The harness is model-agnostic. Dry-run mode loads the holdout intake
+generalization set, loads a local candidate-model config, validates both files,
+selects cases, lists candidate models, and prints the planned smoke-run shape.
 
-It does not call any model.
+Real local mode is explicit and bounded behind `--run-local`. It calls only the
+local Ollama CLI for selected installed models and selected holdout cases.
 
 ## Installed-Model-Only Policy
 
@@ -41,22 +44,21 @@ runner.
 
 ## No-Pull And No-Install Policy
 
-1G-A must not install packages or fetch models.
+The harness must not install packages or fetch models.
 
 Do not run:
 
-- `ollama run`
 - `ollama pull`
 - `ollama serve`
-- Ollama generation endpoints
+- Ollama generation endpoints outside this harness
 - external provider APIs
 - package installers
 
 The script uses Python standard library only.
 
-## No-Inference Boundary In 1G-A
+## Dry-Run Boundary
 
-`scripts/local_model_form_fill_smoke.py` is a dry-run harness skeleton.
+Dry-run mode must not call Ollama.
 
 It may:
 
@@ -72,7 +74,6 @@ It may:
 
 It must not:
 
-- call Ollama;
 - call a provider or model API;
 - open network connections;
 - score real model quality;
@@ -83,11 +84,52 @@ It must not:
 - execute tools;
 - start BlueRev modeling.
 
-If `--dry-run` is not provided, the script exits nonzero with:
+If neither `--dry-run` nor `--run-local` is provided, the script exits nonzero.
+
+## 1G-B1 Real Local Run Scope
+
+1G-B1 allows exactly a narrow installed local model smoke run.
+
+Selected models:
 
 ```text
-Only dry-run mode is implemented in 1G-A; no model inference is available.
+qwen3:8b
+gemma4:12b-it-qat
 ```
+
+Selected cases:
+
+```text
+HG-001
+HG-006
+HG-016
+```
+
+Run command:
+
+```powershell
+python scripts/local_model_form_fill_smoke.py --run-local --models qwen3:8b,gemma4:12b-it-qat --case-ids HG-001,HG-006,HG-016 --timeout-seconds 180
+```
+
+The run writes reports under:
+
+```text
+reports/local_model_smoke/1G-B1/
+```
+
+Each model/case pair writes:
+
+- one raw `.txt` file;
+- one parsed/scored `.json` file.
+
+The run also writes:
+
+- `reports/local_model_smoke/1G-B1/local_model_form_fill_smoke_summary.json`
+- `reports/local_model_smoke/1G-B1/local_model_form_fill_smoke_summary.md`
+
+All results require manual review. Core-field exact matches are structural
+comparison evidence only; they do not prove semantic truth, safety, memory
+readiness, retrieval readiness, provider readiness, or BlueRev validity.
 
 ## Dry-Run Behavior
 
@@ -108,7 +150,7 @@ Dry-run output includes:
 - note that inference is disabled in 1G-A;
 - expected future report path.
 
-The skeleton does not write a report in 1G-A.
+Dry-run mode does not write a report.
 
 ## Candidate Config
 
@@ -145,19 +187,20 @@ The tests cover:
 
 ## Future 1G-B
 
-The next milestone is:
+After 1G-B1, the next milestone is:
 
 ```text
-1G-B - Installed local model form-fill smoke run
+1G-B2 - Installed local model expanded smoke run
 ```
 
-1G-B may decide whether and how to run installed local models. Any live run
-must remain local, explicit, bounded, auditable, and separate from runtime
+1G-B2 may decide whether to expand the installed local smoke scope. Any live
+run must remain local, explicit, bounded, auditable, and separate from runtime
 memory, retrieval, provider routing, tool execution, and BlueRev modeling.
 
 ## Milestone Boundary Confirmation
 
-1G-A adds a config file, dry-run script, docs, and `unittest` tests only.
+1G-B1 adds a guarded local run mode, generated local smoke reports, docs, and
+`unittest` coverage.
 
 It adds no:
 
@@ -166,10 +209,10 @@ It adds no:
 - database migration;
 - runtime models;
 - repository or storage classes;
-- model inference;
+- model inference outside the explicit local Ollama smoke command;
 - Ollama model pull;
 - Ollama model serve;
-- Ollama generation call;
+- Ollama generation call outside the explicit local smoke command;
 - provider call;
 - memory runtime;
 - retrieval runtime;
@@ -182,4 +225,4 @@ It adds no:
 - external reference audit;
 - vendored code.
 
-This milestone does not start `1G-B - Installed local model form-fill smoke run`.
+This milestone does not start `1G-B2 - Installed local model expanded smoke run`.

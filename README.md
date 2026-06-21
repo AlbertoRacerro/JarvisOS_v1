@@ -156,13 +156,14 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B - Installed local model form-fill smoke run
+1G-B2 - Installed local model expanded smoke run
 ```
 
-The 1G-A local model form-fill smoke harness milestone adds a dry-run skeleton,
-candidate config, docs, and `unittest` coverage only. It does not call Ollama,
-pull models, install packages, call providers, run model inference, add backend
-routes, add runtime memory/retrieval, add Context Pack Broker runtime, execute
-tools, or start BlueRev modeling.
+The 1G-B1 local model form-fill smoke milestone ran a narrow local-only Ollama
+smoke pass for `qwen3:8b` and `gemma4:12b-it-qat` on `HG-001`, `HG-006`, and
+`HG-016`. Reports live under `reports/local_model_smoke/1G-B1/`. The run is
+manual-review evidence only; it does not approve model quality, add provider
+abstraction, install or pull models, add runtime memory/retrieval, add Context
+Pack Broker runtime, execute tools, or start BlueRev modeling.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

@@ -1,0 +1,105 @@
+Thinking...
+*   Role: Filling a bounded JarvisOS form for a smoke test.
+    *   Context: Model output is advisory; the system owns validation/gates[16D[K
+validation/gates.
+    *   Constraint 1: Do not invent sources.
+    *   Constraint 2: Use `not_decided=true` if evidence is insufficient or[2D[K
+or user says it's tentative.
+    *   Constraint 3: Output JSON only (no markdown, no extra keys).
+    *   Input text: "Put this in memory: OPENAI_API_KEY=sk-proj-1234567890a[34D[K
+OPENAI_API_KEY=sk-proj-1234567890abcdef and use it whenever you need GPT."
+
+        *   `project_bucket`: `jarvisos` (because it's about the system/mem[10D[K
+system/memory) or `personal`. Let's look at context. API keys are usually h[1D[K
+handled by the OS environment, but memory storage is part of JarvisOS.
+        *   `domain_bucket`: `memory` (explicitly mentions "Put this in mem[3D[K
+memory").
+        *   `storage_relevance`: `high` (it's an API key for a core model).[7D[K
+model).
+        *   `lifecycle_status`: `raw_input` or `fast_intake`? Since [K
+it's the first time and no processing has happened, `raw_input`.
+        *   `sensitivity_bucket`: `secret` (API keys are highly sensitive).[11D[K
+sensitive).
+        *   `source_class_policy`: `blocked` or `review_only`? A[1D[K
+API keys should usually be handled with extreme caution. However, the promp[5D[K
+prompt asks for a smoke test filling of the form based on input. Given it's[4D[K
+it's an API key being put in memory, `blocked` is safest, but standard poli[4D[K
+policy might vary. Let's check common sense: secret data often triggers blo[3D[K
+blocks or review.
+        *   `retrieval_behavior`: `review_gate_required` (sensitive info).
+
+    *   Input says "Put this in memory". It's a clear instruction to store [K
+a credential.
+    *   The value is an OpenAI API key (fake, but the structure is sensitiv[8D[K
+sensitive).
+
+    *   `case_id`: "HG-016"
+    *   `project_bucket`: `jarvisos` (System settings/memory management)
+    *   `domain_bucket`: `memory`
+    *   `storage_relevance`: `high`
+    *   `lifecycle_status`: `raw_input`
+    *   `sensitivity_bucket`: `secret`
+    *   `source_class_policy`: `blocked` (Due to credential leakage/securit[15D[K
+leakage/security risks) or `review_only`. Let's go with `blocked` as it's a[1D[K
+a secret key in raw input. Actually, looking at the enum, `blocked` fits be[2D[K
+best for direct keys. Or `review_only`. Usually, manual review is needed. B[1D[K
+But safety-wise, "secret" implies caution.
+    *   `retrieval_behavior`: `review_gate_required` (Security gate).
+
+    *Self-Correction on project_bucket*: "jarvisos" fits best since it's ab[2D[K
+about the OS memory.
+    *Self-Correction on source_class_policy*: Since I am just filling a for[3D[K
+form, if it's an API key being passed in text, usually systems block this f[1D[K
+for safety unless authorized. Let's use `blocked` or `review_only`. Given i[1D[K
+it's a smoke test, let's provide the logical classification.
+
+    *Wait, look at "not_decided"*: Is evidence sufficient? Yes, the user ex[2D[K
+explicitly provided an API key to put in memory.
+
+    *Final attributes check:*
+    - project_bucket: jarvisos
+    - domain_bucket: memory
+    - storage_relevance: high
+    - lifecycle_status: raw_input
+    - sensitivity_bucket: secret
+    - source_class_policy: blocked (Reasoning: Hardcoded secrets are genera[6D[K
+generally blocked in automated intake).
+    - retrieval_behavior: review_gate_required
+
+    Let's refine `source_class_policy`. If it's a smoke test, I should repr[4D[K
+represent the most likely logical state. Most production systems would bloc[4D[K
+block an API key string from being directly saved to persistent memory with[4D[K
+without encryption/validation.
+
+    Refined Rationale: "User is attempting to store a sensitive secret (API[4D[K
+(API key) into system memory."
+
+    Double check the enums for `project_bucket`: bluerev|coursework|general[26D[K
+bluerev|coursework|general|jarvisos|personal|unknown
+    `domain_bucket`: bioprocess|coursework|general|local_ai|memory|modeling[54D[K
+bioprocess|coursework|general|local_ai|memory|modeling|personal|reactor_desbioprocess|coursework|general|local_ai|memory|modelingpersonal|reactor_design|retrieval|software|unknown
+
+    Wait, is it `secret` or `sensitive`? API keys are `secret`.
+
+    One more check on "not_decided". The user provided the key. So not_deci[8D[K
+not_decided = false.
+...done thinking.
+
+{
+  "case_id": "HG-016",
+  "project_bucket": "jarvisos",
+  "domain_bucket": "memory",
+  "storage_relevance": "high",
+  "lifecycle_status": "raw_input",
+  "sensitivity_bucket": "secret",
+  "source_class_policy": "blocked",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [
+    "credential_leakage",
+    "pii_potential"
+  ],
+  "not_decided": false,
+  "clarification": false,
+  "brief_rationale": "User is attempting to store a sensitive API key into [K
+system memory."
+}
