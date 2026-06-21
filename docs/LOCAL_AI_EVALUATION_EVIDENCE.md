@@ -436,6 +436,46 @@ Decision:
 - Continue protocol repair before wiring any model output into routes, UI, memory, retrieval, provider routing, tool execution, or safety decisions.
 - The next repair should simplify topic/context expectations or split topic hints from task/project hints so failures are easier to isolate.
 
+### 1C-X - Model-Specific Non-Critical Hint Profiles
+
+1C-X added a bounded manual `--mode profile-bakeoff` diagnostic. It keeps the same canonical non-critical hint form across models while comparing model-specific prompt profiles for locally installed `gemma4:12b-it-qat` and `qwen3:8b`. The canonical form is limited to `task_hint`, `project_hint`, `topic_hints`, `context_need_hint`, and `confidence`. It excludes risk, next action, sensitivity, provider, tool, memory, retrieval, route, execution, and free-text rationale fields.
+
+The diagnostic uses local Ollama only, `think:false`, temperature `0`, `num_predict=512`, eight fixed synthetic case IDs, and two repeats per profile. The report stores profile IDs, case IDs, and aggregate metrics only; it does not persist raw prompts, raw case text, or raw model output.
+
+Report:
+
+- `backend/local_eval_reports/classification_budget_probe_profile-bakeoff_20260621T064447.json`
+
+Observed profile bakeoff result:
+
+| Profile | Model | Form | Attempts | Schema-valid | Accepted | All-fields agreement | Mean latency | P95 latency | Overconfident wrong | Suitability |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `gemma12_compact_json_think_false` | `gemma4:12b-it-qat` | compact JSON | 16 | 100% | 87.5% | 12.5% | 5229 ms | 15930 ms | 12 | needs profile repair |
+| `gemma12_explicit_json_think_false` | `gemma4:12b-it-qat` | explicit enum | 16 | 100% | 87.5% | 0% | 4143 ms | 4456 ms | 14 | needs profile repair |
+| `qwen8_explicit_json_think_false` | `qwen3:8b` | explicit enum | 16 | 100% | 87.5% | 25% | 4011 ms | 13745 ms | 12 | needs profile repair |
+| `qwen8_compact_json_think_false` | `qwen3:8b` | compact JSON | 16 | 100% | 100% | 25% | 3349 ms | 3467 ms | 12 | needs profile repair |
+
+Field-level signal:
+
+- `project_hint` reached 100% agreement in every profile.
+- `task_hint` was strongest for `qwen8_explicit_json_think_false` at 87.5%.
+- `topic_hints` remained weak, between 25% and 50%.
+- `context_need_hint` remained weak, between 50% and 62.5%.
+
+Interpretation:
+
+- Model-specific profiles fixed structural compliance for this bounded diagnostic: all rows were schema-valid.
+- The canonical non-critical form is still not semantically reliable enough for runtime use.
+- Qwen3 8B compact JSON with `think:false` is the best operational profile by accepted rate and latency, but it still has only 25% all-fields agreement and 12 overconfident wrong outputs.
+- Gemma 12B did not benefit enough from either compact or explicit profile style to become a reliable non-critical hint source.
+- The main remaining failure is not JSON shape. It is unstable topic/context interpretation plus overconfident wrong hints.
+
+Decision:
+
+- Keep the 1C-U boundary intact.
+- Do not wire these hints into routes, UI, provider routing, tool execution, memory, retrieval, Context Pack Broker, local gatekeeping, chat, autonomous actions, or safety decisions.
+- Continue with form/protocol design focused on narrower topic taxonomies, deterministic project detection, and validator-owned retry behavior.
+
 ## Raw Report Retention Rule
 
 Do not delete raw D9, D9R, D10B, D10B-R, or D10C reports until this document and the ADR log are deliberately updated to preserve their conclusions.
@@ -475,6 +515,7 @@ Current implementation status:
 - 1C-U restricts 12B classification output to non-critical advisory semantic hints. Safety/risk/next/provider/tool/memory/retrieval decisions remain JarvisOS policy or review-gate decisions.
 - 1C-V compares installed local candidates on the split-field diagnostic. All candidates remain rejected for runtime classification; `qwen3:8b` is the most useful next protocol-repair comparison model, but not approved for runtime authority.
 - 1C-W removes safety-critical fields and tests non-critical advisory hints only. The best row is `qwen3:8b` with `think:false` and explicit enums, but all candidates still need protocol repair.
+- 1C-X keeps one canonical non-critical hint form and compares model-specific prompt profiles. Structural validity improved to 100%, but topic/context agreement and overconfident wrong hints still require profile and validator repair before runtime use.
 - The corrected architecture is form-driven local intelligence: Gemma performs semantic reasoning locally; JarvisOS provides showcase files, form schemas, structural validation, retries, persistence, promotion policy, and audit.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
@@ -488,6 +529,7 @@ The accepted next local AI sequence is:
 1C         Classification live probe analysis and roadmap rebase
 1C-V       Local model bakeoff for form-driven classification
 1C-W       Cross-model non-critical hint protocol repair
+1C-X       Canonical non-critical hint form with model-specific prompt profiles
 1D         Gemma-facing showcase files design
 1E         Form protocol catalog design
 1F         Structural validator + retry loop design

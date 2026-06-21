@@ -51,13 +51,18 @@ from app.modules.local_ai.classification.probe_classification_budget import (
     MinimalPromptVariant,
     ModelBakeoffSuitability,
     NonCriticalHintOutput,
+    NonCriticalHintProfile,
     NonCriticalHintProtocolVariant,
     NonCriticalHintSuitability,
     OutputControlVariant,
+    ProfileFormatMode,
+    ProfilePromptStyle,
     REPORT_SCHEMA_VERSION,
     build_non_critical_hint_prompt,
     build_non_critical_hint_repair_report,
     build_model_bakeoff_probe_report,
+    build_profile_bakeoff_prompt,
+    build_profile_bakeoff_report,
     build_label_agreement_prompt,
     build_minimal_classification_prompt,
     build_budget_probe_report,
@@ -412,6 +417,35 @@ class FakeNonCriticalHintAdapter:
         )
 
 
+class FakeProfileFailureAdapter(FakeNonCriticalHintAdapter):
+    def complete(self, prompt: str, *, input_chars: int = 0) -> ClassificationAdapterResult:
+        if "Classify into the canonical metadata JSON form" in prompt:
+            return ClassificationAdapterResult(
+                success=False,
+                model_name=self.config.model_name,
+                runtime_endpoint=self.config.endpoint_url,
+                diagnostics=ClassificationAttemptDiagnostics(
+                    model_name=self.config.model_name,
+                    endpoint=self.config.endpoint_url,
+                    prompt_chars=len(prompt),
+                    input_chars=input_chars,
+                    max_output_tokens=self.config.max_output_tokens,
+                    temperature=self.config.temperature,
+                    timeout_seconds=self.config.timeout_seconds,
+                    latency_ms=15000,
+                    raw_content_empty=True,
+                    thinking_present=False,
+                    done_reason=None,
+                    schema_valid=False,
+                    fallback_used=True,
+                    fallback_reason=ClassificationFailureCode.timeout,
+                ),
+                failure_code=ClassificationFailureCode.timeout,
+                failure_message="simulated profile timeout",
+            )
+        return super().complete(prompt, input_chars=input_chars)
+
+
 def _minimal_payload_for_prompt(prompt: str) -> dict[str, object]:
     if "text=help" in prompt:
         return {
@@ -610,7 +644,7 @@ def _non_critical_hint_payload_for_prompt(prompt: str) -> dict[str, object]:
         return {
             "task_hint": "unknown",
             "project_hint": "unknown",
-            "topic_hints": ["ambiguous"],
+            "topic_hints": ["general"],
             "context_need_hint": "clarify",
             "confidence": 0.9,
         }
@@ -618,7 +652,7 @@ def _non_critical_hint_payload_for_prompt(prompt: str) -> dict[str, object]:
         return {
             "task_hint": "debug",
             "project_hint": "jarvisos",
-            "topic_hints": ["backend", "local_ai", "debugging"],
+            "topic_hints": ["jarvisos", "local_ai", "classification"],
             "context_need_hint": "small",
             "confidence": 0.9,
         }
@@ -626,7 +660,7 @@ def _non_critical_hint_payload_for_prompt(prompt: str) -> dict[str, object]:
         return {
             "task_hint": "docs",
             "project_hint": "jarvisos",
-            "topic_hints": ["docs", "design", "local_ai"],
+            "topic_hints": ["jarvisos", "docs", "local_ai"],
             "context_need_hint": "small",
             "confidence": 0.9,
         }
@@ -634,7 +668,7 @@ def _non_critical_hint_payload_for_prompt(prompt: str) -> dict[str, object]:
         return {
             "task_hint": "question",
             "project_hint": "bluerev",
-            "topic_hints": ["modeling"],
+            "topic_hints": ["bluerev"],
             "context_need_hint": "small",
             "confidence": 0.9,
         }
@@ -642,7 +676,7 @@ def _non_critical_hint_payload_for_prompt(prompt: str) -> dict[str, object]:
         return {
             "task_hint": "question",
             "project_hint": "coursework",
-            "topic_hints": ["chemical_engineering"],
+            "topic_hints": ["coursework"],
             "context_need_hint": "none",
             "confidence": 0.9,
         }
@@ -650,7 +684,7 @@ def _non_critical_hint_payload_for_prompt(prompt: str) -> dict[str, object]:
         return {
             "task_hint": "question",
             "project_hint": "general",
-            "topic_hints": ["public_knowledge"],
+            "topic_hints": ["general"],
             "context_need_hint": "none",
             "confidence": 0.9,
         }
@@ -658,7 +692,7 @@ def _non_critical_hint_payload_for_prompt(prompt: str) -> dict[str, object]:
         return {
             "task_hint": "planning",
             "project_hint": "personal",
-            "topic_hints": ["personal_admin", "planning"],
+            "topic_hints": ["planning", "general"],
             "context_need_hint": "small",
             "confidence": 0.9,
         }
@@ -666,7 +700,7 @@ def _non_critical_hint_payload_for_prompt(prompt: str) -> dict[str, object]:
         return {
             "task_hint": "planning",
             "project_hint": "jarvisos",
-            "topic_hints": ["local_ai", "provider_models"],
+            "topic_hints": ["jarvisos", "local_ai", "models"],
             "context_need_hint": "medium",
             "confidence": 0.9,
         }
@@ -1587,13 +1621,13 @@ def test_non_critical_hint_schema_excludes_authority_and_safety_fields() -> None
     )
     parsed = parse_non_critical_hint_output(
         json.dumps(
-            {
-                "task_hint": "debug",
-                "project_hint": "jarvisos",
-                "topic_hints": ["local_ai", "debugging"],
-                "context_need_hint": "small",
-                "confidence": 0.9,
-            }
+                {
+                    "task_hint": "debug",
+                    "project_hint": "jarvisos",
+                    "topic_hints": ["jarvisos", "local_ai", "classification"],
+                    "context_need_hint": "small",
+                    "confidence": 0.9,
+                }
         )
     )
 
@@ -1685,6 +1719,121 @@ def test_non_critical_hint_mode_cannot_runtime_approve_even_perfect_output() -> 
     assert all(result.returned_label_risk is None for result in report.results)
     assert all(result.returned_label_next is None for result in report.results)
     assert all(result.returned_label_sensitivity is None for result in report.results)
+
+
+def test_profile_bakeoff_profiles_share_canonical_form_but_differ_prompt_style() -> None:
+    request = ClassificationInput(text="Debug JarvisOS local AI classification.", source=ClassificationSource.manual_test)
+    gemma_profile = NonCriticalHintProfile(
+        profile_id="gemma_test",
+        model_name="gemma4:12b-it-qat",
+        think_setting=OutputControlVariant.think_false,
+        format_mode=ProfileFormatMode.json,
+        prompt_style=ProfilePromptStyle.gemma_compact,
+    )
+    qwen_profile = NonCriticalHintProfile(
+        profile_id="qwen_test",
+        model_name="qwen3:8b",
+        think_setting=OutputControlVariant.think_false,
+        format_mode=ProfileFormatMode.json,
+        prompt_style=ProfilePromptStyle.qwen_explicit,
+    )
+
+    gemma_prompt = build_profile_bakeoff_prompt(request, profile=gemma_profile)
+    qwen_prompt = build_profile_bakeoff_prompt(request, profile=qwen_profile)
+
+    assert gemma_prompt != qwen_prompt
+    assert "task_hint" in gemma_prompt
+    assert "task_hint" in qwen_prompt
+    assert set(NonCriticalHintOutput.model_fields) == {
+        "task_hint",
+        "project_hint",
+        "topic_hints",
+        "context_need_hint",
+        "confidence",
+    }
+    assert len(gemma_prompt) <= 900
+    assert len(qwen_prompt) <= 900
+
+
+def test_profile_bakeoff_report_stores_profile_ids_without_raw_prompt_case_or_output() -> None:
+    cases = non_critical_hint_probe_cases()
+    profiles = (
+        NonCriticalHintProfile(
+            profile_id="gemma_test_profile",
+            model_name="gemma4:12b-it-qat",
+            think_setting=OutputControlVariant.think_false,
+            format_mode=ProfileFormatMode.json,
+            prompt_style=ProfilePromptStyle.gemma_compact,
+        ),
+        NonCriticalHintProfile(
+            profile_id="qwen_test_profile",
+            model_name="qwen3:8b",
+            think_setting=OutputControlVariant.think_false,
+            format_mode=ProfileFormatMode.json,
+            prompt_style=ProfilePromptStyle.qwen_explicit,
+        ),
+    )
+    report = build_profile_bakeoff_report(
+        installed_model_names=("gemma4:12b-it-qat", "qwen3:8b"),
+        profiles=profiles,
+        adapter_factory=FakeNonCriticalHintAdapter,
+        created_at_utc=datetime(2026, 6, 21, 12, 0, tzinfo=UTC),
+    )
+    serialized = report.model_dump_json()
+
+    assert report.mode == "profile-bakeoff"
+    assert report.profile_ids == ("gemma_test_profile", "qwen_test_profile")
+    assert {result.profile_id for result in report.results} == set(report.profile_ids)
+    assert len(report.hint_summaries) == 2
+    assert all(summary.profile_id in report.profile_ids for summary in report.hint_summaries)
+    assert all(summary.style_id is not None for summary in report.hint_summaries)
+    assert all(summary.format_mode == ProfileFormatMode.json for summary in report.hint_summaries)
+    assert all(summary.runtime_approved is False for summary in report.hint_summaries)
+    assert all(summary.suitability_label == NonCriticalHintSuitability.non_critical_hint_candidate for summary in report.hint_summaries)
+
+    for case in cases:
+        assert case.case_id in serialized
+        assert case.request.text not in serialized
+    assert "messages" not in serialized
+    assert "prompt" not in serialized
+    assert "response_text" not in serialized
+    assert '"risk"' not in serialized
+    assert '"next"' not in serialized
+    assert '"sensitivity"' not in serialized
+
+
+def test_profile_bakeoff_profile_failure_does_not_abort_diagnostic() -> None:
+    profiles = (
+        NonCriticalHintProfile(
+            profile_id="gemma_ok_profile",
+            model_name="gemma4:12b-it-qat",
+            think_setting=OutputControlVariant.think_false,
+            format_mode=ProfileFormatMode.json,
+            prompt_style=ProfilePromptStyle.gemma_compact,
+        ),
+        NonCriticalHintProfile(
+            profile_id="qwen_failing_profile",
+            model_name="qwen3:8b",
+            think_setting=OutputControlVariant.think_false,
+            format_mode=ProfileFormatMode.json,
+            prompt_style=ProfilePromptStyle.qwen_explicit,
+        ),
+    )
+    report = build_profile_bakeoff_report(
+        installed_model_names=("gemma4:12b-it-qat", "qwen3:8b"),
+        profiles=profiles,
+        adapter_factory=FakeProfileFailureAdapter,
+        created_at_utc=datetime(2026, 6, 21, 12, 15, tzinfo=UTC),
+    )
+
+    by_profile = {summary.profile_id: summary for summary in report.hint_summaries}
+
+    assert set(by_profile) == {"gemma_ok_profile", "qwen_failing_profile"}
+    assert by_profile["gemma_ok_profile"].schema_valid_rate == 1
+    assert by_profile["qwen_failing_profile"].timeout_count == by_profile["qwen_failing_profile"].attempts
+    assert by_profile["qwen_failing_profile"].suitability_label == NonCriticalHintSuitability.rejected
+    assert any(result.profile_id == "gemma_ok_profile" and result.schema_valid for result in report.results)
+    assert any(result.profile_id == "qwen_failing_profile" and result.fallback_used for result in report.results)
 
 
 def test_probe_rejects_non_local_endpoint_and_noncanonical_variants() -> None:
