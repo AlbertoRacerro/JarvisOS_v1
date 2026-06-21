@@ -476,6 +476,28 @@ Decision:
 - Do not wire these hints into routes, UI, provider routing, tool execution, memory, retrieval, Context Pack Broker, local gatekeeping, chat, autonomous actions, or safety decisions.
 - Continue with form/protocol design focused on narrower topic taxonomies, deterministic project detection, and validator-owned retry behavior.
 
+### 1C-Y - Fast Staged Memory Intake Direction
+
+1C-Y pauses further fine-grained task/project/topic classifier repair as the main foundation for memory. The 1C-W and 1C-X diagnostics showed that local models can emit valid JSON, but one-shot semantic agreement remains too unstable for reliable write-time memory classification.
+
+Design direction:
+
+- Memory ingestion should be computationally cheap at write time.
+- JarvisOS should preserve raw text, source/input ID, timestamp, observable signals, broad uncertain buckets, uncertainty flags, and enrichment status.
+- Heavy contextual interpretation should happen later only during retrieval, decision use, conflict resolution, sensitivity review, high-value promotion, or full context-pack availability.
+- `FastIntakeSignalForm` is a cheap intake envelope, not a final memory object and not canonical truth.
+- Later enrichment may produce `KnowledgeCard`, `MemoryCard`, `DecisionCard`, `AssumptionCard`, `EvidenceCard`, or `SourceCard` objects.
+
+Canonical design:
+
+- `docs/STAGED_MEMORY_INTAKE.md`
+
+Decision:
+
+- Stop repairing non-critical classifier profiles as the primary memory-ingestion foundation.
+- Continue toward staged memory intake, micro-context design, and later context-pack-based enrichment.
+- Do not add memory runtime, retrieval runtime, Context Pack Broker runtime, routes, UI, provider integrations, automatic memory writes, or live model calls in this design milestone.
+
 ## Raw Report Retention Rule
 
 Do not delete raw D9, D9R, D10B, D10B-R, or D10C reports until this document and the ADR log are deliberately updated to preserve their conclusions.
@@ -516,6 +538,7 @@ Current implementation status:
 - 1C-V compares installed local candidates on the split-field diagnostic. All candidates remain rejected for runtime classification; `qwen3:8b` is the most useful next protocol-repair comparison model, but not approved for runtime authority.
 - 1C-W removes safety-critical fields and tests non-critical advisory hints only. The best row is `qwen3:8b` with `think:false` and explicit enums, but all candidates still need protocol repair.
 - 1C-X keeps one canonical non-critical hint form and compares model-specific prompt profiles. Structural validity improved to 100%, but topic/context agreement and overconfident wrong hints still require profile and validator repair before runtime use.
+- 1C-Y pauses classifier repair as the main memory foundation and moves to fast staged memory intake: preserve raw input and cheap broad signals first, then enrich only when retrieval, decisions, conflicts, sensitivity, promotion, or full context packs justify deeper reasoning.
 - The corrected architecture is form-driven local intelligence: Gemma performs semantic reasoning locally; JarvisOS provides showcase files, form schemas, structural validation, retries, persistence, promotion policy, and audit.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
@@ -530,6 +553,7 @@ The accepted next local AI sequence is:
 1C-V       Local model bakeoff for form-driven classification
 1C-W       Cross-model non-critical hint protocol repair
 1C-X       Canonical non-critical hint form with model-specific prompt profiles
+1C-Y       Fast staged memory intake design
 1D         Gemma-facing showcase files design
 1E         Form protocol catalog design
 1F         Structural validator + retry loop design

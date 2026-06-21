@@ -21,6 +21,14 @@ This is a form-driven local intelligence architecture. JarvisOS makes the system
 
 Structural validation is not semantic validation. JarvisOS may validate schemas, required fields, enum values, booleans, field lengths, status values, source IDs, path existence, allowed roots, permitted save locations, valid state transitions, and obvious secrets. JarvisOS must not claim to validate semantic fidelity, strategic correctness, summary quality, technical truth of a design assumption, completeness of a memory card, or subtle sensitivity classification.
 
+Memory intake follows a staged principle:
+
+```text
+write fast, enrich later, reason deeply only on retrieval
+```
+
+Initial memory intake preserves raw text, provenance, observable flags, broad uncertain buckets, and enrichment status. Full contextual interpretation is deferred until retrieval, decision use, conflict resolution, sensitivity review, high-value promotion, or full context-pack availability.
+
 BlueRev modeling does not start until AI infrastructure, external API escalation, and the Modeling Workbench are strong enough to support real design work.
 
 ## Backend Spine
@@ -295,13 +303,24 @@ A persistent Windows credential store or DPAPI-backed store requires a separate 
 Future memory should move through explicit stages:
 
 ```text
-raw_source
+raw_input
+fast_intake
 proposed_memory
+enriched_memory
 accepted_memory
 canonical_state
+superseded
 ```
 
-Gemma may fill proposed memory cards. JarvisOS validates the card structure and source links, then promotion is controlled by explicit policy such as smoke-test reliability, sampling review, stronger local 31B or API review, direct user decision, repeated use without contradiction, or source-grounded verification. The user should not be required to personally review every routine mechanical memory card once reliability evidence supports more autonomy.
+Fast intake is intentionally cheap. `FastIntakeSignalForm` is not a final memory object; it is a source-linked signal envelope used to preserve potentially useful input without forcing fine-grained semantic interpretation at write time.
+
+Gemma may propose broad intake signals or, during later enrichment, candidate memory cards. JarvisOS validates structure and source links, preserves raw input, and controls promotion through explicit policy such as deterministic validation, sampling review, stronger local 31B or API review, direct user decision, repeated use without contradiction, or source-grounded verification. The user should not be required to personally review every routine mechanical memory card once reliability evidence supports more autonomy.
+
+Canonical staged memory intake design lives in:
+
+```text
+docs/STAGED_MEMORY_INTAKE.md
+```
 
 ## Current Roadmap
 
@@ -312,6 +331,7 @@ Gemma may fill proposed memory cards. JarvisOS validates the card structure and 
 1B    Thinking/token budget control
 1B-R-LIVE  Manual Gemma 12B classification probe
 1C         Classification live probe analysis and roadmap rebase
+1C-Y       Fast staged memory intake design
 1D         Gemma-facing showcase files design
 1E         Form protocol catalog design
 1F         Structural validator + retry loop design

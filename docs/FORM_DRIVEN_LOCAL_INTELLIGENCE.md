@@ -45,6 +45,26 @@ source quality, or review policy. JarvisOS can reject invalid structure, request
 a retry with machine-readable errors, save a proposed object, or require review.
 It must not pretend that schema validity proves semantic truth.
 
+## Fast Intake Versus Contextual Enrichment
+
+Memory intake is split into cheap write-time preservation and later contextual
+reasoning.
+
+Fast intake uses `FastIntakeSignalForm` to preserve raw text, source IDs,
+timestamps, observable flags, broad uncertain buckets, explicit mentions, and
+enrichment status. It is intentionally approximate and is not a final memory
+object.
+
+Contextual enrichment happens later, when memory is retrieved, used in a
+decision, promoted, found to conflict, marked sensitive, or evaluated with a
+full context pack. Enrichment may create candidate `KnowledgeCard`,
+`MemoryCard`, `DecisionCard`, `AssumptionCard`, `EvidenceCard`, or
+`SourceCard` objects, but promotion remains JarvisOS policy.
+
+Fast intake may use a small always-loaded micro-context such as active projects,
+current focus, recent decisions, a short taxonomy, and sensitivity policy
+summary. It must not require a full context pack on every write.
+
 ## Gemma-Facing Showcase Files
 
 Future JarvisOS should maintain a small set of always-readable showcase files for
@@ -119,6 +139,7 @@ proposes from what JarvisOS is allowed to save, promote, or execute.
 | Form | Purpose | Filled By | JarvisOS Structural Checks | Semantic Limit | Effect |
 | --- | --- | --- | --- | --- | --- |
 | `ClassificationForm` | Produce non-critical semantic hints for a prompt or task. | Gemma or deterministic fallback. | Schema, enums, confidence bounds, hard overrides. | Does not prove the label is semantically correct and does not own safety-critical fields. | Can provide task, project, topic, context-need, and confidence hints only. |
+| `FastIntakeSignalForm` | Preserve cheap write-time signals for possible memory. | Deterministic extraction, Gemma, or hybrid. | Schema, enums, booleans, source ID, confidence bounds, raw-text-preserved flag, obvious secret overrides. | Does not prove the input is important, true, canonical, or fully understood. | Can save a source-linked raw/proposed intake envelope only. |
 | `ContextAccessRequest` | Ask for bounded context. | Gemma. | Allowed package/source IDs, reason length, max count. | Does not prove the requested context is sufficient. | Can trigger bounded context assembly. |
 | `MemoryCard` | Propose a memory item. | Gemma. | Required fields, source IDs, tags, status. | Does not prove the memory is complete or true. | Can save as proposed memory. |
 | `FileCard` | Summarize a file or file role. | Gemma. | Existing path/source ID, allowed root, summary length. | Does not prove summary quality. | Can update an index after policy allows. |
@@ -196,14 +217,20 @@ write arbitrary files, or call an external provider.
 Memory should move through explicit stages:
 
 ```text
-raw_source
+raw_input
+fast_intake
 proposed_memory
+enriched_memory
 accepted_memory
 canonical_state
+superseded
 ```
 
-Gemma may produce proposed memory cards through valid forms. Promotion to
-accepted or canonical memory is controlled by policy, such as:
+Fast intake is not canonical truth. It is a cheap signal envelope that lets
+JarvisOS preserve raw input and defer expensive interpretation. Gemma may
+produce proposed memory cards through valid forms only during later enrichment
+or review. Promotion to accepted or canonical memory is controlled by policy,
+such as:
 
 - high smoke-test reliability;
 - sampling review;
@@ -214,6 +241,8 @@ accepted or canonical memory is controlled by policy, such as:
 
 Routine mechanical memory cards should not require personal user review forever.
 The system should earn autonomy through evidence.
+
+Canonical staged memory intake design lives in `docs/STAGED_MEMORY_INTAKE.md`.
 
 ## Smoke-Test Philosophy
 
@@ -244,6 +273,7 @@ Near-term sequence after the existing manual live probe:
 ```text
 1B-R-LIVE  Manual Gemma 12B classification probe
 1C         Classification live probe analysis and roadmap rebase
+1C-Y       Fast staged memory intake design
 1D         Gemma-facing showcase files design
 1E         Form protocol catalog design
 1F         Structural validator + retry loop design

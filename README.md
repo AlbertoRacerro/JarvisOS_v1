@@ -30,10 +30,11 @@ The current codebase includes:
 
 The current local Gemma conclusion is:
 
-- `gemma4:12b-it-qat` is viable only for narrow classification-style local utilities.
+- `gemma4:12b-it-qat` is viable only for non-critical advisory semantic hints inside bounded diagnostics and future forms.
 - 12B is not approved for orchestration, local gatekeeping, chat, memory, retrieval, Context Pack Broker runtime, provider routing, or BlueRev modeling.
 - `gemma4:31b-it-qat` remains only an occasional heavy local expert candidate.
 - Future Gemma work should be form-driven: Gemma performs local semantic reasoning, while JarvisOS validates structure only and decides what can be saved, retried, promoted, or executed.
+- Memory intake is staged: write fast, preserve raw input and broad signals, enrich later only when retrieval, decisions, conflicts, sensitivity, promotion, or context packs justify deeper reasoning.
 
 ## Canonical Docs
 
@@ -43,6 +44,7 @@ The current local Gemma conclusion is:
 - UI start guide: `docs/UI_START.md`
 - Local AI evidence: `docs/LOCAL_AI_EVALUATION_EVIDENCE.md`
 - Form-driven local intelligence: `docs/FORM_DRIVEN_LOCAL_INTELLIGENCE.md`
+- Staged memory intake: `docs/STAGED_MEMORY_INTAKE.md`
 
 Milestone docs remain in `docs/` as historical evidence. Do not treat older milestone docs as current canon when they conflict with the files above.
 
@@ -143,7 +145,7 @@ npm run build
 Recommended next milestone:
 
 ```text
-1B-R-LIVE - Manual Gemma 12B classification probe
+1D - Gemma-facing showcase files design
 ```
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.
