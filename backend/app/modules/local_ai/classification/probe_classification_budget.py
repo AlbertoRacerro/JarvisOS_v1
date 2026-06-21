@@ -60,10 +60,25 @@ MODEL_BAKEOFF_CANDIDATE_MODELS = (
 MODEL_BAKEOFF_NUM_PREDICT_CANDIDATES = (512,)
 MODEL_BAKEOFF_REPEAT_COUNT = 2
 MODEL_BAKEOFF_THINK_FALSE_PREFIXES = ("gemma4:", "qwen3:")
+NON_CRITICAL_HINT_REPAIR_CANDIDATE_MODELS = (
+    "gemma4:12b-it-qat",
+    "qwen3:8b",
+)
+NON_CRITICAL_HINT_NUM_PREDICT_CANDIDATES = (512,)
+NON_CRITICAL_HINT_REPEAT_COUNT = 2
+NON_CRITICAL_HINT_PROMPT_MAX_CHARS = 900
 MINIMAL_CLASSIFICATION_PROMPT_MAX_CHARS = 700
 LABEL_AGREEMENT_PROMPT_MAX_CHARS = 1200
 MODERATE_CONFIDENCE_THRESHOLD = 0.5
-ProbeMode = Literal["full", "minimal", "minimal-repeat", "confidence-calibration", "label-agreement", "model-bakeoff"]
+ProbeMode = Literal[
+    "full",
+    "minimal",
+    "minimal-repeat",
+    "confidence-calibration",
+    "label-agreement",
+    "model-bakeoff",
+    "non-critical-hint-repair",
+]
 
 
 class OutputControlVariant(StrEnum):
@@ -81,10 +96,19 @@ class LabelAgreementProtocolVariant(StrEnum):
     split_fields_v2 = "split_fields_v2"
 
 
+class NonCriticalHintProtocolVariant(StrEnum):
+    compact_json_v1 = "compact_json_v1"
+    explicit_enum_v1 = "explicit_enum_v1"
+
+
 MODEL_BAKEOFF_PROTOCOL_VARIANTS = (LabelAgreementProtocolVariant.split_fields_v2,)
+NON_CRITICAL_HINT_PROTOCOL_VARIANTS = (
+    NonCriticalHintProtocolVariant.compact_json_v1,
+    NonCriticalHintProtocolVariant.explicit_enum_v1,
+)
 
 
-ProtocolVariant = MinimalPromptVariant | LabelAgreementProtocolVariant
+ProtocolVariant = MinimalPromptVariant | LabelAgreementProtocolVariant | NonCriticalHintProtocolVariant
 
 
 class CalibrationAcceptancePolicy(StrEnum):
@@ -97,6 +121,13 @@ class ModelBakeoffSuitability(StrEnum):
     rejected = "rejected"
     non_critical_hint_candidate = "non_critical_hint_candidate"
     heavy_review_candidate = "heavy_review_candidate"
+    needs_more_testing = "needs_more_testing"
+
+
+class NonCriticalHintSuitability(StrEnum):
+    rejected = "rejected"
+    non_critical_hint_candidate = "non_critical_hint_candidate"
+    needs_protocol_repair = "needs_protocol_repair"
     needs_more_testing = "needs_more_testing"
 
 
@@ -167,6 +198,49 @@ class LabelAgreementNext(StrEnum):
     block = "block"
 
 
+class NonCriticalHintTask(StrEnum):
+    code = "code"
+    docs = "docs"
+    question = "question"
+    planning = "planning"
+    debug = "debug"
+    general = "general"
+    unknown = "unknown"
+
+
+class NonCriticalHintProject(StrEnum):
+    jarvisos = "jarvisos"
+    bluerev = "bluerev"
+    coursework = "coursework"
+    personal = "personal"
+    general = "general"
+    unknown = "unknown"
+
+
+class NonCriticalTopicHint(StrEnum):
+    backend = "backend"
+    local_ai = "local_ai"
+    docs = "docs"
+    debugging = "debugging"
+    design = "design"
+    modeling = "modeling"
+    chemical_engineering = "chemical_engineering"
+    public_knowledge = "public_knowledge"
+    planning = "planning"
+    personal_admin = "personal_admin"
+    provider_models = "provider_models"
+    ambiguous = "ambiguous"
+    general = "general"
+
+
+class NonCriticalContextNeed(StrEnum):
+    none = "none"
+    small = "small"
+    medium = "medium"
+    large = "large"
+    clarify = "clarify"
+
+
 class MinimalClassificationOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -185,6 +259,16 @@ class LabelAgreementOutput(BaseModel):
     sensitivity: LabelAgreementSensitivity
     risk: LabelAgreementRisk
     next: LabelAgreementNext
+    confidence: float = Field(ge=0, le=1)
+
+
+class NonCriticalHintOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_hint: NonCriticalHintTask
+    project_hint: NonCriticalHintProject
+    topic_hints: tuple[NonCriticalTopicHint, ...] = Field(min_length=1, max_length=3)
+    context_need_hint: NonCriticalContextNeed
     confidence: float = Field(ge=0, le=1)
 
 
@@ -207,6 +291,15 @@ class ExpectedLabelAgreementClassification(BaseModel):
     next: LabelAgreementNext
 
 
+class ExpectedNonCriticalHintClassification(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_hint: NonCriticalHintTask
+    project_hint: NonCriticalHintProject
+    topic_hints: tuple[NonCriticalTopicHint, ...] = Field(min_length=1, max_length=3)
+    context_need_hint: NonCriticalContextNeed
+
+
 class ClassificationProbeCase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -214,6 +307,7 @@ class ClassificationProbeCase(BaseModel):
     request: ClassificationInput
     expected_minimal: ExpectedMinimalClassification | None = None
     expected_label_agreement: ExpectedLabelAgreementClassification | None = None
+    expected_non_critical_hint: ExpectedNonCriticalHintClassification | None = None
     deterministic_catches: tuple[str, ...] = ()
 
 
@@ -263,6 +357,20 @@ class ClassificationProbeCaseResult(BaseModel):
     project_area: ProjectArea | None = None
     sensitivity_hint: SensitivityHint | None = None
     allowed_next_step: AllowedNextStep | None = None
+    returned_hint_task: NonCriticalHintTask | None = None
+    returned_hint_project: NonCriticalHintProject | None = None
+    returned_topic_hints: tuple[NonCriticalTopicHint, ...] = ()
+    returned_context_need_hint: NonCriticalContextNeed | None = None
+    expected_hint_task: NonCriticalHintTask | None = None
+    expected_hint_project: NonCriticalHintProject | None = None
+    expected_topic_hints: tuple[NonCriticalTopicHint, ...] = ()
+    expected_context_need_hint: NonCriticalContextNeed | None = None
+    hint_task_match: bool | None = None
+    hint_project_match: bool | None = None
+    hint_topic_match: bool | None = None
+    hint_context_need_match: bool | None = None
+    hint_all_fields_match: bool | None = None
+    overconfident_wrong: bool = False
 
 
 class CalibrationCaseSummary(BaseModel):
@@ -361,6 +469,43 @@ class ModelBakeoffModelSummary(BaseModel):
     runtime_approved: bool = False
 
 
+class NonCriticalHintFieldSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    field: str
+    match_count: int = Field(ge=0)
+    total_count: int = Field(ge=0)
+    agreement_rate: float | None = Field(default=None, ge=0, le=1)
+
+
+class NonCriticalHintProtocolSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    model_name: str
+    protocol_variant: NonCriticalHintProtocolVariant
+    output_control: OutputControlVariant
+    attempts: int = Field(ge=0)
+    schema_valid_rate: float | None = Field(default=None, ge=0, le=1)
+    accepted_rate: float | None = Field(default=None, ge=0, le=1)
+    fallback_rate: float | None = Field(default=None, ge=0, le=1)
+    empty_content_count: int = Field(ge=0)
+    thinking_present_count: int = Field(ge=0)
+    done_reason_length_count: int = Field(ge=0)
+    timeout_count: int = Field(ge=0)
+    mean_latency_ms: float | None = Field(default=None, ge=0)
+    p95_latency_ms: int | None = Field(default=None, ge=0)
+    field_agreement: list[NonCriticalHintFieldSummary] = Field(default_factory=list)
+    all_fields_agreement_rate: float | None = Field(default=None, ge=0, le=1)
+    confidence_min: float | None = Field(default=None, ge=0, le=1)
+    confidence_mean: float | None = Field(default=None, ge=0, le=1)
+    confidence_max: float | None = Field(default=None, ge=0, le=1)
+    overconfident_wrong_count: int = Field(ge=0)
+    dominant_fallback_reason: ClassificationFailureCode | None = None
+    fallback_reason_counts: dict[str, int] = Field(default_factory=dict)
+    suitability_label: NonCriticalHintSuitability
+    runtime_approved: bool = False
+
+
 class ClassificationBudgetProbeReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -385,6 +530,7 @@ class ClassificationBudgetProbeReport(BaseModel):
     installed_model_names: tuple[str, ...] = ()
     candidate_model_names: tuple[str, ...] = ()
     model_summaries: list[ModelBakeoffModelSummary] = Field(default_factory=list)
+    hint_summaries: list[NonCriticalHintProtocolSummary] = Field(default_factory=list)
 
 
 AdapterFactory = Callable[[ClassificationAdapterConfig], LocalGemmaClassificationAdapter]
@@ -599,6 +745,91 @@ def label_agreement_probe_cases() -> tuple[ClassificationProbeCase, ...]:
     )
 
 
+def non_critical_hint_probe_cases() -> tuple[ClassificationProbeCase, ...]:
+    return (
+        _case(
+            "jarvisos_debug_task",
+            "Debug a failing JarvisOS backend classification pytest around the local AI probe.",
+            expected_hint=ExpectedNonCriticalHintClassification(
+                task_hint=NonCriticalHintTask.debug,
+                project_hint=NonCriticalHintProject.jarvisos,
+                topic_hints=(NonCriticalTopicHint.backend, NonCriticalTopicHint.local_ai, NonCriticalTopicHint.debugging),
+                context_need_hint=NonCriticalContextNeed.small,
+            ),
+        ),
+        _case(
+            "jarvisos_docs_design_task",
+            "Update JarvisOS local AI design documentation for bounded form protocols.",
+            expected_hint=ExpectedNonCriticalHintClassification(
+                task_hint=NonCriticalHintTask.docs,
+                project_hint=NonCriticalHintProject.jarvisos,
+                topic_hints=(NonCriticalTopicHint.docs, NonCriticalTopicHint.design, NonCriticalTopicHint.local_ai),
+                context_need_hint=NonCriticalContextNeed.small,
+            ),
+        ),
+        _case(
+            "bluerev_modeling_concept_question",
+            "Explain how a BlueRev impeller modeling concept could be reviewed at a high level.",
+            expected_hint=ExpectedNonCriticalHintClassification(
+                task_hint=NonCriticalHintTask.question,
+                project_hint=NonCriticalHintProject.bluerev,
+                topic_hints=(NonCriticalTopicHint.modeling,),
+                context_need_hint=NonCriticalContextNeed.small,
+            ),
+        ),
+        _case(
+            "coursework_chemical_engineering_question",
+            "What does residence time mean in a chemical engineering reactor course?",
+            expected_hint=ExpectedNonCriticalHintClassification(
+                task_hint=NonCriticalHintTask.question,
+                project_hint=NonCriticalHintProject.coursework,
+                topic_hints=(NonCriticalTopicHint.chemical_engineering,),
+                context_need_hint=NonCriticalContextNeed.none,
+            ),
+        ),
+        _case(
+            "generic_public_knowledge_question",
+            "What is Euler integration in a generic numerical methods explanation?",
+            expected_hint=ExpectedNonCriticalHintClassification(
+                task_hint=NonCriticalHintTask.question,
+                project_hint=NonCriticalHintProject.general,
+                topic_hints=(NonCriticalTopicHint.public_knowledge,),
+                context_need_hint=NonCriticalContextNeed.none,
+            ),
+        ),
+        _case(
+            "ambiguous_short_request",
+            "help",
+            expected_hint=ExpectedNonCriticalHintClassification(
+                task_hint=NonCriticalHintTask.unknown,
+                project_hint=NonCriticalHintProject.unknown,
+                topic_hints=(NonCriticalTopicHint.ambiguous,),
+                context_need_hint=NonCriticalContextNeed.clarify,
+            ),
+        ),
+        _case(
+            "personal_admin_planning_request",
+            "Help organize a personal weekly admin plan.",
+            expected_hint=ExpectedNonCriticalHintClassification(
+                task_hint=NonCriticalHintTask.planning,
+                project_hint=NonCriticalHintProject.personal,
+                topic_hints=(NonCriticalTopicHint.personal_admin, NonCriticalTopicHint.planning),
+                context_need_hint=NonCriticalContextNeed.small,
+            ),
+        ),
+        _case(
+            "model_provider_discussion",
+            "Compare local Gemma and Qwen models for JarvisOS advisory classification hints.",
+            expected_hint=ExpectedNonCriticalHintClassification(
+                task_hint=NonCriticalHintTask.planning,
+                project_hint=NonCriticalHintProject.jarvisos,
+                topic_hints=(NonCriticalTopicHint.local_ai, NonCriticalTopicHint.provider_models),
+                context_need_hint=NonCriticalContextNeed.medium,
+            ),
+        ),
+    )
+
+
 def build_budget_probe_report(
     *,
     mode: ProbeMode = "full",
@@ -752,6 +983,68 @@ def build_model_bakeoff_probe_report(
     )
 
 
+def build_non_critical_hint_repair_report(
+    *,
+    endpoint_url: str = DEFAULT_CLASSIFICATION_ENDPOINT_URL,
+    timeout_seconds: float = DEFAULT_CLASSIFICATION_TIMEOUT_SECONDS,
+    installed_model_names: Iterable[str] | None = None,
+    installed_model_fetcher: InstalledModelFetcher | None = None,
+    adapter_factory: AdapterFactory = LocalGemmaClassificationAdapter,
+    created_at_utc: datetime | None = None,
+) -> ClassificationBudgetProbeReport:
+    installed = tuple(installed_model_names) if installed_model_names is not None else tuple(
+        (installed_model_fetcher or _ollama_installed_model_names)(endpoint_url, timeout_seconds)
+    )
+    candidate_models = _allowed_non_critical_hint_candidates(installed)
+    probe_cases = non_critical_hint_probe_cases()
+    results: list[ClassificationProbeCaseResult] = []
+    for model_name in candidate_models:
+        canonical_control = _canonical_non_critical_hint_output_control(model_name)
+        model_results = _non_critical_hint_case_results(
+            model_name=model_name,
+            endpoint_url=endpoint_url,
+            timeout_seconds=timeout_seconds,
+            output_control=canonical_control,
+            cases=probe_cases,
+            adapter_factory=adapter_factory,
+        )
+        results.extend(model_results)
+        if (
+            canonical_control != OutputControlVariant.think_false
+            and _model_supports_think_false(model_name)
+            and _needs_think_false_diagnostic(model_results)
+        ):
+            results.extend(
+                _non_critical_hint_case_results(
+                    model_name=model_name,
+                    endpoint_url=endpoint_url,
+                    timeout_seconds=timeout_seconds,
+                    output_control=OutputControlVariant.think_false,
+                    cases=probe_cases,
+                    adapter_factory=adapter_factory,
+                )
+            )
+
+    created_at = created_at_utc or datetime.now(UTC)
+    return ClassificationBudgetProbeReport(
+        mode="non-critical-hint-repair",
+        created_at_utc=created_at.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        model_name="non-critical-hint-repair",
+        endpoint=ClassificationAdapterConfig(endpoint_url=endpoint_url).endpoint_url,
+        temperature=DEFAULT_CLASSIFICATION_TEMPERATURE,
+        timeout_seconds=timeout_seconds,
+        num_predict_variants=NON_CRITICAL_HINT_NUM_PREDICT_CANDIDATES,
+        output_control_variants=_used_output_controls(results),
+        protocol_variants=NON_CRITICAL_HINT_PROTOCOL_VARIANTS,
+        repeat_count=NON_CRITICAL_HINT_REPEAT_COUNT,
+        case_ids=tuple(case.case_id for case in probe_cases),
+        results=results,
+        installed_model_names=installed,
+        candidate_model_names=candidate_models,
+        hint_summaries=_non_critical_hint_summaries(candidate_models, results),
+    )
+
+
 def write_probe_report(report: ClassificationBudgetProbeReport, report_dir: Path | None = None) -> Path:
     target_dir = report_dir or default_report_dir()
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -800,6 +1093,19 @@ def summary_lines(report: ClassificationBudgetProbeReport, report_path: Path) ->
             f"suitability={summary.suitability_label}"
         )
         lines.append(f"model={summary.model_name} field_agreement {fields}")
+    for summary in report.hint_summaries:
+        fields = ",".join(
+            f"{field.field}={field.agreement_rate}" for field in summary.field_agreement
+        )
+        lines.append(
+            f"hint_model={summary.model_name} protocol={summary.protocol_variant} "
+            f"think={summary.output_control} attempts={summary.attempts} "
+            f"schema_valid_rate={summary.schema_valid_rate} accepted_rate={summary.accepted_rate} "
+            f"fallback_rate={summary.fallback_rate} all_fields={summary.all_fields_agreement_rate} "
+            f"mean_latency_ms={summary.mean_latency_ms} p95_latency_ms={summary.p95_latency_ms} "
+            f"overconfident_wrong={summary.overconfident_wrong_count} suitability={summary.suitability_label}"
+        )
+        lines.append(f"hint_model={summary.model_name} protocol={summary.protocol_variant} field_agreement {fields}")
     return lines
 
 
@@ -807,7 +1113,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the manual local classification budget probe.")
     parser.add_argument(
         "--mode",
-        choices=("full", "minimal", "minimal-repeat", "confidence-calibration", "label-agreement", "model-bakeoff"),
+        choices=(
+            "full",
+            "minimal",
+            "minimal-repeat",
+            "confidence-calibration",
+            "label-agreement",
+            "model-bakeoff",
+            "non-critical-hint-repair",
+        ),
         default="full",
     )
     parser.add_argument("--endpoint", default=DEFAULT_CLASSIFICATION_ENDPOINT_URL)
@@ -818,6 +1132,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.mode == "model-bakeoff":
         report = build_model_bakeoff_probe_report(
+            endpoint_url=args.endpoint,
+            timeout_seconds=args.timeout_seconds,
+        )
+    elif args.mode == "non-critical-hint-repair":
+        report = build_non_critical_hint_repair_report(
             endpoint_url=args.endpoint,
             timeout_seconds=args.timeout_seconds,
         )
@@ -840,6 +1159,7 @@ def _case(
     *,
     expected: ExpectedMinimalClassification | None = None,
     expected_label: ExpectedLabelAgreementClassification | None = None,
+    expected_hint: ExpectedNonCriticalHintClassification | None = None,
     deterministic_catches: tuple[str, ...] = (),
 ) -> ClassificationProbeCase:
     return ClassificationProbeCase(
@@ -847,6 +1167,7 @@ def _case(
         request=ClassificationInput(text=text, source=ClassificationSource.manual_test, metadata={"case_id": case_id}),
         expected_minimal=expected,
         expected_label_agreement=expected_label,
+        expected_non_critical_hint=expected_hint,
         deterministic_catches=deterministic_catches,
     )
 
@@ -951,6 +1272,61 @@ def parse_label_agreement_output(response_text: str) -> LabelAgreementOutput:
         raise ClassificationParseError(ClassificationFailureCode.non_object_json, "model output must be a JSON object")
     try:
         return LabelAgreementOutput.model_validate(parsed)
+    except ValidationError as exc:
+        code = (
+            ClassificationFailureCode.extra_fields
+            if any(error.get("type") == "extra_forbidden" for error in exc.errors())
+            else ClassificationFailureCode.schema_invalid
+        )
+        raise ClassificationParseError(code, exc.errors()[0]["msg"]) from exc
+
+
+def build_non_critical_hint_prompt(
+    request: ClassificationInput,
+    *,
+    variant: NonCriticalHintProtocolVariant = NonCriticalHintProtocolVariant.compact_json_v1,
+) -> str:
+    fields = (
+        "task_hint=code|docs|question|planning|debug|general|unknown. "
+        "project_hint=jarvisos|bluerev|coursework|personal|general|unknown. "
+        "topic_hints list choose 1-3 from backend|local_ai|docs|debugging|design|modeling|"
+        "chemical_engineering|public_knowledge|planning|personal_admin|provider_models|ambiguous|general. "
+        "context_need_hint=none|small|medium|large|clarify. confidence=0..1. "
+    )
+    if variant == NonCriticalHintProtocolVariant.explicit_enum_v1:
+        prompt = (
+            "Return only JSON. No markdown. No reasoning. "
+            "Keys only: task_hint, project_hint, topic_hints, context_need_hint, confidence. "
+            "These are low-stakes advisory metadata hints only. "
+            "Do not add other keys. "
+            f"{fields}"
+            "Use unknown/clarify for ambiguous short input. "
+            f"text={request.text}"
+        )
+    else:
+        prompt = (
+            "JSON only. No explanation. "
+            "Keys: task_hint, project_hint, topic_hints, context_need_hint, confidence. "
+            f"{fields}"
+            f"text={request.text}"
+        )
+    if len(prompt) > NON_CRITICAL_HINT_PROMPT_MAX_CHARS:
+        raise ValueError("non-critical hint prompt exceeds diagnostic budget")
+    return prompt
+
+
+def parse_non_critical_hint_output(response_text: str) -> NonCriticalHintOutput:
+    text = response_text.strip()
+    if not text:
+        raise ClassificationParseError(ClassificationFailureCode.empty_content, "model output was empty")
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ClassificationParseError(ClassificationFailureCode.invalid_json, exc.msg) from exc
+    if not isinstance(parsed, dict):
+        raise ClassificationParseError(ClassificationFailureCode.non_object_json, "model output must be a JSON object")
+    try:
+        return NonCriticalHintOutput.model_validate(parsed)
     except ValidationError as exc:
         code = (
             ClassificationFailureCode.extra_fields
@@ -1316,6 +1692,8 @@ def _synthetic_minimal_failure(
 
 
 def _default_variants(mode: ProbeMode) -> tuple[int, ...]:
+    if mode == "non-critical-hint-repair":
+        return NON_CRITICAL_HINT_NUM_PREDICT_CANDIDATES
     if mode == "model-bakeoff":
         return MODEL_BAKEOFF_NUM_PREDICT_CANDIDATES
     if mode == "label-agreement":
@@ -1330,6 +1708,8 @@ def _default_variants(mode: ProbeMode) -> tuple[int, ...]:
 
 
 def _default_cases(mode: ProbeMode) -> tuple[ClassificationProbeCase, ...]:
+    if mode == "non-critical-hint-repair":
+        return non_critical_hint_probe_cases()
     if mode == "model-bakeoff":
         return label_agreement_probe_cases()
     if mode == "label-agreement":
@@ -1347,6 +1727,8 @@ def _validate_variants(mode: ProbeMode, variants: tuple[int, ...]) -> None:
 
 
 def _repeat_count(mode: ProbeMode) -> int:
+    if mode == "non-critical-hint-repair":
+        return NON_CRITICAL_HINT_REPEAT_COUNT
     if mode == "model-bakeoff":
         return MODEL_BAKEOFF_REPEAT_COUNT
     if mode == "label-agreement":
@@ -1357,6 +1739,8 @@ def _repeat_count(mode: ProbeMode) -> int:
 
 
 def _output_control_variants(mode: ProbeMode) -> tuple[OutputControlVariant, ...]:
+    if mode == "non-critical-hint-repair":
+        return (OutputControlVariant.default, OutputControlVariant.think_false)
     if mode == "model-bakeoff":
         return (OutputControlVariant.default, OutputControlVariant.think_false)
     if mode == "label-agreement":
@@ -1369,6 +1753,8 @@ def _output_control_variants(mode: ProbeMode) -> tuple[OutputControlVariant, ...
 
 
 def _protocol_variants(mode: ProbeMode) -> tuple[ProtocolVariant, ...]:
+    if mode == "non-critical-hint-repair":
+        return NON_CRITICAL_HINT_PROTOCOL_VARIANTS
     if mode == "model-bakeoff":
         return MODEL_BAKEOFF_PROTOCOL_VARIANTS
     if mode == "label-agreement":
@@ -1640,6 +2026,363 @@ def _model_bakeoff_suitability(summary: ModelBakeoffModelSummary) -> ModelBakeof
     if agreements.get("task", 0) >= 0.75 and agreements.get("project", 0) >= 0.625:
         return ModelBakeoffSuitability.needs_more_testing
     return ModelBakeoffSuitability.rejected
+
+
+def _allowed_non_critical_hint_candidates(installed_model_names: Iterable[str]) -> tuple[str, ...]:
+    installed = set(installed_model_names)
+    return tuple(model_name for model_name in NON_CRITICAL_HINT_REPAIR_CANDIDATE_MODELS if model_name in installed)
+
+
+def _canonical_non_critical_hint_output_control(model_name: str) -> OutputControlVariant:
+    return OutputControlVariant.think_false if model_name.startswith("gemma4:") else OutputControlVariant.default
+
+
+def _non_critical_hint_case_results(
+    *,
+    model_name: str,
+    endpoint_url: str,
+    timeout_seconds: float,
+    output_control: OutputControlVariant,
+    cases: tuple[ClassificationProbeCase, ...],
+    adapter_factory: AdapterFactory,
+) -> list[ClassificationProbeCaseResult]:
+    results: list[ClassificationProbeCaseResult] = []
+    config = ClassificationAdapterConfig(
+        endpoint_url=endpoint_url,
+        model_name=model_name,
+        timeout_seconds=timeout_seconds,
+        max_output_tokens=NON_CRITICAL_HINT_NUM_PREDICT_CANDIDATES[0],
+        temperature=DEFAULT_CLASSIFICATION_TEMPERATURE,
+    )
+    for repeat_index in range(1, NON_CRITICAL_HINT_REPEAT_COUNT + 1):
+        try:
+            adapter = _build_adapter(
+                config=config,
+                adapter_factory=adapter_factory,
+                output_control=output_control,
+            )
+        except Exception:
+            for protocol_variant in NON_CRITICAL_HINT_PROTOCOL_VARIANTS:
+                results.extend(
+                    _non_critical_hint_failure_result(
+                        case=case,
+                        model_name=model_name,
+                        endpoint_url=endpoint_url,
+                        repeat_index=repeat_index,
+                        output_control=output_control,
+                        protocol_variant=protocol_variant,
+                        fallback_reason=ClassificationFailureCode.http_error,
+                    )
+                    for case in cases
+                )
+            continue
+        for protocol_variant in NON_CRITICAL_HINT_PROTOCOL_VARIANTS:
+            for case in cases:
+                results.append(
+                    _non_critical_hint_case_result(
+                        case=case,
+                        num_predict=NON_CRITICAL_HINT_NUM_PREDICT_CANDIDATES[0],
+                        adapter=adapter,
+                        repeat_index=repeat_index,
+                        output_control=output_control,
+                        protocol_variant=protocol_variant,
+                    )
+                )
+    return results
+
+
+def _non_critical_hint_case_result(
+    *,
+    case: ClassificationProbeCase,
+    num_predict: int,
+    adapter: LocalGemmaClassificationAdapter,
+    repeat_index: int,
+    output_control: OutputControlVariant,
+    protocol_variant: NonCriticalHintProtocolVariant,
+) -> ClassificationProbeCaseResult:
+    try:
+        prompt = build_non_critical_hint_prompt(case.request, variant=protocol_variant)
+    except ValueError:
+        return _non_critical_hint_failure_result(
+            case=case,
+            model_name=adapter.config.model_name,
+            endpoint_url=adapter.config.endpoint_url,
+            repeat_index=repeat_index,
+            output_control=output_control,
+            protocol_variant=protocol_variant,
+            fallback_reason=ClassificationFailureCode.over_budget_prompt,
+        )
+    adapter_result = adapter.complete(prompt, input_chars=len(case.request.text))
+    diagnostics = adapter_result.diagnostics
+    if not adapter_result.success or adapter_result.response_text is None:
+        return _non_critical_hint_failure_result(
+            case=case,
+            model_name=diagnostics.model_name,
+            endpoint_url=diagnostics.endpoint,
+            repeat_index=repeat_index,
+            output_control=output_control,
+            protocol_variant=protocol_variant,
+            fallback_reason=adapter_result.failure_code or diagnostics.fallback_reason or ClassificationFailureCode.unknown,
+            latency_ms=diagnostics.latency_ms,
+            done_reason=diagnostics.done_reason,
+            raw_content_empty=diagnostics.raw_content_empty,
+            thinking_present=diagnostics.thinking_present,
+        )
+    try:
+        output = parse_non_critical_hint_output(adapter_result.response_text)
+    except ClassificationParseError as exc:
+        return _non_critical_hint_failure_result(
+            case=case,
+            model_name=diagnostics.model_name,
+            endpoint_url=diagnostics.endpoint,
+            repeat_index=repeat_index,
+            output_control=output_control,
+            protocol_variant=protocol_variant,
+            fallback_reason=exc.code,
+            latency_ms=diagnostics.latency_ms,
+            done_reason=diagnostics.done_reason,
+            raw_content_empty=diagnostics.raw_content_empty,
+            thinking_present=diagnostics.thinking_present,
+        )
+    return _non_critical_hint_success(
+        case=case,
+        output=output,
+        num_predict=num_predict,
+        repeat_index=repeat_index,
+        output_control=output_control,
+        protocol_variant=protocol_variant,
+        diagnostics=diagnostics,
+        fallback_reason=ClassificationFailureCode.low_confidence
+        if output.confidence < LOW_CONFIDENCE_THRESHOLD
+        else None,
+    )
+
+
+def _non_critical_hint_success(
+    *,
+    case: ClassificationProbeCase,
+    output: NonCriticalHintOutput,
+    num_predict: int,
+    repeat_index: int,
+    output_control: OutputControlVariant,
+    protocol_variant: NonCriticalHintProtocolVariant,
+    diagnostics: object,
+    fallback_reason: ClassificationFailureCode | None,
+) -> ClassificationProbeCaseResult:
+    expected = case.expected_non_critical_hint
+    matches = _non_critical_hint_matches(output, expected)
+    all_fields_match = all(matches.values()) if matches else None
+    overconfident_wrong = bool(output.confidence >= 0.8 and all_fields_match is False)
+    return ClassificationProbeCaseResult(
+        case_id=case.case_id,
+        num_predict=num_predict,
+        repeat_index=repeat_index,
+        output_control=output_control,
+        think_setting=output_control,
+        protocol_variant=protocol_variant,
+        model_name=diagnostics.model_name,
+        endpoint=diagnostics.endpoint,
+        latency_ms=diagnostics.latency_ms,
+        done_reason=diagnostics.done_reason,
+        raw_content_empty=diagnostics.raw_content_empty,
+        thinking_present=diagnostics.thinking_present,
+        schema_valid=True,
+        accepted=fallback_reason is None,
+        fallback_used=fallback_reason is not None,
+        fallback_reason=fallback_reason,
+        confidence_value=output.confidence,
+        label_agreement=all_fields_match,
+        returned_hint_task=output.task_hint,
+        returned_hint_project=output.project_hint,
+        returned_topic_hints=output.topic_hints,
+        returned_context_need_hint=output.context_need_hint,
+        expected_hint_task=expected.task_hint if expected else None,
+        expected_hint_project=expected.project_hint if expected else None,
+        expected_topic_hints=expected.topic_hints if expected else (),
+        expected_context_need_hint=expected.context_need_hint if expected else None,
+        hint_task_match=matches.get("task_hint"),
+        hint_project_match=matches.get("project_hint"),
+        hint_topic_match=matches.get("topic_hints"),
+        hint_context_need_match=matches.get("context_need_hint"),
+        hint_all_fields_match=all_fields_match,
+        overconfident_wrong=overconfident_wrong,
+    )
+
+
+def _non_critical_hint_failure_result(
+    *,
+    case: ClassificationProbeCase,
+    model_name: str,
+    endpoint_url: str,
+    repeat_index: int,
+    output_control: OutputControlVariant,
+    protocol_variant: NonCriticalHintProtocolVariant,
+    fallback_reason: ClassificationFailureCode,
+    latency_ms: int | None = None,
+    done_reason: str | None = None,
+    raw_content_empty: bool = True,
+    thinking_present: bool | None = None,
+) -> ClassificationProbeCaseResult:
+    expected = case.expected_non_critical_hint
+    return ClassificationProbeCaseResult(
+        case_id=case.case_id,
+        num_predict=NON_CRITICAL_HINT_NUM_PREDICT_CANDIDATES[0],
+        repeat_index=repeat_index,
+        output_control=output_control,
+        think_setting=output_control,
+        protocol_variant=protocol_variant,
+        model_name=model_name,
+        endpoint=ClassificationAdapterConfig(endpoint_url=endpoint_url).endpoint_url,
+        latency_ms=latency_ms,
+        done_reason=done_reason,
+        raw_content_empty=raw_content_empty,
+        thinking_present=thinking_present,
+        schema_valid=False,
+        accepted=False,
+        fallback_used=True,
+        fallback_reason=fallback_reason,
+        label_agreement=False if expected else None,
+        expected_hint_task=expected.task_hint if expected else None,
+        expected_hint_project=expected.project_hint if expected else None,
+        expected_topic_hints=expected.topic_hints if expected else (),
+        expected_context_need_hint=expected.context_need_hint if expected else None,
+        hint_all_fields_match=False if expected else None,
+    )
+
+
+def _non_critical_hint_matches(
+    output: NonCriticalHintOutput,
+    expected: ExpectedNonCriticalHintClassification | None,
+) -> dict[str, bool]:
+    if expected is None:
+        return {}
+    return {
+        "task_hint": output.task_hint == expected.task_hint,
+        "project_hint": output.project_hint == expected.project_hint,
+        "topic_hints": set(output.topic_hints) == set(expected.topic_hints),
+        "context_need_hint": output.context_need_hint == expected.context_need_hint,
+    }
+
+
+def _non_critical_hint_summaries(
+    candidate_models: tuple[str, ...],
+    results: list[ClassificationProbeCaseResult],
+) -> list[NonCriticalHintProtocolSummary]:
+    summaries: list[NonCriticalHintProtocolSummary] = []
+    for model_name in candidate_models:
+        model_results = [item for item in results if item.model_name == model_name]
+        protocol_values = tuple(
+            item
+            for item in NON_CRITICAL_HINT_PROTOCOL_VARIANTS
+            if any(result.protocol_variant == item for result in model_results)
+        )
+        output_controls = tuple(dict.fromkeys(result.output_control for result in model_results))
+        for output_control in output_controls:
+            for protocol_variant in protocol_values:
+                group = [
+                    item
+                    for item in model_results
+                    if item.output_control == output_control and item.protocol_variant == protocol_variant
+                ]
+                summaries.append(_non_critical_hint_summary(model_name, protocol_variant, output_control, group))
+    return summaries
+
+
+def _non_critical_hint_summary(
+    model_name: str,
+    protocol_variant: NonCriticalHintProtocolVariant,
+    output_control: OutputControlVariant,
+    results: list[ClassificationProbeCaseResult],
+) -> NonCriticalHintProtocolSummary:
+    fallback_reasons = Counter(result.fallback_reason for result in results if result.fallback_reason is not None)
+    dominant_reason = fallback_reasons.most_common(1)[0][0] if fallback_reasons else None
+    latencies = [result.latency_ms for result in results if result.latency_ms is not None]
+    confidences = [result.confidence_value for result in results if result.confidence_value is not None]
+    agreement_values = [result.hint_all_fields_match for result in results if result.hint_all_fields_match is not None]
+    summary = NonCriticalHintProtocolSummary(
+        model_name=model_name,
+        protocol_variant=protocol_variant,
+        output_control=output_control,
+        attempts=len(results),
+        schema_valid_rate=_ratio(sum(1 for result in results if result.schema_valid), len(results)),
+        accepted_rate=_ratio(sum(1 for result in results if result.accepted), len(results)),
+        fallback_rate=_ratio(sum(1 for result in results if result.fallback_used), len(results)),
+        empty_content_count=sum(1 for result in results if result.raw_content_empty),
+        thinking_present_count=sum(1 for result in results if result.thinking_present is True),
+        done_reason_length_count=sum(
+            1
+            for result in results
+            if result.done_reason == "length" or result.fallback_reason == ClassificationFailureCode.done_reason_length
+        ),
+        timeout_count=sum(1 for result in results if result.fallback_reason == ClassificationFailureCode.timeout),
+        mean_latency_ms=_mean([float(item) for item in latencies]),
+        p95_latency_ms=_p95(latencies),
+        field_agreement=_non_critical_hint_field_summaries(results),
+        all_fields_agreement_rate=_ratio(sum(1 for item in agreement_values if item), len(agreement_values)),
+        confidence_min=min(confidences) if confidences else None,
+        confidence_mean=_mean(confidences),
+        confidence_max=max(confidences) if confidences else None,
+        overconfident_wrong_count=sum(1 for result in results if result.overconfident_wrong),
+        dominant_fallback_reason=dominant_reason,
+        fallback_reason_counts=dict(sorted((reason.value, count) for reason, count in fallback_reasons.items())),
+        suitability_label=NonCriticalHintSuitability.needs_more_testing,
+        runtime_approved=False,
+    )
+    return summary.model_copy(update={"suitability_label": _non_critical_hint_suitability(summary)})
+
+
+def _non_critical_hint_field_summaries(
+    results: list[ClassificationProbeCaseResult],
+) -> list[NonCriticalHintFieldSummary]:
+    fields = {
+        "task_hint": "hint_task_match",
+        "project_hint": "hint_project_match",
+        "topic_hints": "hint_topic_match",
+        "context_need_hint": "hint_context_need_match",
+    }
+    summaries: list[NonCriticalHintFieldSummary] = []
+    for field, attr in fields.items():
+        values = [getattr(result, attr) for result in results if getattr(result, attr) is not None]
+        match_count = sum(1 for item in values if item)
+        summaries.append(
+            NonCriticalHintFieldSummary(
+                field=field,
+                match_count=match_count,
+                total_count=len(values),
+                agreement_rate=_ratio(match_count, len(values)),
+            )
+        )
+    return summaries
+
+
+def _non_critical_hint_suitability(summary: NonCriticalHintProtocolSummary) -> NonCriticalHintSuitability:
+    if summary.attempts == 0:
+        return NonCriticalHintSuitability.rejected
+    if (
+        summary.timeout_count == summary.attempts
+        or summary.schema_valid_rate is None
+        or summary.schema_valid_rate < 0.5
+    ):
+        return NonCriticalHintSuitability.rejected
+    if (
+        summary.empty_content_count
+        or summary.thinking_present_count
+        or summary.done_reason_length_count
+        or summary.fallback_rate is None
+        or summary.fallback_rate > 0.2
+    ):
+        return NonCriticalHintSuitability.needs_protocol_repair
+    if summary.overconfident_wrong_count:
+        return NonCriticalHintSuitability.needs_protocol_repair
+    if (
+        summary.schema_valid_rate >= 0.95
+        and (summary.accepted_rate or 0) >= 0.95
+        and (summary.all_fields_agreement_rate or 0) >= 0.75
+    ):
+        return NonCriticalHintSuitability.non_critical_hint_candidate
+    if (summary.all_fields_agreement_rate or 0) >= 0.6:
+        return NonCriticalHintSuitability.needs_more_testing
+    return NonCriticalHintSuitability.needs_protocol_repair
 
 
 def _p95(values: list[int]) -> int | None:

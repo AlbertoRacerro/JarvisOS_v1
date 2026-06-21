@@ -404,6 +404,38 @@ Decision:
 - Do not swap the runtime classification utility to another model yet.
 - Use the bakeoff evidence to design the next milestone around protocol repair and non-critical hint evaluation, not route/UI/provider/tool/memory/retrieval expansion.
 
+### 1C-W - Cross-Model Non-Critical Hint Protocol Repair
+
+1C-W added a bounded manual `--mode non-critical-hint-repair` diagnostic. It compares only `gemma4:12b-it-qat` and `qwen3:8b` on eight fixed synthetic case IDs, two compact hint-only protocol variants, two repeats, temperature `0`, and `num_predict=512`. The schema excludes `risk`, `next`, `sensitivity`, provider/tool/memory/retrieval/route/execution fields, and free-text rationale. The report stores case IDs and aggregate metrics only; it does not persist raw prompts, raw case text, or raw model output.
+
+Report:
+
+- `backend/local_eval_reports/classification_budget_probe_non-critical-hint-repair_20260621T062100.json`
+
+Observed non-critical hint result:
+
+| Model | Protocol | Think | Attempts | Schema-valid | Accepted | All-fields agreement | Mean latency | Overconfident wrong | Suitability |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `gemma4:12b-it-qat` | compact JSON | `think:false` | 16 | 81.2% | 68.8% | 12.5% | 5236 ms | 9 | needs protocol repair |
+| `gemma4:12b-it-qat` | explicit enum | `think:false` | 16 | 87.5% | 75% | 12.5% | 4125 ms | 10 | needs protocol repair |
+| `qwen3:8b` | compact JSON | default | 16 | 81.2% | 68.8% | 12.5% | 7980 ms | 9 | needs protocol repair |
+| `qwen3:8b` | explicit enum | default | 16 | 75% | 62.5% | 0% | 7608 ms | 8 | needs protocol repair |
+| `qwen3:8b` | compact JSON | `think:false` | 16 | 87.5% | 87.5% | 25% | 3383 ms | 10 | needs protocol repair |
+| `qwen3:8b` | explicit enum | `think:false` | 16 | 87.5% | 75% | 37.5% | 3362 ms | 6 | needs protocol repair |
+
+Interpretation:
+
+- Removing safety-critical fields improved the scope of the diagnostic, but did not produce reliable semantic agreement.
+- `project_hint` was strong across most rows; `task_hint`, `topic_hints`, and `context_need_hint` remained unstable.
+- Qwen3 8B with `think:false` and the explicit enum protocol was the strongest row by all-fields agreement, latency, and lower overconfident-wrong count.
+- Neither Qwen3 8B nor Gemma 12B is approved as a runtime authority or reliable non-critical hint candidate yet.
+
+Decision:
+
+- Keep the 1C-U boundary intact.
+- Continue protocol repair before wiring any model output into routes, UI, memory, retrieval, provider routing, tool execution, or safety decisions.
+- The next repair should simplify topic/context expectations or split topic hints from task/project hints so failures are easier to isolate.
+
 ## Raw Report Retention Rule
 
 Do not delete raw D9, D9R, D10B, D10B-R, or D10C reports until this document and the ADR log are deliberately updated to preserve their conclusions.
@@ -442,6 +474,7 @@ Current implementation status:
 - 1C-T shows split-field labels improve some sensitivity/risk signals but still leave too many accepted risky mismatches. 12B must not own safety-critical `risk` or `next` decisions.
 - 1C-U restricts 12B classification output to non-critical advisory semantic hints. Safety/risk/next/provider/tool/memory/retrieval decisions remain JarvisOS policy or review-gate decisions.
 - 1C-V compares installed local candidates on the split-field diagnostic. All candidates remain rejected for runtime classification; `qwen3:8b` is the most useful next protocol-repair comparison model, but not approved for runtime authority.
+- 1C-W removes safety-critical fields and tests non-critical advisory hints only. The best row is `qwen3:8b` with `think:false` and explicit enums, but all candidates still need protocol repair.
 - The corrected architecture is form-driven local intelligence: Gemma performs semantic reasoning locally; JarvisOS provides showcase files, form schemas, structural validation, retries, persistence, promotion policy, and audit.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
@@ -454,6 +487,7 @@ The accepted next local AI sequence is:
 1B-R-LIVE  Manual Gemma 12B classification probe
 1C         Classification live probe analysis and roadmap rebase
 1C-V       Local model bakeoff for form-driven classification
+1C-W       Cross-model non-critical hint protocol repair
 1D         Gemma-facing showcase files design
 1E         Form protocol catalog design
 1F         Structural validator + retry loop design

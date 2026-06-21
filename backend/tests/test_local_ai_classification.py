@@ -42,14 +42,21 @@ from app.modules.local_ai.classification.probe_classification_budget import (
     LABEL_AGREEMENT_REPEAT_COUNT,
     MODEL_BAKEOFF_NUM_PREDICT_CANDIDATES,
     MODEL_BAKEOFF_REPEAT_COUNT,
+    NON_CRITICAL_HINT_NUM_PREDICT_CANDIDATES,
+    NON_CRITICAL_HINT_REPEAT_COUNT,
     MINIMAL_DIAGNOSTIC_NUM_PREDICT_CANDIDATES,
     MINIMAL_REPEAT_NUM_PREDICT_CANDIDATES,
     CalibrationAcceptancePolicy,
     LabelAgreementProtocolVariant,
     MinimalPromptVariant,
     ModelBakeoffSuitability,
+    NonCriticalHintOutput,
+    NonCriticalHintProtocolVariant,
+    NonCriticalHintSuitability,
     OutputControlVariant,
     REPORT_SCHEMA_VERSION,
+    build_non_critical_hint_prompt,
+    build_non_critical_hint_repair_report,
     build_model_bakeoff_probe_report,
     build_label_agreement_prompt,
     build_minimal_classification_prompt,
@@ -58,8 +65,10 @@ from app.modules.local_ai.classification.probe_classification_budget import (
     default_probe_cases,
     label_agreement_probe_cases,
     minimal_probe_cases,
+    non_critical_hint_probe_cases,
     parse_label_agreement_output,
     parse_minimal_classification_output,
+    parse_non_critical_hint_output,
     summary_lines,
     write_probe_report,
 )
@@ -373,6 +382,36 @@ class PerfectBakeoffAdapter:
         )
 
 
+class FakeNonCriticalHintAdapter:
+    def __init__(self, config: ClassificationAdapterConfig) -> None:
+        self.config = config
+
+    def complete(self, prompt: str, *, input_chars: int = 0) -> ClassificationAdapterResult:
+        content = json.dumps(_non_critical_hint_payload_for_prompt(prompt))
+        return ClassificationAdapterResult(
+            success=True,
+            model_name=self.config.model_name,
+            runtime_endpoint=self.config.endpoint_url,
+            diagnostics=ClassificationAttemptDiagnostics(
+                model_name=self.config.model_name,
+                endpoint=self.config.endpoint_url,
+                prompt_chars=len(prompt),
+                input_chars=input_chars,
+                max_output_tokens=self.config.max_output_tokens,
+                temperature=self.config.temperature,
+                timeout_seconds=self.config.timeout_seconds,
+                latency_ms=8,
+                raw_content_empty=False,
+                thinking_present=False,
+                done_reason="stop",
+                schema_valid=False,
+                fallback_used=False,
+                fallback_reason=None,
+            ),
+            response_text=content,
+        )
+
+
 def _minimal_payload_for_prompt(prompt: str) -> dict[str, object]:
     if "text=help" in prompt:
         return {
@@ -562,6 +601,81 @@ def _perfect_label_agreement_payload_for_prompt(prompt: str) -> dict[str, object
         "risk": "needs_review",
         "next": "review",
         "confidence": 0.9,
+    }
+
+
+def _non_critical_hint_payload_for_prompt(prompt: str) -> dict[str, object]:
+    case_text = prompt.rsplit("text=", 1)[-1]
+    if case_text == "help":
+        return {
+            "task_hint": "unknown",
+            "project_hint": "unknown",
+            "topic_hints": ["ambiguous"],
+            "context_need_hint": "clarify",
+            "confidence": 0.9,
+        }
+    if "failing JarvisOS backend classification pytest" in case_text:
+        return {
+            "task_hint": "debug",
+            "project_hint": "jarvisos",
+            "topic_hints": ["backend", "local_ai", "debugging"],
+            "context_need_hint": "small",
+            "confidence": 0.9,
+        }
+    if "design documentation" in case_text:
+        return {
+            "task_hint": "docs",
+            "project_hint": "jarvisos",
+            "topic_hints": ["docs", "design", "local_ai"],
+            "context_need_hint": "small",
+            "confidence": 0.9,
+        }
+    if "BlueRev impeller modeling concept" in case_text:
+        return {
+            "task_hint": "question",
+            "project_hint": "bluerev",
+            "topic_hints": ["modeling"],
+            "context_need_hint": "small",
+            "confidence": 0.9,
+        }
+    if "residence time" in case_text:
+        return {
+            "task_hint": "question",
+            "project_hint": "coursework",
+            "topic_hints": ["chemical_engineering"],
+            "context_need_hint": "none",
+            "confidence": 0.9,
+        }
+    if "Euler integration" in case_text:
+        return {
+            "task_hint": "question",
+            "project_hint": "general",
+            "topic_hints": ["public_knowledge"],
+            "context_need_hint": "none",
+            "confidence": 0.9,
+        }
+    if "weekly admin" in case_text:
+        return {
+            "task_hint": "planning",
+            "project_hint": "personal",
+            "topic_hints": ["personal_admin", "planning"],
+            "context_need_hint": "small",
+            "confidence": 0.9,
+        }
+    if "Gemma and Qwen models" in case_text:
+        return {
+            "task_hint": "planning",
+            "project_hint": "jarvisos",
+            "topic_hints": ["local_ai", "provider_models"],
+            "context_need_hint": "medium",
+            "confidence": 0.9,
+        }
+    return {
+        "task_hint": "general",
+        "project_hint": "unknown",
+        "topic_hints": ["general"],
+        "context_need_hint": "small",
+        "confidence": 0.6,
     }
 
 
@@ -1443,6 +1557,134 @@ def test_model_bakeoff_safety_fields_are_diagnostic_and_no_model_is_runtime_appr
     }
     assert all(result.returned_label_risk is not None for result in report.results)
     assert all(result.returned_label_next is not None for result in report.results)
+
+
+def test_non_critical_hint_schema_excludes_authority_and_safety_fields() -> None:
+    assert set(NonCriticalHintOutput.model_fields) == {
+        "task_hint",
+        "project_hint",
+        "topic_hints",
+        "context_need_hint",
+        "confidence",
+    }
+    forbidden_fields = {
+        "risk",
+        "next",
+        "sensitivity",
+        "provider",
+        "tool",
+        "memory",
+        "retrieval",
+        "route",
+        "execution",
+        "rationale",
+    }
+    assert forbidden_fields.isdisjoint(NonCriticalHintOutput.model_fields)
+
+    prompt = build_non_critical_hint_prompt(
+        ClassificationInput(text="Debug a JarvisOS local AI test.", source=ClassificationSource.manual_test),
+        variant=NonCriticalHintProtocolVariant.explicit_enum_v1,
+    )
+    parsed = parse_non_critical_hint_output(
+        json.dumps(
+            {
+                "task_hint": "debug",
+                "project_hint": "jarvisos",
+                "topic_hints": ["local_ai", "debugging"],
+                "context_need_hint": "small",
+                "confidence": 0.9,
+            }
+        )
+    )
+
+    assert len(prompt) <= 900
+    assert parsed.task_hint == "debug"
+    with pytest.raises(ClassificationParseError) as extra:
+        parse_non_critical_hint_output(
+            json.dumps(
+                {
+                    "task_hint": "debug",
+                    "project_hint": "jarvisos",
+                    "topic_hints": ["local_ai"],
+                    "context_need_hint": "small",
+                    "confidence": 0.9,
+                    "risk": "safe",
+                }
+            )
+        )
+    assert extra.value.code == ClassificationFailureCode.extra_fields
+
+
+def test_non_critical_hint_repair_compares_only_intended_models() -> None:
+    report = build_non_critical_hint_repair_report(
+        installed_model_names=(
+            "gemma4:12b-it-qat",
+            "gemma4:31b-it-qat",
+            "qwen3:8b",
+            "qwen3:14b",
+            "mistral-small3.2:24b",
+        ),
+        adapter_factory=FakeNonCriticalHintAdapter,
+        created_at_utc=datetime(2026, 6, 21, 11, 0, tzinfo=UTC),
+    )
+
+    assert report.mode == "non-critical-hint-repair"
+    assert report.candidate_model_names == ("gemma4:12b-it-qat", "qwen3:8b")
+    assert "gemma4:31b-it-qat" not in report.candidate_model_names
+    assert "qwen3:14b" not in report.candidate_model_names
+    assert "mistral-small3.2:24b" not in report.candidate_model_names
+    assert report.num_predict_variants == NON_CRITICAL_HINT_NUM_PREDICT_CANDIDATES
+    assert report.repeat_count == NON_CRITICAL_HINT_REPEAT_COUNT
+    assert report.protocol_variants == (
+        NonCriticalHintProtocolVariant.compact_json_v1,
+        NonCriticalHintProtocolVariant.explicit_enum_v1,
+    )
+
+
+def test_non_critical_hint_report_omits_raw_text_and_has_protocol_aggregates() -> None:
+    cases = non_critical_hint_probe_cases()
+    report = build_non_critical_hint_repair_report(
+        installed_model_names=("gemma4:12b-it-qat", "qwen3:8b"),
+        adapter_factory=FakeNonCriticalHintAdapter,
+        created_at_utc=datetime(2026, 6, 21, 11, 15, tzinfo=UTC),
+    )
+    lines = summary_lines(report, Path("report.json"))
+
+    assert len(cases) == 8
+    assert len(report.results) == len(cases) * 2 * 2 * 2
+    assert len(report.hint_summaries) == 4
+    assert {summary.model_name for summary in report.hint_summaries} == {"gemma4:12b-it-qat", "qwen3:8b"}
+    assert {summary.protocol_variant for summary in report.hint_summaries} == set(report.protocol_variants)
+    assert all(len(summary.field_agreement) == 4 for summary in report.hint_summaries)
+    assert all(summary.runtime_approved is False for summary in report.hint_summaries)
+    assert all(summary.suitability_label == NonCriticalHintSuitability.non_critical_hint_candidate for summary in report.hint_summaries)
+    assert any("hint_model=gemma4:12b-it-qat" in line for line in lines)
+
+    serialized = report.model_dump_json()
+    for case in cases:
+        assert case.case_id in serialized
+        assert case.request.text not in serialized
+    assert "messages" not in serialized
+    assert "prompt" not in serialized
+    assert "response_text" not in serialized
+    assert '"risk"' not in serialized
+    assert '"next"' not in serialized
+    assert '"sensitivity"' not in serialized
+
+
+def test_non_critical_hint_mode_cannot_runtime_approve_even_perfect_output() -> None:
+    report = build_non_critical_hint_repair_report(
+        installed_model_names=("gemma4:12b-it-qat",),
+        adapter_factory=FakeNonCriticalHintAdapter,
+        created_at_utc=datetime(2026, 6, 21, 11, 30, tzinfo=UTC),
+    )
+
+    assert report.hint_summaries
+    assert all(summary.suitability_label == NonCriticalHintSuitability.non_critical_hint_candidate for summary in report.hint_summaries)
+    assert all(summary.runtime_approved is False for summary in report.hint_summaries)
+    assert all(result.returned_label_risk is None for result in report.results)
+    assert all(result.returned_label_next is None for result in report.results)
+    assert all(result.returned_label_sensitivity is None for result in report.results)
 
 
 def test_probe_rejects_non_local_endpoint_and_noncanonical_variants() -> None:
