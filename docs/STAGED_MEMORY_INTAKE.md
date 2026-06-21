@@ -205,6 +205,33 @@ These channels are diagnostic only. They must not be copied into canonical
 memory, and they cannot authorize tools, providers, retrieval, memory writes,
 actions, routes, final sensitivity, or canonical promotion.
 
+## Hybrid Field Ownership
+
+Fast intake uses hybrid ownership instead of asking a local model to own every
+field. The durable rule is:
+
+```text
+models may propose intake hints;
+JarvisOS validates, owns policy, and decides;
+no intake field authorizes runtime action.
+```
+
+JarvisOS owns source metadata, schema versioning, raw-text preservation links,
+runtime approval, memory-write authorization, retrieval authorization, tool
+authorization, provider authorization, route selection, final sensitivity
+decisions, and canonical promotion.
+
+Deterministic rules are first owner for obvious signals such as numbers or
+metrics, code or command mentions, project/artifact mentions, source/literature
+references, obvious secret detection, and obvious status phrases. AI remains
+useful only as advisory input for semantically subtle preferences, decisions,
+assumptions, constraints, questions, action requests, previous-context
+references, and hybrid bucket hints.
+
+The detailed field ownership policy is documented in:
+
+- `docs/HYBRID_INTAKE_FIELD_OWNERSHIP.md`
+
 ## Later Memory Card Types
 
 The following cards are later enrichment targets, not write-time requirements:

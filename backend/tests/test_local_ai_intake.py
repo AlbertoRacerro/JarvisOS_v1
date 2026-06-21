@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from app.modules.local_ai.classification.adapter import ClassificationAdapterConfig, ClassificationAdapterResult
 from app.modules.local_ai.classification.contracts import ClassificationAttemptDiagnostics, ClassificationFailureCode
 from app.modules.local_ai.intake.probe_fast_intake import (
+    FAST_INTAKE_DETERMINISTIC_MODE,
     FAST_INTAKE_FLAT_MODE,
     FAST_INTAKE_FLAT_SCHEMA_VERSION,
     FAST_INTAKE_SCHEMA_VERSION,
@@ -30,6 +31,7 @@ from app.modules.local_ai.intake.probe_fast_intake import (
     Uncertainty,
     UncertaintyReason,
     UncertainField,
+    build_fast_intake_deterministic_report,
     build_fast_intake_flat_prompt,
     build_fast_intake_prompt,
     build_fast_intake_smoke_report,
@@ -39,6 +41,12 @@ from app.modules.local_ai.intake.probe_fast_intake import (
     parse_fast_intake_output,
     summary_lines,
     write_probe_report,
+)
+from app.modules.local_ai.intake.deterministic_signals import (
+    FIELD_OWNERSHIP,
+    FieldOwnership,
+    deterministic_fast_intake_baseline,
+    field_ownership_for,
 )
 
 
@@ -688,3 +696,127 @@ def test_fast_intake_schema_components_are_broad_not_final_cards() -> None:
     assert ExplicitMentions()
     assert ShortDescription(surface_summary="", preserved_user_phrasing=())
     assert Uncertainty(needs_enrichment=False, needs_user_confirmation=False, reason=UncertaintyReason.none)
+
+
+def test_deterministic_fast_intake_detects_secret_as_hard_override() -> None:
+    flat = deterministic_fast_intake_baseline("Do not store this placeholder secret: API_KEY_PLACEHOLDER_12345.")
+
+    assert isinstance(flat, FastIntakeFlatSignalV0)
+    assert flat.contains_numbers_or_metrics is True
+    assert flat.mentions_code_or_command is True
+    assert flat.storage_relevance == StorageRelevance.high
+    assert flat.sensitivity_bucket == SensitivityBucket.secret
+    assert flat.needs_user_confirmation is True
+    assert flat.uncertainty_reason == UncertaintyReason.sensitive
+    assert flat.advisory_note == ""
+
+
+def test_deterministic_fast_intake_maps_project_and_casual_cases() -> None:
+    jarvisos = deterministic_fast_intake_baseline("JarvisOS FastIntake should keep source IDs deterministic.")
+    bluerev = deterministic_fast_intake_baseline(
+        "For BlueRev, ETFE is a candidate tube material, but it is not decided yet."
+    )
+    casual = deterministic_fast_intake_baseline("ok grazie")
+
+    assert jarvisos.project_bucket == ProjectBucket.jarvisos
+    assert jarvisos.mentions_project_or_artifact is True
+    assert bluerev.project_bucket == ProjectBucket.bluerev
+    assert bluerev.domain_bucket == DomainBucket.reactor_design
+    assert bluerev.contains_assumption is True
+    assert bluerev.status_bucket == StatusBucket.not_decided
+    assert casual.storage_relevance == StorageRelevance.low
+    assert casual.needs_enrichment is False
+    assert casual.mentions_project_or_artifact is False
+
+
+def test_deterministic_fast_intake_scores_obvious_project_and_result_fields() -> None:
+    flat = deterministic_fast_intake_baseline(
+        "Codex report: commit c137038 passed 299 backend tests and git diff --check."
+    )
+
+    assert flat.contains_test_result is True
+    assert flat.contains_numbers_or_metrics is True
+    assert flat.mentions_code_or_command is True
+    assert flat.mentions_project_or_artifact is True
+    assert flat.record_bucket == RecordBucket.result
+    assert flat.project_bucket == ProjectBucket.jarvisos
+    assert flat.domain_bucket == DomainBucket.software
+    assert flat.status_bucket == StatusBucket.accepted
+
+
+def test_deterministic_fast_intake_maps_not_decided_candidate_as_assumption() -> None:
+    flat = deterministic_fast_intake_baseline("This is a candidate approach, not decided yet.")
+
+    assert flat.contains_assumption is True
+    assert flat.record_bucket == RecordBucket.assumption
+    assert flat.status_bucket == StatusBucket.not_decided
+    assert flat.needs_user_confirmation is True
+
+
+def test_deterministic_field_ownership_covers_flat_schema_and_authority_boundaries() -> None:
+    missing = set(FastIntakeFlatSignalV0.model_fields) - set(FIELD_OWNERSHIP)
+
+    assert missing == set()
+    assert field_ownership_for("source.input_id") == FieldOwnership.DETERMINISTIC_OWNED
+    assert field_ownership_for("runtime_approved") == FieldOwnership.DETERMINISTIC_OWNED
+    assert field_ownership_for("memory_write_authorization") == FieldOwnership.DETERMINISTIC_OWNED
+    assert field_ownership_for("retrieval_authorization") == FieldOwnership.DETERMINISTIC_OWNED
+    assert field_ownership_for("provider_authorization") == FieldOwnership.DETERMINISTIC_OWNED
+    assert field_ownership_for("tool_authorization") == FieldOwnership.DETERMINISTIC_OWNED
+    assert field_ownership_for("final_sensitivity_decision") == FieldOwnership.DETERMINISTIC_OWNED
+    assert field_ownership_for("sensitivity_downgrade") == FieldOwnership.UNTRUSTED_FOR_RUNTIME
+    assert field_ownership_for("tool_execution") == FieldOwnership.UNTRUSTED_FOR_RUNTIME
+    assert field_ownership_for("provider_execution") == FieldOwnership.UNTRUSTED_FOR_RUNTIME
+    assert field_ownership_for("advisory_note") == FieldOwnership.DIAGNOSTIC_ONLY
+    assert field_ownership_for("advisory_note_present") == FieldOwnership.DIAGNOSTIC_ONLY
+    assert field_ownership_for("advisory_note_chars") == FieldOwnership.DIAGNOSTIC_ONLY
+
+
+def test_deterministic_baseline_report_omits_raw_text_and_compares_previous_flat_report(tmp_path: Path) -> None:
+    previous = build_fast_intake_smoke_report(
+        mode=FAST_INTAKE_FLAT_MODE,
+        installed_model_names=("qwen3:8b", "gemma4:12b-it-qat"),
+        adapter_factory=FakeFlatFastIntakeAdapter,
+        created_at_utc=datetime(2026, 6, 21, 14, 0, tzinfo=UTC),
+    )
+    previous_path = write_probe_report(previous, tmp_path)
+    report = build_fast_intake_deterministic_report(
+        previous_report_path=previous_path,
+        created_at_utc=datetime(2026, 6, 21, 15, 0, tzinfo=UTC),
+    )
+    path = write_probe_report(report, tmp_path)
+    serialized = report.model_dump_json()
+    lines = summary_lines(report, path)
+
+    assert path.name == "fast_intake_probe_deterministic-baseline_20260621T150000.json"
+    assert report.mode == FAST_INTAKE_DETERMINISTIC_MODE
+    assert report.endpoint == "local-deterministic"
+    assert report.profile_ids == ("deterministic_fast_intake_baseline",)
+    assert report.candidate_model_names == ("deterministic_rules",)
+    assert report.output_control.value == "deterministic"
+    assert len(report.results) == len(fast_intake_probe_cases())
+    assert len(report.comparison_summaries) == len(previous.profile_summaries)
+    assert all(result.schema_valid for result in report.results)
+    assert all(result.runtime_approved is False for result in report.results)
+    assert all(summary.runtime_approved is False for summary in report.profile_summaries)
+    assert any("comparison baseline=deterministic_fast_intake_baseline" in line for line in lines)
+
+    for case in fast_intake_probe_cases():
+        assert case.case_id in serialized
+        assert case.text not in serialized
+        assert build_fast_intake_flat_prompt(case) not in serialized
+    assert "API_KEY_PLACEHOLDER_12345" not in serialized
+    assert "messages" not in serialized
+    assert "response_text" not in serialized
+
+
+def test_deterministic_baseline_report_does_not_require_previous_report() -> None:
+    report = build_fast_intake_deterministic_report(
+        previous_report_path=Path("does-not-exist.json"),
+        created_at_utc=datetime(2026, 6, 21, 15, 30, tzinfo=UTC),
+    )
+
+    assert report.comparison_summaries == []
+    assert report.installed_model_names == ()
+    assert report.profile_summaries[0].attempts == len(fast_intake_probe_cases())
+    assert report.profile_summaries[0].runtime_approved is False

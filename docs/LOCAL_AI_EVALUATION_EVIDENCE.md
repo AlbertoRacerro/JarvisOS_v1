@@ -567,6 +567,66 @@ Decision:
 - Continue evaluating observable-flag extraction separately from broad bucket assignment.
 - Consider deterministic heuristics for cheap observable intake and reserve AI for lazy enrichment or reviewed proposed memory until bucket agreement improves.
 
+### 1C-Z-S - Deterministic Baseline and Hybrid Intake Field Ownership
+
+1C-Z-S adds a deterministic baseline helper and field ownership policy for fast
+staged memory intake. The baseline uses local rules only and does not call
+Ollama, external APIs, routes, frontend code, provider integrations, memory
+runtime, retrieval runtime, Context Pack Broker runtime, tool execution, or
+automatic memory writes.
+
+Policy:
+
+- `docs/HYBRID_INTAKE_FIELD_OWNERSHIP.md`
+
+Report:
+
+- `backend/local_eval_reports/fast_intake_probe_deterministic-baseline_20260621T115144.json`
+
+Observed deterministic baseline result:
+
+| Profile | Attempts | Schema-valid | Accepted | Fallback | Observable flags | Buckets | Storage | Record | Project | Domain | Sensitivity | Status | Overconfident wrong | Suitability |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `deterministic_fast_intake_baseline` | 12 | 100% | 100% | 0% | 91.7% | 65.3% | 91.7% | 83.3% | 58.3% | 66.7% | 33.3% | 58.3% | 0 | needs more testing |
+
+Comparison against the existing flat smoke report:
+
+| Compared profile | Model | Observable delta | Bucket delta | Deterministic better fields | AI better fields |
+| --- | --- | ---: | ---: | --- | --- |
+| `qwen8_fast_intake_think_false` | `qwen3:8b` | +1.5 pp | +18.3 pp | storage relevance, record bucket, domain bucket, sensitivity bucket | project bucket, status bucket |
+| `gemma12_fast_intake_think_false` | `gemma4:12b-it-qat` | +1.5 pp | +3.2 pp | storage relevance, record bucket | project bucket, domain bucket, sensitivity bucket, status bucket |
+
+Interpretation:
+
+- Deterministic rules are strong enough to own hard observable baselines and
+  obvious override fields, especially storage relevance and record bucket
+  relative to the local model smoke-flat runs.
+- Broad semantic buckets remain mixed. AI can still be useful as advisory input
+  for domain, sensitivity, project, and status hints, but those hints are not
+  runtime authority.
+- Confidence for the deterministic baseline is intentionally calibrated below
+  the existing overconfidence threshold because hybrid bucket fields are not
+  final semantic truth.
+- Reports remain sanitized: case IDs and returned fields are stored, but raw
+  prompt text, raw case text, raw model output, messages, secret placeholder
+  values, and raw advisory notes are not persisted.
+
+Decision:
+
+- JarvisOS deterministic policy owns provenance, runtime authority, final
+  sensitivity, memory-write authorization, retrieval authorization, provider
+  authorization, tool authorization, route selection, and canonical promotion.
+- Deterministic rules are first owner for obvious numbers/metrics,
+  code/commands, project/artifact references, source/literature references,
+  obvious secrets, and obvious status phrases.
+- AI output remains advisory for semantically subtle preferences, decisions,
+  assumptions, constraints, questions, action requests, previous-context
+  references, and hybrid bucket hints.
+- Do not wire the deterministic baseline or AI fast-intake hints into routes,
+  UI, memory runtime, retrieval runtime, Context Pack Broker runtime, provider
+  routing, tool execution, automatic memory writes, canonical promotion, or
+  safety decisions.
+
 ## Raw Report Retention Rule
 
 Do not delete raw D9, D9R, D10B, D10B-R, or D10C reports until this document and the ADR log are deliberately updated to preserve their conclusions.
@@ -610,6 +670,7 @@ Current implementation status:
 - 1C-Y pauses classifier repair as the main memory foundation and moves to fast staged memory intake: preserve raw input and cheap broad signals first, then enrich only when retrieval, decisions, conflicts, sensitivity, promotion, or full context packs justify deeper reasoning.
 - 1C-Z tests the documented `FastIntakeSignalForm` live against Qwen3 8B and Gemma 12B. Both profiles were rejected with 0% schema-valid output, so observable flags and broad buckets remain unmeasured until the smoke contract is simplified or repaired.
 - 1C-Z-R repairs the smoke contract with a flat AI-facing schema normalized into the canonical nested form. Schema validity improves to 91.7% for both Qwen3 8B and Gemma 12B, and observable flags become measurable at 90.2% agreement, but broad buckets and overconfident wrong outputs still need repair before runtime use.
+- 1C-Z-S defines hybrid intake field ownership and adds a deterministic baseline report mode. Deterministic rules own provenance, runtime authority, hard observable overrides, obvious secret detection, and obvious status phrases; AI remains advisory for semantic hints and hybrid bucket suggestions.
 - The corrected architecture is form-driven local intelligence: Gemma performs semantic reasoning locally; JarvisOS provides showcase files, form schemas, structural validation, retries, persistence, promotion policy, and audit.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
@@ -627,6 +688,7 @@ The accepted next local AI sequence is:
 1C-Y       Fast staged memory intake design
 1C-Z       FastIntakeSignalForm smoke test
 1C-Z-R     Flat FastIntake smoke contract repair
+1C-Z-S     Deterministic baseline and hybrid intake ownership
 1D         Gemma-facing showcase files design
 1E         Form protocol catalog design
 1F         Structural validator + retry loop design

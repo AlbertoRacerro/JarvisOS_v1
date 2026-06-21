@@ -34,6 +34,7 @@ FAST_INTAKE_SCHEMA_VERSION = "fast_intake_v0"
 FAST_INTAKE_FLAT_SCHEMA_VERSION = "fast_intake_flat_v0"
 FAST_INTAKE_MODE = "smoke"
 FAST_INTAKE_FLAT_MODE = "smoke-flat"
+FAST_INTAKE_DETERMINISTIC_MODE = "deterministic-baseline"
 FAST_INTAKE_NUM_PREDICT = 512
 FAST_INTAKE_TIMEOUT_SECONDS = 15.0
 FAST_INTAKE_PROMPT_MAX_CHARS = 5000
@@ -72,6 +73,7 @@ FAST_INTAKE_FLAT_TOP_LEVEL_FIELDS = (
 
 class OutputControlVariant(StrEnum):
     think_false = "think_false"
+    deterministic = "deterministic"
 
 
 class OutputRootType(StrEnum):
@@ -468,6 +470,26 @@ class FastIntakeProfileSummary(BaseModel):
     runtime_approved: bool = False
 
 
+class FastIntakeComparisonSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    baseline_profile_id: str
+    compared_profile_id: str
+    compared_model_name: str
+    observable_flag_agreement_delta: float | None = None
+    bucket_agreement_delta: float | None = None
+    storage_relevance_accuracy_delta: float | None = None
+    record_bucket_accuracy_delta: float | None = None
+    project_bucket_accuracy_delta: float | None = None
+    domain_bucket_accuracy_delta: float | None = None
+    sensitivity_bucket_accuracy_delta: float | None = None
+    status_bucket_accuracy_delta: float | None = None
+    deterministic_better_fields: tuple[str, ...] = ()
+    ai_better_fields: tuple[str, ...] = ()
+    tied_fields: tuple[str, ...] = ()
+    runtime_approved: bool = False
+
+
 class FastIntakeProbeReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -486,6 +508,7 @@ class FastIntakeProbeReport(BaseModel):
     case_ids: tuple[str, ...]
     results: list[FastIntakeCaseResult]
     profile_summaries: list[FastIntakeProfileSummary]
+    comparison_summaries: list[FastIntakeComparisonSummary] = Field(default_factory=list)
 
 
 AdapterFactory = Callable[[ClassificationAdapterConfig], LocalGemmaClassificationAdapter]
@@ -773,6 +796,44 @@ def build_fast_intake_smoke_report(
     )
 
 
+def build_fast_intake_deterministic_report(
+    *,
+    cases: Iterable[FastIntakeProbeCase] | None = None,
+    previous_report_path: Path | None = None,
+    created_at_utc: datetime | None = None,
+) -> FastIntakeProbeReport:
+    case_list = tuple(cases or fast_intake_probe_cases())
+    profile = FastIntakeProfile(
+        profile_id="deterministic_fast_intake_baseline",
+        model_name="deterministic_rules",
+        output_control=OutputControlVariant.deterministic,
+        num_predict=1,
+        timeout_seconds=0.1,
+    )
+    results = [_deterministic_case_result(case, profile) for case in case_list]
+    summary = _profile_summary(profile, results)
+    comparison_path = previous_report_path if previous_report_path is not None else _latest_report_path(FAST_INTAKE_FLAT_MODE)
+    previous_report = _load_report(comparison_path)
+    created = created_at_utc or datetime.now(UTC)
+    return FastIntakeProbeReport(
+        mode=FAST_INTAKE_DETERMINISTIC_MODE,
+        created_at_utc=created.isoformat(),
+        endpoint="local-deterministic",
+        temperature=0,
+        timeout_seconds=0.1,
+        num_predict=1,
+        repeat_count=1,
+        output_control=OutputControlVariant.deterministic,
+        installed_model_names=(),
+        candidate_model_names=(profile.model_name,),
+        profile_ids=(profile.profile_id,),
+        case_ids=tuple(case.case_id for case in case_list),
+        results=results,
+        profile_summaries=[summary],
+        comparison_summaries=_comparison_summaries(summary, previous_report),
+    )
+
+
 def fast_intake_probe_cases() -> tuple[FastIntakeProbeCase, ...]:
     return (
         _case(
@@ -1009,6 +1070,16 @@ def summary_lines(report: FastIntakeProbeReport, report_path: Path) -> list[str]
                 f"sensitivity={summary.sensitivity_bucket_accuracy},status={summary.status_bucket_accuracy}"
             )
         )
+    for comparison in report.comparison_summaries:
+        lines.append(
+            (
+                f"comparison baseline={comparison.baseline_profile_id} compared={comparison.compared_profile_id} "
+                f"model={comparison.compared_model_name} observable_delta="
+                f"{comparison.observable_flag_agreement_delta} bucket_delta={comparison.bucket_agreement_delta} "
+                f"deterministic_better={comparison.deterministic_better_fields} "
+                f"ai_better={comparison.ai_better_fields} tied={comparison.tied_fields}"
+            )
+        )
     return lines
 
 
@@ -1016,15 +1087,151 @@ def default_report_dir() -> Path:
     return Path(__file__).resolve().parents[4] / "local_eval_reports"
 
 
+def _latest_report_path(mode: str) -> Path | None:
+    matches = sorted(default_report_dir().glob(f"{REPORT_FILENAME_PREFIX}_{mode}_*.json"))
+    if not matches:
+        return None
+    return matches[-1]
+
+
+def _load_report(path: Path | None) -> FastIntakeProbeReport | None:
+    if path is None or not path.exists():
+        return None
+    return FastIntakeProbeReport.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+def _comparison_summaries(
+    baseline: FastIntakeProfileSummary,
+    previous_report: FastIntakeProbeReport | None,
+) -> list[FastIntakeComparisonSummary]:
+    if previous_report is None:
+        return []
+    return [_comparison_summary(baseline, compared) for compared in previous_report.profile_summaries]
+
+
+def _comparison_summary(
+    baseline: FastIntakeProfileSummary,
+    compared: FastIntakeProfileSummary,
+) -> FastIntakeComparisonSummary:
+    metric_pairs = {
+        "storage_relevance": (baseline.storage_relevance_accuracy, compared.storage_relevance_accuracy),
+        "record_bucket": (baseline.record_bucket_accuracy, compared.record_bucket_accuracy),
+        "project_bucket": (baseline.project_bucket_accuracy, compared.project_bucket_accuracy),
+        "domain_bucket": (baseline.domain_bucket_accuracy, compared.domain_bucket_accuracy),
+        "sensitivity_bucket": (baseline.sensitivity_bucket_accuracy, compared.sensitivity_bucket_accuracy),
+        "status_bucket": (baseline.status_bucket_accuracy, compared.status_bucket_accuracy),
+    }
+    deterministic_better = tuple(
+        field
+        for field, (baseline_value, compared_value) in metric_pairs.items()
+        if baseline_value is not None and compared_value is not None and baseline_value > compared_value
+    )
+    ai_better = tuple(
+        field
+        for field, (baseline_value, compared_value) in metric_pairs.items()
+        if baseline_value is not None and compared_value is not None and baseline_value < compared_value
+    )
+    tied = tuple(
+        field
+        for field, (baseline_value, compared_value) in metric_pairs.items()
+        if baseline_value is not None and compared_value is not None and baseline_value == compared_value
+    )
+    return FastIntakeComparisonSummary(
+        baseline_profile_id=baseline.profile_id,
+        compared_profile_id=compared.profile_id,
+        compared_model_name=compared.model_name,
+        observable_flag_agreement_delta=_delta(
+            baseline.observable_flag_agreement_rate,
+            compared.observable_flag_agreement_rate,
+        ),
+        bucket_agreement_delta=_delta(baseline.bucket_agreement_rate, compared.bucket_agreement_rate),
+        storage_relevance_accuracy_delta=_delta(
+            baseline.storage_relevance_accuracy,
+            compared.storage_relevance_accuracy,
+        ),
+        record_bucket_accuracy_delta=_delta(baseline.record_bucket_accuracy, compared.record_bucket_accuracy),
+        project_bucket_accuracy_delta=_delta(baseline.project_bucket_accuracy, compared.project_bucket_accuracy),
+        domain_bucket_accuracy_delta=_delta(baseline.domain_bucket_accuracy, compared.domain_bucket_accuracy),
+        sensitivity_bucket_accuracy_delta=_delta(
+            baseline.sensitivity_bucket_accuracy,
+            compared.sensitivity_bucket_accuracy,
+        ),
+        status_bucket_accuracy_delta=_delta(baseline.status_bucket_accuracy, compared.status_bucket_accuracy),
+        deterministic_better_fields=deterministic_better,
+        ai_better_fields=ai_better,
+        tied_fields=tied,
+        runtime_approved=False,
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Manual local FastIntakeSignalForm smoke probe.")
-    parser.add_argument("--mode", choices=(FAST_INTAKE_MODE, FAST_INTAKE_FLAT_MODE), default=FAST_INTAKE_MODE)
+    parser.add_argument(
+        "--mode",
+        choices=(FAST_INTAKE_MODE, FAST_INTAKE_FLAT_MODE, FAST_INTAKE_DETERMINISTIC_MODE),
+        default=FAST_INTAKE_MODE,
+    )
     args = parser.parse_args(argv)
-    report = build_fast_intake_smoke_report(mode=args.mode)
+    if args.mode == FAST_INTAKE_DETERMINISTIC_MODE:
+        report = build_fast_intake_deterministic_report()
+    else:
+        report = build_fast_intake_smoke_report(mode=args.mode)
     path = write_probe_report(report)
     for line in summary_lines(report, path):
         print(line)
     return 0
+
+
+def _deterministic_case_result(case: FastIntakeProbeCase, profile: FastIntakeProfile) -> FastIntakeCaseResult:
+    from app.modules.local_ai.intake.deterministic_signals import deterministic_fast_intake_baseline
+
+    flat_output = deterministic_fast_intake_baseline(case.text)
+    output = normalize_flat_to_fast_intake_form(flat_output, case)
+    flag_rate = _observable_flag_agreement(output, case.expected)
+    bucket_matches = _bucket_matches(output, case.expected)
+    bucket_rate = _ratio(sum(1 for item in bucket_matches.values() if item), len(bucket_matches))
+    mention_rate = _mentions_partial_match(output, case.expected)
+    overconfident_wrong = _overconfident_wrong(output, flag_rate, bucket_matches)
+    return FastIntakeCaseResult(
+        case_id=case.case_id,
+        profile_id=profile.profile_id,
+        model_name=profile.model_name,
+        output_control=profile.output_control,
+        num_predict=profile.num_predict,
+        latency_ms=0,
+        done_reason="deterministic",
+        raw_content_empty=False,
+        thinking_present=False,
+        schema_valid=True,
+        accepted=True,
+        fallback_used=False,
+        fallback_reason=None,
+        confidence_observable=output.confidence.observable,
+        confidence_bucket_assignment=output.confidence.bucket_assignment,
+        observable_flag_agreement_rate=flag_rate,
+        bucket_agreement_rate=bucket_rate,
+        explicit_mentions_partial_match_rate=mention_rate,
+        storage_relevance_match=bucket_matches["storage_relevance"],
+        record_bucket_match=bucket_matches["record_bucket"],
+        project_bucket_match=bucket_matches["project_bucket"],
+        domain_bucket_match=bucket_matches["domain_bucket"],
+        sensitivity_bucket_match=bucket_matches["sensitivity_bucket"],
+        status_bucket_match=bucket_matches["status_bucket"],
+        returned_observable_flags=output.observable_flags.model_dump(),
+        returned_broad_storage_buckets={
+            key: str(value) for key, value in output.broad_storage_buckets.model_dump().items()
+        },
+        returned_explicit_mentions=_redacted_mentions(output.explicit_mentions),
+        returned_uncertainty=output.uncertainty.model_dump(),
+        short_description_present=False,
+        phrasing_count=0,
+        uncertain_fields=tuple(item.value for item in flat_output.uncertain_fields),
+        advisory_note_present=False,
+        advisory_note_chars=0,
+        validation_diagnostics=None,
+        overconfident_wrong=overconfident_wrong,
+        runtime_approved=False,
+    )
 
 
 def _case_result(
@@ -1500,6 +1707,12 @@ def _mean(values: list[float]) -> float | None:
 
 def _mean_present(values: list[float]) -> float | None:
     return _mean(values)
+
+
+def _delta(left: float | None, right: float | None) -> float | None:
+    if left is None or right is None:
+        return None
+    return round(left - right, 3)
 
 
 def _ratio(numerator: int, denominator: int) -> float | None:
