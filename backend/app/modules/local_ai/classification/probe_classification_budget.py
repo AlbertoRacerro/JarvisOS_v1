@@ -11,10 +11,13 @@ import json
 from collections import Counter
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
+from math import ceil
 from enum import StrEnum
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
+import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.modules.local_ai.classification.adapter import ClassificationAdapterConfig, LocalGemmaClassificationAdapter
@@ -47,10 +50,20 @@ CONFIDENCE_CALIBRATION_NUM_PREDICT_CANDIDATES = (512,)
 CONFIDENCE_CALIBRATION_REPEAT_COUNT = 3
 LABEL_AGREEMENT_NUM_PREDICT_CANDIDATES = (512,)
 LABEL_AGREEMENT_REPEAT_COUNT = 3
+MODEL_BAKEOFF_CANDIDATE_MODELS = (
+    "gemma4:12b-it-qat",
+    "gemma4:31b-it-qat",
+    "qwen3:8b",
+    "qwen3:14b",
+    "mistral-small3.2:24b",
+)
+MODEL_BAKEOFF_NUM_PREDICT_CANDIDATES = (512,)
+MODEL_BAKEOFF_REPEAT_COUNT = 2
+MODEL_BAKEOFF_THINK_FALSE_PREFIXES = ("gemma4:", "qwen3:")
 MINIMAL_CLASSIFICATION_PROMPT_MAX_CHARS = 700
 LABEL_AGREEMENT_PROMPT_MAX_CHARS = 1200
 MODERATE_CONFIDENCE_THRESHOLD = 0.5
-ProbeMode = Literal["full", "minimal", "minimal-repeat", "confidence-calibration", "label-agreement"]
+ProbeMode = Literal["full", "minimal", "minimal-repeat", "confidence-calibration", "label-agreement", "model-bakeoff"]
 
 
 class OutputControlVariant(StrEnum):
@@ -68,6 +81,9 @@ class LabelAgreementProtocolVariant(StrEnum):
     split_fields_v2 = "split_fields_v2"
 
 
+MODEL_BAKEOFF_PROTOCOL_VARIANTS = (LabelAgreementProtocolVariant.split_fields_v2,)
+
+
 ProtocolVariant = MinimalPromptVariant | LabelAgreementProtocolVariant
 
 
@@ -75,6 +91,13 @@ class CalibrationAcceptancePolicy(StrEnum):
     strict_current_threshold = "strict_current_threshold"
     moderate_threshold = "moderate_threshold"
     schema_valid_but_low_confidence_as_proposed = "schema_valid_but_low_confidence_as_proposed"
+
+
+class ModelBakeoffSuitability(StrEnum):
+    rejected = "rejected"
+    non_critical_hint_candidate = "non_critical_hint_candidate"
+    heavy_review_candidate = "heavy_review_candidate"
+    needs_more_testing = "needs_more_testing"
 
 
 class MinimalTaskType(StrEnum):
@@ -201,6 +224,7 @@ class ClassificationProbeCaseResult(BaseModel):
     num_predict: int = Field(ge=1, le=512)
     repeat_index: int = Field(default=1, ge=1)
     output_control: OutputControlVariant = OutputControlVariant.default
+    think_setting: OutputControlVariant | None = None
     protocol_variant: ProtocolVariant | None = None
     model_name: str
     endpoint: str
@@ -301,6 +325,42 @@ class LabelAgreementSafetySummary(BaseModel):
     deterministic_catch_rules: dict[str, int] = Field(default_factory=dict)
 
 
+class ModelBakeoffFieldSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    field: str
+    match_count: int = Field(ge=0)
+    total_count: int = Field(ge=0)
+    agreement_rate: float | None = Field(default=None, ge=0, le=1)
+
+
+class ModelBakeoffModelSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    model_name: str
+    attempts: int = Field(ge=0)
+    think_settings: tuple[OutputControlVariant, ...] = ()
+    schema_valid_rate: float | None = Field(default=None, ge=0, le=1)
+    accepted_rate: float | None = Field(default=None, ge=0, le=1)
+    fallback_rate: float | None = Field(default=None, ge=0, le=1)
+    empty_content_count: int = Field(ge=0)
+    thinking_present_count: int = Field(ge=0)
+    done_reason_length_count: int = Field(ge=0)
+    timeout_count: int = Field(ge=0)
+    http_error_count: int = Field(ge=0)
+    mean_latency_ms: float | None = Field(default=None, ge=0)
+    p95_latency_ms: int | None = Field(default=None, ge=0)
+    field_agreement: list[ModelBakeoffFieldSummary] = Field(default_factory=list)
+    risky_mismatch_count: int = Field(ge=0)
+    accepted_risky_mismatch_count: int = Field(ge=0)
+    unsafe_sensitive_false_negative_count: int = Field(ge=0)
+    deterministic_hard_override_catchable_count: int = Field(ge=0)
+    dominant_fallback_reason: ClassificationFailureCode | None = None
+    fallback_reason_counts: dict[str, int] = Field(default_factory=dict)
+    suitability_label: ModelBakeoffSuitability
+    runtime_approved: bool = False
+
+
 class ClassificationBudgetProbeReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -322,9 +382,13 @@ class ClassificationBudgetProbeReport(BaseModel):
     label_field_summaries: list[LabelAgreementFieldSummary] = Field(default_factory=list)
     label_case_summaries: list[LabelAgreementCaseSummary] = Field(default_factory=list)
     label_safety_summary: LabelAgreementSafetySummary | None = None
+    installed_model_names: tuple[str, ...] = ()
+    candidate_model_names: tuple[str, ...] = ()
+    model_summaries: list[ModelBakeoffModelSummary] = Field(default_factory=list)
 
 
 AdapterFactory = Callable[[ClassificationAdapterConfig], LocalGemmaClassificationAdapter]
+InstalledModelFetcher = Callable[[str, float], Iterable[str]]
 
 
 class ProbeOutputControlAdapter(LocalGemmaClassificationAdapter):
@@ -626,6 +690,68 @@ def build_budget_probe_report(
     )
 
 
+def build_model_bakeoff_probe_report(
+    *,
+    endpoint_url: str = DEFAULT_CLASSIFICATION_ENDPOINT_URL,
+    timeout_seconds: float = DEFAULT_CLASSIFICATION_TIMEOUT_SECONDS,
+    installed_model_names: Iterable[str] | None = None,
+    installed_model_fetcher: InstalledModelFetcher | None = None,
+    adapter_factory: AdapterFactory = LocalGemmaClassificationAdapter,
+    created_at_utc: datetime | None = None,
+) -> ClassificationBudgetProbeReport:
+    installed = tuple(installed_model_names) if installed_model_names is not None else tuple(
+        (installed_model_fetcher or _ollama_installed_model_names)(endpoint_url, timeout_seconds)
+    )
+    candidate_models = _allowed_bakeoff_candidates(installed)
+    probe_cases = label_agreement_probe_cases()
+    results: list[ClassificationProbeCaseResult] = []
+    for model_name in candidate_models:
+        canonical_control = _canonical_bakeoff_output_control(model_name)
+        model_results = _model_bakeoff_case_results(
+            model_name=model_name,
+            endpoint_url=endpoint_url,
+            timeout_seconds=timeout_seconds,
+            output_control=canonical_control,
+            cases=probe_cases,
+            adapter_factory=adapter_factory,
+        )
+        results.extend(model_results)
+        if (
+            canonical_control != OutputControlVariant.think_false
+            and _model_supports_think_false(model_name)
+            and _needs_think_false_diagnostic(model_results)
+        ):
+            results.extend(
+                _model_bakeoff_case_results(
+                    model_name=model_name,
+                    endpoint_url=endpoint_url,
+                    timeout_seconds=timeout_seconds,
+                    output_control=OutputControlVariant.think_false,
+                    cases=probe_cases,
+                    adapter_factory=adapter_factory,
+                )
+            )
+
+    created_at = created_at_utc or datetime.now(UTC)
+    return ClassificationBudgetProbeReport(
+        mode="model-bakeoff",
+        created_at_utc=created_at.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        model_name="model-bakeoff",
+        endpoint=ClassificationAdapterConfig(endpoint_url=endpoint_url).endpoint_url,
+        temperature=DEFAULT_CLASSIFICATION_TEMPERATURE,
+        timeout_seconds=timeout_seconds,
+        num_predict_variants=MODEL_BAKEOFF_NUM_PREDICT_CANDIDATES,
+        output_control_variants=_used_output_controls(results),
+        protocol_variants=MODEL_BAKEOFF_PROTOCOL_VARIANTS,
+        repeat_count=MODEL_BAKEOFF_REPEAT_COUNT,
+        case_ids=tuple(case.case_id for case in probe_cases),
+        results=results,
+        installed_model_names=installed,
+        candidate_model_names=candidate_models,
+        model_summaries=_model_bakeoff_summaries(candidate_models, results),
+    )
+
+
 def write_probe_report(report: ClassificationBudgetProbeReport, report_dir: Path | None = None) -> Path:
     target_dir = report_dir or default_report_dir()
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -661,6 +787,19 @@ def summary_lines(report: ClassificationBudgetProbeReport, report_path: Path) ->
             f"unsafe_sensitive_false_negative={safety.unsafe_sensitive_false_negative_count} "
             f"accepted_risky_mismatch={safety.accepted_risky_mismatch_count}"
         )
+    for summary in report.model_summaries:
+        fields = ",".join(
+            f"{field.field}={field.agreement_rate}" for field in summary.field_agreement
+        )
+        lines.append(
+            f"model={summary.model_name} attempts={summary.attempts} "
+            f"schema_valid_rate={summary.schema_valid_rate} accepted_rate={summary.accepted_rate} "
+            f"fallback_rate={summary.fallback_rate} mean_latency_ms={summary.mean_latency_ms} "
+            f"p95_latency_ms={summary.p95_latency_ms} risky_mismatch={summary.risky_mismatch_count} "
+            f"accepted_risky_mismatch={summary.accepted_risky_mismatch_count} "
+            f"suitability={summary.suitability_label}"
+        )
+        lines.append(f"model={summary.model_name} field_agreement {fields}")
     return lines
 
 
@@ -668,7 +807,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the manual local classification budget probe.")
     parser.add_argument(
         "--mode",
-        choices=("full", "minimal", "minimal-repeat", "confidence-calibration", "label-agreement"),
+        choices=("full", "minimal", "minimal-repeat", "confidence-calibration", "label-agreement", "model-bakeoff"),
         default="full",
     )
     parser.add_argument("--endpoint", default=DEFAULT_CLASSIFICATION_ENDPOINT_URL)
@@ -677,12 +816,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--report-dir", type=Path, default=default_report_dir())
     args = parser.parse_args(argv)
 
-    report = build_budget_probe_report(
-        mode=args.mode,
-        endpoint_url=args.endpoint,
-        model_name=args.model,
-        timeout_seconds=args.timeout_seconds,
-    )
+    if args.mode == "model-bakeoff":
+        report = build_model_bakeoff_probe_report(
+            endpoint_url=args.endpoint,
+            timeout_seconds=args.timeout_seconds,
+        )
+    else:
+        report = build_budget_probe_report(
+            mode=args.mode,
+            endpoint_url=args.endpoint,
+            model_name=args.model,
+            timeout_seconds=args.timeout_seconds,
+        )
     report_path = write_probe_report(report, args.report_dir)
     for line in summary_lines(report, report_path):
         print(line)
@@ -843,6 +988,7 @@ def _minimal_case_result(
             num_predict=num_predict,
             repeat_index=repeat_index,
             output_control=output_control,
+            think_setting=output_control,
             protocol_variant=protocol_variant,
             model_name=diagnostics.model_name,
             endpoint=diagnostics.endpoint,
@@ -865,6 +1011,7 @@ def _minimal_case_result(
             num_predict=num_predict,
             repeat_index=repeat_index,
             output_control=output_control,
+            think_setting=output_control,
             protocol_variant=protocol_variant,
             model_name=diagnostics.model_name,
             endpoint=diagnostics.endpoint,
@@ -887,6 +1034,7 @@ def _minimal_case_result(
         num_predict=num_predict,
         repeat_index=repeat_index,
         output_control=output_control,
+        think_setting=output_control,
         protocol_variant=protocol_variant,
         model_name=diagnostics.model_name,
         endpoint=diagnostics.endpoint,
@@ -982,6 +1130,7 @@ def _case_result(
         num_predict=num_predict,
         repeat_index=repeat_index,
         output_control=output_control,
+        think_setting=output_control,
         model_name=diagnostics.model_name if diagnostics else DEFAULT_CLASSIFICATION_MODEL_NAME,
         endpoint=diagnostics.endpoint if diagnostics else DEFAULT_CLASSIFICATION_ENDPOINT_URL,
         latency_ms=diagnostics.latency_ms if diagnostics else None,
@@ -1020,6 +1169,7 @@ def _label_agreement_success(
         num_predict=num_predict,
         repeat_index=repeat_index,
         output_control=output_control,
+        think_setting=output_control,
         protocol_variant=protocol_variant,
         model_name=diagnostics.model_name,
         endpoint=diagnostics.endpoint,
@@ -1073,6 +1223,7 @@ def _label_agreement_failure(
         num_predict=num_predict,
         repeat_index=repeat_index,
         output_control=output_control,
+        think_setting=output_control,
         protocol_variant=protocol_variant,
         model_name=diagnostics.model_name,
         endpoint=diagnostics.endpoint,
@@ -1113,6 +1264,7 @@ def _synthetic_label_agreement_failure(
         num_predict=num_predict,
         repeat_index=repeat_index,
         output_control=output_control,
+        think_setting=output_control,
         protocol_variant=protocol_variant,
         model_name=DEFAULT_CLASSIFICATION_MODEL_NAME,
         endpoint=DEFAULT_CLASSIFICATION_ENDPOINT_URL,
@@ -1149,6 +1301,7 @@ def _synthetic_minimal_failure(
         num_predict=num_predict,
         repeat_index=repeat_index,
         output_control=output_control,
+        think_setting=output_control,
         protocol_variant=protocol_variant,
         model_name=DEFAULT_CLASSIFICATION_MODEL_NAME,
         endpoint=DEFAULT_CLASSIFICATION_ENDPOINT_URL,
@@ -1163,6 +1316,8 @@ def _synthetic_minimal_failure(
 
 
 def _default_variants(mode: ProbeMode) -> tuple[int, ...]:
+    if mode == "model-bakeoff":
+        return MODEL_BAKEOFF_NUM_PREDICT_CANDIDATES
     if mode == "label-agreement":
         return LABEL_AGREEMENT_NUM_PREDICT_CANDIDATES
     if mode == "confidence-calibration":
@@ -1175,6 +1330,8 @@ def _default_variants(mode: ProbeMode) -> tuple[int, ...]:
 
 
 def _default_cases(mode: ProbeMode) -> tuple[ClassificationProbeCase, ...]:
+    if mode == "model-bakeoff":
+        return label_agreement_probe_cases()
     if mode == "label-agreement":
         return label_agreement_probe_cases()
     if mode == "confidence-calibration":
@@ -1190,6 +1347,8 @@ def _validate_variants(mode: ProbeMode, variants: tuple[int, ...]) -> None:
 
 
 def _repeat_count(mode: ProbeMode) -> int:
+    if mode == "model-bakeoff":
+        return MODEL_BAKEOFF_REPEAT_COUNT
     if mode == "label-agreement":
         return LABEL_AGREEMENT_REPEAT_COUNT
     if mode == "confidence-calibration":
@@ -1198,6 +1357,8 @@ def _repeat_count(mode: ProbeMode) -> int:
 
 
 def _output_control_variants(mode: ProbeMode) -> tuple[OutputControlVariant, ...]:
+    if mode == "model-bakeoff":
+        return (OutputControlVariant.default, OutputControlVariant.think_false)
     if mode == "label-agreement":
         return (OutputControlVariant.think_false,)
     if mode == "confidence-calibration":
@@ -1208,6 +1369,8 @@ def _output_control_variants(mode: ProbeMode) -> tuple[OutputControlVariant, ...
 
 
 def _protocol_variants(mode: ProbeMode) -> tuple[ProtocolVariant, ...]:
+    if mode == "model-bakeoff":
+        return MODEL_BAKEOFF_PROTOCOL_VARIANTS
     if mode == "label-agreement":
         return (
             LabelAgreementProtocolVariant.split_fields_v1,
@@ -1232,6 +1395,259 @@ def _build_adapter(
     if output_control == OutputControlVariant.think_false and adapter_factory is LocalGemmaClassificationAdapter:
         return ProbeOutputControlAdapter(config, think=False)
     return adapter_factory(config)
+
+
+def _ollama_installed_model_names(endpoint_url: str, timeout_seconds: float) -> tuple[str, ...]:
+    tags_url = _ollama_tags_url(endpoint_url)
+    with httpx.Client(timeout=timeout_seconds) as client:
+        response = client.get(tags_url, timeout=timeout_seconds)
+        response.raise_for_status()
+        payload = response.json()
+    models = payload.get("models", [])
+    if not isinstance(models, list):
+        return ()
+    names: list[str] = []
+    for item in models:
+        if isinstance(item, dict) and isinstance(item.get("name"), str):
+            names.append(item["name"])
+    return tuple(names)
+
+
+def _ollama_tags_url(endpoint_url: str) -> str:
+    endpoint = ClassificationAdapterConfig(endpoint_url=endpoint_url).endpoint_url
+    parsed = urlparse(endpoint)
+    return parsed._replace(path="/api/tags", params="", query="", fragment="").geturl()
+
+
+def _allowed_bakeoff_candidates(installed_model_names: Iterable[str]) -> tuple[str, ...]:
+    installed = set(installed_model_names)
+    return tuple(model_name for model_name in MODEL_BAKEOFF_CANDIDATE_MODELS if model_name in installed)
+
+
+def _canonical_bakeoff_output_control(model_name: str) -> OutputControlVariant:
+    return OutputControlVariant.think_false if model_name.startswith("gemma4:") else OutputControlVariant.default
+
+
+def _model_supports_think_false(model_name: str) -> bool:
+    return model_name.startswith(MODEL_BAKEOFF_THINK_FALSE_PREFIXES)
+
+
+def _needs_think_false_diagnostic(results: list[ClassificationProbeCaseResult]) -> bool:
+    return any(
+        result.fallback_reason not in {ClassificationFailureCode.timeout, ClassificationFailureCode.http_error}
+        and (
+            result.thinking_present is True
+            or result.raw_content_empty
+            or result.done_reason == "length"
+            or result.fallback_reason
+            in {ClassificationFailureCode.thinking_budget_exhausted, ClassificationFailureCode.done_reason_length}
+        )
+        for result in results
+    )
+
+
+def _model_bakeoff_case_results(
+    *,
+    model_name: str,
+    endpoint_url: str,
+    timeout_seconds: float,
+    output_control: OutputControlVariant,
+    cases: tuple[ClassificationProbeCase, ...],
+    adapter_factory: AdapterFactory,
+) -> list[ClassificationProbeCaseResult]:
+    results: list[ClassificationProbeCaseResult] = []
+    config = ClassificationAdapterConfig(
+        endpoint_url=endpoint_url,
+        model_name=model_name,
+        timeout_seconds=timeout_seconds,
+        max_output_tokens=MODEL_BAKEOFF_NUM_PREDICT_CANDIDATES[0],
+        temperature=DEFAULT_CLASSIFICATION_TEMPERATURE,
+    )
+    for repeat_index in range(1, MODEL_BAKEOFF_REPEAT_COUNT + 1):
+        try:
+            adapter = _build_adapter(
+                config=config,
+                adapter_factory=adapter_factory,
+                output_control=output_control,
+            )
+        except Exception:
+            results.extend(
+                _model_bakeoff_failure_result(
+                    case=case,
+                    model_name=model_name,
+                    endpoint_url=endpoint_url,
+                    repeat_index=repeat_index,
+                    output_control=output_control,
+                    fallback_reason=ClassificationFailureCode.http_error,
+                )
+                for case in cases
+            )
+            continue
+        for case in cases:
+            results.append(
+                _label_agreement_case_result(
+                    case=case,
+                    num_predict=MODEL_BAKEOFF_NUM_PREDICT_CANDIDATES[0],
+                    adapter=adapter,
+                    repeat_index=repeat_index,
+                    output_control=output_control,
+                    protocol_variant=MODEL_BAKEOFF_PROTOCOL_VARIANTS[0],
+                )
+            )
+    return results
+
+
+def _model_bakeoff_failure_result(
+    *,
+    case: ClassificationProbeCase,
+    model_name: str,
+    endpoint_url: str,
+    repeat_index: int,
+    output_control: OutputControlVariant,
+    fallback_reason: ClassificationFailureCode,
+) -> ClassificationProbeCaseResult:
+    expected = case.expected_label_agreement
+    return ClassificationProbeCaseResult(
+        case_id=case.case_id,
+        num_predict=MODEL_BAKEOFF_NUM_PREDICT_CANDIDATES[0],
+        repeat_index=repeat_index,
+        output_control=output_control,
+        think_setting=output_control,
+        protocol_variant=MODEL_BAKEOFF_PROTOCOL_VARIANTS[0],
+        model_name=model_name,
+        endpoint=ClassificationAdapterConfig(endpoint_url=endpoint_url).endpoint_url,
+        raw_content_empty=True,
+        schema_valid=False,
+        accepted=False,
+        fallback_used=True,
+        fallback_reason=fallback_reason,
+        label_agreement=False if expected else None,
+        risky_acceptance=False,
+        expected_label_task=expected.task if expected else None,
+        expected_label_project=expected.project if expected else None,
+        expected_label_sensitivity=expected.sensitivity if expected else None,
+        expected_label_risk=expected.risk if expected else None,
+        expected_label_next=expected.next if expected else None,
+        all_fields_match=False if expected else None,
+        risky_mismatch=False,
+        unsafe_sensitive_false_negative=False,
+        deterministic_catchable=False,
+    )
+
+
+def _used_output_controls(results: list[ClassificationProbeCaseResult]) -> tuple[OutputControlVariant, ...]:
+    return tuple(dict.fromkeys(result.output_control for result in results))
+
+
+def _model_bakeoff_summaries(
+    candidate_models: tuple[str, ...],
+    results: list[ClassificationProbeCaseResult],
+) -> list[ModelBakeoffModelSummary]:
+    return [_model_bakeoff_summary(model_name, [item for item in results if item.model_name == model_name]) for model_name in candidate_models]
+
+
+def _model_bakeoff_summary(
+    model_name: str,
+    results: list[ClassificationProbeCaseResult],
+) -> ModelBakeoffModelSummary:
+    fallback_reasons = Counter(result.fallback_reason for result in results if result.fallback_reason is not None)
+    dominant_reason = fallback_reasons.most_common(1)[0][0] if fallback_reasons else None
+    latencies = [result.latency_ms for result in results if result.latency_ms is not None]
+    field_agreement = _model_bakeoff_field_summaries(results)
+    summary = ModelBakeoffModelSummary(
+        model_name=model_name,
+        attempts=len(results),
+        think_settings=tuple(dict.fromkeys(result.output_control for result in results)),
+        schema_valid_rate=_ratio(sum(1 for result in results if result.schema_valid), len(results)),
+        accepted_rate=_ratio(sum(1 for result in results if result.accepted), len(results)),
+        fallback_rate=_ratio(sum(1 for result in results if result.fallback_used), len(results)),
+        empty_content_count=sum(1 for result in results if result.raw_content_empty),
+        thinking_present_count=sum(1 for result in results if result.thinking_present is True),
+        done_reason_length_count=sum(
+            1
+            for result in results
+            if result.done_reason == "length" or result.fallback_reason == ClassificationFailureCode.done_reason_length
+        ),
+        timeout_count=sum(1 for result in results if result.fallback_reason == ClassificationFailureCode.timeout),
+        http_error_count=sum(1 for result in results if result.fallback_reason == ClassificationFailureCode.http_error),
+        mean_latency_ms=_mean([float(item) for item in latencies]),
+        p95_latency_ms=_p95(latencies),
+        field_agreement=field_agreement,
+        risky_mismatch_count=sum(1 for result in results if result.risky_mismatch),
+        accepted_risky_mismatch_count=sum(1 for result in results if result.accepted and result.risky_mismatch),
+        unsafe_sensitive_false_negative_count=sum(1 for result in results if result.unsafe_sensitive_false_negative),
+        deterministic_hard_override_catchable_count=sum(1 for result in results if result.deterministic_catchable),
+        dominant_fallback_reason=dominant_reason,
+        fallback_reason_counts={reason.value: count for reason, count in sorted(fallback_reasons.items())},
+        suitability_label=ModelBakeoffSuitability.needs_more_testing,
+        runtime_approved=False,
+    )
+    return summary.model_copy(update={"suitability_label": _model_bakeoff_suitability(summary)})
+
+
+def _model_bakeoff_field_summaries(results: list[ClassificationProbeCaseResult]) -> list[ModelBakeoffFieldSummary]:
+    fields = {
+        "task": "label_task_match",
+        "project": "label_project_match",
+        "sensitivity": "label_sensitivity_match",
+        "risk": "label_risk_match",
+        "next": "label_next_match",
+    }
+    summaries: list[ModelBakeoffFieldSummary] = []
+    for field, attr in fields.items():
+        values = [getattr(result, attr) for result in results if getattr(result, attr) is not None]
+        match_count = sum(1 for item in values if item)
+        summaries.append(
+            ModelBakeoffFieldSummary(
+                field=field,
+                match_count=match_count,
+                total_count=len(values),
+                agreement_rate=_ratio(match_count, len(values)),
+            )
+        )
+    return summaries
+
+
+def _model_bakeoff_suitability(summary: ModelBakeoffModelSummary) -> ModelBakeoffSuitability:
+    if summary.attempts == 0:
+        return ModelBakeoffSuitability.rejected
+    if (
+        summary.timeout_count
+        or summary.http_error_count
+        or summary.empty_content_count
+        or summary.thinking_present_count
+        or summary.done_reason_length_count
+        or summary.schema_valid_rate is None
+        or summary.schema_valid_rate < 0.95
+    ):
+        return ModelBakeoffSuitability.rejected
+    if summary.fallback_rate is None or summary.accepted_rate is None or summary.fallback_rate > 0.25:
+        return ModelBakeoffSuitability.needs_more_testing
+    if summary.accepted_risky_mismatch_count or summary.unsafe_sensitive_false_negative_count:
+        return ModelBakeoffSuitability.needs_more_testing
+    agreements = {item.field: item.agreement_rate or 0 for item in summary.field_agreement}
+    strong_label_agreement = (
+        agreements.get("task", 0) >= 0.875
+        and agreements.get("project", 0) >= 0.75
+        and agreements.get("sensitivity", 0) >= 0.75
+        and agreements.get("risk", 0) >= 0.75
+        and agreements.get("next", 0) >= 0.75
+    )
+    if strong_label_agreement:
+        if "31b" in summary.model_name or "24b" in summary.model_name or (summary.mean_latency_ms or 0) > 8000:
+            return ModelBakeoffSuitability.heavy_review_candidate
+        return ModelBakeoffSuitability.non_critical_hint_candidate
+    if agreements.get("task", 0) >= 0.75 and agreements.get("project", 0) >= 0.625:
+        return ModelBakeoffSuitability.needs_more_testing
+    return ModelBakeoffSuitability.rejected
+
+
+def _p95(values: list[int]) -> int | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    index = max(0, ceil(0.95 * len(ordered)) - 1)
+    return ordered[index]
 
 
 def _case_summaries(

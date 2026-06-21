@@ -364,6 +364,46 @@ Local model prefetch note:
 - The next planned work is a local model bakeoff using requested Ollama candidates if they are available locally.
 - Model downloads are environment state, not repository artifacts, and are not part of the committed evidence.
 
+### 1C-V - Local Model Bakeoff For Form-Driven Classification
+
+1C-V added a bounded manual `--mode model-bakeoff` diagnostic. It compares only locally installed Ollama candidates on the same eight fixed synthetic split-field classification case IDs, two repeats per model, temperature `0`, and `num_predict=512`. The report stores case IDs and aggregate metrics only; it does not persist raw prompts, raw case text, or raw model output.
+
+Report:
+
+- `backend/local_eval_reports/classification_budget_probe_model-bakeoff_20260621T055745.json`
+
+Observed bakeoff result:
+
+| Model | Attempts | Schema-valid | Accepted | Fallbacks | Mean latency | p95 latency | Risky mismatches | Suitability |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| `gemma4:12b-it-qat` | 16 | 93.8% | 93.8% | 6.2% | 4506 ms | 17377 ms | 8 accepted | rejected |
+| `gemma4:31b-it-qat` | 16 | 0% | 0% | 100% | 17289 ms | 17360 ms | 0 accepted | rejected |
+| `qwen3:8b` | 32 | 62.5% | 62.5% | 37.5% | 5936 ms | 9447 ms | 4 accepted | rejected |
+| `qwen3:14b` | 32 | 81.2% | 81.2% | 18.8% | 7722 ms | 14020 ms | 8 accepted | rejected |
+| `mistral-small3.2:24b` | 16 | 0% | 0% | 100% | 17303 ms | 17348 ms | 0 accepted | rejected |
+
+Field-agreement highlights:
+
+- `gemma4:12b-it-qat`: task 73.3%, project 46.7%, sensitivity 40%, risk 46.7%, next 33.3%.
+- `qwen3:8b`: task 95%, project 70%, sensitivity 50%, risk 75%, next 75%.
+- `qwen3:14b`: task 84.6%, project 61.5%, sensitivity 53.8%, risk 53.8%, next 53.8%.
+- `gemma4:31b-it-qat` and `mistral-small3.2:24b` produced no schema-valid outputs under the bounded 15-second attempt timeout.
+
+Interpretation:
+
+- No model is approved for runtime classification.
+- No model should own risk, next action, permission, provider selection, tool execution, memory write, retrieval, route selection, external calls, final sensitivity, or safety decisions.
+- `qwen3:8b` produced the strongest task agreement and the best overall field agreement, especially under its `think:false` diagnostic variant, but schema validity and accepted risky mismatches remain below a usable bar.
+- `qwen3:14b` produced stable JSON under `think:false`, but its safety-sensitive field agreement regressed and accepted risky mismatches remained too high.
+- `gemma4:12b-it-qat` remains suitable only as a previously bounded non-critical advisory hint path if JarvisOS policy owns all critical decisions; this bakeoff did not improve that position.
+- `gemma4:31b-it-qat` and `mistral-small3.2:24b` are not practical candidates under this bounded probe because every attempt timed out.
+
+Decision:
+
+- Keep the 1C-U boundary intact.
+- Do not swap the runtime classification utility to another model yet.
+- Use the bakeoff evidence to design the next milestone around protocol repair and non-critical hint evaluation, not route/UI/provider/tool/memory/retrieval expansion.
+
 ## Raw Report Retention Rule
 
 Do not delete raw D9, D9R, D10B, D10B-R, or D10C reports until this document and the ADR log are deliberately updated to preserve their conclusions.
@@ -401,6 +441,7 @@ Current implementation status:
 - 1C-S shows confidence calibration is not enough: `think:false` produced 30/30 schema-valid outputs, but high-confidence label mismatches on sensitive and unsafe-style cases mean 12B remains unapproved for runtime classification.
 - 1C-T shows split-field labels improve some sensitivity/risk signals but still leave too many accepted risky mismatches. 12B must not own safety-critical `risk` or `next` decisions.
 - 1C-U restricts 12B classification output to non-critical advisory semantic hints. Safety/risk/next/provider/tool/memory/retrieval decisions remain JarvisOS policy or review-gate decisions.
+- 1C-V compares installed local candidates on the split-field diagnostic. All candidates remain rejected for runtime classification; `qwen3:8b` is the most useful next protocol-repair comparison model, but not approved for runtime authority.
 - The corrected architecture is form-driven local intelligence: Gemma performs semantic reasoning locally; JarvisOS provides showcase files, form schemas, structural validation, retries, persistence, promotion policy, and audit.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
@@ -412,6 +453,7 @@ The accepted next local AI sequence is:
 1B-R       CLI-only classification budget probe
 1B-R-LIVE  Manual Gemma 12B classification probe
 1C         Classification live probe analysis and roadmap rebase
+1C-V       Local model bakeoff for form-driven classification
 1D         Gemma-facing showcase files design
 1E         Form protocol catalog design
 1F         Structural validator + retry loop design

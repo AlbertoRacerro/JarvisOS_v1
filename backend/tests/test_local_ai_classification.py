@@ -40,13 +40,17 @@ from app.modules.local_ai.classification.probe_classification_budget import (
     CONFIDENCE_CALIBRATION_REPEAT_COUNT,
     LABEL_AGREEMENT_NUM_PREDICT_CANDIDATES,
     LABEL_AGREEMENT_REPEAT_COUNT,
+    MODEL_BAKEOFF_NUM_PREDICT_CANDIDATES,
+    MODEL_BAKEOFF_REPEAT_COUNT,
     MINIMAL_DIAGNOSTIC_NUM_PREDICT_CANDIDATES,
     MINIMAL_REPEAT_NUM_PREDICT_CANDIDATES,
     CalibrationAcceptancePolicy,
     LabelAgreementProtocolVariant,
     MinimalPromptVariant,
+    ModelBakeoffSuitability,
     OutputControlVariant,
     REPORT_SCHEMA_VERSION,
+    build_model_bakeoff_probe_report,
     build_label_agreement_prompt,
     build_minimal_classification_prompt,
     build_budget_probe_report,
@@ -285,6 +289,90 @@ class FakeLabelAgreementAdapter:
         )
 
 
+class FakeBakeoffAdapter:
+    def __init__(self, config: ClassificationAdapterConfig) -> None:
+        self.config = config
+
+    def complete(self, prompt: str, *, input_chars: int = 0) -> ClassificationAdapterResult:
+        if self.config.model_name == "qwen3:8b":
+            return ClassificationAdapterResult(
+                success=False,
+                model_name=self.config.model_name,
+                runtime_endpoint=self.config.endpoint_url,
+                diagnostics=ClassificationAttemptDiagnostics(
+                    model_name=self.config.model_name,
+                    endpoint=self.config.endpoint_url,
+                    prompt_chars=len(prompt),
+                    input_chars=input_chars,
+                    max_output_tokens=self.config.max_output_tokens,
+                    temperature=self.config.temperature,
+                    timeout_seconds=self.config.timeout_seconds,
+                    latency_ms=15000,
+                    raw_content_empty=True,
+                    thinking_present=None,
+                    done_reason=None,
+                    schema_valid=False,
+                    fallback_used=True,
+                    fallback_reason=ClassificationFailureCode.timeout,
+                ),
+                failure_code=ClassificationFailureCode.timeout,
+                failure_message="simulated timeout",
+            )
+        content = json.dumps(_label_agreement_payload_for_prompt(prompt))
+        return ClassificationAdapterResult(
+            success=True,
+            model_name=self.config.model_name,
+            runtime_endpoint=self.config.endpoint_url,
+            diagnostics=ClassificationAttemptDiagnostics(
+                model_name=self.config.model_name,
+                endpoint=self.config.endpoint_url,
+                prompt_chars=len(prompt),
+                input_chars=input_chars,
+                max_output_tokens=self.config.max_output_tokens,
+                temperature=self.config.temperature,
+                timeout_seconds=self.config.timeout_seconds,
+                latency_ms=11,
+                raw_content_empty=False,
+                thinking_present=False,
+                done_reason="stop",
+                schema_valid=False,
+                fallback_used=False,
+                fallback_reason=None,
+            ),
+            response_text=content,
+        )
+
+
+class PerfectBakeoffAdapter:
+    def __init__(self, config: ClassificationAdapterConfig) -> None:
+        self.config = config
+
+    def complete(self, prompt: str, *, input_chars: int = 0) -> ClassificationAdapterResult:
+        content = json.dumps(_perfect_label_agreement_payload_for_prompt(prompt))
+        return ClassificationAdapterResult(
+            success=True,
+            model_name=self.config.model_name,
+            runtime_endpoint=self.config.endpoint_url,
+            diagnostics=ClassificationAttemptDiagnostics(
+                model_name=self.config.model_name,
+                endpoint=self.config.endpoint_url,
+                prompt_chars=len(prompt),
+                input_chars=input_chars,
+                max_output_tokens=self.config.max_output_tokens,
+                temperature=self.config.temperature,
+                timeout_seconds=self.config.timeout_seconds,
+                latency_ms=9,
+                raw_content_empty=False,
+                thinking_present=False,
+                done_reason="stop",
+                schema_valid=False,
+                fallback_used=False,
+                fallback_reason=None,
+            ),
+            response_text=content,
+        )
+
+
 def _minimal_payload_for_prompt(prompt: str) -> dict[str, object]:
     if "text=help" in prompt:
         return {
@@ -363,6 +451,81 @@ def _label_agreement_payload_for_prompt(prompt: str) -> dict[str, object]:
             "sensitivity": "public",
             "risk": "safe",
             "next": "answer",
+            "confidence": 0.9,
+        }
+    if "local indexing command" in case_text:
+        return {
+            "task": "action",
+            "project": "unknown",
+            "sensitivity": "internal",
+            "risk": "needs_review",
+            "next": "review",
+            "confidence": 0.9,
+        }
+    if "Euler integration" in case_text:
+        return {
+            "task": "question",
+            "project": "general",
+            "sensitivity": "public",
+            "risk": "safe",
+            "next": "answer",
+            "confidence": 0.9,
+        }
+    if "documentation" in case_text:
+        return {
+            "task": "docs",
+            "project": "jarvisos",
+            "sensitivity": "internal",
+            "risk": "needs_review",
+            "next": "review",
+            "confidence": 0.9,
+        }
+    return {
+        "task": "code",
+        "project": "jarvisos",
+        "sensitivity": "internal",
+        "risk": "needs_review",
+        "next": "review",
+        "confidence": 0.9,
+    }
+
+
+def _perfect_label_agreement_payload_for_prompt(prompt: str) -> dict[str, object]:
+    case_text = prompt.rsplit("text=", 1)[-1]
+    if case_text == "help":
+        return {
+            "task": "unknown",
+            "project": "unknown",
+            "sensitivity": "unknown",
+            "risk": "unknown",
+            "next": "clarify",
+            "confidence": 0.9,
+        }
+    if "external API" in case_text:
+        return {
+            "task": "action",
+            "project": "unknown",
+            "sensitivity": "internal",
+            "risk": "needs_review",
+            "next": "review",
+            "confidence": 0.9,
+        }
+    if "delete all local logs" in case_text:
+        return {
+            "task": "action",
+            "project": "unknown",
+            "sensitivity": "internal",
+            "risk": "unsafe",
+            "next": "block",
+            "confidence": 0.9,
+        }
+    if "BlueRev prototype" in case_text:
+        return {
+            "task": "question",
+            "project": "bluerev",
+            "sensitivity": "sensitive",
+            "risk": "needs_review",
+            "next": "review",
             "confidence": 0.9,
         }
     if "local indexing command" in case_text:
@@ -1196,6 +1359,90 @@ def test_label_agreement_probe_splits_fields_and_reports_safety_summaries() -> N
         assert case.request.text not in serialized
     assert "messages" not in serialized
     assert "prompt" not in serialized
+
+
+def test_model_bakeoff_discovers_only_installed_allowed_candidates() -> None:
+    report = build_model_bakeoff_probe_report(
+        installed_model_names=("qwen3:8b", "not-a-candidate:1b", "gemma4:12b-it-qat"),
+        adapter_factory=FakeBakeoffAdapter,
+        created_at_utc=datetime(2026, 6, 21, 10, 0, tzinfo=UTC),
+    )
+
+    assert report.mode == "model-bakeoff"
+    assert report.installed_model_names == ("qwen3:8b", "not-a-candidate:1b", "gemma4:12b-it-qat")
+    assert report.candidate_model_names == ("gemma4:12b-it-qat", "qwen3:8b")
+    assert report.num_predict_variants == MODEL_BAKEOFF_NUM_PREDICT_CANDIDATES
+    assert report.num_predict_variants == (512,)
+    assert report.repeat_count == MODEL_BAKEOFF_REPEAT_COUNT
+    assert report.repeat_count == 2
+    assert report.protocol_variants == (LabelAgreementProtocolVariant.split_fields_v2,)
+
+
+def test_model_bakeoff_model_failure_does_not_stop_report() -> None:
+    report = build_model_bakeoff_probe_report(
+        installed_model_names=("gemma4:12b-it-qat", "qwen3:8b"),
+        adapter_factory=FakeBakeoffAdapter,
+        created_at_utc=datetime(2026, 6, 21, 10, 15, tzinfo=UTC),
+    )
+
+    summary_by_model = {summary.model_name: summary for summary in report.model_summaries}
+
+    assert set(summary_by_model) == {"gemma4:12b-it-qat", "qwen3:8b"}
+    assert summary_by_model["gemma4:12b-it-qat"].attempts == 16
+    assert summary_by_model["gemma4:12b-it-qat"].schema_valid_rate == 1
+    assert summary_by_model["gemma4:12b-it-qat"].think_settings == (OutputControlVariant.think_false,)
+    assert summary_by_model["qwen3:8b"].attempts == 16
+    assert summary_by_model["qwen3:8b"].timeout_count == 16
+    assert summary_by_model["qwen3:8b"].schema_valid_rate == 0
+    assert summary_by_model["qwen3:8b"].suitability_label == ModelBakeoffSuitability.rejected
+
+
+def test_model_bakeoff_report_omits_raw_case_text_and_includes_model_aggregates() -> None:
+    cases = label_agreement_probe_cases()
+    report = build_model_bakeoff_probe_report(
+        installed_model_names=("gemma4:12b-it-qat",),
+        adapter_factory=FakeBakeoffAdapter,
+        created_at_utc=datetime(2026, 6, 21, 10, 30, tzinfo=UTC),
+    )
+    lines = summary_lines(report, Path("report.json"))
+
+    assert len(report.results) == len(cases) * MODEL_BAKEOFF_REPEAT_COUNT
+    assert len(report.model_summaries) == 1
+    assert len(report.model_summaries[0].field_agreement) == 5
+    assert report.model_summaries[0].runtime_approved is False
+    assert any("model=gemma4:12b-it-qat" in line for line in lines)
+
+    serialized = report.model_dump_json()
+    for case in cases:
+        assert case.case_id in serialized
+        assert case.request.text not in serialized
+    assert "messages" not in serialized
+    assert "prompt" not in serialized
+    assert "response_text" not in serialized
+
+
+def test_model_bakeoff_safety_fields_are_diagnostic_and_no_model_is_runtime_approved() -> None:
+    report = build_model_bakeoff_probe_report(
+        installed_model_names=("qwen3:14b",),
+        adapter_factory=PerfectBakeoffAdapter,
+        created_at_utc=datetime(2026, 6, 21, 10, 45, tzinfo=UTC),
+    )
+
+    summary = report.model_summaries[0]
+
+    assert summary.suitability_label == ModelBakeoffSuitability.non_critical_hint_candidate
+    assert summary.runtime_approved is False
+    assert summary.accepted_risky_mismatch_count == 0
+    assert summary.unsafe_sensitive_false_negative_count == 0
+    assert {field.field: field.agreement_rate for field in summary.field_agreement} == {
+        "task": 1,
+        "project": 1,
+        "sensitivity": 1,
+        "risk": 1,
+        "next": 1,
+    }
+    assert all(result.returned_label_risk is not None for result in report.results)
+    assert all(result.returned_label_next is not None for result in report.results)
 
 
 def test_probe_rejects_non_local_endpoint_and_noncanonical_variants() -> None:
