@@ -52,6 +52,7 @@ The current local Gemma conclusion is:
 - Internal compression policy tests: `docs/INTERNAL_COMPRESSION_POLICY_TESTS.md`
 - SQLite/FTS memory schema design: `docs/SQLITE_FTS_MEMORY_SCHEMA_DESIGN.md`
 - Progressive retrieval contract design: `docs/PROGRESSIVE_RETRIEVAL_CONTRACT_DESIGN.md`
+- Holdout intake generalization set: `docs/HOLDOUT_INTAKE_GENERALIZATION_SET.md`
 
 Milestone docs remain in `docs/` as historical evidence. Do not treat older milestone docs as current canon when they conflict with the files above.
 
@@ -152,14 +153,12 @@ npm run build
 Recommended next milestone:
 
 ```text
-1D-G - Holdout intake generalization set
+1E - Form protocol catalog design
 ```
 
-The 1D-F progressive retrieval milestone is design-only. Retrieval is a future
-scoped read contract: orientation first, compact candidates second, and full
-evidence by stable ID/source reference only after policy checks. It does not add
-retrieval runtime, RAG runtime, Context Pack Broker runtime, database queries,
-FTS indexes, memory runtime, provider calls, tool execution, routes, UI, model
-authority, or BlueRev modeling.
+The 1D-G holdout intake generalization milestone is docs/data-only. The holdout
+set precedes model testing and does not add model calls, scorer, harness,
+memory runtime, retrieval runtime, Context Pack Broker runtime, provider/tool
+execution, routes, UI, model authority, or BlueRev modeling.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

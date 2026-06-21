@@ -409,3 +409,17 @@ directly.
 
 Context Pack Broker runtime, retrieval APIs, DB queries, memory runtime,
 provider calls, and tool execution are not added in this milestone.
+
+## ADR-053: Holdout intake generalization set precedes model testing
+
+Status: Accepted
+
+The holdout intake generalization set is docs/data-only evaluation evidence for
+future staged-intake and progressive-retrieval form testing. It precedes model
+testing and must remain stable input data rather than a generated or
+model-written dataset.
+
+This milestone adds no model calls, scorer, harness, memory runtime, retrieval
+runtime, Context Pack Broker runtime, provider/tool execution, routes, APIs,
+database migrations, runtime models, storage classes, hooks, MCP, workers,
+viewers, BlueRev modeling, external reference audit, or vendored code.
