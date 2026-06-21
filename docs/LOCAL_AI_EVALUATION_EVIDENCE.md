@@ -627,6 +627,28 @@ Decision:
   routing, tool execution, automatic memory writes, canonical promotion, or
   safety decisions.
 
+### 1C-Z-T - Cavemem/Caveman Reference Clone And Pattern Audit
+
+1C-Z-T cloned Cavemem and Caveman outside the JarvisOS repository and audited
+them as external implementation references before the 1D design sequence.
+
+Canonical audit:
+
+- `docs/CAVEMEM_CAVEMAN_REFERENCE_AUDIT.md`
+
+Decision:
+
+- 1C-Z-T is a reference audit, not runtime implementation.
+- Cavemem/Caveman ideas are adapted, not vendored.
+- No runtime memory, retrieval, compression, MCP server, hooks, worker, viewer,
+  routes, frontend UI, provider integrations, local model calls, Context Pack
+  Broker runtime, or local gatekeeper authority were added.
+- The useful patterns are a future `MemoryStore` write boundary, compact-first
+  retrieval, full memory body retrieval by ID, raw/original retention before
+  compression, token-preservation validation, and lazy enrichment/indexing.
+- External compression/runtime behavior from Caveman is rejected for JarvisOS
+  internal memory unless a later explicit provider-gated design approves it.
+
 ## Raw Report Retention Rule
 
 Do not delete raw D9, D9R, D10B, D10B-R, or D10C reports until this document and the ADR log are deliberately updated to preserve their conclusions.
@@ -671,6 +693,7 @@ Current implementation status:
 - 1C-Z tests the documented `FastIntakeSignalForm` live against Qwen3 8B and Gemma 12B. Both profiles were rejected with 0% schema-valid output, so observable flags and broad buckets remain unmeasured until the smoke contract is simplified or repaired.
 - 1C-Z-R repairs the smoke contract with a flat AI-facing schema normalized into the canonical nested form. Schema validity improves to 91.7% for both Qwen3 8B and Gemma 12B, and observable flags become measurable at 90.2% agreement, but broad buckets and overconfident wrong outputs still need repair before runtime use.
 - 1C-Z-S defines hybrid intake field ownership and adds a deterministic baseline report mode. Deterministic rules own provenance, runtime authority, hard observable overrides, obvious secret detection, and obvious status phrases; AI remains advisory for semantic hints and hybrid bucket suggestions.
+- 1C-Z-T audits Cavemem/Caveman implementation patterns before 1D. The ideas are adapted, not vendored, and no runtime memory, retrieval, compression, MCP, hooks, worker, viewer, route, UI, or model authority is added.
 - The corrected architecture is form-driven local intelligence: Gemma performs semantic reasoning locally; JarvisOS provides showcase files, form schemas, structural validation, retries, persistence, promotion policy, and audit.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
@@ -689,7 +712,14 @@ The accepted next local AI sequence is:
 1C-Z       FastIntakeSignalForm smoke test
 1C-Z-R     Flat FastIntake smoke contract repair
 1C-Z-S     Deterministic baseline and hybrid intake ownership
-1D         Gemma-facing showcase files design
+1C-Z-T     Cavemem/Caveman reference implementation audit
+1D-A       Local-model-facing showcase files design
+1D-B       Micro-context design
+1D-C       MemoryStore facade design
+1D-D       Internal compression policy tests
+1D-E       SQLite/FTS schema design
+1D-F       Progressive retrieval contract design
+1D-G       Holdout intake generalization set
 1E         Form protocol catalog design
 1F         Structural validator + retry loop design
 1G         Gemma form-fill smoke test harness

@@ -141,3 +141,14 @@ The baseline is useful for field ownership, hard overrides, and calibration. It
 is not approval for memory runtime, retrieval runtime, Context Pack Broker
 runtime, routes, UI, provider routing, tool execution, external APIs, local
 gatekeeping, chat, or autonomous action.
+
+## Reference Audit Boundary
+
+1C-Z-T audited Cavemem/Caveman implementation patterns before the 1D design
+sequence. The audit does not change field ownership: models still propose
+advisory hints, deterministic JarvisOS policy owns authority, and no intake
+field authorizes runtime action.
+
+The audit is documented in:
+
+- `docs/CAVEMEM_CAVEMAN_REFERENCE_AUDIT.md`

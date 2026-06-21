@@ -232,6 +232,20 @@ The detailed field ownership policy is documented in:
 
 - `docs/HYBRID_INTAKE_FIELD_OWNERSHIP.md`
 
+## Reference Implementation Pattern Audit
+
+1C-Z-T audited Cavemem and Caveman as external implementation references before
+the 1D memory/showcase design sequence:
+
+- `docs/CAVEMEM_CAVEMAN_REFERENCE_AUDIT.md`
+
+The durable lessons are architectural only: a future `MemoryStore` facade should
+own the write boundary, retrieval should use compact candidates before full
+body-by-ID access, raw/original text must survive compression, and any internal
+compression policy needs token-preservation tests. JarvisOS has not vendored
+Cavemem/Caveman code and has not added runtime memory, retrieval, compression,
+MCP, hooks, worker, viewer, route, UI, or provider behavior from that audit.
+
 ## Later Memory Card Types
 
 The following cards are later enrichment targets, not write-time requirements:

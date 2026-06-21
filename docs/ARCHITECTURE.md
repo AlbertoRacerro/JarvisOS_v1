@@ -322,6 +322,17 @@ Canonical staged memory intake design lives in:
 docs/STAGED_MEMORY_INTAKE.md
 ```
 
+External memory implementation references were audited before 1D:
+
+```text
+docs/CAVEMEM_CAVEMAN_REFERENCE_AUDIT.md
+```
+
+Cavemem/Caveman inform future MemoryStore, progressive retrieval, compression
+policy, hook, worker, and viewer design only as patterns. JarvisOS has not
+vendored their code and has not added runtime memory, retrieval, compression,
+MCP, hooks, worker, or viewer behavior from that audit.
+
 ## Current Roadmap
 
 ```text
@@ -332,7 +343,14 @@ docs/STAGED_MEMORY_INTAKE.md
 1B-R-LIVE  Manual Gemma 12B classification probe
 1C         Classification live probe analysis and roadmap rebase
 1C-Y       Fast staged memory intake design
-1D         Gemma-facing showcase files design
+1C-Z-T     Cavemem/Caveman reference implementation audit
+1D-A       Local-model-facing showcase files design
+1D-B       Micro-context design
+1D-C       MemoryStore facade design
+1D-D       Internal compression policy tests
+1D-E       SQLite/FTS schema design
+1D-F       Progressive retrieval contract design
+1D-G       Holdout intake generalization set
 1E         Form protocol catalog design
 1F         Structural validator + retry loop design
 1G         Gemma form-fill smoke test harness
@@ -380,6 +398,7 @@ docs/STAGED_MEMORY_INTAKE.md
 - Runbooks: `docs/RUNBOOKS.md`
 - Local AI evidence: `docs/LOCAL_AI_EVALUATION_EVIDENCE.md`
 - Form-driven local intelligence: `docs/FORM_DRIVEN_LOCAL_INTELLIGENCE.md`
+- Cavemem/Caveman reference audit: `docs/CAVEMEM_CAVEMAN_REFERENCE_AUDIT.md`
 - UI startup: `docs/UI_START.md`
 
 Milestone documents remain historical evidence. If a milestone document conflicts with this file or `DECISIONS.md`, prefer the canonical docs.

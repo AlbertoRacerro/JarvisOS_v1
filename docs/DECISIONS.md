@@ -275,3 +275,18 @@ JarvisOS should be described as deterministic structure around a local semantic 
 Status: Accepted
 
 JarvisOS memory ingestion must be computationally cheap at write time. The 1C-W and 1C-X classification diagnostics showed that local models can emit structurally valid JSON, but one-shot semantic agreement remains too weak for fine-grained memory classification. Initial memory intake should preserve raw text, source/input ID, timestamp, conversation/project reference when available, observable boolean signals, broad uncertain buckets, uncertainty flags, and enrichment status. `FastIntakeSignalForm` is a cheap intake envelope, not canonical truth and not a final `MemoryCard`, `KnowledgeCard`, `DecisionCard`, `AssumptionCard`, `EvidenceCard`, or `SourceCard`. Full contextual interpretation should be deferred until retrieval, decision use, conflict resolution, high-value promotion, sensitivity review, or full context-pack availability. JarvisOS owns validation, persistence, promotion, execution, audit, and policy; model output remains advisory and cannot authorize memory promotion, retrieval access, provider calls, tool execution, route selection, safety decisions, or BlueRev assumption acceptance.
+
+## ADR-046: Audit External Memory References Before 1D
+
+Status: Accepted
+
+Before the 1D design sequence, JarvisOS audited Cavemem and Caveman as external
+reference implementations for memory write boundaries, compact retrieval,
+compression safety, raw/original retention, hooks, workers, MCP, and viewer
+patterns. The audit is accepted as design evidence only. Cavemem/Caveman code
+is not vendored into JarvisOS in this milestone, and no runtime memory,
+retrieval, compression, MCP server, hooks, worker, viewer, routes, frontend UI,
+provider integrations, Context Pack Broker runtime, local gatekeeper runtime, or
+model authority is added. JarvisOS will adapt useful patterns with
+Python-native implementation unless a specific licensed snippet is explicitly
+approved later with MIT license and copyright notices preserved.
