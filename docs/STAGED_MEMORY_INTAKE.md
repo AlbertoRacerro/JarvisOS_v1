@@ -254,6 +254,13 @@ The JarvisOS-specific facade contract is documented in:
 
 - `docs/MEMORYSTORE_FACADE_DESIGN.md`
 
+Internal compression policy test design is documented in:
+
+- `docs/INTERNAL_COMPRESSION_POLICY_TESTS.md`
+
+Compression remains optional and later. It must never replace raw/original
+evidence.
+
 ## Later Memory Card Types
 
 The following cards are later enrichment targets, not write-time requirements:

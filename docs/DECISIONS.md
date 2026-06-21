@@ -352,3 +352,20 @@ This milestone is design-only. It adds no MemoryStore runtime, database schema,
 retrieval, hooks, worker, MCP, viewer, compression, provider calls, tool
 execution, or BlueRev modeling. Cavemem is an architectural reference only, not
 vendored code.
+
+## ADR-050: Compression requires token-preservation tests before runtime use
+
+Status: Accepted
+
+Compression is optional and later. Raw/original evidence must survive, and
+compressed text remains non-authoritative.
+
+Before any runtime compression is allowed, JarvisOS must prove protected
+technical tokens are preserved, including code, paths, URLs, DOIs, commit
+hashes, versions, commands, formulas, numbers, units, enum values, source IDs,
+artifact IDs, table values, chemical identifiers, engineering identifiers, and
+BlueRev material/geometry/process terms.
+
+Sensitive or secret inputs must be refused or gated before compression.
+External compression providers are not approved for JarvisOS memory. This
+milestone adds no compression runtime.

@@ -376,6 +376,15 @@ policy, hook, worker, and viewer design only as patterns. JarvisOS has not
 vendored their code and has not added runtime memory, retrieval, compression,
 MCP, hooks, worker, or viewer behavior from that audit.
 
+Internal compression policy test design lives in:
+
+```text
+docs/INTERNAL_COMPRESSION_POLICY_TESTS.md
+```
+
+Compression is optional and later. Compressed text must not replace raw/original
+evidence.
+
 ## Current Roadmap
 
 ```text
@@ -445,6 +454,7 @@ MCP, hooks, worker, or viewer behavior from that audit.
 - Local-model-facing showcase files: `docs/LOCAL_MODEL_SHOWCASE_FILES.md`
 - Micro-context design: `docs/MICRO_CONTEXT_DESIGN.md`
 - MemoryStore facade design: `docs/MEMORYSTORE_FACADE_DESIGN.md`
+- Internal compression policy tests: `docs/INTERNAL_COMPRESSION_POLICY_TESTS.md`
 - UI startup: `docs/UI_START.md`
 
 Milestone documents remain historical evidence. If a milestone document conflicts with this file or `DECISIONS.md`, prefer the canonical docs.

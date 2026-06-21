@@ -29,6 +29,9 @@ current Caveman compression path uses external Claude/Anthropic execution, so
 JarvisOS should not copy that runtime. It should adapt the safety philosophy
 with Python-native internal tests later.
 
+JarvisOS internal compression policy test design is documented in
+`docs/INTERNAL_COMPRESSION_POLICY_TESTS.md`.
+
 This audit adds no JarvisOS runtime memory, SQLite runtime, retrieval runtime,
 MCP server, frontend UI, routes, hooks, worker, viewer, local model authority,
 provider integration, or compression implementation. It records patterns to

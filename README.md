@@ -49,6 +49,7 @@ The current local Gemma conclusion is:
 - Local-model-facing showcase files: `docs/LOCAL_MODEL_SHOWCASE_FILES.md`
 - Micro-context design: `docs/MICRO_CONTEXT_DESIGN.md`
 - MemoryStore facade design: `docs/MEMORYSTORE_FACADE_DESIGN.md`
+- Internal compression policy tests: `docs/INTERNAL_COMPRESSION_POLICY_TESTS.md`
 
 Milestone docs remain in `docs/` as historical evidence. Do not treat older milestone docs as current canon when they conflict with the files above.
 
@@ -149,13 +150,14 @@ npm run build
 Recommended next milestone:
 
 ```text
-1D-D - Internal compression policy tests
+1D-E - SQLite/FTS schema design
 ```
 
-The 1D-C MemoryStore facade milestone is design-only. MemoryStore is the future
-single memory write boundary. It does not add runtime memory writes, database
-schema, retrieval runtime, hooks, workers, MCP, viewer, compression runtime,
-provider routing, tool execution, routes, UI, model authority, or BlueRev
-modeling.
+The 1D-D internal compression policy milestone is design-only. Compression is
+optional and later; raw/original evidence must survive, and protected technical
+tokens must be preserved before compressed text can be used. It does not add
+compression runtime, executable tests, memory runtime, retrieval runtime,
+database schema, hooks, workers, MCP, viewer, provider routing, tool execution,
+routes, UI, model authority, or BlueRev modeling.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

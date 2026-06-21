@@ -132,7 +132,8 @@ This milestone does not implement Context Pack Broker runtime.
 
 Compression is later and optional. Compact text must not replace raw/original
 evidence. Compression policy needs token-preservation tests and retention rules
-before runtime use.
+before runtime use. The policy test design lives in
+`docs/INTERNAL_COMPRESSION_POLICY_TESTS.md`.
 
 ### Future SQLite/FTS Schema
 
