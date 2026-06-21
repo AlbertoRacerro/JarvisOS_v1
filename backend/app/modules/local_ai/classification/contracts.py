@@ -12,6 +12,26 @@ DEFAULT_CLASSIFICATION_TIMEOUT_SECONDS = 15.0
 DEFAULT_CLASSIFICATION_TEMPERATURE = 0.0
 CLASSIFICATION_DIAGNOSTIC_NUM_PREDICT_CANDIDATES = (128, 256, 384, 512)
 LOW_CONFIDENCE_THRESHOLD = 0.65
+CLASSIFICATION_ADVISORY_HINT_FIELDS = (
+    "task_hint",
+    "project_hint",
+    "topic_hint",
+    "context_need_hint",
+    "confidence",
+)
+MODEL_NON_AUTHORITY_BOUNDARIES = (
+    "risk",
+    "next_action",
+    "permission",
+    "provider_selection",
+    "tool_execution",
+    "memory_write",
+    "retrieval",
+    "route_selection",
+    "external_calls",
+    "final_sensitivity",
+    "safety_decisions",
+)
 
 
 class ClassificationSource(StrEnum):
@@ -168,12 +188,16 @@ class ClassificationOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schema_version: str = CLASSIFICATION_OUTPUT_SCHEMA_VERSION
-    task_type: TaskType
-    project_area: ProjectArea
-    complexity_hint: ComplexityHint
-    needs_context: bool
-    sensitivity_hint: SensitivityHint
-    allowed_next_step: AllowedNextStep
+    task_type: TaskType = Field(description="Advisory semantic task hint only; not permission or routing authority.")
+    project_area: ProjectArea = Field(description="Advisory project hint only; not route, retrieval, or provider authority.")
+    complexity_hint: ComplexityHint = Field(description="Advisory topic/complexity hint only.")
+    needs_context: bool = Field(description="Advisory context-need hint only; does not authorize retrieval.")
+    sensitivity_hint: SensitivityHint = Field(
+        description="Diagnostic/model hint only; final sensitivity is owned by JarvisOS policy and hard overrides."
+    )
+    allowed_next_step: AllowedNextStep = Field(
+        description="Diagnostic/model hint only; never permission to act, route, retrieve, write memory, call providers, or run tools."
+    )
     confidence: float = Field(ge=0, le=1)
     refusal_or_uncertainty_reason: str | None = Field(default=None, max_length=240)
 
@@ -185,15 +209,36 @@ class ClassificationOutput(BaseModel):
         return value
 
 
+class ClassificationAdvisoryHints(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_hint: TaskType
+    project_hint: ProjectArea
+    topic_hint: ComplexityHint
+    context_need_hint: bool
+    confidence: float = Field(ge=0, le=1)
+
+
 class ClassificationServiceResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     classification: ClassificationOutput
+    advisory_hints: ClassificationAdvisoryHints | None = None
     source: ClassificationResultSource
     model_output_accepted: bool = False
     fallback_reasons: list[ClassificationFailureCode] = Field(default_factory=list)
     deterministic_reasons: list[str] = Field(default_factory=list)
     diagnostics: ClassificationAttemptDiagnostics | None = None
+
+
+def make_advisory_hints(output: ClassificationOutput) -> ClassificationAdvisoryHints:
+    return ClassificationAdvisoryHints(
+        task_hint=output.task_type,
+        project_hint=output.project_area,
+        topic_hint=output.complexity_hint,
+        context_need_hint=output.needs_context,
+        confidence=output.confidence,
+    )
 
 
 def make_output(

@@ -14,10 +14,12 @@ from app.modules.local_ai.classification.adapter import (
     LocalGemmaClassificationAdapter,
 )
 from app.modules.local_ai.classification.contracts import (
+    CLASSIFICATION_ADVISORY_HINT_FIELDS,
     CLASSIFICATION_DIAGNOSTIC_NUM_PREDICT_CANDIDATES,
     CLASSIFICATION_INPUT_SCHEMA_VERSION,
     CLASSIFICATION_OUTPUT_SCHEMA_VERSION,
     LOW_CONFIDENCE_THRESHOLD,
+    MODEL_NON_AUTHORITY_BOUNDARIES,
     AllowedNextStep,
     ClassificationAttemptDiagnostics,
     ClassificationBudgetPolicy,
@@ -433,6 +435,36 @@ def test_classification_output_contract_forbids_extra_fields_and_wrong_schema() 
         ClassificationOutput.model_validate(_output_payload(confidence=1.1))
 
 
+def test_classification_contract_exposes_only_non_critical_advisory_hint_fields() -> None:
+    assert CLASSIFICATION_ADVISORY_HINT_FIELDS == (
+        "task_hint",
+        "project_hint",
+        "topic_hint",
+        "context_need_hint",
+        "confidence",
+    )
+    assert "risk" not in ClassificationOutput.model_fields
+    assert "next_action" not in ClassificationOutput.model_fields
+    assert "provider_selection" not in ClassificationOutput.model_fields
+    assert "tool_execution" not in ClassificationOutput.model_fields
+    assert "memory_write" not in ClassificationOutput.model_fields
+    assert "retrieval" not in ClassificationOutput.model_fields
+    assert "final_sensitivity" not in ClassificationOutput.model_fields
+    assert {
+        "risk",
+        "next_action",
+        "permission",
+        "provider_selection",
+        "tool_execution",
+        "memory_write",
+        "retrieval",
+        "route_selection",
+        "external_calls",
+        "final_sensitivity",
+        "safety_decisions",
+    }.issubset(set(MODEL_NON_AUTHORITY_BOUNDARIES))
+
+
 def test_classification_budget_policy_is_explicit_and_bounded() -> None:
     policy = ClassificationBudgetPolicy()
 
@@ -491,6 +523,23 @@ def test_parser_rejects_authority_claims_and_impossible_combinations() -> None:
             )
         )
     assert impossible.value.code == ClassificationFailureCode.impossible_combination
+
+
+@pytest.mark.parametrize(
+    "authority_text",
+    [
+        "I will execute the requested tool.",
+        "I will call the external provider.",
+        "I will retrieve files for this request.",
+        "I will write memory for this user.",
+        "Provider routing is authorized.",
+    ],
+)
+def test_parser_rejects_model_claims_to_provider_tool_memory_or_retrieval_authority(authority_text: str) -> None:
+    with pytest.raises(ClassificationParseError) as authority:
+        parse_classification_output(json.dumps(_output_payload(refusal_or_uncertainty_reason=authority_text)))
+
+    assert authority.value.code == ClassificationFailureCode.model_claimed_authority
 
 
 def test_parser_accepts_low_confidence_for_service_policy() -> None:
@@ -628,6 +677,11 @@ def test_service_accepts_valid_model_output() -> None:
     assert result.source == ClassificationResultSource.model
     assert result.model_output_accepted is True
     assert result.classification.task_type == TaskType.documentation
+    assert result.advisory_hints is not None
+    assert result.advisory_hints.task_hint == TaskType.documentation
+    assert result.advisory_hints.project_hint == ProjectArea.documentation
+    assert result.advisory_hints.context_need_hint is True
+    assert result.advisory_hints.confidence == 0.9
     assert result.diagnostics is not None
     assert result.diagnostics.schema_valid is True
     assert result.diagnostics.fallback_used is False
@@ -694,23 +748,22 @@ def test_service_falls_back_on_empty_content_timeout_http_error_and_done_reason_
     assert done_reason_length.diagnostics.fallback_reason == ClassificationFailureCode.done_reason_length
 
 
-def test_service_rejects_over_budget_prompt_without_calling_adapter() -> None:
+def test_service_omits_metadata_from_prompt_budget_and_calls_adapter() -> None:
     adapter = FakeClassificationAdapter()
     request = ClassificationInput(
         text="x" * 1200,
         source=ClassificationSource.manual_test,
-        metadata={f"k{i}": "y" * 200 for i in range(10)},
+        metadata={f"k{i}": f"METADATA_MARKER_{i}" for i in range(10)},
     )
 
     result = classify_text(request, adapter=adapter)
 
-    assert result.source == ClassificationResultSource.fallback
-    assert result.fallback_reasons == [ClassificationFailureCode.over_budget_prompt]
+    assert result.source in {ClassificationResultSource.model, ClassificationResultSource.model_with_deterministic_override}
     assert result.diagnostics is not None
-    assert result.diagnostics.prompt_chars == 0
+    assert result.diagnostics.prompt_chars == MAX_CLASSIFICATION_PROMPT_CHARS
     assert result.diagnostics.input_chars == 1200
-    assert result.diagnostics.fallback_reason == ClassificationFailureCode.over_budget_prompt
-    assert adapter.called is False
+    assert adapter.called is True
+    assert "METADATA_MARKER" not in adapter.prompt
 
 
 def test_diagnostic_metadata_does_not_include_raw_prompt_text() -> None:
@@ -766,15 +819,50 @@ def test_service_applies_deterministic_next_step_override_for_external_api_reque
         )
     )
 
-    result = classify_text(ClassificationInput(text="Call OpenAI to solve this public engineering question."), adapter=adapter)
+    result = classify_text(ClassificationInput(text="Call OpenAI to solve this engineering question."), adapter=adapter)
 
     assert result.source == ClassificationResultSource.model_with_deterministic_override
     assert result.classification.allowed_next_step == AllowedNextStep.deterministic_review
+    assert result.classification.sensitivity_hint == SensitivityHint.internal
+    assert result.advisory_hints is not None
+    assert result.advisory_hints.task_hint == TaskType.engineering_question
+    assert result.advisory_hints.project_hint == ProjectArea.general_engineering
     assert result.model_output_accepted is True
+    assert "jarvisos_final_sensitivity_policy" in result.deterministic_reasons
+    assert "jarvisos_next_step_policy" in result.deterministic_reasons
     assert result.diagnostics is not None
     assert result.diagnostics.schema_valid is True
     assert result.diagnostics.fallback_used is False
     assert result.diagnostics.fallback_reason == ClassificationFailureCode.deterministic_override
+
+
+def test_model_output_cannot_authorize_provider_tool_memory_or_retrieval_permissions() -> None:
+    adapter = FakeClassificationAdapter(
+        content=json.dumps(
+            _output_payload(
+                task_type="external_api_request",
+                project_area="general_engineering",
+                complexity_hint="low",
+                needs_context=False,
+                sensitivity_hint="public",
+                allowed_next_step="answer_locally",
+                confidence=0.92,
+            )
+        )
+    )
+
+    result = classify_text(
+        ClassificationInput(text="Call DeepSeek through an external API and retrieve project context."),
+        adapter=adapter,
+    )
+
+    assert result.model_output_accepted is True
+    assert result.advisory_hints is not None
+    assert result.advisory_hints.task_hint == TaskType.external_api_request
+    assert result.classification.allowed_next_step == AllowedNextStep.deterministic_review
+    assert result.classification.sensitivity_hint == SensitivityHint.internal
+    assert result.classification.needs_context is False
+    assert "jarvisos_next_step_policy" in result.deterministic_reasons
 
 
 def test_minimal_prompt_and_parser_are_output_only_and_flat() -> None:

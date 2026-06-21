@@ -5,10 +5,13 @@ policy remain authoritative.
 """
 
 from app.modules.local_ai.classification.contracts import (
+    CLASSIFICATION_ADVISORY_HINT_FIELDS,
     CLASSIFICATION_INPUT_SCHEMA_VERSION,
     CLASSIFICATION_OUTPUT_SCHEMA_VERSION,
     CLASSIFICATION_DIAGNOSTIC_NUM_PREDICT_CANDIDATES,
+    MODEL_NON_AUTHORITY_BOUNDARIES,
     AllowedNextStep,
+    ClassificationAdvisoryHints,
     ClassificationAttemptDiagnostics,
     ClassificationBudgetPolicy,
     ClassificationInput,
@@ -25,9 +28,12 @@ from app.modules.local_ai.classification.service import classify_text
 
 __all__ = [
     "AllowedNextStep",
+    "CLASSIFICATION_ADVISORY_HINT_FIELDS",
     "CLASSIFICATION_DIAGNOSTIC_NUM_PREDICT_CANDIDATES",
     "CLASSIFICATION_INPUT_SCHEMA_VERSION",
     "CLASSIFICATION_OUTPUT_SCHEMA_VERSION",
+    "MODEL_NON_AUTHORITY_BOUNDARIES",
+    "ClassificationAdvisoryHints",
     "ClassificationAttemptDiagnostics",
     "ClassificationBudgetPolicy",
     "ClassificationInput",

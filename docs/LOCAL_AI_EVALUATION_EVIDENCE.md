@@ -8,7 +8,9 @@ JarvisOS must not proceed to broad Gemma orchestration yet.
 
 Accepted local AI position:
 
-- `gemma4:12b-it-qat` is viable only for narrow classification-style local utility work.
+- `gemma4:12b-it-qat` is viable only for non-critical advisory semantic hints inside bounded diagnostics and future forms.
+- Allowed 12B hint categories are limited to low-stakes labels such as task hint, project hint, topic hint, context-need hint, and confidence.
+- 12B must not own or authorize risk, next action, permission, provider selection, tool execution, memory write, retrieval, route selection, external calls, final sensitivity, or safety decisions.
 - `gemma4:12b-it-qat` is not approved for orchestration, local gatekeeping, chat, memory runtime, retrieval runtime, Context Pack Broker runtime, provider routing, autonomous tools, frontend UI, or BlueRev modeling.
 - `gemma4:31b-it-qat` remains an occasional heavy local expert candidate only. It is too slow for routine orchestration.
 - FunctionGemma remains future-track until JarvisOS has a concrete tool catalog and evaluation dataset for tool/function behavior.
@@ -345,6 +347,23 @@ Decision:
 - It may continue only toward non-critical classification diagnostics where JarvisOS treats output as advisory metadata and never as safety, routing, permission, memory, retrieval, provider, or tool authority.
 - The next repair should either split safety-sensitive classification into separate micro-contracts with deterministic validators and review gates, or restrict 12B to low-stakes semantic labels that cannot authorize action.
 
+### 1C-U - Non-Critical Hint Boundary
+
+1C-U corrected the runtime-facing boundary after 1C-T. The classification utility keeps compatibility with the existing schema, but 12B output is now framed as non-critical advisory hints only.
+
+Boundary decision:
+
+- 12B may emit advisory semantic hints such as task hint, project hint, topic hint, context-need hint, and confidence.
+- Runtime fields that look authoritative, including `sensitivity_hint` and `allowed_next_step`, are diagnostic/model hints only.
+- JarvisOS policy, deterministic hard overrides, user confirmation, 31B/API review, or future review gates own safety-critical decisions.
+- 12B output cannot authorize risk, next action, permission, provider selection, tool execution, memory write, retrieval, route selection, external calls, final sensitivity, or safety decisions.
+- Diagnostic modes such as `confidence-calibration` and `label-agreement` may continue to measure risk/safety/next failures, but those fields must not become runtime authority.
+
+Local model prefetch note:
+
+- The next planned work is a local model bakeoff using requested Ollama candidates if they are available locally.
+- Model downloads are environment state, not repository artifacts, and are not part of the committed evidence.
+
 ## Raw Report Retention Rule
 
 Do not delete raw D9, D9R, D10B, D10B-R, or D10C reports until this document and the ADR log are deliberately updated to preserve their conclusions.
@@ -381,6 +400,7 @@ Current implementation status:
 - 1C-R shows `think:false` is a useful local Ollama output-control diagnostic: it produced 9/9 schema-valid outputs and 6/9 accepted outputs in the first bounded repeatability run. 12B still remains unapproved until confidence and repeatability improve.
 - 1C-S shows confidence calibration is not enough: `think:false` produced 30/30 schema-valid outputs, but high-confidence label mismatches on sensitive and unsafe-style cases mean 12B remains unapproved for runtime classification.
 - 1C-T shows split-field labels improve some sensitivity/risk signals but still leave too many accepted risky mismatches. 12B must not own safety-critical `risk` or `next` decisions.
+- 1C-U restricts 12B classification output to non-critical advisory semantic hints. Safety/risk/next/provider/tool/memory/retrieval decisions remain JarvisOS policy or review-gate decisions.
 - The corrected architecture is form-driven local intelligence: Gemma performs semantic reasoning locally; JarvisOS provides showcase files, form schemas, structural validation, retries, persistence, promotion policy, and audit.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 

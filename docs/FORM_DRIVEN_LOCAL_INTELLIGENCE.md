@@ -80,6 +80,12 @@ the simpler showcase/index pattern proves useful.
 
 ## Responsibilities
 
+For current `gemma4:12b-it-qat` classification work, the only accepted runtime
+role is non-critical advisory semantic hints. The broader capabilities below
+describe future form-driven architecture and require reliability gates before
+they can affect policy, persistence, routing, tools, memory, retrieval, or
+provider behavior.
+
 Gemma should be able to:
 
 - read showcase files;
@@ -112,7 +118,7 @@ proposes from what JarvisOS is allowed to save, promote, or execute.
 
 | Form | Purpose | Filled By | JarvisOS Structural Checks | Semantic Limit | Effect |
 | --- | --- | --- | --- | --- | --- |
-| `ClassificationForm` | Classify a prompt or task. | Gemma or deterministic fallback. | Schema, enums, confidence bounds, hard overrides. | Does not prove the label is semantically correct. | Can guide retry, review, or next form selection. |
+| `ClassificationForm` | Produce non-critical semantic hints for a prompt or task. | Gemma or deterministic fallback. | Schema, enums, confidence bounds, hard overrides. | Does not prove the label is semantically correct and does not own safety-critical fields. | Can provide task, project, topic, context-need, and confidence hints only. |
 | `ContextAccessRequest` | Ask for bounded context. | Gemma. | Allowed package/source IDs, reason length, max count. | Does not prove the requested context is sufficient. | Can trigger bounded context assembly. |
 | `MemoryCard` | Propose a memory item. | Gemma. | Required fields, source IDs, tags, status. | Does not prove the memory is complete or true. | Can save as proposed memory. |
 | `FileCard` | Summarize a file or file role. | Gemma. | Existing path/source ID, allowed root, summary length. | Does not prove summary quality. | Can update an index after policy allows. |
@@ -168,6 +174,12 @@ providers, invalid enum values, or explicit user confirmation requirements.
 Deterministic checks cannot reliably distinguish public literature data from
 proprietary prototype experimental data. That distinction is semantic and
 belongs to Gemma or to a stronger reviewer when needed.
+
+The current `gemma4:12b-it-qat` classification evidence is not strong enough for
+runtime safety decisions. 12B may provide advisory semantic hints, but final
+sensitivity, risk, next action, provider selection, tool execution, memory
+write, retrieval, route selection, external-call, and safety decisions remain
+JarvisOS policy or review-gate responsibilities.
 
 ## Tool And Provider Intent
 

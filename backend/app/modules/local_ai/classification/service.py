@@ -2,6 +2,7 @@ from app.modules.local_ai.classification.adapter import LocalGemmaClassification
 from app.modules.local_ai.classification.contracts import (
     LOW_CONFIDENCE_THRESHOLD,
     AllowedNextStep,
+    ClassificationAdvisoryHints,
     ClassificationAttemptDiagnostics,
     ClassificationFailureCode,
     ClassificationInput,
@@ -12,6 +13,7 @@ from app.modules.local_ai.classification.contracts import (
     ProjectArea,
     SensitivityHint,
     TaskType,
+    make_advisory_hints,
     make_output,
 )
 from app.modules.local_ai.classification.parser import ClassificationParseError, parse_classification_output
@@ -39,6 +41,7 @@ def classify_text(
     if _is_hard_deterministic(deterministic):
         return ClassificationServiceResult(
             classification=deterministic,
+            advisory_hints=make_advisory_hints(deterministic),
             source=ClassificationResultSource.deterministic,
             model_output_accepted=False,
             deterministic_reasons=deterministic_reasons,
@@ -46,6 +49,7 @@ def classify_text(
     if adapter is None:
         return ClassificationServiceResult(
             classification=deterministic,
+            advisory_hints=make_advisory_hints(deterministic),
             source=ClassificationResultSource.deterministic,
             model_output_accepted=False,
             deterministic_reasons=deterministic_reasons,
@@ -92,6 +96,7 @@ def classify_text(
                 schema_valid=True,
                 fallback_reason=ClassificationFailureCode.low_confidence,
             ),
+            advisory_hints=make_advisory_hints(model_output),
         )
 
     merged, override_reasons = apply_deterministic_overrides(model_output, deterministic)
@@ -102,6 +107,7 @@ def classify_text(
     )
     return ClassificationServiceResult(
         classification=merged,
+        advisory_hints=make_advisory_hints(model_output),
         source=source,
         model_output_accepted=True,
         fallback_reasons=[],
@@ -255,18 +261,15 @@ def apply_deterministic_overrides(
 ) -> tuple[ClassificationOutput, list[str]]:
     reasons: list[str] = []
     output = model_output.model_copy(deep=True)
-    if SENSITIVITY_RANK[deterministic.sensitivity_hint] > SENSITIVITY_RANK[output.sensitivity_hint]:
+    if output.sensitivity_hint != deterministic.sensitivity_hint:
         output.sensitivity_hint = deterministic.sensitivity_hint
-        reasons.append("deterministic_sensitivity_override")
+        reasons.append("jarvisos_final_sensitivity_policy")
+    if output.allowed_next_step != deterministic.allowed_next_step:
+        output.allowed_next_step = deterministic.allowed_next_step
+        reasons.append("jarvisos_next_step_policy")
     if deterministic.task_type in HARD_DETERMINISTIC_TASKS:
         output.task_type = deterministic.task_type
         reasons.append("deterministic_task_override")
-    if output.sensitivity_hint in HARD_DETERMINISTIC_SENSITIVITY:
-        output.allowed_next_step = AllowedNextStep.human_review
-        reasons.append("deterministic_review_override")
-    elif deterministic.allowed_next_step == AllowedNextStep.deterministic_review:
-        output.allowed_next_step = AllowedNextStep.deterministic_review
-        reasons.append("deterministic_next_step_override")
     return output, reasons
 
 
@@ -276,6 +279,7 @@ def _fallback(
     deterministic_reasons: list[str],
     *,
     diagnostics: ClassificationAttemptDiagnostics | None = None,
+    advisory_hints: ClassificationAdvisoryHints | None = None,
 ) -> ClassificationServiceResult:
     classification = deterministic
     if reason == ClassificationFailureCode.low_confidence and deterministic.task_type in {TaskType.unknown, TaskType.ambiguous}:
@@ -288,6 +292,7 @@ def _fallback(
         )
     return ClassificationServiceResult(
         classification=classification,
+        advisory_hints=advisory_hints or make_advisory_hints(classification),
         source=ClassificationResultSource.fallback,
         model_output_accepted=False,
         fallback_reasons=[reason],

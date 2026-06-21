@@ -153,12 +153,15 @@ docs/LOCAL_AI_EVALUATION_EVIDENCE.md
 
 Current conclusion:
 
-- `gemma4:12b-it-qat` is viable only for classification-style local utilities.
+- `gemma4:12b-it-qat` is viable only for non-critical advisory semantic hints, such as task, project, topic, context-need, and confidence hints.
+- 12B must not own risk, next action, permission, provider selection, tool execution, memory write, retrieval, route selection, external calls, final sensitivity, or safety decisions.
 - 12B is not approved for orchestration, local gatekeeping, chat, memory runtime, retrieval runtime, Context Pack Broker runtime, provider routing, autonomous tools, frontend UI, or BlueRev modeling.
 - `gemma4:31b-it-qat` is only an occasional heavy local expert candidate.
 - FunctionGemma remains future-track until tool catalog and dataset work exists.
 
-Gemma may eventually propose small structured objects through forms such as classification, context access, memory cards, source cards, decision cards, sensitivity assessments, tool intent, provider intent, and clarification requests. JarvisOS validates those forms structurally, applies hard policy overrides, retries with machine-readable errors, saves proposed objects, and decides what happens next.
+Gemma may eventually propose small structured objects through forms such as non-critical classification hints, context requests, memory cards, source cards, decision cards, sensitivity assessments, tool intent, provider intent, and clarification requests. JarvisOS validates those forms structurally, applies hard policy overrides, retries with machine-readable errors, saves proposed objects, and decides what happens next.
+
+For the current 12B classification utility, model output is restricted to advisory semantic hints. Fields that look safety-critical in diagnostics, including risk, next action, provider/tool intent, memory, retrieval, route, external-call, and final-sensitivity decisions, are owned by JarvisOS policy, deterministic hard overrides, user confirmation, stronger local review, or future API review gates.
 
 Canonical form-driven design lives in:
 
