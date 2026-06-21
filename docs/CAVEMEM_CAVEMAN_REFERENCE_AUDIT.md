@@ -19,6 +19,9 @@ durable memory. Cavemem also demonstrates a useful progressive disclosure
 shape: compact search/timeline results first, then full observation retrieval by
 ID.
 
+The JarvisOS-specific future facade contract is documented in
+`docs/MEMORYSTORE_FACADE_DESIGN.md`.
+
 The strongest reusable Caveman idea is the compression safety pattern:
 technical-token preservation, validation after compression, out-of-tree original
 retention, sensitive path refusal, and "safe fields only" transformation. The

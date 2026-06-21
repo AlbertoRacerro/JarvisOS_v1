@@ -306,7 +306,8 @@ Boundary meanings:
 - `EventCaptureBoundary`: validates event shape, scope, source reference, and
   allowed effect before anything reaches storage or regeneration.
 - `FastIntake or future MemoryStore`: controlled write boundary for raw/proposed
-  intake or accepted durable memory after the MemoryStore design exists.
+  intake or accepted durable memory after the MemoryStore design exists. The
+  facade design lives in `docs/MEMORYSTORE_FACADE_DESIGN.md`.
 - `canonical storage / accepted state`: durable source of truth, not model
   output.
 - `MicroContextAssembler`: future component that reads only allowed canonical

@@ -334,3 +334,21 @@ Runtime generation and loading are deferred. Cavemem-inspired hooks/events are
 future triggers only and must not write micro-context or memory directly. Any
 future hook/event implementation must pass through controlled boundaries after
 MemoryStore facade, storage schema, policy, scope, retention, and tests exist.
+
+## ADR-049: MemoryStore facade is the single future memory write boundary
+
+Status: Accepted
+
+Future durable memory writes must pass through a `MemoryStore` facade. Models,
+hooks, routes, workers, tools, providers, and UI must not write durable memory
+directly.
+
+MemoryStore owns future validation, source links, staged state transitions,
+raw/original retention references, hard policy overrides, and audit records.
+Model output remains advisory and cannot authorize memory writes, promotion,
+final sensitivity, retrieval, canonical state changes, or BlueRev assumptions.
+
+This milestone is design-only. It adds no MemoryStore runtime, database schema,
+retrieval, hooks, worker, MCP, viewer, compression, provider calls, tool
+execution, or BlueRev modeling. Cavemem is an architectural reference only, not
+vendored code.

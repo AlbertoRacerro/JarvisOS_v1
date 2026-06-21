@@ -72,6 +72,10 @@ All data-root-derived paths must remain centralized through `app/core/paths.py`.
 
 SQLite is the initial database. The schema is intentionally small and migration-friendly. Alembic is postponed until schema churn justifies formal migration tooling.
 
+Future durable memory writes must pass through a `MemoryStore` facade before any
+memory runtime or storage schema exists. The facade design is documented in
+`docs/MEMORYSTORE_FACADE_DESIGN.md`; this is not current runtime behavior.
+
 ## Domain Foundation
 
 Current persistent objects include:
@@ -355,6 +359,12 @@ Canonical staged memory intake design lives in:
 docs/STAGED_MEMORY_INTAKE.md
 ```
 
+Future `MemoryStore` facade design lives in:
+
+```text
+docs/MEMORYSTORE_FACADE_DESIGN.md
+```
+
 External memory implementation references were audited before 1D:
 
 ```text
@@ -434,6 +444,7 @@ MCP, hooks, worker, or viewer behavior from that audit.
 - Cavemem/Caveman reference audit: `docs/CAVEMEM_CAVEMAN_REFERENCE_AUDIT.md`
 - Local-model-facing showcase files: `docs/LOCAL_MODEL_SHOWCASE_FILES.md`
 - Micro-context design: `docs/MICRO_CONTEXT_DESIGN.md`
+- MemoryStore facade design: `docs/MEMORYSTORE_FACADE_DESIGN.md`
 - UI startup: `docs/UI_START.md`
 
 Milestone documents remain historical evidence. If a milestone document conflicts with this file or `DECISIONS.md`, prefer the canonical docs.

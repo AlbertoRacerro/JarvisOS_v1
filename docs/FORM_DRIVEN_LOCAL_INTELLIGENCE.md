@@ -150,6 +150,10 @@ JarvisOS should:
 - log everything;
 - prevent arbitrary commands and arbitrary file writes.
 
+Future durable memory writes for model-proposed memory forms must pass through
+the `MemoryStore` facade design in `docs/MEMORYSTORE_FACADE_DESIGN.md`. Models
+may propose memory cards, but they cannot bypass MemoryStore or promote memory.
+
 ## Form Protocol Catalog
 
 Future Gemma work should use explicit forms. Each form separates what Gemma

@@ -62,6 +62,10 @@ canonical_state
 superseded
 ```
 
+Future durable writes and state transitions for this lifecycle must pass through
+the `MemoryStore` facade documented in `docs/MEMORYSTORE_FACADE_DESIGN.md`.
+This design does not add memory runtime, retrieval runtime, or database schema.
+
 ### `raw_input`
 
 The original text or source payload is preserved with an input ID, timestamp,
@@ -245,6 +249,10 @@ body-by-ID access, raw/original text must survive compression, and any internal
 compression policy needs token-preservation tests. JarvisOS has not vendored
 Cavemem/Caveman code and has not added runtime memory, retrieval, compression,
 MCP, hooks, worker, viewer, route, UI, or provider behavior from that audit.
+
+The JarvisOS-specific facade contract is documented in:
+
+- `docs/MEMORYSTORE_FACADE_DESIGN.md`
 
 ## Later Memory Card Types
 
