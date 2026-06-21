@@ -274,7 +274,14 @@ include:
 - sensitivity policy summary.
 
 Micro-context exists to make fast intake less blind without forcing full
-project interpretation on every input.
+project interpretation on every input. It is bounded, non-authoritative
+orientation context regenerated from canonical sources and accepted state; it is
+not memory runtime, retrieval runtime, Context Pack Broker runtime, model
+authority, or a full context pack.
+
+Canonical micro-context design lives in:
+
+- `docs/MICRO_CONTEXT_DESIGN.md`
 
 ### Full Context Pack
 

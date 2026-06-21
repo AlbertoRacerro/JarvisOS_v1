@@ -63,7 +63,10 @@ full context pack. Enrichment may create candidate `KnowledgeCard`,
 
 Fast intake may use a small always-loaded micro-context such as active projects,
 current focus, recent decisions, a short taxonomy, and sensitivity policy
-summary. It must not require a full context pack on every write.
+summary. Micro-context is bounded orientation context, not runtime retrieval,
+memory runtime, or model authority. Its design is documented in
+`docs/MICRO_CONTEXT_DESIGN.md`. It must not require a full context pack on every
+write.
 
 ## Gemma-Facing Showcase Files
 

@@ -316,3 +316,21 @@ until MemoryStore, memory runtime, retrieval runtime, promotion policy, and
 memory indexing are designed. `TOOL_AND_PROVIDER_CATALOG.md` is deferred until
 provider/tool intent forms, provider routing, and tool execution policy are
 ready.
+
+## ADR-048: Micro-context is bounded orientation context, not memory or retrieval
+
+Status: Accepted
+
+Micro-context is a small bounded orientation payload for local-model-facing
+work. It may support future fast intake and form filling by providing compact
+workspace, project, milestone, decision, clarification, and safety context.
+
+Micro-context is non-authoritative. Canonical docs and source files remain the
+source of truth. Micro-context cannot authorize runtime action, memory
+promotion, retrieval, provider calls, tool calls, routing, safety decisions, or
+BlueRev assumptions. Full context packs remain separate and heavier.
+
+Runtime generation and loading are deferred. Cavemem-inspired hooks/events are
+future triggers only and must not write micro-context or memory directly. Any
+future hook/event implementation must pass through controlled boundaries after
+MemoryStore facade, storage schema, policy, scope, retention, and tests exist.

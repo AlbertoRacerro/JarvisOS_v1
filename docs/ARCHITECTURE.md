@@ -216,6 +216,19 @@ over-fetch. Under-fetch on important tasks is a serious failure mode. If a
 showcase file conflicts with canonical docs or source code, the canonical source
 wins.
 
+### Micro-Context
+
+Canonical micro-context design lives in:
+
+```text
+docs/MICRO_CONTEXT_DESIGN.md
+```
+
+Micro-context is bounded orientation context for future fast intake and form
+filling. It is regenerated from canonical sources and accepted state. It is not
+canonical memory, runtime retrieval, Context Pack Broker runtime, memory
+runtime, provider/tool behavior, routing, safety authority, or BlueRev modeling.
+
 ## Context Pack Broker Future Role
 
 The Context Pack Broker is a future JarvisOS service, not a model-controlled runtime.
@@ -420,6 +433,7 @@ MCP, hooks, worker, or viewer behavior from that audit.
 - Form-driven local intelligence: `docs/FORM_DRIVEN_LOCAL_INTELLIGENCE.md`
 - Cavemem/Caveman reference audit: `docs/CAVEMEM_CAVEMAN_REFERENCE_AUDIT.md`
 - Local-model-facing showcase files: `docs/LOCAL_MODEL_SHOWCASE_FILES.md`
+- Micro-context design: `docs/MICRO_CONTEXT_DESIGN.md`
 - UI startup: `docs/UI_START.md`
 
 Milestone documents remain historical evidence. If a milestone document conflicts with this file or `DECISIONS.md`, prefer the canonical docs.

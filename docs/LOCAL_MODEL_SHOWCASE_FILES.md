@@ -9,6 +9,12 @@ They help a local model orient itself before it requests source files, context
 packs, or bounded forms. They do not replace canonical docs, source files,
 database records, runtime policy, or human-reviewed decisions.
 
+Showcase files and micro-context are separate orientation surfaces. Showcase
+files are small model-readable files and indexes. Micro-context is a future
+bounded snapshot regenerated from canonical sources and accepted state, designed
+in `docs/MICRO_CONTEXT_DESIGN.md`. Neither surface is authoritative runtime
+memory or retrieval.
+
 V0 designs a small documentation-facing showcase set:
 
 - `GEMMA_START_HERE.md`

@@ -47,6 +47,7 @@ The current local Gemma conclusion is:
 - Staged memory intake: `docs/STAGED_MEMORY_INTAKE.md`
 - Cavemem/Caveman reference audit: `docs/CAVEMEM_CAVEMAN_REFERENCE_AUDIT.md`
 - Local-model-facing showcase files: `docs/LOCAL_MODEL_SHOWCASE_FILES.md`
+- Micro-context design: `docs/MICRO_CONTEXT_DESIGN.md`
 
 Milestone docs remain in `docs/` as historical evidence. Do not treat older milestone docs as current canon when they conflict with the files above.
 
@@ -147,13 +148,13 @@ npm run build
 Recommended next milestone:
 
 ```text
-1D-B - Micro-context design
+1D-C - MemoryStore facade design
 ```
 
-The 1D-A showcase files milestone is design-only. Showcase files are synthetic,
-non-authoritative, regenerable views over canonical sources. They orient local
-models before source/context requests, but they do not add runtime retrieval,
-memory runtime, Context Pack Broker runtime, provider routing, tool execution,
-routes, UI, model authority, or BlueRev modeling.
+The 1D-B micro-context milestone is design-only. Micro-context is bounded,
+non-authoritative orientation context regenerated from canonical sources and
+accepted state. It does not add runtime loading, generators, hooks, memory
+runtime, retrieval runtime, Context Pack Broker runtime, provider routing, tool
+execution, routes, UI, model authority, or BlueRev modeling.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.
