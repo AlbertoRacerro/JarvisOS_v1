@@ -980,6 +980,7 @@ def build_result_record(
     raw_path: Path,
     ollama_result: dict[str, Any],
     context_pack: dict[str, Any],
+    milestone: str | None = None,
 ) -> dict[str, Any]:
     parsed, parse_error = parse_model_json_output(ollama_result["stdout"])
     comparison = score_output(
@@ -989,7 +990,7 @@ def build_result_record(
     )
     return {
         "schema_version": "local_model_form_fill_smoke_result_v0",
-        "milestone": "1G-B2-A" if context_pack["path"] else "1G-B1",
+        "milestone": milestone or ("1G-B2-A" if context_pack["path"] else "1G-B1"),
         "model_id": model["model_id"],
         "ollama_name": model["ollama_name"],
         "case_id": case["case_id"],
@@ -1017,6 +1018,7 @@ def summarize_results(
     results: list[dict[str, Any]],
     report_dir: Path,
     context_pack: dict[str, Any],
+    milestone: str | None = None,
 ) -> dict[str, Any]:
     exact_by_run = [
         {
@@ -1046,7 +1048,7 @@ def summarize_results(
     ]
     return {
         "schema_version": "local_model_form_fill_smoke_summary_v0",
-        "milestone": "1G-B2-A" if context_pack["path"] else "1G-B1",
+        "milestone": milestone or ("1G-B2-A" if context_pack["path"] else "1G-B1"),
         "created_at": datetime.now(timezone.utc).isoformat(),
         "report_dir": str(report_dir),
         "context_pack_path": context_pack["path"],
@@ -1074,7 +1076,11 @@ def summarize_results(
     }
 
 
-def summarize_ablation(results: list[dict[str, Any]], report_dir: Path) -> dict[str, Any]:
+def summarize_ablation(
+    results: list[dict[str, Any]],
+    report_dir: Path,
+    milestone: str = "1G-B2-B",
+) -> dict[str, Any]:
     profiles: dict[tuple[str, str], dict[str, Any]] = {}
     for result in results:
         key = (result["context_pack_label"], result["ollama_name"])
@@ -1082,6 +1088,11 @@ def summarize_ablation(results: list[dict[str, Any]], report_dir: Path) -> dict[
             key,
             {
                 "context_pack_label": result["context_pack_label"],
+                "context_pack_path": result["context_pack_path"],
+                "context_pack_char_count": result["context_pack_char_count"],
+                "context_pack_approx_token_estimate": result[
+                    "context_pack_approx_token_estimate"
+                ],
                 "model": result["ollama_name"],
                 "runs": 0,
                 "json_parse_passes": 0,
@@ -1116,6 +1127,20 @@ def summarize_ablation(results: list[dict[str, Any]], report_dir: Path) -> dict[
             item["model"],
         ),
     )
+    for profile in profile_rows:
+        token_k = max(1, profile["context_pack_approx_token_estimate"]) / 1000
+        profile["hard_matches_per_1k_tokens"] = round(
+            profile["hard_matches"] / token_k,
+            3,
+        )
+        profile["soft_tolerant_matches_per_1k_tokens"] = round(
+            profile["soft_tolerant_matches"] / token_k,
+            3,
+        )
+        profile["successful_parse_per_1k_tokens"] = round(
+            profile["json_parse_passes"] / token_k,
+            3,
+        )
 
     def best_by(key: str) -> dict[str, Any] | None:
         if not profile_rows:
@@ -1126,6 +1151,18 @@ def summarize_ablation(results: list[dict[str, Any]], report_dir: Path) -> dict[
                 item[key] / item["runs"]
                 if key in {"json_parse_passes"} and item["runs"]
                 else item[key] / max(1, item.get(key.replace("matches", "total"), 1)),
+                -item["critical_gate_failures"],
+            ),
+        )
+
+    def best_ratio(match_key: str, total_key: str) -> dict[str, Any] | None:
+        if not profile_rows:
+            return None
+        return max(
+            profile_rows,
+            key=lambda item: (
+                item[match_key] / max(1, item[total_key]),
+                item["json_parse_passes"] / max(1, item["runs"]),
                 -item["critical_gate_failures"],
             ),
         )
@@ -1156,19 +1193,22 @@ def summarize_ablation(results: list[dict[str, Any]], report_dir: Path) -> dict[
     }
 
     best_parse = best_by("json_parse_passes")
-    best_hard = max(
+    best_hard = best_ratio("hard_matches", "hard_total")
+    best_soft_tolerant = best_ratio("soft_tolerant_matches", "soft_total")
+    best_critical_gate = min(
         profile_rows,
         key=lambda item: (
-            item["hard_matches"] / max(1, item["hard_total"]),
-            item["json_parse_passes"] / max(1, item["runs"]),
-            -item["critical_gate_failures"],
+            item["critical_gate_failures"],
+            -item["json_parse_passes"] / max(1, item["runs"]),
+            -item["hard_matches"] / max(1, item["hard_total"]),
         ),
     ) if profile_rows else None
-    best_soft_tolerant = max(
+    best_score_per_token = max(
         profile_rows,
         key=lambda item: (
-            item["soft_tolerant_matches"] / max(1, item["soft_total"]),
-            item["json_parse_passes"] / max(1, item["runs"]),
+            item["hard_matches_per_1k_tokens"],
+            item["soft_tolerant_matches_per_1k_tokens"],
+            item["successful_parse_per_1k_tokens"],
             -item["critical_gate_failures"],
         ),
     ) if profile_rows else None
@@ -1186,7 +1226,7 @@ def summarize_ablation(results: list[dict[str, Any]], report_dir: Path) -> dict[
 
     return {
         "schema_version": "local_model_form_fill_recipe_ablation_summary_v0",
-        "milestone": "1G-B2-B",
+        "milestone": milestone,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "report_dir": str(report_dir),
         "semantic_truth_scored": False,
@@ -1197,6 +1237,8 @@ def summarize_ablation(results: list[dict[str, Any]], report_dir: Path) -> dict[
         "best_parse_stability_profile": best_parse,
         "best_hard_score_profile": best_hard,
         "best_soft_tolerant_score_profile": best_soft_tolerant,
+        "best_critical_gate_profile": best_critical_gate,
+        "best_score_per_token_profile": best_score_per_token,
         "known_error_reduction_notes": {
             "bluerev_unresolved_assumption": "review per HG-006 hard/not_decided fields",
             "memory_boundary_too_broad": "review per HG-001 hard/soft scores",
@@ -1245,21 +1287,23 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
 
 def write_ablation_markdown(path: Path, summary: dict[str, Any]) -> None:
     rows = [
-        "| pack | model | parse | hard | soft exact | soft tolerant | gate failures |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
+        "| pack | model | tokens | parse | hard | soft exact | soft tolerant | gate failures | hard/1k tok | soft tol/1k tok | parse/1k tok |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for profile in summary["profiles"]:
         rows.append(
-            "| {context_pack_label} | {model} | {json_parse_passes}/{runs} | "
+            "| {context_pack_label} | {model} | {context_pack_approx_token_estimate} | {json_parse_passes}/{runs} | "
             "{hard_matches}/{hard_total} | {soft_exact_matches}/{soft_total} | "
-            "{soft_tolerant_matches}/{soft_total} | {critical_gate_failures} |".format(
+            "{soft_tolerant_matches}/{soft_total} | {critical_gate_failures} | "
+            "{hard_matches_per_1k_tokens} | {soft_tolerant_matches_per_1k_tokens} | "
+            "{successful_parse_per_1k_tokens} |".format(
                 **profile
             )
         )
     recommended = summary["recommended_next_expanded_profile"] or {}
     content = "\n".join(
         [
-            "# 1G-B2-B Fast Secretary Recipe Ablation Summary",
+            f"# {summary['milestone']} Fast Secretary Recipe Ablation Summary",
             "",
             "Manual review is required. This ablation does not prove semantic truth.",
             "",
@@ -1269,6 +1313,8 @@ def write_ablation_markdown(path: Path, summary: dict[str, Any]) -> None:
             f"- best parse stability: {summary['best_parse_stability_profile']}",
             f"- best hard score: {summary['best_hard_score_profile']}",
             f"- best soft tolerant score: {summary['best_soft_tolerant_score_profile']}",
+            f"- best critical gate performance: {summary['best_critical_gate_profile']}",
+            f"- best score per approximate token: {summary['best_score_per_token_profile']}",
             f"- recommended next expanded profile: {recommended}",
             "",
             *rows,
@@ -1294,6 +1340,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--context-packs", default=None)
     parser.add_argument("--pack-label", default=None)
     parser.add_argument("--pack-labels", default=None)
+    parser.add_argument("--ablation-summary-stem", default="recipe_ablation_summary")
+    parser.add_argument("--report-milestone", default=None)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--run-local", action="store_true")
     return parser
@@ -1405,6 +1453,7 @@ def run_local(args: argparse.Namespace) -> int:
                     raw_path=raw_path,
                     ollama_result=ollama_result,
                     context_pack=context_pack,
+                    milestone=args.report_milestone,
                 )
                 write_json(result_path, result)
                 pack_results.append(result)
@@ -1422,7 +1471,12 @@ def run_local(args: argparse.Namespace) -> int:
                     f"timeout={result['timed_out']}"
                 )
 
-        summary = summarize_results(pack_results, report_dir, context_pack)
+        summary = summarize_results(
+            pack_results,
+            report_dir,
+            context_pack,
+            args.report_milestone,
+        )
         summary_stem = "local_model_form_fill_smoke_summary"
         if context_pack["label"]:
             summary_stem = f"{sanitize_filename(context_pack['label'])}__{summary_stem}"
@@ -1435,14 +1489,19 @@ def run_local(args: argparse.Namespace) -> int:
         print(f"summary md: {report_dir / f'{summary_stem}.md'}")
 
     if len(context_packs) > 1:
-        ablation_summary = summarize_ablation(results, report_dir)
-        write_json(report_dir / "recipe_ablation_summary.json", ablation_summary)
+        ablation_summary = summarize_ablation(
+            results,
+            report_dir,
+            args.report_milestone or "1G-B2-B",
+        )
+        summary_stem = sanitize_filename(args.ablation_summary_stem)
+        write_json(report_dir / f"{summary_stem}.json", ablation_summary)
         write_ablation_markdown(
-            report_dir / "recipe_ablation_summary.md",
+            report_dir / f"{summary_stem}.md",
             ablation_summary,
         )
-        print(f"ablation summary json: {report_dir / 'recipe_ablation_summary.json'}")
-        print(f"ablation summary md: {report_dir / 'recipe_ablation_summary.md'}")
+        print(f"ablation summary json: {report_dir / f'{summary_stem}.json'}")
+        print(f"ablation summary md: {report_dir / f'{summary_stem}.md'}")
     return 0
 
 

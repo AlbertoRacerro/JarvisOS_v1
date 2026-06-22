@@ -1,0 +1,53 @@
+Thinking...
+Okay, let's tackle this. The user is talking about BlueRev and considering [K
+polycarbonate tubes versus ETFE for prototyping. They mention they haven't [K
+decided on the material and don't want it saved as an accepted assumption.
+
+First, I need to use the provided routing table. The input pattern here is [K
+about BlueRev unresolved material, which falls under the 'bluerev' project [K
+bucket. The primary domain is reactor_design since it's about material choi[4D[K
+choice for a reactor component. The domain_tags should include reactor_desi[12D[K
+reactor_design and not_decided because the user hasn't made a decision yet.[4D[K
+yet.
+
+Storage relevance is high because the information is about material selecti[7D[K
+selection which is important. Lifecycle status is proposed_memory since it'[3D[K
+it's a tentative decision. Sensitivity is internal as it's project-related [K
+but not secret. Source policy is review_only, and retrieval behavior requir[6D[K
+requires a review gate. Not_decided is true because the user hasn't finaliz[7D[K
+finalized their choice.
+
+The provider preference says to use local_senior_model for unresolved assum[5D[K
+assumptions. The brief rationale should note the tentative material choice.[7D[K
+choice. I need to make sure all fields are filled with the correct enums an[2D[K
+and that the JSON structure matches the required shape. Also, check that th[2D[K
+the user's explicit mention of not wanting it saved as an accepted assumpti[8D[K
+assumption leads to not_decided being true. Alright, putting it all togethe[7D[K
+together now.
+...done thinking.
+
+{
+  "case_id": "HG-006",
+  "project_bucket": "bluerev",
+  "summary": "BlueRev material selection consideration for prototyping",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design", "not_decided"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Tentative material selection discussion with explicit[8D[K
+explicit rejection of accepted assumption"
+}

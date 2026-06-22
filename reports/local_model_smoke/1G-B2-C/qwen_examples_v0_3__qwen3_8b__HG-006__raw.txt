@@ -1,0 +1,53 @@
+Thinking...
+Okay, let's tackle this query. The user is working on a BlueRev project and[3D[K
+and is considering polycarbonate vs ETFE for tubing. They mention that poly[4D[K
+polycarbonate might be easier to prototype but haven't decided on the mater[5D[K
+material and don't want it saved as an accepted assumption.
+
+First, I need to categorize this. The project_bucket is clearly bluerev. Th[2D[K
+The primary_domain here is reactor_design since it's about material selecti[7D[K
+selection for a reactor component. Domain_tags should include reactor_desig[13D[K
+reactor_design, materials, and maybe not_decided since the choice isn't fin[3D[K
+final.
+
+Storage relevance is high because the material choice is a significant deci[4D[K
+decision. Lifecycle status is proposed_memory since it's a tentative idea. [K
+Sensitivity is internal as it's project-related but not secret. Source poli[4D[K
+policy should be review_only because it's a proposed decision needing valid[5D[K
+validation.
+
+Retrieval behavior might need a review gate since it's not finalized. Not_d[5D[K
+Not_decided is true because the user hasn't made a choice yet. Clarificatio[12D[K
+Clarification isn't required, but the user wants to avoid saving it as acce[4D[K
+accepted. The rationale should note the unresolved material choice. I need [K
+to make sure all required fields are included and enums are correct. Let me[2D[K
+me double-check the allowed values to ensure compliance.
+...done thinking.
+
+{
+  "case_id": "HG-006",
+  "project_bucket": "bluerev",
+  "summary": "BlueRev tubing material selection is undecided; polycarbonate[13D[K
+polycarbonate is a prototype candidate but not final.",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design", "materials", "prototype", "not_decided"[13D[K
+"not_decided"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Unresolved BlueRev material selection requires review[6D[K
+review before acceptance."
+}

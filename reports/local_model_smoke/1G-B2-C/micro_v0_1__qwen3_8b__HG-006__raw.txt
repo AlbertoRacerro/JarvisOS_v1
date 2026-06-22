@@ -1,0 +1,50 @@
+Thinking...
+Okay, let's tackle this. The user is working on a BlueRev project and is co[2D[K
+considering polycarbonate tubes versus ETFE. They mentioned that polycarbon[10D[K
+polycarbonate might be easier to prototype but haven't decided on the mater[5D[K
+material and don't want it saved as an accepted assumption.
+
+First, I need to extract the key points. The main subject is BlueRev, so pr[2D[K
+project_bucket should be 'bluerev'. The domain here is about material selec[5D[K
+selection for a reactor, so primary_domain and domain_bucket should be 'rea[4D[K
+'reactor_design' and 'bioprocess' since it involves both reactor design and[3D[K
+and biological processes.
+
+Storage relevance is high because the material choice impacts the project's[9D[K
+project's feasibility and is a durable decision. Lifecycle status is 'raw_i[6D[K
+'raw_input' because the user hasn't decided yet. The sensitivity is 'intern[7D[K
+'internal' since it's project-specific. Source policy is 'review_only' as p[1D[K
+per the context pack rules for BlueRev. Retrieval behavior is 'review_gate_[13D[K
+'review_gate_required' to ensure proper validation.
+
+The user explicitly states they haven't decided, so 'not_decided' is true. [K
+The rationale is that the material choice is tentative and needs further ev[2D[K
+evaluation. I'll make sure all the enums are correctly applied based on the[3D[K
+the provided rules and the user's input.
+...done thinking.
+
+{
+  "case_id": "HG-006",
+  "project_bucket": "bluerev",
+  "summary": "Material selection consideration for BlueRev prototyping",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["bioprocess", "reactor_design"],
+  "domain_bucket": "bioprocess",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "raw_input",
+  "lifecycle_status": "raw_input",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Material choice remains tentative with explicit user [K
+caveat against accepted assumptions"
+}

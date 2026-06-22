@@ -1,0 +1,57 @@
+Thinking...
+Okay, let's tackle this. The user is working on a BlueRev project and menti[5D[K
+mentioned that polycarbonate tubes might be easier to prototype than ETFE, [K
+but they haven't decided on the material and don't want it saved as an acce[4D[K
+accepted assumption.
+
+First, I need to classify this according to the JarvisOS guidelines. The ke[2D[K
+key points here are that the user is considering a material choice but hasn[4D[K
+hasn't decided yet. The instruction says not to save it as an accepted assu[4D[K
+assumption, so the lifecycle status shouldn't be accepted_memory. Since the[3D[K
+they're still undecided, 'not_decided' should be true.
+
+Looking at the project_bucket, it's clearly related to BlueRev, so that's s[1D[K
+set to bluerev. The primary_domain here is reactor_design because it's abou[4D[K
+about material selection for a reactor component. Domain tags should includ[6D[K
+include reactor_design and maybe not_decided/concrete_topic as per the comp[4D[K
+compact routing for BlueRev unresolved assumptions.
+
+Storage relevance is high because the decision impacts the project. The lif[3D[K
+lifecycle_status_proposal would be proposed_memory since it's a tentative i[1D[K
+idea. Sensitivity is internal as it's an internal project decision. Source [K
+policy is review_only, and retrieval behavior requires a review gate since [K
+it's an unresolved assumption.
+
+The reasoning route should use the local_senior_model for deeper analysis. [K
+The brief rationale needs to be short, mentioning the material consideratio[12D[K
+consideration and the undecided status. I need to make sure all enums are c[1D[K
+correctly applied and that the JSON structure matches the required shape wi[2D[K
+without any markdown or extra text.
+...done thinking.
+
+{
+  "case_id": "HG-006",
+  "project_bucket": "bluerev",
+  "summary": "Material selection consideration for BlueRev reactor design",[8D[K
+design",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design/not_decided/concrete_topic"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Uncertain material selection for reactor prototyping"[12D[K
+prototyping"
+}

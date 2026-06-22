@@ -1,0 +1,52 @@
+Thinking...
+Okay, let's tackle this. The user provided a query about JarvisOS where the[3D[K
+they state that MemoryStore should be the only durable memory write boundar[7D[K
+boundary, and hooks/routes can submit events but can't write accepted memor[5D[K
+memory directly.
+
+First, I need to map this into the required JSON structure. The project_buc[11D[K
+project_bucket is clearly "jarvisos" since it's about JarvisOS. The primary[7D[K
+primary_domain is "memory" because the topic is about memory management.
+
+Domain tags should include "memory" and "software" since it's about the sys[3D[K
+system's architecture. Storage relevance is high because this is a core sys[3D[K
+system boundary. Lifecycle status is proposed_memory as it's a new policy. [K
+Sensitivity is internal since it's about system internals.
+
+Source class policy should be review_only because it's a critical system bo[2D[K
+boundary. Retrieval behavior is none since this is a policy statement, not [K
+data. Not_decided is false because the statement is clear.
+
+Clarification required is false. The brief rationale is to define the memor[5D[K
+memory architecture boundary. I need to make sure all required fields are i[1D[K
+included and enums are correct. Let me double-check the allowed enums and r[1D[K
+required JSON shape to ensure compliance.
+...done thinking.
+
+{
+  "case_id": "HG-001",
+  "project_bucket": "jarvisos",
+  "summary": "MemoryStore should remain the only future durable memory writ[4D[K
+write boundary for JarvisOS. Hooks/routes may submit events but cannot writ[4D[K
+write accepted memory directly.",
+  "primary_domain": "memory",
+  "domain_tags": ["memory", "software", "architecture"],
+  "domain_bucket": "software",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "none",
+  "retrieval_behavior": "none",
+  "flags": [],
+  "not_decided": false,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "none",
+  "brief_rationale": "Defines JarvisOS memory architecture boundary and wri[3D[K
+write access constraints."
+}

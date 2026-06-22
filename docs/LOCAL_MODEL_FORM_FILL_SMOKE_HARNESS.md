@@ -6,6 +6,7 @@ Milestones:
 - 1G-B1 - Installed local model form-fill smoke run
 - 1G-B2-A - Fast secretary context pack compression and scoring refinement
 - 1G-B2-B - Fast secretary recipe ablation
+- 1G-B2-C - Qwen secretary context optimization
 
 ## Purpose
 
@@ -238,6 +239,60 @@ micro_rules_v0_2 + qwen3:8b
 That profile produced 3/3 parse, 23/24 hard, 15/15 soft tolerant, and 0
 critical gate failures. This is still smoke evidence only.
 
+## 1G-B2-C Qwen Secretary Context Optimization
+
+1G-B2-C keeps the benchmark bounded to Qwen and the same three holdout cases.
+
+New Qwen-focused packs:
+
+- `docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_RECIPE_ONLY_v0_3.md`
+- `docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_RECIPE_TABLE_v0_3.md`
+- `docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_EXAMPLES_v0_3.md`
+- `docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_HYBRID_v0_3.md`
+- `docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_OUTPUT_STRICT_v0_3.md`
+
+The optimization matrix:
+
+```text
+packs: micro_v0_1, micro_rules_v0_2, qwen_recipe_only_v0_3, qwen_recipe_table_v0_3, qwen_examples_v0_3, qwen_hybrid_v0_3, qwen_output_strict_v0_3
+model: qwen3:8b
+cases: HG-001, HG-006, HG-016
+total: 21 local Ollama runs
+```
+
+Reports are written under:
+
+```text
+reports/local_model_smoke/1G-B2-C/
+```
+
+Summary files:
+
+- `reports/local_model_smoke/1G-B2-C/qwen_context_optimization_summary.json`
+- `reports/local_model_smoke/1G-B2-C/qwen_context_optimization_summary.md`
+
+High-level result:
+
+```text
+micro_v0_1:                 3/3 parse, 21/24 hard, 12/15 soft tolerant, 0 gates, 558 tokens
+micro_rules_v0_2:           3/3 parse, 23/24 hard, 15/15 soft tolerant, 0 gates, 1339 tokens
+qwen_recipe_only_v0_3:      2/3 parse, 16/24 hard, 10/15 soft tolerant, 1 gate, 1346 tokens
+qwen_recipe_table_v0_3:     2/3 parse, 16/24 hard, 10/15 soft tolerant, 1 gate, 1118 tokens
+qwen_examples_v0_3:         2/3 parse, 11/24 hard,  6/15 soft tolerant, 2 gates, 1193 tokens
+qwen_hybrid_v0_3:           3/3 parse, 24/24 hard, 14/15 soft tolerant, 0 gates, 1257 tokens
+qwen_output_strict_v0_3:    2/3 parse, 14/24 hard,  7/15 soft tolerant, 1 gate, 858 tokens
+```
+
+Best default fast secretary pack for the next Qwen run:
+
+```text
+qwen_hybrid_v0_3
+```
+
+`micro_v0_1` remains the best score-per-token profile, but `qwen_hybrid_v0_3`
+is the best balanced default because it reached 3/3 parse, 24/24 hard, 14/15
+soft tolerant, and 0 critical gate failures.
+
 ## Dry-Run Behavior
 
 Example:
@@ -303,23 +358,25 @@ The tests cover:
 - secret/security soft-domain tolerance;
 - multi-pack label preservation;
 - legacy v0.1 report compatibility.
+- Qwen v0.3 pack loading;
+- score-per-token diagnostics in summaries.
 
 ## Future 1G-B
 
-After 1G-B2-B, the next milestone is:
+After 1G-B2-C, the next milestone is:
 
 ```text
-1G-B2-C - Expanded profiled secretary smoke run
+1G-B2-D - Expanded profiled Qwen secretary smoke run
 ```
 
-1G-B2-C may decide whether to expand the installed local secretary smoke scope.
+1G-B2-D may decide whether to expand the profiled Qwen secretary smoke scope.
 Any live run must remain local, explicit, bounded, auditable, and separate from
 runtime memory, retrieval, provider routing, tool execution, and BlueRev
 modeling.
 
 ## Milestone Boundary Confirmation
 
-1G-B2-B adds recipe pack ablation support, tolerant soft scoring, generated
+1G-B2-C adds Qwen-focused pack variants, score-per-token diagnostics, generated
 local smoke reports, docs, and `unittest` coverage.
 
 It adds no:
@@ -345,4 +402,4 @@ It adds no:
 - external reference audit;
 - vendored code.
 
-This milestone does not start `1G-B2-C - Expanded profiled secretary smoke run`.
+This milestone does not start `1G-B2-D - Expanded profiled Qwen secretary smoke run`.

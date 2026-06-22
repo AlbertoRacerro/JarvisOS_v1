@@ -721,6 +721,14 @@ Current implementation status:
   `micro_rules_v0_2` with `qwen3:8b`: 3/3 parse, 23/24 hard, 15/15 soft
   tolerant, and 0 critical gate failures. This is the recommended next
   expanded secretary profile, still manual-review evidence only.
+- 1G-B2-C optimized Qwen secretary context without expanding the benchmark.
+  Reports are under `reports/local_model_smoke/1G-B2-C/`. `qwen_hybrid_v0_3`
+  was the strongest default candidate for `qwen3:8b`: 3/3 parse, 24/24 hard,
+  14/15 soft tolerant, and 0 critical gate failures. `micro_rules_v0_2` had
+  the best soft tolerant score (15/15), while `micro_v0_1` had the best
+  score-per-token diagnostic. Recommendation: use `qwen_hybrid_v0_3` as the
+  default fast secretary pack for the next expanded Qwen run. This is still
+  manual-review evidence only.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
 The accepted next local AI sequence is:
@@ -752,7 +760,8 @@ The accepted next local AI sequence is:
 1G-B1      Installed local model form-fill smoke run
 1G-B2-A    Fast secretary context pack compression and scoring refinement
 1G-B2-B    Fast secretary recipe ablation
-1G-B2-C    Expanded profiled secretary smoke run
+1G-B2-C    Qwen secretary context optimization
+1G-B2-D    Expanded profiled Qwen secretary smoke run
 1H         Showcase files generator design
 1I         Context access from showcase files
 1J         Provider/tool intent form design

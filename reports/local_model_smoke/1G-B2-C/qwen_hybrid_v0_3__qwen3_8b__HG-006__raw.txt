@@ -1,0 +1,53 @@
+Thinking...
+Okay, let's tackle this query. The user is working on a BlueRev project and[3D[K
+and is considering polycarbonate versus ETFE for tubes. They mentioned that[4D[K
+that they haven't decided on the material and don't want it saved as an acc[3D[K
+accepted assumption.
+
+First, I need to map this to the provided enums and routing rules. The proj[4D[K
+project_bucket is clearly bluerev. The primary_domain should be reactor_des[11D[K
+reactor_design since it's about material selection for a reactor. The domai[5D[K
+domain_tags should include reactor_design, materials, and not_decided becau[5D[K
+because the choice is unresolved.
+
+Storage relevance is high because the decision impacts the project. The lif[3D[K
+lifecycle_status_proposal is proposed_memory since it's a tentative idea. S[1D[K
+Since the user hasn't decided, not_decided is true. The sensitivity is inte[4D[K
+internal as it's a project-related decision. Source policy is review_only b[1D[K
+because it's a proposed assumption. Retrieval behavior requires a review ga[2D[K
+gate since it's not finalized.
+
+The reasoning route should use the local senior model for BlueRev contexts.[9D[K
+contexts. The data package needed is a draft summary. The user hasn't asked[5D[K
+asked for approval, so user_approval_recommended is false. The brief ration[6D[K
+rationale notes the material uncertainty. I need to ensure all fields are c[1D[K
+correctly set according to the routing table and enums. Let me double-check[12D[K
+double-check the required JSON shape to include all necessary fields withou[6D[K
+without markdown.
+...done thinking.
+
+{
+  "case_id": "HG-006",
+  "project_bucket": "bluerev",
+  "summary": "Material selection uncertainty for BlueRev tubes",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design", "materials", "not_decided"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Unresolved material choice requires senior model revi[4D[K
+review"
+}

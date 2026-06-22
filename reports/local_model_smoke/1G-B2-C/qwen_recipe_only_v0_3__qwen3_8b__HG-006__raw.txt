@@ -1,0 +1,53 @@
+Thinking...
+Okay, let's tackle this query. The user is talking about BlueRev and consid[6D[K
+considering polycarbonate tubes versus ETFE for prototyping. They mention t[1D[K
+they haven't decided on the material and don't want it saved as an accepted[8D[K
+accepted assumption.
+
+First, I need to classify this according to the JarvisOS rules. The input i[1D[K
+is about BlueRev, which is a project bucket. The primary domain here is rea[3D[K
+reactor design since it's about material choice for a photobioreactor. The [K
+domain tags should include reactor_design and not_decided because the user [K
+hasn't made a decision yet.
+
+Storage relevance is high because the information is about a project decisi[6D[K
+decision, even though it's tentative. The lifecycle status should be propos[6D[K
+proposed_memory since it's a tentative idea. Sensitivity is internal as it'[3D[K
+it's project-related but not a secret. Source policy is review_only because[7D[K
+because it's a proposal. Retrieval behavior needs review gate since it's a [K
+proposed memory. Not_decided is true because the user hasn't finalized the [K
+choice.
+
+The user didn't ask for external providers, so that's false. Reasoning rout[4D[K
+route is local_senior_model as per the BlueRev recipe. The brief rationale [K
+is that it's a tentative material choice for BlueRev. I need to make sure a[1D[K
+all fields are correctly filled with the allowed enums and that the JSON st[2D[K
+structure matches the required shape.
+...done thinking.
+
+{
+  "case_id": "HG-006",
+  "project_bucket": "bluerev",
+  "summary": "BlueRev material consideration: polycarbonate tubes vs ETFE",[6D[K
+ETFE",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design", "not_decided"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Tentative BlueRev material choice requires senior rev[3D[K
+review"
+}

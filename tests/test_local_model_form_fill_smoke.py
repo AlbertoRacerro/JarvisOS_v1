@@ -35,6 +35,13 @@ class LocalModelFormFillSmokeTests(unittest.TestCase):
         cls.lite_rules_pack_path = (
             ROOT / "docs/context_packs/JARVISOS_FAST_SECRETARY_LITE_RULES_v0_2.md"
         )
+        cls.qwen_pack_paths = [
+            ROOT / "docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_RECIPE_ONLY_v0_3.md",
+            ROOT / "docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_RECIPE_TABLE_v0_3.md",
+            ROOT / "docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_EXAMPLES_v0_3.md",
+            ROOT / "docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_HYBRID_v0_3.md",
+            ROOT / "docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_OUTPUT_STRICT_v0_3.md",
+        ]
         cls.cases = smoke.load_jsonl_holdout(cls.holdout_path)
         cls.config = smoke.load_candidate_config(cls.config_path)
 
@@ -190,6 +197,13 @@ class LocalModelFormFillSmokeTests(unittest.TestCase):
             self.assertIn("Case Routing Recipes", pack["content"])
             self.assertIn("Output Discipline", pack["content"])
 
+    def test_qwen_v03_pack_files_exist_and_load(self):
+        for path in self.qwen_pack_paths:
+            self.assertTrue(path.exists())
+            pack = smoke.load_context_pack(path)
+            self.assertGreater(pack["char_count"], 0)
+            self.assertIn("Qwen", pack["content"])
+
     def test_context_pack_loading(self):
         pack = smoke.load_context_pack(self.micro_pack_path)
         self.assertGreater(pack["char_count"], 0)
@@ -222,6 +236,72 @@ class LocalModelFormFillSmokeTests(unittest.TestCase):
             context_pack=pack,
         )
         self.assertEqual("micro_rules_v0_2", result["context_pack_label"])
+
+    def test_summary_includes_pack_size_and_token_estimate(self):
+        case = next(case for case in self.cases if case["case_id"] == "HG-001")
+        model = smoke.select_models(self.config, ["qwen3:8b"])[0]
+        pack = smoke.load_context_pack(self.qwen_pack_paths[0])
+        pack["label"] = "qwen_recipe_only_v0_3"
+        result = smoke.build_result_record(
+            model=model,
+            case=case,
+            raw_path=Path("reports/local_model_smoke/test/raw.txt"),
+            ollama_result={
+                "stdout": json.dumps(
+                    {
+                        "case_id": "HG-001",
+                        "project_bucket": "jarvisos",
+                        "primary_domain": "memory",
+                        "domain_tags": ["memory", "software", "architecture"],
+                        "storage_relevance": "high",
+                        "lifecycle_status_proposal": "proposed_memory",
+                        "sensitivity_bucket_proposal": "internal",
+                        "source_class_policy_proposal": "review_only",
+                        "retrieval_behavior_proposal": "none",
+                        "not_decided": False,
+                        "clarification_required": False,
+                        "api_or_model_escalation_recommended": False,
+                        "reasoning_route_proposal": "none",
+                        "brief_rationale": "memory boundary",
+                    }
+                ),
+                "stderr": "",
+                "duration_seconds": 0.1,
+                "returncode": 0,
+                "timed_out": False,
+            },
+            context_pack=pack,
+        )
+        summary = smoke.summarize_ablation([result], Path("reports/local_model_smoke/test"))
+        profile = summary["profiles"][0]
+        self.assertIn("context_pack_char_count", profile)
+        self.assertIn("context_pack_approx_token_estimate", profile)
+
+    def test_score_per_token_diagnostics_exist(self):
+        case = next(case for case in self.cases if case["case_id"] == "HG-001")
+        model = smoke.select_models(self.config, ["qwen3:8b"])[0]
+        pack = smoke.load_context_pack(self.qwen_pack_paths[1])
+        pack["label"] = "qwen_recipe_table_v0_3"
+        result = smoke.build_result_record(
+            model=model,
+            case=case,
+            raw_path=Path("reports/local_model_smoke/test/raw.txt"),
+            ollama_result={
+                "stdout": '{"case_id": "HG-001"}',
+                "stderr": "",
+                "duration_seconds": 0.1,
+                "returncode": 0,
+                "timed_out": False,
+            },
+            context_pack=pack,
+        )
+        profile = smoke.summarize_ablation(
+            [result],
+            Path("reports/local_model_smoke/test"),
+        )["profiles"][0]
+        self.assertIn("hard_matches_per_1k_tokens", profile)
+        self.assertIn("soft_tolerant_matches_per_1k_tokens", profile)
+        self.assertIn("successful_parse_per_1k_tokens", profile)
 
     def test_soft_hard_score_separation(self):
         case = next(case for case in self.cases if case["case_id"] == "HG-006")
@@ -377,6 +457,24 @@ class LocalModelFormFillSmokeTests(unittest.TestCase):
             )
         self.assertEqual(0, result)
         self.assertIn("context pack label: micro_rules_v0_2", output.getvalue())
+
+    def test_dry_run_with_new_qwen_pack_still_works(self):
+        output = StringIO()
+        with redirect_stdout(output):
+            result = smoke.main(
+                [
+                    "--dry-run",
+                    "--include-disabled",
+                    "--max-cases",
+                    "1",
+                    "--context-pack",
+                    str(self.qwen_pack_paths[3]),
+                    "--pack-label",
+                    "qwen_hybrid_v0_3",
+                ]
+            )
+        self.assertEqual(0, result)
+        self.assertIn("context pack label: qwen_hybrid_v0_3", output.getvalue())
 
     def test_legacy_v01_report_compatibility_preserved(self):
         report_path = (
