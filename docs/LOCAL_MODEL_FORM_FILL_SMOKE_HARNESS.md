@@ -398,6 +398,56 @@ Recommended next milestone:
 1G-B2-E - Full holdout Qwen secretary smoke run
 ```
 
+## 1G-B2-E Full Holdout Qwen Secretary Smoke Run
+
+1G-B2-E runs the first full 32-case local smoke test for the current parse-safe
+Qwen secretary pack.
+
+The exact matrix:
+
+```text
+model: qwen3:8b
+pack: qwen_hybrid_parse_safe_v0_4
+cases: HG-001 through HG-032 from docs/holdout/intake_generalization_v0.jsonl
+total: 32 local Ollama runs
+```
+
+Reports are written under:
+
+```text
+reports/local_model_smoke/1G-B2-E/
+```
+
+Summary files:
+
+- `reports/local_model_smoke/1G-B2-E/full_holdout_qwen_summary.json`
+- `reports/local_model_smoke/1G-B2-E/full_holdout_qwen_summary.md`
+
+High-level result:
+
+```text
+qwen_hybrid_parse_safe_v0_4: 28/32 parse, 169/256 hard, 103/160 soft exact, 104/160 soft tolerant, 4 gates, 1235 tokens
+```
+
+Parse and critical gate failures:
+
+```text
+HG-007, HG-017, HG-018, HG-024
+```
+
+The known `HG-018` provider/memory-boundary risk persisted as a parse/gate
+failure. Other low-hard-score cases indicate remaining clarification, retrieval,
+cross-project, personal/coursework memory, and provider/memory boundary risks.
+
+Recommended next milestone:
+
+```text
+1G-B2-E-R - Full holdout Qwen failure analysis
+```
+
+Do not treat v0.4 as runtime-approved or default-queue-approved. The full
+holdout parse score is below 30/32, and hard-field misses remain significant.
+
 ## Dry-Run Behavior
 
 Example:
@@ -468,22 +518,22 @@ The tests cover:
 
 ## Future 1G-B
 
-After 1G-B2-D-R, the next milestone is:
+After 1G-B2-E, the next milestone is:
 
 ```text
-1G-B2-E - Full holdout Qwen secretary smoke run
+1G-B2-E-R - Full holdout Qwen failure analysis
 ```
 
-1G-B2-E should use `qwen_hybrid_parse_safe_v0_4`, stay manual-review only, and
-track `HG-018`-style provider/memory-boundary hard-field misses.
+1G-B2-E-R should analyze the full-holdout parse/gate failures and hard-field
+miss clusters before any default-pack decision.
 Any live run must remain local, explicit, bounded, auditable, and separate from
 runtime memory, retrieval, provider routing, tool execution, and BlueRev
 modeling.
 
 ## Milestone Boundary Confirmation
 
-1G-B2-D-R adds failure-analysis docs, a parse-safe Qwen pack, generated local
-rerun reports, docs, and `unittest` coverage for the new pack file.
+1G-B2-E adds full-holdout Qwen smoke reports, docs, and eval-harness guard
+coverage allowing exactly 32 real local cases while still rejecting larger runs.
 
 It adds no:
 

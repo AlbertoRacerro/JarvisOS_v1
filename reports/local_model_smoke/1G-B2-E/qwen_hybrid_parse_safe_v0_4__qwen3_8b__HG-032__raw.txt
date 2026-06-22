@@ -1,0 +1,57 @@
+Thinking...
+Okay, let's tackle this query. The user is asking about material selection [K
+for BlueRev tubing, specifically between silicone, PVC, ETFE, and acrylic. [K
+They mention that none have been selected yet and that if asked, the answer[6D[K
+answer should state the material isn't decided.
+
+First, I need to determine the correct project bucket. Since it's related t[1D[K
+to BlueRev, which is an engineering choice, the project_bucket should be 'b[2D[K
+'bluerev'. The primary_domain here is reactor_design because it's about sel[3D[K
+selecting materials for a reactor's tubing.
+
+Looking at the domain_tags, I should include 'reactor_design' and note that[4D[K
+that the material is not decided. The storage_relevance is high because thi[3D[K
+this is an important engineering decision. The lifecycle_status_proposal is[2D[K
+is proposed_memory since the material hasn't been finalized yet.
+
+Sensitivity is internal because it's an internal engineering choice. The so[2D[K
+source_class_policy_proposal is review_only, meaning it needs to be reviewe[7D[K
+reviewed but not blocked. Retrieval behavior should be review_gate_required[20D[K
+review_gate_required to ensure proper access.
+
+Not_decided is set to true because the material hasn't been selected. Clari[5D[K
+Clarification is required since the user wants to know that the material is[2D[K
+is undecided. The reasoning route should be local_senior_model as it's a si[2D[K
+significant engineering decision.
+
+The brief rationale is that the material selection is unresolved. I need to[2D[K
+to make sure all enums are correctly applied and that the JSON structure ma[2D[K
+matches the required shape without any markdown. Also, check that the user'[5D[K
+user's instruction to not select any material is reflected in the not_decid[9D[K
+not_decided flag and clarification_required.
+...done thinking.
+
+{
+  "case_id": "HG-032",
+  "project_bucket": "bluerev",
+  "summary": "BlueRev tubing material selection unresolved",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design", "not_decided", "material_selection"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": true,
+  "clarification": "Material selection is unresolved",
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Material selection unresolved per user instruction"
+}

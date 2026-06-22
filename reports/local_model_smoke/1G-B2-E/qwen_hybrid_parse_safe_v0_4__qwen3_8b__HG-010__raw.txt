@@ -1,0 +1,40 @@
+Thinking...
+Okay, let's tackle this. The user mentioned using the previous decision abo[3D[K
+about material and preparing the next step. From the context, if it's relat[5D[K
+related to BlueRev engineering choices like material, geometry, etc., then [K
+the project_bucket should be bluerev and primary_domain reactor_design. The[3D[K
+The domain_tags would include reactor_design and the specific topic, which [K
+here is material. Storage relevance is high, lifecycle_status_proposal is p[1D[K
+proposed_memory, sensitivity is internal, source policy is review_only. Ret[3D[K
+Retrieval behavior needs review_gate_required. Not_decided is true because [K
+it's an unresolved assumption. Escalation recommended is true, reasoning ro[2D[K
+route is local_senior_model. Data package needed is draft_batch_summary. Th[2D[K
+The summary should mention preparing the next step based on the material de[2D[K
+decision. Make sure all enums are correct and required fields are present.
+...done thinking.
+
+{
+  "case_id": "HG-010",
+  "project_bucket": "bluerev",
+  "summary": "Prepare next step based on previous material decision",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design", "material"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Unresolved BlueRev material assumption requires senio[5D[K
+senior model review"
+}

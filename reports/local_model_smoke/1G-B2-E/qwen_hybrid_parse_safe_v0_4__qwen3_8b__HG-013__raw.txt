@@ -1,0 +1,106 @@
+Thinking...
+Okay, let's tackle this query. The user wants to fill out a JarvisOS form f[1D[K
+for a smoke test, specifically for the CPPOM handout's distillation chapter[7D[K
+chapter using the latest JarvisOS memory decision style.
+
+First, I need to parse the input text. The main request is about organizing[10D[K
+organizing the distillation chapter with the latest JarvisOS memory style. [K
+The allowed enums and required JSON shape are provided, so I need to map th[2D[K
+the input into those fields.
+
+Looking at the context pack, if the content relates to JarvisOS memory arch[4D[K
+architecture, the project_bucket should be 'jarvisos' and primary_domain 'm[2D[K
+'memory'. The domain_tags should include 'memory', 'software', 'architectur[12D[K
+'architecture'. Storage relevance is high, lifecycle_status_proposal is 'pr[3D[K
+'proposed_memory', sensitivity_bucket_proposal is 'internal', source_class_[13D[K
+source_class_policy_proposal is 'review_only', retrieval_behavior_proposal [K
+is 'none' unless there's a need for raw memory review. Not_decided is false[5D[K
+false, and reasoning_route_proposal is 'none'.
+
+The user mentioned "CPPOM handout" and "distillation chapter," which seems [K
+to be part of a coursework or documentation. However, the context pack does[4D[K
+doesn't mention coursework in the same way as JarvisOS or BlueRev. But sinc[4D[K
+since the user is using JarvisOS memory style, it's likely related to Jarvi[5D[K
+JarvisOS. However, the input text doesn't explicitly state it's about Jarvi[5D[K
+JarvisOS memory architecture. Wait, the user says "use the latest JarvisOS [K
+memory decision style to organize the distillation chapter." So it's about [K
+organizing content using JarvisOS's memory structure.
+
+Therefore, project_bucket should be 'jarvisos', primary_domain 'memory', do[2D[K
+domain_tags including 'memory', 'software', 'architecture'. Storage_relevan[15D[K
+Storage_relevance is high because it's about memory organization. Lifecycle[9D[K
+Lifecycle_status_proposal is 'proposed_memory' since it's a draft. Sensitiv[8D[K
+Sensitivity is internal as it's internal documentation. Source policy is re[2D[K
+review_only. Retrieval behavior is none unless raw review is needed, but th[2D[K
+the user hasn't mentioned that. Not_decided is false. Reasoning route is no[2D[K
+none.
+
+The case_id is given as HG-013. The summary should be a short summary of th[2D[K
+the task. The brief_rationale would explain why it's categorized this way. [K
+The other fields like flags, clarification_required, etc., are not mentione[8D[K
+mentioned, so they default to false. The user didn't mention any secrets or[2D[K
+or API keys, so those fields aren't applicable here. The data_package_neede[18D[K
+data_package_needed isn't specified, so maybe 'none' or 'draft_batch_summar[19D[K
+'draft_batch_summary' if it's a draft. But according to the context pack, f[1D[K
+for JarvisOS memory, data_package_needed isn't specified, but in the defaul[6D[K
+default rules, if it's a draft, maybe 'draft_batch_summary'.
+
+Wait, looking back, the context pack says for JarvisOS memory architecture,[13D[K
+architecture, data_package_needed isn't mentioned, but in the default rules[5D[K
+rules, if it's a draft, maybe 'draft_batch_summary'. However, the user hasn[4D[K
+hasn't specified needing a data package, so maybe 'none'. But the required [K
+JSON shape includes data_package_needed, which in the original context wasn[4D[K
+wasn't part of the initial enums. Wait, checking the required JSON shape pr[2D[K
+provided by the user, there's a field 'data_package_needed' which is part o[1D[K
+of the required shape. But in the initial context pack, the enums for data_[5D[K
+data_package_needed are listed as 'none', 'draft_only', etc. So I need to i[1D[K
+include that.
+
+Wait, the required JSON shape includes 'data_package_needed' as one of the [K
+fields. However, in the initial context pack, the enums for data_package_ne[15D[K
+data_package_needed are part of the allowed enums. So I need to set that. S[1D[K
+Since it's a draft, maybe 'draft_batch_summary'?
+
+But the user hasn't specified any data package, so perhaps 'none' or 'draft[6D[K
+'draft_only'. However, the context pack for JarvisOS memory doesn't mention[7D[K
+mention data_package_needed, but the required JSON shape includes it. Maybe[5D[K
+Maybe the default is 'none' unless specified. Since the user is creating a [K
+draft, maybe 'draft_batch_summary' is appropriate.
+
+Putting it all together, the JSON should have project_bucket 'jarvisos', pr[2D[K
+primary_domain 'memory', domain_tags including 'memory', 'software', 'archi[6D[K
+'architecture', storage_relevance 'high', lifecycle_status_proposal 'propos[7D[K
+'proposed_memory', sensitivity_bucket_proposal 'internal', source_class_pol[16D[K
+source_class_policy_proposal 'review_only', retrieval_behavior_proposal 'no[3D[K
+'none', not_decided false, reasoning_route_proposal 'none', and data_packag[11D[K
+data_package_needed 'draft_batch_summary' as it's a draft. The brief_ration[12D[K
+brief_rationale would explain that it's organizing a chapter using JarvisOS[8D[K
+JarvisOS memory style. The case_id is provided as HG-013. The other fields [K
+like flags, clarification_required, etc., are false unless specified.
+...done thinking.
+
+{
+  "case_id": "HG-013",
+  "project_bucket": "jarvisos",
+  "summary": "Organize CPPOM handout distillation chapter using JarvisOS me[2D[K
+memory decision style",
+  "primary_domain": "memory",
+  "domain_tags": ["memory", "software", "architecture"],
+  "domain_bucket": "memory",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "none",
+  "retrieval_behavior": "none",
+  "flags": [],
+  "not_decided": false,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "none",
+  "brief_rationale": "Memory architecture organization for documentation"
+}

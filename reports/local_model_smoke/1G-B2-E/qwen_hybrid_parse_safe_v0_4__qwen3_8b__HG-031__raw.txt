@@ -1,0 +1,83 @@
+Thinking...
+Okay, let's tackle this. The user provided a JSON structure and some input [K
+text. The task is to generate a valid JSON based on the given context and r[1D[K
+rules.
+
+First, the input text mentions an algal productivity number from a private [K
+spreadsheet: 0.82 g/L/day. They note to use it carefully when comparing wit[3D[K
+with literature later. The key points here are that the data comes from a p[1D[K
+private source, which might imply sensitivity. Also, the mention of compari[7D[K
+comparing with literature suggests it's related to bioprocess or reactor de[2D[K
+design, maybe part of BlueRev.
+
+Looking at the enums and rules, if it's about BlueRev engineering choices, [K
+the project_bucket should be bluerev, primary_domain reactor_design, and do[2D[K
+domain_tags include reactor_design and the topic. However, the user hasn't [K
+specified a particular unresolved assumption, just a number. But since it's[4D[K
+it's from a private spreadsheet, maybe it's considered sensitive.
+
+Wait, the rules say if it's API keys, passwords, etc., then sensitivity is [K
+secret. But this is a productivity number, not a secret. However, the user [K
+says it's from a private spreadsheet, so maybe it's internal. The sensitivi[9D[K
+sensitivity_bucket_proposal would be internal.
+
+The storage_relevance is high because it's a specific data point. Lifecycle[9D[K
+Lifecycle status is proposed_memory since it's a useful but not final input[5D[K
+input. Not_decided is true because the user mentions using it carefully whe[3D[K
+when comparing literature, indicating it's tentative.
+
+The reasoning_route_proposal should be local_senior_model for private/IP-se[13D[K
+private/IP-sensitive data. Data_package_needed is draft_batch_summary.
+
+Primary_domain is bioprocess since it's about algal productivity. Domain_ta[9D[K
+Domain_tags would include bioprocess and maybe reactor_design if it's relat[5D[K
+related. Wait, the input doesn't mention reactor design, so maybe just biop[4D[K
+bioprocess.
+
+Need to check the required fields. The user's input doesn't mention any API[3D[K
+API keys or secrets, so the security domain isn't needed. The project_bucke[13D[K
+project_bucket is likely bluerev if it's part of their engineering choices.[8D[K
+choices. But the example given in the rules for BlueRev includes things lik[3D[K
+like material, geometry, etc. The algal productivity might be part of biopr[5D[K
+bioprocess in BlueRev.
+
+So, project_bucket: bluerev, primary_domain: bioprocess. Domain_tags would [K
+include bioprocess and maybe reactor_design if applicable. But the input do[2D[K
+doesn't mention reactor design, so maybe just bioprocess.
+
+Sensitivity_bucket_proposal: internal. Source_class_policy_proposal: review[6D[K
+review_only. Retrieval_behavior_proposal: review_gate_required. Not_decided[11D[K
+Not_decided: true.
+
+The case_id is given as HG-031. The brief_rationale would be something like[4D[K
+like "Private algal productivity data for bioprocess analysis."
+
+Putting it all together, ensuring all required fields are filled with the c[1D[K
+correct enums and values based on the rules provided.
+...done thinking.
+
+{
+  "case_id": "HG-031",
+  "project_bucket": "bluerev",
+  "summary": "Private algal productivity data from spreadsheet",
+  "primary_domain": "bioprocess",
+  "domain_tags": ["bioprocess", "not_decided"],
+  "domain_bucket": "bioprocess",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Private bioprocess data with tentative comparison rel[3D[K
+relevance"
+}

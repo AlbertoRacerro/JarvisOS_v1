@@ -1,0 +1,128 @@
+Thinking...
+Okay, let me try to figure out how to approach this. The user provided a co[2D[K
+complex input about not building a RAG runtime yet and keeping retrieval as[2D[K
+as a design contract. They want a JSON output based on specific enums and r[1D[K
+rules.
+
+First, I need to parse the input text. The main points are that retrieval s[1D[K
+should be scoped to candidates first, then full body by source ID when need[4D[K
+needed. The user also mentioned allowed enums and a required JSON shape.
+
+Looking at the Fast secretary context pack, there are rules for different s[1D[K
+scenarios. Since the input is about retrieval design, which falls under the[3D[K
+the memory domain, I should check the relevant sections. The context pack s[1D[K
+says that if it's about JarvisOS memory architecture, then project_bucket i[1D[K
+is jarvisos, primary_domain is memory, and domain_tags include memory, soft[4D[K
+software, architecture. Storage relevance is high, lifecycle_status_proposa[24D[K
+lifecycle_status_proposal is proposed_memory, sensitivity is internal, sour[4D[K
+source_class_policy is review_only, retrieval_behavior is none unless raw m[1D[K
+memory review is requested. Not_decided is false, reasoning_route is none.
+
+But the user's input isn't about memory architecture per se, but about retr[4D[K
+retrieval design. However, the context pack's first section mentions retrie[6D[K
+retrieval as part of memory. So maybe the primary_domain should be retrieva[8D[K
+retrieval. Wait, the primary_domain options include retrieval. Let me check[5D[K
+check the enums again. The primary_domain can be memory, software, retrieva[8D[K
+retrieval, etc.
+
+The input says retrieval should stay a design contract, so maybe the primar[6D[K
+primary_domain is retrieval. But the context pack's first section mentions [K
+if it's about JarvisOS memory architecture, then primary_domain is memory. [K
+However, the user's case is about retrieval design, not memory architecture[12D[K
+architecture. So perhaps the primary_domain is retrieval.
+
+Wait, the user's input is about not building a RAG runtime yet and keeping [K
+retrieval as a design contract. This seems more related to the retrieval as[2D[K
+aspect rather than memory architecture. So maybe the primary_domain is retr[4D[K
+retrieval.
+
+But the context pack's first section says if it's about JarvisOS memory arc[3D[K
+architecture, then primary_domain is memory. But the current input is about[5D[K
+about retrieval design, not memory architecture. So maybe the primary_domai[13D[K
+primary_domain is retrieval.
+
+But the required JSON shape includes domain_bucket, which the user's input [K
+has as a field. Wait, the required JSON shape includes domain_bucket, but t[1D[K
+the original context pack's enums have primary_domain. Maybe there's a conf[4D[K
+confusion here. Let me check the original context pack again.
+
+In the context pack, the required output fields include primary_domain, and[3D[K
+and the enums for primary_domain include retrieval. So if the input is abou[4D[K
+about retrieval design, primary_domain should be retrieval.
+
+So, project_bucket would be jarvisos because it's about JarvisOS's retrieva[8D[K
+retrieval design. Primary_domain is retrieval. Domain_tags would include re[2D[K
+retrieval, maybe memory and software as well? Wait, the context pack says f[1D[K
+for memory architecture, domain_tags include memory, software, architecture[12D[K
+architecture. But here, it's retrieval design, so maybe domain_tags are ret[3D[K
+retrieval, software, and maybe others.
+
+Storage_relevance is high because it's about system design. Lifecycle_statu[15D[K
+Lifecycle_status_proposal is proposed_memory as per the context pack's firs[4D[K
+first section. Sensitivity_bucket_proposal is internal. Source_class_policy[19D[K
+Source_class_policy_proposal is review_only. Retrieval_behavior_proposal is[2D[K
+is none unless raw memory review is requested. But the user says retrieval [K
+should stay a design contract, so maybe retrieval_behavior is candidate_dis[13D[K
+candidate_discovery_only? Wait, the context pack says for memory architectu[10D[K
+architecture, retrieval_behavior is none unless source access is requested.[10D[K
+requested. But here, the user is talking about design contract, which might[5D[K
+might be candidate_discovery_only.
+
+Not_decided is false. Reasoning_route_proposal is none. The brief_rationale[15D[K
+brief_rationale would be something like "Retrieval design contract as per u[1D[K
+user instruction."
+
+Wait, but the user's input is not about memory architecture but about retri[5D[K
+retrieval design. The context pack's first section is for memory architectu[10D[K
+architecture. However, the user's case is about retrieval, so perhaps the p[1D[K
+primary_domain is retrieval.
+
+But the context pack's first section says if it's about JarvisOS memory arc[3D[K
+architecture, then primary_domain is memory. Since the user is talking abou[4D[K
+about retrieval, maybe the primary_domain is retrieval.
+
+So, project_bucket is jarvisos, primary_domain is retrieval. Domain_tags wo[2D[K
+would include retrieval, maybe software. Storage_relevance is high. Lifecyc[7D[K
+Lifecycle_status_proposal is proposed_memory. Sensitivity_bucket_proposal i[1D[K
+is internal. Source_class_policy_proposal is review_only. Retrieval_behavio[17D[K
+Retrieval_behavior_proposal is candidate_discovery_only. Not_decided is fal[3D[K
+false. Reasoning_route_proposal is none.
+
+But the user's input says that retrieval should stay a design contract, sco[3D[K
+scoped candidates first, then full body by source ID. So maybe retrieval_be[12D[K
+retrieval_behavior is candidate_discovery_only.
+
+Putting it all together, the JSON would have project_bucket as jarvisos, pr[2D[K
+primary_domain as retrieval, domain_tags as ["retrieval", "software"], stor[4D[K
+storage_relevance as high, lifecycle_status_proposal as proposed_memory, se[2D[K
+sensitivity_bucket_proposal as internal, source_class_policy_proposal as re[2D[K
+review_only, retrieval_behavior_proposal as candidate_discovery_only, not_d[5D[K
+not_decided as false, reasoning_route_proposal as none, and brief_rationale[15D[K
+brief_rationale as "Retrieval design contract as per user instruction."
+...done thinking.
+
+{
+  "case_id": "HG-002",
+  "project_bucket": "jarvisos",
+  "summary": "Retrieval design contract prioritizing scoped candidates over[4D[K
+over full body access",
+  "primary_domain": "retrieval",
+  "domain_tags": ["retrieval", "software", "architecture"],
+  "domain_bucket": "retrieval",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "candidate_discovery_only",
+  "retrieval_behavior": "candidate_discovery_only",
+  "flags": [],
+  "not_decided": false,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "none",
+  "brief_rationale": "Retrieval design contract as per user instruction"
+}

@@ -159,14 +159,22 @@ class LocalModelFormFillSmokeTests(unittest.TestCase):
         self.assertTrue(all(comparison["enum_validity"].values()))
 
     def test_real_run_case_limit_guard(self):
-        selected = self.cases[:13]
+        selected = self.cases + [dict(self.cases[0], case_id="HG-033")]
         selected_models = smoke.select_models(self.config, ["qwen3:8b"])
-        with self.assertRaisesRegex(ValueError, "limited to 12 cases"):
+        with self.assertRaisesRegex(ValueError, "limited to 32 cases"):
             smoke.validate_real_run_selection(
                 selected_cases=selected,
                 explicit_case_ids=[case["case_id"] for case in selected],
                 selected_models=selected_models,
             )
+
+    def test_real_run_case_limit_allows_full_holdout(self):
+        selected_models = smoke.select_models(self.config, ["qwen3:8b"])
+        smoke.validate_real_run_selection(
+            selected_cases=self.cases,
+            explicit_case_ids=[case["case_id"] for case in self.cases],
+            selected_models=selected_models,
+        )
 
     def test_selected_model_validation_by_ollama_name(self):
         selected = smoke.select_models(
@@ -278,6 +286,55 @@ class LocalModelFormFillSmokeTests(unittest.TestCase):
         profile = summary["profiles"][0]
         self.assertIn("context_pack_char_count", profile)
         self.assertIn("context_pack_approx_token_estimate", profile)
+
+    def test_report_metadata_keeps_smoke_manual_review_framing(self):
+        case = next(case for case in self.cases if case["case_id"] == "HG-001")
+        model = smoke.select_models(self.config, ["qwen3:8b"])[0]
+        pack = smoke.load_context_pack(self.qwen_pack_paths[-1])
+        pack["label"] = "qwen_hybrid_parse_safe_v0_4"
+        result = smoke.build_result_record(
+            model=model,
+            case=case,
+            raw_path=Path("reports/local_model_smoke/test/raw.txt"),
+            ollama_result={
+                "stdout": '{"case_id": "HG-001"}',
+                "stderr": "",
+                "duration_seconds": 0.1,
+                "returncode": 0,
+                "timed_out": False,
+            },
+            context_pack=pack,
+            milestone="1G-B2-E",
+        )
+        summary = smoke.summarize_results(
+            [result],
+            Path("reports/local_model_smoke/test"),
+            pack,
+            "1G-B2-E",
+        )
+        ablation = smoke.summarize_ablation(
+            [result],
+            Path("reports/local_model_smoke/test"),
+            "1G-B2-E",
+        )
+        self.assertEqual("1G-B2-E", summary["milestone"])
+        self.assertTrue(summary["manual_review_required"])
+        self.assertFalse(summary["semantic_truth_scored"])
+        self.assertEqual("1G-B2-E", ablation["milestone"])
+        self.assertTrue(ablation["manual_review_required"])
+        self.assertFalse(ablation["semantic_truth_scored"])
+
+    def test_named_summary_stem_writes_single_pack_ablation_summary(self):
+        pack = smoke.load_context_pack(self.qwen_pack_paths[-1])
+        self.assertFalse(
+            smoke.should_write_ablation_summary([pack], "recipe_ablation_summary")
+        )
+        self.assertTrue(
+            smoke.should_write_ablation_summary([pack], "full_holdout_qwen_summary")
+        )
+        self.assertTrue(
+            smoke.should_write_ablation_summary([pack, pack], "recipe_ablation_summary")
+        )
 
     def test_score_per_token_diagnostics_exist(self):
         case = next(case for case in self.cases if case["case_id"] == "HG-001")
@@ -477,6 +534,27 @@ class LocalModelFormFillSmokeTests(unittest.TestCase):
             )
         self.assertEqual(0, result)
         self.assertIn("context pack label: qwen_hybrid_v0_3", output.getvalue())
+
+    def test_dry_run_with_parse_safe_qwen_pack_and_full_case_set(self):
+        output = StringIO()
+        with redirect_stdout(output):
+            result = smoke.main(
+                [
+                    "--dry-run",
+                    "--case-ids",
+                    ",".join(case["case_id"] for case in self.cases),
+                    "--context-pack",
+                    str(self.qwen_pack_paths[-1]),
+                    "--pack-label",
+                    "qwen_hybrid_parse_safe_v0_4",
+                    "--report-milestone",
+                    "1G-B2-E",
+                ]
+            )
+        self.assertEqual(0, result)
+        text = output.getvalue()
+        self.assertIn("context pack label: qwen_hybrid_parse_safe_v0_4", text)
+        self.assertIn("HG-032", text)
 
     def test_legacy_v01_report_compatibility_preserved(self):
         report_path = (

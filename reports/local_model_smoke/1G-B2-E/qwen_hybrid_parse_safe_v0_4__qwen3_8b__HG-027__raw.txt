@@ -1,0 +1,55 @@
+Thinking...
+Okay, let's tackle this. The user provided a complex input about JarvisOS a[1D[K
+and a form to fill out. The main point is that if Codex adds runtime code d[1D[K
+during a docs-only milestone, that milestone is considered failed until rev[3D[K
+reviewed.
+
+First, I need to map this into the required JSON structure. The input menti[5D[K
+mentions "JarvisOS" and a rule about milestones, so the project_bucket shou[4D[K
+should be "jarvisos". The primary_domain is likely "memory" since it's abou[4D[K
+about system rules and memory handling.
+
+Domain_tags should include "memory" and maybe "software" since it's about s[1D[K
+system behavior. Storage_relevance is "high" because the rule affects syste[5D[K
+system storage. Lifecycle_status_proposal is "proposed_memory" as it's a ne[2D[K
+new rule. Sensitivity_bucket_proposal is "internal" since it's a system rul[3D[K
+rule.
+
+Source_class_policy_proposal is "review_only" because the rule needs review[6D[K
+review before acceptance. Retrieval_behavior_proposal is "none" unless ther[4D[K
+there's a reason to access it. Not_decided is false since the rule is clear[5D[K
+clear. Reasoning_route_proposal should be "local_senior_model" for such sys[3D[K
+system rules.
+
+The brief_rationale should mention the rule about Codex adding code during [K
+docs-only milestones. I need to ensure all enums are correct and required f[1D[K
+fields are present. Let me double-check each field against the enums and th[2D[K
+the context given.
+...done thinking.
+
+{
+  "case_id": "HG-027",
+  "project_bucket": "jarvisos",
+  "summary": "Codex runtime code addition during docs-only milestones requi[5D[K
+requires review",
+  "primary_domain": "memory",
+  "domain_tags": ["memory", "software", "architecture"],
+  "domain_bucket": "memory",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "none",
+  "retrieval_behavior": "none",
+  "flags": [],
+  "not_decided": false,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "System rule requiring review of runtime code addition[8D[K
+additions during docs-only milestones"
+}

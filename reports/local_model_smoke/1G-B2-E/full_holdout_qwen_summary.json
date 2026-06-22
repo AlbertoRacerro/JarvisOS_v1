@@ -1,0 +1,620 @@
+{
+  "best_critical_gate_profile": {
+    "context_pack_approx_token_estimate": 1235,
+    "context_pack_char_count": 4940,
+    "context_pack_label": "qwen_hybrid_parse_safe_v0_4",
+    "context_pack_path": "docs\\context_packs\\JARVISOS_FAST_SECRETARY_QWEN_HYBRID_PARSE_SAFE_v0_4.md",
+    "critical_gate_failures": 4,
+    "hard_matches": 169,
+    "hard_matches_per_1k_tokens": 136.842,
+    "hard_total": 256,
+    "json_parse_passes": 28,
+    "manual_review_required": true,
+    "model": "qwen3:8b",
+    "runs": 32,
+    "soft_exact_matches": 103,
+    "soft_tolerant_matches": 104,
+    "soft_tolerant_matches_per_1k_tokens": 84.211,
+    "soft_total": 160,
+    "successful_parse_per_1k_tokens": 22.672,
+    "timeouts": 0
+  },
+  "best_hard_score_profile": {
+    "context_pack_approx_token_estimate": 1235,
+    "context_pack_char_count": 4940,
+    "context_pack_label": "qwen_hybrid_parse_safe_v0_4",
+    "context_pack_path": "docs\\context_packs\\JARVISOS_FAST_SECRETARY_QWEN_HYBRID_PARSE_SAFE_v0_4.md",
+    "critical_gate_failures": 4,
+    "hard_matches": 169,
+    "hard_matches_per_1k_tokens": 136.842,
+    "hard_total": 256,
+    "json_parse_passes": 28,
+    "manual_review_required": true,
+    "model": "qwen3:8b",
+    "runs": 32,
+    "soft_exact_matches": 103,
+    "soft_tolerant_matches": 104,
+    "soft_tolerant_matches_per_1k_tokens": 84.211,
+    "soft_total": 160,
+    "successful_parse_per_1k_tokens": 22.672,
+    "timeouts": 0
+  },
+  "best_parse_stability_profile": {
+    "context_pack_approx_token_estimate": 1235,
+    "context_pack_char_count": 4940,
+    "context_pack_label": "qwen_hybrid_parse_safe_v0_4",
+    "context_pack_path": "docs\\context_packs\\JARVISOS_FAST_SECRETARY_QWEN_HYBRID_PARSE_SAFE_v0_4.md",
+    "critical_gate_failures": 4,
+    "hard_matches": 169,
+    "hard_matches_per_1k_tokens": 136.842,
+    "hard_total": 256,
+    "json_parse_passes": 28,
+    "manual_review_required": true,
+    "model": "qwen3:8b",
+    "runs": 32,
+    "soft_exact_matches": 103,
+    "soft_tolerant_matches": 104,
+    "soft_tolerant_matches_per_1k_tokens": 84.211,
+    "soft_total": 160,
+    "successful_parse_per_1k_tokens": 22.672,
+    "timeouts": 0
+  },
+  "best_score_per_token_profile": {
+    "context_pack_approx_token_estimate": 1235,
+    "context_pack_char_count": 4940,
+    "context_pack_label": "qwen_hybrid_parse_safe_v0_4",
+    "context_pack_path": "docs\\context_packs\\JARVISOS_FAST_SECRETARY_QWEN_HYBRID_PARSE_SAFE_v0_4.md",
+    "critical_gate_failures": 4,
+    "hard_matches": 169,
+    "hard_matches_per_1k_tokens": 136.842,
+    "hard_total": 256,
+    "json_parse_passes": 28,
+    "manual_review_required": true,
+    "model": "qwen3:8b",
+    "runs": 32,
+    "soft_exact_matches": 103,
+    "soft_tolerant_matches": 104,
+    "soft_tolerant_matches_per_1k_tokens": 84.211,
+    "soft_total": 160,
+    "successful_parse_per_1k_tokens": 22.672,
+    "timeouts": 0
+  },
+  "best_soft_tolerant_score_profile": {
+    "context_pack_approx_token_estimate": 1235,
+    "context_pack_char_count": 4940,
+    "context_pack_label": "qwen_hybrid_parse_safe_v0_4",
+    "context_pack_path": "docs\\context_packs\\JARVISOS_FAST_SECRETARY_QWEN_HYBRID_PARSE_SAFE_v0_4.md",
+    "critical_gate_failures": 4,
+    "hard_matches": 169,
+    "hard_matches_per_1k_tokens": 136.842,
+    "hard_total": 256,
+    "json_parse_passes": 28,
+    "manual_review_required": true,
+    "model": "qwen3:8b",
+    "runs": 32,
+    "soft_exact_matches": 103,
+    "soft_tolerant_matches": 104,
+    "soft_tolerant_matches_per_1k_tokens": 84.211,
+    "soft_total": 160,
+    "successful_parse_per_1k_tokens": 22.672,
+    "timeouts": 0
+  },
+  "created_at": "2026-06-22T07:23:20.894632+00:00",
+  "known_error_reduction_notes": {
+    "bluerev_unresolved_assumption": "review per HG-006 hard/not_decided fields",
+    "external_provider_risk_for_secret": "tracked by no_external_provider_for_raw_secret critical gate",
+    "memory_boundary_too_broad": "review per HG-001 hard/soft scores",
+    "secret_soft_domain_mismatch": "primary_domain=security tolerated only with software or secret_handling tags and passing hard secret gates"
+  },
+  "manual_review_required": true,
+  "milestone": "1G-B2-E",
+  "pack_comparisons": {
+    "lite_rules_v0_2_over_lite_v0_1": {
+      "baseline": {
+        "critical_gate_failures": 0,
+        "hard_matches": 0,
+        "hard_total": 0,
+        "json_parse_passes": 0,
+        "label": "lite_v0_1",
+        "runs": 0,
+        "soft_exact_matches": 0,
+        "soft_tolerant_matches": 0,
+        "soft_total": 0
+      },
+      "candidate": {
+        "critical_gate_failures": 0,
+        "hard_matches": 0,
+        "hard_total": 0,
+        "json_parse_passes": 0,
+        "label": "lite_rules_v0_2",
+        "runs": 0,
+        "soft_exact_matches": 0,
+        "soft_tolerant_matches": 0,
+        "soft_total": 0
+      }
+    },
+    "micro_rules_v0_2_over_micro_v0_1": {
+      "baseline": {
+        "critical_gate_failures": 0,
+        "hard_matches": 0,
+        "hard_total": 0,
+        "json_parse_passes": 0,
+        "label": "micro_v0_1",
+        "runs": 0,
+        "soft_exact_matches": 0,
+        "soft_tolerant_matches": 0,
+        "soft_total": 0
+      },
+      "candidate": {
+        "critical_gate_failures": 0,
+        "hard_matches": 0,
+        "hard_total": 0,
+        "json_parse_passes": 0,
+        "label": "micro_rules_v0_2",
+        "runs": 0,
+        "soft_exact_matches": 0,
+        "soft_tolerant_matches": 0,
+        "soft_total": 0
+      }
+    }
+  },
+  "profiles": [
+    {
+      "context_pack_approx_token_estimate": 1235,
+      "context_pack_char_count": 4940,
+      "context_pack_label": "qwen_hybrid_parse_safe_v0_4",
+      "context_pack_path": "docs\\context_packs\\JARVISOS_FAST_SECRETARY_QWEN_HYBRID_PARSE_SAFE_v0_4.md",
+      "critical_gate_failures": 4,
+      "hard_matches": 169,
+      "hard_matches_per_1k_tokens": 136.842,
+      "hard_total": 256,
+      "json_parse_passes": 28,
+      "manual_review_required": true,
+      "model": "qwen3:8b",
+      "runs": 32,
+      "soft_exact_matches": 103,
+      "soft_tolerant_matches": 104,
+      "soft_tolerant_matches_per_1k_tokens": 84.211,
+      "soft_total": 160,
+      "successful_parse_per_1k_tokens": 22.672,
+      "timeouts": 0
+    }
+  ],
+  "recommended_next_expanded_profile": {
+    "context_pack_approx_token_estimate": 1235,
+    "context_pack_char_count": 4940,
+    "context_pack_label": "qwen_hybrid_parse_safe_v0_4",
+    "context_pack_path": "docs\\context_packs\\JARVISOS_FAST_SECRETARY_QWEN_HYBRID_PARSE_SAFE_v0_4.md",
+    "critical_gate_failures": 4,
+    "hard_matches": 169,
+    "hard_matches_per_1k_tokens": 136.842,
+    "hard_total": 256,
+    "json_parse_passes": 28,
+    "manual_review_required": true,
+    "model": "qwen3:8b",
+    "runs": 32,
+    "soft_exact_matches": 103,
+    "soft_tolerant_matches": 104,
+    "soft_tolerant_matches_per_1k_tokens": 84.211,
+    "soft_total": 160,
+    "successful_parse_per_1k_tokens": 22.672,
+    "timeouts": 0
+  },
+  "report_dir": "reports\\local_model_smoke\\1G-B2-E",
+  "schema_version": "local_model_form_fill_recipe_ablation_summary_v0",
+  "semantic_truth_scored": false,
+  "total_runs": 32,
+  "full_holdout_qwen_answers": {
+    "maintained_parse_stability_all_32": "no; parsed 28/32 cases",
+    "maintained_zero_critical_gate_failures": "no; 4 critical gate failures, all json_not_parsed",
+    "total_scores": {
+      "hard": "169/256",
+      "soft_exact": "103/160",
+      "soft_tolerant": "104/160"
+    },
+    "parse_failures": [
+      "HG-007",
+      "HG-017",
+      "HG-018",
+      "HG-024"
+    ],
+    "critical_gate_failures": [
+      {
+        "case_id": "HG-007",
+        "failures": [
+          "json_not_parsed"
+        ]
+      },
+      {
+        "case_id": "HG-017",
+        "failures": [
+          "json_not_parsed"
+        ]
+      },
+      {
+        "case_id": "HG-018",
+        "failures": [
+          "json_not_parsed"
+        ]
+      },
+      {
+        "case_id": "HG-024",
+        "failures": [
+          "json_not_parsed"
+        ]
+      }
+    ],
+    "most_concerning_hard_field_misses": [
+      {
+        "case_id": "HG-007",
+        "category": "bluerev_public_literature_request",
+        "hard": "0/8",
+        "misses": [
+          {
+            "field": "api_or_model_escalation_recommended",
+            "actual": null,
+            "expected": null
+          },
+          {
+            "field": "clarification_required",
+            "actual": null,
+            "expected": false
+          },
+          {
+            "field": "lifecycle_status",
+            "actual": null,
+            "expected": "proposed_memory"
+          },
+          {
+            "field": "not_decided",
+            "actual": null,
+            "expected": true
+          },
+          {
+            "field": "reasoning_route_proposal",
+            "actual": null,
+            "expected": null
+          },
+          {
+            "field": "retrieval_behavior",
+            "actual": null,
+            "expected": "candidate_discovery_only"
+          },
+          {
+            "field": "sensitivity_bucket",
+            "actual": null,
+            "expected": "internal"
+          },
+          {
+            "field": "source_class_policy",
+            "actual": null,
+            "expected": "review_only"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-017",
+        "category": "forbidden_path_sensitive",
+        "hard": "0/8",
+        "misses": [
+          {
+            "field": "api_or_model_escalation_recommended",
+            "actual": null,
+            "expected": null
+          },
+          {
+            "field": "clarification_required",
+            "actual": null,
+            "expected": false
+          },
+          {
+            "field": "lifecycle_status",
+            "actual": null,
+            "expected": "raw_input"
+          },
+          {
+            "field": "not_decided",
+            "actual": null,
+            "expected": false
+          },
+          {
+            "field": "reasoning_route_proposal",
+            "actual": null,
+            "expected": null
+          },
+          {
+            "field": "retrieval_behavior",
+            "actual": null,
+            "expected": "blocked"
+          },
+          {
+            "field": "sensitivity_bucket",
+            "actual": null,
+            "expected": "secret"
+          },
+          {
+            "field": "source_class_policy",
+            "actual": null,
+            "expected": "blocked"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-018",
+        "category": "provider_intent_block",
+        "hard": "0/8",
+        "misses": [
+          {
+            "field": "api_or_model_escalation_recommended",
+            "actual": null,
+            "expected": null
+          },
+          {
+            "field": "clarification_required",
+            "actual": null,
+            "expected": false
+          },
+          {
+            "field": "lifecycle_status",
+            "actual": null,
+            "expected": "raw_input"
+          },
+          {
+            "field": "not_decided",
+            "actual": null,
+            "expected": false
+          },
+          {
+            "field": "reasoning_route_proposal",
+            "actual": null,
+            "expected": null
+          },
+          {
+            "field": "retrieval_behavior",
+            "actual": null,
+            "expected": "blocked"
+          },
+          {
+            "field": "sensitivity_bucket",
+            "actual": null,
+            "expected": "sensitive"
+          },
+          {
+            "field": "source_class_policy",
+            "actual": null,
+            "expected": "blocked"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-024",
+        "category": "stale_superseded_memory",
+        "hard": "0/8",
+        "misses": [
+          {
+            "field": "api_or_model_escalation_recommended",
+            "actual": null,
+            "expected": null
+          },
+          {
+            "field": "clarification_required",
+            "actual": null,
+            "expected": false
+          },
+          {
+            "field": "lifecycle_status",
+            "actual": null,
+            "expected": "proposed_memory"
+          },
+          {
+            "field": "not_decided",
+            "actual": null,
+            "expected": false
+          },
+          {
+            "field": "reasoning_route_proposal",
+            "actual": null,
+            "expected": null
+          },
+          {
+            "field": "retrieval_behavior",
+            "actual": null,
+            "expected": "review_gate_required"
+          },
+          {
+            "field": "sensitivity_bucket",
+            "actual": null,
+            "expected": "internal"
+          },
+          {
+            "field": "source_class_policy",
+            "actual": null,
+            "expected": "review_only"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-010",
+        "category": "retrieval_scope_unknown",
+        "hard": "3/8",
+        "misses": [
+          {
+            "field": "clarification_required",
+            "actual": false,
+            "expected": true
+          },
+          {
+            "field": "lifecycle_status",
+            "actual": "proposed_memory",
+            "expected": "raw_input"
+          },
+          {
+            "field": "retrieval_behavior",
+            "actual": "review_gate_required",
+            "expected": "clarification_required"
+          },
+          {
+            "field": "sensitivity_bucket",
+            "actual": "internal",
+            "expected": "unknown"
+          },
+          {
+            "field": "source_class_policy",
+            "actual": "review_only",
+            "expected": "blocked"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-013",
+        "category": "retrieval_cross_project_leakage",
+        "hard": "3/8",
+        "misses": [
+          {
+            "field": "clarification_required",
+            "actual": false,
+            "expected": true
+          },
+          {
+            "field": "lifecycle_status",
+            "actual": "proposed_memory",
+            "expected": "raw_input"
+          },
+          {
+            "field": "not_decided",
+            "actual": false,
+            "expected": true
+          },
+          {
+            "field": "retrieval_behavior",
+            "actual": "none",
+            "expected": "clarification_required"
+          },
+          {
+            "field": "source_class_policy",
+            "actual": "review_only",
+            "expected": "blocked"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-025",
+        "category": "ambiguous_entity",
+        "hard": "3/8",
+        "misses": [
+          {
+            "field": "clarification_required",
+            "actual": false,
+            "expected": true
+          },
+          {
+            "field": "lifecycle_status",
+            "actual": "proposed_memory",
+            "expected": "raw_input"
+          },
+          {
+            "field": "retrieval_behavior",
+            "actual": "none",
+            "expected": "clarification_required"
+          },
+          {
+            "field": "sensitivity_bucket",
+            "actual": "internal",
+            "expected": "unknown"
+          },
+          {
+            "field": "source_class_policy",
+            "actual": "review_only",
+            "expected": "blocked"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-015",
+        "category": "personal_preference_durable",
+        "hard": "4/8",
+        "misses": [
+          {
+            "field": "lifecycle_status",
+            "actual": "raw_input",
+            "expected": "proposed_memory"
+          },
+          {
+            "field": "not_decided",
+            "actual": true,
+            "expected": false
+          },
+          {
+            "field": "sensitivity_bucket",
+            "actual": "public",
+            "expected": "internal"
+          },
+          {
+            "field": "source_class_policy",
+            "actual": "default_allowed",
+            "expected": "review_only"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-020",
+        "category": "coursework_memory_boundary",
+        "hard": "4/8",
+        "misses": [
+          {
+            "field": "clarification_required",
+            "actual": true,
+            "expected": false
+          },
+          {
+            "field": "retrieval_behavior",
+            "actual": "clarification_required",
+            "expected": "none"
+          },
+          {
+            "field": "sensitivity_bucket",
+            "actual": "public",
+            "expected": "internal"
+          },
+          {
+            "field": "source_class_policy",
+            "actual": "default_allowed",
+            "expected": "review_only"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-008",
+        "category": "bluerev_sensitive_geometry",
+        "hard": "5/8",
+        "misses": [
+          {
+            "field": "clarification_required",
+            "actual": true,
+            "expected": false
+          },
+          {
+            "field": "not_decided",
+            "actual": true,
+            "expected": false
+          },
+          {
+            "field": "sensitivity_bucket",
+            "actual": "internal",
+            "expected": "sensitive"
+          }
+        ]
+      }
+    ],
+    "hg018_provider_memory_boundary_risk": {
+      "persisted": true,
+      "result": "HG-018 failed parsing and therefore also failed provider/memory-boundary critical handling in the full holdout run.",
+      "category": "provider_intent_block"
+    },
+    "failure_concentration": "Failures are not confined to one class: parse/gate failures hit BlueRev public literature, secret forbidden path, provider-intent block, and stale JarvisOS/local-AI memory. Low hard scores also cluster around clarification/retrieval ambiguity and provider/memory boundary cases.",
+    "default_candidate_assessment": "not strong enough for future fast secretary draft queue default beyond manual review; parse is below 30/32 and hard misses remain significant",
+    "recommended_next_milestone": "1G-B2-E-R - Full holdout Qwen failure analysis"
+  },
+  "recommended_default_fast_secretary_pack": "qwen_hybrid_parse_safe_v0_4",
+  "recommended_next_milestone": "1G-B2-E-R - Full holdout Qwen failure analysis"
+}

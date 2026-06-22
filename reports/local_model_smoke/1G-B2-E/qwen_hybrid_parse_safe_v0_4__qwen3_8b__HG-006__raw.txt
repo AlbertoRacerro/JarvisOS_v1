@@ -1,0 +1,60 @@
+Thinking...
+Okay, let's tackle this. The user is working on a BlueRev project and menti[5D[K
+mentioned polycarbonate tubes versus ETFE. They haven't decided on the mate[4D[K
+material and don't want it saved as an accepted assumption.
+
+First, I need to check the provided context pack. The key points here are t[1D[K
+that unresolved BlueRev engineering choices fall under project_bucket=bluer[20D[K
+project_bucket=bluerev and primary_domain=reactor_design. The domain_tags s[1D[K
+should include reactor_design and note the undecided topic. Storage relevan[7D[K
+relevance is high, lifecycle_status_proposal is proposed_memory, sensitivit[10D[K
+sensitivity is internal, source policy is review_only. Retrieval behavior n[1D[K
+needs a review gate since it's unresolved. Not_decided is true, and escalat[7D[K
+escalation to local_senior_model is recommended. Data package needed is dra[3D[K
+draft_batch_summary.
+
+Wait, the user explicitly says they haven't decided and don't want it saved[5D[K
+saved as accepted. So not_decided should be true. The reasoning route shoul[5D[K
+should be local_senior_model as per the default rules for BlueRev. Also, th[2D[K
+the domain_tags must include reactor_design and the specific topic, which h[1D[K
+here is material choice (polycarbonate vs ETFE).
+
+I need to make sure all the required fields are filled with the correct enu[3D[K
+enums. The summary should capture the tentative material choice. The brief_[6D[K
+brief_rationale explains why it's not decided. Also, check if any other fie[3D[K
+fields like flags or clarification_required are needed. Since the user is u[1D[K
+unsure, clarification_required might be false, but the context pack says to[2D[K
+to use not_decided=true when it's tentative.
+
+Putting it all together, the JSON should reflect bluerev project, reactor_d[9D[K
+reactor_design domain, domain_tags with the specific topic, high storage re[2D[K
+relevance, proposed_memory lifecycle, internal sensitivity, review_only pol[3D[K
+policy, retrieval gate required, not_decided true, escalation to local_seni[10D[K
+local_senior_model, and data package as draft_batch_summary. The rest like [K
+flags and others are set to default or false.
+...done thinking.
+
+{
+  "case_id": "HG-006",
+  "project_bucket": "bluerev",
+  "summary": "Tentative material choice comparison for BlueRev tubing",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design", "material_choice", "not_decided"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "unknown",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Unresolved material selection for prototyping"
+}

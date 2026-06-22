@@ -1,0 +1,48 @@
+Thinking...
+Okay, let's tackle this query. The user is saying they need to remember tha[3D[K
+that they often confuse absorption operating-line slopes and equilibrium-li[14D[K
+equilibrium-line slopes for tomorrow's exam.
+
+First, I need to determine the project bucket. Since this is about an exam,[5D[K
+exam, it's likely coursework. The primary domain here is memory because the[3D[K
+the user is trying to retain information. The domain tags should include me[2D[K
+memory and maybe coursework since it's related to an exam.
+
+Storage relevance is probably low because the information isn't something t[1D[K
+that needs to be stored long-term. The lifecycle status is proposed_memory [K
+since the user is suggesting this information for memory. Sensitivity bucke[5D[K
+bucket is public as it's general knowledge. Source class policy is default_[8D[K
+default_allowed because it's not sensitive. Retrieval behavior should be no[2D[K
+none unless there's a need to access it. Not decided is false because the u[1D[K
+user is clear about the confusion. Clarification required is true because t[1D[K
+the user might need help distinguishing the slopes. The reasoning route is [K
+local_fast_model for quick processing. The brief rationale is that it's an [K
+exam-related memory concern.
+...done thinking.
+
+{
+  "case_id": "HG-020",
+  "project_bucket": "coursework",
+  "summary": "Exam preparation: confusion between absorption operating-line[14D[K
+operating-line and equilibrium-line slopes",
+  "primary_domain": "memory",
+  "domain_tags": ["memory", "coursework", "education"],
+  "domain_bucket": "coursework",
+  "storage_relevance": "low",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "public",
+  "sensitivity_bucket": "public",
+  "source_class_policy_proposal": "default_allowed",
+  "source_class_policy": "default_allowed",
+  "retrieval_behavior_proposal": "clarification_required",
+  "retrieval_behavior": "clarification_required",
+  "flags": [],
+  "not_decided": false,
+  "clarification_required": true,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "local_fast_model",
+  "brief_rationale": "Exam-related memory concern requiring conceptual clar[4D[K
+clarification"
+}

@@ -1,0 +1,56 @@
+Thinking...
+Okay, let's tackle this. The user provided a query about a paper DOI relate[6D[K
+related to Nannochloropsis productivity and reactor geometry for BlueRev. F[1D[K
+First, I need to parse the input and apply the given rules.
+
+The main points are: the user mentions a paper that might be relevant for N[1D[K
+Nannochloropsis productivity but hasn't checked if the reactor geometry mat[3D[K
+matches BlueRev. So, this seems like a BlueRev engineering choice. Accordin[8D[K
+According to the context pack, unresolved BlueRev assumptions should have p[1D[K
+project_bucket as bluerev, primary_domain as reactor_design, and include th[2D[K
+the topic in domain_tags.
+
+Storage relevance is high because it's about reactor design. Lifecycle stat[4D[K
+status is proposed_memory since it's an unresolved assumption. Sensitivity [K
+is internal, source policy is review_only. Retrieval behavior requires revi[4D[K
+review_gate unless raw access is requested. Not_decided is true because the[3D[K
+the user hasn't checked the geometry match. Clarification is needed, so cla[3D[K
+clarification_required is true.
+
+The reasoning route should be local_senior_model as per the default for pri[3D[K
+private/IP-sensitive contexts. Data package needed is draft_batch_summary. [K
+The brief rationale should mention the unresolved reactor geometry check. A[1D[K
+Also, the user hasn't confirmed the relevance, so not_decided is true.
+
+I need to make sure all the enums are correctly applied and that the JSON s[1D[K
+structure matches the required shape. Check for any missing fields and ensu[4D[K
+ensure that the flags array is empty. Also, confirm that the case_id is inc[3D[K
+included as HG-021. Let me structure all this into the JSON accordingly.
+...done thinking.
+
+{
+  "case_id": "HG-021",
+  "project_bucket": "bluerev",
+  "summary": "DOI 10.1016/j.biortech.2020.123456 potential relevance to Nan[3D[K
+Nannochloropsis productivity with unresolved reactor geometry match",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design", "not_decided", "reactor_geometry"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": true,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Unresolved reactor geometry match verification for Bl[2D[K
+BlueRev"
+}

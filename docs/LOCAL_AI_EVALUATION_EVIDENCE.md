@@ -749,6 +749,14 @@ Current implementation status:
   `HG-006`, `HG-018`, and `HG-022`. `HG-018` still missed hard
   provider/memory-boundary fields, so the next full holdout Qwen smoke run must
   remain manual-review only and track that risk explicitly.
+- 1G-B2-E ran the first full 32-case Qwen secretary smoke test using only
+  `qwen3:8b` and `qwen_hybrid_parse_safe_v0_4`. Reports are under
+  `reports/local_model_smoke/1G-B2-E/`. Result: 28/32 parse, 169/256 hard,
+  103/160 soft exact, 104/160 soft tolerant, and 4 critical gate failures.
+  Parse/gate failures were `HG-007`, `HG-017`, `HG-018`, and `HG-024`. The known
+  `HG-018` provider/memory-boundary risk persisted as a parse/gate failure.
+  Recommendation: `1G-B2-E-R - Full holdout Qwen failure analysis`. This remains
+  manual-review smoke evidence only and is not runtime approval.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
 The accepted next local AI sequence is:
@@ -784,6 +792,7 @@ The accepted next local AI sequence is:
 1G-B2-D    Expanded profiled Qwen secretary smoke run
 1G-B2-D-R  Qwen profile failure analysis
 1G-B2-E    Full holdout Qwen secretary smoke run
+1G-B2-E-R  Full holdout Qwen failure analysis
 1H         Showcase files generator design
 1I         Context access from showcase files
 1J         Provider/tool intent form design

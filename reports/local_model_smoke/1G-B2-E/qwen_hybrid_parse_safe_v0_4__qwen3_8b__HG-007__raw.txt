@@ -1,0 +1,99 @@
+Thinking...
+Okay, let's tackle this query. The user is asking about modeling BlueRev ga[2D[K
+gas exchange and retrieving public literature on kLa correlations for tubul[5D[K
+tubular photobioreactors. They mention not treating any paper as directly v[1D[K
+valid without checking assumptions.
+
+First, I need to determine the project bucket. Since it's about BlueRev, wh[2D[K
+which is a project mentioned in the context, the project_bucket should be '[1D[K
+'bluerev'.
+
+Primary domain here is reactor design because gas exchange relates to react[5D[K
+reactor design. So primary_domain is 'reactor_design'.
+
+Domain tags should include 'reactor_design' and the specific topic, which i[1D[K
+is 'gas exchange'. Also, since they're retrieving literature, 'retrieval' m[1D[K
+might be relevant. But looking back at the enums, the allowed domain_tags i[1D[K
+include 'reactor_design' and others. Wait, the initial context says for unr[3D[K
+unresolved BlueRev engineering choices, include the concrete topic in domai[5D[K
+domain_tags. So 'gas exchange' should be in domain_tags.
+
+Storage relevance is high because they're dealing with technical data retri[5D[K
+retrieval.
+
+Lifecycle status proposal is 'proposed_memory' since it's a model that's ye[2D[K
+yet to be accepted.
+
+Sensitivity bucket proposal is 'internal' as it's internal research.
+
+Source class policy proposal is 'review_only' because they need to check as[2D[K
+assumptions before accepting any paper.
+
+Retrieval behavior proposal is 'review_gate_required' since there's a need [K
+for review before accepting data.
+
+Not_decided is true because the user mentions unresolved assumptions about [K
+the papers' validity.
+
+Clarification required is false, but the user might need to check assumptio[9D[K
+assumptions, so maybe clarification_required is true? Wait, the user says "[1D[K
+"do not treat any paper as directly valid without checking assumptions," wh[2D[K
+which implies that clarification is needed. So clarification_required shoul[5D[K
+should be true.
+
+Api or model escalation is recommended because it's an unresolved BlueRev a[1D[K
+assumption.
+
+Reasoning route proposal is 'local_senior_model' as per the default rules f[1D[K
+for private/IP-sensitive JarvisOS or BlueRev context.
+
+Data package needed is 'draft_batch_summary' as per the BlueRev unresolved [K
+case.
+
+Brief rationale is that they need to retrieve and validate literature for g[1D[K
+gas exchange modeling.
+
+Wait, the user didn't mention any secrets, so the security domain isn't inv[3D[K
+involved. Also, the primary_domain is reactor_design, and domain_tags inclu[5D[K
+include 'reactor_design' and 'gas exchange'.
+
+Let me check the enums again. The allowed project_buckets include 'bluerev'[9D[K
+'bluerev', primary_domain 'reactor_design', storage_relevance 'high', lifec[5D[K
+lifecycle_status_proposal 'proposed_memory', sensitivity_bucket_proposal 'i[2D[K
+'internal', source_class_policy_proposal 'review_only', retrieval_behavior_[19D[K
+retrieval_behavior_proposal 'review_gate_required', not_decided true, clari[5D[K
+clarification_required true, api_or_model_escalation_recommended true, reas[4D[K
+reasoning_route_proposal 'local_senior_model', data_package_needed 'draft_b[8D[K
+'draft_batch_summary', and brief_rationale as per the input.
+
+I think that covers all the required fields. Let me structure the JSON acco[4D[K
+accordingly.
+...done thinking.
+
+{
+  "case_id": "HG-007",
+  "project_bucket": "bluerev",
+  "summary": "Retrieve public literature on kLa correlations for tubular ph[2D[K
+photobioreactors for BlueRev gas exchange modeling with assumption checks",[8D[K
+checks",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design", "gas exchange", "bioprocess"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": true,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Unresolved BlueRev engineering assumptions require se[2D[K
+senior model review for gas exchange modeling"
+}

@@ -1,0 +1,77 @@
+Thinking...
+Okay, let's tackle this. The user provided an input text about a failure in[2D[K
+in a 1D-G project where Codex added a backend scorer and called Ollama duri[4D[K
+during a milestone. The worktree is dirty, and tests weren't run.
+
+First, I need to map this into the required JSON structure. The main goal i[1D[K
+is to categorize this under the correct project_bucket and primary_domain. [K
+The input mentions issues with code (Codex, Ollama, worktree, tests), which[5D[K
+which points towards software issues.
+
+Looking at the enums, project_bucket options include bluerev, coursework, g[1D[K
+general, jarvisos, personal, unknown. Since the problem is about a code fai[3D[K
+failure in a project (possibly related to JarvisOS or BlueRev?), but the in[2D[K
+input doesn't specify. However, the example in the context pack mentions th[2D[K
+that if it's about JarvisOS memory architecture, project_bucket is jarvisos[8D[K
+jarvisos. But here, it's more about software issues during development.
+
+The primary_domain options include software, which seems fitting. The domai[5D[K
+domain_tags should include software and maybe others if applicable. The sto[3D[K
+storage_relevance is probably low since it's about code issues, not data st[2D[K
+storage.
+
+Lifecycle status: The problem is a failure, so maybe raw_input or proposed_[9D[K
+proposed_memory. But since it's a failure report, maybe raw_input. Sensitiv[8D[K
+Sensitivity_bucket could be internal if it's internal project stuff. Source[6D[K
+Source_class_policy might be review_only. Retrieval_behavior could be revie[5D[K
+review_gate_required if it needs review.
+
+Not_decided might be false since the issue is clear. Clarification_required[22D[K
+Clarification_required is false. Reasoning_route_proposal should be local_s[7D[K
+local_senior_model for software issues. Brief rationale would be the summar[6D[K
+summary of the problem.
+
+Wait, the user's input doesn't mention anything about BlueRev engineering c[1D[K
+choices, so project_bucket might not be bluerev. The mention of Codex and O[1D[K
+Ollama suggests software issues, so primary_domain is software. Domain_tags[11D[K
+Domain_tags would include software. Storage_relevance is low. Lifecycle_sta[13D[K
+Lifecycle_status_proposal is proposed_memory since it's a problem to be add[3D[K
+addressed. Sensitivity_bucket_proposal is internal. Source_class_policy_pro[23D[K
+Source_class_policy_proposal is review_only. Retrieval_behavior_proposal is[2D[K
+is review_gate_required. Reasoning_route_proposal is local_senior_model.
+
+I need to make sure all required fields are filled with the correct enums. [K
+The case_id is given as HG-005. The summary should be concise. The brief_ra[8D[K
+brief_rationale explains why the lifecycle status is proposed_memory.
+
+Double-checking the enums and required fields. Make sure not to use any mar[3D[K
+markdown and output only JSON. Also, ensure that all fields are present and[3D[K
+and correctly formatted.
+...done thinking.
+
+{
+  "case_id": "HG-005",
+  "project_bucket": "general",
+  "summary": "1D-G failure due to Codex adding backend scorer and Ollama ca[2D[K
+call during milestone with untested worktree",
+  "primary_domain": "software",
+  "domain_tags": ["software", "debugging", "ci_cd"],
+  "domain_bucket": "software",
+  "storage_relevance": "low",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": false,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Software failure requires review of code changes and [K
+CI/CD process"
+}

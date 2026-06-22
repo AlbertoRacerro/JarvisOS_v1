@@ -1,0 +1,56 @@
+Thinking...
+Okay, let's tackle this query. The user is asking about whether 100 meters [K
+of 50 mm ID transparent tubing can hold enough culture volume for a bench-s[7D[K
+bench-scale floating module. It's a toy scale check, not a design decision.[9D[K
+decision.
+
+First, I need to determine the project bucket. Since it's related to BlueRe[6D[K
+BlueRev, the project_bucket should be 'bluerev'. The primary domain here is[2D[K
+is reactor design because it's about the physical setup of the module. So p[1D[K
+primary_domain is 'reactor_design'.
+
+Domain tags should include 'reactor_design' and the specific topic, which i[1D[K
+is 'tubing_volume_check'. Storage relevance is high because the question in[2D[K
+involves physical dimensions and capacity. Lifecycle status is proposed_mem[12D[K
+proposed_memory since it's a preliminary check. Sensitivity is internal as [K
+it's an internal design question.
+
+Source class policy is review_only because it's a proposed idea needing rev[3D[K
+review. Retrieval behavior is review_gate_required to ensure proper review [K
+before acceptance. Not_decided is true because it's a tentative check.
+
+The reasoning route should be local_senior_model for engineering decisions.[10D[K
+decisions. Data package needed is draft_batch_summary. The brief rationale [K
+is that it's a scale check for a floating module.
+
+I need to make sure all enums are correct and required fields are included.[9D[K
+included. Also, check if any flags are needed, but the user didn't mention [K
+any. So, the JSON should have all these fields properly filled.
+...done thinking.
+
+{
+  "case_id": "HG-022",
+  "project_bucket": "bluerev",
+  "summary": "BlueRev tubing volume capacity estimation for bench-scale flo[3D[K
+floating module",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design", "tubing_volume_check", "not_decided"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Tentative scale check for transparent tubing capacity[8D[K
+capacity in floating module"
+}

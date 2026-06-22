@@ -27,7 +27,7 @@ EXPECTED_FUTURE_REPORT = (
 DRY_RUN_REQUIRED_MESSAGE = (
     "Pass --dry-run or --run-local. Real local inference requires --run-local."
 )
-MAX_REAL_CASES = 12
+MAX_REAL_CASES = 32
 APPROX_CHARS_PER_TOKEN = 4
 
 EXPECTED_OLLAMA_NAMES = [
@@ -1488,7 +1488,7 @@ def run_local(args: argparse.Namespace) -> int:
         print(f"summary json: {report_dir / f'{summary_stem}.json'}")
         print(f"summary md: {report_dir / f'{summary_stem}.md'}")
 
-    if len(context_packs) > 1:
+    if should_write_ablation_summary(context_packs, args.ablation_summary_stem):
         ablation_summary = summarize_ablation(
             results,
             report_dir,
@@ -1503,6 +1503,13 @@ def run_local(args: argparse.Namespace) -> int:
         print(f"ablation summary json: {report_dir / f'{summary_stem}.json'}")
         print(f"ablation summary md: {report_dir / f'{summary_stem}.md'}")
     return 0
+
+
+def should_write_ablation_summary(
+    context_packs: list[dict[str, Any]],
+    ablation_summary_stem: str,
+) -> bool:
+    return len(context_packs) > 1 or ablation_summary_stem != "recipe_ablation_summary"
 
 
 def main(argv: list[str] | None = None) -> int:

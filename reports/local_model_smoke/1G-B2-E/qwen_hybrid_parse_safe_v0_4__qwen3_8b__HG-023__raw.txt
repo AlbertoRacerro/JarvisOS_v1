@@ -1,0 +1,59 @@
+Thinking...
+Okay, let's tackle this. The user provided a JSON structure and some contex[6D[K
+context about handling different cases for JarvisOS. The input text mention[7D[K
+mentions using a specific markdown file as a canonical reference for retrie[6D[K
+retrieval wording.
+
+First, I need to determine which category this falls into. The file mention[7D[K
+mentioned is about retrieval contract design, which seems related to the re[2D[K
+retrieval domain. The user also mentioned that the model output is advisory[8D[K
+advisory, so I need to follow the guidelines provided in the context pack.
+
+Looking at the enums and required fields, the primary_domain should be 'ret[4D[K
+'retrieval' since the topic is about retrieval wording. The project_bucket [K
+might be 'jarvisos' because it's about the system's retrieval mechanisms. T[1D[K
+The storage_relevance is likely 'high' as the document is a canonical refer[5D[K
+reference.
+
+The lifecycle_status_proposal should be 'proposed_memory' since it's a refe[4D[K
+reference document but not yet accepted. Sensitivity is 'internal' as it's [K
+a system design document. Source class policy is 'review_only' because it's[4D[K
+it's part of the system's internal processes. Retrieval behavior might be '[1D[K
+'none' unless there's a need for review gates.
+
+Not_decided is false because the document is a reference, so decisions are [K
+made. The reasoning route could be 'local_senior_model' for thorough review[6D[K
+review. The brief rationale would explain that the document is a canonical [K
+reference for retrieval wording.
+
+I need to make sure all the required fields are included and that the enums[5D[K
+enums match the allowed values. Also, check if any flags or other fields ar[2D[K
+are needed, but the user didn't mention any specific flags. So, the final J[1D[K
+JSON should reflect these considerations.
+...done thinking.
+
+{
+  "case_id": "HG-023",
+  "project_bucket": "jarvisos",
+  "summary": "Retrieval contract design reference document",
+  "primary_domain": "retrieval",
+  "domain_tags": ["retrieval", "memory", "software"],
+  "domain_bucket": "retrieval",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": false,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Canonical retrieval contract design document requires[8D[K
+requires senior model review"
+}

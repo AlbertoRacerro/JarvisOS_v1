@@ -1,0 +1,86 @@
+Thinking...
+Okay, let's tackle this. The user provided a complex JSON structure and som[3D[K
+some context about JarvisOS. The main goal is to generate a valid JSON outp[4D[K
+output based on the input text and the given rules.
+
+First, I need to parse the input text. The key point is: "Use the latest de[2D[K
+decision from the memory document to update the policy." But there's no spe[3D[K
+specific memory document mentioned here. The user might be referring to a p[1D[K
+previous context not included in the input. Since there's no explicit infor[5D[K
+information, I'll have to make assumptions based on the provided enums and [K
+rules.
+
+Looking at the Fast secretary context pack, there are specific cases. For e[1D[K
+example, if it's about JarvisOS memory architecture, the project_bucket is [K
+jarvisos, primary_domain is memory, and domain_tags include memory, softwar[7D[K
+software, architecture. Storage relevance is high, lifecycle_status_proposa[24D[K
+lifecycle_status_proposal is proposed_memory, sensitivity_bucket_proposal i[1D[K
+is internal, etc.
+
+The input text mentions updating the policy using the latest memory documen[7D[K
+document decision. However, without knowing what that decision is, I might [K
+have to default to certain values. The user might be testing if I can apply[5D[K
+apply the rules when there's insufficient data.
+
+Since the input is vague, the safest approach is to set not_decided to true[4D[K
+true because there's insufficient evidence. Also, the user might be expecti[7D[K
+expecting the system to recognize that without specific details, certain fi[2D[K
+fields can't be determined.
+
+Looking at the required JSON shape, the case_id is provided as HG-025. The [K
+project_bucket could be jarvisos if it's related to memory architecture. Pr[2D[K
+Primary_domain would be memory. Domain_tags would include memory, software,[9D[K
+software, architecture. Storage_relevance is high. Lifecycle_status_proposa[24D[K
+Lifecycle_status_proposal and lifecycle_status might both be proposed_memor[14D[K
+proposed_memory. Sensitivity_bucket_proposal and sensitivity_bucket could b[1D[K
+be internal. Source_class_policy_proposal and source_class_policy would be [K
+review_only. Retrieval_behavior_proposal and retrieval_behavior might be no[2D[K
+none. Not_decided is true, clarification_required is false. Reasoning_route[15D[K
+Reasoning_route_proposal could be local_senior_model. Brief_rationale would[5D[K
+would explain that the decision is based on the latest memory document, but[3D[K
+but since it's not provided, some fields are undecided.
+
+Wait, but the user said to use not_decided=true when evidence is insufficie[10D[K
+insufficient. Since the input doesn't specify the memory document's content[7D[K
+content, it's reasonable to set not_decided to true. Also, the project_buck[12D[K
+project_bucket might be jarvisos if the context is about memory architectur[11D[K
+architecture. The domain_tags would include memory, software, architecture.[13D[K
+architecture. The lifecycle_status_proposal would be proposed_memory as per[3D[K
+per the rules. Sensitivity_bucket_proposal is internal. Source_class_policy[19D[K
+Source_class_policy_proposal is review_only. Retrieval_behavior_proposal is[2D[K
+is none unless there's a reason to access the source. Since the user hasn't[6D[K
+hasn't specified any access, it's none. The reasoning_route_proposal would [K
+be local_senior_model because it's a private JarvisOS context. The brief_ra[8D[K
+brief_rationale would mention that the latest memory document decision is n[1D[K
+needed but not provided, leading to some fields being undecided.
+
+I need to make sure all the required fields are included and that the enums[5D[K
+enums match. Also, check that the JSON structure is correct without any mar[3D[K
+markdown. Let me put this all together.
+...done thinking.
+
+{
+  "case_id": "HG-025",
+  "project_bucket": "jarvisos",
+  "summary": "Update policy using latest memory document decision",
+  "primary_domain": "memory",
+  "domain_tags": ["memory", "software", "architecture"],
+  "domain_bucket": "memory",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "none",
+  "retrieval_behavior": "none",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Latest memory document decision required for policy u[1D[K
+update but not provided"
+}
