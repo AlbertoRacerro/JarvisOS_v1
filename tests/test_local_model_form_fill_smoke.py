@@ -157,9 +157,9 @@ class LocalModelFormFillSmokeTests(unittest.TestCase):
         self.assertTrue(all(comparison["enum_validity"].values()))
 
     def test_real_run_case_limit_guard(self):
-        selected = self.cases[:4]
+        selected = self.cases[:13]
         selected_models = smoke.select_models(self.config, ["qwen3:8b"])
-        with self.assertRaisesRegex(ValueError, "limited to 3 cases"):
+        with self.assertRaisesRegex(ValueError, "limited to 12 cases"):
             smoke.validate_real_run_selection(
                 selected_cases=selected,
                 explicit_case_ids=[case["case_id"] for case in selected],

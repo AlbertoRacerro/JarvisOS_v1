@@ -293,6 +293,53 @@ qwen_hybrid_v0_3
 is the best balanced default because it reached 3/3 parse, 24/24 hard, 14/15
 soft tolerant, and 0 critical gate failures.
 
+## 1G-B2-D Expanded Profiled Qwen Secretary Smoke Run
+
+1G-B2-D tests whether the best 1G-B2-C Qwen profile generalizes beyond the
+three optimized cases.
+
+The exact matrix:
+
+```text
+model: qwen3:8b
+packs: qwen_hybrid_v0_3, micro_rules_v0_2
+cases: HG-001, HG-006, HG-016, HG-002, HG-005, HG-008, HG-009, HG-011, HG-017, HG-018, HG-022, HG-028
+total: 24 local Ollama runs
+```
+
+Reports are written under:
+
+```text
+reports/local_model_smoke/1G-B2-D/
+```
+
+Summary files:
+
+- `reports/local_model_smoke/1G-B2-D/expanded_profiled_qwen_summary.json`
+- `reports/local_model_smoke/1G-B2-D/expanded_profiled_qwen_summary.md`
+
+High-level result:
+
+```text
+micro_rules_v0_2: 8/12 parse, 56/96 hard, 37/60 soft exact, 38/60 soft tolerant, 4 gates, 1339 tokens
+qwen_hybrid_v0_3: 9/12 parse, 62/96 hard, 37/60 soft exact, 38/60 soft tolerant, 3 gates, 1257 tokens
+```
+
+`qwen_hybrid_v0_3` remains the better profiled candidate on aggregate hard
+score, parse count, critical gate count, and score-per-token diagnostics. It
+did not maintain full parse stability or zero critical gates. The concerning
+failure cases are `HG-006`, `HG-018`, and `HG-022`; all three failures were
+`json_not_parsed` gates.
+
+Recommended next milestone:
+
+```text
+1G-B2-D-R - Qwen profile failure analysis
+```
+
+Do not expand to the full 32-case set until failure analysis explains or
+repairs the remaining parse/gate failures.
+
 ## Dry-Run Behavior
 
 Example:
@@ -363,21 +410,23 @@ The tests cover:
 
 ## Future 1G-B
 
-After 1G-B2-C, the next milestone is:
+After 1G-B2-D, the next milestone is:
 
 ```text
-1G-B2-D - Expanded profiled Qwen secretary smoke run
+1G-B2-D-R - Qwen profile failure analysis
 ```
 
-1G-B2-D may decide whether to expand the profiled Qwen secretary smoke scope.
+1G-B2-D-R should analyze the profile failures before expanding to a full
+32-case profiled Qwen secretary smoke run.
 Any live run must remain local, explicit, bounded, auditable, and separate from
 runtime memory, retrieval, provider routing, tool execution, and BlueRev
 modeling.
 
 ## Milestone Boundary Confirmation
 
-1G-B2-C adds Qwen-focused pack variants, score-per-token diagnostics, generated
-local smoke reports, docs, and `unittest` coverage.
+1G-B2-D adds scoped local Qwen smoke evidence, generated local smoke reports,
+docs, and a harness guard update that allows the explicit twelve-case profiled
+smoke run.
 
 It adds no:
 

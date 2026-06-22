@@ -1,0 +1,65 @@
+Thinking...
+Okay, let's tackle this query. The user is asking about a BlueRev toy targe[5D[K
+target, specifically estimating if 100 meters of 50 mm ID transparent tubin[5D[K
+tubing can hold enough culture volume for a bench-scale floating module. Th[2D[K
+They mentioned it's just a scale check, not a design decision.
+
+First, I need to determine the project bucket. Since it's related to BlueRe[6D[K
+BlueRev, which is the Signore's cleantech project, the project_bucket shoul[5D[K
+should be 'bluerev'.
+
+The primary domain here is reactor design because they're discussing the tu[2D[K
+tubing and volume for a photobioreactor. So primary_domain is 'reactor_desi[13D[K
+'reactor_design'.
+
+Domain tags should include 'reactor_design' and the specific topic, which i[1D[K
+is 'tubing' since they're talking about the tubing's capacity. Also, since [K
+the question is about an unresolved assumption, 'not_decided' is needed.
+
+Storage relevance is high because this is a proposed memory for future refe[4D[K
+reference. Lifecycle status is 'proposed_memory' as it's a tentative check.[6D[K
+check.
+
+Sensitivity bucket is 'internal' since it's about the project's internal de[2D[K
+design. Source class policy is 'review_only' as per the rules for BlueRev u[1D[K
+unresolved assumptions.
+
+Retrieval behavior is 'review_gate_required' because the information is ten[3D[K
+tentative and needs review.
+
+Flags might include 'tentative' since it's a toy scale check. Not_decided i[1D[K
+is true because the user is asking for an estimate, not a confirmed design.[7D[K
+design.
+
+The reasoning route proposal is 'local_senior_model' since it's an engineer[8D[K
+engineering assumption. Brief rationale is that it's a tentative check on t[1D[K
+tubing capacity for a bench-scale module.
+...done thinking.
+
+{
+  "case_id": "HG-022",
+  "project_bucket": "bluerev",
+  "summary": "Estimate culture volume capacity of 100m 50mm ID tubing for b[1D[K
+bench-scale BlueRev module",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design", "not_decided", "tubing", "volume_capaci[14D[K
+"volume_capacity"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": ["tentative"],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Tentative engineering assumption about tubing volume [K
+capacity for bench-scale module"
+}

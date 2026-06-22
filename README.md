@@ -156,13 +156,15 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-D - Expanded profiled Qwen secretary smoke run
+1G-B2-D-R - Qwen profile failure analysis
 ```
 
-The 1G-B2-C local model form-fill smoke milestone optimized Qwen secretary
-context without expanding cases or models. It ran only `qwen3:8b` on `HG-001`,
-`HG-006`, and `HG-016` across seven compact packs. Reports live under
-`reports/local_model_smoke/1G-B2-C/`. The recommended default fast secretary
-pack is `qwen_hybrid_v0_3`, as manual-review evidence only.
+The 1G-B2-D expanded profiled Qwen secretary smoke run tested only `qwen3:8b`
+on two packs and twelve selected holdout cases. Reports live under
+`reports/local_model_smoke/1G-B2-D/`. `qwen_hybrid_v0_3` beat
+`micro_rules_v0_2` on aggregate hard score, parse count, critical gate count,
+and score-per-token diagnostics, but still had parse/gate failures on
+`HG-006`, `HG-018`, and `HG-022`. It remains manual-review smoke evidence only;
+run failure analysis before any full 32-case Qwen run.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

@@ -1,0 +1,60 @@
+Thinking...
+Okay, let's tackle this. The user provided a query about not building a RAG[3D[K
+RAG runtime yet and keeping retrieval as a design contract with scoped cand[4D[K
+candidates first. They want a JSON output based on specific enums and rules[5D[K
+rules.
+
+First, I need to determine the project_bucket. Since the input is about Jar[3D[K
+JarvisOS's retrieval design, the project_bucket should be 'jarvisos'.
+
+The primary_domain is likely 'retrieval' because the focus is on retrieval [K
+behavior. The domain_tags should include 'retrieval' and maybe 'design_cont[12D[K
+'design_contract' since it's about design decisions.
+
+Storage relevance here is 'high' because the retrieval design is crucial fo[2D[K
+for the system's architecture.
+
+Lifecycle status is 'proposed_memory' as it's a draft design. Sensitivity i[1D[K
+is 'internal' since it's about system design. Source policy should be 'revi[5D[K
+'review_only' for internal review.
+
+Retrieval behavior is 'candidate_discovery_only' as per the user's instruct[8D[K
+instruction to start with scoped candidates. The user mentioned not to buil[4D[K
+build RAG runtime yet, so retrieval should stay scoped.
+
+Not_decided is false because the user is making a clear design choice. The [K
+reasoning route might be 'local_senior_model' since it's a design decision.[9D[K
+decision.
+
+The brief rationale should summarize the user's instruction about scoped re[2D[K
+retrieval. I need to make sure all fields are correctly mapped according to[2D[K
+to the routing table and enums provided. Let me double-check the enums and [K
+required fields to ensure compliance.
+...done thinking.
+
+{
+  "case_id": "HG-002",
+  "project_bucket": "jarvisos",
+  "summary": "Retrieval design contract prioritizes scoped candidate discov[6D[K
+discovery over full body retrieval",
+  "primary_domain": "retrieval",
+  "domain_tags": ["retrieval", "design_contract", "architecture"],
+  "domain_bucket": "retrieval",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "candidate_discovery_only",
+  "retrieval_behavior": "candidate_discovery_only",
+  "flags": [],
+  "not_decided": false,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Retrieval design prioritizes scoped candidate discove[7D[K
+discovery as per design contract"
+}

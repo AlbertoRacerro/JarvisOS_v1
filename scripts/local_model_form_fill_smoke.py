@@ -27,7 +27,7 @@ EXPECTED_FUTURE_REPORT = (
 DRY_RUN_REQUIRED_MESSAGE = (
     "Pass --dry-run or --run-local. Real local inference requires --run-local."
 )
-MAX_REAL_CASES = 3
+MAX_REAL_CASES = 12
 APPROX_CHARS_PER_TOKEN = 4
 
 EXPECTED_OLLAMA_NAMES = [

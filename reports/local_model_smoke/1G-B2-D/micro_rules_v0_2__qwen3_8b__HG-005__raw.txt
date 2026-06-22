@@ -1,0 +1,90 @@
+Thinking...
+Okay, let's tackle this. The user provided a input text about a failed 1D-G[4D[K
+1D-G due to Codex adding a backend scorer and calling Ollama. The worktree [K
+is dirty, and tests weren't run. I need to map this into the required JSON [K
+structure based on the context pack rules.
+
+First, the project_bucket. The mention of Codex and Ollama makes me think i[1D[K
+it's related to AI models, possibly JarvisOS since the context pack mention[7D[K
+mentions JarvisOS and BlueRev. But the error is about a software issue, so [K
+maybe software domain. Wait, the input is about a failure in a project, but[3D[K
+but the context pack's rules for JarvisOS memory architecture apply if it's[4D[K
+it's about memory stores, which it's not. The BlueRev rules are for unresol[7D[K
+unresolved engineering assumptions, which this doesn't seem to be. The ment[4D[K
+mention of API keys or secrets isn't here. So maybe the project_bucket is g[1D[K
+general or unknown? Wait, the input is about a software error in a project,[8D[K
+project, possibly coursework? But the user mentioned JarvisOS as the system[6D[K
+system. Wait, the initial instruction says to act like you know JarvisOS an[2D[K
+and BlueRev. The error is about Codex and Ollama, which are models. Maybe i[1D[K
+it's a software issue within JarvisOS. Let me check the rules again.
+
+Looking at the case routing recipes: if it's about MemoryStore or architect[9D[K
+architecture, use jarvisos. If it's about BlueRev unresolved assumptions, u[1D[K
+use bluerev. If it's about secrets, use general. The input here is about a [K
+software error, possibly in the software domain. But the project_bucket opt[3D[K
+options are bluerev, coursework, general, jarvisos, etc. Since the error is[2D[K
+is related to model interactions (Codex, Ollama), maybe it's under software[8D[K
+software or local_ai? The domain_bucket allowed includes local_ai. But the [K
+primary_domain is memory, software, retrieval, etc. The input mentions a fa[2D[K
+failed test, worktree issues, which might relate to software development. S[1D[K
+So primary_domain could be software. The project_bucket might be general or[2D[K
+or coursework? The user didn't specify, but the context pack's rules don't [K
+directly apply here. Since the input is about a software error, perhaps pro[3D[K
+project_bucket is general. But the user might be referring to a JarvisOS-re[11D[K
+JarvisOS-related project. Hmm. The initial instruction says to act like you[3D[K
+you know JarvisOS, so maybe it's jarvisos. Let me check the rules again. Th[2D[K
+The JarvisOS memory boundary rules apply if the input is about memory store[5D[K
+stores, which this isn't. So maybe it's software.
+
+For the domain_tags, since it's a software issue, maybe include software. A[1D[K
+Also, the error involves models (Codex, Ollama), so local_ai. The storage_r[9D[K
+storage_relevance is high if it's important for later. The lifecycle_status[16D[K
+lifecycle_status_proposal is raw_input because it's an input about an issue[5D[K
+issue. The sensitivity_bucket is internal unless it's a secret. The source_[7D[K
+source_class_policy is review_only. Retrieval_behavior is review_gate_requi[17D[K
+review_gate_required if it needs review. The flags might be empty. Not_deci[8D[K
+Not_decided is false unless there's uncertainty. The reasoning_route_propos[22D[K
+reasoning_route_proposal might be local_senior_model if it's an engineering[11D[K
+engineering decision. The brief_rationale would be something like "Software[9D[K
+"Software error in model interaction during milestone."
+
+Wait, the input mentions Codex and Ollama, which are models, so maybe the d[1D[K
+domain is local_ai. The project_bucket could be general unless it's part of[2D[K
+of a specific project. Since the user didn't specify, maybe general. The pr[2D[K
+primary_domain would be software or local_ai. Let me structure the JSON acc[3D[K
+accordingly. Also, the storage_relevance is high because the issue is about[5D[K
+about a failed test and worktree, which is important. The lifecycle_status_[17D[K
+lifecycle_status_proposal is raw_input. The sensitivity_bucket is internal.[9D[K
+internal. Source_class_policy is review_only. Retrieval_behavior is review_[7D[K
+review_gate_required. The flags might include something like "test_failure"[14D[K
+"test_failure". Not_decided is false. Reasoning_route_proposal could be loc[3D[K
+local_senior_model. The brief_rationale is "Software error in model interac[7D[K
+interaction during milestone."
+...done thinking.
+
+{
+  "case_id": "HG-005",
+  "project_bucket": "general",
+  "summary": "1D-G failed due to Codex adding backend scorer and Ollama cal[3D[K
+call during milestone",
+  "primary_domain": "software",
+  "domain_tags": ["software", "local_ai", "testing"],
+  "domain_bucket": "local_ai",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "raw_input",
+  "lifecycle_status": "raw_input",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": ["test_failure"],
+  "not_decided": false,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Software error in model interaction during milestone"[10D[K
+milestone"
+}

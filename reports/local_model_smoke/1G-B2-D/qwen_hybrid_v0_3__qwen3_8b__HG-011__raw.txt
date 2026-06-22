@@ -1,0 +1,76 @@
+Thinking...
+Okay, let's tackle this query. The user is asking to create a JSON object b[1D[K
+based on the provided context and routing rules. The input text is about ch[2D[K
+checking the full progressive retrieval document for ADR-052 before accepti[7D[K
+accepting it as a basis for implementation, not just the README summary.
+
+First, I need to determine the project_bucket. Since the mention is about A[1D[K
+ADR-052, which seems related to documentation or processes, maybe it's unde[4D[K
+under JarvisOS. But the user hasn't specified, so maybe 'unknown' is safer.[6D[K
+safer. Wait, looking at the routing table, the MemoryStore/accepted memory [K
+writes are under jarvisos. But this is about checking a document, so maybe [K
+retrieval?
+
+Primary_domain could be retrieval since it's about checking documents. The [K
+domain_tags might include retrieval and maybe documentation. Storage releva[6D[K
+relevance is high because the document is important. Lifecycle status propo[5D[K
+proposal is proposed_memory since it's a draft. Sensitivity is internal as [K
+it's an internal document. Source class policy is review_only because it's [K
+for internal use. Retrieval behavior requires full_body_required since the [K
+user says to check the full document. Not_decided is false because the acti[4D[K
+action is clear. Reasoning route might be local_senior_model for thorough r[1D[K
+review. The brief rationale is about ensuring the full document is checked [K
+before acceptance.
+
+Wait, the user's input is a directive to check the full document, so the JS[2D[K
+JSON should reflect that process. The project_bucket might be general or ja[2D[K
+jarvisos. Since it's about a documentation check, maybe general. But if ADR[3D[K
+ADR-052 is part of JarvisOS, then jarvisos. Since the user didn't specify, [K
+perhaps 'unknown' is safer. But the example in the routing table for Memory[6D[K
+MemoryStore uses jarvisos. Maybe here it's about retrieval, so primary_doma[12D[K
+primary_domain is retrieval. Domain_tags could be retrieval, documentation.[14D[K
+documentation. Storage relevance high. Lifecycle status proposed_memory. Se[2D[K
+Sensitivity internal. Source policy review_only. Retrieval behavior full_bo[7D[K
+full_body_required. Not_decided false. Reasoning route local_senior_model. [K
+Data package needed might be full_context.
+
+Wait, the required JSON shape includes 'domain_bucket', which in the exampl[6D[K
+example was 'memory'. But the user's input is about retrieval, so domain_bu[9D[K
+domain_bucket should be retrieval. Let me check the enums again. The primar[6D[K
+primary_domain options include retrieval. So primary_domain is retrieval. D[1D[K
+Domain_tags would include retrieval and maybe documentation. Storage_releva[14D[K
+Storage_relevance is high. Lifecycle_status_proposal is proposed_memory. Se[2D[K
+Sensitivity_bucket_proposal is internal. Source_class_policy_proposal is re[2D[K
+review_only. Retrieval_behavior_proposal is full_body_required. Not_decided[11D[K
+Not_decided is false. Reasoning_route_proposal is local_senior_model. Brief[5D[K
+Brief rationale is about checking the full document before acceptance.
+
+I think that's the structure. Now map all the required fields accordingly.
+...done thinking.
+
+{
+  "case_id": "HG-011",
+  "project_bucket": "general",
+  "summary": "Verify ADR-052 implementation basis by reviewing full progres[7D[K
+progressive retrieval document",
+  "primary_domain": "retrieval",
+  "domain_tags": ["retrieval", "documentation", "process-validation"],
+  "domain_bucket": "retrieval",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "full_body_required",
+  "retrieval_behavior": "full_body_required",
+  "flags": [],
+  "not_decided": false,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Mandatory full document verification before implement[9D[K
+implementation acceptance"
+}

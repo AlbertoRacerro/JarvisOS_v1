@@ -1,0 +1,58 @@
+Thinking...
+Okay, let's tackle this. The user provided a query about not building a RAG[3D[K
+RAG runtime yet and keeping retrieval as a design contract with specific sc[2D[K
+scopes. The goal is to create a JSON output based on the given context and [K
+rules.
+
+First, I need to determine the project_bucket. The input is about JarvisOS'[9D[K
+JarvisOS's retrieval design, so according to the rules, if it's about memor[5D[K
+memory architecture or retrieval, the project_bucket should be jarvisos. Th[2D[K
+The primary_domain here is retrieval since the focus is on retrieval design[6D[K
+design. The domain_tags should include retrieval and maybe memory since it'[3D[K
+it's related to JarvisOS's memory architecture.
+
+Storage relevance is high because the retrieval design is important for fut[3D[K
+future use. The lifecycle_status_proposal is proposed_memory since it's a d[1D[K
+design contract that's still in the drafting stage. Sensitivity is internal[8D[K
+internal as it's about system design. Source policy is review_only because [K
+it's a design proposal needing review. Retrieval behavior is set to candida[7D[K
+candidate_discovery_only as per the user's instruction to scope candidates [K
+first.
+
+Not_decided is false because the user is making a clear statement about ret[3D[K
+retrieval design. The reasoning_route_proposal is local_senior_model since [K
+it's an internal design decision. The brief rationale should mention the re[2D[K
+retrieval design contract and scoped candidates.
+
+I need to make sure all the required fields are included and that the enums[5D[K
+enums match the allowed values. Also, check if any flags are needed, but th[2D[K
+the user didn't mention any, so flags can be empty. The case_id is given as[2D[K
+as HG-002. Let me structure all this into the JSON format as specified.
+...done thinking.
+
+{
+  "case_id": "HG-002",
+  "project_bucket": "jarvisos",
+  "summary": "Retrieval design contract: scoped candidates first, full body[4D[K
+body by source ID only when evidence needed",
+  "primary_domain": "retrieval",
+  "domain_tags": ["retrieval", "memory", "design_contract"],
+  "domain_bucket": "retrieval",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "candidate_discovery_only",
+  "retrieval_behavior": "candidate_discovery_only",
+  "flags": [],
+  "not_decided": false,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Retrieval design contract prioritizes scoped candidat[8D[K
+candidates over full source body until evidence requires otherwise"
+}

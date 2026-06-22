@@ -729,6 +729,16 @@ Current implementation status:
   score-per-token diagnostic. Recommendation: use `qwen_hybrid_v0_3` as the
   default fast secretary pack for the next expanded Qwen run. This is still
   manual-review evidence only.
+- 1G-B2-D ran the expanded profiled Qwen secretary smoke set without using the
+  BlueRev vault or expanding to all 32 cases. Reports are under
+  `reports/local_model_smoke/1G-B2-D/`. `qwen_hybrid_v0_3` outscored
+  `micro_rules_v0_2` on aggregate hard score (62/96 vs. 56/96), parse count
+  (9/12 vs. 8/12), critical gate count (3 vs. 4), and score-per-token
+  diagnostics. It did not maintain zero critical gates or full parse stability:
+  `HG-006`, `HG-018`, and `HG-022` failed parsing/gates. Recommendation: keep
+  `qwen_hybrid_v0_3` as the better profiled candidate, but run
+  `1G-B2-D-R - Qwen profile failure analysis` before any full 32-case Qwen
+  smoke run. This remains manual-review evidence only.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
 The accepted next local AI sequence is:
@@ -762,6 +772,7 @@ The accepted next local AI sequence is:
 1G-B2-B    Fast secretary recipe ablation
 1G-B2-C    Qwen secretary context optimization
 1G-B2-D    Expanded profiled Qwen secretary smoke run
+1G-B2-D-R  Qwen profile failure analysis
 1H         Showcase files generator design
 1I         Context access from showcase files
 1J         Provider/tool intent form design

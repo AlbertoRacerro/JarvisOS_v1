@@ -1,0 +1,52 @@
+Thinking...
+Okay, let's tackle this. The user is asking about the first BlueRev pilot's[7D[K
+pilot's target location between Mar Piccolo and a controlled Adriatic site.[5D[K
+site. They don't want to assume either yet.
+
+First, the project_bucket should be 'bluerev' since it's about BlueRev. The[3D[K
+The primary_domain is likely 'reactor_design' because choosing a site for a[1D[K
+a pilot relates to reactor design. Domain tags should include 'reactor_desi[13D[K
+'reactor_design' and maybe 'location_selection' since it's about deciding t[1D[K
+the site. Storage relevance is high because the decision is important for t[1D[K
+the project.
+
+Lifecycle status is 'proposed_memory' as it's a draft decision. Sensitivity[11D[K
+Sensitivity is 'internal' since it's project-specific. Source policy is 're[3D[K
+'review_only' because JarvisOS reviews it. Retrieval behavior needs 'review[7D[K
+'review_gate_required' to ensure proper review before finalizing. Not_decid[9D[K
+Not_decided is true because the choice isn't made yet.
+
+Clarification isn't required, but the user might need to confirm. The reaso[5D[K
+reasoning route should be 'local_senior_model' for detailed analysis. The b[1D[K
+brief rationale is that the location is undecided and needs review. Data pa[2D[K
+package needed is 'draft_batch_summary' for the proposal. Redaction isn't r[1D[K
+required here. User approval is recommended since it's a significant decisi[6D[K
+decision.
+...done thinking.
+
+{
+  "case_id": "HG-009",
+  "project_bucket": "bluerev",
+  "summary": "BlueRev pilot location selection between Mar Piccolo and cont[4D[K
+controlled Adriatic site",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design", "location_selection", "not_decided"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Location decision requires review gate and senior mod[3D[K
+model analysis"
+}

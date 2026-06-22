@@ -1,0 +1,55 @@
+Thinking...
+Okay, let me try to figure out how to handle this query. The user is asking[6D[K
+asking about a BlueRev toy target related to estimating if 100 meters of 50[2D[K
+50mm ID transparent tubing can hold enough culture volume for a bench-scale[11D[K
+bench-scale floating module. They mentioned it's just a scale check, not a [K
+design decision.
+
+First, I need to determine the appropriate project bucket. Since it's relat[5D[K
+related to BlueRev, the project_bucket should be 'bluerev'. The primary dom[3D[K
+domain here seems to be reactor design because it's about the physical stru[4D[K
+structure and capacity of the tubing in a reactor setup.
+
+Domain tags should include reactor_design and maybe bioprocess since it's a[1D[K
+about culture volume. Storage relevance is high because the information is [K
+important for the project. The lifecycle status is proposed_memory since it[2D[K
+it's an initial estimate. Sensitivity is internal as it's part of the proje[5D[K
+project but not public yet. Source policy is review_only because it's a dra[3D[K
+draft. Retrieval behavior might need review gate since it's a proposed memo[4D[K
+memory. Not decided is true because it's a toy check, not a final decision.[9D[K
+decision.
+
+The reasoning route should use a local senior model for engineering choices[7D[K
+choices. Data package needed is draft_batch_summary. I need to make sure al[2D[K
+all the enums are correctly set and that the JSON structure matches the req[3D[K
+required shape. Also, the brief rationale should explain why these settings[8D[K
+settings are chosen. Let me double-check the routing table and provider pre[3D[K
+preferences to ensure everything aligns correctly.
+...done thinking.
+
+{
+  "case_id": "HG-022",
+  "project_bucket": "bluerev",
+  "summary": "BlueRev toy target: estimate 100m 50mm ID tubing volume for b[1D[K
+bench-scale culture",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design", "bioprocess", "fluid_dynamics", "not_de[7D[K
+"not_decided"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Engineering estimation for reactor scale validation"
+}

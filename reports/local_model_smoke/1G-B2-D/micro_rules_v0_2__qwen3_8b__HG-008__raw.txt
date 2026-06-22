@@ -1,0 +1,70 @@
+Thinking...
+Okay, let's tackle this input. The user is talking about the Smart Joint ge[2D[K
+geometry not being sent to external providers until a redaction policy is i[1D[K
+in place. They want it kept local-only for now.
+
+First, I need to determine the project_bucket. Since the mention is about a[1D[K
+a geometry related to BlueRev, which is part of the Signore's project, the [K
+project_bucket should be bluerev.
+
+The primary_domain here is about handling data and policies, which relates [K
+to memory and security. But looking at the rules, if it's about a BlueRev u[1D[K
+unresolved engineering choice, the primary_domain would be reactor_design. [K
+However, the user is discussing data handling and redaction policies, which[5D[K
+which might fall under security. Wait, the input is about keeping data loca[4D[K
+local and not sending to external providers, which is more about security a[1D[K
+and data handling. But the BlueRev context pack mentions that if it's about[5D[K
+about unresolved engineering choices, then reactor_design. However, this in[2D[K
+input is about data sharing policies, which might be under security. Hmm.
+
+Wait, looking at the Case Routing Recipes, the BlueRev unresolved engineeri[9D[K
+engineering assumption is when it's about materials, geometry, etc. But her[3D[K
+here, the user is talking about sending data to external providers, which i[1D[K
+is more about data handling policies. So maybe this falls under security. H[1D[K
+However, the input is part of the BlueRev project, so maybe the project_buc[11D[K
+project_bucket is bluerev, and the primary_domain is reactor_design. But th[2D[K
+the main issue here is data handling, which might be under security. Wait, [K
+the rules for BlueRev unresolved engineering assumptions include topics lik[3D[K
+like material, geometry, etc., but the user is discussing the handling of t[1D[K
+that data (redaction policy). So maybe this is a BlueRev unresolved enginee[7D[K
+engineering assumption related to data sharing, which is part of the projec[6D[K
+project. Therefore, the primary_domain would be reactor_design, and the dom[3D[K
+domain_tags would include reactor_design and not_decided.
+
+The storage_relevance is high because it's about data handling for the proj[4D[K
+project. The lifecycle_status_proposal is raw_input because the user is inp[3D[K
+inputting the data. The sensitivity_bucket_proposal is internal since it's [K
+about internal policies. Source_class_policy_proposal is review_only becaus[6D[K
+because it's about policies that need review. Retrieval_behavior_proposal i[1D[K
+is review_gate_required because it's about future retrieval.
+
+The flags might include data_handling. The not_decided is true because the [K
+redaction policy is not yet in place. The reasoning_route_proposal is local[5D[K
+local_senior_model as per the BlueRev rules. The brief_rationale is that th[2D[K
+the data handling policy is tentative.
+...done thinking.
+
+{
+  "case_id": "HG-008",
+  "project_bucket": "bluerev",
+  "summary": "Smart Joint geometry handling policy",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design", "not_decided", "data_handling"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": ["data_handling"],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Data handling policy for BlueRev geometry"
+}

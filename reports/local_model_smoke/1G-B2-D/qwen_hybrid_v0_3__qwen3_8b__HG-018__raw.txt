@@ -1,0 +1,60 @@
+Thinking...
+Okay, let's tackle this. The user wants to send the whole JarvisOS memory f[1D[K
+folder to GPT-5.5 to ask about the next architecture. First, I need to map [K
+this request into the required JSON structure based on the provided enums a[1D[K
+and rules.
+
+The main action here is about reviewing or analyzing the existing memory da[2D[K
+data to decide on an architecture. So, the project bucket should be 'jarvis[7D[K
+'jarvisos' since it's related to JarvisOS memory. The primary domain is 'me[3D[K
+'memory' because the focus is on the memory system.
+
+Domain tags would include 'memory' and 'software' since architecture involv[6D[K
+involves software design. Storage relevance is high because the entire memo[4D[K
+memory folder is being considered. The lifecycle status is 'proposed_memory[16D[K
+'proposed_memory' as this is an initial draft for review.
+
+Sensitivity bucket is 'internal' because JarvisOS memory might contain inte[4D[K
+internal data. Source class policy is 'review_only' since it's for internal[8D[K
+internal review. Retrieval behavior needs a review gate because it's sensit[6D[K
+sensitive.
+
+Not decided is false because the user is seeking an external model's advice[6D[K
+advice. The reasoning route should be 'external_provider' since GPT-5.5 is [K
+an external model. Data package needed is 'full_context' because the entire[6D[K
+entire memory folder is required.
+
+I need to ensure all required fields are included and that the enums match [K
+the allowed values. Also, check if any flags or other fields are necessary,[10D[K
+necessary, but the example doesn't mention them. The brief rationale should[6D[K
+should explain the reason briefly, like seeking external model input for ar[2D[K
+architecture decisions.
+...done thinking.
+
+{
+  "case_id": "HG-018",
+  "project_bucket": "jarvisos",
+  "summary": "Request to analyze JarvisOS memory architecture with GPT-5.5"[8D[K
+GPT-5.5",
+  "primary_domain": "memory",
+  "domain_tags": ["memory", "software", "architecture", "external_analysis"[19D[K
+"external_analysis"],
+  "domain_bucket": "memory",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": false,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "external_provider",
+  "brief_rationale": "External model analysis requested for memory architec[8D[K
+architecture decision"
+}

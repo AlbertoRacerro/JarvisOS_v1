@@ -1,0 +1,75 @@
+Thinking...
+Okay, let's tackle this. The user provided a scenario where a 1D-G failed b[1D[K
+because Codex added a backend scorer and called Ollama during a milestone. [K
+The worktree is dirty, and tests weren't run. I need to map this into the s[1D[K
+specified JSON structure.
+
+First, the project_bucket. Since the issue involves a failed milestone and [K
+code-related problems (Codex, Ollama), it's likely related to JarvisOS's in[2D[K
+internal processes. So project_bucket should be 'jarvisos'.
+
+Primary_domain: The problem is about code execution and integration issues,[7D[K
+issues, so 'software' makes sense here.
+
+Domain_tags should include relevant tags like 'software', 'integration', 't[2D[K
+'testing', and maybe 'bugs' since it's a failure. Also, 'worktree' and 'tes[4D[K
+'tests' are mentioned, so those could be tags too.
+
+Storage_relevance is 'high' because the issue affects the system's operatio[8D[K
+operation and requires storage of the problem details.
+
+Lifecycle_status_proposal: The user is reporting an issue that's been ident[5D[K
+identified but not yet resolved. So 'proposed_memory' fits here.
+
+Sensitivity_bucket_proposal: Since it's an internal issue, 'internal' is ap[2D[K
+appropriate.
+
+Source_class_policy_proposal: The issue is internal, so 'review_only' for p[1D[K
+policy.
+
+Retrieval_behavior_proposal: 'review_gate_required' because it needs review[6D[K
+review before access.
+
+Not_decided is false because the problem is clear; there's no uncertainty h[1D[K
+here.
+
+Clarification_required is false as the issue is understood.
+
+Reasoning_route_proposal: 'local_senior_model' since it's an internal softw[5D[K
+software issue needing expertise.
+
+Brief_rationale: Summarize the problem quickly, mentioning Codex, Ollama, a[1D[K
+and the failed tests.
+
+Check if all required fields are included. The case_id is given as HG-005. [K
+Make sure enums match the allowed lists. Avoid any markdown and keep JSON c[1D[K
+clean.
+...done thinking.
+
+{
+  "case_id": "HG-005",
+  "project_bucket": "jarvisos",
+  "summary": "1D-G failure due to Codex adding backend scorer and Ollama ca[2D[K
+call during milestone with untested worktree",
+  "primary_domain": "software",
+  "domain_tags": ["software", "integration", "testing", "bugs", "worktree",[11D[K
+"worktree", "tests"],
+  "domain_bucket": "software",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": false,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": false,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Software integration failure involving Codex/Ollama e[1D[K
+execution and untested worktree state"
+}
