@@ -340,6 +340,64 @@ Recommended next milestone:
 Do not expand to the full 32-case set until failure analysis explains or
 repairs the remaining parse/gate failures.
 
+## 1G-B2-D-R Qwen Profile Failure Analysis
+
+1G-B2-D-R inspects the `qwen_hybrid_v0_3` failures on `HG-006`, `HG-018`, and
+`HG-022`.
+
+Analysis report:
+
+```text
+docs/QWEN_PROFILE_FAILURE_ANALYSIS_1G_B2_D_R.md
+```
+
+The failures were not timeouts or model refusals. The raw outputs contained
+Qwen thinking/prose plus malformed JSON-like objects with split strings,
+duplicated fragments, or split enum/tag values. Parser-only hardening was not
+chosen because heuristic repair could make malformed model text look accepted.
+
+Created parse-safe pack:
+
+```text
+docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_HYBRID_PARSE_SAFE_v0_4.md
+```
+
+The v0.4 pack keeps the same semantic routing rules as v0.3 but removes the
+table/example shape and moves strict JSON-only constraints to the top.
+
+Narrow rerun:
+
+```text
+model: qwen3:8b
+packs: qwen_hybrid_v0_3, qwen_hybrid_parse_safe_v0_4
+cases: HG-006, HG-018, HG-022
+total: 6 local Ollama runs
+```
+
+Reports are written under:
+
+```text
+reports/local_model_smoke/1G-B2-D-R/
+```
+
+High-level result:
+
+```text
+qwen_hybrid_v0_3:             0/3 parse,  0/24 hard,  0/15 soft tolerant, 3 gates, 1257 tokens
+qwen_hybrid_parse_safe_v0_4:  3/3 parse, 20/24 hard, 15/15 soft tolerant, 0 gates, 1235 tokens
+```
+
+`qwen_hybrid_parse_safe_v0_4` fixed the targeted parse/gate failures in the
+narrow rerun. `HG-018` still missed hard provider/memory-boundary fields, so the
+next full holdout smoke run must remain manual-review only and track this
+semantic risk.
+
+Recommended next milestone:
+
+```text
+1G-B2-E - Full holdout Qwen secretary smoke run
+```
+
 ## Dry-Run Behavior
 
 Example:
@@ -410,23 +468,22 @@ The tests cover:
 
 ## Future 1G-B
 
-After 1G-B2-D, the next milestone is:
+After 1G-B2-D-R, the next milestone is:
 
 ```text
-1G-B2-D-R - Qwen profile failure analysis
+1G-B2-E - Full holdout Qwen secretary smoke run
 ```
 
-1G-B2-D-R should analyze the profile failures before expanding to a full
-32-case profiled Qwen secretary smoke run.
+1G-B2-E should use `qwen_hybrid_parse_safe_v0_4`, stay manual-review only, and
+track `HG-018`-style provider/memory-boundary hard-field misses.
 Any live run must remain local, explicit, bounded, auditable, and separate from
 runtime memory, retrieval, provider routing, tool execution, and BlueRev
 modeling.
 
 ## Milestone Boundary Confirmation
 
-1G-B2-D adds scoped local Qwen smoke evidence, generated local smoke reports,
-docs, and a harness guard update that allows the explicit twelve-case profiled
-smoke run.
+1G-B2-D-R adds failure-analysis docs, a parse-safe Qwen pack, generated local
+rerun reports, docs, and `unittest` coverage for the new pack file.
 
 It adds no:
 

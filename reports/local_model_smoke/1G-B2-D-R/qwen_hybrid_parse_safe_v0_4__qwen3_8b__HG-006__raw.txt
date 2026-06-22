@@ -1,0 +1,52 @@
+Thinking...
+Okay, let's tackle this. The user is working on a BlueRev project and menti[5D[K
+mentioned polycarbonate tubes versus ETFE. They haven't decided on the mate[4D[K
+material and don't want it saved as an accepted assumption.
+
+First, I need to check the provided context pack. For unresolved BlueRev en[2D[K
+engineering choices, the project_bucket should be bluerev and primary_domai[13D[K
+primary_domain reactor_design. The domain_tags should include reactor_desig[13D[K
+reactor_design and note that the topic is unresolved. Storage relevance is [K
+high, lifecycle_status_proposal is proposed_memory, sensitivity is internal[8D[K
+internal, source policy is review_only. Retrieval behavior needs a review g[1D[K
+gate. Not_decided is true, and escalation to a senior model is recommended.[12D[K
+recommended.
+
+Wait, the user said they haven't decided, so not_decided should be true. Al[2D[K
+Also, since they don't want it saved as accepted, the lifecycle status shou[4D[K
+should be proposed_memory. The domain_tags should include reactor_design an[2D[K
+and the specific topic, which here is material choice.
+
+I should make sure all the required fields are filled according to the enum[4D[K
+enums. The reasoning_route_proposal should be local_senior_model as per the[3D[K
+the defaults for BlueRev. Data package needed is draft_batch_summary. Also,[5D[K
+Also, the brief rationale should explain why these settings are chosen. Let[3D[K
+Let me double-check the enums and required fields to ensure compliance.
+...done thinking.
+
+{
+  "case_id": "HG-006",
+  "project_bucket": "bluerev",
+  "summary": "BlueRev material selection consideration for polycarbonate vs[2D[K
+vs ETFE tubes",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design", "material_choice", "not_decided"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Unresolved BlueRev material selection requires senior[6D[K
+senior model review"
+}

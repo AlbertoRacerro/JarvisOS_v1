@@ -1,0 +1,84 @@
+{
+  "case_ids": [
+    "HG-006",
+    "HG-018",
+    "HG-022"
+  ],
+  "context_pack_approx_token_estimate": 1257,
+  "context_pack_char_count": 5028,
+  "context_pack_label": "qwen_hybrid_v0_3",
+  "context_pack_path": "docs\\context_packs\\JARVISOS_FAST_SECRETARY_QWEN_HYBRID_v0_3.md",
+  "core_field_exact_matches_by_run": [
+    {
+      "case_id": "HG-006",
+      "context_pack_label": "qwen_hybrid_v0_3",
+      "critical_gate_failures": [
+        "json_not_parsed"
+      ],
+      "exact_matches": 0,
+      "hard_matches": 0,
+      "hard_total": 8,
+      "json_parse_passed": false,
+      "model": "qwen3:8b",
+      "returncode": 0,
+      "soft_exact_matches": 0,
+      "soft_matches": 0,
+      "soft_tolerant_matches": 0,
+      "soft_total": 5,
+      "timed_out": false,
+      "total": 9
+    },
+    {
+      "case_id": "HG-018",
+      "context_pack_label": "qwen_hybrid_v0_3",
+      "critical_gate_failures": [
+        "json_not_parsed"
+      ],
+      "exact_matches": 0,
+      "hard_matches": 0,
+      "hard_total": 8,
+      "json_parse_passed": false,
+      "model": "qwen3:8b",
+      "returncode": 0,
+      "soft_exact_matches": 0,
+      "soft_matches": 0,
+      "soft_tolerant_matches": 0,
+      "soft_total": 5,
+      "timed_out": false,
+      "total": 9
+    },
+    {
+      "case_id": "HG-022",
+      "context_pack_label": "qwen_hybrid_v0_3",
+      "critical_gate_failures": [
+        "json_not_parsed"
+      ],
+      "exact_matches": 0,
+      "hard_matches": 0,
+      "hard_total": 8,
+      "json_parse_passed": false,
+      "model": "qwen3:8b",
+      "returncode": 0,
+      "soft_exact_matches": 0,
+      "soft_matches": 0,
+      "soft_tolerant_matches": 0,
+      "soft_total": 5,
+      "timed_out": false,
+      "total": 9
+    }
+  ],
+  "created_at": "2026-06-22T06:52:48.655285+00:00",
+  "errors": 0,
+  "json_parse_failures": 3,
+  "json_parse_passes": 0,
+  "manual_review_required": true,
+  "milestone": "1G-B2-D-R",
+  "models": [
+    "qwen3:8b"
+  ],
+  "report_dir": "reports\\local_model_smoke\\1G-B2-D-R",
+  "schema_version": "local_model_form_fill_smoke_summary_v0",
+  "semantic_truth_scored": false,
+  "timeouts": 0,
+  "total_runs": 3
+}

@@ -156,15 +156,16 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-D-R - Qwen profile failure analysis
+1G-B2-E - Full holdout Qwen secretary smoke run
 ```
 
-The 1G-B2-D expanded profiled Qwen secretary smoke run tested only `qwen3:8b`
-on two packs and twelve selected holdout cases. Reports live under
-`reports/local_model_smoke/1G-B2-D/`. `qwen_hybrid_v0_3` beat
-`micro_rules_v0_2` on aggregate hard score, parse count, critical gate count,
-and score-per-token diagnostics, but still had parse/gate failures on
-`HG-006`, `HG-018`, and `HG-022`. It remains manual-review smoke evidence only;
-run failure analysis before any full 32-case Qwen run.
+The 1G-B2-D-R failure analysis found that `qwen_hybrid_v0_3` failed on
+`HG-006`, `HG-018`, and `HG-022` because Qwen emitted thinking/prose plus
+malformed JSON-like fragments. Reports live under
+`reports/local_model_smoke/1G-B2-D-R/`. The parse-safe
+`qwen_hybrid_parse_safe_v0_4` pack fixed the targeted failed cases in a narrow
+6-run rerun: 3/3 parse, 20/24 hard, 15/15 soft tolerant, and 0 critical gates.
+This remains manual-review smoke evidence only; `HG-018` still needs attention
+for provider/memory-boundary hard-field misses in the next full holdout smoke.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

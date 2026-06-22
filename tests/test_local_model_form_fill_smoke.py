@@ -41,6 +41,8 @@ class LocalModelFormFillSmokeTests(unittest.TestCase):
             ROOT / "docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_EXAMPLES_v0_3.md",
             ROOT / "docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_HYBRID_v0_3.md",
             ROOT / "docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_OUTPUT_STRICT_v0_3.md",
+            ROOT
+            / "docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_HYBRID_PARSE_SAFE_v0_4.md",
         ]
         cls.cases = smoke.load_jsonl_holdout(cls.holdout_path)
         cls.config = smoke.load_candidate_config(cls.config_path)
@@ -197,7 +199,7 @@ class LocalModelFormFillSmokeTests(unittest.TestCase):
             self.assertIn("Case Routing Recipes", pack["content"])
             self.assertIn("Output Discipline", pack["content"])
 
-    def test_qwen_v03_pack_files_exist_and_load(self):
+    def test_qwen_pack_files_exist_and_load(self):
         for path in self.qwen_pack_paths:
             self.assertTrue(path.exists())
             pack = smoke.load_context_pack(path)

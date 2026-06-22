@@ -1,0 +1,55 @@
+Thinking...
+Okay, let's tackle this. The user is asking about a BlueRev toy target to e[1D[K
+estimate if 100 meters of 50mm ID transparent tubing can hold enough cultur[6D[K
+culture volume for a bench-scale floating module. It's a scale check, not a[1D[K
+a design decision.
+
+First, I need to determine the project bucket. Since it's related to BlueRe[6D[K
+BlueRev, the project_bucket should be 'bluerev'. The primary_domain is reac[4D[K
+reactor_design because it's about the design of the module. The domain_tags[11D[K
+domain_tags should include reactor_design and maybe bioprocess since it's a[1D[K
+about culture volume.
+
+Storage relevance is high because the question is about the capacity and ph[2D[K
+physical dimensions. Lifecycle status is proposed_memory since it's a preli[5D[K
+preliminary check. Sensitivity is internal as it's an internal design consi[5D[K
+consideration. Source policy is review_only because it's part of the design[6D[K
+design process. Retrieval behavior is review_gate_required to ensure proper[6D[K
+proper review before acceptance.
+
+Not_decided is true because it's a tentative calculation. Clarification req[3D[K
+required is false since the question is specific. Api or model escalation i[1D[K
+is recommended because it's a calculation that might need expert input. Rea[3D[K
+Reasoning route is local_senior_model for engineering calculations. Data pa[2D[K
+package needed is draft_batch_summary for the calculation details. Redactio[8D[K
+Redaction isn't required here. User approval isn't recommended as it's a pr[2D[K
+preliminary check. The brief rationale is that it's a scale check for the m[1D[K
+module's tubing capacity.
+...done thinking.
+
+{
+  "case_id": "HG-022",
+  "project_bucket": "bluerev",
+  "summary": "Estimate culture volume capacity of 100m 50mm ID tubing for b[1D[K
+bench-scale floating module",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design", "bioprocess", "not_decided"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "BlueRev reactor design scale check requiring engineer[8D[K
+engineering calculation"
+}

@@ -1,0 +1,54 @@
+Thinking...
+Okay, let's tackle this. The user is providing input about BlueRev, specifi[7D[K
+specifically comparing polycarbonate and ETFE for tubes, but hasn't decided[7D[K
+decided on the material and doesn't want it saved as an accepted assumption[10D[K
+assumption.
+
+First, I need to map this to the correct enums and fields. The project_buck[12D[K
+project_bucket is clearly bluerev. The primary_domain should be reactor_des[11D[K
+reactor_design since it's about material selection for a reactor component.[10D[K
+component. Domain_tags would include reactor_design, materials, prototype, [K
+and not_decided because the choice isn't finalized.
+
+Storage relevance is high since the material choice impacts the design. Lif[3D[K
+Lifecycle_status_proposal is proposed_memory because it's a tentative decis[5D[K
+decision. Since the user hasn't decided, not_decided is true. Sensitivity i[1D[K
+is internal as it's an engineering choice, and source policy is review_only[11D[K
+review_only. Retrieval behavior needs a review gate since it's an unresolve[9D[K
+unresolved assumption.
+
+The reasoning route should use the local_senior_model for deeper analysis. [K
+Data package needed is draft_batch_summary. The summary should capture the [K
+uncertainty about the material. I need to ensure all required fields are in[2D[K
+included and enums are correct. Also, check if any flags or other fields ar[2D[K
+are needed, but the example doesn't mention them. Make sure the JSON struct[6D[K
+structure matches exactly, avoiding any markdown or extra text.
+...done thinking.
+
+{
+  "case_id": "HG-006",
+  "project_bucket": "bluerev",
+  "summary": "Material selection for polycarbonate vs ETFE tubes remains un[2D[K
+undetermined",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design", "materials", "prototype", "not_decided"[13D[K
+"not_decided"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "unknown",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Unresolved material selection requires senior model r[1D[K
+review"
+}

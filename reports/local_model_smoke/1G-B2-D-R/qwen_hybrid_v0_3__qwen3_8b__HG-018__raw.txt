@@ -1,0 +1,47 @@
+Thinking...
+Okay, let's tackle this query. The user wants to send the entire JarvisOS m[1D[K
+memory folder to GPT-5.5 to get advice on the next architecture. First, I n[1D[K
+need to map this into the required JSON structure.
+
+The project_bucket is likely 'jarvisos' since it's about JarvisOS memory. T[1D[K
+The primary_domain would be 'memory' as they're discussing memory architect[9D[K
+architecture. Domain_tags should include 'memory' and 'architecture' maybe.[6D[K
+maybe. Storage_relevance is high because the whole folder is being sent.
+
+Lifecycle status is 'proposed_memory' since it's a draft for review. Sensit[6D[K
+Sensitivity is 'internal' as it's JarvisOS data. Source policy is 'review_o[9D[K
+'review_only' because it's internal. Retrieval behavior needs a review gate[4D[K
+gate since it's sensitive. Not decided is false because the action is clear[5D[K
+clear.
+
+Reasoning route should be 'local_senior_model' as per the provider routing [K
+for internal matters. The brief rationale is that GPT-5.5 is being asked fo[2D[K
+for architecture advice. Make sure all required fields are included and enu[3D[K
+enums are correct.
+...done thinking.
+
+{
+  "case_id": "HG-018",
+  "project_bucket": "jarvisos",
+  "summary": "Request to analyze JarvisOS memory architecture with GPT-5.5"[8D[K
+GPT-5.5",
+  "primary_domain": "memory",
+  "domain_tags": ["memory", "architecture", "software"],
+  "domain_bucket": "memory",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": false,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Architecture analysis requires senior model review"
+}

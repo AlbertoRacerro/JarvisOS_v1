@@ -1,0 +1,54 @@
+Thinking...
+Okay, let's tackle this query. The user is asking about estimating if 100 m[1D[K
+meters of 50mm ID transparent tubing can hold enough culture volume for a b[1D[K
+bench-scale floating module. It's a toy scale check, not a design decision.[9D[K
+decision.
+
+First, I need to determine the project bucket. Since it's related to BlueRe[6D[K
+BlueRev, which is part of their context, I'll set project_bucket to bluerev[7D[K
+bluerev. The primary domain here seems to be reactor_design because it's ab[2D[K
+about the physical structure and capacity of the module.
+
+Domain tags should include reactor_design, bioprocess (since it's about cul[3D[K
+culture volume), and maybe materials or engineering. But since the user men[3D[K
+mentioned it's a toy check, maybe not materials. Storage relevance is high [K
+because the calculation involves physical dimensions and volume.
+
+Lifecycle status is proposed_memory since it's a draft. Sensitivity is inte[4D[K
+internal as it's an internal check. Source policy is review_only. Retrieval[9D[K
+Retrieval behavior might need a review gate since it's a calculation. Not d[1D[K
+decided is true because it's an estimate, not a final decision.
+
+Reasoning route should be local_senior_model for accurate calculation. The [K
+brief rationale is about estimating volume based on tube dimensions. Data p[1D[K
+package needed is draft_batch_summary. I'll make sure all required fields a[1D[K
+are included and enums are correct.
+...done thinking.
+
+{
+  "case_id": "HG-022",
+  "project_bucket": "bluerev",
+  "summary": "Estimate culture volume capacity of 100m 50mm ID transparent [K
+tubing for bench-scale floating module",
+  "primary_domain": "reactor_design",
+  "domain_tags": ["reactor_design", "bioprocess", "volume_calculation", "no[3D[K
+"not_decided"],
+  "domain_bucket": "reactor_design",
+  "storage_relevance": "high",
+  "lifecycle_status_proposal": "proposed_memory",
+  "lifecycle_status": "proposed_memory",
+  "sensitivity_bucket_proposal": "internal",
+  "sensitivity_bucket": "internal",
+  "source_class_policy_proposal": "review_only",
+  "source_class_policy": "review_only",
+  "retrieval_behavior_proposal": "review_gate_required",
+  "retrieval_behavior": "review_gate_required",
+  "flags": [],
+  "not_decided": true,
+  "clarification_required": false,
+  "clarification": false,
+  "api_or_model_escalation_recommended": true,
+  "reasoning_route_proposal": "local_senior_model",
+  "brief_rationale": "Physical dimension calculation for volume estimation"[11D[K
+estimation"
+}
