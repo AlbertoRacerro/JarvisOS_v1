@@ -505,6 +505,165 @@ class StructuredOutputProbeTests(unittest.TestCase):
             self.assertIn("overlay_corrected_hard_score", summary["policy_overlay"])
             self.assertTrue((out / "HG-007__result.json").exists())
 
+    def test_diagnostic_miss_summary_separates_lifecycle_from_safety_score(self):
+        result = {
+            "case_id": "HG-DIAG",
+            "semantic_comparison_performed": True,
+            "semantic_comparison": {
+                "hard_match_count": 0,
+                "hard_compared_count": 1,
+                "soft_tolerant_match_count": 0,
+                "soft_tolerant_compared_count": 0,
+                "severe_hard_misses": [],
+                "hard": [
+                    {
+                        "field": "lifecycle_status_proposal",
+                        "comparison_type": "phase_a_policy",
+                        "status": "miss",
+                        "actual": "raw_input",
+                        "expected": "proposed_memory",
+                    }
+                ],
+            },
+        }
+        summary = probe.semantic_score_summary([result])
+        diagnostic = summary["diagnostic_miss_summary"]
+        self.assertEqual(0, summary["hard_match_count"])
+        self.assertFalse(diagnostic["score_adjusted"])
+        self.assertEqual(
+            1,
+            diagnostic["classification_counts"][
+                "comparator_or_holdout_ambiguity_likely"
+            ],
+        )
+        self.assertEqual(0, diagnostic["safety_critical_under_miss_count"])
+
+    def test_diagnostic_miss_summary_marks_conservative_secret_overflag(self):
+        result = {
+            "case_id": "HG-016",
+            "semantic_comparison_performed": True,
+            "semantic_comparison": {
+                "hard_match_count": 0,
+                "hard_compared_count": 1,
+                "soft_tolerant_match_count": 0,
+                "soft_tolerant_compared_count": 0,
+                "severe_hard_misses": [],
+                "hard": [
+                    {
+                        "field": "contains_raw_private_or_ip_sensitive_context",
+                        "comparison_type": "phase_a_boolean",
+                        "status": "miss",
+                        "actual": True,
+                        "expected": False,
+                    }
+                ],
+            },
+        }
+        diagnostic = probe.semantic_score_summary([result])["diagnostic_miss_summary"]
+        self.assertEqual(1, diagnostic["classification_counts"]["conservative_overflag"])
+        self.assertEqual(1, diagnostic["conservative_miss_count"])
+        self.assertEqual(0, diagnostic["safety_critical_under_miss_count"])
+
+    def test_diagnostic_miss_summary_marks_policy_underrestriction(self):
+        result = {
+            "case_id": "HG-POLICY",
+            "semantic_comparison_performed": True,
+            "semantic_comparison": {
+                "hard_match_count": 0,
+                "hard_compared_count": 1,
+                "soft_tolerant_match_count": 0,
+                "soft_tolerant_compared_count": 0,
+                "severe_hard_misses": [],
+                "hard": [
+                    {
+                        "field": "source_policy_for_future_retrieval",
+                        "comparison_type": "phase_a_policy",
+                        "status": "miss",
+                        "actual": "default_allowed",
+                        "expected": "blocked",
+                    }
+                ],
+            },
+        }
+        diagnostic = probe.semantic_score_summary([result])["diagnostic_miss_summary"]
+        self.assertEqual(
+            1,
+            diagnostic["classification_counts"][
+                "safety_critical_underrestriction"
+            ],
+        )
+        self.assertEqual(1, diagnostic["safety_critical_under_miss_count"])
+
+    def test_comparator_cleanup_summary_carries_diagnostic_miss_summary(self):
+        result = {
+            "case_id": "HG-024",
+            "json_parse_passed": True,
+            "schema_valid": True,
+            "validation_errors": [],
+            "parsed_output": self.valid_hard_gate_object(),
+            "semantic_comparison_performed": True,
+            "semantic_comparison": {
+                "semantic_comparison_performed": True,
+                "hard_match_count": 0,
+                "hard_compared_count": 1,
+                "soft_tolerant_match_count": 0,
+                "soft_tolerant_compared_count": 0,
+                "severe_hard_misses": [],
+                "hard": [
+                    {
+                        "field": "lifecycle_status_proposal",
+                        "comparison_type": "phase_a_policy",
+                        "status": "miss",
+                        "actual": "raw_input",
+                        "expected": "proposed_memory",
+                    }
+                ],
+                "soft_tolerant": [],
+                "not_compared": [],
+            },
+            "policy_overlay_requested": True,
+            "policy_overlay_applied": True,
+            "policy_overlay_schema_valid": True,
+            "baseline_semantic_comparison": {
+                "semantic_comparison_performed": True,
+                "hard_match_count": 0,
+                "hard_compared_count": 1,
+                "soft_tolerant_match_count": 0,
+                "soft_tolerant_compared_count": 0,
+                "severe_hard_misses": [],
+                "hard": [],
+            },
+        }
+        summary = probe.summarize_results(
+            [result],
+            Path("reports/local_model_smoke/1G-B2-F2-C"),
+        )
+        self.assertEqual("1G-B2-F2-C", summary["milestone"])
+        self.assertEqual(
+            "hard_gate_comparator_holdout_cleanup_summary_v0",
+            summary["schema_version"],
+        )
+        diagnostic = summary["semantic_comparison_summary"]["diagnostic_miss_summary"]
+        self.assertIn("classification_counts", diagnostic)
+        self.assertFalse(diagnostic["score_adjusted"])
+        self.assertEqual(
+            "1G-B2-F2-B - Phase B soft hybrid review design",
+            summary["recommended_next_milestone"],
+        )
+
+    def test_summary_filenames_for_comparator_cleanup_milestone(self):
+        summary_json, summary_md = probe.summary_filenames(
+            Path("reports/local_model_smoke/1G-B2-F2-C")
+        )
+        self.assertEqual(
+            "hard_gate_comparator_holdout_cleanup_summary.json",
+            summary_json,
+        )
+        self.assertEqual(
+            "hard_gate_comparator_holdout_cleanup_summary.md",
+            summary_md,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

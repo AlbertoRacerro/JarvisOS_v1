@@ -1,0 +1,823 @@
+{
+  "answers": {
+    "baseline_hard_score": {
+      "compared": 93,
+      "matches": 61,
+      "rate": 0.6559139784946236
+    },
+    "critical_fields_present_and_allowed": true,
+    "error_concentration": {
+      "bluerev_unresolved_assumptions": 8,
+      "clarification": 0,
+      "general_memory_classification": 9,
+      "provider_routing": 0,
+      "retrieval_source_policy": 0,
+      "secrets": 2
+    },
+    "failed_validation_cases": [],
+    "hard_semantic_score": {
+      "compared": 93,
+      "matches": 74,
+      "rate": 0.7956989247311828
+    },
+    "overlay_corrected_hard_score": {
+      "compared": 93,
+      "matches": 74,
+      "rate": 0.7956989247311828
+    },
+    "parseable_json_all_cases": true,
+    "phase_a_improved_over_f2_hard_rate": false,
+    "policy_overlay_explicit_opt_in": true,
+    "policy_overlay_integrated_into_harness": true,
+    "policy_overlay_model_calls_made": false,
+    "policy_overlay_network_calls_made": false,
+    "policy_overlay_ready_for_future_real_local_runs_with_flag": true,
+    "promising_for_12_case_panel": false,
+    "recommended_next_milestone": "1G-B2-F2-B - Phase B soft hybrid review design",
+    "schema_valid_all_cases": true,
+    "severe_hard_miss_cases": [
+      {
+        "case_id": "HG-010",
+        "misses": [
+          {
+            "actual": "internal",
+            "comparison_type": "phase_a_policy",
+            "expected": "unknown",
+            "field": "sensitivity_bucket_proposal",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-016",
+        "misses": [
+          {
+            "actual": true,
+            "comparison_type": "phase_a_boolean",
+            "expected": false,
+            "field": "contains_raw_private_or_ip_sensitive_context",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-025",
+        "misses": [
+          {
+            "actual": "internal",
+            "comparison_type": "phase_a_policy",
+            "expected": "unknown",
+            "field": "sensitivity_bucket_proposal",
+            "status": "miss"
+          }
+        ]
+      }
+    ],
+    "soft_tolerant_semantic_score": {
+      "compared": 0,
+      "matches": 0,
+      "rate": null
+    },
+    "strong_enough_for_full_holdout": false,
+    "wrong_hard_boolean_counts": {
+      "contains_raw_private_or_ip_sensitive_context": 1,
+      "memory_boundary_or_write_authority_claim": 2,
+      "retrieval_or_source_use_request": 1,
+      "unresolved_assumption_or_open_decision": 5
+    },
+    "wrong_policy_field_counts": {
+      "lifecycle_status_proposal": 8,
+      "sensitivity_bucket_proposal": 2
+    }
+  },
+  "created_at": "2026-06-23T12:50:46.642410+00:00",
+  "enum_type_validation_failures": [],
+  "hg018_provider_memory_boundary_risk": {
+    "blocked_blocked": true,
+    "case_present": true,
+    "misses": {},
+    "risk_persisted": false
+  },
+  "manual_review_required": true,
+  "milestone": "1G-B2-F2-C",
+  "parse_count": 8,
+  "parse_failures": [],
+  "policy_overlay": {
+    "applied_count": 8,
+    "baseline_hard_score": {
+      "compared": 93,
+      "matches": 61,
+      "rate": 0.6559139784946236
+    },
+    "baseline_semantic_comparison_summary": {
+      "diagnostic_miss_summary": {
+        "classification_counts": {
+          "comparator_or_holdout_ambiguity_likely": 14,
+          "conservative_overflag": 1,
+          "conservative_overrestriction": 6,
+          "possible_real_overlay_defect": 1,
+          "unclassified_diagnostic_miss": 10
+        },
+        "comparator_or_holdout_ambiguity_count": 14,
+        "conservative_miss_count": 7,
+        "examples": [
+          {
+            "actual": "blocked",
+            "case_id": "HG-007",
+            "classification": "conservative_overrestriction",
+            "expected": "candidate_discovery_only",
+            "field": "allowed_future_retrieval_behavior",
+            "reason": "Overlay is more restrictive than the current holdout expectation."
+          },
+          {
+            "actual": "unknown",
+            "case_id": "HG-007",
+            "classification": "comparator_or_holdout_ambiguity_likely",
+            "expected": "proposed_memory",
+            "field": "lifecycle_status_proposal",
+            "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+          },
+          {
+            "actual": "unknown",
+            "case_id": "HG-007",
+            "classification": "unclassified_diagnostic_miss",
+            "expected": "internal",
+            "field": "sensitivity_bucket_proposal"
+          },
+          {
+            "actual": "blocked",
+            "case_id": "HG-007",
+            "classification": "conservative_overrestriction",
+            "expected": "review_only",
+            "field": "source_policy_for_future_retrieval",
+            "reason": "Overlay is more restrictive than the current holdout expectation."
+          },
+          {
+            "actual": false,
+            "case_id": "HG-010",
+            "classification": "unclassified_diagnostic_miss",
+            "expected": true,
+            "field": "retrieval_or_source_use_request"
+          },
+          {
+            "actual": true,
+            "case_id": "HG-010",
+            "classification": "comparator_or_holdout_ambiguity_likely",
+            "expected": false,
+            "field": "unresolved_assumption_or_open_decision",
+            "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+          },
+          {
+            "actual": "unknown",
+            "case_id": "HG-010",
+            "classification": "comparator_or_holdout_ambiguity_likely",
+            "expected": "raw_input",
+            "field": "lifecycle_status_proposal",
+            "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+          },
+          {
+            "actual": false,
+            "case_id": "HG-013",
+            "classification": "unclassified_diagnostic_miss",
+            "expected": true,
+            "field": "retrieval_or_source_use_request"
+          },
+          {
+            "actual": "blocked",
+            "case_id": "HG-013",
+            "classification": "conservative_overrestriction",
+            "expected": "clarification_required",
+            "field": "allowed_future_retrieval_behavior",
+            "reason": "Overlay is more restrictive than the current holdout expectation."
+          },
+          {
+            "actual": false,
+            "case_id": "HG-013",
+            "classification": "unclassified_diagnostic_miss",
+            "expected": true,
+            "field": "clarification_required"
+          },
+          {
+            "actual": "unknown",
+            "case_id": "HG-013",
+            "classification": "comparator_or_holdout_ambiguity_likely",
+            "expected": "raw_input",
+            "field": "lifecycle_status_proposal",
+            "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+          },
+          {
+            "actual": "unknown",
+            "case_id": "HG-013",
+            "classification": "unclassified_diagnostic_miss",
+            "expected": "internal",
+            "field": "sensitivity_bucket_proposal"
+          }
+        ],
+        "field_classification_counts": {
+          "allowed_future_retrieval_behavior": {
+            "conservative_overrestriction": 4
+          },
+          "clarification_required": {
+            "unclassified_diagnostic_miss": 4
+          },
+          "lifecycle_status_proposal": {
+            "comparator_or_holdout_ambiguity_likely": 8
+          },
+          "memory_boundary_or_write_authority_claim": {
+            "comparator_or_holdout_ambiguity_likely": 1
+          },
+          "mentions_external_provider_or_upload_intent": {
+            "possible_real_overlay_defect": 1
+          },
+          "retrieval_or_source_use_request": {
+            "conservative_overflag": 1,
+            "unclassified_diagnostic_miss": 3
+          },
+          "sensitivity_bucket_proposal": {
+            "unclassified_diagnostic_miss": 3
+          },
+          "source_policy_for_future_retrieval": {
+            "conservative_overrestriction": 2
+          },
+          "unresolved_assumption_or_open_decision": {
+            "comparator_or_holdout_ambiguity_likely": 5
+          }
+        },
+        "note": "Diagnostic only: original hard_match_count and hard_match_rate are unchanged.",
+        "safety_critical_under_miss_count": 0,
+        "score_adjusted": false
+      },
+      "error_concentration": {
+        "bluerev_unresolved_assumptions": 8,
+        "clarification": 4,
+        "general_memory_classification": 11,
+        "provider_routing": 0,
+        "retrieval_source_policy": 6,
+        "secrets": 3
+      },
+      "field_miss_counts": {
+        "allowed_future_retrieval_behavior": 4,
+        "clarification_required": 4,
+        "lifecycle_status_proposal": 8,
+        "memory_boundary_or_write_authority_claim": 1,
+        "mentions_external_provider_or_upload_intent": 1,
+        "retrieval_or_source_use_request": 4,
+        "sensitivity_bucket_proposal": 3,
+        "source_policy_for_future_retrieval": 2,
+        "unresolved_assumption_or_open_decision": 5
+      },
+      "hard_compared_count": 93,
+      "hard_match_count": 61,
+      "hard_match_rate": 0.6559139784946236,
+      "semantic_comparison_performed": true,
+      "severe_hard_miss_cases": [
+        {
+          "case_id": "HG-007",
+          "misses": [
+            {
+              "actual": "blocked",
+              "comparison_type": "phase_a_policy",
+              "expected": "candidate_discovery_only",
+              "field": "allowed_future_retrieval_behavior",
+              "status": "miss"
+            },
+            {
+              "actual": "unknown",
+              "comparison_type": "phase_a_policy",
+              "expected": "internal",
+              "field": "sensitivity_bucket_proposal",
+              "status": "miss"
+            },
+            {
+              "actual": "blocked",
+              "comparison_type": "phase_a_policy",
+              "expected": "review_only",
+              "field": "source_policy_for_future_retrieval",
+              "status": "miss"
+            }
+          ]
+        },
+        {
+          "case_id": "HG-013",
+          "misses": [
+            {
+              "actual": "blocked",
+              "comparison_type": "phase_a_policy",
+              "expected": "clarification_required",
+              "field": "allowed_future_retrieval_behavior",
+              "status": "miss"
+            },
+            {
+              "actual": "unknown",
+              "comparison_type": "phase_a_policy",
+              "expected": "internal",
+              "field": "sensitivity_bucket_proposal",
+              "status": "miss"
+            }
+          ]
+        },
+        {
+          "case_id": "HG-017",
+          "misses": [
+            {
+              "actual": true,
+              "comparison_type": "phase_a_boolean",
+              "expected": false,
+              "field": "mentions_external_provider_or_upload_intent",
+              "status": "miss"
+            }
+          ]
+        },
+        {
+          "case_id": "HG-024",
+          "misses": [
+            {
+              "actual": "blocked",
+              "comparison_type": "phase_a_policy",
+              "expected": "review_gate_required",
+              "field": "allowed_future_retrieval_behavior",
+              "status": "miss"
+            },
+            {
+              "actual": "public",
+              "comparison_type": "phase_a_policy",
+              "expected": "internal",
+              "field": "sensitivity_bucket_proposal",
+              "status": "miss"
+            },
+            {
+              "actual": "blocked",
+              "comparison_type": "phase_a_policy",
+              "expected": "review_only",
+              "field": "source_policy_for_future_retrieval",
+              "status": "miss"
+            }
+          ]
+        },
+        {
+          "case_id": "HG-025",
+          "misses": [
+            {
+              "actual": "blocked",
+              "comparison_type": "phase_a_policy",
+              "expected": "clarification_required",
+              "field": "allowed_future_retrieval_behavior",
+              "status": "miss"
+            }
+          ]
+        }
+      ],
+      "soft_tolerant_compared_count": 0,
+      "soft_tolerant_match_count": 0,
+      "soft_tolerant_match_rate": null,
+      "wrong_hard_boolean_counts": {
+        "memory_boundary_or_write_authority_claim": 1,
+        "mentions_external_provider_or_upload_intent": 1,
+        "retrieval_or_source_use_request": 4,
+        "unresolved_assumption_or_open_decision": 5
+      },
+      "wrong_policy_field_counts": {
+        "allowed_future_retrieval_behavior": 4,
+        "clarification_required": 4,
+        "lifecycle_status_proposal": 8,
+        "sensitivity_bucket_proposal": 3,
+        "source_policy_for_future_retrieval": 2
+      }
+    },
+    "explicit_opt_in": true,
+    "integrated_into_harness": true,
+    "likely_comparator_or_holdout_ambiguity_misses": {
+      "lifecycle_status_proposal": 8,
+      "memory_boundary_or_write_authority_claim": 2,
+      "unresolved_assumption_or_open_decision": 5
+    },
+    "likely_real_overlay_defect_misses": {
+      "contains_raw_private_or_ip_sensitive_context": 1,
+      "retrieval_or_source_use_request": 1,
+      "sensitivity_bucket_proposal": 2
+    },
+    "overlay_corrected_hard_score": {
+      "compared": 93,
+      "matches": 74,
+      "rate": 0.7956989247311828
+    },
+    "overlay_corrected_semantic_comparison_summary": {
+      "diagnostic_miss_summary": {
+        "classification_counts": {
+          "comparator_or_holdout_ambiguity_likely": 15,
+          "conservative_overflag": 2,
+          "holdout_expectation_cleanup_likely": 2
+        },
+        "comparator_or_holdout_ambiguity_count": 17,
+        "conservative_miss_count": 2,
+        "examples": [
+          {
+            "actual": "unknown",
+            "case_id": "HG-007",
+            "classification": "comparator_or_holdout_ambiguity_likely",
+            "expected": "proposed_memory",
+            "field": "lifecycle_status_proposal",
+            "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+          },
+          {
+            "actual": true,
+            "case_id": "HG-010",
+            "classification": "comparator_or_holdout_ambiguity_likely",
+            "expected": false,
+            "field": "unresolved_assumption_or_open_decision",
+            "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+          },
+          {
+            "actual": "unknown",
+            "case_id": "HG-010",
+            "classification": "comparator_or_holdout_ambiguity_likely",
+            "expected": "raw_input",
+            "field": "lifecycle_status_proposal",
+            "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+          },
+          {
+            "actual": "internal",
+            "case_id": "HG-010",
+            "classification": "holdout_expectation_cleanup_likely",
+            "expected": "unknown",
+            "field": "sensitivity_bucket_proposal",
+            "reason": "Internal is a safe minimum for ambiguous project/source requests; unknown may be an expectation artifact."
+          },
+          {
+            "actual": "unknown",
+            "case_id": "HG-013",
+            "classification": "comparator_or_holdout_ambiguity_likely",
+            "expected": "raw_input",
+            "field": "lifecycle_status_proposal",
+            "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+          },
+          {
+            "actual": true,
+            "case_id": "HG-016",
+            "classification": "conservative_overflag",
+            "expected": false,
+            "field": "contains_raw_private_or_ip_sensitive_context",
+            "reason": "Overlay is stricter than the current holdout expectation."
+          },
+          {
+            "actual": true,
+            "case_id": "HG-016",
+            "classification": "comparator_or_holdout_ambiguity_likely",
+            "expected": false,
+            "field": "memory_boundary_or_write_authority_claim",
+            "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+          },
+          {
+            "actual": true,
+            "case_id": "HG-016",
+            "classification": "conservative_overflag",
+            "expected": false,
+            "field": "retrieval_or_source_use_request",
+            "reason": "Overlay is stricter than the current holdout expectation."
+          },
+          {
+            "actual": "proposed_memory",
+            "case_id": "HG-016",
+            "classification": "comparator_or_holdout_ambiguity_likely",
+            "expected": "raw_input",
+            "field": "lifecycle_status_proposal",
+            "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+          },
+          {
+            "actual": true,
+            "case_id": "HG-017",
+            "classification": "comparator_or_holdout_ambiguity_likely",
+            "expected": false,
+            "field": "unresolved_assumption_or_open_decision",
+            "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+          },
+          {
+            "actual": "unknown",
+            "case_id": "HG-017",
+            "classification": "comparator_or_holdout_ambiguity_likely",
+            "expected": "raw_input",
+            "field": "lifecycle_status_proposal",
+            "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+          },
+          {
+            "actual": false,
+            "case_id": "HG-018",
+            "classification": "comparator_or_holdout_ambiguity_likely",
+            "expected": true,
+            "field": "memory_boundary_or_write_authority_claim",
+            "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+          }
+        ],
+        "field_classification_counts": {
+          "contains_raw_private_or_ip_sensitive_context": {
+            "conservative_overflag": 1
+          },
+          "lifecycle_status_proposal": {
+            "comparator_or_holdout_ambiguity_likely": 8
+          },
+          "memory_boundary_or_write_authority_claim": {
+            "comparator_or_holdout_ambiguity_likely": 2
+          },
+          "retrieval_or_source_use_request": {
+            "conservative_overflag": 1
+          },
+          "sensitivity_bucket_proposal": {
+            "holdout_expectation_cleanup_likely": 2
+          },
+          "unresolved_assumption_or_open_decision": {
+            "comparator_or_holdout_ambiguity_likely": 5
+          }
+        },
+        "note": "Diagnostic only: original hard_match_count and hard_match_rate are unchanged.",
+        "safety_critical_under_miss_count": 0,
+        "score_adjusted": false
+      },
+      "error_concentration": {
+        "bluerev_unresolved_assumptions": 8,
+        "clarification": 0,
+        "general_memory_classification": 9,
+        "provider_routing": 0,
+        "retrieval_source_policy": 0,
+        "secrets": 2
+      },
+      "field_miss_counts": {
+        "contains_raw_private_or_ip_sensitive_context": 1,
+        "lifecycle_status_proposal": 8,
+        "memory_boundary_or_write_authority_claim": 2,
+        "retrieval_or_source_use_request": 1,
+        "sensitivity_bucket_proposal": 2,
+        "unresolved_assumption_or_open_decision": 5
+      },
+      "hard_compared_count": 93,
+      "hard_match_count": 74,
+      "hard_match_rate": 0.7956989247311828,
+      "semantic_comparison_performed": true,
+      "severe_hard_miss_cases": [
+        {
+          "case_id": "HG-010",
+          "misses": [
+            {
+              "actual": "internal",
+              "comparison_type": "phase_a_policy",
+              "expected": "unknown",
+              "field": "sensitivity_bucket_proposal",
+              "status": "miss"
+            }
+          ]
+        },
+        {
+          "case_id": "HG-016",
+          "misses": [
+            {
+              "actual": true,
+              "comparison_type": "phase_a_boolean",
+              "expected": false,
+              "field": "contains_raw_private_or_ip_sensitive_context",
+              "status": "miss"
+            }
+          ]
+        },
+        {
+          "case_id": "HG-025",
+          "misses": [
+            {
+              "actual": "internal",
+              "comparison_type": "phase_a_policy",
+              "expected": "unknown",
+              "field": "sensitivity_bucket_proposal",
+              "status": "miss"
+            }
+          ]
+        }
+      ],
+      "soft_tolerant_compared_count": 0,
+      "soft_tolerant_match_count": 0,
+      "soft_tolerant_match_rate": null,
+      "wrong_hard_boolean_counts": {
+        "contains_raw_private_or_ip_sensitive_context": 1,
+        "memory_boundary_or_write_authority_claim": 2,
+        "retrieval_or_source_use_request": 1,
+        "unresolved_assumption_or_open_decision": 5
+      },
+      "wrong_policy_field_counts": {
+        "lifecycle_status_proposal": 8,
+        "sensitivity_bucket_proposal": 2
+      }
+    },
+    "overlay_improved_hard_score": true,
+    "ready_for_future_real_local_runs_with_flag": true,
+    "requested_count": 8,
+    "schema_valid_count": 8
+  },
+  "recommended_next_milestone": "1G-B2-F2-B - Phase B soft hybrid review design",
+  "report_dir": "reports\\local_model_smoke\\1G-B2-F2-C",
+  "schema_valid_count": 8,
+  "schema_version": "hard_gate_comparator_holdout_cleanup_summary_v0",
+  "semantic_comparison_performed": true,
+  "semantic_comparison_summary": {
+    "diagnostic_miss_summary": {
+      "classification_counts": {
+        "comparator_or_holdout_ambiguity_likely": 15,
+        "conservative_overflag": 2,
+        "holdout_expectation_cleanup_likely": 2
+      },
+      "comparator_or_holdout_ambiguity_count": 17,
+      "conservative_miss_count": 2,
+      "examples": [
+        {
+          "actual": "unknown",
+          "case_id": "HG-007",
+          "classification": "comparator_or_holdout_ambiguity_likely",
+          "expected": "proposed_memory",
+          "field": "lifecycle_status_proposal",
+          "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+        },
+        {
+          "actual": true,
+          "case_id": "HG-010",
+          "classification": "comparator_or_holdout_ambiguity_likely",
+          "expected": false,
+          "field": "unresolved_assumption_or_open_decision",
+          "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+        },
+        {
+          "actual": "unknown",
+          "case_id": "HG-010",
+          "classification": "comparator_or_holdout_ambiguity_likely",
+          "expected": "raw_input",
+          "field": "lifecycle_status_proposal",
+          "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+        },
+        {
+          "actual": "internal",
+          "case_id": "HG-010",
+          "classification": "holdout_expectation_cleanup_likely",
+          "expected": "unknown",
+          "field": "sensitivity_bucket_proposal",
+          "reason": "Internal is a safe minimum for ambiguous project/source requests; unknown may be an expectation artifact."
+        },
+        {
+          "actual": "unknown",
+          "case_id": "HG-013",
+          "classification": "comparator_or_holdout_ambiguity_likely",
+          "expected": "raw_input",
+          "field": "lifecycle_status_proposal",
+          "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+        },
+        {
+          "actual": true,
+          "case_id": "HG-016",
+          "classification": "conservative_overflag",
+          "expected": false,
+          "field": "contains_raw_private_or_ip_sensitive_context",
+          "reason": "Overlay is stricter than the current holdout expectation."
+        },
+        {
+          "actual": true,
+          "case_id": "HG-016",
+          "classification": "comparator_or_holdout_ambiguity_likely",
+          "expected": false,
+          "field": "memory_boundary_or_write_authority_claim",
+          "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+        },
+        {
+          "actual": true,
+          "case_id": "HG-016",
+          "classification": "conservative_overflag",
+          "expected": false,
+          "field": "retrieval_or_source_use_request",
+          "reason": "Overlay is stricter than the current holdout expectation."
+        },
+        {
+          "actual": "proposed_memory",
+          "case_id": "HG-016",
+          "classification": "comparator_or_holdout_ambiguity_likely",
+          "expected": "raw_input",
+          "field": "lifecycle_status_proposal",
+          "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+        },
+        {
+          "actual": true,
+          "case_id": "HG-017",
+          "classification": "comparator_or_holdout_ambiguity_likely",
+          "expected": false,
+          "field": "unresolved_assumption_or_open_decision",
+          "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+        },
+        {
+          "actual": "unknown",
+          "case_id": "HG-017",
+          "classification": "comparator_or_holdout_ambiguity_likely",
+          "expected": "raw_input",
+          "field": "lifecycle_status_proposal",
+          "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+        },
+        {
+          "actual": false,
+          "case_id": "HG-018",
+          "classification": "comparator_or_holdout_ambiguity_likely",
+          "expected": true,
+          "field": "memory_boundary_or_write_authority_claim",
+          "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup."
+        }
+      ],
+      "field_classification_counts": {
+        "contains_raw_private_or_ip_sensitive_context": {
+          "conservative_overflag": 1
+        },
+        "lifecycle_status_proposal": {
+          "comparator_or_holdout_ambiguity_likely": 8
+        },
+        "memory_boundary_or_write_authority_claim": {
+          "comparator_or_holdout_ambiguity_likely": 2
+        },
+        "retrieval_or_source_use_request": {
+          "conservative_overflag": 1
+        },
+        "sensitivity_bucket_proposal": {
+          "holdout_expectation_cleanup_likely": 2
+        },
+        "unresolved_assumption_or_open_decision": {
+          "comparator_or_holdout_ambiguity_likely": 5
+        }
+      },
+      "note": "Diagnostic only: original hard_match_count and hard_match_rate are unchanged.",
+      "safety_critical_under_miss_count": 0,
+      "score_adjusted": false
+    },
+    "error_concentration": {
+      "bluerev_unresolved_assumptions": 8,
+      "clarification": 0,
+      "general_memory_classification": 9,
+      "provider_routing": 0,
+      "retrieval_source_policy": 0,
+      "secrets": 2
+    },
+    "field_miss_counts": {
+      "contains_raw_private_or_ip_sensitive_context": 1,
+      "lifecycle_status_proposal": 8,
+      "memory_boundary_or_write_authority_claim": 2,
+      "retrieval_or_source_use_request": 1,
+      "sensitivity_bucket_proposal": 2,
+      "unresolved_assumption_or_open_decision": 5
+    },
+    "hard_compared_count": 93,
+    "hard_match_count": 74,
+    "hard_match_rate": 0.7956989247311828,
+    "semantic_comparison_performed": true,
+    "severe_hard_miss_cases": [
+      {
+        "case_id": "HG-010",
+        "misses": [
+          {
+            "actual": "internal",
+            "comparison_type": "phase_a_policy",
+            "expected": "unknown",
+            "field": "sensitivity_bucket_proposal",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-016",
+        "misses": [
+          {
+            "actual": true,
+            "comparison_type": "phase_a_boolean",
+            "expected": false,
+            "field": "contains_raw_private_or_ip_sensitive_context",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-025",
+        "misses": [
+          {
+            "actual": "internal",
+            "comparison_type": "phase_a_policy",
+            "expected": "unknown",
+            "field": "sensitivity_bucket_proposal",
+            "status": "miss"
+          }
+        ]
+      }
+    ],
+    "soft_tolerant_compared_count": 0,
+    "soft_tolerant_match_count": 0,
+    "soft_tolerant_match_rate": null,
+    "wrong_hard_boolean_counts": {
+      "contains_raw_private_or_ip_sensitive_context": 1,
+      "memory_boundary_or_write_authority_claim": 2,
+      "retrieval_or_source_use_request": 1,
+      "unresolved_assumption_or_open_decision": 5
+    },
+    "wrong_policy_field_counts": {
+      "lifecycle_status_proposal": 8,
+      "sensitivity_bucket_proposal": 2
+    }
+  },
+  "semantic_truth_scored": false,
+  "total_runs": 8,
+  "validation_failures": []
+}

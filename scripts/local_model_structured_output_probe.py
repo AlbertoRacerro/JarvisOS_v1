@@ -32,6 +32,51 @@ POLICY_OVERLAY_SUMMARY_JSON = "policy_overlay_harness_integration_summary.json"
 POLICY_OVERLAY_SUMMARY_MD = "policy_overlay_harness_integration_summary.md"
 F2_BASELINE_HARD_RATE = 0.6371681415929203
 
+COMPARATOR_CLEANUP_SUMMARY_JSON = "hard_gate_comparator_holdout_cleanup_summary.json"
+COMPARATOR_CLEANUP_SUMMARY_MD = "hard_gate_comparator_holdout_cleanup_summary.md"
+
+# Diagnostic classification for comparator/holdout cleanup.
+# These classes do not change the strict hard score. They explain remaining
+# misses so safety regressions are not mixed with lifecycle/holdout ambiguity.
+COMPARATOR_OR_HOLDOUT_AMBIGUITY_FIELDS = {
+    "lifecycle_status_proposal",
+    "unresolved_assumption_or_open_decision",
+    "memory_boundary_or_write_authority_claim",
+}
+
+SAFETY_CRITICAL_UNDERBLOCK_FIELDS = {
+    "contains_secret_or_credential",
+    "contains_raw_private_or_ip_sensitive_context",
+    "mentions_external_provider_or_upload_intent",
+    "redaction_required",
+    "external_provider_allowed",
+    "source_policy_for_future_retrieval",
+    "allowed_future_retrieval_behavior",
+}
+
+CONSERVATIVE_OVERFLAG_FIELDS = {
+    "contains_raw_private_or_ip_sensitive_context",
+    "contains_secret_or_credential",
+    "redaction_required",
+    "retrieval_or_source_use_request",
+}
+
+SOURCE_POLICY_RESTRICTIVENESS = {
+    "default_allowed": 0,
+    "not_applicable": 0,
+    "review_only": 1,
+    "blocked": 2,
+}
+
+RETRIEVAL_BEHAVIOR_RESTRICTIVENESS = {
+    "none": 0,
+    "full_body_required": 1,
+    "candidate_discovery_only": 1,
+    "review_gate_required": 2,
+    "clarification_required": 2,
+    "blocked": 3,
+}
+
 HARD_FIELD_COMPARISONS = {
     "project_bucket": "expected_project_bucket",
     "primary_domain": "expected_domain_bucket",
@@ -386,6 +431,8 @@ def result_paths(report_dir: Path, case_id: str) -> tuple[Path, Path]:
 
 def milestone_for_report_dir(report_dir: Path) -> str:
     name = report_dir.name.upper()
+    if name == "1G-B2-F2-C":
+        return "1G-B2-F2-C"
     if name == "1G-B2-F2-P3":
         return "1G-B2-F2-P3"
     if name == "1G-B2-F2-A":
@@ -397,6 +444,8 @@ def milestone_for_report_dir(report_dir: Path) -> str:
 
 def summary_filenames(report_dir: Path) -> tuple[str, str]:
     milestone = milestone_for_report_dir(report_dir)
+    if milestone == "1G-B2-F2-C":
+        return COMPARATOR_CLEANUP_SUMMARY_JSON, COMPARATOR_CLEANUP_SUMMARY_MD
     if milestone == "1G-B2-F2-P3":
         return POLICY_OVERLAY_SUMMARY_JSON, POLICY_OVERLAY_SUMMARY_MD
     if milestone == "1G-B2-F2-A":
@@ -486,6 +535,169 @@ def compare_field(
         "status": "match" if actual == expected else "miss",
         "actual": actual,
         "expected": expected,
+    }
+
+
+def enum_restrictiveness(field: str, value: Any) -> int | None:
+    if field == "source_policy_for_future_retrieval":
+        return SOURCE_POLICY_RESTRICTIVENESS.get(value)
+    if field == "allowed_future_retrieval_behavior":
+        return RETRIEVAL_BEHAVIOR_RESTRICTIVENESS.get(value)
+    return None
+
+
+def classify_hard_miss(item: dict[str, Any]) -> dict[str, Any]:
+    """Classify a hard miss without altering the underlying hard score.
+
+    The goal is diagnostic separation: safety under-blocking must remain visible,
+    while lifecycle/holdout/comparator ambiguities should not be confused with
+    provider/secret/retrieval policy defects.
+    """
+    field = item.get("field")
+    actual = item.get("actual")
+    expected = item.get("expected")
+
+    if item.get("status") != "miss":
+        return {
+            "field": field,
+            "classification": "not_a_miss",
+            "actual": actual,
+            "expected": expected,
+        }
+
+    if field in COMPARATOR_OR_HOLDOUT_AMBIGUITY_FIELDS:
+        return {
+            "field": field,
+            "classification": "comparator_or_holdout_ambiguity_likely",
+            "actual": actual,
+            "expected": expected,
+            "reason": "Field semantics are diagnostic/advisory in Phase A and need expectation cleanup.",
+        }
+
+    if isinstance(actual, bool) and isinstance(expected, bool):
+        if actual is True and expected is False and field in CONSERVATIVE_OVERFLAG_FIELDS:
+            return {
+                "field": field,
+                "classification": "conservative_overflag",
+                "actual": actual,
+                "expected": expected,
+                "reason": "Overlay is stricter than the current holdout expectation.",
+            }
+        if actual is False and expected is True and field in SAFETY_CRITICAL_UNDERBLOCK_FIELDS:
+            return {
+                "field": field,
+                "classification": "safety_critical_underblock",
+                "actual": actual,
+                "expected": expected,
+                "reason": "Overlay failed to assert a required safety-critical flag.",
+            }
+
+    actual_rank = enum_restrictiveness(str(field), actual)
+    expected_rank = enum_restrictiveness(str(field), expected)
+    if actual_rank is not None and expected_rank is not None:
+        if actual_rank > expected_rank:
+            return {
+                "field": field,
+                "classification": "conservative_overrestriction",
+                "actual": actual,
+                "expected": expected,
+                "reason": "Overlay is more restrictive than the current holdout expectation.",
+            }
+        if actual_rank < expected_rank:
+            return {
+                "field": field,
+                "classification": "safety_critical_underrestriction",
+                "actual": actual,
+                "expected": expected,
+                "reason": "Overlay is less restrictive than the current holdout expectation.",
+            }
+
+    if field == "sensitivity_bucket_proposal" and actual == "internal" and expected == "unknown":
+        return {
+            "field": field,
+            "classification": "holdout_expectation_cleanup_likely",
+            "actual": actual,
+            "expected": expected,
+            "reason": "Internal is a safe minimum for ambiguous project/source requests; unknown may be an expectation artifact.",
+        }
+
+    if field in SAFETY_CRITICAL_UNDERBLOCK_FIELDS:
+        return {
+            "field": field,
+            "classification": "possible_real_overlay_defect",
+            "actual": actual,
+            "expected": expected,
+            "reason": "Safety-relevant miss that is not clearly conservative.",
+        }
+
+    return {
+        "field": field,
+        "classification": "unclassified_diagnostic_miss",
+        "actual": actual,
+        "expected": expected,
+    }
+
+
+def diagnostic_miss_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
+    classification_counts: dict[str, int] = {}
+    field_classification_counts: dict[str, dict[str, int]] = {}
+    examples: list[dict[str, Any]] = []
+
+    for result in results:
+        comparison = result.get("semantic_comparison") or {}
+        for item in comparison.get("hard", []):
+            if item.get("status") != "miss":
+                continue
+            classified = classify_hard_miss(item)
+            classification = classified["classification"]
+            classification_counts[classification] = classification_counts.get(classification, 0) + 1
+
+            field = str(classified["field"])
+            field_counts = field_classification_counts.setdefault(field, {})
+            field_counts[classification] = field_counts.get(classification, 0) + 1
+
+            if len(examples) < 12:
+                example = dict(classified)
+                example["case_id"] = result.get("case_id")
+                examples.append(example)
+
+    safety_under_miss_count = sum(
+        count
+        for classification, count in classification_counts.items()
+        if classification in {
+            "safety_critical_underblock",
+            "safety_critical_underrestriction",
+        }
+    )
+    conservative_miss_count = sum(
+        count
+        for classification, count in classification_counts.items()
+        if classification in {
+            "conservative_overflag",
+            "conservative_overrestriction",
+        }
+    )
+    ambiguity_count = sum(
+        count
+        for classification, count in classification_counts.items()
+        if classification in {
+            "comparator_or_holdout_ambiguity_likely",
+            "holdout_expectation_cleanup_likely",
+        }
+    )
+
+    return {
+        "classification_counts": dict(sorted(classification_counts.items())),
+        "field_classification_counts": {
+            field: dict(sorted(counts.items()))
+            for field, counts in sorted(field_classification_counts.items())
+        },
+        "safety_critical_under_miss_count": safety_under_miss_count,
+        "conservative_miss_count": conservative_miss_count,
+        "comparator_or_holdout_ambiguity_count": ambiguity_count,
+        "examples": examples,
+        "score_adjusted": False,
+        "note": "Diagnostic only: original hard_match_count and hard_match_rate are unchanged.",
     }
 
 
@@ -844,6 +1056,7 @@ def semantic_score_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
         "field_miss_counts": dict(sorted(field_misses.items())),
         "wrong_hard_boolean_counts": dict(sorted(wrong_hard_booleans.items())),
         "wrong_policy_field_counts": dict(sorted(wrong_policy_fields.items())),
+        "diagnostic_miss_summary": diagnostic_miss_summary(results),
         "error_concentration": category_misses,
     }
 
@@ -870,6 +1083,11 @@ def recommend_next_milestone(
     schema_valid_count: int,
     semantic_summary: dict[str, Any],
 ) -> str:
+    if milestone == "1G-B2-F2-C":
+        diagnostic = semantic_summary.get("diagnostic_miss_summary", {})
+        if diagnostic.get("safety_critical_under_miss_count", 0):
+            return "1G-B2-F2-C-R - Hard-gate comparator cleanup repair"
+        return "1G-B2-F2-B - Phase B soft hybrid review design"
     if milestone == "1G-B2-F2-P3":
         if parse_count != total_runs or schema_valid_count != total_runs:
             return "1G-B2-F2-P3-R - Policy overlay harness integration repair"
@@ -941,6 +1159,9 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
     )
     summary = {
         "schema_version": (
+            "hard_gate_comparator_holdout_cleanup_summary_v0"
+            if milestone == "1G-B2-F2-C"
+            else
             "policy_overlay_harness_integration_summary_v0"
             if milestone == "1G-B2-F2-P3"
             else
@@ -1087,7 +1308,9 @@ def write_json(path: Path, data: dict[str, Any]) -> None:
 def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
     answers = summary["answers"]
     semantic = summary["semantic_comparison_summary"]
-    if summary["milestone"] == "1G-B2-F2-P3":
+    if summary["milestone"] == "1G-B2-F2-C":
+        title = "# 1G-B2-F2-C Hard-Gate Comparator And Holdout Cleanup Summary"
+    elif summary["milestone"] == "1G-B2-F2-P3":
         title = "# 1G-B2-F2-P3 Policy Overlay Harness Integration Summary"
     elif summary["milestone"] == "1G-B2-F2-A":
         title = "# 1G-B2-F2-A Hard-Gate Schema Smoke Summary"
@@ -1132,6 +1355,10 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
         f"- error concentration: {semantic['error_concentration']}",
         f"- wrong hard booleans: {semantic['wrong_hard_boolean_counts']}",
         f"- wrong policy fields: {semantic['wrong_policy_field_counts']}",
+        "- diagnostic miss classification: "
+        f"{semantic.get('diagnostic_miss_summary', {}).get('classification_counts', {})}",
+        "- diagnostic note: "
+        f"{semantic.get('diagnostic_miss_summary', {}).get('note', 'n/a')}",
         f"- HG-018 risk: {summary['hg018_provider_memory_boundary_risk']}",
         f"- recommended next milestone: {summary['recommended_next_milestone']}",
         "",
@@ -1202,6 +1429,27 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
                 "12. Likely real overlay defect misses: "
                 f"{overlay['likely_real_overlay_defect_misses']}.",
                 f"13. Next milestone: {summary['recommended_next_milestone']}.",
+            ]
+        )
+    if summary["milestone"] == "1G-B2-F2-C":
+        diagnostic = semantic.get("diagnostic_miss_summary", {})
+        lines.extend(
+            [
+                "",
+                "## Comparator / Holdout Cleanup Direct Answers",
+                "",
+                "1. Original hard score was not adjusted: "
+                f"{not diagnostic.get('score_adjusted', True)}.",
+                "2. Diagnostic classification counts: "
+                f"{diagnostic.get('classification_counts', {})}.",
+                "3. Safety-critical under-miss count: "
+                f"{diagnostic.get('safety_critical_under_miss_count')}.",
+                "4. Conservative miss count: "
+                f"{diagnostic.get('conservative_miss_count')}.",
+                "5. Comparator or holdout ambiguity count: "
+                f"{diagnostic.get('comparator_or_holdout_ambiguity_count')}.",
+                "6. The cleanup is diagnostic-only and does not approve runtime behavior.",
+                f"7. Next milestone: {summary['recommended_next_milestone']}.",
             ]
         )
     lines.extend(
