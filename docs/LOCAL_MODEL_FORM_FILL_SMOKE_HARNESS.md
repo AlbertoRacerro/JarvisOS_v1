@@ -18,6 +18,7 @@ Milestones:
 - 1G-B2-F2-P - Fast secretary policy-gate overlay design
 - 1G-B2-F2-P1 - Policy-gate overlay fixture prototype
 - 1G-B2-F2-P2 - Policy-gate overlay replay on saved F2-A outputs
+- 1G-B2-F2-P3 - Integrate policy overlay into structured-output evaluation harness
 
 ## Purpose
 
@@ -972,6 +973,89 @@ Recommended next milestone:
 1G-B2-F2-P3 - Integrate policy overlay into structured-output evaluation harness
 ```
 
+## 1G-B2-F2-P3 Policy Overlay Harness Integration
+
+1G-B2-F2-P3 integrates the deterministic overlay into the structured-output
+evaluation harness as an explicit opt-in.
+
+Flag:
+
+```text
+--apply-policy-overlay
+```
+
+The flag is valid only with:
+
+```text
+schemas/fast_secretary_hard_gate_v0_1.schema.json
+```
+
+No-model replay command:
+
+```powershell
+python scripts/local_model_structured_output_probe.py --replay-existing-report-dir reports/local_model_smoke/1G-B2-F2-A --apply-policy-overlay --schema-path schemas/fast_secretary_hard_gate_v0_1.schema.json --report-dir reports/local_model_smoke/1G-B2-F2-P3
+```
+
+Reports:
+
+```text
+reports/local_model_smoke/1G-B2-F2-P3/
+```
+
+Integration behavior:
+
+- raw Phase A draft stays in `parsed_output`;
+- corrected object is written to `policy_overlay_corrected_output`;
+- baseline comparison is written to `baseline_semantic_comparison`;
+- corrected comparison is written to `semantic_comparison`;
+- comparison basis is `policy_overlay_corrected_output`;
+- overlay application remains evaluation-only and opt-in.
+
+P3 no-model replay results:
+
+- cases evaluated: 8 saved F2-A outputs;
+- corrected outputs schema-valid: 8/8;
+- baseline hard score: 61/93;
+- overlay-corrected hard score: 74/93;
+- `HG-018` blocked/blocked preserved;
+- model calls: 0;
+- network calls: 0;
+- overlay ready for future real local runs under `--apply-policy-overlay`: true.
+
+Remaining hard boolean misses:
+
+```text
+contains_raw_private_or_ip_sensitive_context: 1
+memory_boundary_or_write_authority_claim: 2
+retrieval_or_source_use_request: 1
+unresolved_assumption_or_open_decision: 5
+```
+
+Remaining policy field misses:
+
+```text
+lifecycle_status_proposal: 8
+sensitivity_bucket_proposal: 2
+```
+
+Likely comparator/holdout ambiguity:
+
+- lifecycle status expectations;
+- unresolved-assumption semantics;
+- memory-boundary expectation for whole-folder provider upload.
+
+Likely real overlay defects:
+
+- sensitivity proposals for some unknown/internal cases;
+- one raw-private-context miss;
+- one retrieval/source-use miss.
+
+Recommended next milestone:
+
+```text
+1G-B2-F2-C - Hard-gate comparator and holdout expectation cleanup
+```
+
 ## Dry-Run Behavior
 
 Example:
@@ -1048,22 +1132,23 @@ The tests cover:
 
 ## Future 1G-B
 
-After 1G-B2-F2-P2, the next milestone is:
+After 1G-B2-F2-P3, the next milestone is:
 
 ```text
-1G-B2-F2-P3 - Integrate policy overlay into structured-output evaluation harness
+1G-B2-F2-C - Hard-gate comparator and holdout expectation cleanup
 ```
 
-1G-B2-F2-P3 should integrate the deterministic overlay into the
-structured-output evaluation harness before any Phase B soft hybrid review or
-full holdout structured-output Qwen smoke run. The schema-first path must
-remain local, explicit, bounded, auditable, and separate from runtime memory,
-retrieval, provider routing, tool execution, and BlueRev modeling.
+1G-B2-F2-C should clean up comparator and holdout expectations before any Phase
+B soft hybrid review or full holdout structured-output Qwen smoke run. The
+schema-first path must remain local, explicit, bounded, auditable, and separate
+from runtime memory, retrieval, provider routing, tool execution, and BlueRev
+modeling.
 
 ## Milestone Boundary Confirmation
 
-1G-B2-F2-P2 adds replay support for saved F2-A evaluation outputs and derived
-reports. It does not integrate structured output into runtime behavior.
+1G-B2-F2-P3 adds opt-in policy-overlay support to the structured-output
+evaluation harness and derived reports. It does not integrate structured output
+into runtime behavior.
 
 It adds no:
 
@@ -1087,4 +1172,4 @@ It adds no:
 - BlueRev modeling;
 - vendored code.
 
-This milestone does not start `1G-B2-F2-P3 - Integrate policy overlay into structured-output evaluation harness`.
+This milestone does not start `1G-B2-F2-C - Hard-gate comparator and holdout expectation cleanup`.

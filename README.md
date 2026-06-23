@@ -158,14 +158,15 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F2-P3 - Integrate policy overlay into structured-output evaluation harness
+1G-B2-F2-C - Hard-gate comparator and holdout expectation cleanup
 ```
 
-The 1G-B2-F2-P2 replay applies the deterministic overlay to saved F2-A outputs
-under `reports/local_model_smoke/1G-B2-F2-P2/`. Corrected outputs validate
-8/8, hard score improves from 61/93 to 74/93, and the intended severe cases
-move to the expected block/review/clarification/candidate-discovery behavior.
-The next step is integrating the overlay into the structured-output evaluation
-harness before Phase B soft review or full holdout expansion.
+The 1G-B2-F2-P3 integration adds the explicit `--apply-policy-overlay` option
+to the structured-output evaluation harness and writes P3 evidence under
+`reports/local_model_smoke/1G-B2-F2-P3/`. The no-model replay keeps raw Phase A
+drafts separate from overlay-corrected hard-gate objects, validates corrected
+outputs 8/8, and preserves the 61/93 -> 74/93 hard-score improvement. Remaining
+misses are now mostly comparator/holdout cleanup work, especially lifecycle and
+unresolved-assumption expectations.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

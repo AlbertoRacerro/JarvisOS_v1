@@ -28,6 +28,8 @@ F2_SUMMARY_JSON = "structured_output_12_case_panel_summary.json"
 F2_SUMMARY_MD = "structured_output_12_case_panel_summary.md"
 HARD_GATE_SUMMARY_JSON = "hard_gate_schema_smoke_summary.json"
 HARD_GATE_SUMMARY_MD = "hard_gate_schema_smoke_summary.md"
+POLICY_OVERLAY_SUMMARY_JSON = "policy_overlay_harness_integration_summary.json"
+POLICY_OVERLAY_SUMMARY_MD = "policy_overlay_harness_integration_summary.md"
 F2_BASELINE_HARD_RATE = 0.6371681415929203
 
 HARD_FIELD_COMPARISONS = {
@@ -384,6 +386,8 @@ def result_paths(report_dir: Path, case_id: str) -> tuple[Path, Path]:
 
 def milestone_for_report_dir(report_dir: Path) -> str:
     name = report_dir.name.upper()
+    if name == "1G-B2-F2-P3":
+        return "1G-B2-F2-P3"
     if name == "1G-B2-F2-A":
         return "1G-B2-F2-A"
     if name == "1G-B2-F2":
@@ -393,6 +397,8 @@ def milestone_for_report_dir(report_dir: Path) -> str:
 
 def summary_filenames(report_dir: Path) -> tuple[str, str]:
     milestone = milestone_for_report_dir(report_dir)
+    if milestone == "1G-B2-F2-P3":
+        return POLICY_OVERLAY_SUMMARY_JSON, POLICY_OVERLAY_SUMMARY_MD
     if milestone == "1G-B2-F2-A":
         return HARD_GATE_SUMMARY_JSON, HARD_GATE_SUMMARY_MD
     if milestone == "1G-B2-F2":
@@ -627,6 +633,37 @@ def semantic_comparison(case: dict[str, Any], parsed: Any) -> dict[str, Any]:
     }
 
 
+def empty_semantic_comparison(reason: str) -> dict[str, Any]:
+    return {
+        "semantic_comparison_performed": False,
+        "reason": reason,
+        "hard": [],
+        "soft_tolerant": [],
+        "not_compared": [],
+        "hard_match_count": 0,
+        "hard_compared_count": 0,
+        "soft_tolerant_match_count": 0,
+        "soft_tolerant_compared_count": 0,
+        "severe_hard_misses": [],
+    }
+
+
+def apply_policy_overlay_to_parsed(
+    case: dict[str, Any],
+    parsed: dict[str, Any],
+    schema: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    import local_policy_gate_overlay_probe as policy_overlay
+
+    corrected = policy_overlay.apply_policy_overlay(case["input_text"], parsed)
+    validation = validate_instance(corrected, schema)
+    if validation["schema_valid"]:
+        comparison = phase_a_hard_gate_comparison(case, corrected)
+    else:
+        comparison = empty_semantic_comparison("policy overlay schema validation failed")
+    return corrected, validation, comparison
+
+
 def build_result(
     *,
     case: dict[str, Any],
@@ -636,7 +673,10 @@ def build_result(
     raw_path: Path,
     raw_call: dict[str, Any],
     schema: dict[str, Any],
+    apply_policy_overlay: bool = False,
 ) -> dict[str, Any]:
+    if apply_policy_overlay and not is_hard_gate_schema(schema):
+        raise ValueError("--apply-policy-overlay requires the hard-gate schema")
     parsed, parse_error = (None, raw_call["error"])
     if raw_call["ok"] and isinstance(raw_call["body"], dict):
         parsed, parse_error = parse_model_content(raw_call["body"])
@@ -649,19 +689,8 @@ def build_result(
     elif validation["schema_valid"]:
         comparison = semantic_comparison(case, parsed)
     else:
-        comparison = {
-        "semantic_comparison_performed": False,
-        "reason": "schema validation failed",
-        "hard": [],
-        "soft_tolerant": [],
-        "not_compared": [],
-        "hard_match_count": 0,
-        "hard_compared_count": 0,
-        "soft_tolerant_match_count": 0,
-        "soft_tolerant_compared_count": 0,
-        "severe_hard_misses": [],
-        }
-    return {
+        comparison = empty_semantic_comparison("schema validation failed")
+    result = {
         "schema_version": "structured_output_schema_probe_result_v0",
         "milestone": milestone_for_report_dir(raw_path.parent),
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -683,6 +712,39 @@ def build_result(
         "semantic_comparison": comparison,
         "parsed_output": parsed,
     }
+    if apply_policy_overlay:
+        result["policy_overlay_requested"] = True
+        result["baseline_semantic_comparison"] = comparison
+        result["semantic_comparison_basis"] = "parsed_output"
+        if validation["schema_valid"] and isinstance(parsed, dict):
+            corrected, overlay_validation, overlay_comparison = (
+                apply_policy_overlay_to_parsed(case, parsed, schema)
+            )
+            result.update(
+                {
+                    "policy_overlay_applied": True,
+                    "policy_overlay_corrected_output": corrected,
+                    "policy_overlay_schema_valid": overlay_validation["schema_valid"],
+                    "policy_overlay_validation_errors": overlay_validation["errors"],
+                    "semantic_comparison": overlay_comparison,
+                    "semantic_comparison_performed": overlay_comparison[
+                        "semantic_comparison_performed"
+                    ],
+                    "semantic_comparison_basis": "policy_overlay_corrected_output",
+                }
+            )
+        else:
+            result.update(
+                {
+                    "policy_overlay_applied": False,
+                    "policy_overlay_corrected_output": None,
+                    "policy_overlay_schema_valid": False,
+                    "policy_overlay_validation_errors": [
+                        {"field": "$", "error": "baseline output was not schema-valid"}
+                    ],
+                }
+            )
+    return result
 
 
 def hg018_risk(result: dict[str, Any] | None) -> dict[str, Any]:
@@ -786,6 +848,20 @@ def semantic_score_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def semantic_score_summary_for_key(
+    results: list[dict[str, Any]],
+    comparison_key: str,
+) -> dict[str, Any]:
+    keyed_results = []
+    for result in results:
+        if comparison_key not in result:
+            continue
+        keyed = dict(result)
+        keyed["semantic_comparison"] = result[comparison_key]
+        keyed_results.append(keyed)
+    return semantic_score_summary(keyed_results)
+
+
 def recommend_next_milestone(
     *,
     milestone: str,
@@ -794,6 +870,10 @@ def recommend_next_milestone(
     schema_valid_count: int,
     semantic_summary: dict[str, Any],
 ) -> str:
+    if milestone == "1G-B2-F2-P3":
+        if parse_count != total_runs or schema_valid_count != total_runs:
+            return "1G-B2-F2-P3-R - Policy overlay harness integration repair"
+        return "1G-B2-F2-C - Hard-gate comparator and holdout expectation cleanup"
     if milestone == "1G-B2-F2-A":
         if parse_count != total_runs or schema_valid_count != total_runs:
             return "1G-B2-F2-A-R - Hard-gate schema repair"
@@ -843,6 +923,15 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
     parse_count = sum(1 for result in results if result["json_parse_passed"])
     milestone = milestone_for_report_dir(report_dir)
     semantic_summary = semantic_score_summary(results)
+    overlay_results = [result for result in results if result.get("policy_overlay_requested")]
+    baseline_overlay_summary = (
+        semantic_score_summary_for_key(overlay_results, "baseline_semantic_comparison")
+        if overlay_results
+        else None
+    )
+    overlay_schema_valid_count = sum(
+        1 for result in overlay_results if result.get("policy_overlay_schema_valid")
+    )
     next_milestone = recommend_next_milestone(
         milestone=milestone,
         total_runs=len(results),
@@ -850,8 +939,11 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
         schema_valid_count=schema_valid_count,
         semantic_summary=semantic_summary,
     )
-    return {
+    summary = {
         "schema_version": (
+            "policy_overlay_harness_integration_summary_v0"
+            if milestone == "1G-B2-F2-P3"
+            else
             "hard_gate_schema_smoke_summary_v0"
             if milestone == "1G-B2-F2-A"
             else
@@ -913,6 +1005,79 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
         },
         "recommended_next_milestone": next_milestone,
     }
+    if overlay_results:
+        baseline_score = {
+            "matches": baseline_overlay_summary["hard_match_count"],
+            "compared": baseline_overlay_summary["hard_compared_count"],
+            "rate": baseline_overlay_summary["hard_match_rate"],
+        }
+        corrected_score = {
+            "matches": semantic_summary["hard_match_count"],
+            "compared": semantic_summary["hard_compared_count"],
+            "rate": semantic_summary["hard_match_rate"],
+        }
+        likely_ambiguity = {
+            "lifecycle_status_proposal": semantic_summary["wrong_policy_field_counts"].get(
+                "lifecycle_status_proposal",
+                0,
+            ),
+            "unresolved_assumption_or_open_decision": semantic_summary[
+                "wrong_hard_boolean_counts"
+            ].get("unresolved_assumption_or_open_decision", 0),
+            "memory_boundary_or_write_authority_claim": semantic_summary[
+                "wrong_hard_boolean_counts"
+            ].get("memory_boundary_or_write_authority_claim", 0),
+        }
+        likely_real = {
+            "sensitivity_bucket_proposal": semantic_summary[
+                "wrong_policy_field_counts"
+            ].get("sensitivity_bucket_proposal", 0),
+            "contains_raw_private_or_ip_sensitive_context": semantic_summary[
+                "wrong_hard_boolean_counts"
+            ].get("contains_raw_private_or_ip_sensitive_context", 0),
+            "retrieval_or_source_use_request": semantic_summary[
+                "wrong_hard_boolean_counts"
+            ].get("retrieval_or_source_use_request", 0),
+        }
+        summary["policy_overlay"] = {
+            "integrated_into_harness": True,
+            "explicit_opt_in": True,
+            "requested_count": len(overlay_results),
+            "applied_count": sum(
+                1 for result in overlay_results if result.get("policy_overlay_applied")
+            ),
+            "schema_valid_count": overlay_schema_valid_count,
+            "baseline_semantic_comparison_summary": baseline_overlay_summary,
+            "overlay_corrected_semantic_comparison_summary": semantic_summary,
+            "baseline_hard_score": baseline_score,
+            "overlay_corrected_hard_score": corrected_score,
+            "overlay_improved_hard_score": corrected_score["matches"]
+            > baseline_score["matches"],
+            "ready_for_future_real_local_runs_with_flag": (
+                overlay_schema_valid_count == len(overlay_results)
+                and corrected_score["matches"] > baseline_score["matches"]
+            ),
+            "likely_comparator_or_holdout_ambiguity_misses": {
+                key: value for key, value in likely_ambiguity.items() if value
+            },
+            "likely_real_overlay_defect_misses": {
+                key: value for key, value in likely_real.items() if value
+            },
+        }
+        summary["answers"].update(
+            {
+                "policy_overlay_integrated_into_harness": True,
+                "policy_overlay_explicit_opt_in": True,
+                "policy_overlay_model_calls_made": False,
+                "policy_overlay_network_calls_made": False,
+                "baseline_hard_score": baseline_score,
+                "overlay_corrected_hard_score": corrected_score,
+                "policy_overlay_ready_for_future_real_local_runs_with_flag": summary[
+                    "policy_overlay"
+                ]["ready_for_future_real_local_runs_with_flag"],
+            }
+        )
+    return summary
 
 
 def write_json(path: Path, data: dict[str, Any]) -> None:
@@ -922,7 +1087,9 @@ def write_json(path: Path, data: dict[str, Any]) -> None:
 def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
     answers = summary["answers"]
     semantic = summary["semantic_comparison_summary"]
-    if summary["milestone"] == "1G-B2-F2-A":
+    if summary["milestone"] == "1G-B2-F2-P3":
+        title = "# 1G-B2-F2-P3 Policy Overlay Harness Integration Summary"
+    elif summary["milestone"] == "1G-B2-F2-A":
         title = "# 1G-B2-F2-A Hard-Gate Schema Smoke Summary"
     elif summary["milestone"] == "1G-B2-F2":
         title = "# 1G-B2-F2 Structured Output 12-Case Qwen Panel Summary"
@@ -1008,6 +1175,35 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
                 f"8. Next milestone: {answers['recommended_next_milestone']}.",
             ]
         )
+    if summary["milestone"] == "1G-B2-F2-P3":
+        overlay = summary["policy_overlay"]
+        lines.extend(
+            [
+                "",
+                "## Policy Overlay Direct Answers",
+                "",
+                "1. Overlay integrated into structured-output evaluation harness: "
+                f"{answers['policy_overlay_integrated_into_harness']}.",
+                f"2. Overlay is explicit opt-in: {answers['policy_overlay_explicit_opt_in']}.",
+                f"3. Model calls made: {answers['policy_overlay_model_calls_made']}.",
+                f"4. Network calls made: {answers['policy_overlay_network_calls_made']}.",
+                f"5. Saved F2-A cases evaluated: {summary['total_runs']}.",
+                "6. Baseline hard score: "
+                f"{overlay['baseline_hard_score']['matches']}/{overlay['baseline_hard_score']['compared']}.",
+                "7. Overlay-corrected hard score: "
+                f"{overlay['overlay_corrected_hard_score']['matches']}/{overlay['overlay_corrected_hard_score']['compared']}.",
+                "8. Overlay ready for future real local runs under flag: "
+                f"{overlay['ready_for_future_real_local_runs_with_flag']}.",
+                "9. Remaining hard boolean misses: "
+                f"{semantic['wrong_hard_boolean_counts']}.",
+                f"10. Remaining policy misses: {semantic['wrong_policy_field_counts']}.",
+                "11. Likely comparator/holdout ambiguity misses: "
+                f"{overlay['likely_comparator_or_holdout_ambiguity_misses']}.",
+                "12. Likely real overlay defect misses: "
+                f"{overlay['likely_real_overlay_defect_misses']}.",
+                f"13. Next milestone: {summary['recommended_next_milestone']}.",
+            ]
+        )
     lines.extend(
         [
             "",
@@ -1037,6 +1233,8 @@ def run_dry_run(args: argparse.Namespace) -> int:
     holdout_path = Path(args.holdout)
     schema = load_json(schema_path)
     validate_schema_shape(schema)
+    if args.apply_policy_overlay and not is_hard_gate_schema(schema, schema_path):
+        raise ValueError("--apply-policy-overlay requires the hard-gate schema")
     cases = select_cases(
         load_holdout(holdout_path),
         case_id=args.case_id,
@@ -1049,6 +1247,7 @@ def run_dry_run(args: argparse.Namespace) -> int:
     print(f"selected case IDs: {', '.join(case['case_id'] for case in cases)}")
     print(f"context pack path: {args.context_pack or 'none'}")
     print(f"context pack char count: {context_pack_size}")
+    print(f"policy overlay enabled: {args.apply_policy_overlay}")
     print("inference disabled in dry-run: no Ollama call was made")
     if context_pack:
         print("prompt preview:")
@@ -1059,6 +1258,130 @@ def run_dry_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def build_replay_result_from_saved(
+    *,
+    case: dict[str, Any],
+    saved_result: dict[str, Any],
+    saved_result_path: Path,
+    schema_path: Path,
+    schema: dict[str, Any],
+    report_dir: Path,
+    apply_policy_overlay: bool,
+) -> dict[str, Any]:
+    if apply_policy_overlay and not is_hard_gate_schema(schema, schema_path):
+        raise ValueError("--apply-policy-overlay requires the hard-gate schema")
+    parsed = saved_result.get("parsed_output")
+    validation = validate_instance(parsed, schema) if parsed is not None else {
+        "schema_valid": False,
+        "errors": [{"field": "$", "error": "json_not_parsed"}],
+    }
+    if validation["schema_valid"] and is_hard_gate_schema(schema):
+        comparison = phase_a_hard_gate_comparison(case, parsed)
+    elif validation["schema_valid"]:
+        comparison = semantic_comparison(case, parsed)
+    else:
+        comparison = empty_semantic_comparison("schema validation failed")
+    result = {
+        "schema_version": "structured_output_schema_probe_result_v0",
+        "milestone": milestone_for_report_dir(report_dir),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "case_id": case["case_id"],
+        "model": saved_result.get("model"),
+        "schema_path": str(schema_path),
+        "context_pack_path": saved_result.get("context_pack_path"),
+        "raw_response_path": saved_result.get("raw_response_path"),
+        "source_result_path": str(saved_result_path),
+        "manual_review_required": True,
+        "semantic_truth_scored": False,
+        "ollama_ok": saved_result.get("ollama_ok"),
+        "ollama_status": saved_result.get("ollama_status"),
+        "duration_seconds": saved_result.get("duration_seconds"),
+        "json_parse_passed": isinstance(parsed, dict),
+        "json_parse_error": None if isinstance(parsed, dict) else "parsed_output missing",
+        "schema_valid": validation["schema_valid"],
+        "validation_errors": validation["errors"],
+        "semantic_comparison_performed": comparison["semantic_comparison_performed"],
+        "semantic_comparison": comparison,
+        "parsed_output": parsed,
+        "replayed_from_saved_result": True,
+    }
+    if apply_policy_overlay:
+        result["policy_overlay_requested"] = True
+        result["baseline_semantic_comparison"] = comparison
+        result["semantic_comparison_basis"] = "parsed_output"
+        if validation["schema_valid"] and isinstance(parsed, dict):
+            corrected, overlay_validation, overlay_comparison = (
+                apply_policy_overlay_to_parsed(case, parsed, schema)
+            )
+            result.update(
+                {
+                    "policy_overlay_applied": True,
+                    "policy_overlay_corrected_output": corrected,
+                    "policy_overlay_schema_valid": overlay_validation["schema_valid"],
+                    "policy_overlay_validation_errors": overlay_validation["errors"],
+                    "semantic_comparison": overlay_comparison,
+                    "semantic_comparison_performed": overlay_comparison[
+                        "semantic_comparison_performed"
+                    ],
+                    "semantic_comparison_basis": "policy_overlay_corrected_output",
+                }
+            )
+        else:
+            result.update(
+                {
+                    "policy_overlay_applied": False,
+                    "policy_overlay_corrected_output": None,
+                    "policy_overlay_schema_valid": False,
+                    "policy_overlay_validation_errors": [
+                        {"field": "$", "error": "baseline output was not schema-valid"}
+                    ],
+                }
+            )
+    return result
+
+
+def run_replay_existing(args: argparse.Namespace) -> int:
+    if not args.apply_policy_overlay:
+        raise ValueError("--replay-existing-report-dir requires --apply-policy-overlay")
+    schema_path = Path(args.schema_path)
+    schema = load_json(schema_path)
+    validate_schema_shape(schema)
+    if not is_hard_gate_schema(schema, schema_path):
+        raise ValueError("--apply-policy-overlay requires the hard-gate schema")
+    report_dir = Path(args.report_dir)
+    source_dir = Path(args.replay_existing_report_dir)
+    saved_paths = sorted(source_dir.glob("*__result.json"))
+    if not saved_paths:
+        raise ValueError(f"no saved result files found in {source_dir}")
+    holdout_cases = {case["case_id"]: case for case in load_holdout(Path(args.holdout))}
+    report_dir.mkdir(parents=True, exist_ok=True)
+    results = []
+    for saved_path in saved_paths:
+        saved_result = load_json(saved_path)
+        case_id = saved_result["case_id"]
+        if case_id not in holdout_cases:
+            raise ValueError(f"missing holdout case for {case_id}")
+        result = build_replay_result_from_saved(
+            case=holdout_cases[case_id],
+            saved_result=saved_result,
+            saved_result_path=saved_path,
+            schema_path=schema_path,
+            schema=schema,
+            report_dir=report_dir,
+            apply_policy_overlay=args.apply_policy_overlay,
+        )
+        write_json(report_dir / f"{case_id}__result.json", result)
+        results.append(result)
+    summary = summarize_results(results, report_dir)
+    summary_json, summary_md = summary_filenames(report_dir)
+    write_json(report_dir / summary_json, summary)
+    write_summary_markdown(report_dir / summary_md, summary)
+    print(f"replayed saved results: {len(results)}")
+    print(f"summary json: {report_dir / summary_json}")
+    print(f"summary md: {report_dir / summary_md}")
+    return 0
+
+
 def run_local(args: argparse.Namespace) -> int:
     if args.timeout_seconds < 1:
         raise ValueError("--timeout-seconds must be greater than 0")
@@ -1066,6 +1389,8 @@ def run_local(args: argparse.Namespace) -> int:
     report_dir = Path(args.report_dir)
     schema = load_json(schema_path)
     validate_schema_shape(schema)
+    if args.apply_policy_overlay and not is_hard_gate_schema(schema, schema_path):
+        raise ValueError("--apply-policy-overlay requires the hard-gate schema")
     cases = select_cases(
         load_holdout(Path(args.holdout)),
         case_id=args.case_id,
@@ -1094,6 +1419,7 @@ def run_local(args: argparse.Namespace) -> int:
             raw_path=raw_path,
             raw_call=raw_call,
             schema=schema,
+            apply_policy_overlay=args.apply_policy_overlay,
         )
         write_json(result_path, result)
         results.append(result)
@@ -1127,6 +1453,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout-seconds", type=int, default=180)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--run-local", action="store_true")
+    parser.add_argument("--apply-policy-overlay", action="store_true")
+    parser.add_argument("--replay-existing-report-dir", default=None)
     return parser
 
 
@@ -1134,9 +1462,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
     try:
+        if args.replay_existing_report_dir and args.run_local:
+            print("Choose only one of --replay-existing-report-dir or --run-local.", file=sys.stderr)
+            return 2
+        if args.replay_existing_report_dir and args.dry_run:
+            print("Choose only one of --replay-existing-report-dir or --dry-run.", file=sys.stderr)
+            return 2
         if args.dry_run and args.run_local:
             print("Choose only one of --dry-run or --run-local.", file=sys.stderr)
             return 2
+        if args.replay_existing_report_dir:
+            return run_replay_existing(args)
         if args.run_local:
             return run_local(args)
         return run_dry_run(args)

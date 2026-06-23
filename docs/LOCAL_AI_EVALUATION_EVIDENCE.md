@@ -847,6 +847,24 @@ Current implementation status:
   The replay makes zero model/network calls and remains evaluation evidence
   only. Recommendation: `1G-B2-F2-P3 - Integrate policy overlay into
   structured-output evaluation harness`.
+- 1G-B2-F2-P3 integrates the deterministic policy overlay into the
+  structured-output evaluation harness as the explicit `--apply-policy-overlay`
+  option. The no-model saved-report replay command writes
+  `reports/local_model_smoke/1G-B2-F2-P3/`, keeps the raw Phase A draft,
+  overlay-corrected output, baseline comparison, and corrected comparison
+  separate, and makes zero model/network calls. Corrected outputs validate 8/8.
+  Baseline hard score remains 61/93 and overlay-corrected hard score remains
+  74/93. `HG-018` remains blocked/blocked and the intended P2 severe-case
+  outcomes are preserved. Remaining misses: hard booleans
+  `contains_raw_private_or_ip_sensitive_context: 1`,
+  `memory_boundary_or_write_authority_claim: 2`,
+  `retrieval_or_source_use_request: 1`,
+  `unresolved_assumption_or_open_decision: 5`; policy fields
+  `lifecycle_status_proposal: 8`, `sensitivity_bucket_proposal: 2`. Lifecycle,
+  unresolved-assumption, and memory-boundary misses are likely comparator or
+  holdout-mapping cleanup; sensitivity/private-context/retrieval misses may be
+  real overlay defects. Recommendation:
+  `1G-B2-F2-C - Hard-gate comparator and holdout expectation cleanup`.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
 The accepted next local AI sequence is:
@@ -892,6 +910,7 @@ The accepted next local AI sequence is:
 1G-B2-F2-P1 Policy-gate overlay fixture prototype
 1G-B2-F2-P2 Policy-gate overlay replay on saved F2-A outputs
 1G-B2-F2-P3 Integrate policy overlay into structured-output evaluation harness
+1G-B2-F2-C Hard-gate comparator and holdout expectation cleanup
 1H         Showcase files generator design
 1I         Context access from showcase files
 1J         Provider/tool intent form design

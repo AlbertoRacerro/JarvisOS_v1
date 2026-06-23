@@ -38,15 +38,17 @@ must inherit Phase A constraints and remain advisory.
 Recommended next milestone:
 
 ```text
-1G-B2-F2-P3 - Integrate policy overlay into structured-output evaluation harness
+1G-B2-F2-C - Hard-gate comparator and holdout expectation cleanup
 ```
 
 Phase A has now been tested in `1G-B2-F2-A`, and `1G-B2-F2-P` has designed the
 deterministic policy overlay. `1G-B2-F2-P1` has implemented fixture-level
 overlay behavior. `1G-B2-F2-P2` replayed the overlay on saved F2-A outputs and
-improved hard score from 61/93 to 74/93. Do not run a full 32-case
-structured-output Qwen smoke or Phase B panel until the overlay is integrated
-into the evaluation harness or deliberately deferred with this evidence.
+improved hard score from 61/93 to 74/93. `1G-B2-F2-P3` integrated the overlay
+into the evaluation harness behind explicit opt-in flag `--apply-policy-overlay`
+and preserved the same score in no-model replay. Do not run a full 32-case
+structured-output Qwen smoke or Phase B panel until comparator/holdout cleanup
+is addressed or deliberately deferred with this evidence.
 
 ## Why F2 Is Not One Flat Failure
 
@@ -447,23 +449,23 @@ for stale or superseded memory.
 Recommended next milestone:
 
 ```text
-1G-B2-F2-P3 - Integrate policy overlay into structured-output evaluation harness
+1G-B2-F2-C - Hard-gate comparator and holdout expectation cleanup
 ```
 
 Scope for that milestone:
 
-- integrate deterministic overlay application into the structured-output
-  evaluation harness;
-- preserve both original model draft and corrected overlay output;
-- compare corrected outputs against Phase A hard-gate expectations;
-- preserve blocked/review/clarification gates;
-- keep Phase B out of scope until harness integration is explicit;
+- review lifecycle-status expectations;
+- review unresolved-assumption expectations;
+- review memory-boundary expectation for whole-folder provider upload;
+- separate comparator/holdout ambiguity from real overlay defects;
+- preserve blocked/review/clarification/candidate-discovery gates;
+- keep Phase B out of scope until comparator cleanup is explicit;
 - keep all output advisory and manual-review only.
 
 Do not recommend `1G-B2-F3 - Full holdout structured-output Qwen smoke run`
-yet. The structural channel is stable, fixture behavior is explicit, and
-saved-output replay improved the score, but harness integration is still needed
-before broader model runs.
+yet. The structural channel is stable, fixture behavior is explicit,
+saved-output replay improved the score, and harness integration is opt-in, but
+comparator/holdout cleanup is still needed before broader model runs.
 
 ## Boundary Confirmation
 

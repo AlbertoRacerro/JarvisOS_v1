@@ -506,7 +506,7 @@ model calls.
 Recommended next milestone:
 
 ```text
-1G-B2-F2-P3 - Integrate policy overlay into structured-output evaluation harness
+1G-B2-F2-C - Hard-gate comparator and holdout expectation cleanup
 ```
 
 `1G-B2-F2-P2` replayed the overlay on saved F2-A outputs. Corrected outputs
@@ -521,9 +521,16 @@ the intended severe case behavior:
 
 Remaining misses are concentrated in unresolved-assumption booleans,
 lifecycle-status proposals, sensitivity proposals, and likely comparator or
-holdout-mapping ambiguity. Do not start Phase B soft hybrid review until the
-overlay is integrated into the structured-output evaluation harness or
-deliberately deferred with this evidence.
+holdout-mapping ambiguity.
+
+`1G-B2-F2-P3` then integrated the overlay into
+`scripts/local_model_structured_output_probe.py` behind explicit opt-in flag
+`--apply-policy-overlay`. The P3 no-model replay writes
+`reports/local_model_smoke/1G-B2-F2-P3/`, preserves raw Phase A drafts and
+overlay-corrected objects separately, validates corrected outputs 8/8, and
+preserves the 61/93 to 74/93 hard-score improvement. Do not start Phase B soft
+hybrid review until comparator/holdout cleanup is addressed or deliberately
+deferred with this evidence.
 
 ## Milestone Boundary Confirmation
 

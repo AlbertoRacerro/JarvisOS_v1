@@ -552,7 +552,7 @@ Case replay:
 The next milestone should run:
 
 ```text
-1G-B2-F2-P3 - Integrate policy overlay into structured-output evaluation harness
+1G-B2-F2-C - Hard-gate comparator and holdout expectation cleanup
 ```
 
 `1G-B2-F2-P1` implemented fixture-level overlay behavior in
@@ -560,6 +560,10 @@ The next milestone should run:
 against `schemas/fast_secretary_hard_gate_v0_1.schema.json`. `1G-B2-F2-P2`
 replayed the overlay on saved F2-A outputs in
 `reports/local_model_smoke/1G-B2-F2-P2/`; corrected outputs validate 8/8 and
-hard score improves from 61/93 to 74/93. Do not start Phase B soft review until
-the overlay is integrated into the structured-output evaluation harness or
+hard score improves from 61/93 to 74/93. `1G-B2-F2-P3` integrated the overlay
+into `scripts/local_model_structured_output_probe.py` behind explicit opt-in
+flag `--apply-policy-overlay`, produced
+`reports/local_model_smoke/1G-B2-F2-P3/`, validated corrected outputs 8/8, and
+preserved the 74/93 corrected hard score without model or network calls. Do not
+start Phase B soft review until comparator/holdout cleanup is addressed or
 deliberately deferred with this evidence.

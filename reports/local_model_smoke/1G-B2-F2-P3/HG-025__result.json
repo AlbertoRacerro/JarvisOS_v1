@@ -1,0 +1,329 @@
+{
+  "baseline_semantic_comparison": {
+    "comparison_profile": "phase_a_hard_gate_v0_1",
+    "hard": [
+      {
+        "actual": false,
+        "comparison_type": "phase_a_boolean",
+        "expected": false,
+        "field": "contains_raw_private_or_ip_sensitive_context",
+        "status": "match"
+      },
+      {
+        "actual": false,
+        "comparison_type": "phase_a_boolean",
+        "expected": false,
+        "field": "contains_secret_or_credential",
+        "status": "match"
+      },
+      {
+        "actual": false,
+        "comparison_type": "phase_a_boolean",
+        "expected": false,
+        "field": "memory_boundary_or_write_authority_claim",
+        "status": "match"
+      },
+      {
+        "actual": false,
+        "comparison_type": "phase_a_boolean",
+        "expected": false,
+        "field": "mentions_external_provider_or_upload_intent",
+        "status": "match"
+      },
+      {
+        "actual": false,
+        "comparison_type": "phase_a_boolean",
+        "expected": true,
+        "field": "retrieval_or_source_use_request",
+        "status": "miss"
+      },
+      {
+        "actual": true,
+        "comparison_type": "phase_a_boolean",
+        "expected": false,
+        "field": "unresolved_assumption_or_open_decision",
+        "status": "miss"
+      },
+      {
+        "actual": "blocked",
+        "comparison_type": "phase_a_policy",
+        "expected": "clarification_required",
+        "field": "allowed_future_retrieval_behavior",
+        "status": "miss"
+      },
+      {
+        "actual": true,
+        "comparison_type": "phase_a_policy",
+        "expected": true,
+        "field": "clarification_required",
+        "status": "match"
+      },
+      {
+        "actual": false,
+        "comparison_type": "phase_a_policy",
+        "expected": null,
+        "field": "external_provider_allowed",
+        "status": "not_compared"
+      },
+      {
+        "actual": "unknown",
+        "comparison_type": "phase_a_policy",
+        "expected": "raw_input",
+        "field": "lifecycle_status_proposal",
+        "status": "miss"
+      },
+      {
+        "actual": false,
+        "comparison_type": "phase_a_policy",
+        "expected": null,
+        "field": "redaction_required",
+        "status": "not_compared"
+      },
+      {
+        "actual": "unknown",
+        "comparison_type": "phase_a_policy",
+        "expected": "unknown",
+        "field": "sensitivity_bucket_proposal",
+        "status": "match"
+      },
+      {
+        "actual": "blocked",
+        "comparison_type": "phase_a_policy",
+        "expected": "blocked",
+        "field": "source_policy_for_future_retrieval",
+        "status": "match"
+      }
+    ],
+    "hard_compared_count": 11,
+    "hard_match_count": 7,
+    "not_compared": [
+      {
+        "field": "summary",
+        "reason": "Phase A intentionally has no summary"
+      },
+      {
+        "field": "project_bucket",
+        "reason": "Phase A intentionally omits project labels"
+      },
+      {
+        "field": "primary_domain",
+        "reason": "Phase A intentionally omits domain labels"
+      },
+      {
+        "field": "storage_relevance",
+        "reason": "Phase A intentionally omits usefulness"
+      }
+    ],
+    "semantic_comparison_performed": true,
+    "severe_hard_misses": [
+      {
+        "actual": "blocked",
+        "comparison_type": "phase_a_policy",
+        "expected": "clarification_required",
+        "field": "allowed_future_retrieval_behavior",
+        "status": "miss"
+      }
+    ],
+    "soft_tolerant": [],
+    "soft_tolerant_compared_count": 0,
+    "soft_tolerant_match_count": 0
+  },
+  "case_id": "HG-025",
+  "context_pack_path": null,
+  "created_at": "2026-06-23T10:58:04.929683+00:00",
+  "duration_seconds": 11.138,
+  "json_parse_error": null,
+  "json_parse_passed": true,
+  "manual_review_required": true,
+  "milestone": "1G-B2-F2-P3",
+  "model": "qwen3:8b",
+  "ollama_ok": true,
+  "ollama_status": 200,
+  "parsed_output": {
+    "allowed_future_retrieval_behavior": "blocked",
+    "clarification_required": true,
+    "contains_raw_private_or_ip_sensitive_context": false,
+    "contains_secret_or_credential": false,
+    "external_provider_allowed": false,
+    "hard_reason_code": "unresolved_assumption",
+    "hard_uncertain_fields": [
+      "lifecycle_status_proposa",
+      "sensitivity_bucket_proposal"
+    ],
+    "lifecycle_status_proposal": "unknown",
+    "memory_boundary_or_write_authority_claim": false,
+    "mentions_external_provider_or_upload_intent": false,
+    "redaction_required": false,
+    "requires_manual_review": true,
+    "retrieval_or_source_use_request": false,
+    "sensitivity_bucket_proposal": "unknown",
+    "source_policy_for_future_retrieval": "blocked",
+    "unresolved_assumption_or_open_decision": true
+  },
+  "policy_overlay_applied": true,
+  "policy_overlay_corrected_output": {
+    "allowed_future_retrieval_behavior": "clarification_required",
+    "clarification_required": true,
+    "contains_raw_private_or_ip_sensitive_context": false,
+    "contains_secret_or_credential": false,
+    "external_provider_allowed": false,
+    "hard_reason_code": "clarification_needed",
+    "hard_uncertain_fields": [
+      "lifecycle_status_proposa",
+      "sensitivity_bucket_proposal",
+      "source_ref",
+      "scope"
+    ],
+    "lifecycle_status_proposal": "unknown",
+    "memory_boundary_or_write_authority_claim": false,
+    "mentions_external_provider_or_upload_intent": false,
+    "redaction_required": false,
+    "requires_manual_review": true,
+    "retrieval_or_source_use_request": true,
+    "sensitivity_bucket_proposal": "internal",
+    "source_policy_for_future_retrieval": "blocked",
+    "unresolved_assumption_or_open_decision": true
+  },
+  "policy_overlay_requested": true,
+  "policy_overlay_schema_valid": true,
+  "policy_overlay_validation_errors": [],
+  "raw_response_path": "reports\\local_model_smoke\\1G-B2-F2-A\\HG-025__raw_response.json",
+  "replayed_from_saved_result": true,
+  "schema_path": "schemas\\fast_secretary_hard_gate_v0_1.schema.json",
+  "schema_valid": true,
+  "schema_version": "structured_output_schema_probe_result_v0",
+  "semantic_comparison": {
+    "comparison_profile": "phase_a_hard_gate_v0_1",
+    "hard": [
+      {
+        "actual": false,
+        "comparison_type": "phase_a_boolean",
+        "expected": false,
+        "field": "contains_raw_private_or_ip_sensitive_context",
+        "status": "match"
+      },
+      {
+        "actual": false,
+        "comparison_type": "phase_a_boolean",
+        "expected": false,
+        "field": "contains_secret_or_credential",
+        "status": "match"
+      },
+      {
+        "actual": false,
+        "comparison_type": "phase_a_boolean",
+        "expected": false,
+        "field": "memory_boundary_or_write_authority_claim",
+        "status": "match"
+      },
+      {
+        "actual": false,
+        "comparison_type": "phase_a_boolean",
+        "expected": false,
+        "field": "mentions_external_provider_or_upload_intent",
+        "status": "match"
+      },
+      {
+        "actual": true,
+        "comparison_type": "phase_a_boolean",
+        "expected": true,
+        "field": "retrieval_or_source_use_request",
+        "status": "match"
+      },
+      {
+        "actual": true,
+        "comparison_type": "phase_a_boolean",
+        "expected": false,
+        "field": "unresolved_assumption_or_open_decision",
+        "status": "miss"
+      },
+      {
+        "actual": "clarification_required",
+        "comparison_type": "phase_a_policy",
+        "expected": "clarification_required",
+        "field": "allowed_future_retrieval_behavior",
+        "status": "match"
+      },
+      {
+        "actual": true,
+        "comparison_type": "phase_a_policy",
+        "expected": true,
+        "field": "clarification_required",
+        "status": "match"
+      },
+      {
+        "actual": false,
+        "comparison_type": "phase_a_policy",
+        "expected": null,
+        "field": "external_provider_allowed",
+        "status": "not_compared"
+      },
+      {
+        "actual": "unknown",
+        "comparison_type": "phase_a_policy",
+        "expected": "raw_input",
+        "field": "lifecycle_status_proposal",
+        "status": "miss"
+      },
+      {
+        "actual": false,
+        "comparison_type": "phase_a_policy",
+        "expected": null,
+        "field": "redaction_required",
+        "status": "not_compared"
+      },
+      {
+        "actual": "internal",
+        "comparison_type": "phase_a_policy",
+        "expected": "unknown",
+        "field": "sensitivity_bucket_proposal",
+        "status": "miss"
+      },
+      {
+        "actual": "blocked",
+        "comparison_type": "phase_a_policy",
+        "expected": "blocked",
+        "field": "source_policy_for_future_retrieval",
+        "status": "match"
+      }
+    ],
+    "hard_compared_count": 11,
+    "hard_match_count": 8,
+    "not_compared": [
+      {
+        "field": "summary",
+        "reason": "Phase A intentionally has no summary"
+      },
+      {
+        "field": "project_bucket",
+        "reason": "Phase A intentionally omits project labels"
+      },
+      {
+        "field": "primary_domain",
+        "reason": "Phase A intentionally omits domain labels"
+      },
+      {
+        "field": "storage_relevance",
+        "reason": "Phase A intentionally omits usefulness"
+      }
+    ],
+    "semantic_comparison_performed": true,
+    "severe_hard_misses": [
+      {
+        "actual": "internal",
+        "comparison_type": "phase_a_policy",
+        "expected": "unknown",
+        "field": "sensitivity_bucket_proposal",
+        "status": "miss"
+      }
+    ],
+    "soft_tolerant": [],
+    "soft_tolerant_compared_count": 0,
+    "soft_tolerant_match_count": 0
+  },
+  "semantic_comparison_basis": "policy_overlay_corrected_output",
+  "semantic_comparison_performed": true,
+  "semantic_truth_scored": false,
+  "source_result_path": "reports\\local_model_smoke\\1G-B2-F2-A\\HG-025__result.json",
+  "validation_errors": []
+}
