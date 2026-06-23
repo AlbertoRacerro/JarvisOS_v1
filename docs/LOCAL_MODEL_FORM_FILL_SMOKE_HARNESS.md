@@ -16,6 +16,7 @@ Milestones:
 - 1G-B2-F2-R - Two-phase structured secretary semantic analysis
 - 1G-B2-F2-A - Hard-gate schema prototype
 - 1G-B2-F2-P - Fast secretary policy-gate overlay design
+- 1G-B2-F2-P1 - Policy-gate overlay fixture prototype
 
 ## Purpose
 
@@ -858,6 +859,54 @@ Recommended next milestone:
 1G-B2-F2-P1 - Policy-gate overlay fixture prototype
 ```
 
+## 1G-B2-F2-P1 Policy-Gate Overlay Fixture Prototype
+
+1G-B2-F2-P1 implements the deterministic overlay as a small stdlib-only fixture
+prototype.
+
+Prototype:
+
+```text
+scripts/local_policy_gate_overlay_probe.py
+```
+
+Tests:
+
+```text
+tests/test_local_policy_gate_overlay_probe.py
+```
+
+Implemented rule classes:
+
+- mandatory block;
+- clarification;
+- review gate;
+- candidate discovery;
+- internal memory boundary;
+- low-risk/default.
+
+Fixture coverage:
+
+- `HG-018`-like provider memory upload forces blocked/blocked.
+- `HG-007`-like public literature discovery remains candidate discovery only.
+- `HG-013`-like cross-project memory-style use requires clarification.
+- `HG-017`-like `.ssh/id_rsa` blocks without false provider intent.
+- `HG-024`-like stale/superseded memory becomes review-gated.
+- `HG-025`-like ambiguous memory document reference requires clarification.
+- A mixed public-literature plus secret input proves block precedence.
+- A low-risk internal note stays manual-review with no retrieval.
+
+The fixture tests validate corrected outputs against
+`schemas/fast_secretary_hard_gate_v0_1.schema.json` and verify that the overlay
+adds no extra schema fields. This milestone makes zero model calls and adds no
+runtime memory, retrieval, provider routing, or Phase B behavior.
+
+Recommended next milestone:
+
+```text
+1G-B2-F2-P2 - Policy-gate overlay replay on saved F2-A outputs
+```
+
 ## Dry-Run Behavior
 
 Example:
@@ -934,22 +983,22 @@ The tests cover:
 
 ## Future 1G-B
 
-After 1G-B2-F2-P, the next milestone is:
+After 1G-B2-F2-P1, the next milestone is:
 
 ```text
-1G-B2-F2-P1 - Policy-gate overlay fixture prototype
+1G-B2-F2-P2 - Policy-gate overlay replay on saved F2-A outputs
 ```
 
-1G-B2-F2-P1 should implement a tiny fixture-only overlay prototype with zero
-model calls before any Phase B soft hybrid review or full holdout
-structured-output Qwen smoke run. The schema-first path must remain local,
-explicit, bounded, auditable, and separate from runtime memory, retrieval,
-provider routing, tool execution, and BlueRev modeling.
+1G-B2-F2-P2 should replay the deterministic overlay on saved F2-A outputs
+before any Phase B soft hybrid review or full holdout structured-output Qwen
+smoke run. The schema-first path must remain local, explicit, bounded,
+auditable, and separate from runtime memory, retrieval, provider routing, tool
+execution, and BlueRev modeling.
 
 ## Milestone Boundary Confirmation
 
-1G-B2-F2-P adds design documentation only. It does not integrate structured
-output into runtime behavior.
+1G-B2-F2-P1 adds a fixture-only deterministic overlay prototype and unit tests.
+It does not integrate structured output into runtime behavior.
 
 It adds no:
 
@@ -973,4 +1022,4 @@ It adds no:
 - BlueRev modeling;
 - vendored code.
 
-This milestone does not start `1G-B2-F2-P1 - Policy-gate overlay fixture prototype`.
+This milestone does not start `1G-B2-F2-P2 - Policy-gate overlay replay on saved F2-A outputs`.

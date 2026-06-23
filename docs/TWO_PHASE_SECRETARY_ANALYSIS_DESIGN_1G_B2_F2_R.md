@@ -38,12 +38,13 @@ must inherit Phase A constraints and remain advisory.
 Recommended next milestone:
 
 ```text
-1G-B2-F2-P1 - Policy-gate overlay fixture prototype
+1G-B2-F2-P2 - Policy-gate overlay replay on saved F2-A outputs
 ```
 
 Phase A has now been tested in `1G-B2-F2-A`, and `1G-B2-F2-P` has designed the
-deterministic policy overlay. Do not run a full 32-case structured-output Qwen
-smoke or Phase B panel until overlay fixture behavior is explicit and tested.
+deterministic policy overlay. `1G-B2-F2-P1` has implemented fixture-level
+overlay behavior. Do not run a full 32-case structured-output Qwen smoke or
+Phase B panel until the overlay is replayed on saved F2-A outputs.
 
 ## Why F2 Is Not One Flat Failure
 
@@ -444,20 +445,20 @@ for stale or superseded memory.
 Recommended next milestone:
 
 ```text
-1G-B2-F2-P1 - Policy-gate overlay fixture prototype
+1G-B2-F2-P2 - Policy-gate overlay replay on saved F2-A outputs
 ```
 
 Scope for that milestone:
 
-- implement a tiny fixture-only overlay prototype;
-- test precedence and case replay using fixed fixtures;
+- replay the deterministic overlay on saved F2-A outputs;
+- compare corrected outputs against the Phase A hard-gate expectations;
 - preserve blocked/review/clarification gates;
-- keep Phase B out of scope until overlay fixture behavior is explicit;
+- keep Phase B out of scope until saved-output replay is explicit;
 - keep all output advisory and manual-review only.
 
 Do not recommend `1G-B2-F3 - Full holdout structured-output Qwen smoke run`
-yet. The structural channel is stable, and the overlay is now designed, but
-fixture behavior still needs to be made explicit before broader model runs.
+yet. The structural channel is stable, and the overlay fixture behavior is now
+explicit, but saved-output replay is still needed before broader model runs.
 
 ## Boundary Confirmation
 

@@ -158,14 +158,14 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F2-P1 - Policy-gate overlay fixture prototype
+1G-B2-F2-P2 - Policy-gate overlay replay on saved F2-A outputs
 ```
 
-The 1G-B2-F2-P policy-gate overlay design defines deterministic rule classes,
-precedence, field overrides, and F2-A case replay for the Phase A hard-gate
-path. The next step is a tiny fixture-only overlay prototype with zero model
-calls. Do not start Phase B soft review or a full holdout structured-output run
-until block/review/clarification/candidate-discovery overlays are explicit and
-tested.
+The 1G-B2-F2-P1 fixture prototype adds
+`scripts/local_policy_gate_overlay_probe.py` and unittest fixtures for
+mandatory block, clarification, review gate, candidate discovery, internal
+memory boundary, low-risk/default, and precedence behavior. It makes zero model
+calls and adds no runtime authority. The next step is replaying the overlay on
+saved F2-A outputs before Phase B soft review or full holdout expansion.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

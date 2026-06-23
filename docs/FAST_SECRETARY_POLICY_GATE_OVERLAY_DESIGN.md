@@ -484,30 +484,39 @@ Manual review remains required for:
 
 ## What Should Be Tested Next
 
+`1G-B2-F2-P1` implemented the fixture-only overlay prototype in:
+
+```text
+scripts/local_policy_gate_overlay_probe.py
+```
+
+It covers:
+
+- mandatory block;
+- clarification;
+- review gate;
+- candidate discovery;
+- internal memory boundary;
+- low-risk/default;
+- block precedence over candidate discovery.
+
+The prototype is deterministic, stdlib-only, fixture-level, and makes zero
+model calls.
+
 Recommended next milestone:
 
 ```text
-1G-B2-F2-P1 - Policy-gate overlay fixture prototype
+1G-B2-F2-P2 - Policy-gate overlay replay on saved F2-A outputs
 ```
 
-Scope:
-
-- implement a tiny pure-Python fixture prototype only;
-- make zero model calls;
-- run against fixed examples for `HG-018`, `HG-007`, `HG-013`, `HG-017`,
-  `HG-024`, and `HG-025`;
-- test precedence order;
-- test block vs review vs clarification vs candidate discovery;
-- prove the overlay does not over-block public literature discovery;
-- prove private key paths do not create false provider intent.
-
-Do not start Phase B soft hybrid review until overlay fixture behavior is
-explicit and tested.
+Do not start Phase B soft hybrid review until the overlay is replayed on saved
+F2-A outputs.
 
 ## Milestone Boundary Confirmation
 
-This milestone is docs-only. It does not add overlay code, runtime memory,
-retrieval runtime, provider routing runtime, queue behavior, backend route,
-frontend UI, database schema, Context Pack Broker runtime, worker, hook, MCP,
-tool execution, model call, BlueRev vault use, BlueRev modeling behavior, or
-vendored code.
+This design milestone was docs-only. The follow-up `1G-B2-F2-P1` adds only a
+fixture-level evaluation script and unit tests. Neither milestone adds runtime
+memory, retrieval runtime, provider routing runtime, queue behavior, backend
+route, frontend UI, database schema, Context Pack Broker runtime, worker, hook,
+MCP, tool execution, model call, BlueRev vault use, BlueRev modeling behavior,
+or vendored code.

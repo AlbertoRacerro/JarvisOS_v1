@@ -826,6 +826,15 @@ Current implementation status:
   review-gated stale/superseded memory. This milestone is docs-only and makes
   zero model calls. Recommendation: `1G-B2-F2-P1 - Policy-gate overlay fixture
   prototype`.
+- 1G-B2-F2-P1 implements the deterministic policy-gate overlay as a small
+  stdlib-only fixture prototype in `scripts/local_policy_gate_overlay_probe.py`.
+  It tests mandatory block, clarification, review gate, candidate discovery,
+  internal memory boundary, low-risk/default, and precedence behavior against
+  fixed fixtures derived from the F2-A severe miss cases. Corrected outputs
+  validate against `schemas/fast_secretary_hard_gate_v0_1.schema.json`, add no
+  extra schema fields, make zero model/network calls, and remain evaluation
+  evidence only. Recommendation: `1G-B2-F2-P2 - Policy-gate overlay replay on
+  saved F2-A outputs`.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
 The accepted next local AI sequence is:
@@ -869,6 +878,7 @@ The accepted next local AI sequence is:
 1G-B2-F2-A Hard-gate schema prototype
 1G-B2-F2-P Fast secretary policy-gate overlay design
 1G-B2-F2-P1 Policy-gate overlay fixture prototype
+1G-B2-F2-P2 Policy-gate overlay replay on saved F2-A outputs
 1H         Showcase files generator design
 1I         Context access from showcase files
 1J         Provider/tool intent form design
