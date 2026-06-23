@@ -39,6 +39,12 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
             "hard_uncertain_fields": [],
         }
 
+    def source_result(self, phase_a=None):
+        return {
+            "case_id": "HG-007",
+            "policy_overlay_corrected_output": phase_a or self.phase_a(),
+        }
+
     def valid_soft_proposal(self):
         return {
             "summary_short": "Input may support candidate source discovery under review.",
@@ -128,7 +134,7 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             result = model_probe.build_model_result(
                 case_id="HG-007",
-                source_result={"case_id": "HG-007", "policy_overlay_corrected_output": self.phase_a()},
+                source_result=self.source_result(),
                 schema=self.schema,
                 schema_path=self.schema_path,
                 model="qwen3:8b",
@@ -138,11 +144,13 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
         self.assertTrue(result["json_parse_passed"])
         self.assertTrue(result["schema_valid"])
         self.assertEqual([], result["authority_field_leakage"])
+        self.assertEqual(result["phase_b_soft_proposal_effective"], result["phase_b_soft_proposal"])
         envelope = result["review_envelope"]
         self.assertFalse(envelope["runtime_approved"])
         self.assertTrue(envelope["manual_review_required"])
         self.assertIn("phase_a_hard_gate", envelope)
         self.assertIn("phase_b_soft_proposal", envelope)
+        self.assertEqual(envelope["phase_b_soft_proposal_effective"], envelope["phase_b_soft_proposal"])
         self.assertTrue(envelope["soft_quality_review_required"])
 
     def test_authority_field_in_model_output_is_schema_invalid_and_detected(self):
@@ -151,7 +159,7 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             result = model_probe.build_model_result(
                 case_id="HG-007",
-                source_result={"case_id": "HG-007", "policy_overlay_corrected_output": self.phase_a()},
+                source_result=self.source_result(),
                 schema=self.schema,
                 schema_path=self.schema_path,
                 model="qwen3:8b",
@@ -159,7 +167,8 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
                 raw_call=self.raw_call(output),
             )
         self.assertFalse(result["schema_valid"])
-        self.assertEqual(["can_override_phase_a"], result["authority_field_leakage"])
+        self.assertEqual(["can_override_phase_a"], result["phase_b_soft_proposal_model_raw_authority_field_leakage"])
+        self.assertEqual(["can_override_phase_a"], result["phase_b_soft_proposal_effective_authority_field_leakage"])
         self.assertEqual(1, result["review_envelope"]["authority_field_leakage_count"])
 
     def test_soft_quality_diagnostic_flags_known_bad_project_bucket(self):
@@ -176,24 +185,239 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
         self.assertIn("project_bucket", fields)
         self.assertGreater(diagnostic["quality_compared_count"], diagnostic["quality_match_count"])
 
-    def test_summary_compares_against_b4_baseline_without_runtime_approval(self):
+    def test_secret_phase_a_clamps_raw_model_soft_proposal(self):
+        phase_a = dict(self.phase_a())
+        phase_a.update(
+            {
+                "contains_secret_or_credential": True,
+                "sensitivity_bucket_proposal": "secret",
+                "hard_reason_code": "secret_or_credential",
+            }
+        )
+        raw = dict(self.valid_soft_proposal())
+        raw.update(
+            {
+                "summary_short": "The API key sk-live-example should be remembered.",
+                "brief_rationale": "Store sk-live-example for later.",
+                "domain_tags": ["api-key", "secret"],
+                "suggested_followup_question": "What is the missing private key?",
+            }
+        )
+        result = model_probe.build_model_result(
+            case_id="HG-016",
+            source_result=self.source_result(phase_a),
+            schema=self.schema,
+            schema_path=self.schema_path,
+            model="qwen3:8b",
+            raw_path=Path("raw.json"),
+            raw_call=self.raw_call(raw),
+        )
+        effective = result["phase_b_soft_proposal_effective"]
+        self.assertEqual("security", effective["primary_domain"])
+        self.assertEqual("none", effective["possible_memory_card_type"])
+        self.assertEqual("none", effective["storage_relevance"])
+        self.assertEqual("low", effective["usefulness_for_future_review"])
+        self.assertEqual("contextual_summary", effective["soft_reason_code"])
+        self.assertTrue(result["soft_proposal_deterministic_clamps"])
+
+    def test_raw_private_phase_a_clamps_raw_model_soft_proposal(self):
+        phase_a = dict(self.phase_a())
+        phase_a.update(
+            {
+                "contains_raw_private_or_ip_sensitive_context": True,
+                "sensitivity_bucket_proposal": "sensitive",
+                "hard_reason_code": "provider_or_upload_intent",
+            }
+        )
+        result = model_probe.build_model_result(
+            case_id="HG-018",
+            source_result=self.source_result(phase_a),
+            schema=self.schema,
+            schema_path=self.schema_path,
+            model="qwen3:8b",
+            raw_path=Path("raw.json"),
+            raw_call=self.raw_call(self.valid_soft_proposal()),
+        )
+        effective = result["phase_b_soft_proposal_effective"]
+        self.assertEqual("security", effective["primary_domain"])
+        self.assertEqual("none", effective["possible_memory_card_type"])
+        self.assertEqual("low", effective["storage_relevance"])
+        self.assertEqual(["security", "private-context"], effective["domain_tags"])
+
+    def test_phase_a_blocked_clamps_card_and_storage(self):
+        phase_a = dict(self.phase_a())
+        phase_a.update(
+            {
+                "source_policy_for_future_retrieval": "blocked",
+                "allowed_future_retrieval_behavior": "blocked",
+            }
+        )
+        result = model_probe.build_model_result(
+            case_id="HG-007",
+            source_result=self.source_result(phase_a),
+            schema=self.schema,
+            schema_path=self.schema_path,
+            model="qwen3:8b",
+            raw_path=Path("raw.json"),
+            raw_call=self.raw_call(self.valid_soft_proposal()),
+        )
+        effective = result["phase_b_soft_proposal_effective"]
+        self.assertEqual("none", effective["possible_memory_card_type"])
+        self.assertEqual("low", effective["storage_relevance"])
+        self.assertEqual("retrieval", effective["primary_domain"])
+
+    def test_raw_model_soft_proposal_is_preserved_for_audit(self):
+        phase_a = dict(self.phase_a())
+        phase_a["contains_secret_or_credential"] = True
+        raw = dict(self.valid_soft_proposal())
+        result = model_probe.build_model_result(
+            case_id="HG-016",
+            source_result=self.source_result(phase_a),
+            schema=self.schema,
+            schema_path=self.schema_path,
+            model="qwen3:8b",
+            raw_path=Path("raw.json"),
+            raw_call=self.raw_call(raw),
+        )
+        self.assertEqual(raw, result["phase_b_soft_proposal_model_raw"])
+        self.assertNotEqual(raw, result["phase_b_soft_proposal_effective"])
+        self.assertEqual(raw, result["review_envelope"]["phase_b_soft_proposal_model_raw"])
+
+    def test_effective_soft_proposal_is_used_in_review_envelope(self):
+        phase_a = dict(self.phase_a())
+        phase_a["contains_secret_or_credential"] = True
+        result = model_probe.build_model_result(
+            case_id="HG-016",
+            source_result=self.source_result(phase_a),
+            schema=self.schema,
+            schema_path=self.schema_path,
+            model="qwen3:8b",
+            raw_path=Path("raw.json"),
+            raw_call=self.raw_call(self.valid_soft_proposal()),
+        )
+        envelope = result["review_envelope"]
+        self.assertEqual(envelope["phase_b_soft_proposal_effective"], envelope["phase_b_soft_proposal"])
+        self.assertEqual(result["phase_b_soft_proposal_effective"], envelope["phase_b_soft_proposal"])
+
+    def test_secret_clamp_redacts_or_replaces_free_text_fields(self):
+        phase_a = dict(self.phase_a())
+        phase_a["contains_secret_or_credential"] = True
+        raw = dict(self.valid_soft_proposal())
+        raw.update(
+            {
+                "summary_short": "Copy sk-secret and C:/private/user-data into memory.",
+                "brief_rationale": "The sk-secret value is useful later.",
+                "domain_tags": ["sk-secret", "private-path"],
+                "suggested_followup_question": "What is the full sk-secret value?",
+            }
+        )
+        result = model_probe.build_model_result(
+            case_id="HG-016",
+            source_result=self.source_result(phase_a),
+            schema=self.schema,
+            schema_path=self.schema_path,
+            model="qwen3:8b",
+            raw_path=Path("raw.json"),
+            raw_call=self.raw_call(raw),
+        )
+        effective = result["phase_b_soft_proposal_effective"]
+        serialized = json.dumps(
+            {
+                "summary_short": effective["summary_short"],
+                "brief_rationale": effective["brief_rationale"],
+                "domain_tags": effective["domain_tags"],
+                "suggested_followup_question": effective["suggested_followup_question"],
+            }
+        )
+        self.assertNotIn("sk-secret", serialized)
+        self.assertNotIn("private-path", serialized)
+        self.assertEqual(["security", "sensitive-context"], effective["domain_tags"])
+
+    def test_secret_clamp_always_blanks_followup_question(self):
+        phase_a = dict(self.phase_a())
+        phase_a["contains_secret_or_credential"] = True
+        raw = dict(self.valid_soft_proposal())
+        raw["suggested_followup_question"] = "Paste the private key here?"
+        result = model_probe.build_model_result(
+            case_id="HG-016",
+            source_result=self.source_result(phase_a),
+            schema=self.schema,
+            schema_path=self.schema_path,
+            model="qwen3:8b",
+            raw_path=Path("raw.json"),
+            raw_call=self.raw_call(raw),
+        )
+        self.assertEqual("", result["phase_b_soft_proposal_effective"]["suggested_followup_question"])
+
+    def test_clamp_does_not_apply_to_normal_source_case(self):
+        raw = self.valid_soft_proposal()
+        result = model_probe.build_model_result(
+            case_id="HG-007",
+            source_result=self.source_result(),
+            schema=self.schema,
+            schema_path=self.schema_path,
+            model="qwen3:8b",
+            raw_path=Path("raw.json"),
+            raw_call=self.raw_call(raw),
+        )
+        self.assertEqual([], result["soft_proposal_deterministic_clamps"])
+        self.assertEqual(raw, result["phase_b_soft_proposal_effective"])
+
+    def test_summary_does_not_require_clamp_count_to_pass(self):
         result = {
             "case_id": "HG-007",
             "json_parse_passed": True,
-            "schema_valid": True,
-            "validation_errors": [],
-            "authority_field_leakage": [],
-            "soft_quality_diagnostic": {
-                "quality_match_count": 15,
+            "phase_b_soft_proposal_model_raw_schema_valid": True,
+            "phase_b_soft_proposal_effective_schema_valid": True,
+            "phase_b_soft_proposal_model_raw_validation_errors": [],
+            "phase_b_soft_proposal_effective_validation_errors": [],
+            "phase_b_soft_proposal_model_raw_authority_field_leakage": [],
+            "phase_b_soft_proposal_effective_authority_field_leakage": [],
+            "soft_proposal_deterministic_clamps": [],
+            "raw_soft_quality_diagnostic": {
+                "quality_match_count": 23,
+                "quality_compared_count": 29,
+                "quality_misses": [],
+            },
+            "effective_soft_quality_diagnostic": {
+                "quality_match_count": 23,
                 "quality_compared_count": 29,
                 "quality_misses": [],
             },
         }
-        summary = model_probe.summarize_results([result], Path("reports/local_model_smoke/1G-B2-F2-B5-A"))
+        summary = model_probe.summarize_results([result], Path("reports/local_model_smoke/1G-B2-F2-B5-B"))
+        self.assertEqual(0, summary["deterministic_soft_clamp_count"])
+        self.assertTrue(summary["strong_enough_for_semantic_quality_review"])
+
+    def test_summary_reports_raw_and_effective_quality_separately(self):
+        result = {
+            "case_id": "HG-007",
+            "json_parse_passed": True,
+            "phase_b_soft_proposal_model_raw_schema_valid": True,
+            "phase_b_soft_proposal_effective_schema_valid": True,
+            "phase_b_soft_proposal_model_raw_validation_errors": [],
+            "phase_b_soft_proposal_effective_validation_errors": [],
+            "phase_b_soft_proposal_model_raw_authority_field_leakage": [],
+            "phase_b_soft_proposal_effective_authority_field_leakage": [],
+            "soft_proposal_deterministic_clamps": [{"field": "storage_relevance"}],
+            "raw_soft_quality_diagnostic": {
+                "quality_match_count": 10,
+                "quality_compared_count": 29,
+                "quality_misses": [],
+            },
+            "effective_soft_quality_diagnostic": {
+                "quality_match_count": 23,
+                "quality_compared_count": 29,
+                "quality_misses": [],
+            },
+        }
+        summary = model_probe.summarize_results([result], Path("reports/local_model_smoke/1G-B2-F2-B5-B"))
         self.assertFalse(summary["runtime_approved"])
         self.assertFalse(summary["accepted_for_runtime"])
         self.assertTrue(summary["strong_enough_for_semantic_quality_review"])
-        self.assertTrue(summary["soft_quality_summary"]["improved_over_b4_baseline"])
+        self.assertEqual(10, summary["raw_soft_quality_summary"]["soft_quality_match_count"])
+        self.assertEqual(23, summary["effective_soft_quality_summary"]["soft_quality_match_count"])
+        self.assertTrue(summary["effective_soft_quality_summary"]["improved_over_b5a_baseline"])
         self.assertTrue(summary["soft_quality_summary"]["soft_quality_review_required"])
         self.assertFalse(summary["soft_quality_summary"]["soft_quality_truth_scored"])
 

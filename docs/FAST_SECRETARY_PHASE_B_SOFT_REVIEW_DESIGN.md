@@ -255,3 +255,36 @@ The instruction profile now explains general reusable categories for project
 bucket, primary domain, card type, reason code, rationale quality, and follow-up
 question quality. B5-A reruns the same eight B4 cases only as a regression
 panel against the B4 soft-quality baseline.
+
+## 1G-B2-F2-B5-B Deterministic Soft Clamp
+
+`1G-B2-F2-B5-B` adds deterministic post-model enforcement for Phase B soft
+proposals.
+
+Data path:
+
+```text
+Qwen raw soft proposal -> preserved for audit
+Phase A corrected hard gate -> deterministic clamp trigger
+effective soft proposal -> review envelope and effective quality metrics
+```
+
+Clamp triggers come from Phase A hard-gate state:
+
+- secret or credential material;
+- raw private/IP-sensitive or provider-sensitive context;
+- deterministic Phase A blocked state.
+
+The raw proposal remains available as
+`phase_b_soft_proposal_model_raw`. The review envelope uses
+`phase_b_soft_proposal_effective`, with `phase_b_soft_proposal` retained as a
+compatibility alias for the effective proposal.
+
+B5-B reports raw quality and effective quality separately:
+
+- raw quality describes Qwen behavior;
+- effective quality describes Qwen plus deterministic clamp behavior.
+
+The clamp is evaluation-only in this milestone. It does not approve runtime
+memory writes, retrieval, provider use, tool execution, route selection,
+semantic truth, or BlueRev modeling.

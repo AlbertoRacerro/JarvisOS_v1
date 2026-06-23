@@ -1328,3 +1328,32 @@ python scripts\local_phase_b_soft_review_model_probe.py `
 
 Acceptance compares against the B4 soft-quality baseline of `14/29` while
 preserving parse, schema validity, and zero authority-field leakage.
+
+## 1G-B2-F2-B5-B Deterministic Secret/Private Soft Clamp
+
+B5-B keeps the B4/B5-A eight-case panel and adds deterministic post-model
+effective-proposal clamping.
+
+Run command:
+
+```powershell
+python scripts\local_phase_b_soft_review_model_probe.py `
+  --run-local `
+  --source-b2-report-dir reports\local_model_smoke\1G-B2-F2-B2 `
+  --schema-path schemas\fast_secretary_soft_proposal_v0_1.schema.json `
+  --out-dir reports\local_model_smoke\1G-B2-F2-B5-B `
+  --model qwen3:8b `
+  --case-ids HG-007,HG-010,HG-013,HG-016,HG-017,HG-018,HG-024,HG-025 `
+  --timeout-seconds 180
+```
+
+Acceptance uses the effective proposal, not the raw model proposal:
+
+- parse `8/8`;
+- raw schema validity `8/8`;
+- effective schema validity `8/8`;
+- raw authority leakage reported separately;
+- effective authority leakage must be `0`;
+- effective soft quality must improve over the B5-A baseline of `22/29`.
+
+Clamp count is evidence only. It is not a pass requirement.

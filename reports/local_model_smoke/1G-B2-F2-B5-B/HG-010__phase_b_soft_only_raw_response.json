@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-23T20:44:27.8580761Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 162,
+    "eval_duration": 7125853000,
+    "load_duration": 615869700,
+    "message": {
+      "content": "{\n  \"summary_short\": \"Referencing a prior decision to guide next steps\",\n  \"project_bucket\": \"unknown\",\n  \"primary_domain\": \"memory\",\n  \"domain_tags\": [\"memory\", \"decision\"],\n  \"storage_relevance\": \"low\",\n  \"usefulness_for_future_review\": \"medium\",\n  \"possible_memory_card_type\": \"decision_card\",\n  \"soft_reason_code\": \"decision_candidate\",\n  \"brief_rationale\": \"This input references a prior decision that may influence current actions, helping reviewers understand the context of previous choices and their impact on next steps.\",\n  \"suggested_followup_question\": \"What was the specific decision made about the material last time?\"\n  , \"soft_uncertain_fields\": []\n}",
+      "role": "assistant",
+      "thinking": "Okay, let's tackle this query. The user's input is: \"Use the thing we decided last time about the material and prepare the next step.\" \n\nFirst, I need to figure out the project bucket. The mention of \"material\" could relate to a project, but it's not clear. The user might be referring to a previous decision in a project. Since there's no specific mention of a project name like \"jarvisos\" or \"bluerev,\" maybe it's under \"unknown.\" But wait, the user is talking about a previous decision, which might tie into a project's memory or decision tracking. However, without more context, it's safer to go with \"unknown\" for the project bucket.\n\nNext, the primary domain. The input is about using a previous decision, which relates to memory or decisions. The domain tags could be \"memory\" and \"decision.\" The user is referencing a past decision, so it's about recalling that decision for the next step. \n\nFor the card type, since it's about using a previous decision, \"decision_card\" makes sense. The rationale is that the input refers to a prior decision that needs to be applied, which is useful for future reviewers to understand the context. \n\nThe soft reason code is \"decision_candidate\" because it involves using a previous decision. The follow-up question should ask for the specific decision to clarify what was decided last time. \n\nPutting it all together, the JSON should have the project bucket as \"unknown,\" domain tags as \"memory\" and \"decision,\" card type \"decision_card,\" soft reason code \"decision_candidate,\" and a follow-up question asking for the specific decision.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 1503,
+    "prompt_eval_duration": 175088000,
+    "total_duration": 17266289600
+  },
+  "duration_seconds": 19.307,
+  "error": null,
+  "ok": true,
+  "status": 200
+}

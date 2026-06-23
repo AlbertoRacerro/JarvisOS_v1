@@ -1072,3 +1072,31 @@ Decision boundary:
 - Python/JarvisOS merges saved Phase A hard-gate state with the soft proposal.
 - The eight-case run is a regression panel against the B4 soft-quality baseline,
   not runtime approval.
+
+### 1G-B2-F2-B5-B - Deterministic Secret/Private Soft Clamp
+
+1G-B2-F2-B5-B preserves Qwen's raw Phase B soft proposal for audit and builds a
+deterministic effective proposal for the review envelope.
+
+Observed local result:
+
+- model: `qwen3:8b`;
+- cases: `HG-007, HG-010, HG-013, HG-016, HG-017, HG-018, HG-024, HG-025`;
+- parse: `8/8`;
+- raw schema validity: `8/8`;
+- effective schema validity: `8/8`;
+- raw authority leakage: `0`;
+- effective authority leakage: `0`;
+- raw soft quality: `22/29`;
+- effective soft quality: `26/29`;
+- deterministic clamp count: `28`;
+- clamp cases: `HG-010, HG-013, HG-016, HG-017, HG-018, HG-025`.
+
+Decision boundary:
+
+- Qwen local receives only input text and the soft-only schema.
+- Qwen local may process sensitive local text for advisory soft review.
+- Qwen raw output remains audit evidence, not authority.
+- Python/JarvisOS owns deterministic effective-proposal clamping.
+- B5-B does not approve runtime memory, retrieval, provider use, tool
+  execution, route selection, semantic truth, or BlueRev modeling.

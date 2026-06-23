@@ -24,14 +24,16 @@ import local_phase_b_soft_review_probe as phase_b_probe
 DEFAULT_SOURCE_B2_REPORT_DIR = Path("reports/local_model_smoke/1G-B2-F2-B2")
 DEFAULT_HOLDOUT = Path("docs/holdout/intake_generalization_v0.jsonl")
 DEFAULT_SCHEMA = Path("schemas/fast_secretary_soft_proposal_v0_1.schema.json")
-DEFAULT_OUT_DIR = Path("reports/local_model_smoke/1G-B2-F2-B5-A")
+DEFAULT_OUT_DIR = Path("reports/local_model_smoke/1G-B2-F2-B5-B")
 DEFAULT_MODEL = "qwen3:8b"
 DEFAULT_CASE_IDS = "HG-007,HG-010,HG-013,HG-016,HG-017,HG-018,HG-024,HG-025"
-SUMMARY_JSON = "phase_b_general_instruction_repair_summary.json"
-SUMMARY_MD = "phase_b_general_instruction_repair_summary.md"
+SUMMARY_JSON = "phase_b_deterministic_soft_clamp_summary.json"
+SUMMARY_MD = "phase_b_deterministic_soft_clamp_summary.md"
 MAX_CASES = 8
 BASELINE_B4_SOFT_QUALITY_MATCH_COUNT = 14
 BASELINE_B4_SOFT_QUALITY_COMPARED_COUNT = 29
+BASELINE_B5A_SOFT_QUALITY_MATCH_COUNT = 22
+BASELINE_B5A_SOFT_QUALITY_COMPARED_COUNT = 29
 
 AUTHORITY_FIELD_NAMES = {
     "phase_a_case_id",
@@ -376,14 +378,123 @@ def evaluate_soft_quality(case_id: str, proposal: Any) -> dict[str, Any]:
     }
 
 
+def phase_a_secret_or_credential(phase_a: dict[str, Any]) -> bool:
+    return (
+        phase_a.get("contains_secret_or_credential") is True
+        or phase_a.get("sensitivity_bucket_proposal") == "secret"
+        or phase_a.get("hard_reason_code") == "secret_or_credential"
+    )
+
+
+def phase_a_raw_private_or_provider_sensitive(phase_a: dict[str, Any]) -> bool:
+    return (
+        phase_a.get("contains_raw_private_or_ip_sensitive_context") is True
+        or phase_a.get("sensitivity_bucket_proposal") == "sensitive"
+        or phase_a.get("hard_reason_code") == "provider_or_upload_intent"
+    )
+
+
+def deterministic_soft_clamp_reasons(phase_a: dict[str, Any]) -> list[str]:
+    reasons: list[str] = []
+    if phase_a_secret_or_credential(phase_a):
+        reasons.append("secret_or_credential")
+    if phase_a_raw_private_or_provider_sensitive(phase_a):
+        reasons.append("raw_private_or_provider_sensitive")
+    if phase_b_probe.phase_a_blocked(phase_a):
+        reasons.append("phase_a_blocked")
+    return reasons
+
+
+def apply_deterministic_soft_clamp(
+    *,
+    phase_a: dict[str, Any],
+    raw_proposal: dict[str, Any] | None,
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
+    """Return the effective proposal used by the envelope.
+
+    The raw model proposal remains preserved for audit. Clamping is deterministic
+    and driven only by Phase A hard-gate state.
+    """
+    if not isinstance(raw_proposal, dict):
+        return raw_proposal, []
+
+    reasons = deterministic_soft_clamp_reasons(phase_a)
+    effective = dict(raw_proposal)
+    clamps: list[dict[str, Any]] = []
+    if not reasons:
+        return effective, clamps
+
+    secret = "secret_or_credential" in reasons
+    private = "raw_private_or_provider_sensitive" in reasons
+
+    if secret:
+        replacements = {
+            "summary_short": "Security-sensitive input was detected and withheld from memory candidacy.",
+            "primary_domain": "security",
+            "domain_tags": ["security", "sensitive-context"],
+            "storage_relevance": "none",
+            "usefulness_for_future_review": "low",
+            "possible_memory_card_type": "none",
+            "soft_reason_code": "contextual_summary",
+            "brief_rationale": (
+                "Phase A flagged secret or credential material. The effective soft proposal keeps only "
+                "generic security-review context and does not preserve the sensitive content."
+            ),
+            "suggested_followup_question": "",
+        }
+        severity = "secret_or_credential"
+    elif private:
+        replacements = {
+            "summary_short": "Sensitive private context was detected and requires review without exposing raw content.",
+            "primary_domain": "security",
+            "domain_tags": ["security", "private-context"],
+            "storage_relevance": "low",
+            "usefulness_for_future_review": "low",
+            "possible_memory_card_type": "none",
+            "soft_reason_code": "contextual_summary",
+            "brief_rationale": (
+                "Phase A flagged private or provider-sensitive context. The effective soft proposal keeps only "
+                "generic security-review context."
+            ),
+            "suggested_followup_question": "",
+        }
+        severity = "raw_private_or_provider_sensitive"
+    else:
+        replacements = {
+            "storage_relevance": "low",
+            "possible_memory_card_type": "none",
+        }
+        severity = "phase_a_blocked"
+
+    for field, replacement in replacements.items():
+        previous = effective.get(field)
+        if previous != replacement:
+            effective[field] = replacement
+            clamps.append(
+                {
+                    "field": field,
+                    "reason": severity,
+                    "previous": previous,
+                    "replacement": replacement,
+                }
+            )
+
+    return effective, clamps
+
+
 def build_review_envelope(
     *,
     case_id: str,
     source_result: dict[str, Any],
-    soft_proposal: dict[str, Any] | None,
-    proposal_validation: dict[str, Any],
-    authority_leakage: list[str],
-    soft_quality: dict[str, Any],
+    raw_soft_proposal: dict[str, Any] | None,
+    effective_soft_proposal: dict[str, Any] | None,
+    raw_proposal_validation: dict[str, Any],
+    effective_proposal_validation: dict[str, Any],
+    raw_authority_leakage: list[str],
+    effective_authority_leakage: list[str],
+    raw_soft_quality: dict[str, Any],
+    effective_soft_quality: dict[str, Any],
+    deterministic_clamps: list[dict[str, Any]],
 ) -> dict[str, Any]:
     phase_a = phase_b_probe.corrected_phase_a_output(source_result)
     return {
@@ -396,14 +507,25 @@ def build_review_envelope(
         "external_provider_calls_made": False,
         "local_model_calls_made": True,
         "phase_a_hard_gate": compact_hard_envelope(phase_a),
-        "phase_b_soft_proposal": soft_proposal,
-        "phase_b_soft_proposal_schema_valid": proposal_validation["schema_valid"],
-        "phase_b_soft_proposal_validation_errors": proposal_validation["errors"],
-        "authority_field_leakage": authority_leakage,
-        "authority_field_leakage_count": len(authority_leakage),
+        "phase_b_soft_proposal_model_raw": raw_soft_proposal,
+        "phase_b_soft_proposal_effective": effective_soft_proposal,
+        "phase_b_soft_proposal": effective_soft_proposal,
+        "phase_b_soft_proposal_model_raw_schema_valid": raw_proposal_validation["schema_valid"],
+        "phase_b_soft_proposal_effective_schema_valid": effective_proposal_validation["schema_valid"],
+        "phase_b_soft_proposal_schema_valid": effective_proposal_validation["schema_valid"],
+        "phase_b_soft_proposal_model_raw_validation_errors": raw_proposal_validation["errors"],
+        "phase_b_soft_proposal_effective_validation_errors": effective_proposal_validation["errors"],
+        "phase_b_soft_proposal_validation_errors": effective_proposal_validation["errors"],
+        "phase_b_soft_proposal_model_raw_authority_field_leakage_count": len(raw_authority_leakage),
+        "phase_b_soft_proposal_effective_authority_field_leakage_count": len(effective_authority_leakage),
+        "authority_field_leakage": effective_authority_leakage,
+        "authority_field_leakage_count": len(effective_authority_leakage),
+        "soft_proposal_deterministic_clamps": deterministic_clamps,
         "soft_quality_review_required": True,
         "soft_quality_truth_scored": False,
-        "soft_quality_diagnostic": soft_quality,
+        "raw_soft_quality_diagnostic": raw_soft_quality,
+        "effective_soft_quality_diagnostic": effective_soft_quality,
+        "soft_quality_diagnostic": effective_soft_quality,
     }
 
 
@@ -420,23 +542,43 @@ def build_model_result(
     parsed, parse_error = (None, raw_call["error"])
     if raw_call["ok"] and isinstance(raw_call["body"], dict):
         parsed, parse_error = parse_soft_proposal(raw_call["body"])
-    validation = structured_probe.validate_instance(parsed, schema) if parsed is not None else {
+    raw_validation = structured_probe.validate_instance(parsed, schema) if parsed is not None else {
         "schema_valid": False,
         "errors": [{"field": "$", "error": "json_not_parsed"}],
     }
-    leakage = authority_field_leakage(parsed)
-    soft_quality = evaluate_soft_quality(case_id, parsed)
+    phase_a = phase_b_probe.corrected_phase_a_output(source_result)
+    effective_proposal, deterministic_clamps = apply_deterministic_soft_clamp(
+        phase_a=phase_a,
+        raw_proposal=parsed,
+    )
+    effective_validation = (
+        structured_probe.validate_instance(effective_proposal, schema)
+        if effective_proposal is not None
+        else {
+            "schema_valid": False,
+            "errors": [{"field": "$", "error": "json_not_parsed"}],
+        }
+    )
+    raw_leakage = authority_field_leakage(parsed)
+    effective_leakage = authority_field_leakage(effective_proposal)
+    raw_soft_quality = evaluate_soft_quality(case_id, parsed)
+    effective_soft_quality = evaluate_soft_quality(case_id, effective_proposal)
     envelope = build_review_envelope(
         case_id=case_id,
         source_result=source_result,
-        soft_proposal=parsed,
-        proposal_validation=validation,
-        authority_leakage=leakage,
-        soft_quality=soft_quality,
+        raw_soft_proposal=parsed,
+        effective_soft_proposal=effective_proposal,
+        raw_proposal_validation=raw_validation,
+        effective_proposal_validation=effective_validation,
+        raw_authority_leakage=raw_leakage,
+        effective_authority_leakage=effective_leakage,
+        raw_soft_quality=raw_soft_quality,
+        effective_soft_quality=effective_soft_quality,
+        deterministic_clamps=deterministic_clamps,
     )
     return {
-        "schema_version": "phase_b_soft_instruction_repair_result_v0",
-        "milestone": "1G-B2-F2-B5-A",
+        "schema_version": "phase_b_deterministic_soft_clamp_result_v0",
+        "milestone": "1G-B2-F2-B5-B",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "case_id": case_id,
         "model": model,
@@ -451,33 +593,52 @@ def build_model_result(
         "duration_seconds": raw_call["duration_seconds"],
         "json_parse_passed": parsed is not None,
         "json_parse_error": parse_error,
-        "schema_valid": validation["schema_valid"],
-        "validation_errors": validation["errors"],
-        "authority_field_leakage": leakage,
-        "authority_field_leakage_count": len(leakage),
-        "phase_b_soft_proposal": parsed,
+        "phase_b_soft_proposal_model_raw_schema_valid": raw_validation["schema_valid"],
+        "phase_b_soft_proposal_effective_schema_valid": effective_validation["schema_valid"],
+        "schema_valid": effective_validation["schema_valid"],
+        "validation_errors": effective_validation["errors"],
+        "phase_b_soft_proposal_model_raw_validation_errors": raw_validation["errors"],
+        "phase_b_soft_proposal_effective_validation_errors": effective_validation["errors"],
+        "phase_b_soft_proposal_model_raw_authority_field_leakage": raw_leakage,
+        "phase_b_soft_proposal_effective_authority_field_leakage": effective_leakage,
+        "phase_b_soft_proposal_model_raw_authority_field_leakage_count": len(raw_leakage),
+        "phase_b_soft_proposal_effective_authority_field_leakage_count": len(effective_leakage),
+        "authority_field_leakage": effective_leakage,
+        "authority_field_leakage_count": len(effective_leakage),
+        "phase_b_soft_proposal_model_raw": parsed,
+        "phase_b_soft_proposal_effective": effective_proposal,
+        "phase_b_soft_proposal": effective_proposal,
+        "soft_proposal_deterministic_clamps": deterministic_clamps,
         "soft_quality_review_required": True,
         "soft_quality_truth_scored": False,
-        "soft_quality_diagnostic": soft_quality,
+        "raw_soft_quality_diagnostic": raw_soft_quality,
+        "effective_soft_quality_diagnostic": effective_soft_quality,
+        "soft_quality_diagnostic": effective_soft_quality,
         "review_envelope": envelope,
     }
 
 
-def soft_quality_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
+def soft_quality_summary(
+    results: list[dict[str, Any]],
+    *,
+    diagnostic_key: str,
+    baseline_match_count: int,
+    baseline_compared_count: int,
+) -> dict[str, Any]:
     compared = 0
     matched = 0
     cases_with_misses: list[dict[str, Any]] = []
     for result in results:
-        diagnostic = result.get("soft_quality_diagnostic") or {}
+        diagnostic = result.get(diagnostic_key) or {}
         compared += diagnostic.get("quality_compared_count", 0)
         matched += diagnostic.get("quality_match_count", 0)
         misses = diagnostic.get("quality_misses", [])
         if misses:
             cases_with_misses.append({"case_id": result["case_id"], "misses": misses})
     miss_count = compared - matched
-    baseline_rate = BASELINE_B4_SOFT_QUALITY_MATCH_COUNT / BASELINE_B4_SOFT_QUALITY_COMPARED_COUNT
+    baseline_rate = baseline_match_count / baseline_compared_count
     current_rate = matched / compared if compared else None
-    improved_over_b4 = matched > BASELINE_B4_SOFT_QUALITY_MATCH_COUNT
+    improved_over_baseline = matched > baseline_match_count
     return {
         "soft_quality_review_required": True,
         "soft_quality_truth_scored": False,
@@ -485,10 +646,18 @@ def soft_quality_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
         "soft_quality_compared_count": compared,
         "soft_quality_miss_count": miss_count,
         "soft_quality_match_rate": current_rate,
+        "baseline_match_count": baseline_match_count,
+        "baseline_compared_count": baseline_compared_count,
+        "baseline_match_rate": baseline_rate,
+        "improved_over_baseline": improved_over_baseline,
         "baseline_b4_match_count": BASELINE_B4_SOFT_QUALITY_MATCH_COUNT,
         "baseline_b4_compared_count": BASELINE_B4_SOFT_QUALITY_COMPARED_COUNT,
-        "baseline_b4_match_rate": baseline_rate,
-        "improved_over_b4_baseline": improved_over_b4,
+        "baseline_b4_match_rate": BASELINE_B4_SOFT_QUALITY_MATCH_COUNT / BASELINE_B4_SOFT_QUALITY_COMPARED_COUNT,
+        "baseline_b5a_match_count": BASELINE_B5A_SOFT_QUALITY_MATCH_COUNT,
+        "baseline_b5a_compared_count": BASELINE_B5A_SOFT_QUALITY_COMPARED_COUNT,
+        "baseline_b5a_match_rate": BASELINE_B5A_SOFT_QUALITY_MATCH_COUNT / BASELINE_B5A_SOFT_QUALITY_COMPARED_COUNT,
+        "improved_over_b4_baseline": matched > BASELINE_B4_SOFT_QUALITY_MATCH_COUNT,
+        "improved_over_b5a_baseline": matched > BASELINE_B5A_SOFT_QUALITY_MATCH_COUNT,
         "cases_with_soft_quality_misses": cases_with_misses,
         "note": "Diagnostic only: soft-quality checks do not approve runtime behavior or semantic truth.",
     }
@@ -496,34 +665,76 @@ def soft_quality_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
 
 def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[str, Any]:
     parse_count = sum(1 for result in results if result["json_parse_passed"])
-    schema_valid_count = sum(1 for result in results if result["schema_valid"])
-    leakage_results = [
+    raw_schema_valid_count = sum(
+        1 for result in results if result["phase_b_soft_proposal_model_raw_schema_valid"]
+    )
+    effective_schema_valid_count = sum(
+        1 for result in results if result["phase_b_soft_proposal_effective_schema_valid"]
+    )
+    raw_leakage_results = [
         {
             "case_id": result["case_id"],
-            "authority_field_leakage": result["authority_field_leakage"],
+            "authority_field_leakage": result["phase_b_soft_proposal_model_raw_authority_field_leakage"],
         }
         for result in results
-        if result["authority_field_leakage"]
+        if result["phase_b_soft_proposal_model_raw_authority_field_leakage"]
     ]
-    validation_failures = [
+    effective_leakage_results = [
         {
             "case_id": result["case_id"],
-            "errors": result["validation_errors"],
+            "authority_field_leakage": result["phase_b_soft_proposal_effective_authority_field_leakage"],
         }
         for result in results
-        if not result["schema_valid"]
+        if result["phase_b_soft_proposal_effective_authority_field_leakage"]
     ]
-    quality = soft_quality_summary(results)
+    raw_validation_failures = [
+        {
+            "case_id": result["case_id"],
+            "errors": result["phase_b_soft_proposal_model_raw_validation_errors"],
+        }
+        for result in results
+        if not result["phase_b_soft_proposal_model_raw_schema_valid"]
+    ]
+    effective_validation_failures = [
+        {
+            "case_id": result["case_id"],
+            "errors": result["phase_b_soft_proposal_effective_validation_errors"],
+        }
+        for result in results
+        if not result["phase_b_soft_proposal_effective_schema_valid"]
+    ]
+    deterministic_clamp_cases = [
+        {
+            "case_id": result["case_id"],
+            "clamp_count": len(result.get("soft_proposal_deterministic_clamps") or []),
+            "clamps": result.get("soft_proposal_deterministic_clamps") or [],
+        }
+        for result in results
+        if result.get("soft_proposal_deterministic_clamps")
+    ]
+    deterministic_clamp_count = sum(case["clamp_count"] for case in deterministic_clamp_cases)
+    raw_quality = soft_quality_summary(
+        results,
+        diagnostic_key="raw_soft_quality_diagnostic",
+        baseline_match_count=BASELINE_B5A_SOFT_QUALITY_MATCH_COUNT,
+        baseline_compared_count=BASELINE_B5A_SOFT_QUALITY_COMPARED_COUNT,
+    )
+    effective_quality = soft_quality_summary(
+        results,
+        diagnostic_key="effective_soft_quality_diagnostic",
+        baseline_match_count=BASELINE_B5A_SOFT_QUALITY_MATCH_COUNT,
+        baseline_compared_count=BASELINE_B5A_SOFT_QUALITY_COMPARED_COUNT,
+    )
     pass_structural = (
         len(results) > 0
         and parse_count == len(results)
-        and schema_valid_count == len(results)
-        and not leakage_results
+        and effective_schema_valid_count == len(results)
+        and not effective_leakage_results
     )
-    pass_instruction_repair = pass_structural and quality["improved_over_b4_baseline"]
+    pass_deterministic_clamp = pass_structural and effective_quality["improved_over_b5a_baseline"]
     return {
-        "schema_version": "phase_b_general_instruction_repair_summary_v0",
-        "milestone": "1G-B2-F2-B5-A",
+        "schema_version": "phase_b_deterministic_soft_clamp_summary_v0",
+        "milestone": "1G-B2-F2-B5-B",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "report_dir": str(report_dir),
         "total_runs": len(results),
@@ -531,11 +742,21 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
         "semantic_truth_scored": False,
         "runtime_approved": False,
         "parse_count": parse_count,
-        "schema_valid_count": schema_valid_count,
-        "schema_valid_all_cases": schema_valid_count == len(results),
-        "validation_failures": validation_failures,
-        "authority_field_leakage_count": len(leakage_results),
-        "authority_field_leakage": leakage_results,
+        "phase_b_soft_proposal_model_raw_schema_valid_count": raw_schema_valid_count,
+        "phase_b_soft_proposal_effective_schema_valid_count": effective_schema_valid_count,
+        "schema_valid_count": effective_schema_valid_count,
+        "schema_valid_all_cases": effective_schema_valid_count == len(results),
+        "phase_b_soft_proposal_model_raw_validation_failures": raw_validation_failures,
+        "phase_b_soft_proposal_effective_validation_failures": effective_validation_failures,
+        "validation_failures": effective_validation_failures,
+        "phase_b_soft_proposal_model_raw_authority_field_leakage_count": len(raw_leakage_results),
+        "phase_b_soft_proposal_effective_authority_field_leakage_count": len(effective_leakage_results),
+        "authority_field_leakage_count": len(effective_leakage_results),
+        "phase_b_soft_proposal_model_raw_authority_field_leakage": raw_leakage_results,
+        "phase_b_soft_proposal_effective_authority_field_leakage": effective_leakage_results,
+        "authority_field_leakage": effective_leakage_results,
+        "deterministic_soft_clamp_count": deterministic_clamp_count,
+        "deterministic_soft_clamp_cases": deterministic_clamp_cases,
         "model_facing_schema": "fast_secretary_soft_proposal_v0_1.schema.json",
         "model_facing_schema_has_authority_fields": False,
         "model_facing_instruction_profile": "general_soft_review_v0_2",
@@ -544,60 +765,76 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
         "external_provider_calls_made": False,
         "network_calls_made": False,
         "accepted_for_runtime": False,
-        "strong_enough_for_semantic_quality_review": pass_instruction_repair,
+        "strong_enough_for_semantic_quality_review": pass_deterministic_clamp,
         "strong_enough_for_runtime": False,
-        "soft_quality_summary": quality,
+        "raw_soft_quality_summary": raw_quality,
+        "effective_soft_quality_summary": effective_quality,
+        "soft_quality_summary": effective_quality,
         "recommended_next_milestone": (
             "1G-B2-F2-B5 - Phase B semantic quality review"
-            if pass_instruction_repair
-            else "1G-B2-F2-B5-A-R - General Phase B soft-review instruction repair"
+            if pass_deterministic_clamp
+            else "1G-B2-F2-B5-B-R - Deterministic secret/private soft clamp repair"
         ),
         "answers": {
             "parseable_json_all_cases": parse_count == len(results),
-            "schema_valid_all_cases": schema_valid_count == len(results),
-            "authority_field_leakage_count": len(leakage_results),
+            "raw_schema_valid_all_cases": raw_schema_valid_count == len(results),
+            "effective_schema_valid_all_cases": effective_schema_valid_count == len(results),
+            "schema_valid_all_cases": effective_schema_valid_count == len(results),
+            "raw_authority_field_leakage_count": len(raw_leakage_results),
+            "effective_authority_field_leakage_count": len(effective_leakage_results),
+            "authority_field_leakage_count": len(effective_leakage_results),
             "model_facing_schema_has_authority_fields": False,
             "instruction_profile_case_specific": False,
             "runtime_approved": False,
             "external_provider_calls_made": False,
             "soft_quality_review_required": True,
             "soft_quality_truth_scored": False,
-            "improved_over_b4_baseline": quality["improved_over_b4_baseline"],
-            "strong_enough_for_semantic_quality_review": pass_instruction_repair,
+            "raw_soft_quality_match_count": raw_quality["soft_quality_match_count"],
+            "effective_soft_quality_match_count": effective_quality["soft_quality_match_count"],
+            "effective_soft_quality_improved_over_b5a_baseline": effective_quality[
+                "improved_over_b5a_baseline"
+            ],
+            "deterministic_soft_clamp_count": deterministic_clamp_count,
+            "strong_enough_for_semantic_quality_review": pass_deterministic_clamp,
         },
     }
 
 
 def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
-    quality = summary["soft_quality_summary"]
+    raw_quality = summary["raw_soft_quality_summary"]
+    effective_quality = summary["effective_soft_quality_summary"]
     lines = [
-        "# 1G-B2-F2-B5-A General Phase B Soft-Review Instruction Repair Summary",
+        "# 1G-B2-F2-B5-B Deterministic Phase B Soft Clamp Summary",
         "",
         "Manual review is required. This smoke does not prove semantic truth or approve runtime use.",
         "",
         f"- total runs: {summary['total_runs']}",
         f"- parse: {summary['parse_count']}/{summary['total_runs']}",
-        f"- schema valid: {summary['schema_valid_count']}/{summary['total_runs']}",
-        f"- authority field leakage count: {summary['authority_field_leakage_count']}",
+        f"- raw schema valid: {summary['phase_b_soft_proposal_model_raw_schema_valid_count']}/{summary['total_runs']}",
+        f"- effective schema valid: {summary['phase_b_soft_proposal_effective_schema_valid_count']}/{summary['total_runs']}",
+        f"- raw authority field leakage count: {summary['phase_b_soft_proposal_model_raw_authority_field_leakage_count']}",
+        f"- effective authority field leakage count: {summary['phase_b_soft_proposal_effective_authority_field_leakage_count']}",
+        f"- deterministic soft clamp count: {summary['deterministic_soft_clamp_count']}",
+        f"- deterministic soft clamp cases: {[case['case_id'] for case in summary['deterministic_soft_clamp_cases']]}",
         f"- model-facing schema has authority fields: {summary['model_facing_schema_has_authority_fields']}",
         f"- instruction profile case-specific: {summary['instruction_profile_case_specific']}",
         f"- local Ollama calls made: {summary['local_ollama_calls_made']}",
         f"- external provider calls made: {summary['external_provider_calls_made']}",
         f"- runtime approved: {summary['runtime_approved']}",
-        f"- soft quality review required: {quality['soft_quality_review_required']}",
-        f"- soft quality truth scored: {quality['soft_quality_truth_scored']}",
-        f"- soft quality diagnostic: {quality['soft_quality_match_count']}/{quality['soft_quality_compared_count']}",
-        f"- B4 baseline: {quality['baseline_b4_match_count']}/{quality['baseline_b4_compared_count']}",
-        f"- improved over B4 baseline: {quality['improved_over_b4_baseline']}",
-        f"- soft quality miss count: {quality['soft_quality_miss_count']}",
+        f"- raw soft quality: {raw_quality['soft_quality_match_count']}/{raw_quality['soft_quality_compared_count']}",
+        f"- effective soft quality: {effective_quality['soft_quality_match_count']}/{effective_quality['soft_quality_compared_count']}",
+        f"- B5-A baseline: {effective_quality['baseline_b5a_match_count']}/{effective_quality['baseline_b5a_compared_count']}",
+        f"- effective improved over B5-A baseline: {effective_quality['improved_over_b5a_baseline']}",
+        f"- raw soft quality miss count: {raw_quality['soft_quality_miss_count']}",
+        f"- effective soft quality miss count: {effective_quality['soft_quality_miss_count']}",
         f"- strong enough for semantic quality review: {summary['strong_enough_for_semantic_quality_review']}",
         f"- recommended next milestone: {summary['recommended_next_milestone']}",
         "",
         "Qwen receives only the soft-only proposal schema and the input text. Phase A hard fields are merged later by deterministic Python into an internal review envelope.",
         "",
-        "The B5-A instruction profile uses general reusable categories. It must not use case IDs or holdout-specific examples as model-facing instruction content.",
+        "The raw Qwen soft proposal is preserved for audit. The review envelope uses the deterministic effective soft proposal.",
         "",
-        "Soft-quality diagnostics are advisory only. They do not approve runtime behavior, memory writes, retrieval, provider use, tool execution, or semantic truth.",
+        "Raw quality describes Qwen behavior. Effective quality describes Qwen plus deterministic clamp behavior. Neither approves runtime behavior, memory writes, retrieval, provider use, tool execution, or semantic truth.",
         "",
         "No memory, retrieval, provider routing, tool execution, backend route, frontend UI, queue, worker, hook, MCP, or BlueRev modeling behavior is added.",
         "",
@@ -658,13 +895,18 @@ def run_local_smoke(
         )
         write_json(result_path, result)
         results.append(result)
-        quality = result["soft_quality_diagnostic"]
+        raw_quality = result["raw_soft_quality_diagnostic"]
+        effective_quality = result["effective_soft_quality_diagnostic"]
         print(
             f"{model} {case_id}: "
             f"parse={result['json_parse_passed']} "
-            f"schema_valid={result['schema_valid']} "
-            f"authority_leakage={result['authority_field_leakage_count']} "
-            f"soft_quality={quality['quality_match_count']}/{quality['quality_compared_count']} "
+            f"raw_schema_valid={result['phase_b_soft_proposal_model_raw_schema_valid']} "
+            f"effective_schema_valid={result['phase_b_soft_proposal_effective_schema_valid']} "
+            f"raw_authority_leakage={result['phase_b_soft_proposal_model_raw_authority_field_leakage_count']} "
+            f"effective_authority_leakage={result['phase_b_soft_proposal_effective_authority_field_leakage_count']} "
+            f"clamps={len(result['soft_proposal_deterministic_clamps'])} "
+            f"raw_soft_quality={raw_quality['quality_match_count']}/{raw_quality['quality_compared_count']} "
+            f"effective_soft_quality={effective_quality['quality_match_count']}/{effective_quality['quality_compared_count']} "
             f"duration={result['duration_seconds']}"
         )
 
@@ -677,7 +919,7 @@ def run_local_smoke(
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="General Phase B soft-review instruction repair.")
+    parser = argparse.ArgumentParser(description="Deterministic Phase B soft-review clamp smoke.")
     parser.add_argument("--source-b2-report-dir", default=str(DEFAULT_SOURCE_B2_REPORT_DIR))
     parser.add_argument("--holdout", default=str(DEFAULT_HOLDOUT))
     parser.add_argument("--schema-path", default=str(DEFAULT_SCHEMA))
@@ -705,7 +947,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     except ValueError as exc:
-        print(f"phase b expanded local panel failed: {exc}")
+        print(f"phase b deterministic soft clamp failed: {exc}")
         return 2
 
 

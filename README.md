@@ -161,14 +161,13 @@ Recommended next milestone:
 1G-B2-F2-B5 - Phase B semantic quality review
 ```
 
-`1G-B2-F2-B5-A` repairs the Phase B soft-only model-facing instructions using
-general reusable category guidance rather than holdout-specific examples. Qwen
-local still receives only input text plus the soft-only proposal schema. Python
-/JarvisOS still merges the soft proposal with saved Phase A hard-gate state in a
-deterministic envelope.
+`1G-B2-F2-B5-B` adds a deterministic post-model soft clamp for Phase B. Qwen's
+raw soft proposal is preserved for audit, while the internal review envelope
+uses an effective proposal clamped by Phase A hard-gate state for secret,
+private/provider-sensitive, or blocked inputs.
 
-If B5-A does not improve over the B4 soft-quality baseline while preserving
-parse/schema/authority-leakage checks, use
-`1G-B2-F2-B5-A-R - General Phase B soft-review instruction repair` instead.
+B5-B passed the eight-case local Qwen panel with raw soft quality `22/29`,
+effective soft quality `26/29`, raw/effective schema validity `8/8`, and
+effective authority leakage `0`. Passing B5-B does not approve runtime use.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

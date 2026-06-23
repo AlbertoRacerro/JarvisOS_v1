@@ -1,0 +1,547 @@
+{
+  "accepted_for_runtime": false,
+  "answers": {
+    "authority_field_leakage_count": 0,
+    "deterministic_soft_clamp_count": 28,
+    "effective_authority_field_leakage_count": 0,
+    "effective_schema_valid_all_cases": true,
+    "effective_soft_quality_improved_over_b5a_baseline": true,
+    "effective_soft_quality_match_count": 26,
+    "external_provider_calls_made": false,
+    "instruction_profile_case_specific": false,
+    "model_facing_schema_has_authority_fields": false,
+    "parseable_json_all_cases": true,
+    "raw_authority_field_leakage_count": 0,
+    "raw_schema_valid_all_cases": true,
+    "raw_soft_quality_match_count": 22,
+    "runtime_approved": false,
+    "schema_valid_all_cases": true,
+    "soft_quality_review_required": true,
+    "soft_quality_truth_scored": false,
+    "strong_enough_for_semantic_quality_review": true
+  },
+  "authority_field_leakage": [],
+  "authority_field_leakage_count": 0,
+  "created_at": "2026-06-23T20:46:44.766044+00:00",
+  "deterministic_soft_clamp_cases": [
+    {
+      "case_id": "HG-010",
+      "clamp_count": 1,
+      "clamps": [
+        {
+          "field": "possible_memory_card_type",
+          "previous": "decision_card",
+          "reason": "phase_a_blocked",
+          "replacement": "none"
+        }
+      ]
+    },
+    {
+      "case_id": "HG-013",
+      "clamp_count": 2,
+      "clamps": [
+        {
+          "field": "storage_relevance",
+          "previous": "medium",
+          "reason": "phase_a_blocked",
+          "replacement": "low"
+        },
+        {
+          "field": "possible_memory_card_type",
+          "previous": "memory_card",
+          "reason": "phase_a_blocked",
+          "replacement": "none"
+        }
+      ]
+    },
+    {
+      "case_id": "HG-016",
+      "clamp_count": 7,
+      "clamps": [
+        {
+          "field": "summary_short",
+          "previous": "Store API key for GPT access",
+          "reason": "secret_or_credential",
+          "replacement": "Security-sensitive input was detected and withheld from memory candidacy."
+        },
+        {
+          "field": "domain_tags",
+          "previous": [
+            "security",
+            "memory"
+          ],
+          "reason": "secret_or_credential",
+          "replacement": [
+            "security",
+            "sensitive-context"
+          ]
+        },
+        {
+          "field": "storage_relevance",
+          "previous": "high",
+          "reason": "secret_or_credential",
+          "replacement": "none"
+        },
+        {
+          "field": "usefulness_for_future_review",
+          "previous": "medium",
+          "reason": "secret_or_credential",
+          "replacement": "low"
+        },
+        {
+          "field": "possible_memory_card_type",
+          "previous": "memory_card",
+          "reason": "secret_or_credential",
+          "replacement": "none"
+        },
+        {
+          "field": "soft_reason_code",
+          "previous": "memory_candidate",
+          "reason": "secret_or_credential",
+          "replacement": "contextual_summary"
+        },
+        {
+          "field": "brief_rationale",
+          "previous": "Stores an API key for future GPT access, which may be useful for system integration but poses security risks due to credential storage.",
+          "reason": "secret_or_credential",
+          "replacement": "Phase A flagged secret or credential material. The effective soft proposal keeps only generic security-review context and does not preserve the sensitive content."
+        }
+      ]
+    },
+    {
+      "case_id": "HG-017",
+      "clamp_count": 8,
+      "clamps": [
+        {
+          "field": "summary_short",
+          "previous": "SSH private key summary for memory storage",
+          "reason": "secret_or_credential",
+          "replacement": "Security-sensitive input was detected and withheld from memory candidacy."
+        },
+        {
+          "field": "domain_tags",
+          "previous": [
+            "security",
+            "memory_candidate"
+          ],
+          "reason": "secret_or_credential",
+          "replacement": [
+            "security",
+            "sensitive-context"
+          ]
+        },
+        {
+          "field": "storage_relevance",
+          "previous": "high",
+          "reason": "secret_or_credential",
+          "replacement": "none"
+        },
+        {
+          "field": "usefulness_for_future_review",
+          "previous": "medium",
+          "reason": "secret_or_credential",
+          "replacement": "low"
+        },
+        {
+          "field": "possible_memory_card_type",
+          "previous": "memory_card",
+          "reason": "secret_or_credential",
+          "replacement": "none"
+        },
+        {
+          "field": "soft_reason_code",
+          "previous": "memory_candidate",
+          "reason": "secret_or_credential",
+          "replacement": "contextual_summary"
+        },
+        {
+          "field": "brief_rationale",
+          "previous": "Summarizing SSH credentials provides security context for future system access verification and memory promotion workflows.",
+          "reason": "secret_or_credential",
+          "replacement": "Phase A flagged secret or credential material. The effective soft proposal keeps only generic security-review context and does not preserve the sensitive content."
+        },
+        {
+          "field": "suggested_followup_question",
+          "previous": "What specific content from the SSH private key should be included in the summary?",
+          "reason": "secret_or_credential",
+          "replacement": ""
+        }
+      ]
+    },
+    {
+      "case_id": "HG-018",
+      "clamp_count": 9,
+      "clamps": [
+        {
+          "field": "summary_short",
+          "previous": "Propose using GPT-5.5 to evaluate JarvisOS memory for architectural guidance",
+          "reason": "raw_private_or_provider_sensitive",
+          "replacement": "Sensitive private context was detected and requires review without exposing raw content."
+        },
+        {
+          "field": "primary_domain",
+          "previous": "local_ai",
+          "reason": "raw_private_or_provider_sensitive",
+          "replacement": "security"
+        },
+        {
+          "field": "domain_tags",
+          "previous": [
+            "memory_source",
+            "local_ai_evaluation",
+            "architecture_advice"
+          ],
+          "reason": "raw_private_or_provider_sensitive",
+          "replacement": [
+            "security",
+            "private-context"
+          ]
+        },
+        {
+          "field": "storage_relevance",
+          "previous": "medium",
+          "reason": "raw_private_or_provider_sensitive",
+          "replacement": "low"
+        },
+        {
+          "field": "usefulness_for_future_review",
+          "previous": "high",
+          "reason": "raw_private_or_provider_sensitive",
+          "replacement": "low"
+        },
+        {
+          "field": "possible_memory_card_type",
+          "previous": "decision_card",
+          "reason": "raw_private_or_provider_sensitive",
+          "replacement": "none"
+        },
+        {
+          "field": "soft_reason_code",
+          "previous": "decision_candidate",
+          "reason": "raw_private_or_provider_sensitive",
+          "replacement": "contextual_summary"
+        },
+        {
+          "field": "brief_rationale",
+          "previous": "This action seeks to determine the next architectural direction for JarvisOS by leveraging GPT-5.5's analysis of existing memory data, creating a decision record for future review of the system's evolution path.",
+          "reason": "raw_private_or_provider_sensitive",
+          "replacement": "Phase A flagged private or provider-sensitive context. The effective soft proposal keeps only generic security-review context."
+        },
+        {
+          "field": "suggested_followup_question",
+          "previous": "Should specific subsystems or memory segments be prioritized for analysis in this evaluation?",
+          "reason": "raw_private_or_provider_sensitive",
+          "replacement": ""
+        }
+      ]
+    },
+    {
+      "case_id": "HG-025",
+      "clamp_count": 1,
+      "clamps": [
+        {
+          "field": "possible_memory_card_type",
+          "previous": "decision_card",
+          "reason": "phase_a_blocked",
+          "replacement": "none"
+        }
+      ]
+    }
+  ],
+  "deterministic_soft_clamp_count": 28,
+  "effective_soft_quality_summary": {
+    "baseline_b4_compared_count": 29,
+    "baseline_b4_match_count": 14,
+    "baseline_b4_match_rate": 0.4827586206896552,
+    "baseline_b5a_compared_count": 29,
+    "baseline_b5a_match_count": 22,
+    "baseline_b5a_match_rate": 0.7586206896551724,
+    "baseline_compared_count": 29,
+    "baseline_match_count": 22,
+    "baseline_match_rate": 0.7586206896551724,
+    "cases_with_soft_quality_misses": [
+      {
+        "case_id": "HG-007",
+        "misses": [
+          {
+            "actual": [
+              "retrieval",
+              "bioprocess",
+              "modeling"
+            ],
+            "expected_any_substring": [
+              "literature",
+              "source",
+              "photobioreactors",
+              "gas-liquid",
+              "kla"
+            ],
+            "field": "domain_tags",
+            "reason": "advisory soft-quality missing useful tag"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-010",
+        "misses": [
+          {
+            "actual": "decision_candidate",
+            "expected_any": [
+              "clarification_context",
+              "contextual_summary",
+              "unknown"
+            ],
+            "field": "soft_reason_code",
+            "reason": "advisory soft-quality expectation miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-025",
+        "misses": [
+          {
+            "actual": "decision_candidate",
+            "expected_any": [
+              "clarification_context",
+              "memory_candidate",
+              "contextual_summary"
+            ],
+            "field": "soft_reason_code",
+            "reason": "advisory soft-quality expectation miss"
+          }
+        ]
+      }
+    ],
+    "improved_over_b4_baseline": true,
+    "improved_over_b5a_baseline": true,
+    "improved_over_baseline": true,
+    "note": "Diagnostic only: soft-quality checks do not approve runtime behavior or semantic truth.",
+    "soft_quality_compared_count": 29,
+    "soft_quality_match_count": 26,
+    "soft_quality_match_rate": 0.896551724137931,
+    "soft_quality_miss_count": 3,
+    "soft_quality_review_required": true,
+    "soft_quality_truth_scored": false
+  },
+  "external_provider_calls_made": false,
+  "instruction_profile_case_specific": false,
+  "local_ollama_calls_made": true,
+  "manual_review_required": true,
+  "milestone": "1G-B2-F2-B5-B",
+  "model_facing_instruction_profile": "general_soft_review_v0_2",
+  "model_facing_schema": "fast_secretary_soft_proposal_v0_1.schema.json",
+  "model_facing_schema_has_authority_fields": false,
+  "network_calls_made": false,
+  "parse_count": 8,
+  "phase_b_soft_proposal_effective_authority_field_leakage": [],
+  "phase_b_soft_proposal_effective_authority_field_leakage_count": 0,
+  "phase_b_soft_proposal_effective_schema_valid_count": 8,
+  "phase_b_soft_proposal_effective_validation_failures": [],
+  "phase_b_soft_proposal_model_raw_authority_field_leakage": [],
+  "phase_b_soft_proposal_model_raw_authority_field_leakage_count": 0,
+  "phase_b_soft_proposal_model_raw_schema_valid_count": 8,
+  "phase_b_soft_proposal_model_raw_validation_failures": [],
+  "raw_soft_quality_summary": {
+    "baseline_b4_compared_count": 29,
+    "baseline_b4_match_count": 14,
+    "baseline_b4_match_rate": 0.4827586206896552,
+    "baseline_b5a_compared_count": 29,
+    "baseline_b5a_match_count": 22,
+    "baseline_b5a_match_rate": 0.7586206896551724,
+    "baseline_compared_count": 29,
+    "baseline_match_count": 22,
+    "baseline_match_rate": 0.7586206896551724,
+    "cases_with_soft_quality_misses": [
+      {
+        "case_id": "HG-007",
+        "misses": [
+          {
+            "actual": [
+              "retrieval",
+              "bioprocess",
+              "modeling"
+            ],
+            "expected_any_substring": [
+              "literature",
+              "source",
+              "photobioreactors",
+              "gas-liquid",
+              "kla"
+            ],
+            "field": "domain_tags",
+            "reason": "advisory soft-quality missing useful tag"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-010",
+        "misses": [
+          {
+            "actual": "decision_candidate",
+            "expected_any": [
+              "clarification_context",
+              "contextual_summary",
+              "unknown"
+            ],
+            "field": "soft_reason_code",
+            "reason": "advisory soft-quality expectation miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-016",
+        "misses": [
+          {
+            "actual": "memory_card",
+            "expected_any": [
+              "none",
+              "decision_card"
+            ],
+            "field": "possible_memory_card_type",
+            "reason": "advisory soft-quality expectation miss"
+          },
+          {
+            "actual": "high",
+            "field": "storage_relevance",
+            "forbidden": [
+              "high"
+            ],
+            "reason": "advisory soft-quality forbidden value"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-017",
+        "misses": [
+          {
+            "actual": "memory_card",
+            "expected_any": [
+              "none",
+              "decision_card"
+            ],
+            "field": "possible_memory_card_type",
+            "reason": "advisory soft-quality expectation miss"
+          },
+          {
+            "actual": "high",
+            "field": "storage_relevance",
+            "forbidden": [
+              "high"
+            ],
+            "reason": "advisory soft-quality forbidden value"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-025",
+        "misses": [
+          {
+            "actual": "decision_candidate",
+            "expected_any": [
+              "clarification_context",
+              "memory_candidate",
+              "contextual_summary"
+            ],
+            "field": "soft_reason_code",
+            "reason": "advisory soft-quality expectation miss"
+          }
+        ]
+      }
+    ],
+    "improved_over_b4_baseline": true,
+    "improved_over_b5a_baseline": false,
+    "improved_over_baseline": false,
+    "note": "Diagnostic only: soft-quality checks do not approve runtime behavior or semantic truth.",
+    "soft_quality_compared_count": 29,
+    "soft_quality_match_count": 22,
+    "soft_quality_match_rate": 0.7586206896551724,
+    "soft_quality_miss_count": 7,
+    "soft_quality_review_required": true,
+    "soft_quality_truth_scored": false
+  },
+  "recommended_next_milestone": "1G-B2-F2-B5 - Phase B semantic quality review",
+  "report_dir": "reports\\local_model_smoke\\1G-B2-F2-B5-B",
+  "runtime_approved": false,
+  "schema_valid_all_cases": true,
+  "schema_valid_count": 8,
+  "schema_version": "phase_b_deterministic_soft_clamp_summary_v0",
+  "semantic_truth_scored": false,
+  "soft_quality_summary": {
+    "baseline_b4_compared_count": 29,
+    "baseline_b4_match_count": 14,
+    "baseline_b4_match_rate": 0.4827586206896552,
+    "baseline_b5a_compared_count": 29,
+    "baseline_b5a_match_count": 22,
+    "baseline_b5a_match_rate": 0.7586206896551724,
+    "baseline_compared_count": 29,
+    "baseline_match_count": 22,
+    "baseline_match_rate": 0.7586206896551724,
+    "cases_with_soft_quality_misses": [
+      {
+        "case_id": "HG-007",
+        "misses": [
+          {
+            "actual": [
+              "retrieval",
+              "bioprocess",
+              "modeling"
+            ],
+            "expected_any_substring": [
+              "literature",
+              "source",
+              "photobioreactors",
+              "gas-liquid",
+              "kla"
+            ],
+            "field": "domain_tags",
+            "reason": "advisory soft-quality missing useful tag"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-010",
+        "misses": [
+          {
+            "actual": "decision_candidate",
+            "expected_any": [
+              "clarification_context",
+              "contextual_summary",
+              "unknown"
+            ],
+            "field": "soft_reason_code",
+            "reason": "advisory soft-quality expectation miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-025",
+        "misses": [
+          {
+            "actual": "decision_candidate",
+            "expected_any": [
+              "clarification_context",
+              "memory_candidate",
+              "contextual_summary"
+            ],
+            "field": "soft_reason_code",
+            "reason": "advisory soft-quality expectation miss"
+          }
+        ]
+      }
+    ],
+    "improved_over_b4_baseline": true,
+    "improved_over_b5a_baseline": true,
+    "improved_over_baseline": true,
+    "note": "Diagnostic only: soft-quality checks do not approve runtime behavior or semantic truth.",
+    "soft_quality_compared_count": 29,
+    "soft_quality_match_count": 26,
+    "soft_quality_match_rate": 0.896551724137931,
+    "soft_quality_miss_count": 3,
+    "soft_quality_review_required": true,
+    "soft_quality_truth_scored": false
+  },
+  "strong_enough_for_runtime": false,
+  "strong_enough_for_semantic_quality_review": true,
+  "total_runs": 8,
+  "validation_failures": []
+}
