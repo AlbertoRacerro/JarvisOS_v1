@@ -814,6 +814,18 @@ Current implementation status:
   lifecycle, sensitivity, and source policy. Recommendation:
   `1G-B2-F2-P - Fast secretary policy-gate overlay design`. This remains
   manual-review evidence only and is not runtime approval.
+- 1G-B2-F2-P designs the deterministic policy-gate overlay that constrains the
+  Phase A hard-gate LLM draft before Phase B. The overlay is intentionally more
+  precise than "block everything": it separates mandatory block rules,
+  mandatory review-gate rules, mandatory clarification rules, candidate
+  discovery rules, internal memory-boundary rules, and low-risk/default rules.
+  It replays `HG-018`, `HG-007`, `HG-013`, `HG-017`, `HG-024`, and `HG-025`.
+  `HG-018` remains a mandatory block, `HG-007` becomes review-only candidate
+  discovery, `HG-013` and `HG-025` become clarification gates, `HG-017` becomes
+  secret/private-path block without false provider intent, and `HG-024` becomes
+  review-gated stale/superseded memory. This milestone is docs-only and makes
+  zero model calls. Recommendation: `1G-B2-F2-P1 - Policy-gate overlay fixture
+  prototype`.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
 The accepted next local AI sequence is:
@@ -856,6 +868,7 @@ The accepted next local AI sequence is:
 1G-B2-F2-R Structured-output semantic failure analysis
 1G-B2-F2-A Hard-gate schema prototype
 1G-B2-F2-P Fast secretary policy-gate overlay design
+1G-B2-F2-P1 Policy-gate overlay fixture prototype
 1H         Showcase files generator design
 1I         Context access from showcase files
 1J         Provider/tool intent form design

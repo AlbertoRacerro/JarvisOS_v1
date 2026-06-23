@@ -508,3 +508,52 @@ The next milestone should run:
 
 Do not start Phase B soft review or a full holdout structured-output Qwen smoke
 until hard policy overlays are designed.
+
+## F2-P Policy-Gate Overlay Design
+
+`1G-B2-F2-P` designs the deterministic overlay that sits after the Phase A
+hard-gate LLM draft and before Phase B soft review.
+
+Target pipeline:
+
+```text
+input/event
+-> Phase A hard-gate LLM draft
+-> deterministic policy-gate overlay
+-> corrected hard-gate decision
+-> Phase B soft hybrid review
+-> manual review / memory proposal / no-write
+```
+
+The overlay has six rule classes:
+
+1. mandatory block;
+2. mandatory clarification;
+3. mandatory review gate;
+4. candidate discovery;
+5. internal memory boundary;
+6. low-risk/default.
+
+The design corrects the main F2-A pattern: Qwen can block dangerous
+provider/raw-memory cases such as `HG-018`, but it still over-blocks
+public-literature and stale-memory cases and mislabels some hard booleans. The
+overlay must be more precise than "block harder."
+
+Case replay:
+
+- `HG-018`: mandatory block for provider intent plus whole memory folder.
+- `HG-007`: review-only public literature candidate discovery.
+- `HG-013`: clarification gate for cross-project JarvisOS memory style use in
+  coursework.
+- `HG-017`: secret/private-path block without false provider intent.
+- `HG-024`: review gate for stale/superseded Gemma routing memory.
+- `HG-025`: clarification gate for ambiguous memory-document reference.
+
+The next milestone should run:
+
+```text
+1G-B2-F2-P1 - Policy-gate overlay fixture prototype
+```
+
+Do not start Phase B soft review until overlay fixture behavior is explicit and
+tested.

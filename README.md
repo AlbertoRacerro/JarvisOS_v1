@@ -48,6 +48,7 @@ The current local Gemma conclusion is:
 - Structural validator retry loop design: `docs/STRUCTURAL_VALIDATOR_RETRY_LOOP_DESIGN.md`
 - Local model form-fill smoke harness: `docs/LOCAL_MODEL_FORM_FILL_SMOKE_HARNESS.md`
 - Two-phase secretary analysis: `docs/TWO_PHASE_SECRETARY_ANALYSIS_DESIGN_1G_B2_F2_R.md`
+- Fast secretary policy-gate overlay design: `docs/FAST_SECRETARY_POLICY_GATE_OVERLAY_DESIGN.md`
 - Staged memory intake: `docs/STAGED_MEMORY_INTAKE.md`
 - Cavemem/Caveman reference audit: `docs/CAVEMEM_CAVEMAN_REFERENCE_AUDIT.md`
 - Local-model-facing showcase files: `docs/LOCAL_MODEL_SHOWCASE_FILES.md`
@@ -157,15 +158,14 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F2-P - Fast secretary policy-gate overlay design
+1G-B2-F2-P1 - Policy-gate overlay fixture prototype
 ```
 
-The 1G-B2-F2-A hard-gate schema prototype added
-`schemas/fast_secretary_hard_gate_v0_1.schema.json` and ran a bounded local
-`qwen3:8b` 8-case Phase A panel. Reports are under
-`reports/local_model_smoke/1G-B2-F2-A/`. Result: 8/8 parse, 8/8 schema-valid,
-hard-gate comparison 61/93, and `HG-018` improved to blocked/blocked. Remaining
-misses in hard booleans and policy fields show deterministic policy overlays
-are still needed before Phase B or full holdout expansion.
+The 1G-B2-F2-P policy-gate overlay design defines deterministic rule classes,
+precedence, field overrides, and F2-A case replay for the Phase A hard-gate
+path. The next step is a tiny fixture-only overlay prototype with zero model
+calls. Do not start Phase B soft review or a full holdout structured-output run
+until block/review/clarification/candidate-discovery overlays are explicit and
+tested.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

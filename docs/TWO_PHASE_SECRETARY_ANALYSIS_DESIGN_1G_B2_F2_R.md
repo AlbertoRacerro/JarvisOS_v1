@@ -38,11 +38,12 @@ must inherit Phase A constraints and remain advisory.
 Recommended next milestone:
 
 ```text
-1G-B2-F2-P - Fast secretary policy-gate overlay design
+1G-B2-F2-P1 - Policy-gate overlay fixture prototype
 ```
 
-Phase A has now been tested in `1G-B2-F2-A`; do not run a full 32-case
-structured-output Qwen smoke until deterministic policy overlays are designed.
+Phase A has now been tested in `1G-B2-F2-A`, and `1G-B2-F2-P` has designed the
+deterministic policy overlay. Do not run a full 32-case structured-output Qwen
+smoke or Phase B panel until overlay fixture behavior is explicit and tested.
 
 ## Why F2 Is Not One Flat Failure
 
@@ -424,23 +425,39 @@ remained. Deterministic policy overlays are still needed for source/retrieval
 policy, clarification, lifecycle, sensitivity, provider/upload intent,
 retrieval/source-use detection, and unresolved assumptions.
 
+`1G-B2-F2-P` then designed the deterministic policy-gate overlay after the
+Phase A draft and before any Phase B review. The overlay rule classes are:
+
+- mandatory block;
+- mandatory clarification;
+- mandatory review gate;
+- candidate discovery;
+- internal memory boundary;
+- low-risk/default.
+
+Case replay in the overlay design preserves `HG-018` as a mandatory block,
+treats `HG-007` as public candidate discovery only, marks `HG-013` and
+`HG-025` as clarification-required, blocks `HG-017` as secret/private-path
+handling without inventing provider intent, and routes `HG-024` through review
+for stale or superseded memory.
+
 Recommended next milestone:
 
 ```text
-1G-B2-F2-P - Fast secretary policy-gate overlay design
+1G-B2-F2-P1 - Policy-gate overlay fixture prototype
 ```
 
 Scope for that milestone:
 
-- define deterministic overlays for hard-gate fields;
-- make overlay precedence explicit over model output;
+- implement a tiny fixture-only overlay prototype;
+- test precedence and case replay using fixed fixtures;
 - preserve blocked/review/clarification gates;
-- keep Phase B out of scope until hard overlays are designed;
+- keep Phase B out of scope until overlay fixture behavior is explicit;
 - keep all output advisory and manual-review only.
 
 Do not recommend `1G-B2-F3 - Full holdout structured-output Qwen smoke run`
-yet. The structural channel is stable, but hard-gate behavior still needs
-deterministic overlays.
+yet. The structural channel is stable, and the overlay is now designed, but
+fixture behavior still needs to be made explicit before broader model runs.
 
 ## Boundary Confirmation
 

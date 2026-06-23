@@ -15,6 +15,7 @@ Milestones:
 - 1G-B2-F2 - Structured-output 12-case Qwen panel
 - 1G-B2-F2-R - Two-phase structured secretary semantic analysis
 - 1G-B2-F2-A - Hard-gate schema prototype
+- 1G-B2-F2-P - Fast secretary policy-gate overlay design
 
 ## Purpose
 
@@ -791,6 +792,72 @@ Recommended next milestone:
 1G-B2-F2-P - Fast secretary policy-gate overlay design
 ```
 
+## 1G-B2-F2-P Fast Secretary Policy-Gate Overlay Design
+
+1G-B2-F2-P designs the deterministic overlay that constrains the Phase A
+hard-gate LLM draft before Phase B soft review.
+
+Design doc:
+
+```text
+docs/FAST_SECRETARY_POLICY_GATE_OVERLAY_DESIGN.md
+```
+
+Pipeline:
+
+```text
+input/event
+-> Phase A hard-gate LLM draft
+-> deterministic policy-gate overlay
+-> corrected hard-gate decision
+-> Phase B soft hybrid review
+-> manual review / memory proposal / no-write
+```
+
+Rule classes:
+
+- mandatory block;
+- mandatory review gate;
+- mandatory clarification;
+- candidate discovery;
+- internal memory boundary;
+- low-risk/default.
+
+Precedence:
+
+```text
+mandatory block
+-> clarification
+-> review gate
+-> candidate discovery
+-> internal memory boundary
+-> low-risk/default
+```
+
+Case replay conclusions:
+
+- `HG-018`: preserve mandatory block for provider intent plus whole memory
+  folder.
+- `HG-007`: do not over-block public literature candidate discovery; use
+  `review_only` plus `candidate_discovery_only`.
+- `HG-013`: require clarification for cross-project JarvisOS memory style use
+  in coursework.
+- `HG-017`: block `.ssh/id_rsa` as secret/private path without inventing
+  provider intent.
+- `HG-024`: review-gate stale/superseded Gemma routing memory, not mandatory
+  block.
+- `HG-025`: require clarification for ambiguous "latest decision from memory
+  document" references.
+
+This milestone is docs-only. It adds no overlay code and makes zero model
+calls.
+
+Recommended next milestone:
+
+```text
+1G-B2-F2-P1 - Policy-gate overlay fixture prototype
+```
+
 ## Dry-Run Behavior
 
 Example:
@@ -867,23 +934,22 @@ The tests cover:
 
 ## Future 1G-B
 
-After 1G-B2-F2-A, the next milestone is:
+After 1G-B2-F2-P, the next milestone is:
 
 ```text
-1G-B2-F2-P - Fast secretary policy-gate overlay design
+1G-B2-F2-P1 - Policy-gate overlay fixture prototype
 ```
 
-1G-B2-F2-P should define deterministic overlays for hard-gate fields before any
-Phase B soft hybrid review or full holdout structured-output Qwen smoke run. The
-schema-first path must remain local, explicit, bounded, auditable, and separate
-from runtime memory, retrieval, provider routing, tool execution, and BlueRev
-modeling.
+1G-B2-F2-P1 should implement a tiny fixture-only overlay prototype with zero
+model calls before any Phase B soft hybrid review or full holdout
+structured-output Qwen smoke run. The schema-first path must remain local,
+explicit, bounded, auditable, and separate from runtime memory, retrieval,
+provider routing, tool execution, and BlueRev modeling.
 
 ## Milestone Boundary Confirmation
 
-1G-B2-F2-A adds a local evaluation schema, narrow probe support, unit tests,
-bounded smoke reports, and documentation updates. It does not integrate
-structured output into runtime behavior.
+1G-B2-F2-P adds design documentation only. It does not integrate structured
+output into runtime behavior.
 
 It adds no:
 
@@ -892,10 +958,10 @@ It adds no:
 - database migration;
 - runtime models;
 - repository or storage classes;
-- model inference outside the explicit local Ollama hard-gate smoke command;
+- model inference;
 - Ollama model pull;
 - Ollama model serve;
-- Ollama generation call outside the explicit local hard-gate smoke command;
+- Ollama generation call;
 - provider call;
 - memory runtime;
 - retrieval runtime;
@@ -907,4 +973,4 @@ It adds no:
 - BlueRev modeling;
 - vendored code.
 
-This milestone does not start `1G-B2-F2-P - Fast secretary policy-gate overlay design`.
+This milestone does not start `1G-B2-F2-P1 - Policy-gate overlay fixture prototype`.
