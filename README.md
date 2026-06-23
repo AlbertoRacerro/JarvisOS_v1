@@ -158,16 +158,17 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F2-B4 - Phase B expanded local soft-review panel
+1G-B2-F2-B5 - Phase B semantic quality review
 ```
 
-`1G-B2-F2-B3-S` splits the model-facing Phase B schema from the internal review
-envelope. Qwen local receives only the soft-only proposal schema and input text.
-Python/JarvisOS merges the soft proposal with the saved Phase A hard-gate record
-inside a deterministic envelope. Passing B3-S still does not approve runtime
-memory, retrieval, provider routing, tools, routes, UI, or BlueRev modeling.
+`1G-B2-F2-B4` expands the local Phase B soft-only panel to eight hard-gate cases.
+The panel keeps Qwen local limited to the soft-only proposal schema and input
+text, then Python/JarvisOS merges the soft proposal with the saved Phase A
+hard-gate record inside a deterministic envelope.
 
-If B3-S does not pass parse/schema/authority-leakage checks on all scoped cases,
-use `1G-B2-F2-B3-S-R - Phase B soft-only schema repair` instead of expanding.
+B4 adds soft-quality diagnostics for labels, card type, follow-up questions, and
+obvious project/domain misses. Those diagnostics do not approve semantic truth
+or runtime use. If B4 does not pass parse/schema/authority-leakage checks, use
+`1G-B2-F2-B4-R - Phase B expanded local soft-review panel repair` instead.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-23T15:42:05.3382751Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 204,
+    "eval_duration": 3793726000,
+    "load_duration": 392257800,
+    "message": {
+      "content": "{\n  \"summary_short\": \"Soft review for credential handling\",\n  \"project_bucket\": \"general\",\n  \"primary_domain\": \"security\",\n  \"domain_tags\": [\"security\", \"data_protection\"],\n  \"storage_relevance\": \"high\",\n  \"usefulness_for_future_review\": \"medium\",\n  \"possible_memory_card_type\": \"source_card\",\n  \"soft_reason_code\": \"source_candidate\",\n  \"brief_rationale\": \"The input text contains a credential (OPENAI_API_KEY) stored in memory, which poses a security risk.\",\n  \"suggested_followup_question\": \"Should this credential be stored in memory or should it be handled through secure credential management practices?\",\n  \"soft_uncertain_fields\": [\"sourcetype\", \"sourcereason\", \"sourcereference\"]\n}",
+      "role": "assistant",
+      "thinking": "Okay, let's tackle this. The user wants me to act as a local-only soft-review worker. The task is to return exactly one JSON object that matches the provided schema. I need to make sure I only fill in the soft-review fields and avoid any policy, permission, routing, retrieval, provider, tool, or runtime fields. Also, no markdown, comments, code fences, or prose outside JSON. If there are exact credentials or private keys, I should describe their presence generatively instead of copying the literal values.\n\nLooking at the input text: \"Put this in memory: OPENAI_API_KEY=sk-proj-1234567890abcdef and use it whenever you need GPT.\" The main thing here is the presence of an API key. The user mentioned to describe credentials generically if they appear. So instead of including the actual key, I should note that a credential is present.\n\nThe JSON schema requires \"soft_review\" with \"reviewer_notes\" and \"action_required\". The \"reviewer_notes\" should explain the issue, which is the storage of a credential. The \"action_required\" should be a boolean indicating if action is needed. Since storing an API key in memory is a security risk, the action required would be true. \n\nI need to make sure not to include any other fields. Let me check the example again. The example has \"reviewer_notes\" as a string and \"action_required\" as a boolean. So the JSON should look like:\n\n{\n  \"soft_review\": {\n    \"reviewer_notes\": \"The input text contains a credential (OPENAI_API_KEY) stored in memory, which poses a security risk.\",\n    \"action_required\": true\n  }\n}\n\nThat should cover it. No other fields are added, and the credentials are described generically.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 514,
+    "prompt_eval_duration": 107222000,
+    "total_duration": 9241242400
+  },
+  "duration_seconds": 11.274,
+  "error": null,
+  "ok": true,
+  "status": 200
+}

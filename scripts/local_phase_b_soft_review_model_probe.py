@@ -1,4 +1,4 @@
-"""Local Phase B soft-only proposal smoke.
+"""Local Phase B soft-only proposal smoke and expanded panel.
 
 This script is evaluation-only. It asks a local Ollama model to emit only a
 soft-review proposal, validates a soft-only model-facing schema, and then builds
@@ -24,12 +24,12 @@ import local_phase_b_soft_review_probe as phase_b_probe
 DEFAULT_SOURCE_B2_REPORT_DIR = Path("reports/local_model_smoke/1G-B2-F2-B2")
 DEFAULT_HOLDOUT = Path("docs/holdout/intake_generalization_v0.jsonl")
 DEFAULT_SCHEMA = Path("schemas/fast_secretary_soft_proposal_v0_1.schema.json")
-DEFAULT_OUT_DIR = Path("reports/local_model_smoke/1G-B2-F2-B3-S")
+DEFAULT_OUT_DIR = Path("reports/local_model_smoke/1G-B2-F2-B4")
 DEFAULT_MODEL = "qwen3:8b"
-DEFAULT_CASE_IDS = "HG-007,HG-018,HG-024,HG-025"
-SUMMARY_JSON = "phase_b_soft_only_local_smoke_summary.json"
-SUMMARY_MD = "phase_b_soft_only_local_smoke_summary.md"
-MAX_CASES = 4
+DEFAULT_CASE_IDS = "HG-007,HG-010,HG-013,HG-016,HG-017,HG-018,HG-024,HG-025"
+SUMMARY_JSON = "phase_b_expanded_local_soft_review_panel_summary.json"
+SUMMARY_MD = "phase_b_expanded_local_soft_review_panel_summary.md"
+MAX_CASES = 8
 
 AUTHORITY_FIELD_NAMES = {
     "phase_a_case_id",
@@ -51,6 +51,54 @@ AUTHORITY_FIELD_NAMES = {
     "tool_execution_allowed",
 }
 
+SOFT_QUALITY_EXPECTATIONS = {
+    "HG-007": {
+        "project_bucket_any": ["bluerev"],
+        "primary_domain_any": ["retrieval", "bioprocess", "modeling"],
+        "domain_tag_any": ["literature", "source", "photobioreactors", "gas-liquid", "kla"],
+        "soft_reason_code_any": ["source_candidate", "assumption_candidate", "contextual_summary"],
+    },
+    "HG-010": {
+        "soft_reason_code_any": ["clarification_context", "contextual_summary", "unknown"],
+        "followup_question_required": True,
+    },
+    "HG-013": {
+        "project_bucket_any": ["jarvisos"],
+        "primary_domain_any": ["memory"],
+        "soft_reason_code_any": ["clarification_context", "memory_candidate", "contextual_summary", "unknown"],
+        "followup_question_required": True,
+    },
+    "HG-016": {
+        "primary_domain_any": ["security"],
+        "possible_memory_card_type_any": ["none", "decision_card"],
+        "storage_relevance_not": ["high"],
+    },
+    "HG-017": {
+        "primary_domain_any": ["security"],
+        "possible_memory_card_type_any": ["none", "decision_card"],
+        "storage_relevance_not": ["high"],
+    },
+    "HG-018": {
+        "project_bucket_any": ["jarvisos"],
+        "primary_domain_any": ["memory", "security", "local_ai"],
+        "domain_tag_any": ["memory", "provider", "privacy", "security", "jarvisos"],
+        "project_bucket_not": ["unknown"],
+        "primary_domain_not": ["unknown"],
+    },
+    "HG-024": {
+        "project_bucket_any": ["jarvisos"],
+        "primary_domain_any": ["memory", "local_ai"],
+        "possible_memory_card_type_any": ["decision_card", "memory_card"],
+        "project_bucket_not": ["coursework", "personal", "unknown"],
+    },
+    "HG-025": {
+        "primary_domain_any": ["memory"],
+        "soft_reason_code_any": ["clarification_context", "memory_candidate", "contextual_summary"],
+        "followup_question_required": True,
+        "project_bucket_not": ["personal"],
+    },
+}
+
 
 def write_json(path: Path, data: dict[str, Any]) -> None:
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -68,7 +116,7 @@ def select_case_ids(case_ids: str) -> list[str]:
     if not selected:
         raise ValueError("--case-ids did not include any case IDs")
     if len(selected) > MAX_CASES:
-        raise ValueError(f"B3-S is limited to {MAX_CASES} cases")
+        raise ValueError(f"Phase B expanded panel is limited to {MAX_CASES} cases")
     if len(selected) != len(set(selected)):
         raise ValueError("--case-ids contains duplicate case IDs")
     return selected
@@ -121,6 +169,125 @@ def parse_soft_proposal(raw_response: dict[str, Any]) -> tuple[dict[str, Any] | 
     return structured_probe.parse_model_content(raw_response)
 
 
+def normalized(value: Any) -> str:
+    return str(value).strip().lower()
+
+
+def contains_any_text(value: Any, options: list[str]) -> bool:
+    text = normalized(value)
+    return any(normalized(option) in text for option in options)
+
+
+def list_contains_any(values: Any, options: list[str]) -> bool:
+    if not isinstance(values, list):
+        return False
+    return any(contains_any_text(item, options) for item in values)
+
+
+def evaluate_soft_quality(case_id: str, proposal: Any) -> dict[str, Any]:
+    """Return advisory quality diagnostics only.
+
+    These checks are intentionally not runtime authority. They help decide
+    whether the soft proposals are worth semantic review in the next milestone.
+    """
+    if not isinstance(proposal, dict):
+        return {
+            "case_id": case_id,
+            "quality_compared": False,
+            "quality_match_count": 0,
+            "quality_compared_count": 0,
+            "quality_misses": [{"field": "$", "reason": "soft proposal is not an object"}],
+        }
+    expectation = SOFT_QUALITY_EXPECTATIONS.get(case_id, {})
+    misses: list[dict[str, Any]] = []
+    compared = 0
+    matched = 0
+
+    def check_any(field: str, expected_values: list[str]) -> None:
+        nonlocal compared, matched
+        compared += 1
+        actual = proposal.get(field)
+        ok = normalized(actual) in {normalized(value) for value in expected_values}
+        if ok:
+            matched += 1
+        else:
+            misses.append(
+                {
+                    "field": field,
+                    "actual": actual,
+                    "expected_any": expected_values,
+                    "reason": "advisory soft-quality expectation miss",
+                }
+            )
+
+    def check_not(field: str, forbidden_values: list[str]) -> None:
+        nonlocal compared, matched
+        compared += 1
+        actual = proposal.get(field)
+        ok = normalized(actual) not in {normalized(value) for value in forbidden_values}
+        if ok:
+            matched += 1
+        else:
+            misses.append(
+                {
+                    "field": field,
+                    "actual": actual,
+                    "forbidden": forbidden_values,
+                    "reason": "advisory soft-quality forbidden value",
+                }
+            )
+
+    if "project_bucket_any" in expectation:
+        check_any("project_bucket", expectation["project_bucket_any"])
+    if "project_bucket_not" in expectation:
+        check_not("project_bucket", expectation["project_bucket_not"])
+    if "primary_domain_any" in expectation:
+        check_any("primary_domain", expectation["primary_domain_any"])
+    if "primary_domain_not" in expectation:
+        check_not("primary_domain", expectation["primary_domain_not"])
+    if "soft_reason_code_any" in expectation:
+        check_any("soft_reason_code", expectation["soft_reason_code_any"])
+    if "possible_memory_card_type_any" in expectation:
+        check_any("possible_memory_card_type", expectation["possible_memory_card_type_any"])
+    if "storage_relevance_not" in expectation:
+        check_not("storage_relevance", expectation["storage_relevance_not"])
+    if "domain_tag_any" in expectation:
+        compared += 1
+        if list_contains_any(proposal.get("domain_tags"), expectation["domain_tag_any"]):
+            matched += 1
+        else:
+            misses.append(
+                {
+                    "field": "domain_tags",
+                    "actual": proposal.get("domain_tags"),
+                    "expected_any_substring": expectation["domain_tag_any"],
+                    "reason": "advisory soft-quality missing useful tag",
+                }
+            )
+    if expectation.get("followup_question_required"):
+        compared += 1
+        actual = proposal.get("suggested_followup_question")
+        if isinstance(actual, str) and actual.strip():
+            matched += 1
+        else:
+            misses.append(
+                {
+                    "field": "suggested_followup_question",
+                    "actual": actual,
+                    "expected": "non-empty question",
+                    "reason": "ambiguous case should suggest a clarification question",
+                }
+            )
+
+    return {
+        "case_id": case_id,
+        "quality_compared": compared > 0,
+        "quality_match_count": matched,
+        "quality_compared_count": compared,
+        "quality_misses": misses,
+    }
+
+
 def build_review_envelope(
     *,
     case_id: str,
@@ -128,6 +295,7 @@ def build_review_envelope(
     soft_proposal: dict[str, Any] | None,
     proposal_validation: dict[str, Any],
     authority_leakage: list[str],
+    soft_quality: dict[str, Any],
 ) -> dict[str, Any]:
     phase_a = phase_b_probe.corrected_phase_a_output(source_result)
     return {
@@ -145,6 +313,9 @@ def build_review_envelope(
         "phase_b_soft_proposal_validation_errors": proposal_validation["errors"],
         "authority_field_leakage": authority_leakage,
         "authority_field_leakage_count": len(authority_leakage),
+        "soft_quality_review_required": True,
+        "soft_quality_truth_scored": False,
+        "soft_quality_diagnostic": soft_quality,
     }
 
 
@@ -166,16 +337,18 @@ def build_model_result(
         "errors": [{"field": "$", "error": "json_not_parsed"}],
     }
     leakage = authority_field_leakage(parsed)
+    soft_quality = evaluate_soft_quality(case_id, parsed)
     envelope = build_review_envelope(
         case_id=case_id,
         source_result=source_result,
         soft_proposal=parsed,
         proposal_validation=validation,
         authority_leakage=leakage,
+        soft_quality=soft_quality,
     )
     return {
         "schema_version": "phase_b_soft_only_local_smoke_result_v0",
-        "milestone": "1G-B2-F2-B3-S",
+        "milestone": "1G-B2-F2-B4",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "case_id": case_id,
         "model": model,
@@ -195,7 +368,34 @@ def build_model_result(
         "authority_field_leakage": leakage,
         "authority_field_leakage_count": len(leakage),
         "phase_b_soft_proposal": parsed,
+        "soft_quality_review_required": True,
+        "soft_quality_truth_scored": False,
+        "soft_quality_diagnostic": soft_quality,
         "review_envelope": envelope,
+    }
+
+
+def soft_quality_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
+    compared = 0
+    matched = 0
+    cases_with_misses: list[dict[str, Any]] = []
+    for result in results:
+        diagnostic = result.get("soft_quality_diagnostic") or {}
+        compared += diagnostic.get("quality_compared_count", 0)
+        matched += diagnostic.get("quality_match_count", 0)
+        misses = diagnostic.get("quality_misses", [])
+        if misses:
+            cases_with_misses.append({"case_id": result["case_id"], "misses": misses})
+    miss_count = compared - matched
+    return {
+        "soft_quality_review_required": True,
+        "soft_quality_truth_scored": False,
+        "soft_quality_match_count": matched,
+        "soft_quality_compared_count": compared,
+        "soft_quality_miss_count": miss_count,
+        "soft_quality_match_rate": matched / compared if compared else None,
+        "cases_with_soft_quality_misses": cases_with_misses,
+        "note": "Diagnostic only: soft-quality checks do not approve runtime behavior or semantic truth.",
     }
 
 
@@ -218,6 +418,7 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
         for result in results
         if not result["schema_valid"]
     ]
+    quality = soft_quality_summary(results)
     pass_structural = (
         len(results) > 0
         and parse_count == len(results)
@@ -225,8 +426,8 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
         and not leakage_results
     )
     return {
-        "schema_version": "phase_b_soft_only_local_smoke_summary_v0",
-        "milestone": "1G-B2-F2-B3-S",
+        "schema_version": "phase_b_expanded_local_soft_review_panel_summary_v0",
+        "milestone": "1G-B2-F2-B4",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "report_dir": str(report_dir),
         "total_runs": len(results),
@@ -245,11 +446,13 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
         "external_provider_calls_made": False,
         "network_calls_made": False,
         "accepted_for_runtime": False,
-        "strong_enough_for_expanded_phase_b_panel": pass_structural,
+        "strong_enough_for_semantic_quality_review": pass_structural,
+        "strong_enough_for_runtime": False,
+        "soft_quality_summary": quality,
         "recommended_next_milestone": (
-            "1G-B2-F2-B4 - Phase B expanded local soft-review panel"
+            "1G-B2-F2-B5 - Phase B semantic quality review"
             if pass_structural
-            else "1G-B2-F2-B3-S-R - Phase B soft-only schema repair"
+            else "1G-B2-F2-B4-R - Phase B expanded local soft-review panel repair"
         ),
         "answers": {
             "parseable_json_all_cases": parse_count == len(results),
@@ -258,14 +461,17 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
             "model_facing_schema_has_authority_fields": False,
             "runtime_approved": False,
             "external_provider_calls_made": False,
-            "strong_enough_for_expanded_phase_b_panel": pass_structural,
+            "soft_quality_review_required": True,
+            "soft_quality_truth_scored": False,
+            "strong_enough_for_semantic_quality_review": pass_structural,
         },
     }
 
 
 def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
+    quality = summary["soft_quality_summary"]
     lines = [
-        "# 1G-B2-F2-B3-S Phase B Soft-Only Local Smoke Summary",
+        "# 1G-B2-F2-B4 Phase B Expanded Local Soft-Review Panel Summary",
         "",
         "Manual review is required. This smoke does not prove semantic truth or approve runtime use.",
         "",
@@ -277,10 +483,16 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
         f"- local Ollama calls made: {summary['local_ollama_calls_made']}",
         f"- external provider calls made: {summary['external_provider_calls_made']}",
         f"- runtime approved: {summary['runtime_approved']}",
-        f"- strong enough for expanded Phase B panel: {summary['strong_enough_for_expanded_phase_b_panel']}",
+        f"- soft quality review required: {quality['soft_quality_review_required']}",
+        f"- soft quality truth scored: {quality['soft_quality_truth_scored']}",
+        f"- soft quality diagnostic: {quality['soft_quality_match_count']}/{quality['soft_quality_compared_count']}",
+        f"- soft quality miss count: {quality['soft_quality_miss_count']}",
+        f"- strong enough for semantic quality review: {summary['strong_enough_for_semantic_quality_review']}",
         f"- recommended next milestone: {summary['recommended_next_milestone']}",
         "",
         "Qwen receives only the soft-only proposal schema and the input text. Phase A hard fields are merged later by deterministic Python into an internal review envelope.",
+        "",
+        "Soft-quality diagnostics are advisory only. They do not approve runtime behavior, memory writes, retrieval, provider use, tool execution, or semantic truth.",
         "",
         "No memory, retrieval, provider routing, tool execution, backend route, frontend UI, queue, worker, hook, MCP, or BlueRev modeling behavior is added.",
         "",
@@ -341,11 +553,13 @@ def run_local_smoke(
         )
         write_json(result_path, result)
         results.append(result)
+        quality = result["soft_quality_diagnostic"]
         print(
             f"{model} {case_id}: "
             f"parse={result['json_parse_passed']} "
             f"schema_valid={result['schema_valid']} "
             f"authority_leakage={result['authority_field_leakage_count']} "
+            f"soft_quality={quality['quality_match_count']}/{quality['quality_compared_count']} "
             f"duration={result['duration_seconds']}"
         )
 
@@ -358,7 +572,7 @@ def run_local_smoke(
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Phase B soft-only local structured-output smoke.")
+    parser = argparse.ArgumentParser(description="Phase B expanded local soft-review panel.")
     parser.add_argument("--source-b2-report-dir", default=str(DEFAULT_SOURCE_B2_REPORT_DIR))
     parser.add_argument("--holdout", default=str(DEFAULT_HOLDOUT))
     parser.add_argument("--schema-path", default=str(DEFAULT_SCHEMA))
@@ -386,7 +600,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     except ValueError as exc:
-        print(f"phase b soft-only local smoke failed: {exc}")
+        print(f"phase b expanded local panel failed: {exc}")
         return 2
 
 

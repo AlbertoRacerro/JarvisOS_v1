@@ -1289,3 +1289,21 @@ python scripts\local_phase_b_soft_review_model_probe.py `
 ```
 
 The summary must show no authority-field leakage and `runtime_approved=false`.
+
+## 1G-B2-F2-B4 Phase B Expanded Local Soft-Review Panel
+
+B4 expands the corrected soft-only Phase B smoke to eight cases:
+
+```text
+HG-007, HG-010, HG-013, HG-016, HG-017, HG-018, HG-024, HG-025
+```
+
+The report is written under:
+
+```text
+reports/local_model_smoke/1G-B2-F2-B4/
+```
+
+The structural acceptance criteria are parse, schema validity, and zero
+authority-field leakage. B4 also records separate soft-quality diagnostics, but
+those diagnostics do not approve semantic truth or runtime use.

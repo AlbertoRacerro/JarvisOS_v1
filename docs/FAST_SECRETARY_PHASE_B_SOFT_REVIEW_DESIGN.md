@@ -212,3 +212,30 @@ phase_a_hard_gate + phase_b_soft_proposal + validation + audit fields
 The envelope is built deterministically by Python/JarvisOS after model output.
 Qwen local may process sensitive local text for soft review, but it does not own
 or emit policy, retrieval, provider, memory-write, tool, or runtime authority.
+
+## 1G-B2-F2-B4 Expanded Local Soft-Review Panel
+
+`1G-B2-F2-B4` expands the Phase B soft-only local model panel from four to eight
+cases while keeping the corrected model-facing contract from B3-S.
+
+Model-facing schema:
+
+```text
+schemas/fast_secretary_soft_proposal_v0_1.schema.json
+```
+
+Run command:
+
+```powershell
+python scripts\local_phase_b_soft_review_model_probe.py `
+  --run-local `
+  --source-b2-report-dir reports\local_model_smoke\1G-B2-F2-B2 `
+  --schema-path schemas\fast_secretary_soft_proposal_v0_1.schema.json `
+  --out-dir reports\local_model_smoke\1G-B2-F2-B4 `
+  --model qwen3:8b `
+  --case-ids HG-007,HG-010,HG-013,HG-016,HG-017,HG-018,HG-024,HG-025 `
+  --timeout-seconds 180
+```
+
+B4 records soft-quality diagnostics for reviewer triage. These diagnostics are
+not semantic truth scoring and cannot approve runtime behavior.

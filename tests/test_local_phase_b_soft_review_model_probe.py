@@ -63,6 +63,27 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
             "error": None,
         }
 
+    def test_default_b4_case_selection_has_eight_cases(self):
+        self.assertEqual(
+            [
+                "HG-007",
+                "HG-010",
+                "HG-013",
+                "HG-016",
+                "HG-017",
+                "HG-018",
+                "HG-024",
+                "HG-025",
+            ],
+            model_probe.select_case_ids(model_probe.DEFAULT_CASE_IDS),
+        )
+
+    def test_case_selection_rejects_more_than_eight_cases(self):
+        with self.assertRaises(ValueError):
+            model_probe.select_case_ids(
+                "HG-001,HG-002,HG-003,HG-004,HG-005,HG-006,HG-007,HG-008,HG-009"
+            )
+
     def test_soft_proposal_schema_is_closed_and_has_no_authority_fields(self):
         self.assertFalse(self.schema["additionalProperties"])
         self.assertEqual([], model_probe.authority_field_leakage(self.schema["properties"]))
@@ -113,6 +134,7 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
         self.assertTrue(envelope["manual_review_required"])
         self.assertIn("phase_a_hard_gate", envelope)
         self.assertIn("phase_b_soft_proposal", envelope)
+        self.assertTrue(envelope["soft_quality_review_required"])
 
     def test_authority_field_in_model_output_is_schema_invalid_and_detected(self):
         output = dict(self.valid_soft_proposal())
@@ -130,6 +152,39 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
         self.assertFalse(result["schema_valid"])
         self.assertEqual(["can_override_phase_a"], result["authority_field_leakage"])
         self.assertEqual(1, result["review_envelope"]["authority_field_leakage_count"])
+
+    def test_soft_quality_diagnostic_flags_known_bad_project_bucket(self):
+        proposal = dict(self.valid_soft_proposal())
+        proposal.update(
+            {
+                "project_bucket": "coursework",
+                "primary_domain": "local_ai",
+                "possible_memory_card_type": "decision_card",
+            }
+        )
+        diagnostic = model_probe.evaluate_soft_quality("HG-024", proposal)
+        fields = {miss["field"] for miss in diagnostic["quality_misses"]}
+        self.assertIn("project_bucket", fields)
+        self.assertGreater(diagnostic["quality_compared_count"], diagnostic["quality_match_count"])
+
+    def test_summary_keeps_soft_quality_separate_from_runtime_approval(self):
+        result = {
+            "case_id": "HG-007",
+            "json_parse_passed": True,
+            "schema_valid": True,
+            "validation_errors": [],
+            "authority_field_leakage": [],
+            "soft_quality_diagnostic": model_probe.evaluate_soft_quality(
+                "HG-007",
+                self.valid_soft_proposal(),
+            ),
+        }
+        summary = model_probe.summarize_results([result], Path("reports/local_model_smoke/1G-B2-F2-B4"))
+        self.assertFalse(summary["runtime_approved"])
+        self.assertFalse(summary["accepted_for_runtime"])
+        self.assertTrue(summary["strong_enough_for_semantic_quality_review"])
+        self.assertTrue(summary["soft_quality_summary"]["soft_quality_review_required"])
+        self.assertFalse(summary["soft_quality_summary"]["soft_quality_truth_scored"])
 
     def test_run_local_smoke_uses_mocked_local_model_call(self):
         with tempfile.TemporaryDirectory() as tmp:

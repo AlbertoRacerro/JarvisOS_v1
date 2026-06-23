@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-23T15:42:55.1211578Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 218,
+    "eval_duration": 4134453999,
+    "load_duration": 392880200,
+    "message": {
+      "content": "{\n  \"summary_short\": \"Update policy using latest memory document decision\",\n  \"project_bucket\": \"personal\",\n  \"primary_domain\": \"memory\",\n  \"domain_tags\": [\"policy\", \"decision\", \"update\"],\n  \"storage_relevance\": \"high\",\n  \"usefulness_for_future_review\": \"medium\",\n  \"possible_memory_card_type\": \"decision_card\",\n  \"soft_reason_code\": \"memory_candidate\"\n  ,\"brief_rationale\": \"The input text references updating a policy based on a memory document decision, which aligns with soft-review criteria for memory-related updates.\"\n  ,\"suggested_followup_question\": \"What specific aspects of the policy need to be updated based on the memory document's decision?\"\n  ,\"soft_uncertain_fields\": [\"policy_specifics\", \"memory_document_reference\"]\n  \t}",
+      "role": "assistant",
+      "thinking": "Okay, let's tackle this. The user wants me to act as a local-only soft-review worker. They provided a JSON schema and specific instructions. First, I need to make sure I understand the requirements.\n\nThe task is to return exactly one JSON object that matches the supplied schema. The user mentioned filling only the soft-review fields and not adding any policy, permission, routing, retrieval, provider, tool, or runtime fields. Also, if there are exact credentials or private keys, I should describe their presence generically instead of copying literal values.\n\nLooking at the input text: \"Use the latest decision from the memory document to update the policy.\" The case ID is HG-025. The soft-review fields in the schema are likely the ones related to the review process, like the case ID, input text, and maybe some flags or notes.\n\nI need to ensure that the JSON object includes the case ID and input text as specified. Since the user said not to include other fields, I should only add the soft-review fields. Also, check if there are any credentials mentioned. The input text mentions a memory document and updating a policy, but no specific credentials are present. So, I don't need to worry about generic descriptions for credentials here.\n\nPutting it all together, the JSON should have \"case_id\" and \"input_text\" as required. No other fields. Let me structure that correctly.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 405,
+    "prompt_eval_duration": 92689000,
+    "total_duration": 8573640600
+  },
+  "duration_seconds": 10.601,
+  "error": null,
+  "ok": true,
+  "status": 200
+}

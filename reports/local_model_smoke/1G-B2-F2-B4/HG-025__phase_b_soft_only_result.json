@@ -1,0 +1,125 @@
+{
+  "authority_field_leakage": [],
+  "authority_field_leakage_count": 0,
+  "case_id": "HG-025",
+  "created_at": "2026-06-23T15:42:55.123631+00:00",
+  "duration_seconds": 10.601,
+  "json_parse_error": null,
+  "json_parse_passed": true,
+  "manual_review_required": true,
+  "milestone": "1G-B2-F2-B4",
+  "model": "qwen3:8b",
+  "ollama_ok": true,
+  "ollama_status": 200,
+  "phase_a_result_source": "reports\\local_model_smoke\\1G-B2-F2-B2\\HG-025__result.json",
+  "phase_b_soft_proposal": {
+    "brief_rationale": "The input text references updating a policy based on a memory document decision, which aligns with soft-review criteria for memory-related updates.",
+    "domain_tags": [
+      "policy",
+      "decision",
+      "update"
+    ],
+    "possible_memory_card_type": "decision_card",
+    "primary_domain": "memory",
+    "project_bucket": "personal",
+    "soft_reason_code": "memory_candidate",
+    "soft_uncertain_fields": [
+      "policy_specifics",
+      "memory_document_reference"
+    ],
+    "storage_relevance": "high",
+    "suggested_followup_question": "What specific aspects of the policy need to be updated based on the memory document's decision?",
+    "summary_short": "Update policy using latest memory document decision",
+    "usefulness_for_future_review": "medium"
+  },
+  "raw_response_path": "reports\\local_model_smoke\\1G-B2-F2-B4\\HG-025__phase_b_soft_only_raw_response.json",
+  "review_envelope": {
+    "authority_field_leakage": [],
+    "authority_field_leakage_count": 0,
+    "case_id": "HG-025",
+    "external_provider_calls_made": false,
+    "local_model_calls_made": true,
+    "manual_review_required": true,
+    "phase_a_hard_gate": {
+      "allowed_future_retrieval_behavior": "clarification_required",
+      "clarification_required": true,
+      "contains_raw_private_or_ip_sensitive_context": false,
+      "contains_secret_or_credential": false,
+      "external_provider_allowed": false,
+      "hard_reason_code": "clarification_needed",
+      "mentions_external_provider_or_upload_intent": false,
+      "redaction_required": false,
+      "requires_manual_review": true,
+      "sensitivity_bucket_proposal": "internal",
+      "source_policy_for_future_retrieval": "blocked"
+    },
+    "phase_b_soft_proposal": {
+      "brief_rationale": "The input text references updating a policy based on a memory document decision, which aligns with soft-review criteria for memory-related updates.",
+      "domain_tags": [
+        "policy",
+        "decision",
+        "update"
+      ],
+      "possible_memory_card_type": "decision_card",
+      "primary_domain": "memory",
+      "project_bucket": "personal",
+      "soft_reason_code": "memory_candidate",
+      "soft_uncertain_fields": [
+        "policy_specifics",
+        "memory_document_reference"
+      ],
+      "storage_relevance": "high",
+      "suggested_followup_question": "What specific aspects of the policy need to be updated based on the memory document's decision?",
+      "summary_short": "Update policy using latest memory document decision",
+      "usefulness_for_future_review": "medium"
+    },
+    "phase_b_soft_proposal_schema_valid": true,
+    "phase_b_soft_proposal_validation_errors": [],
+    "runtime_approved": false,
+    "schema_version": "fast_secretary_review_envelope_v0_1",
+    "semantic_truth_scored": false,
+    "soft_generation_mode": "local_model",
+    "soft_quality_diagnostic": {
+      "case_id": "HG-025",
+      "quality_compared": true,
+      "quality_compared_count": 4,
+      "quality_match_count": 3,
+      "quality_misses": [
+        {
+          "actual": "personal",
+          "field": "project_bucket",
+          "forbidden": [
+            "personal"
+          ],
+          "reason": "advisory soft-quality forbidden value"
+        }
+      ]
+    },
+    "soft_quality_review_required": true,
+    "soft_quality_truth_scored": false
+  },
+  "runtime_approved": false,
+  "schema_path": "schemas\\fast_secretary_soft_proposal_v0_1.schema.json",
+  "schema_valid": true,
+  "schema_version": "phase_b_soft_only_local_smoke_result_v0",
+  "semantic_truth_scored": false,
+  "soft_quality_diagnostic": {
+    "case_id": "HG-025",
+    "quality_compared": true,
+    "quality_compared_count": 4,
+    "quality_match_count": 3,
+    "quality_misses": [
+      {
+        "actual": "personal",
+        "field": "project_bucket",
+        "forbidden": [
+          "personal"
+        ],
+        "reason": "advisory soft-quality forbidden value"
+      }
+    ]
+  },
+  "soft_quality_review_required": true,
+  "soft_quality_truth_scored": false,
+  "validation_errors": []
+}

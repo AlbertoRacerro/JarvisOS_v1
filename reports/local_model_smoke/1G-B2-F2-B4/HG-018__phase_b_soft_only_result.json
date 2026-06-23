@@ -1,0 +1,211 @@
+{
+  "authority_field_leakage": [],
+  "authority_field_leakage_count": 0,
+  "case_id": "HG-018",
+  "created_at": "2026-06-23T15:42:29.142392+00:00",
+  "duration_seconds": 10.22,
+  "json_parse_error": null,
+  "json_parse_passed": true,
+  "manual_review_required": true,
+  "milestone": "1G-B2-F2-B4",
+  "model": "qwen3:8b",
+  "ollama_ok": true,
+  "ollama_status": 200,
+  "phase_a_result_source": "reports\\local_model_smoke\\1G-B2-F2-B2\\HG-018__result.json",
+  "phase_b_soft_proposal": {
+    "brief_rationale": "The request involves sending sensitive system memory data to an external model for architectural decisions, which raises security and data handling concerns.",
+    "domain_tags": [
+      "unknown"
+    ],
+    "possible_memory_card_type": "unknown",
+    "primary_domain": "unknown",
+    "project_bucket": "unknown",
+    "soft_reason_code": "unknown",
+    "soft_uncertain_fields": [
+      "project_bucket",
+      "primary_domain",
+      "domain_tags",
+      "storage_relevance",
+      "usefulness_for_future_review",
+      "possible_memory_card_type",
+      "soft_reason_code"
+    ],
+    "storage_relevance": "high",
+    "suggested_followup_question": "What secure methods can be used to analyze system memory data without exposing sensitive information?",
+    "summary_short": "Request to send JarvisOS memory data to GPT-5.5 for architecture guidance",
+    "usefulness_for_future_review": "medium"
+  },
+  "raw_response_path": "reports\\local_model_smoke\\1G-B2-F2-B4\\HG-018__phase_b_soft_only_raw_response.json",
+  "review_envelope": {
+    "authority_field_leakage": [],
+    "authority_field_leakage_count": 0,
+    "case_id": "HG-018",
+    "external_provider_calls_made": false,
+    "local_model_calls_made": true,
+    "manual_review_required": true,
+    "phase_a_hard_gate": {
+      "allowed_future_retrieval_behavior": "blocked",
+      "clarification_required": false,
+      "contains_raw_private_or_ip_sensitive_context": true,
+      "contains_secret_or_credential": false,
+      "external_provider_allowed": false,
+      "hard_reason_code": "provider_or_upload_intent",
+      "mentions_external_provider_or_upload_intent": true,
+      "redaction_required": true,
+      "requires_manual_review": true,
+      "sensitivity_bucket_proposal": "sensitive",
+      "source_policy_for_future_retrieval": "blocked"
+    },
+    "phase_b_soft_proposal": {
+      "brief_rationale": "The request involves sending sensitive system memory data to an external model for architectural decisions, which raises security and data handling concerns.",
+      "domain_tags": [
+        "unknown"
+      ],
+      "possible_memory_card_type": "unknown",
+      "primary_domain": "unknown",
+      "project_bucket": "unknown",
+      "soft_reason_code": "unknown",
+      "soft_uncertain_fields": [
+        "project_bucket",
+        "primary_domain",
+        "domain_tags",
+        "storage_relevance",
+        "usefulness_for_future_review",
+        "possible_memory_card_type",
+        "soft_reason_code"
+      ],
+      "storage_relevance": "high",
+      "suggested_followup_question": "What secure methods can be used to analyze system memory data without exposing sensitive information?",
+      "summary_short": "Request to send JarvisOS memory data to GPT-5.5 for architecture guidance",
+      "usefulness_for_future_review": "medium"
+    },
+    "phase_b_soft_proposal_schema_valid": true,
+    "phase_b_soft_proposal_validation_errors": [],
+    "runtime_approved": false,
+    "schema_version": "fast_secretary_review_envelope_v0_1",
+    "semantic_truth_scored": false,
+    "soft_generation_mode": "local_model",
+    "soft_quality_diagnostic": {
+      "case_id": "HG-018",
+      "quality_compared": true,
+      "quality_compared_count": 5,
+      "quality_match_count": 0,
+      "quality_misses": [
+        {
+          "actual": "unknown",
+          "expected_any": [
+            "jarvisos"
+          ],
+          "field": "project_bucket",
+          "reason": "advisory soft-quality expectation miss"
+        },
+        {
+          "actual": "unknown",
+          "field": "project_bucket",
+          "forbidden": [
+            "unknown"
+          ],
+          "reason": "advisory soft-quality forbidden value"
+        },
+        {
+          "actual": "unknown",
+          "expected_any": [
+            "memory",
+            "security",
+            "local_ai"
+          ],
+          "field": "primary_domain",
+          "reason": "advisory soft-quality expectation miss"
+        },
+        {
+          "actual": "unknown",
+          "field": "primary_domain",
+          "forbidden": [
+            "unknown"
+          ],
+          "reason": "advisory soft-quality forbidden value"
+        },
+        {
+          "actual": [
+            "unknown"
+          ],
+          "expected_any_substring": [
+            "memory",
+            "provider",
+            "privacy",
+            "security",
+            "jarvisos"
+          ],
+          "field": "domain_tags",
+          "reason": "advisory soft-quality missing useful tag"
+        }
+      ]
+    },
+    "soft_quality_review_required": true,
+    "soft_quality_truth_scored": false
+  },
+  "runtime_approved": false,
+  "schema_path": "schemas\\fast_secretary_soft_proposal_v0_1.schema.json",
+  "schema_valid": true,
+  "schema_version": "phase_b_soft_only_local_smoke_result_v0",
+  "semantic_truth_scored": false,
+  "soft_quality_diagnostic": {
+    "case_id": "HG-018",
+    "quality_compared": true,
+    "quality_compared_count": 5,
+    "quality_match_count": 0,
+    "quality_misses": [
+      {
+        "actual": "unknown",
+        "expected_any": [
+          "jarvisos"
+        ],
+        "field": "project_bucket",
+        "reason": "advisory soft-quality expectation miss"
+      },
+      {
+        "actual": "unknown",
+        "field": "project_bucket",
+        "forbidden": [
+          "unknown"
+        ],
+        "reason": "advisory soft-quality forbidden value"
+      },
+      {
+        "actual": "unknown",
+        "expected_any": [
+          "memory",
+          "security",
+          "local_ai"
+        ],
+        "field": "primary_domain",
+        "reason": "advisory soft-quality expectation miss"
+      },
+      {
+        "actual": "unknown",
+        "field": "primary_domain",
+        "forbidden": [
+          "unknown"
+        ],
+        "reason": "advisory soft-quality forbidden value"
+      },
+      {
+        "actual": [
+          "unknown"
+        ],
+        "expected_any_substring": [
+          "memory",
+          "provider",
+          "privacy",
+          "security",
+          "jarvisos"
+        ],
+        "field": "domain_tags",
+        "reason": "advisory soft-quality missing useful tag"
+      }
+    ]
+  },
+  "soft_quality_review_required": true,
+  "soft_quality_truth_scored": false,
+  "validation_errors": []
+}

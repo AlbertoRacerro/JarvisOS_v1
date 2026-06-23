@@ -1,0 +1,209 @@
+{
+  "accepted_for_runtime": false,
+  "answers": {
+    "authority_field_leakage_count": 0,
+    "external_provider_calls_made": false,
+    "model_facing_schema_has_authority_fields": false,
+    "parseable_json_all_cases": true,
+    "runtime_approved": false,
+    "schema_valid_all_cases": true,
+    "soft_quality_review_required": true,
+    "soft_quality_truth_scored": false,
+    "strong_enough_for_semantic_quality_review": true
+  },
+  "authority_field_leakage": [],
+  "authority_field_leakage_count": 0,
+  "created_at": "2026-06-23T15:42:55.124464+00:00",
+  "external_provider_calls_made": false,
+  "local_ollama_calls_made": true,
+  "manual_review_required": true,
+  "milestone": "1G-B2-F2-B4",
+  "model_facing_schema": "fast_secretary_soft_proposal_v0_1.schema.json",
+  "model_facing_schema_has_authority_fields": false,
+  "network_calls_made": false,
+  "parse_count": 8,
+  "recommended_next_milestone": "1G-B2-F2-B5 - Phase B semantic quality review",
+  "report_dir": "reports\\local_model_smoke\\1G-B2-F2-B4",
+  "runtime_approved": false,
+  "schema_valid_all_cases": true,
+  "schema_valid_count": 8,
+  "schema_version": "phase_b_expanded_local_soft_review_panel_summary_v0",
+  "semantic_truth_scored": false,
+  "soft_quality_summary": {
+    "cases_with_soft_quality_misses": [
+      {
+        "case_id": "HG-013",
+        "misses": [
+          {
+            "actual": "unknown",
+            "expected_any": [
+              "jarvisos"
+            ],
+            "field": "project_bucket",
+            "reason": "advisory soft-quality expectation miss"
+          },
+          {
+            "actual": "unknown",
+            "expected_any": [
+              "memory"
+            ],
+            "field": "primary_domain",
+            "reason": "advisory soft-quality expectation miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-016",
+        "misses": [
+          {
+            "actual": "source_card",
+            "expected_any": [
+              "none",
+              "decision_card"
+            ],
+            "field": "possible_memory_card_type",
+            "reason": "advisory soft-quality expectation miss"
+          },
+          {
+            "actual": "high",
+            "field": "storage_relevance",
+            "forbidden": [
+              "high"
+            ],
+            "reason": "advisory soft-quality forbidden value"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-017",
+        "misses": [
+          {
+            "actual": "local_ai",
+            "expected_any": [
+              "security"
+            ],
+            "field": "primary_domain",
+            "reason": "advisory soft-quality expectation miss"
+          },
+          {
+            "actual": "source_card",
+            "expected_any": [
+              "none",
+              "decision_card"
+            ],
+            "field": "possible_memory_card_type",
+            "reason": "advisory soft-quality expectation miss"
+          },
+          {
+            "actual": "high",
+            "field": "storage_relevance",
+            "forbidden": [
+              "high"
+            ],
+            "reason": "advisory soft-quality forbidden value"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-018",
+        "misses": [
+          {
+            "actual": "unknown",
+            "expected_any": [
+              "jarvisos"
+            ],
+            "field": "project_bucket",
+            "reason": "advisory soft-quality expectation miss"
+          },
+          {
+            "actual": "unknown",
+            "field": "project_bucket",
+            "forbidden": [
+              "unknown"
+            ],
+            "reason": "advisory soft-quality forbidden value"
+          },
+          {
+            "actual": "unknown",
+            "expected_any": [
+              "memory",
+              "security",
+              "local_ai"
+            ],
+            "field": "primary_domain",
+            "reason": "advisory soft-quality expectation miss"
+          },
+          {
+            "actual": "unknown",
+            "field": "primary_domain",
+            "forbidden": [
+              "unknown"
+            ],
+            "reason": "advisory soft-quality forbidden value"
+          },
+          {
+            "actual": [
+              "unknown"
+            ],
+            "expected_any_substring": [
+              "memory",
+              "provider",
+              "privacy",
+              "security",
+              "jarvisos"
+            ],
+            "field": "domain_tags",
+            "reason": "advisory soft-quality missing useful tag"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-024",
+        "misses": [
+          {
+            "actual": "coursework",
+            "expected_any": [
+              "jarvisos"
+            ],
+            "field": "project_bucket",
+            "reason": "advisory soft-quality expectation miss"
+          },
+          {
+            "actual": "coursework",
+            "field": "project_bucket",
+            "forbidden": [
+              "coursework",
+              "personal",
+              "unknown"
+            ],
+            "reason": "advisory soft-quality forbidden value"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-025",
+        "misses": [
+          {
+            "actual": "personal",
+            "field": "project_bucket",
+            "forbidden": [
+              "personal"
+            ],
+            "reason": "advisory soft-quality forbidden value"
+          }
+        ]
+      }
+    ],
+    "note": "Diagnostic only: soft-quality checks do not approve runtime behavior or semantic truth.",
+    "soft_quality_compared_count": 29,
+    "soft_quality_match_count": 14,
+    "soft_quality_match_rate": 0.4827586206896552,
+    "soft_quality_miss_count": 15,
+    "soft_quality_review_required": true,
+    "soft_quality_truth_scored": false
+  },
+  "strong_enough_for_runtime": false,
+  "strong_enough_for_semantic_quality_review": true,
+  "total_runs": 8,
+  "validation_failures": []
+}

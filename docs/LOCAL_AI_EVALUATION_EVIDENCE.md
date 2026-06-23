@@ -1044,3 +1044,17 @@ Decision boundary:
 - Python/JarvisOS merges saved Phase A hard-gate state with the soft proposal.
 - No runtime memory, retrieval, provider use, tool execution, route selection,
   or BlueRev modeling behavior is approved.
+
+### 1G-B2-F2-B4 - Phase B Expanded Local Soft-Review Panel
+
+1G-B2-F2-B4 expands the local Qwen Phase B soft-only panel to eight cases.
+
+Decision boundary:
+
+- Qwen local receives only input text and the soft-only schema.
+- Qwen local may process sensitive local text for advisory soft review.
+- Qwen does not receive or emit Phase A policy fields.
+- Python/JarvisOS merges saved Phase A hard-gate state with the soft proposal.
+- B4 adds soft-quality diagnostics for later review, but those diagnostics do
+  not approve runtime memory, retrieval, provider use, tool execution, route
+  selection, semantic truth, or BlueRev modeling.
