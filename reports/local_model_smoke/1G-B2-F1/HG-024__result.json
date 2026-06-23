@@ -1,0 +1,45 @@
+{
+  "case_id": "HG-024",
+  "context_pack_path": "docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_HYBRID_PARSE_SAFE_v0_4.md",
+  "created_at": "2026-06-23T06:11:56.871527+00:00",
+  "duration_seconds": 21.915,
+  "json_parse_error": null,
+  "json_parse_passed": true,
+  "manual_review_required": true,
+  "milestone": "1G-B2-F1",
+  "model": "qwen3:8b",
+  "ollama_ok": true,
+  "ollama_status": 200,
+  "parsed_output": {
+    "allowed_future_retrieval_behavior": "none",
+    "brief_reason_code": "memory_boundary",
+    "clarification_required": false,
+    "data_package_needed": "draft_batch_summary",
+    "domain_tags": [
+      "memory",
+      "software",
+      "architecture"
+    ],
+    "external_provider_allowed": false,
+    "lifecycle_status_proposal": "superseded",
+    "not_decided": false,
+    "primary_domain": "memory",
+    "project_bucket": "jarvisos",
+    "recommended_reasoning_route": "none",
+    "redaction_required": false,
+    "requires_manual_review": true,
+    "sensitivity_bucket_proposal": "internal",
+    "source_policy_for_future_retrieval": "review_only",
+    "storage_relevance": "high",
+    "summary_short": "Supersede outdated Gemma 12B routing approval with current local-AI evidence",
+    "uncertain_fields": [
+      "superseding_criteria"
+    ]
+  },
+  "raw_response_path": "reports\\local_model_smoke\\1G-B2-F1\\HG-024__raw_response.json",
+  "schema_path": "schemas\\fast_secretary_intake_v0_1.schema.json",
+  "schema_valid": true,
+  "schema_version": "structured_output_schema_probe_result_v0",
+  "semantic_truth_scored": false,
+  "validation_errors": []
+}

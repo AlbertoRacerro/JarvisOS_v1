@@ -7,6 +7,11 @@ Milestones:
 - 1G-B2-A - Fast secretary context pack compression and scoring refinement
 - 1G-B2-B - Fast secretary recipe ablation
 - 1G-B2-C - Qwen secretary context optimization
+- 1G-B2-D - Expanded profiled Qwen secretary smoke run
+- 1G-B2-D-R - Qwen profile failure analysis
+- 1G-B2-E - Full holdout Qwen secretary smoke run
+- 1G-B2-F0 - Structured-output reference audit and schema-first redesign
+- 1G-B2-F1 - Ollama structured-output schema smoke prototype
 
 ## Purpose
 
@@ -488,6 +493,72 @@ Recommended next milestone:
 1G-B2-F1 - Ollama structured-output schema smoke prototype
 ```
 
+## 1G-B2-F1 Ollama Structured-Output Schema Smoke Prototype
+
+1G-B2-F1 materializes the schema-first structured-output prototype proposed by
+F0.
+
+Prototype files:
+
+- `schemas/fast_secretary_intake_v0_1.schema.json`
+- `scripts/local_model_structured_output_probe.py`
+
+The probe uses Python standard library only. Dry-run mode loads the schema,
+holdout cases, and context pack, validates planned inputs, writes no report,
+and makes no Ollama call.
+
+Real smoke matrix:
+
+```text
+model: qwen3:8b
+schema: schemas/fast_secretary_intake_v0_1.schema.json
+context pack: docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_HYBRID_PARSE_SAFE_v0_4.md
+cases: HG-007, HG-017, HG-018, HG-024, HG-010, HG-013, HG-025, HG-015
+total: 8 local Ollama API calls
+```
+
+Reports are written under:
+
+```text
+reports/local_model_smoke/1G-B2-F1/
+```
+
+Summary files:
+
+- `reports/local_model_smoke/1G-B2-F1/structured_output_schema_smoke_summary.json`
+- `reports/local_model_smoke/1G-B2-F1/structured_output_schema_smoke_summary.md`
+
+High-level result:
+
+```text
+parse: 8/8
+schema-valid: 8/8
+validation failures: none
+enum/type validation failures: none
+```
+
+This is structural evidence only. It does not prove semantic truth, memory
+readiness, retrieval readiness, provider/tool readiness, queue readiness, or
+BlueRev validity.
+
+Known semantic risk:
+
+```text
+HG-018 returned review_only/none for provider and memory-boundary fields where
+the expected policy was blocked/blocked. external_provider_allowed remained
+false.
+```
+
+Recommended next milestone:
+
+```text
+1G-B2-F2 - Structured-output 12-case Qwen panel
+```
+
+Do not treat the F1 result as runtime approval. The next panel should measure
+whether schema-first output remains stable across more difficult cases and
+whether semantic gate behavior improves under manual review.
+
 ## Dry-Run Behavior
 
 Example:
@@ -555,25 +626,27 @@ The tests cover:
 - legacy v0.1 report compatibility.
 - Qwen v0.3 pack loading;
 - score-per-token diagnostics in summaries.
+- structured-output schema loading;
+- structured-output dry-run without Ollama calls;
+- structured-output result validation and summary generation.
 
 ## Future 1G-B
 
-After 1G-B2-F0, the next milestone is:
+After 1G-B2-F1, the next milestone is:
 
 ```text
-1G-B2-F1 - Ollama structured-output schema smoke prototype
+1G-B2-F2 - Structured-output 12-case Qwen panel
 ```
 
-1G-B2-F1 should test local Ollama structured output with JSON Schema on a small
-difficult-case panel before any default-pack decision.
-Any live run must remain local, explicit, bounded, auditable, and separate from
-runtime memory, retrieval, provider routing, tool execution, and BlueRev
-modeling.
+1G-B2-F2 should keep the schema-first path local, explicit, bounded, auditable,
+and separate from runtime memory, retrieval, provider routing, tool execution,
+and BlueRev modeling.
 
 ## Milestone Boundary Confirmation
 
-1G-B2-F0 adds reference/design docs, ADR-056, and documentation updates only.
-It does not add the structured-output prototype.
+1G-B2-F1 adds a local evaluation prototype, JSON Schema, unit tests, and
+bounded smoke reports. It does not integrate structured output into runtime
+behavior.
 
 It adds no:
 
@@ -582,10 +655,12 @@ It adds no:
 - database migration;
 - runtime models;
 - repository or storage classes;
-- model inference outside the explicit local Ollama smoke command;
+- model inference outside the explicit local Ollama structured-output smoke
+  command;
 - Ollama model pull;
 - Ollama model serve;
-- Ollama generation call outside the explicit local smoke command;
+- Ollama generation call outside the explicit local structured-output smoke
+  command;
 - provider call;
 - memory runtime;
 - retrieval runtime;
@@ -595,7 +670,6 @@ It adds no:
 - MCP;
 - worker or viewer;
 - BlueRev modeling;
-- external reference audit;
 - vendored code.
 
-This milestone does not start `1G-B2-D - Expanded profiled Qwen secretary smoke run`.
+This milestone does not start `1G-B2-F2 - Structured-output 12-case Qwen panel`.

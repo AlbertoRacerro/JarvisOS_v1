@@ -1,0 +1,37 @@
+{
+  "answers": {
+    "critical_fields_present_and_allowed": true,
+    "failed_validation_cases": [],
+    "parseable_json_all_cases": true,
+    "promising_for_12_case_panel": true,
+    "recommended_next_milestone": "1G-B2-F2 - Structured-output 12-case Qwen panel",
+    "schema_valid_all_cases": true
+  },
+  "created_at": "2026-06-23T06:13:27.127283+00:00",
+  "enum_type_validation_failures": [],
+  "hg018_provider_memory_boundary_risk": {
+    "case_present": true,
+    "misses": {
+      "allowed_future_retrieval_behavior": {
+        "actual": "none",
+        "expected": "blocked"
+      },
+      "source_policy_for_future_retrieval": {
+        "actual": "review_only",
+        "expected": "blocked"
+      }
+    },
+    "risk_persisted": true
+  },
+  "manual_review_required": true,
+  "milestone": "1G-B2-F1",
+  "parse_count": 8,
+  "parse_failures": [],
+  "recommended_next_milestone": "1G-B2-F2 - Structured-output 12-case Qwen panel",
+  "report_dir": "reports\\local_model_smoke\\1G-B2-F1",
+  "schema_valid_count": 8,
+  "schema_version": "structured_output_schema_smoke_summary_v0",
+  "semantic_truth_scored": false,
+  "total_runs": 8,
+  "validation_failures": []
+}

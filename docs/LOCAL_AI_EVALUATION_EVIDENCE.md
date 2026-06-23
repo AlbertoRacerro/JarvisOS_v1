@@ -764,6 +764,19 @@ Current implementation status:
   fast secretary must move schema-first before runtime or default queue
   approval. The optional prototype is deferred to
   `1G-B2-F1 - Ollama structured-output schema smoke prototype`.
+- 1G-B2-F1 materializes the schema-first prototype with
+  `schemas/fast_secretary_intake_v0_1.schema.json` and
+  `scripts/local_model_structured_output_probe.py`. The dry-run path makes no
+  Ollama call. The real local structured-output smoke used only `qwen3:8b`,
+  `qwen_hybrid_parse_safe_v0_4`, and eight difficult holdout cases:
+  `HG-007`, `HG-017`, `HG-018`, `HG-024`, `HG-010`, `HG-013`, `HG-025`, and
+  `HG-015`. Reports are under `reports/local_model_smoke/1G-B2-F1/`. Result:
+  8/8 parse, 8/8 schema-valid, no validation failures, and no enum/type
+  validation failures. This is structural evidence only. `HG-018` still shows a
+  semantic provider/memory-boundary risk because it returned `review_only` and
+  `none` where the expected policy was `blocked` and `blocked`. Recommendation:
+  advance to `1G-B2-F2 - Structured-output 12-case Qwen panel`, still
+  manual-review only.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
 The accepted next local AI sequence is:
@@ -802,6 +815,7 @@ The accepted next local AI sequence is:
 1G-B2-E-R  Full holdout Qwen failure analysis
 1G-B2-F0   Structured-output reference audit and schema-first redesign
 1G-B2-F1   Ollama structured-output schema smoke prototype
+1G-B2-F2   Structured-output 12-case Qwen panel
 1H         Showcase files generator design
 1I         Context access from showcase files
 1J         Provider/tool intent form design

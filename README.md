@@ -156,14 +156,18 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F1 - Ollama structured-output schema smoke prototype
+1G-B2-F2 - Structured-output 12-case Qwen panel
 ```
 
-The 1G-B2-F0 structured-output audit concluded that prompt-only JSON generation
-is not robust enough for Qwen fast secretary approval. The 1G-B2-E full holdout
-run reached only 28/32 parse and had 4 critical gates. New design docs are
-`docs/STRUCTURED_OUTPUT_REFERENCE_AUDIT.md` and
-`docs/FAST_SECRETARY_JSON_SCHEMA_DESIGN.md`. ADR-056 accepts that structured
-output experiments must precede runtime/default queue decisions.
+The 1G-B2-F1 structured-output prototype added
+`schemas/fast_secretary_intake_v0_1.schema.json` and
+`scripts/local_model_structured_output_probe.py`, then ran a bounded local
+`qwen3:8b` Ollama structured-output smoke test on eight difficult holdout cases.
+Reports are under `reports/local_model_smoke/1G-B2-F1/`. Result: 8/8 parse,
+8/8 schema-valid, no validation failures, and no enum/type validation failures.
+This is structural evidence only. `HG-018` still showed a semantic provider and
+memory-boundary risk by returning `review_only`/`none` where the expected policy
+was `blocked`/`blocked`, so the next 12-case panel must remain manual-review
+only.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

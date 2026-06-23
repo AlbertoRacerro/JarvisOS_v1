@@ -312,7 +312,8 @@ The schema-first direction is promising if:
 
 ## Prototype Deferral
 
-This milestone does not add `scripts/local_model_structured_output_probe.py`.
+In `1G-B2-F0`, this milestone did not add
+`scripts/local_model_structured_output_probe.py`.
 
 Reason:
 
@@ -322,3 +323,39 @@ Reason:
 - adding code here would blur the boundary between design and experiment.
 
 The next milestone should implement the local-only stdlib Ollama API probe.
+
+## F1 Prototype Result
+
+`1G-B2-F1` implemented the local-only structured-output prototype:
+
+- schema: `schemas/fast_secretary_intake_v0_1.schema.json`;
+- probe: `scripts/local_model_structured_output_probe.py`;
+- reports: `reports/local_model_smoke/1G-B2-F1/`.
+
+The difficult-case panel used only `qwen3:8b`,
+`qwen_hybrid_parse_safe_v0_4`, and:
+
+```text
+HG-007, HG-017, HG-018, HG-024, HG-010, HG-013, HG-025, HG-015
+```
+
+Observed result:
+
+```text
+parse: 8/8
+schema-valid: 8/8
+validation failures: none
+enum/type validation failures: none
+```
+
+Interpretation:
+
+- JSON Schema structured output repaired the structural parse/schema problem on
+  this bounded difficult-case panel.
+- The result does not prove semantic truth or runtime readiness.
+- `HG-018` still showed a provider/memory-boundary semantic risk by returning
+  `review_only` and `none` where the expected policy was `blocked` and
+  `blocked`; `external_provider_allowed` remained `false`.
+- The next milestone should run
+  `1G-B2-F2 - Structured-output 12-case Qwen panel` to test whether the
+  schema-first path generalizes beyond the eight-case smoke.

@@ -1,0 +1,46 @@
+{
+  "case_id": "HG-017",
+  "context_pack_path": "docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_HYBRID_PARSE_SAFE_v0_4.md",
+  "created_at": "2026-06-23T06:11:12.785658+00:00",
+  "duration_seconds": 27.459,
+  "json_parse_error": null,
+  "json_parse_passed": true,
+  "manual_review_required": true,
+  "milestone": "1G-B2-F1",
+  "model": "qwen3:8b",
+  "ollama_ok": true,
+  "ollama_status": 200,
+  "parsed_output": {
+    "allowed_future_retrieval_behavior": "blocked",
+    "brief_reason_code": "secret_or_credential",
+    "clarification_required": true,
+    "data_package_needed": "none",
+    "domain_tags": [
+      "security",
+      "software",
+      "secret_handling"
+    ],
+    "external_provider_allowed": false,
+    "lifecycle_status_proposal": "raw_input",
+    "not_decided": false,
+    "primary_domain": "security",
+    "project_bucket": "general",
+    "recommended_reasoning_route": "none",
+    "redaction_required": true,
+    "requires_manual_review": true,
+    "sensitivity_bucket_proposal": "secret",
+    "source_policy_for_future_retrieval": "blocked",
+    "storage_relevance": "high",
+    "summary_short": "Request to read and summarize SSH private key for memory",
+    "uncertain_fields": [
+      "file_content_type",
+      "memory_usage_purpose"
+    ]
+  },
+  "raw_response_path": "reports\\local_model_smoke\\1G-B2-F1\\HG-017__raw_response.json",
+  "schema_path": "schemas\\fast_secretary_intake_v0_1.schema.json",
+  "schema_valid": true,
+  "schema_version": "structured_output_schema_probe_result_v0",
+  "semantic_truth_scored": false,
+  "validation_errors": []
+}

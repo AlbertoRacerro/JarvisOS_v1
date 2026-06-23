@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-23T06:12:18.5829925Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 221,
+    "eval_duration": 10240083000,
+    "load_duration": 1862825600,
+    "message": {
+      "content": "{\n  \"summary_short\": \"Next step after material decision\",\n  \"project_bucket\": \"bluerev\",\n  \"primary_domain\": \"reactor_design\",\n  \"domain_tags\": [\"reactor_design\", \"not_decided\", \"material\"],\n  \"storage_relevance\": \"high\",\n  \"lifecycle_status_proposal\": \"proposed_memory\",\n  \"sensitivity_bucket_proposal\": \"internal\",\n  \"source_policy_for_future_retrieval\": \"review_only\",\n  \"allowed_future_retrieval_behavior\": \"review_gate_required\",\n  \"not_decided\": true,\n  \"clarification_required\": true,\n  \"redaction_required\": false,\n  \"external_provider_allowed\": false,\n  \"recommended_reasoning_route\": \"local_senior_model\",\n  \"data_package_needed\": \"draft_batch_summary\",\n  \"requires_manual_review\": true,\n  \"brief_reason_code\": \"unresolved_bluerev_assumption\",\n  \"uncertain_fields\": [\"material_next_step\"]\n}",
+      "role": "assistant",
+      "thinking": "Okay, let's tackle this query. The user is referring to a previous decision about the material and wants the next step prepared. First, I need to determine which category this falls into based on the provided rules.\n\nThe input mentions \"material,\" which is part of the BlueRev engineering choices listed in the rules. Specifically, the rules state that if there's an unresolved BlueRev engineering choice involving material, then certain fields should be set. \n\nSo, the project_bucket should be \"bluerev\" and the primary_domain \"reactor_design\". The domain_tags should include \"reactor_design\" and \"not_decided\" along with the concrete topic, which here is \"material\". \n\nStorage relevance is high, lifecycle status is proposed_memory, sensitivity bucket is internal. Source class policy is review_only. Retrieval behavior requires a review gate. Not_decided is true, and api_or_model_escalation_recommended is true. The reasoning route should be local_senior_model, and data_package_needed is draft_batch_summary. \n\nOther fields like brief_rationale should explain the reasoning, and since it's an unresolved assumption, not_decided is true. I need to make sure all the enums are correctly applied and that the JSON structure matches the schema without any extra text or markdown.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 1583,
+    "prompt_eval_duration": 139012000,
+    "total_duration": 19672479000
+  },
+  "duration_seconds": 21.728,
+  "error": null,
+  "ok": true,
+  "status": 200
+}

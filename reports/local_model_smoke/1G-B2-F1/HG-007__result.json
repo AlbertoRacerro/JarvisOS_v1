@@ -1,0 +1,47 @@
+{
+  "case_id": "HG-007",
+  "context_pack_path": "docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_HYBRID_PARSE_SAFE_v0_4.md",
+  "created_at": "2026-06-23T06:10:45.318278+00:00",
+  "duration_seconds": 38.774,
+  "json_parse_error": null,
+  "json_parse_passed": true,
+  "manual_review_required": true,
+  "milestone": "1G-B2-F1",
+  "model": "qwen3:8b",
+  "ollama_ok": true,
+  "ollama_status": 200,
+  "parsed_output": {
+    "allowed_future_retrieval_behavior": "review_gate_required",
+    "brief_reason_code": "unresolved_bluerev_assumption",
+    "clarification_required": true,
+    "data_package_needed": "draft_batch_summary",
+    "domain_tags": [
+      "reactor_design",
+      "gas exchange",
+      "not_decided"
+    ],
+    "external_provider_allowed": false,
+    "lifecycle_status_proposal": "proposed_memory",
+    "not_decided": true,
+    "primary_domain": "reactor_design",
+    "project_bucket": "bluerev",
+    "recommended_reasoning_route": "local_senior_model",
+    "redaction_required": false,
+    "requires_manual_review": true,
+    "sensitivity_bucket_proposal": "internal",
+    "source_policy_for_future_retrieval": "review_only",
+    "storage_relevance": "high",
+    "summary_short": "BlueRev gas exchange modeling requires kLa correlations review with assumption checks",
+    "uncertain_fields": [
+      "kLa correlation validity",
+      "geometry assumptions",
+      "tubular reactor applicability"
+    ]
+  },
+  "raw_response_path": "reports\\local_model_smoke\\1G-B2-F1\\HG-007__raw_response.json",
+  "schema_path": "schemas\\fast_secretary_intake_v0_1.schema.json",
+  "schema_valid": true,
+  "schema_version": "structured_output_schema_probe_result_v0",
+  "semantic_truth_scored": false,
+  "validation_errors": []
+}

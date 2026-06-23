@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-23T06:13:14.8972623Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 210,
+    "eval_duration": 3370362000,
+    "load_duration": 563081300,
+    "message": {
+      "content": "{\n  \"summary_short\": \"Update policy using latest memory decision\",\n  \"project_bucket\": \"jarvisos\",\n  \"primary_domain\": \"memory\",\n  \"domain_tags\": [\"memory\", \"software\", \"policy\"],\n  \"storage_relevance\": \"high\",\n  \"lifecycle_status_proposal\": \"proposed_memory\",\n  \"sensitivity_bucket_proposal\": \"internal\",\n  \"source_policy_for_future_retrieval\": \"review_only\",\n  \"allowed_future_retrieval_behavior\": \"none\",\n  \"not_decided\": false,\n  \"clarification_required\": false,\n  \"redaction_required\": false,\n  \"external_provider_allowed\": false,\n  \"recommended_reasoning_route\": \"local_fast_model\",\n  \"data_package_needed\": \"draft_batch_summary\",\n  \"requires_manual_review\": true,\n  \"brief_reason_code\": \"memory_boundary\",\n  \"uncertain_fields\": [\"policy_update_scope\"]\n}",
+      "role": "assistant",
+      "thinking": "Okay, let's tackle this query. The user is asking to use the latest decision from the memory document to update the policy. First, I need to figure out what the context is here. The input is pretty vague, just mentioning updating the policy based on the latest memory decision.\n\nLooking at the rules and the JSON schema, I need to determine which category this falls into. The user hasn't provided specific details about secrets, BlueRev engineering choices, or API keys. So, it's not one of those specific cases. \n\nThe default rules mention that if the information is useful but not final, it should be marked as proposed_memory. Since the user is referring to updating a policy based on a memory decision, this seems like a policy adjustment rather than a secret or a BlueRev engineering choice. \n\nThe primary_domain here would likely be 'memory' since it's about updating memory-related policies. The project_bucket should be 'jarvisos' because it's related to the JarvisOS memory architecture. The storage_relevance is high because policies are important and need proper storage. The lifecycle_status_proposal would be 'proposed_memory' as it's a new policy update. \n\nSensitivity is internal since it's about internal policies. The source_class_policy_proposal is 'review_only' because it's a policy update that needs review. Retrieval behavior is 'none' unless there's a specific request for access. Not_decided is false because the action is clear. The reasoning_route_proposal is 'none' as it's a straightforward policy update. \n\nData_package_needed is 'draft_batch_summary' to include the latest decision. The brief_rationale is short, explaining the update based on the latest memory decision. I need to make sure all the enums are correctly used and that the JSON structure matches the schema without any extra fields or markdown.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 1692,
+    "prompt_eval_duration": 123183000,
+    "total_duration": 9107233800
+  },
+  "duration_seconds": 11.163,
+  "error": null,
+  "ok": true,
+  "status": 200
+}
