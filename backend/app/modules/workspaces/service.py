@@ -5,7 +5,6 @@ from app.core.database import open_sqlite_connection
 from app.modules.events.service import log_event, utc_now
 from app.modules.workspaces.models import WorkspaceCreate, WorkspaceRead
 
-
 DEFAULT_BLUEREV_WORKSPACE = WorkspaceCreate(
     name="BlueRev Model Foundry",
     slug="bluerev",

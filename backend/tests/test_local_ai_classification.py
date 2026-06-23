@@ -28,24 +28,23 @@ from app.modules.local_ai.classification.contracts import (
     ClassificationOutput,
     ClassificationResultSource,
     ClassificationSource,
-    ComplexityHint,
     ProjectArea,
     SensitivityHint,
     TaskType,
 )
 from app.modules.local_ai.classification.parser import ClassificationParseError, parse_classification_output
-from app.modules.local_ai.classification.prompts import MAX_CLASSIFICATION_PROMPT_CHARS, build_classification_prompt
 from app.modules.local_ai.classification.probe_classification_budget import (
     CONFIDENCE_CALIBRATION_NUM_PREDICT_CANDIDATES,
     CONFIDENCE_CALIBRATION_REPEAT_COUNT,
     LABEL_AGREEMENT_NUM_PREDICT_CANDIDATES,
     LABEL_AGREEMENT_REPEAT_COUNT,
+    MINIMAL_DIAGNOSTIC_NUM_PREDICT_CANDIDATES,
+    MINIMAL_REPEAT_NUM_PREDICT_CANDIDATES,
     MODEL_BAKEOFF_NUM_PREDICT_CANDIDATES,
     MODEL_BAKEOFF_REPEAT_COUNT,
     NON_CRITICAL_HINT_NUM_PREDICT_CANDIDATES,
     NON_CRITICAL_HINT_REPEAT_COUNT,
-    MINIMAL_DIAGNOSTIC_NUM_PREDICT_CANDIDATES,
-    MINIMAL_REPEAT_NUM_PREDICT_CANDIDATES,
+    REPORT_SCHEMA_VERSION,
     CalibrationAcceptancePolicy,
     LabelAgreementProtocolVariant,
     MinimalPromptVariant,
@@ -57,15 +56,14 @@ from app.modules.local_ai.classification.probe_classification_budget import (
     OutputControlVariant,
     ProfileFormatMode,
     ProfilePromptStyle,
-    REPORT_SCHEMA_VERSION,
-    build_non_critical_hint_prompt,
-    build_non_critical_hint_repair_report,
-    build_model_bakeoff_probe_report,
-    build_profile_bakeoff_prompt,
-    build_profile_bakeoff_report,
+    build_budget_probe_report,
     build_label_agreement_prompt,
     build_minimal_classification_prompt,
-    build_budget_probe_report,
+    build_model_bakeoff_probe_report,
+    build_non_critical_hint_prompt,
+    build_non_critical_hint_repair_report,
+    build_profile_bakeoff_prompt,
+    build_profile_bakeoff_report,
     confidence_calibration_probe_cases,
     default_probe_cases,
     label_agreement_probe_cases,
@@ -77,6 +75,7 @@ from app.modules.local_ai.classification.probe_classification_budget import (
     summary_lines,
     write_probe_report,
 )
+from app.modules.local_ai.classification.prompts import MAX_CLASSIFICATION_PROMPT_CHARS, build_classification_prompt
 from app.modules.local_ai.classification.service import classify_text, deterministic_classify
 
 

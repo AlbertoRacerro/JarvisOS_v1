@@ -1,8 +1,7 @@
+import os
 from dataclasses import dataclass
 from functools import lru_cache
-import os
 from pathlib import Path
-
 
 DEFAULT_DATA_ROOT = Path(r"C:\JarvisOS")
 

@@ -8,9 +8,9 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.local_ai.eval_adapter import LocalGemmaEvalAdapter, LocalGemmaEvalAdapterResult
 from app.modules.local_ai.config import LocalGemmaConfig
 from app.modules.local_ai.errors import LocalGemmaFailureCode
+from app.modules.local_ai.eval_adapter import LocalGemmaEvalAdapter, LocalGemmaEvalAdapterResult
 from app.modules.local_ai_eval.eval_prompt_builder import build_gemma_eval_prompt
 from app.modules.local_ai_eval.loader import load_golden_cases
 from app.modules.local_ai_eval.models import GEMMA_EVAL_SCHEMA_VERSION, GoldenTestCase

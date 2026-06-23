@@ -2,7 +2,6 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
 CLASSIFICATION_INPUT_SCHEMA_VERSION = "local_ai_classification_input_v1"
 CLASSIFICATION_OUTPUT_SCHEMA_VERSION = "local_ai_classification_output_v1"
 DEFAULT_CLASSIFICATION_MODEL_NAME = "gemma4:12b-it-qat"

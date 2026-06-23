@@ -10,17 +10,16 @@ from app.modules.ai.models import (
     ProviderSmokeResponse,
     SmokeConsoleRequest,
     SmokeConsoleResponse,
-    SupervisorPublicTestRequest,
-    SupervisorPublicTestResponse,
     SmokeTestRequest,
     SmokeTestResponse,
+    SupervisorPublicTestRequest,
+    SupervisorPublicTestResponse,
 )
 from app.modules.ai.providers.base import AIRequest
 from app.modules.ai.providers.fake import FakeModelingProvider
 from app.modules.ai.settings import get_ai_settings
 from app.modules.events.service import log_event
 from app.modules.workspaces.service import get_workspace
-
 
 TASK_MODELING_DRAFT = "modeling_draft"
 

@@ -4,13 +4,12 @@ from typing import Any
 from pydantic import ValidationError
 
 from app.modules.local_ai.classification.contracts import (
+    AllowedNextStep,
     ClassificationFailureCode,
     ClassificationOutput,
-    TaskType,
-    AllowedNextStep,
     SensitivityHint,
+    TaskType,
 )
-
 
 MAX_CLASSIFICATION_RESPONSE_CHARS = 2000
 AUTHORITY_CLAIM_MARKERS = (

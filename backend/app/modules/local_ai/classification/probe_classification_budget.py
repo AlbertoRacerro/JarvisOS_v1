@@ -11,8 +11,8 @@ import json
 from collections import Counter
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
-from math import ceil
 from enum import StrEnum
+from math import ceil
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
@@ -25,8 +25,8 @@ from app.modules.local_ai.classification.contracts import (
     CLASSIFICATION_DIAGNOSTIC_NUM_PREDICT_CANDIDATES,
     DEFAULT_CLASSIFICATION_ENDPOINT_URL,
     DEFAULT_CLASSIFICATION_MODEL_NAME,
-    DEFAULT_CLASSIFICATION_TIMEOUT_SECONDS,
     DEFAULT_CLASSIFICATION_TEMPERATURE,
+    DEFAULT_CLASSIFICATION_TIMEOUT_SECONDS,
     LOW_CONFIDENCE_THRESHOLD,
     AllowedNextStep,
     ClassificationFailureCode,
@@ -39,7 +39,6 @@ from app.modules.local_ai.classification.contracts import (
 )
 from app.modules.local_ai.classification.parser import ClassificationParseError
 from app.modules.local_ai.classification.service import classify_text
-
 
 REPORT_SCHEMA_VERSION = "classification_budget_probe_report_v1"
 REPORT_FILENAME_PREFIX = "classification_budget_probe"

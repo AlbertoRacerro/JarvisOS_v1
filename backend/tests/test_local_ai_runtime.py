@@ -6,8 +6,8 @@ import pytest
 from pydantic import ValidationError
 
 from app.modules.local_ai.config import LocalGemmaConfig
-from app.modules.local_ai.eval_adapter import LocalGemmaEvalAdapter
 from app.modules.local_ai.errors import LocalGemmaConfigurationError, LocalGemmaFailureCode
+from app.modules.local_ai.eval_adapter import LocalGemmaEvalAdapter
 from app.modules.local_ai_eval.eval_prompt_builder import build_gemma_eval_prompt
 from app.modules.local_ai_eval.loader import load_golden_cases
 from app.modules.local_ai_eval.run_gemma_eval import run_gemma_eval

@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
 from app.core.database import open_sqlite_connection
-from app.modules.ai.contracts import AIPrivacyClass, AIRequest, AITaskType
 from app.modules.ai.budget import evaluate_ai_status, evaluate_live_scaleway_smoke_gate
+from app.modules.ai.contracts import AIPrivacyClass, AIRequest, AITaskType
 from app.modules.ai.models import SmokeTestResponse, SmokeTestResult, SmokeTestTokenMetadata
 from app.modules.ai.privacy import PrivacyPolicyEngine
 from app.modules.ai.providers.fake import FakeModelingProvider

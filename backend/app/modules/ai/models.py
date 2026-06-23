@@ -2,7 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.ai.contracts import AIPolicyMode, AIUsage, AITaskType
+from app.modules.ai.contracts import AIPolicyMode, AITaskType, AIUsage
 
 
 class AISettingsUpdate(BaseModel):

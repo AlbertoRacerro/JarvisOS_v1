@@ -8,7 +8,7 @@ import json
 from typing import Any
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from app.modules.local_ai.config import LocalGemmaConfig
 from app.modules.local_ai.errors import LocalGemmaConfigurationError, LocalGemmaFailureCode

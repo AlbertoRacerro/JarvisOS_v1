@@ -5,7 +5,7 @@ gateway policy implementation.
 """
 
 from app.core.database import open_sqlite_connection
-from app.modules.ai.contracts import AIPrivacyClass, AIRequest, AIPolicyMode, AITaskType
+from app.modules.ai.contracts import AIPolicyMode, AIPrivacyClass, AIRequest, AITaskType
 from app.modules.ai.models import AISettingsRead, ProviderSmokeRequest, ProviderSmokeResponse
 from app.modules.ai.privacy import PrivacyPolicyEngine
 from app.modules.ai.providers.deepseek_adapter import (

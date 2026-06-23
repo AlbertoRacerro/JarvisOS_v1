@@ -19,7 +19,6 @@ from app.modules.local_ai.classification.contracts import (
 from app.modules.local_ai.classification.parser import ClassificationParseError, parse_classification_output
 from app.modules.local_ai.classification.prompts import ClassificationPromptError, build_classification_prompt
 
-
 SENSITIVITY_RANK = {
     SensitivityHint.public: 0,
     SensitivityHint.internal: 1,

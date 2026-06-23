@@ -1,7 +1,7 @@
 from app.modules.ai.contracts import AIPolicyMode
 from app.modules.ai.models import AISettingsRead, AIStatusRead
-from app.modules.secrets.storage import get_effective_scaleway_api_key
 from app.modules.ai.providers.deepseek import DeepSeekProvider
+from app.modules.secrets.storage import get_effective_scaleway_api_key
 
 SCALEWAY_STUB_IMPLEMENTATION = "stub_no_external_calls"
 SCALEWAY_LIVE_IMPLEMENTATION = "live_chat_completions"

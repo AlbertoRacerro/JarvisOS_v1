@@ -27,7 +27,6 @@ from app.modules.local_ai.classification.contracts import (
     ClassificationFailureCode,
 )
 
-
 REPORT_SCHEMA_VERSION = "fast_intake_probe_report_v1"
 REPORT_FILENAME_PREFIX = "fast_intake_probe"
 FAST_INTAKE_SCHEMA_VERSION = "fast_intake_v0"
@@ -1048,7 +1047,7 @@ def summary_lines(report: FastIntakeProbeReport, report_path: Path) -> list[str]
     ]
     for summary in report.profile_summaries:
         lines.append(
-            (
+            
                 f"profile={summary.profile_id} model={summary.model_name} attempts={summary.attempts} "
                 f"schema_valid_rate={summary.schema_valid_rate} accepted_rate={summary.accepted_rate} "
                 f"fallback_rate={summary.fallback_rate} observable_flags={summary.observable_flag_agreement_rate} "
@@ -1057,28 +1056,28 @@ def summary_lines(report: FastIntakeProbeReport, report_path: Path) -> list[str]
                 f"overconfident_wrong={summary.overconfident_wrong_count} "
                 f"advisory_note_present={summary.advisory_note_present_count} "
                 f"dominant_fallback={summary.dominant_fallback_reason} suitability={summary.suitability_label}"
-            )
+            
         )
         lines.append(
             f"profile={summary.profile_id} uncertain_fields={summary.uncertain_fields_frequency}"
         )
         lines.append(
-            (
+            
                 f"profile={summary.profile_id} bucket_accuracy "
                 f"storage={summary.storage_relevance_accuracy},record={summary.record_bucket_accuracy},"
                 f"project={summary.project_bucket_accuracy},domain={summary.domain_bucket_accuracy},"
                 f"sensitivity={summary.sensitivity_bucket_accuracy},status={summary.status_bucket_accuracy}"
-            )
+            
         )
     for comparison in report.comparison_summaries:
         lines.append(
-            (
+            
                 f"comparison baseline={comparison.baseline_profile_id} compared={comparison.compared_profile_id} "
                 f"model={comparison.compared_model_name} observable_delta="
                 f"{comparison.observable_flag_agreement_delta} bucket_delta={comparison.bucket_agreement_delta} "
                 f"deterministic_better={comparison.deterministic_better_fields} "
                 f"ai_better={comparison.ai_better_fields} tied={comparison.tied_fields}"
-            )
+            
         )
     return lines
 

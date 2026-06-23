@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
-from app.core.config import get_settings
 from app.core.bootstrap import initialize_storage
+from app.core.config import get_settings
 from app.core.database import get_database_info
 from app.core.paths import build_paths
 from app.modules.ai.gateway import AIGateway

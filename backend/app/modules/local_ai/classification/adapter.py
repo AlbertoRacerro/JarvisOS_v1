@@ -13,9 +13,11 @@ from app.modules.local_ai.classification.contracts import (
     ClassificationAttemptDiagnostics,
     ClassificationFailureCode,
 )
-from app.modules.local_ai.classification.parser import extract_response_text, response_indicates_thinking_budget_exhausted
+from app.modules.local_ai.classification.parser import (
+    extract_response_text,
+    response_indicates_thinking_budget_exhausted,
+)
 from app.modules.local_ai.classification.prompts import MAX_CLASSIFICATION_PROMPT_CHARS
-
 
 DEFAULT_CLASSIFICATION_MODEL = DEFAULT_CLASSIFICATION_MODEL_NAME
 DEFAULT_CLASSIFICATION_ENDPOINT = DEFAULT_CLASSIFICATION_ENDPOINT_URL

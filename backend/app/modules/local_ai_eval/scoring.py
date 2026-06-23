@@ -1,10 +1,16 @@
 import json
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from app.modules.local_ai_eval.models import EvalLocalAction, EvalState, EvalSensitivity, GemmaEvalOutput, GoldenTestCase
-
+from app.modules.local_ai_eval.models import (
+    EvalLocalAction,
+    EvalSensitivity,
+    EvalState,
+    GemmaEvalOutput,
+    GoldenTestCase,
+)
 
 EXTERNAL_ACTIONS = {
     "CHEAP_GATE",

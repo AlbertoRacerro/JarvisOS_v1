@@ -1,8 +1,8 @@
 import csv
 import json
+import sys
 from math import exp, isfinite
 from pathlib import Path
-import sys
 
 
 def _read_inputs(input_path: Path) -> dict:

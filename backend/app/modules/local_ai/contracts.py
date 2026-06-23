@@ -2,7 +2,6 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
 MICRO_CONTRACT_SCHEMA_VERSION = "local_gemma_micro_contract_v1"
 
 

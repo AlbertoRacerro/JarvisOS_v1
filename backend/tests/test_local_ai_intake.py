@@ -7,6 +7,12 @@ from pydantic import ValidationError
 
 from app.modules.local_ai.classification.adapter import ClassificationAdapterConfig, ClassificationAdapterResult
 from app.modules.local_ai.classification.contracts import ClassificationAttemptDiagnostics, ClassificationFailureCode
+from app.modules.local_ai.intake.deterministic_signals import (
+    FIELD_OWNERSHIP,
+    FieldOwnership,
+    deterministic_fast_intake_baseline,
+    field_ownership_for,
+)
 from app.modules.local_ai.intake.probe_fast_intake import (
     FAST_INTAKE_DETERMINISTIC_MODE,
     FAST_INTAKE_FLAT_MODE,
@@ -28,9 +34,9 @@ from app.modules.local_ai.intake.probe_fast_intake import (
     ShortDescription,
     StatusBucket,
     StorageRelevance,
+    UncertainField,
     Uncertainty,
     UncertaintyReason,
-    UncertainField,
     build_fast_intake_deterministic_report,
     build_fast_intake_flat_prompt,
     build_fast_intake_prompt,
@@ -41,12 +47,6 @@ from app.modules.local_ai.intake.probe_fast_intake import (
     parse_fast_intake_output,
     summary_lines,
     write_probe_report,
-)
-from app.modules.local_ai.intake.deterministic_signals import (
-    FIELD_OWNERSHIP,
-    FieldOwnership,
-    deterministic_fast_intake_baseline,
-    field_ownership_for,
 )
 
 

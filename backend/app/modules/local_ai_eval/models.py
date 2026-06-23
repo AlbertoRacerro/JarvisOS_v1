@@ -3,7 +3,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
 GEMMA_EVAL_SCHEMA_VERSION = "local_gemma_eval_v1"
 
 

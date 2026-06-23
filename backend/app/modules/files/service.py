@@ -5,6 +5,7 @@ from app.modules.events.service import utc_now
 from app.modules.files.models import ArtifactCreate, ArtifactRecord
 from app.modules.files.registry import ArtifactRegistry
 
+
 def create_artifact_registry() -> ArtifactRegistry:
     return ArtifactRegistry()
 

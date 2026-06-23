@@ -9,13 +9,13 @@ from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
 from app.modules.ai.contracts import (
+    AIPolicyMode,
     AIPrivacyClass,
     AIRequest,
-    AIPolicyMode,
     AIResponse,
+    AITaskType,
     AIUsage,
     AIUsageSource,
-    AITaskType,
 )
 from app.modules.ai.models import AISettingsRead, SupervisorPublicTestRequest, SupervisorPublicTestResponse
 from app.modules.ai.privacy import PrivacyPolicyEngine

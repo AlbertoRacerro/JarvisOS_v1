@@ -22,7 +22,6 @@ from app.modules.local_ai.contracts import (
     TodoExtractionOutput,
 )
 
-
 DEFAULT_MODEL_NAME = "gemma4:12b-it-qat"
 DEFAULT_HEAVY_MODEL_NAME = "gemma4:31b-it-qat"
 DEFAULT_NATIVE_ENDPOINT = "http://localhost:11434/api/chat"

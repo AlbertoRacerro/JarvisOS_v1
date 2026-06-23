@@ -1,13 +1,12 @@
 from app.modules.local_ai.classification.contracts import (
     CLASSIFICATION_OUTPUT_SCHEMA_VERSION,
-    ClassificationInput,
-    TaskType,
-    ProjectArea,
-    ComplexityHint,
-    SensitivityHint,
     AllowedNextStep,
+    ClassificationInput,
+    ComplexityHint,
+    ProjectArea,
+    SensitivityHint,
+    TaskType,
 )
-
 
 MAX_CLASSIFICATION_PROMPT_CHARS = 2000
 

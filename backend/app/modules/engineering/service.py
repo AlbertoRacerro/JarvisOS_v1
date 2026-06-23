@@ -1,7 +1,13 @@
 from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
-from app.modules.engineering.models import EntityCreate, EntityLinkCreate, EntityLinkRead, EntityRead, EngineeringBoundary
+from app.modules.engineering.models import (
+    EngineeringBoundary,
+    EntityCreate,
+    EntityLinkCreate,
+    EntityLinkRead,
+    EntityRead,
+)
 from app.modules.events.service import utc_now
 
 
