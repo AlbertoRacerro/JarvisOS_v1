@@ -777,6 +777,19 @@ Current implementation status:
   `none` where the expected policy was `blocked` and `blocked`. Recommendation:
   advance to `1G-B2-F2 - Structured-output 12-case Qwen panel`, still
   manual-review only.
+- 1G-B2-F2 extends the schema-first probe with lightweight semantic comparison
+  against holdout labels and runs the bounded 12-case Qwen panel. Reports are
+  under `reports/local_model_smoke/1G-B2-F2/`. Result: 12/12 parse, 12/12
+  schema-valid, no validation failures, hard semantic comparison 72/113, and
+  soft tolerant semantic comparison 5/12. Severe hard-field misses occurred on
+  `HG-007`, `HG-018`, `HG-024`, `HG-010`, `HG-013`, and `HG-025`. Error
+  concentration was retrieval/source policy 10, BlueRev unresolved assumptions
+  7, clarification 6, secrets 3, provider routing 0, and general memory
+  classification 15. `HG-018` provider/memory-boundary risk persisted:
+  `review_only` and `none` were returned where `blocked` and `blocked` were
+  expected. Recommendation: `1G-B2-F2-R - Structured-output semantic failure
+  analysis`. This remains manual-review evidence only and is not runtime
+  approval.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
 The accepted next local AI sequence is:
@@ -816,6 +829,7 @@ The accepted next local AI sequence is:
 1G-B2-F0   Structured-output reference audit and schema-first redesign
 1G-B2-F1   Ollama structured-output schema smoke prototype
 1G-B2-F2   Structured-output 12-case Qwen panel
+1G-B2-F2-R Structured-output semantic failure analysis
 1H         Showcase files generator design
 1I         Context access from showcase files
 1J         Provider/tool intent form design

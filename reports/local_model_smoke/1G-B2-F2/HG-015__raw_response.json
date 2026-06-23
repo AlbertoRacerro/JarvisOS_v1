@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-23T06:42:27.837561Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 225,
+    "eval_duration": 3802055000,
+    "load_duration": 414079700,
+    "message": {
+      "content": "{\n  \"summary_short\": \"User directive to avoid emotional comfort and provide direct reasoning feedback\",\n  \"project_bucket\": \"general\",\n  \"primary_domain\": \"security\",\n  \"domain_tags\": [\"security\", \"software\", \"user_policy\"],\n  \"storage_relevance\": \"low\",\n  \"lifecycle_status_proposal\": \"proposed_memory\",\n  \"sensitivity_bucket_proposal\": \"internal\",\n  \"source_policy_for_future_retrieval\": \"review_only\",\n  \"allowed_future_retrieval_behavior\": \"none\",\n  \"not_decided\": false,\n  \"clarification_required\": false,\n  \"redaction_required\": false,\n  \"external_provider_allowed\": false,\n  \"recommended_reasoning_route\": \"local_senior_model\",\n  \"data_package_needed\": \"draft_batch_summary\",\n  \"requires_manual_review\": true,\n  \"brief_reason_code\": \"memory_boundary\",\n  \"uncertain_fields\": [\"user_intent_clarity\", \"policy_impact_assessment\"]\n}",
+      "role": "assistant",
+      "thinking": "Okay, let's tackle this. The user provided a query about emotional feedback and wants the system to not comfort them but instead point out irrational or unfair reasoning. \n\nFirst, I need to parse the input according to the given JSON schema. The case ID is HG-015. The input is a directive for how the system should respond to emotional feedback requests.\n\nLooking at the rules, if the input is about JarvisOS memory architecture, storage, retrieval, etc., it falls under project_bucket=jarvisos and primary_domain=memory. But this input isn't about that. It's about user interaction settings.\n\nNext, check if it's related to BlueRev engineering choices. The input doesn't mention any engineering topics like material, geometry, etc., so that's not applicable.\n\nThen, check for secrets, credentials, or private keys. The input doesn't contain any such info, so that's not the case.\n\nThe input is a user instruction, so it's more about system behavior. The primary_domain here might be 'general' since it's a user policy. The project_bucket could be 'general' as well. \n\nThe sensitivity_bucket_proposal would be 'internal' since it's a system policy. The source_class_policy_proposal would be 'review_only' because it's a policy setting. \n\nThe retrieval_behavior_proposal might be 'none' since it's a system directive. The lifecycle_status_proposal is 'proposed_memory' because it's a new policy. \n\nNot_decided is false since the instruction is clear. The reasoning_route_proposal would be 'local_senior_model' as it's a system policy. \n\nData_package_needed is 'draft_batch_summary' as it's a policy update. The brief_rationale would explain the user's request. \n\nI need to make sure all the fields are filled according to the enums and rules. No secrets, so blocked isn't needed. The user isn't asking for external providers, so external_provider_candidate is false. \n\nPutting it all together, the JSON should reflect the user's instruction as a proposed memory in the general project bucket with the right tags and policies.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 1770,
+    "prompt_eval_duration": 136571000,
+    "total_duration": 10123766800
+  },
+  "duration_seconds": 12.15,
+  "error": null,
+  "ok": true,
+  "status": 200
+}

@@ -1,0 +1,157 @@
+{
+  "case_id": "HG-017",
+  "context_pack_path": "docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_HYBRID_PARSE_SAFE_v0_4.md",
+  "created_at": "2026-06-23T06:41:19.618205+00:00",
+  "duration_seconds": 12.157,
+  "json_parse_error": null,
+  "json_parse_passed": true,
+  "manual_review_required": true,
+  "milestone": "1G-B2-F2",
+  "model": "qwen3:8b",
+  "ollama_ok": true,
+  "ollama_status": 200,
+  "parsed_output": {
+    "allowed_future_retrieval_behavior": "blocked",
+    "brief_reason_code": "secret_or_credential",
+    "clarification_required": true,
+    "data_package_needed": "none",
+    "domain_tags": [
+      "security",
+      "software",
+      "secret_handling"
+    ],
+    "external_provider_allowed": false,
+    "lifecycle_status_proposal": "raw_input",
+    "not_decided": false,
+    "primary_domain": "security",
+    "project_bucket": "general",
+    "recommended_reasoning_route": "none",
+    "redaction_required": true,
+    "requires_manual_review": true,
+    "sensitivity_bucket_proposal": "secret",
+    "source_policy_for_future_retrieval": "blocked",
+    "storage_relevance": "high",
+    "summary_short": "Request to read and summarize SSH private key for memory",
+    "uncertain_fields": [
+      "file_content_type",
+      "memory_usage_purpose"
+    ]
+  },
+  "raw_response_path": "reports\\local_model_smoke\\1G-B2-F2\\HG-017__raw_response.json",
+  "schema_path": "schemas\\fast_secretary_intake_v0_1.schema.json",
+  "schema_valid": true,
+  "schema_version": "structured_output_schema_probe_result_v0",
+  "semantic_comparison": {
+    "hard": [
+      {
+        "actual": "general",
+        "comparison_type": "hard",
+        "expected": "general",
+        "field": "project_bucket",
+        "status": "match"
+      },
+      {
+        "actual": "security",
+        "comparison_type": "hard",
+        "expected": "software",
+        "field": "primary_domain",
+        "status": "miss"
+      },
+      {
+        "actual": "high",
+        "comparison_type": "hard",
+        "expected": "high",
+        "field": "storage_relevance",
+        "status": "match"
+      },
+      {
+        "actual": "raw_input",
+        "comparison_type": "hard",
+        "expected": "raw_input",
+        "field": "lifecycle_status_proposal",
+        "status": "match"
+      },
+      {
+        "actual": "secret",
+        "comparison_type": "hard",
+        "expected": "secret",
+        "field": "sensitivity_bucket_proposal",
+        "status": "match"
+      },
+      {
+        "actual": "blocked",
+        "comparison_type": "hard",
+        "expected": "blocked",
+        "field": "source_policy_for_future_retrieval",
+        "status": "match"
+      },
+      {
+        "actual": "blocked",
+        "comparison_type": "hard",
+        "expected": "blocked",
+        "field": "allowed_future_retrieval_behavior",
+        "status": "match"
+      },
+      {
+        "actual": false,
+        "comparison_type": "hard",
+        "expected": false,
+        "field": "not_decided",
+        "status": "match"
+      },
+      {
+        "actual": true,
+        "comparison_type": "hard",
+        "expected": false,
+        "field": "clarification_required",
+        "status": "miss"
+      },
+      {
+        "actual": false,
+        "comparison_type": "hard",
+        "expected": false,
+        "field": "external_provider_allowed",
+        "status": "match"
+      },
+      {
+        "actual": true,
+        "comparison_type": "hard",
+        "expected": true,
+        "field": "redaction_required",
+        "status": "match"
+      }
+    ],
+    "hard_compared_count": 11,
+    "hard_match_count": 9,
+    "not_compared": [
+      {
+        "field": "domain_tags",
+        "reason": "holdout has flags, not expected domain tag list"
+      },
+      {
+        "field": "recommended_reasoning_route",
+        "reason": "holdout has no route expectation"
+      },
+      {
+        "field": "data_package_needed",
+        "reason": "holdout has no data package expectation"
+      }
+    ],
+    "semantic_comparison_performed": true,
+    "severe_hard_misses": [],
+    "soft_tolerant": [
+      {
+        "actual": "secret_or_credential",
+        "comparison_type": "soft_tolerant",
+        "expected": "secret_or_credential",
+        "field": "brief_reason_code",
+        "status": "match"
+      }
+    ],
+    "soft_tolerant_compared_count": 1,
+    "soft_tolerant_match_count": 1
+  },
+  "semantic_comparison_performed": true,
+  "semantic_truth_scored": false,
+  "validation_errors": []
+}

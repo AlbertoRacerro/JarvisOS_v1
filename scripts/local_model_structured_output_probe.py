@@ -21,9 +21,57 @@ DEFAULT_HOLDOUT = Path("docs/holdout/intake_generalization_v0.jsonl")
 DEFAULT_SCHEMA = Path("schemas/fast_secretary_intake_v0_1.schema.json")
 DEFAULT_REPORT_DIR = Path("reports/local_model_smoke/1G-B2-F1")
 DEFAULT_OLLAMA_URL = "http://localhost:11434/api/chat"
-MAX_REAL_CASES = 8
-SUMMARY_JSON = "structured_output_schema_smoke_summary.json"
-SUMMARY_MD = "structured_output_schema_smoke_summary.md"
+MAX_REAL_CASES = 12
+F1_SUMMARY_JSON = "structured_output_schema_smoke_summary.json"
+F1_SUMMARY_MD = "structured_output_schema_smoke_summary.md"
+F2_SUMMARY_JSON = "structured_output_12_case_panel_summary.json"
+F2_SUMMARY_MD = "structured_output_12_case_panel_summary.md"
+
+HARD_FIELD_COMPARISONS = {
+    "project_bucket": "expected_project_bucket",
+    "primary_domain": "expected_domain_bucket",
+    "storage_relevance": "expected_storage_relevance",
+    "lifecycle_status_proposal": "expected_lifecycle_status",
+    "sensitivity_bucket_proposal": "expected_sensitivity_bucket",
+    "source_policy_for_future_retrieval": "expected_source_class_policy",
+    "allowed_future_retrieval_behavior": "expected_retrieval_behavior",
+    "not_decided": "expected_not_decided",
+    "clarification_required": "expected_clarification",
+}
+
+SEVERE_HARD_FIELDS = {
+    "sensitivity_bucket_proposal",
+    "source_policy_for_future_retrieval",
+    "allowed_future_retrieval_behavior",
+    "external_provider_allowed",
+    "redaction_required",
+}
+
+EXTERNAL_PROVIDER_BLOCK_CATEGORIES = {
+    "provider_intent_block",
+    "secret_detection",
+    "forbidden_path_sensitive",
+}
+
+REDACTION_REQUIRED_CATEGORIES = {
+    "secret_detection",
+    "forbidden_path_sensitive",
+}
+
+BRIEF_REASON_BY_CATEGORY = {
+    "jarvisos_architecture_decision": "memory_boundary",
+    "bluerev_not_decided_assumption": "unresolved_bluerev_assumption",
+    "bluerev_public_literature_request": "full_body_needed",
+    "retrieval_scope_unknown": "clarification_needed",
+    "retrieval_cross_project_leakage": "clarification_needed",
+    "personal_preference_durable": "general_useful_note",
+    "secret_detection": "secret_or_credential",
+    "forbidden_path_sensitive": "secret_or_credential",
+    "provider_intent_block": "provider_routing_risk",
+    "numbers_metrics_engineering": "unresolved_bluerev_assumption",
+    "stale_superseded_memory": "contradiction_or_superseded",
+    "ambiguous_entity": "clarification_needed",
+}
 
 
 def parse_csv_values(values: str | None, *, flag_name: str) -> list[str] | None:
@@ -254,6 +302,138 @@ def result_paths(report_dir: Path, case_id: str) -> tuple[Path, Path]:
     )
 
 
+def milestone_for_report_dir(report_dir: Path) -> str:
+    name = report_dir.name.upper()
+    if name == "1G-B2-F2":
+        return "1G-B2-F2"
+    return "1G-B2-F1"
+
+
+def summary_filenames(report_dir: Path) -> tuple[str, str]:
+    if milestone_for_report_dir(report_dir) == "1G-B2-F2":
+        return F2_SUMMARY_JSON, F2_SUMMARY_MD
+    return F1_SUMMARY_JSON, F1_SUMMARY_MD
+
+
+def expected_external_provider_allowed(case: dict[str, Any]) -> bool | None:
+    if case.get("category") in EXTERNAL_PROVIDER_BLOCK_CATEGORIES:
+        return False
+    return None
+
+
+def expected_redaction_required(case: dict[str, Any]) -> bool | None:
+    if case.get("category") in REDACTION_REQUIRED_CATEGORIES:
+        return True
+    return None
+
+
+def expected_brief_reason_code(case: dict[str, Any]) -> str | None:
+    category = case.get("category")
+    if not isinstance(category, str):
+        return None
+    return BRIEF_REASON_BY_CATEGORY.get(category)
+
+
+def compare_field(
+    *,
+    field: str,
+    actual: Any,
+    expected: Any,
+    comparison_type: str,
+) -> dict[str, Any]:
+    if expected is None:
+        return {
+            "field": field,
+            "comparison_type": comparison_type,
+            "status": "not_compared",
+            "actual": actual,
+            "expected": None,
+        }
+    return {
+        "field": field,
+        "comparison_type": comparison_type,
+        "status": "match" if actual == expected else "miss",
+        "actual": actual,
+        "expected": expected,
+    }
+
+
+def semantic_comparison(case: dict[str, Any], parsed: Any) -> dict[str, Any]:
+    if not isinstance(parsed, dict):
+        return {
+            "semantic_comparison_performed": False,
+            "reason": "parsed output is not an object",
+            "hard": [],
+            "soft_tolerant": [],
+            "not_compared": [],
+            "hard_match_count": 0,
+            "hard_compared_count": 0,
+            "soft_tolerant_match_count": 0,
+            "soft_tolerant_compared_count": 0,
+            "severe_hard_misses": [],
+        }
+
+    hard = [
+        compare_field(
+            field=schema_field,
+            actual=parsed.get(schema_field),
+            expected=case.get(expected_field),
+            comparison_type="hard",
+        )
+        for schema_field, expected_field in HARD_FIELD_COMPARISONS.items()
+    ]
+    hard.append(
+        compare_field(
+            field="external_provider_allowed",
+            actual=parsed.get("external_provider_allowed"),
+            expected=expected_external_provider_allowed(case),
+            comparison_type="hard",
+        )
+    )
+    hard.append(
+        compare_field(
+            field="redaction_required",
+            actual=parsed.get("redaction_required"),
+            expected=expected_redaction_required(case),
+            comparison_type="hard",
+        )
+    )
+
+    soft_tolerant = [
+        compare_field(
+            field="brief_reason_code",
+            actual=parsed.get("brief_reason_code"),
+            expected=expected_brief_reason_code(case),
+            comparison_type="soft_tolerant",
+        )
+    ]
+
+    hard_compared = [item for item in hard if item["status"] != "not_compared"]
+    soft_compared = [item for item in soft_tolerant if item["status"] != "not_compared"]
+    severe_misses = [
+        item
+        for item in hard_compared
+        if item["status"] == "miss" and item["field"] in SEVERE_HARD_FIELDS
+    ]
+    return {
+        "semantic_comparison_performed": True,
+        "hard": hard,
+        "soft_tolerant": soft_tolerant,
+        "not_compared": [
+            {"field": "domain_tags", "reason": "holdout has flags, not expected domain tag list"},
+            {"field": "recommended_reasoning_route", "reason": "holdout has no route expectation"},
+            {"field": "data_package_needed", "reason": "holdout has no data package expectation"},
+        ],
+        "hard_match_count": sum(1 for item in hard_compared if item["status"] == "match"),
+        "hard_compared_count": len(hard_compared),
+        "soft_tolerant_match_count": sum(
+            1 for item in soft_compared if item["status"] == "match"
+        ),
+        "soft_tolerant_compared_count": len(soft_compared),
+        "severe_hard_misses": severe_misses,
+    }
+
+
 def build_result(
     *,
     case: dict[str, Any],
@@ -271,9 +451,21 @@ def build_result(
         "schema_valid": False,
         "errors": [{"field": "$", "error": "json_not_parsed"}],
     }
+    comparison = semantic_comparison(case, parsed) if validation["schema_valid"] else {
+        "semantic_comparison_performed": False,
+        "reason": "schema validation failed",
+        "hard": [],
+        "soft_tolerant": [],
+        "not_compared": [],
+        "hard_match_count": 0,
+        "hard_compared_count": 0,
+        "soft_tolerant_match_count": 0,
+        "soft_tolerant_compared_count": 0,
+        "severe_hard_misses": [],
+    }
     return {
         "schema_version": "structured_output_schema_probe_result_v0",
-        "milestone": "1G-B2-F1",
+        "milestone": milestone_for_report_dir(raw_path.parent),
         "created_at": datetime.now(timezone.utc).isoformat(),
         "case_id": case["case_id"],
         "model": model,
@@ -289,6 +481,8 @@ def build_result(
         "json_parse_error": parse_error,
         "schema_valid": validation["schema_valid"],
         "validation_errors": validation["errors"],
+        "semantic_comparison_performed": comparison["semantic_comparison_performed"],
+        "semantic_comparison": comparison,
         "parsed_output": parsed,
     }
 
@@ -320,6 +514,91 @@ def hg018_risk(result: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
+def semantic_score_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
+    hard_matches = 0
+    hard_compared = 0
+    soft_matches = 0
+    soft_compared = 0
+    severe_cases: list[dict[str, Any]] = []
+    field_misses: dict[str, int] = {}
+    category_misses: dict[str, int] = {
+        "provider_routing": 0,
+        "retrieval_source_policy": 0,
+        "bluerev_unresolved_assumptions": 0,
+        "secrets": 0,
+        "clarification": 0,
+        "general_memory_classification": 0,
+    }
+    for result in results:
+        comparison = result.get("semantic_comparison") or {}
+        hard_matches += comparison.get("hard_match_count", 0)
+        hard_compared += comparison.get("hard_compared_count", 0)
+        soft_matches += comparison.get("soft_tolerant_match_count", 0)
+        soft_compared += comparison.get("soft_tolerant_compared_count", 0)
+        hard_items = comparison.get("hard", [])
+        misses = [item for item in hard_items if item.get("status") == "miss"]
+        severe_misses = comparison.get("severe_hard_misses", [])
+        if severe_misses:
+            severe_cases.append({"case_id": result["case_id"], "misses": severe_misses})
+        for miss in misses:
+            field = miss["field"]
+            field_misses[field] = field_misses.get(field, 0) + 1
+            if field == "external_provider_allowed":
+                category_misses["provider_routing"] += 1
+            elif field in {
+                "source_policy_for_future_retrieval",
+                "allowed_future_retrieval_behavior",
+            }:
+                category_misses["retrieval_source_policy"] += 1
+            elif field in {"not_decided", "lifecycle_status_proposal"}:
+                category_misses["bluerev_unresolved_assumptions"] += 1
+            elif field in {"sensitivity_bucket_proposal", "redaction_required"}:
+                category_misses["secrets"] += 1
+            elif field == "clarification_required":
+                category_misses["clarification"] += 1
+            else:
+                category_misses["general_memory_classification"] += 1
+    hard_rate = hard_matches / hard_compared if hard_compared else None
+    soft_rate = soft_matches / soft_compared if soft_compared else None
+    return {
+        "semantic_comparison_performed": any(
+            result.get("semantic_comparison_performed") for result in results
+        ),
+        "hard_match_count": hard_matches,
+        "hard_compared_count": hard_compared,
+        "hard_match_rate": hard_rate,
+        "soft_tolerant_match_count": soft_matches,
+        "soft_tolerant_compared_count": soft_compared,
+        "soft_tolerant_match_rate": soft_rate,
+        "severe_hard_miss_cases": severe_cases,
+        "field_miss_counts": dict(sorted(field_misses.items())),
+        "error_concentration": category_misses,
+    }
+
+
+def recommend_next_milestone(
+    *,
+    milestone: str,
+    total_runs: int,
+    parse_count: int,
+    schema_valid_count: int,
+    semantic_summary: dict[str, Any],
+) -> str:
+    if milestone != "1G-B2-F2":
+        if parse_count == total_runs and schema_valid_count == total_runs:
+            return "1G-B2-F2 - Structured-output 12-case Qwen panel"
+        return "1G-B2-F1-R - Structured-output schema prototype repair"
+    if parse_count != total_runs or schema_valid_count != total_runs:
+        return "1G-B2-F2-R - Structured-output semantic failure analysis"
+    hard_compared = semantic_summary["hard_compared_count"]
+    hard_matches = semantic_summary["hard_match_count"]
+    severe_cases = semantic_summary["severe_hard_miss_cases"]
+    hard_rate = hard_matches / hard_compared if hard_compared else 0
+    if hard_rate >= 0.9 and not severe_cases:
+        return "1G-B2-F3 - Full holdout structured-output Qwen smoke run"
+    return "1G-B2-F2-R - Structured-output semantic failure analysis"
+
+
 def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[str, Any]:
     parse_failures = [result["case_id"] for result in results if not result["json_parse_passed"]]
     validation_failures = [
@@ -341,32 +620,64 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
     hg018_result = next((result for result in results if result["case_id"] == "HG-018"), None)
     schema_valid_count = sum(1 for result in results if result["schema_valid"])
     parse_count = sum(1 for result in results if result["json_parse_passed"])
-    next_milestone = (
-        "1G-B2-F2 - Structured-output 12-case Qwen panel"
-        if parse_count == len(results) and schema_valid_count == len(results)
-        else "1G-B2-F1-R - Structured-output schema prototype repair"
+    milestone = milestone_for_report_dir(report_dir)
+    semantic_summary = semantic_score_summary(results)
+    next_milestone = recommend_next_milestone(
+        milestone=milestone,
+        total_runs=len(results),
+        parse_count=parse_count,
+        schema_valid_count=schema_valid_count,
+        semantic_summary=semantic_summary,
     )
     return {
-        "schema_version": "structured_output_schema_smoke_summary_v0",
-        "milestone": "1G-B2-F1",
+        "schema_version": (
+            "structured_output_12_case_panel_summary_v0"
+            if milestone == "1G-B2-F2"
+            else "structured_output_schema_smoke_summary_v0"
+        ),
+        "milestone": milestone,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "report_dir": str(report_dir),
         "total_runs": len(results),
         "manual_review_required": True,
         "semantic_truth_scored": False,
+        "semantic_comparison_performed": semantic_summary[
+            "semantic_comparison_performed"
+        ],
         "parse_count": parse_count,
         "schema_valid_count": schema_valid_count,
         "parse_failures": parse_failures,
         "validation_failures": validation_failures,
         "enum_type_validation_failures": enum_type_failures,
+        "semantic_comparison_summary": semantic_summary,
         "hg018_provider_memory_boundary_risk": hg018_risk(hg018_result),
         "answers": {
             "parseable_json_all_cases": parse_count == len(results),
             "schema_valid_all_cases": schema_valid_count == len(results),
             "critical_fields_present_and_allowed": not enum_type_failures,
+            "hard_semantic_score": {
+                "matches": semantic_summary["hard_match_count"],
+                "compared": semantic_summary["hard_compared_count"],
+                "rate": semantic_summary["hard_match_rate"],
+            },
+            "soft_tolerant_semantic_score": {
+                "matches": semantic_summary["soft_tolerant_match_count"],
+                "compared": semantic_summary["soft_tolerant_compared_count"],
+                "rate": semantic_summary["soft_tolerant_match_rate"],
+            },
+            "severe_hard_miss_cases": semantic_summary["severe_hard_miss_cases"],
+            "error_concentration": semantic_summary["error_concentration"],
             "failed_validation_cases": [failure["case_id"] for failure in validation_failures],
-            "promising_for_12_case_panel": parse_count == len(results)
-            and schema_valid_count == len(results),
+            "promising_for_12_case_panel": (
+                milestone == "1G-B2-F1"
+                and parse_count == len(results)
+                and schema_valid_count == len(results)
+            ),
+            "strong_enough_for_full_holdout": (
+                milestone == "1G-B2-F2"
+                and next_milestone
+                == "1G-B2-F3 - Full holdout structured-output Qwen smoke run"
+            ),
             "recommended_next_milestone": next_milestone,
         },
         "recommended_next_milestone": next_milestone,
@@ -379,14 +690,25 @@ def write_json(path: Path, data: dict[str, Any]) -> None:
 
 def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
     answers = summary["answers"]
+    semantic = summary["semantic_comparison_summary"]
+    title = (
+        "# 1G-B2-F2 Structured Output 12-Case Qwen Panel Summary"
+        if summary["milestone"] == "1G-B2-F2"
+        else "# 1G-B2-F1 Structured Output Schema Smoke Summary"
+    )
     lines = [
-        "# 1G-B2-F1 Structured Output Schema Smoke Summary",
+        title,
         "",
         "Manual review is required. This smoke does not prove semantic truth or approve runtime use.",
         "",
         f"- total runs: {summary['total_runs']}",
         f"- parse: {summary['parse_count']}/{summary['total_runs']}",
         f"- schema valid: {summary['schema_valid_count']}/{summary['total_runs']}",
+        "- semantic comparison: "
+        + ("performed" if summary["semantic_comparison_performed"] else "not performed"),
+        f"- hard semantic score: {semantic['hard_match_count']}/{semantic['hard_compared_count']}",
+        "- soft tolerant semantic score: "
+        f"{semantic['soft_tolerant_match_count']}/{semantic['soft_tolerant_compared_count']}",
         f"- parse failures: {', '.join(summary['parse_failures']) or 'none'}",
         "- validation failures: "
         + (
@@ -402,27 +724,51 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
             if summary["enum_type_validation_failures"]
             else "none"
         ),
+        "- severe hard-field miss cases: "
+        + (
+            ", ".join(case["case_id"] for case in semantic["severe_hard_miss_cases"])
+            if semantic["severe_hard_miss_cases"]
+            else "none"
+        ),
+        f"- error concentration: {semantic['error_concentration']}",
         f"- HG-018 risk: {summary['hg018_provider_memory_boundary_risk']}",
         f"- recommended next milestone: {summary['recommended_next_milestone']}",
         "",
         "## Direct Answers",
         "",
-        f"1. Parseable JSON for all cases: {answers['parseable_json_all_cases']}.",
-        f"2. Schema-valid output for all cases: {answers['schema_valid_all_cases']}.",
-        "3. Critical fields present and allowed by schema: "
-        f"{answers['critical_fields_present_and_allowed']}.",
-        "4. HG-018 provider/memory-boundary risk: "
+        f"1. Structured output maintained parse for all cases: {answers['parseable_json_all_cases']}.",
+        f"2. Schema validation remained valid for all cases: {answers['schema_valid_all_cases']}.",
+        "3. Hard semantic comparison score: "
+        f"{answers['hard_semantic_score']['matches']}/{answers['hard_semantic_score']['compared']}.",
+        "4. Soft tolerant semantic comparison score: "
+        f"{answers['soft_tolerant_semantic_score']['matches']}/{answers['soft_tolerant_semantic_score']['compared']}.",
+        "5. HG-018 provider/memory-boundary risk: "
         f"{summary['hg018_provider_memory_boundary_risk']}.",
-        "5. Failed validation cases: "
+        "6. Severe hard-field miss cases: "
+        + (
+            ", ".join(case["case_id"] for case in answers["severe_hard_miss_cases"])
+            if answers["severe_hard_miss_cases"]
+            else "none"
+        )
+        + ".",
+        f"7. Error concentration: {answers['error_concentration']}.",
+        "8. Strong enough for full holdout structured-output smoke: "
+        f"{answers['strong_enough_for_full_holdout']}.",
+        f"9. Next milestone: {answers['recommended_next_milestone']}.",
+        "",
+        "## Legacy F1 Answers",
+        "",
+        "Critical fields present and allowed by schema: "
+        f"{answers['critical_fields_present_and_allowed']}.",
+        "Failed validation cases: "
         + (
             ", ".join(answers["failed_validation_cases"])
             if answers["failed_validation_cases"]
             else "none"
         )
         + ".",
-        "6. Promising enough for a 12-case structured-output panel: "
+        "Promising enough for a 12-case structured-output panel: "
         f"{answers['promising_for_12_case_panel']}.",
-        f"7. Next milestone: {answers['recommended_next_milestone']}.",
         "",
         "No memory, retrieval, provider routing, tool execution, backend route, frontend UI, queue, worker, hook, MCP, or BlueRev modeling behavior is added.",
         "",
@@ -500,10 +846,11 @@ def run_local(args: argparse.Namespace) -> int:
             f"duration={result['duration_seconds']}"
         )
     summary = summarize_results(results, report_dir)
-    write_json(report_dir / SUMMARY_JSON, summary)
-    write_summary_markdown(report_dir / SUMMARY_MD, summary)
-    print(f"summary json: {report_dir / SUMMARY_JSON}")
-    print(f"summary md: {report_dir / SUMMARY_MD}")
+    summary_json, summary_md = summary_filenames(report_dir)
+    write_json(report_dir / summary_json, summary)
+    write_summary_markdown(report_dir / summary_md, summary)
+    print(f"summary json: {report_dir / summary_json}")
+    print(f"summary md: {report_dir / summary_md}")
     return 0
 
 

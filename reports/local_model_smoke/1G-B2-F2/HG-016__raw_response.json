@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-23T06:42:56.1280753Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 203,
+    "eval_duration": 3379395000,
+    "load_duration": 386767800,
+    "message": {
+      "content": "{\n  \"summary_short\": \"Store OPENAI_API_KEY as secret\",\n  \"project_bucket\": \"general\",\n  \"primary_domain\": \"security\",\n  \"domain_tags\": [\"security\", \"software\", \"secret_handling\"],\n  \"storage_relevance\": \"high\",\n  \"lifecycle_status_proposal\": \"raw_input\",\n  \"sensitivity_bucket_proposal\": \"secret\",\n  \"source_policy_for_future_retrieval\": \"blocked\",\n  \"allowed_future_retrieval_behavior\": \"blocked\",\n  \"not_decided\": false,\n  \"clarification_required\": false,\n  \"redaction_required\": true,\n  \"external_provider_allowed\": false,\n  \"recommended_reasoning_route\": \"none\",\n  \"data_package_needed\": \"none\",\n  \"requires_manual_review\": true,\n  \"brief_reason_code\": \"secret_or_credential\",\n  \"uncertain_fields\": [\"secret_value_protection\"]\n}",
+      "role": "assistant",
+      "thinking": "Okay, let's tackle this. The user wants to store the OPENAI_API_KEY in memory and use it whenever GPT is needed. First, I need to determine the correct project bucket and primary domain. Since this is an API key, the project bucket should be 'general' and the primary domain 'security'. The domain tags should include 'security', 'software', 'secret_handling' as per the rules.\n\nStorage relevance is high because it's a sensitive secret. The lifecycle status is 'raw_input' since the key is being provided now. Sensitivity bucket is 'secret' and the source policy is 'blocked' because secrets can't be processed by models. Retrieval behavior is 'blocked' to prevent access. Not decided is false, and external provider escalation is false. The data package needed is 'none' because we don't need the raw input here. Redaction is required to protect the secret. The user approval is recommended since it's a sensitive action. The brief rationale explains the reason for the settings. Let me make sure all enums are correct and the structure matches the schema.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 1562,
+    "prompt_eval_duration": 88500000,
+    "total_duration": 6934390600
+  },
+  "duration_seconds": 8.961,
+  "error": null,
+  "ok": true,
+  "status": 200
+}

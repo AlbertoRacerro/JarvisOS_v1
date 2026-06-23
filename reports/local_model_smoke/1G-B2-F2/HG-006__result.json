@@ -1,0 +1,157 @@
+{
+  "case_id": "HG-006",
+  "context_pack_path": "docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_HYBRID_PARSE_SAFE_v0_4.md",
+  "created_at": "2026-06-23T06:42:47.166876+00:00",
+  "duration_seconds": 10.183,
+  "json_parse_error": null,
+  "json_parse_passed": true,
+  "manual_review_required": true,
+  "milestone": "1G-B2-F2",
+  "model": "qwen3:8b",
+  "ollama_ok": true,
+  "ollama_status": 200,
+  "parsed_output": {
+    "allowed_future_retrieval_behavior": "review_gate_required",
+    "brief_reason_code": "unresolved_bluerev_assumption",
+    "clarification_required": true,
+    "data_package_needed": "draft_batch_summary",
+    "domain_tags": [
+      "reactor_design",
+      "not_decided",
+      "material_choice"
+    ],
+    "external_provider_allowed": false,
+    "lifecycle_status_proposal": "proposed_memory",
+    "not_decided": true,
+    "primary_domain": "reactor_design",
+    "project_bucket": "bluerev",
+    "recommended_reasoning_route": "local_senior_model",
+    "redaction_required": false,
+    "requires_manual_review": true,
+    "sensitivity_bucket_proposal": "internal",
+    "source_policy_for_future_retrieval": "review_only",
+    "storage_relevance": "high",
+    "summary_short": "Unresolved BlueRev material choice between polycarbonate and ETFE tubes",
+    "uncertain_fields": [
+      "material_choice",
+      "prototyping_difficulty"
+    ]
+  },
+  "raw_response_path": "reports\\local_model_smoke\\1G-B2-F2\\HG-006__raw_response.json",
+  "schema_path": "schemas\\fast_secretary_intake_v0_1.schema.json",
+  "schema_valid": true,
+  "schema_version": "structured_output_schema_probe_result_v0",
+  "semantic_comparison": {
+    "hard": [
+      {
+        "actual": "bluerev",
+        "comparison_type": "hard",
+        "expected": "bluerev",
+        "field": "project_bucket",
+        "status": "match"
+      },
+      {
+        "actual": "reactor_design",
+        "comparison_type": "hard",
+        "expected": "reactor_design",
+        "field": "primary_domain",
+        "status": "match"
+      },
+      {
+        "actual": "high",
+        "comparison_type": "hard",
+        "expected": "high",
+        "field": "storage_relevance",
+        "status": "match"
+      },
+      {
+        "actual": "proposed_memory",
+        "comparison_type": "hard",
+        "expected": "proposed_memory",
+        "field": "lifecycle_status_proposal",
+        "status": "match"
+      },
+      {
+        "actual": "internal",
+        "comparison_type": "hard",
+        "expected": "internal",
+        "field": "sensitivity_bucket_proposal",
+        "status": "match"
+      },
+      {
+        "actual": "review_only",
+        "comparison_type": "hard",
+        "expected": "review_only",
+        "field": "source_policy_for_future_retrieval",
+        "status": "match"
+      },
+      {
+        "actual": "review_gate_required",
+        "comparison_type": "hard",
+        "expected": "review_gate_required",
+        "field": "allowed_future_retrieval_behavior",
+        "status": "match"
+      },
+      {
+        "actual": true,
+        "comparison_type": "hard",
+        "expected": true,
+        "field": "not_decided",
+        "status": "match"
+      },
+      {
+        "actual": true,
+        "comparison_type": "hard",
+        "expected": false,
+        "field": "clarification_required",
+        "status": "miss"
+      },
+      {
+        "actual": false,
+        "comparison_type": "hard",
+        "expected": null,
+        "field": "external_provider_allowed",
+        "status": "not_compared"
+      },
+      {
+        "actual": false,
+        "comparison_type": "hard",
+        "expected": null,
+        "field": "redaction_required",
+        "status": "not_compared"
+      }
+    ],
+    "hard_compared_count": 9,
+    "hard_match_count": 8,
+    "not_compared": [
+      {
+        "field": "domain_tags",
+        "reason": "holdout has flags, not expected domain tag list"
+      },
+      {
+        "field": "recommended_reasoning_route",
+        "reason": "holdout has no route expectation"
+      },
+      {
+        "field": "data_package_needed",
+        "reason": "holdout has no data package expectation"
+      }
+    ],
+    "semantic_comparison_performed": true,
+    "severe_hard_misses": [],
+    "soft_tolerant": [
+      {
+        "actual": "unresolved_bluerev_assumption",
+        "comparison_type": "soft_tolerant",
+        "expected": "unresolved_bluerev_assumption",
+        "field": "brief_reason_code",
+        "status": "match"
+      }
+    ],
+    "soft_tolerant_compared_count": 1,
+    "soft_tolerant_match_count": 1
+  },
+  "semantic_comparison_performed": true,
+  "semantic_truth_scored": false,
+  "validation_errors": []
+}

@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-23T06:41:38.6421223Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 223,
+    "eval_duration": 3707035000,
+    "load_duration": 408884700,
+    "message": {
+      "content": "{\n  \"summary_short\": \"Supersede outdated Gemma 12B routing approval with current local-AI evidence\",\n  \"project_bucket\": \"jarvisos\",\n  \"primary_domain\": \"memory\",\n  \"domain_tags\": [\"memory\", \"software\", \"architecture\"],\n  \"storage_relevance\": \"high\",\n  \"lifecycle_status_proposal\": \"superseded\",\n  \"sensitivity_bucket_proposal\": \"internal\",\n  \"source_policy_for_future_retrieval\": \"review_only\",\n  \"allowed_future_retrieval_behavior\": \"none\",\n  \"not_decided\": false,\n  \"clarification_required\": false,\n  \"redaction_required\": false,\n  \"external_provider_allowed\": false,\n  \"recommended_reasoning_route\": \"none\",\n  \"data_package_needed\": \"draft_batch_summary\",\n  \"requires_manual_review\": true,\n  \"brief_reason_code\": \"memory_boundary\",\n  \"uncertain_fields\": [\"superseding_criteria\"]\n}",
+      "role": "assistant",
+      "thinking": "Okay, let's tackle this. The user provided a query about handling an older memory regarding Gemma 12B being approved for routing. They want it treated as superseded by current local-AI evidence.\n\nFirst, I need to determine the project bucket. Since this is about JarvisOS memory architecture and handling outdated information, the project bucket should be 'jarvisos'. The primary domain is 'memory' because it's about memory management and superseding entries. \n\nDomain tags should include 'memory', 'software', and 'architecture' as per the rules for JarvisOS memory architecture. Storage relevance is high because this affects memory system design. The lifecycle status proposal is 'superseded' since the old memory is being replaced. \n\nSensitivity bucket is 'internal' as it's about system internals. Source class policy is 'review_only' because it's part of the memory system but needs review. Retrieval behavior is 'none' since it's about internal memory handling. \n\nNot decided is false because the status is clear. Reasoning route is 'none' as it's internal. Data package needed is 'draft_batch_summary' to provide context. Redaction required is false since no secrets are involved. User approval is recommended for changes to memory. The brief rationale explains the superseding based on current evidence.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 1606,
+    "prompt_eval_duration": 91925000,
+    "total_duration": 7869580100
+  },
+  "duration_seconds": 9.918,
+  "error": null,
+  "ok": true,
+  "status": 200
+}

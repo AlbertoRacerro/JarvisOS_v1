@@ -359,3 +359,43 @@ Interpretation:
 - The next milestone should run
   `1G-B2-F2 - Structured-output 12-case Qwen panel` to test whether the
   schema-first path generalizes beyond the eight-case smoke.
+
+## F2 12-Case Panel Result
+
+`1G-B2-F2` extended the structured-output probe with lightweight semantic
+comparison against holdout labels and ran the scoped 12-case Qwen panel.
+
+The panel used only `qwen3:8b`, `qwen_hybrid_parse_safe_v0_4`, and:
+
+```text
+HG-007, HG-017, HG-018, HG-024, HG-010, HG-013, HG-025, HG-015, HG-001, HG-006, HG-016, HG-022
+```
+
+Observed result:
+
+```text
+parse: 12/12
+schema-valid: 12/12
+validation failures: none
+enum/type validation failures: none
+hard semantic comparison: 72/113
+soft tolerant semantic comparison: 5/12
+```
+
+Severe hard-field miss cases:
+
+```text
+HG-007, HG-018, HG-024, HG-010, HG-013, HG-025
+```
+
+Interpretation:
+
+- JSON Schema structured output continued to repair the structural channel.
+- The bottleneck moved to semantic policy quality, especially retrieval/source
+  policy, clarification handling, and general memory classification.
+- `HG-018` still showed the provider/memory-boundary risk by returning
+  `review_only` and `none` where `blocked` and `blocked` were expected.
+- The result does not prove semantic truth or runtime readiness.
+- The next milestone should run
+  `1G-B2-F2-R - Structured-output semantic failure analysis` before any full
+  32-case structured-output Qwen smoke.

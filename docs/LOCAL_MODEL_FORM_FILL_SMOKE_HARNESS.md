@@ -12,6 +12,7 @@ Milestones:
 - 1G-B2-E - Full holdout Qwen secretary smoke run
 - 1G-B2-F0 - Structured-output reference audit and schema-first redesign
 - 1G-B2-F1 - Ollama structured-output schema smoke prototype
+- 1G-B2-F2 - Structured-output 12-case Qwen panel
 
 ## Purpose
 
@@ -559,6 +560,79 @@ Do not treat the F1 result as runtime approval. The next panel should measure
 whether schema-first output remains stable across more difficult cases and
 whether semantic gate behavior improves under manual review.
 
+## 1G-B2-F2 Structured-Output 12-Case Qwen Panel
+
+1G-B2-F2 keeps the F1 schema-first path and expands only to the scoped 12-case
+panel.
+
+The exact matrix:
+
+```text
+model: qwen3:8b
+schema: schemas/fast_secretary_intake_v0_1.schema.json
+context pack: docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_HYBRID_PARSE_SAFE_v0_4.md
+cases: HG-007, HG-017, HG-018, HG-024, HG-010, HG-013, HG-025, HG-015, HG-001, HG-006, HG-016, HG-022
+total: 12 local Ollama API calls
+```
+
+Reports are written under:
+
+```text
+reports/local_model_smoke/1G-B2-F2/
+```
+
+Summary files:
+
+- `reports/local_model_smoke/1G-B2-F2/structured_output_12_case_panel_summary.json`
+- `reports/local_model_smoke/1G-B2-F2/structured_output_12_case_panel_summary.md`
+
+High-level result:
+
+```text
+parse: 12/12
+schema-valid: 12/12
+validation failures: none
+enum/type validation failures: none
+hard semantic comparison: 72/113
+soft tolerant semantic comparison: 5/12
+```
+
+Severe hard-field miss cases:
+
+```text
+HG-007, HG-018, HG-024, HG-010, HG-013, HG-025
+```
+
+Error concentration:
+
+```text
+retrieval_source_policy: 10
+bluerev_unresolved_assumptions: 7
+clarification: 6
+secrets: 3
+provider_routing: 0
+general_memory_classification: 15
+```
+
+`HG-018` provider/memory-boundary risk persisted. The model returned
+`review_only` and `none` where `blocked` and `blocked` were expected.
+`external_provider_allowed` remained `false`.
+
+Interpretation:
+
+- Structured output maintained the parse/schema channel on the 12-case panel.
+- Semantic policy quality is not strong enough for full holdout expansion.
+- The semantic comparison is against holdout labels only; it does not prove
+  semantic truth.
+- `semantic_truth_scored` remains `false`.
+- `manual_review_required` remains `true`.
+
+Recommended next milestone:
+
+```text
+1G-B2-F2-R - Structured-output semantic failure analysis
+```
+
 ## Dry-Run Behavior
 
 Example:
@@ -629,23 +703,27 @@ The tests cover:
 - structured-output schema loading;
 - structured-output dry-run without Ollama calls;
 - structured-output result validation and summary generation.
+- schema-facing semantic comparison mapping;
+- semantic comparison misses and not-compared behavior;
+- F2 summary generation with semantic score rollups.
 
 ## Future 1G-B
 
-After 1G-B2-F1, the next milestone is:
+After 1G-B2-F2, the next milestone is:
 
 ```text
-1G-B2-F2 - Structured-output 12-case Qwen panel
+1G-B2-F2-R - Structured-output semantic failure analysis
 ```
 
-1G-B2-F2 should keep the schema-first path local, explicit, bounded, auditable,
-and separate from runtime memory, retrieval, provider routing, tool execution,
-and BlueRev modeling.
+1G-B2-F2-R should inspect semantic misses before any full holdout
+structured-output Qwen smoke run. The schema-first path must remain local,
+explicit, bounded, auditable, and separate from runtime memory, retrieval,
+provider routing, tool execution, and BlueRev modeling.
 
 ## Milestone Boundary Confirmation
 
-1G-B2-F1 adds a local evaluation prototype, JSON Schema, unit tests, and
-bounded smoke reports. It does not integrate structured output into runtime
+1G-B2-F2 adds semantic comparison logic, unit tests, bounded smoke reports, and
+documentation updates. It does not integrate structured output into runtime
 behavior.
 
 It adds no:
@@ -672,4 +750,4 @@ It adds no:
 - BlueRev modeling;
 - vendored code.
 
-This milestone does not start `1G-B2-F2 - Structured-output 12-case Qwen panel`.
+This milestone does not start `1G-B2-F2-R - Structured-output semantic failure analysis`.

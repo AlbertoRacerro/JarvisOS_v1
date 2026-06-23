@@ -1,0 +1,331 @@
+{
+  "answers": {
+    "critical_fields_present_and_allowed": true,
+    "error_concentration": {
+      "bluerev_unresolved_assumptions": 7,
+      "clarification": 6,
+      "general_memory_classification": 15,
+      "provider_routing": 0,
+      "retrieval_source_policy": 10,
+      "secrets": 3
+    },
+    "failed_validation_cases": [],
+    "hard_semantic_score": {
+      "compared": 113,
+      "matches": 72,
+      "rate": 0.6371681415929203
+    },
+    "parseable_json_all_cases": true,
+    "promising_for_12_case_panel": false,
+    "recommended_next_milestone": "1G-B2-F2-R - Structured-output semantic failure analysis",
+    "schema_valid_all_cases": true,
+    "severe_hard_miss_cases": [
+      {
+        "case_id": "HG-007",
+        "misses": [
+          {
+            "actual": "review_gate_required",
+            "comparison_type": "hard",
+            "expected": "candidate_discovery_only",
+            "field": "allowed_future_retrieval_behavior",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-018",
+        "misses": [
+          {
+            "actual": "internal",
+            "comparison_type": "hard",
+            "expected": "sensitive",
+            "field": "sensitivity_bucket_proposal",
+            "status": "miss"
+          },
+          {
+            "actual": "review_only",
+            "comparison_type": "hard",
+            "expected": "blocked",
+            "field": "source_policy_for_future_retrieval",
+            "status": "miss"
+          },
+          {
+            "actual": "none",
+            "comparison_type": "hard",
+            "expected": "blocked",
+            "field": "allowed_future_retrieval_behavior",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-024",
+        "misses": [
+          {
+            "actual": "none",
+            "comparison_type": "hard",
+            "expected": "review_gate_required",
+            "field": "allowed_future_retrieval_behavior",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-010",
+        "misses": [
+          {
+            "actual": "internal",
+            "comparison_type": "hard",
+            "expected": "unknown",
+            "field": "sensitivity_bucket_proposal",
+            "status": "miss"
+          },
+          {
+            "actual": "review_only",
+            "comparison_type": "hard",
+            "expected": "blocked",
+            "field": "source_policy_for_future_retrieval",
+            "status": "miss"
+          },
+          {
+            "actual": "review_gate_required",
+            "comparison_type": "hard",
+            "expected": "clarification_required",
+            "field": "allowed_future_retrieval_behavior",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-013",
+        "misses": [
+          {
+            "actual": "review_only",
+            "comparison_type": "hard",
+            "expected": "blocked",
+            "field": "source_policy_for_future_retrieval",
+            "status": "miss"
+          },
+          {
+            "actual": "none",
+            "comparison_type": "hard",
+            "expected": "clarification_required",
+            "field": "allowed_future_retrieval_behavior",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-025",
+        "misses": [
+          {
+            "actual": "internal",
+            "comparison_type": "hard",
+            "expected": "unknown",
+            "field": "sensitivity_bucket_proposal",
+            "status": "miss"
+          },
+          {
+            "actual": "review_only",
+            "comparison_type": "hard",
+            "expected": "blocked",
+            "field": "source_policy_for_future_retrieval",
+            "status": "miss"
+          },
+          {
+            "actual": "none",
+            "comparison_type": "hard",
+            "expected": "clarification_required",
+            "field": "allowed_future_retrieval_behavior",
+            "status": "miss"
+          }
+        ]
+      }
+    ],
+    "soft_tolerant_semantic_score": {
+      "compared": 12,
+      "matches": 5,
+      "rate": 0.4166666666666667
+    },
+    "strong_enough_for_full_holdout": false
+  },
+  "created_at": "2026-06-23T06:43:06.769494+00:00",
+  "enum_type_validation_failures": [],
+  "hg018_provider_memory_boundary_risk": {
+    "case_present": true,
+    "misses": {
+      "allowed_future_retrieval_behavior": {
+        "actual": "none",
+        "expected": "blocked"
+      },
+      "source_policy_for_future_retrieval": {
+        "actual": "review_only",
+        "expected": "blocked"
+      }
+    },
+    "risk_persisted": true
+  },
+  "manual_review_required": true,
+  "milestone": "1G-B2-F2",
+  "parse_count": 12,
+  "parse_failures": [],
+  "recommended_next_milestone": "1G-B2-F2-R - Structured-output semantic failure analysis",
+  "report_dir": "reports\\local_model_smoke\\1G-B2-F2",
+  "schema_valid_count": 12,
+  "schema_version": "structured_output_12_case_panel_summary_v0",
+  "semantic_comparison_performed": true,
+  "semantic_comparison_summary": {
+    "error_concentration": {
+      "bluerev_unresolved_assumptions": 7,
+      "clarification": 6,
+      "general_memory_classification": 15,
+      "provider_routing": 0,
+      "retrieval_source_policy": 10,
+      "secrets": 3
+    },
+    "field_miss_counts": {
+      "allowed_future_retrieval_behavior": 6,
+      "clarification_required": 6,
+      "lifecycle_status_proposal": 5,
+      "not_decided": 2,
+      "primary_domain": 7,
+      "project_bucket": 4,
+      "sensitivity_bucket_proposal": 3,
+      "source_policy_for_future_retrieval": 4,
+      "storage_relevance": 4
+    },
+    "hard_compared_count": 113,
+    "hard_match_count": 72,
+    "hard_match_rate": 0.6371681415929203,
+    "semantic_comparison_performed": true,
+    "severe_hard_miss_cases": [
+      {
+        "case_id": "HG-007",
+        "misses": [
+          {
+            "actual": "review_gate_required",
+            "comparison_type": "hard",
+            "expected": "candidate_discovery_only",
+            "field": "allowed_future_retrieval_behavior",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-018",
+        "misses": [
+          {
+            "actual": "internal",
+            "comparison_type": "hard",
+            "expected": "sensitive",
+            "field": "sensitivity_bucket_proposal",
+            "status": "miss"
+          },
+          {
+            "actual": "review_only",
+            "comparison_type": "hard",
+            "expected": "blocked",
+            "field": "source_policy_for_future_retrieval",
+            "status": "miss"
+          },
+          {
+            "actual": "none",
+            "comparison_type": "hard",
+            "expected": "blocked",
+            "field": "allowed_future_retrieval_behavior",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-024",
+        "misses": [
+          {
+            "actual": "none",
+            "comparison_type": "hard",
+            "expected": "review_gate_required",
+            "field": "allowed_future_retrieval_behavior",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-010",
+        "misses": [
+          {
+            "actual": "internal",
+            "comparison_type": "hard",
+            "expected": "unknown",
+            "field": "sensitivity_bucket_proposal",
+            "status": "miss"
+          },
+          {
+            "actual": "review_only",
+            "comparison_type": "hard",
+            "expected": "blocked",
+            "field": "source_policy_for_future_retrieval",
+            "status": "miss"
+          },
+          {
+            "actual": "review_gate_required",
+            "comparison_type": "hard",
+            "expected": "clarification_required",
+            "field": "allowed_future_retrieval_behavior",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-013",
+        "misses": [
+          {
+            "actual": "review_only",
+            "comparison_type": "hard",
+            "expected": "blocked",
+            "field": "source_policy_for_future_retrieval",
+            "status": "miss"
+          },
+          {
+            "actual": "none",
+            "comparison_type": "hard",
+            "expected": "clarification_required",
+            "field": "allowed_future_retrieval_behavior",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-025",
+        "misses": [
+          {
+            "actual": "internal",
+            "comparison_type": "hard",
+            "expected": "unknown",
+            "field": "sensitivity_bucket_proposal",
+            "status": "miss"
+          },
+          {
+            "actual": "review_only",
+            "comparison_type": "hard",
+            "expected": "blocked",
+            "field": "source_policy_for_future_retrieval",
+            "status": "miss"
+          },
+          {
+            "actual": "none",
+            "comparison_type": "hard",
+            "expected": "clarification_required",
+            "field": "allowed_future_retrieval_behavior",
+            "status": "miss"
+          }
+        ]
+      }
+    ],
+    "soft_tolerant_compared_count": 12,
+    "soft_tolerant_match_count": 5,
+    "soft_tolerant_match_rate": 0.4166666666666667
+  },
+  "semantic_truth_scored": false,
+  "total_runs": 12,
+  "validation_failures": []
+}

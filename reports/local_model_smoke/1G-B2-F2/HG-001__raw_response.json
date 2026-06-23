@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-23T06:42:36.9789392Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 211,
+    "eval_duration": 3353164000,
+    "load_duration": 405907700,
+    "message": {
+      "content": "{\n  \"summary_short\": \"JarvisOS MemoryStore as sole durable memory write boundary\",\n  \"project_bucket\": \"jarvisos\",\n  \"primary_domain\": \"memory\",\n  \"domain_tags\": [\"memory\", \"software\", \"architecture\"],\n  \"storage_relevance\": \"high\",\n  \"lifecycle_status_proposal\": \"proposed_memory\",\n  \"sensitivity_bucket_proposal\": \"internal\",\n  \"source_policy_for_future_retrieval\": \"review_only\",\n  \"allowed_future_retrieval_behavior\": \"none\",\n  \"not_decided\": false,\n  \"clarification_required\": false,\n  \"redaction_required\": false,\n  \"external_provider_allowed\": false,\n  \"recommended_reasoning_route\": \"none\",\n  \"data_package_needed\": \"draft_batch_summary\",\n  \"requires_manual_review\": true,\n  \"brief_reason_code\": \"memory_boundary\",\n  \"uncertain_fields\": [\"write_boundary_enforcement\"]\n}",
+      "role": "assistant",
+      "thinking": "Okay, let's tackle this query. The user is talking about JarvisOS and MemoryStore, specifically that MemoryStore should be the only durable memory write boundary. They mention hooks and routes can submit events but shouldn't write accepted memory directly.\n\nFirst, I need to determine the project bucket. Since it's about JarvisOS memory architecture, the project_bucket should be 'jarvisos' and primary_domain 'memory'. The domain_tags should include 'memory', 'software', 'architecture'. Storage relevance is high because it's about the system's core storage. Lifecycle status is 'proposed_memory' since it's a suggestion. Sensitivity is 'internal' as it's about system design. Source policy is 'review_only' because it's internal but needs review. Retrieval behavior is 'none' unless there's a request for access. Not_decided is false. Reasoning route is 'none' as it's a design decision. Data package needed is 'draft_batch_summary' to provide context. No redaction is needed here. User approval is recommended. The rationale is brief, explaining the focus on MemoryStore as the sole durable boundary.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 1568,
+    "prompt_eval_duration": 92081000,
+    "total_duration": 7106876700
+  },
+  "duration_seconds": 9.138,
+  "error": null,
+  "ok": true,
+  "status": 200
+}

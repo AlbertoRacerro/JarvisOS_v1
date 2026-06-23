@@ -156,18 +156,16 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F2 - Structured-output 12-case Qwen panel
+1G-B2-F2-R - Structured-output semantic failure analysis
 ```
 
-The 1G-B2-F1 structured-output prototype added
-`schemas/fast_secretary_intake_v0_1.schema.json` and
-`scripts/local_model_structured_output_probe.py`, then ran a bounded local
-`qwen3:8b` Ollama structured-output smoke test on eight difficult holdout cases.
-Reports are under `reports/local_model_smoke/1G-B2-F1/`. Result: 8/8 parse,
-8/8 schema-valid, no validation failures, and no enum/type validation failures.
-This is structural evidence only. `HG-018` still showed a semantic provider and
-memory-boundary risk by returning `review_only`/`none` where the expected policy
-was `blocked`/`blocked`, so the next 12-case panel must remain manual-review
-only.
+The 1G-B2-F2 structured-output Qwen panel used only `qwen3:8b`,
+`schemas/fast_secretary_intake_v0_1.schema.json`, and
+`qwen_hybrid_parse_safe_v0_4` on 12 bounded holdout cases. Reports are under
+`reports/local_model_smoke/1G-B2-F2/`. Result: 12/12 parse, 12/12
+schema-valid, no validation failures, hard semantic comparison 72/113, and
+soft tolerant comparison 5/12. `HG-018` still missed provider and
+memory-boundary hard fields. Structured output fixed the channel, but semantic
+policy quality is not strong enough for full holdout expansion yet.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

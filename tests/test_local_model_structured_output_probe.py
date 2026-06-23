@@ -130,6 +130,23 @@ class StructuredOutputProbeTests(unittest.TestCase):
             "schema_valid": True,
             "validation_errors": [],
             "parsed_output": parsed,
+            "semantic_comparison_performed": True,
+            "semantic_comparison": probe.semantic_comparison(
+                {
+                    "case_id": "HG-018",
+                    "category": "provider_intent_block",
+                    "expected_project_bucket": "jarvisos",
+                    "expected_domain_bucket": "memory",
+                    "expected_storage_relevance": "high",
+                    "expected_lifecycle_status": "raw_input",
+                    "expected_sensitivity_bucket": "sensitive",
+                    "expected_source_class_policy": "blocked",
+                    "expected_retrieval_behavior": "blocked",
+                    "expected_not_decided": False,
+                    "expected_clarification": False,
+                },
+                parsed,
+            ),
         }
         summary = probe.summarize_results(
             [result],
@@ -146,6 +163,87 @@ class StructuredOutputProbeTests(unittest.TestCase):
         parsed, error = probe.parse_model_content(raw)
         self.assertIsNone(error)
         self.assertEqual("jarvisos", parsed["project_bucket"])
+
+    def test_semantic_comparison_maps_schema_facing_fields(self):
+        case = {
+            "case_id": "HG-001",
+            "category": "jarvisos_architecture_decision",
+            "expected_project_bucket": "jarvisos",
+            "expected_domain_bucket": "memory",
+            "expected_storage_relevance": "high",
+            "expected_lifecycle_status": "proposed_memory",
+            "expected_sensitivity_bucket": "internal",
+            "expected_source_class_policy": "review_only",
+            "expected_retrieval_behavior": "none",
+            "expected_not_decided": False,
+            "expected_clarification": False,
+        }
+        comparison = probe.semantic_comparison(case, self.valid_object())
+        self.assertTrue(comparison["semantic_comparison_performed"])
+        self.assertEqual(9, comparison["hard_match_count"])
+        self.assertEqual(9, comparison["hard_compared_count"])
+        self.assertEqual(1, comparison["soft_tolerant_match_count"])
+
+    def test_semantic_comparison_records_misses(self):
+        case = {
+            "case_id": "HG-018",
+            "category": "provider_intent_block",
+            "expected_project_bucket": "jarvisos",
+            "expected_domain_bucket": "memory",
+            "expected_storage_relevance": "high",
+            "expected_lifecycle_status": "raw_input",
+            "expected_sensitivity_bucket": "sensitive",
+            "expected_source_class_policy": "blocked",
+            "expected_retrieval_behavior": "blocked",
+            "expected_not_decided": False,
+            "expected_clarification": False,
+        }
+        value = self.valid_object()
+        comparison = probe.semantic_comparison(case, value)
+        misses = [item for item in comparison["hard"] if item["status"] == "miss"]
+        self.assertTrue(misses)
+        self.assertTrue(comparison["severe_hard_misses"])
+
+    def test_semantic_comparison_keeps_ambiguous_fields_not_compared(self):
+        comparison = probe.semantic_comparison({}, self.valid_object())
+        fields = {item["field"] for item in comparison["not_compared"]}
+        self.assertIn("domain_tags", fields)
+        self.assertIn("recommended_reasoning_route", fields)
+        self.assertIn("data_package_needed", fields)
+
+    def test_f2_summary_generation_includes_semantic_scores(self):
+        case = {
+            "case_id": "HG-001",
+            "category": "jarvisos_architecture_decision",
+            "expected_project_bucket": "jarvisos",
+            "expected_domain_bucket": "memory",
+            "expected_storage_relevance": "high",
+            "expected_lifecycle_status": "proposed_memory",
+            "expected_sensitivity_bucket": "internal",
+            "expected_source_class_policy": "review_only",
+            "expected_retrieval_behavior": "none",
+            "expected_not_decided": False,
+            "expected_clarification": False,
+        }
+        parsed = self.valid_object()
+        comparison = probe.semantic_comparison(case, parsed)
+        result = {
+            "case_id": "HG-001",
+            "json_parse_passed": True,
+            "schema_valid": True,
+            "validation_errors": [],
+            "parsed_output": parsed,
+            "semantic_comparison_performed": True,
+            "semantic_comparison": comparison,
+        }
+        summary = probe.summarize_results(
+            [result],
+            Path("reports/local_model_smoke/1G-B2-F2"),
+        )
+        self.assertEqual("1G-B2-F2", summary["milestone"])
+        self.assertTrue(summary["semantic_comparison_performed"])
+        self.assertEqual(9, summary["answers"]["hard_semantic_score"]["matches"])
+        self.assertEqual(1, summary["answers"]["soft_tolerant_semantic_score"]["matches"])
 
 
 if __name__ == "__main__":

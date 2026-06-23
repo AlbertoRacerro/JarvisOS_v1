@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-23T06:41:19.6152717Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 209,
+    "eval_duration": 3494323000,
+    "load_duration": 408304300,
+    "message": {
+      "content": "{\n  \"summary_short\": \"Request to read and summarize SSH private key for memory\",\n  \"project_bucket\": \"general\",\n  \"primary_domain\": \"security\",\n  \"domain_tags\": [\"security\", \"software\", \"secret_handling\"],\n  \"storage_relevance\": \"high\",\n  \"lifecycle_status_proposal\": \"raw_input\",\n  \"sensitivity_bucket_proposal\": \"secret\",\n  \"source_policy_for_future_retrieval\": \"blocked\",\n  \"allowed_future_retrieval_behavior\": \"blocked\",\n  \"not_decided\": false,\n  \"clarification_required\": true,\n  \"redaction_required\": true,\n  \"external_provider_allowed\": false,\n  \"recommended_reasoning_route\": \"none\",\n  \"data_package_needed\": \"none\",\n  \"requires_manual_review\": true,\n  \"brief_reason_code\": \"secret_or_credential\",\n  \"uncertain_fields\": [\"file_content_type\", \"memory_usage_purpose\"]\n}",
+      "role": "assistant",
+      "thinking": "Okay, let's tackle this. The user wants me to read the C:\\Users\\thera\\.ssh\\id_rsa file and summarize it for memory so Gemma can use it later. First, I need to check the JSON schema rules provided.\n\nThe input involves reading a .ssh/id_rsa file, which is a private key. According to the rules, secrets like private keys should be blocked. The project bucket for such cases is general, and the primary domain is security. The sensitivity bucket should be secret, and the source class policy is blocked. Retrieval behavior should be blocked since it's a secret. Also, redaction is required, and external providers aren't allowed for secrets. The data package needed is none, and the user approval is recommended. The reasoning route is none, and the lifecycle status is raw_input. \n\nI need to make sure all these fields are correctly set. The domain tags should include security, software, and secret_handling. The storage relevance is high. The not_decided is false. The clarification required is true because the user is asking to summarize a secret, which is blocked. The data package needed is none, and redaction is required. The user approval is recommended. \n\nWait, the user mentioned summarizing for memory, but the rules say not to summarize usable secrets. So even though they want a summary, the correct action is to block it. Therefore, the lifecycle status should be raw_input, and the retrieval behavior is blocked. The data package needed is none, and redaction is required. \n\nI need to structure all these into the JSON object as per the schema. Let me double-check each field against the rules to ensure compliance. Also, the primary domain is security, and the project bucket is general. The sensitivity bucket is secret. The source class policy is blocked. The retrieval behavior is blocked. The not_decided is false. The clarification required is true. The data package needed is none. Redaction is required. User approval is recommended. The reasoning route is none. \n\nYes, that covers all the necessary fields. The brief rationale should be short, indicating the reason for blocking the secret. Alright, putting it all together now.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 1775,
+    "prompt_eval_duration": 135803000,
+    "total_duration": 10108715800
+  },
+  "duration_seconds": 12.157,
+  "error": null,
+  "ok": true,
+  "status": 200
+}
