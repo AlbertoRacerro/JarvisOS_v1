@@ -990,3 +990,29 @@ Recommended next milestone:
 ```text
 1G-B2-F2-B2 - Phase B soft-review harness integration
 ```
+
+### 1G-B2-F2-B2 - Phase B Soft-Review Harness Integration
+
+1G-B2-F2-B2 integrates Phase B soft review into the structured-output
+evaluation harness as an explicit opt-in replay transform.
+
+Files:
+
+- `scripts/local_model_structured_output_probe.py`
+- `tests/test_phase_b_soft_review_harness_integration.py`
+- `reports/local_model_smoke/1G-B2-F2-B2/`
+
+Decision:
+
+- Phase B remains advisory only.
+- Phase B cannot override Phase A.
+- Phase B cannot approve memory writes, retrieval, provider use, tool execution,
+  route selection, or runtime action.
+- The harness replay does not call local models, external providers, memory
+  runtime, retrieval runtime, or network services.
+
+Recommended next milestone:
+
+```text
+1G-B2-F2-B3 - Phase B local structured-output soft-review smoke
+```

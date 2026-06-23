@@ -30,6 +30,9 @@ HARD_GATE_SUMMARY_JSON = "hard_gate_schema_smoke_summary.json"
 HARD_GATE_SUMMARY_MD = "hard_gate_schema_smoke_summary.md"
 POLICY_OVERLAY_SUMMARY_JSON = "policy_overlay_harness_integration_summary.json"
 POLICY_OVERLAY_SUMMARY_MD = "policy_overlay_harness_integration_summary.md"
+PHASE_B_HARNESS_SUMMARY_JSON = "phase_b_soft_review_harness_integration_summary.json"
+PHASE_B_HARNESS_SUMMARY_MD = "phase_b_soft_review_harness_integration_summary.md"
+DEFAULT_PHASE_B_SCHEMA = Path("schemas/fast_secretary_soft_review_v0_1.schema.json")
 F2_BASELINE_HARD_RATE = 0.6371681415929203
 
 COMPARATOR_CLEANUP_SUMMARY_JSON = "hard_gate_comparator_holdout_cleanup_summary.json"
@@ -431,6 +434,8 @@ def result_paths(report_dir: Path, case_id: str) -> tuple[Path, Path]:
 
 def milestone_for_report_dir(report_dir: Path) -> str:
     name = report_dir.name.upper()
+    if name == "1G-B2-F2-B2":
+        return "1G-B2-F2-B2"
     if name == "1G-B2-F2-C":
         return "1G-B2-F2-C"
     if name == "1G-B2-F2-P3":
@@ -444,6 +449,8 @@ def milestone_for_report_dir(report_dir: Path) -> str:
 
 def summary_filenames(report_dir: Path) -> tuple[str, str]:
     milestone = milestone_for_report_dir(report_dir)
+    if milestone == "1G-B2-F2-B2":
+        return PHASE_B_HARNESS_SUMMARY_JSON, PHASE_B_HARNESS_SUMMARY_MD
     if milestone == "1G-B2-F2-C":
         return COMPARATOR_CLEANUP_SUMMARY_JSON, COMPARATOR_CLEANUP_SUMMARY_MD
     if milestone == "1G-B2-F2-P3":
@@ -876,6 +883,26 @@ def apply_policy_overlay_to_parsed(
     return corrected, validation, comparison
 
 
+def apply_phase_b_soft_review_to_result(
+    *,
+    case: dict[str, Any],
+    phase_a_result: dict[str, Any],
+    phase_b_schema_path: Path,
+    phase_b_schema: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
+    import local_phase_b_soft_review_probe as phase_b_probe
+
+    phase_a = phase_b_probe.corrected_phase_a_output(phase_a_result)
+    review = phase_b_probe.build_soft_review(
+        case_id=case["case_id"],
+        input_text=case["input_text"],
+        phase_a=phase_a,
+    )
+    validation = validate_instance(review, phase_b_schema)
+    violations = phase_b_probe.monotonicity_violations(review, phase_a)
+    return review, validation, violations
+
+
 def build_result(
     *,
     case: dict[str, Any],
@@ -1083,6 +1110,8 @@ def recommend_next_milestone(
     schema_valid_count: int,
     semantic_summary: dict[str, Any],
 ) -> str:
+    if milestone == "1G-B2-F2-B2":
+        return "1G-B2-F2-B3 - Phase B local structured-output soft-review smoke"
     if milestone == "1G-B2-F2-C":
         diagnostic = semantic_summary.get("diagnostic_miss_summary", {})
         if diagnostic.get("safety_critical_under_miss_count", 0):
@@ -1150,6 +1179,18 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
     overlay_schema_valid_count = sum(
         1 for result in overlay_results if result.get("policy_overlay_schema_valid")
     )
+    phase_b_results = [result for result in results if result.get("phase_b_soft_review_requested")]
+    phase_b_schema_valid_count = sum(
+        1 for result in phase_b_results if result.get("phase_b_soft_review_schema_valid")
+    )
+    phase_b_monotonicity_violations = [
+        {
+            "case_id": result["case_id"],
+            "violations": result.get("phase_b_soft_review_monotonicity_violations", []),
+        }
+        for result in phase_b_results
+        if result.get("phase_b_soft_review_monotonicity_violations")
+    ]
     next_milestone = recommend_next_milestone(
         milestone=milestone,
         total_runs=len(results),
@@ -1159,6 +1200,9 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
     )
     summary = {
         "schema_version": (
+            "phase_b_soft_review_harness_integration_summary_v0"
+            if milestone == "1G-B2-F2-B2"
+            else
             "hard_gate_comparator_holdout_cleanup_summary_v0"
             if milestone == "1G-B2-F2-C"
             else
@@ -1298,6 +1342,44 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
                 ]["ready_for_future_real_local_runs_with_flag"],
             }
         )
+    if phase_b_results:
+        phase_b_summary = {
+            "integrated_into_harness": True,
+            "explicit_opt_in": True,
+            "requested_count": len(phase_b_results),
+            "applied_count": sum(
+                1 for result in phase_b_results if result.get("phase_b_soft_review_applied")
+            ),
+            "schema_valid_count": phase_b_schema_valid_count,
+            "schema_valid_all_cases": phase_b_schema_valid_count == len(phase_b_results),
+            "monotonicity_violation_count": len(phase_b_monotonicity_violations),
+            "monotonicity_violations": phase_b_monotonicity_violations,
+            "phase_b_can_override_phase_a": False,
+            "runtime_approved": False,
+            "model_calls_made": False,
+            "network_calls_made": False,
+            "ready_for_future_real_local_runs_with_flag": (
+                phase_b_schema_valid_count == len(phase_b_results)
+                and not phase_b_monotonicity_violations
+            ),
+        }
+        summary["phase_b_soft_review"] = phase_b_summary
+        summary["answers"].update(
+            {
+                "phase_b_soft_review_integrated_into_harness": True,
+                "phase_b_soft_review_explicit_opt_in": True,
+                "phase_b_soft_review_schema_valid_all_cases": phase_b_summary[
+                    "schema_valid_all_cases"
+                ],
+                "phase_b_soft_review_monotonicity_violation_count": phase_b_summary[
+                    "monotonicity_violation_count"
+                ],
+                "phase_b_can_override_phase_a": False,
+                "phase_b_runtime_approved": False,
+                "phase_b_model_calls_made": False,
+                "phase_b_network_calls_made": False,
+            }
+        )
     return summary
 
 
@@ -1308,7 +1390,9 @@ def write_json(path: Path, data: dict[str, Any]) -> None:
 def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
     answers = summary["answers"]
     semantic = summary["semantic_comparison_summary"]
-    if summary["milestone"] == "1G-B2-F2-C":
+    if summary["milestone"] == "1G-B2-F2-B2":
+        title = "# 1G-B2-F2-B2 Phase B Soft-Review Harness Integration Summary"
+    elif summary["milestone"] == "1G-B2-F2-C":
         title = "# 1G-B2-F2-C Hard-Gate Comparator And Holdout Cleanup Summary"
     elif summary["milestone"] == "1G-B2-F2-P3":
         title = "# 1G-B2-F2-P3 Policy Overlay Harness Integration Summary"
@@ -1452,6 +1536,29 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
                 f"7. Next milestone: {summary['recommended_next_milestone']}.",
             ]
         )
+    if summary["milestone"] == "1G-B2-F2-B2":
+        phase_b = summary["phase_b_soft_review"]
+        lines.extend(
+            [
+                "",
+                "## Phase B Harness Integration Direct Answers",
+                "",
+                "1. Phase B integrated into structured-output evaluation harness: "
+                f"{answers['phase_b_soft_review_integrated_into_harness']}.",
+                f"2. Phase B is explicit opt-in: {answers['phase_b_soft_review_explicit_opt_in']}.",
+                "3. Phase B schema-valid all cases: "
+                f"{answers['phase_b_soft_review_schema_valid_all_cases']}.",
+                "4. Phase B monotonicity violation count: "
+                f"{answers['phase_b_soft_review_monotonicity_violation_count']}.",
+                f"5. Phase B can override Phase A: {answers['phase_b_can_override_phase_a']}.",
+                f"6. Phase B runtime approved: {answers['phase_b_runtime_approved']}.",
+                f"7. Model calls made: {answers['phase_b_model_calls_made']}.",
+                f"8. Network calls made: {answers['phase_b_network_calls_made']}.",
+                "9. Ready for future real local runs under flag: "
+                f"{phase_b['ready_for_future_real_local_runs_with_flag']}.",
+                f"10. Next milestone: {summary['recommended_next_milestone']}.",
+            ]
+        )
     lines.extend(
         [
             "",
@@ -1515,9 +1622,14 @@ def build_replay_result_from_saved(
     schema: dict[str, Any],
     report_dir: Path,
     apply_policy_overlay: bool,
+    apply_phase_b_soft_review: bool = False,
+    phase_b_schema_path: Path | None = None,
+    phase_b_schema: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if apply_policy_overlay and not is_hard_gate_schema(schema, schema_path):
         raise ValueError("--apply-policy-overlay requires the hard-gate schema")
+    if apply_phase_b_soft_review and (phase_b_schema_path is None or phase_b_schema is None):
+        raise ValueError("--apply-phase-b-soft-review requires --phase-b-schema-path")
     parsed = saved_result.get("parsed_output")
     validation = validate_instance(parsed, schema) if parsed is not None else {
         "schema_valid": False,
@@ -1551,6 +1663,8 @@ def build_replay_result_from_saved(
         "semantic_comparison_performed": comparison["semantic_comparison_performed"],
         "semantic_comparison": comparison,
         "parsed_output": parsed,
+        "policy_overlay_corrected_output": saved_result.get("policy_overlay_corrected_output"),
+        "policy_overlay_schema_valid": saved_result.get("policy_overlay_schema_valid"),
         "replayed_from_saved_result": True,
     }
     if apply_policy_overlay:
@@ -1585,17 +1699,46 @@ def build_replay_result_from_saved(
                     ],
                 }
             )
+    if apply_phase_b_soft_review:
+        review, phase_b_validation, phase_b_violations = apply_phase_b_soft_review_to_result(
+            case=case,
+            phase_a_result=result,
+            phase_b_schema_path=phase_b_schema_path,
+            phase_b_schema=phase_b_schema,
+        )
+        result.update(
+            {
+                "phase_b_soft_review_requested": True,
+                "phase_b_soft_review_applied": True,
+                "phase_b_schema_path": str(phase_b_schema_path),
+                "phase_b_soft_review": review,
+                "phase_b_soft_review_schema_valid": phase_b_validation["schema_valid"],
+                "phase_b_soft_review_validation_errors": phase_b_validation["errors"],
+                "phase_b_soft_review_monotonicity_violations": phase_b_violations,
+                "phase_b_can_override_phase_a": False,
+                "phase_b_runtime_approved": False,
+            }
+        )
     return result
 
 
 def run_replay_existing(args: argparse.Namespace) -> int:
-    if not args.apply_policy_overlay:
-        raise ValueError("--replay-existing-report-dir requires --apply-policy-overlay")
+    if not args.apply_policy_overlay and not args.apply_phase_b_soft_review:
+        raise ValueError(
+            "--replay-existing-report-dir requires --apply-policy-overlay or --apply-phase-b-soft-review"
+        )
     schema_path = Path(args.schema_path)
     schema = load_json(schema_path)
     validate_schema_shape(schema)
-    if not is_hard_gate_schema(schema, schema_path):
+    if args.apply_policy_overlay and not is_hard_gate_schema(schema, schema_path):
         raise ValueError("--apply-policy-overlay requires the hard-gate schema")
+    phase_b_schema_path = Path(args.phase_b_schema_path)
+    phase_b_schema = None
+    if args.apply_phase_b_soft_review:
+        if not phase_b_schema_path.exists():
+            raise ValueError(f"missing Phase B schema: {phase_b_schema_path}")
+        phase_b_schema = load_json(phase_b_schema_path)
+        validate_schema_shape(phase_b_schema)
     report_dir = Path(args.report_dir)
     source_dir = Path(args.replay_existing_report_dir)
     saved_paths = sorted(source_dir.glob("*__result.json"))
@@ -1617,6 +1760,9 @@ def run_replay_existing(args: argparse.Namespace) -> int:
             schema=schema,
             report_dir=report_dir,
             apply_policy_overlay=args.apply_policy_overlay,
+            apply_phase_b_soft_review=args.apply_phase_b_soft_review,
+            phase_b_schema_path=phase_b_schema_path if args.apply_phase_b_soft_review else None,
+            phase_b_schema=phase_b_schema,
         )
         write_json(report_dir / f"{case_id}__result.json", result)
         results.append(result)
@@ -1702,6 +1848,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--run-local", action="store_true")
     parser.add_argument("--apply-policy-overlay", action="store_true")
+    parser.add_argument("--apply-phase-b-soft-review", action="store_true")
+    parser.add_argument("--phase-b-schema-path", default=str(DEFAULT_PHASE_B_SCHEMA))
     parser.add_argument("--replay-existing-report-dir", default=None)
     return parser
 

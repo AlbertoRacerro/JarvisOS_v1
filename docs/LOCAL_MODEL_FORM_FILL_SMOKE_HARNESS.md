@@ -1219,3 +1219,28 @@ Recommended next milestone:
 ```text
 1G-B2-F2-B2 - Phase B soft-review harness integration
 ```
+
+## 1G-B2-F2-B2 Phase B Soft-Review Harness Integration
+
+`1G-B2-F2-B2` integrates Phase B soft review into the structured-output
+evaluation harness as an explicit opt-in replay transform:
+
+```powershell
+python scripts\local_model_structured_output_probe.py `
+  --replay-existing-report-dir reports\local_model_smoke\1G-B2-F2-C `
+  --apply-phase-b-soft-review `
+  --schema-path schemas\fast_secretary_hard_gate_v0_1.schema.json `
+  --phase-b-schema-path schemas\fast_secretary_soft_review_v0_1.schema.json `
+  --report-dir reports\local_model_smoke\1G-B2-F2-B2
+```
+
+Phase B remains advisory only. The harness records schema validation,
+monotonicity violations, model/network call status, and runtime approval status.
+It cannot override Phase A, approve memory writes, approve retrieval, approve
+provider use, execute tools, or clear manual review.
+
+Recommended next milestone:
+
+```text
+1G-B2-F2-B3 - Phase B local structured-output soft-review smoke
+```

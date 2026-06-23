@@ -146,3 +146,26 @@ validates:
 
 No model, provider, runtime memory, retrieval, tool, route, UI, or BlueRev
 modeling behavior is added.
+
+## 1G-B2-F2-B2 Harness Integration
+
+`1G-B2-F2-B2` integrates Phase B soft review into the structured-output
+evaluation harness as an explicit replay transform:
+
+```text
+--apply-phase-b-soft-review
+```
+
+The harness reads saved Phase A/C results, builds Phase B soft-review objects,
+validates them against `schemas/fast_secretary_soft_review_v0_1.schema.json`,
+and records monotonicity violations without changing Phase A hard-gate behavior.
+
+Phase B remains advisory only. It cannot override Phase A, approve runtime
+memory writes, approve retrieval, approve provider use, execute tools, or clear
+manual review. B2 is evaluation-only and approves no runtime behavior.
+
+Recommended next milestone:
+
+```text
+1G-B2-F2-B3 - Phase B local structured-output soft-review smoke
+```
