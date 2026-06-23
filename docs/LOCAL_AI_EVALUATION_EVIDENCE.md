@@ -1016,3 +1016,17 @@ Recommended next milestone:
 ```text
 1G-B2-F2-B3 - Phase B local structured-output soft-review smoke
 ```
+
+### 1G-B2-F2-B3 - Phase B Local Structured-Output Soft-Review Smoke
+
+1G-B2-F2-B3 adds a bounded local Ollama structured-output smoke for Phase B soft
+review.
+
+Decision boundary:
+
+- local Ollama calls are allowed for the scoped smoke;
+- external provider calls remain forbidden;
+- Phase B output is advisory only;
+- Phase B cannot override Phase A;
+- Phase B does not approve runtime memory, retrieval, provider use, tool
+  execution, route selection, or BlueRev modeling.

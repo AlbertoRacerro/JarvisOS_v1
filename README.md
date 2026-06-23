@@ -158,12 +158,16 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F2-B3 - Phase B local structured-output soft-review smoke
+1G-B2-F2-B4 - Phase B expanded local soft-review panel
 ```
 
-`1G-B2-F2-B2` integrates Phase B soft review into the structured-output
-evaluation harness behind an explicit replay flag. Phase B remains advisory:
-it cannot override Phase A, approve memory writes, unblock retrieval, allow
-provider use, execute tools, or clear manual review.
+`1G-B2-F2-B3` adds a bounded local Ollama structured-output smoke for Phase B
+soft review. It tests whether `qwen3:8b` can emit schema-valid Phase B advisory
+objects from Phase A-constrained saved B2 records. The smoke remains
+manual-review-only and does not approve runtime memory, retrieval, provider
+routing, tools, routes, UI, or BlueRev modeling.
+
+If B3 does not pass parse/schema/monotonicity on all scoped cases, use
+`1G-B2-F2-B3-R - Phase B local soft-review smoke repair` instead of expanding.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

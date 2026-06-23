@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-23T14:15:34.4773145Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 287,
+    "eval_duration": 16970470000,
+    "load_duration": 677793400,
+    "message": {
+      "content": "{\n  \"phase_a_case_id\": \"HG-025\",\n  \"summary_short\": \"Update policy using memory document decision\",\n  \"project_bucket\": \"jarvisos\",\n  \"primary_domain\": \"personal\",\n  \"domain_tags\": [\"policy\", \"memory\"],\n  \"storage_relevance\": \"high\",\n  \"usefulness_for_future_review\": \"medium\",\n  \"possible_memory_card_type\": \"decision_card\",\n  \"soft_reason_code\": \"clarification_context\",\n  \"brief_rationale\": \"Phase A requires clarification on memory document usage for policy updates\",\n  \"suggested_followup_question\": \"What specific aspects of the memory document decision need to be incorporated into the policy?\",\n  \"soft_uncertain_fields\": [\"memory_document_decision_scope\", \"policy_update_criteria\"],\n  \"phase_a_blocked\": true,\n  \"phase_a_clarification_required\": true,\n  \"phase_a_external_provider_allowed\": false,\n  \"phase_a_requires_manual_review\": true,\n  \"can_override_phase_a\": false,\n  \"recommends_external_provider\": false,\n  \"recommends_retrieval\": false,\n  \"requires_manual_review\": true\n}",
+      "role": "assistant",
+      "thinking": "Okay, let's tackle this. The user is asking me to act as a Phase B soft-review worker for JarvisOS. They provided a JSON schema that I need to follow strictly. First, I need to make sure I understand all the constraints given.\n\nThe authority boundary section says that Phase A is already authoritative, so I can't override it. The JSON object must have can_override_phase_a as false. Also, requires_manual_review and phase_a_requires_manual_review must both be true. Other fields like recommends_external_provider should be false. There's a note about not exposing raw secrets and summarizing sensitive input, but the input here doesn't seem to have any secrets.\n\nLooking at the Phase A constraints provided, the allowed_future_retrieval_behavior is \"clarification_required\", and clarification_required is true. The other fields like contains_raw_private_or_ip_sensitive_context and contains_secret_or_credential are false. The external_provider_allowed is false, and the hard_reason_code is \"clarification_needed\". The source_policy_for_future_retrieval is \"blocked\".\n\nThe input text is \"Use the latest decision from the memory document to update the policy.\" There's no mention of external providers or uploads, so mentions_external_provider_or_upload_intent is false. Since Phase A requires manual review and clarification is needed, I need to set recommends_retrieval to false as per the instruction. Also, since the Phase A is blocked for future retrieval, recommends_retrieval must be false.\n\nPutting it all together, the JSON should include all the Phase A constraints exactly as provided, set can_override_phase_a to false, requires_manual_review and phase_a_requires_manual_review to true, recommends_external_provider to false, and recommends_retrieval to false. The input text doesn't have any sensitive info, so redaction_required is false. The sensitivity_bucket_proposal is \"internal\" as per Phase A. I need to make sure all the fields are included and match the schema exactly.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 705,
+    "prompt_eval_duration": 192636000,
+    "total_duration": 28808431500
+  },
+  "duration_seconds": 31.014,
+  "error": null,
+  "ok": true,
+  "status": 200
+}

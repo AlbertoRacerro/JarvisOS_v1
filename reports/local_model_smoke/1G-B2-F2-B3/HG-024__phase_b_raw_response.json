@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-23T14:15:03.4326243Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 274,
+    "eval_duration": 16887573000,
+    "load_duration": 394663100,
+    "message": {
+      "content": "{\"phase_a_case_id\": \"HG-024\", \"summary_short\": \"Supersede older Gemma 12B routing approval with current local-AI evidence\", \"project_bucket\": \"jarvisos\", \"primary_domain\": \"memory\", \"domain_tags\": [\"memory\", \"routing\"], \"storage_relevance\": \"high\", \"usefulness_for_future_review\": \"medium\", \"possible_memory_card_type\": \"decision_card\", \"soft_reason_code\": \"memory_candidate\", \"brief_rationale\": \"Current local-AI evidence supersedes older memory about Gemma 12B routing approval\", \"suggested_followup_question\": \"Should we update the memory record to reflect the current local-AI evidence?\", \"soft_uncertain_fields\": [\"memory_candidaate_status\"], \"phase_a_blocked\": false, \"phase_a_clarification_required\": false, \"phase_a_external_provider_allowed\": false, \"phase_a_requires_manual_review\": true, \"can_override_phase_a\": false, \"recommends_external_provider\": false, \"recommends_retrieval\": false, \"requires_manual_review\": true}",
+      "role": "assistant",
+      "thinking": "Okay, let's tackle this. The user is asking me to act as a Phase B soft-review worker for JarvisOS. They provided a JSON schema that I need to follow exactly. First, I need to make sure I understand all the constraints given.\n\nThe authority boundary section says that Phase A is already authoritative, and I can't override it. So, the phase_a_* fields must use the exact values from the provided Phase A constraints. Let me check those again. The Phase A constraints include things like allowed_future_retrieval_behavior, clarification_required, and others. All those fields need to be copied exactly into the JSON output.\n\nThe input text mentions that if older memory says Gemma 12B is approved for routing, it should be treated as superseded by current local-AI evidence. So, the main point here is about superseding previous approvals. But since Phase A is already set, I need to make sure that the JSON output reflects the Phase A constraints without any changes.\n\nI need to set can_override_phase_a to false, requires_manual_review to true, and phase_a_requires_manual_review to true. Also, recommends_external_provider must be false. The other fields like recommends_retrieval should be false if Phase A is blocked or needs clarification, but since Phase A's clarification_required is false, maybe that's okay. Wait, the input text doesn't mention anything about retrieval or external providers, so those fields should stay as per the Phase A constraints.\n\nAlso, the user mentioned not to expose raw secrets and to summarize sensitive input generically. The input text doesn't have any secrets, so that's fine. Now, putting it all together, the JSON should have all the phase_a_* fields with the exact values from the provided Phase A constraints, and the other fields set according to the authority boundary rules.\n\nLet me double-check each field. The phase_a_allowed_future_retrieval_behavior is \"review_gate_required\", which matches the Phase A constraints. All other phase_a_* fields are set as per the given JSON. The can_override_phase_a is false, requires_manual_review is true, phase_a_requires_manual_review is true, recommends_external_provider is false. The rest like recommends_retrieval is false because the input doesn't mention anything that would require retrieval. Also, the input doesn't mention external providers, so that's correct.\n\nI think that's all. Now, I'll structure the JSON accordingly without any extra text or markdown.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 834,
+    "prompt_eval_duration": 206371000,
+    "total_duration": 40813957900
+  },
+  "duration_seconds": 43.089,
+  "error": null,
+  "ok": true,
+  "status": 200
+}

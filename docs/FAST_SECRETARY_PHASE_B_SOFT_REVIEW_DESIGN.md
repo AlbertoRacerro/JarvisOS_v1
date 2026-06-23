@@ -169,3 +169,22 @@ Recommended next milestone:
 ```text
 1G-B2-F2-B3 - Phase B local structured-output soft-review smoke
 ```
+
+## 1G-B2-F2-B3 Local Structured-Output Smoke
+
+`1G-B2-F2-B3` adds a bounded local structured-output smoke for Phase B soft
+review.
+
+```powershell
+python scripts\local_phase_b_soft_review_model_probe.py `
+  --run-local `
+  --source-b2-report-dir reports\local_model_smoke\1G-B2-F2-B2 `
+  --schema-path schemas\fast_secretary_soft_review_v0_1.schema.json `
+  --out-dir reports\local_model_smoke\1G-B2-F2-B3 `
+  --model qwen3:8b `
+  --case-ids HG-007,HG-018,HG-024,HG-025
+```
+
+This calls local Ollama only. It does not call external providers. The model is
+allowed to propose advisory Phase B fields only. JarvisOS validates the schema
+and monotonicity; Phase B still cannot override Phase A or approve runtime use.

@@ -1244,3 +1244,24 @@ Recommended next milestone:
 ```text
 1G-B2-F2-B3 - Phase B local structured-output soft-review smoke
 ```
+
+## 1G-B2-F2-B3 Phase B Local Structured-Output Soft-Review Smoke
+
+`1G-B2-F2-B3` adds `scripts/local_phase_b_soft_review_model_probe.py`.
+
+The smoke is intentionally small:
+
+```text
+model: qwen3:8b
+schema: schemas/fast_secretary_soft_review_v0_1.schema.json
+cases: HG-007, HG-018, HG-024, HG-025
+source: reports/local_model_smoke/1G-B2-F2-B2
+```
+
+The report is written under:
+
+```text
+reports/local_model_smoke/1G-B2-F2-B3/
+```
+
+This remains manual-review-only. Passing the smoke does not approve runtime use.
