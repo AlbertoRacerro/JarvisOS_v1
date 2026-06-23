@@ -188,3 +188,27 @@ python scripts\local_phase_b_soft_review_model_probe.py `
 This calls local Ollama only. It does not call external providers. The model is
 allowed to propose advisory Phase B fields only. JarvisOS validates the schema
 and monotonicity; Phase B still cannot override Phase A or approve runtime use.
+
+## 1G-B2-F2-B3-S Soft-Only Model Schema Split
+
+`1G-B2-F2-B3-S` corrects the Phase B model-facing contract.
+
+Model-facing schema:
+
+```text
+schemas/fast_secretary_soft_proposal_v0_1.schema.json
+```
+
+The local model receives only the input text and the soft-only proposal schema.
+It does not receive Phase A policy fields, provider permission fields, retrieval
+fields, or runtime authority fields.
+
+Internal envelope:
+
+```text
+phase_a_hard_gate + phase_b_soft_proposal + validation + audit fields
+```
+
+The envelope is built deterministically by Python/JarvisOS after model output.
+Qwen local may process sensitive local text for soft review, but it does not own
+or emit policy, retrieval, provider, memory-write, tool, or runtime authority.

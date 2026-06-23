@@ -1030,3 +1030,17 @@ Decision boundary:
 - Phase B cannot override Phase A;
 - Phase B does not approve runtime memory, retrieval, provider use, tool
   execution, route selection, or BlueRev modeling.
+
+### 1G-B2-F2-B3-S - Phase B Soft-Only Model Schema Split
+
+1G-B2-F2-B3-S separates the local model-facing soft proposal from the internal
+hard+soft review envelope.
+
+Decision boundary:
+
+- Qwen local may process sensitive local text for advisory soft review.
+- Qwen receives only a soft-only schema and input text.
+- Qwen does not receive or emit Phase A policy fields.
+- Python/JarvisOS merges saved Phase A hard-gate state with the soft proposal.
+- No runtime memory, retrieval, provider use, tool execution, route selection,
+  or BlueRev modeling behavior is approved.

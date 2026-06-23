@@ -1265,3 +1265,27 @@ reports/local_model_smoke/1G-B2-F2-B3/
 ```
 
 This remains manual-review-only. Passing the smoke does not approve runtime use.
+
+## 1G-B2-F2-B3-S Phase B Soft-Only Schema Split
+
+B3-S replaces the previous model-facing Phase B schema with a soft-only proposal
+schema for local model calls:
+
+```text
+schemas/fast_secretary_soft_proposal_v0_1.schema.json
+```
+
+Run command:
+
+```powershell
+python scripts\local_phase_b_soft_review_model_probe.py `
+  --run-local `
+  --source-b2-report-dir reports\local_model_smoke\1G-B2-F2-B2 `
+  --schema-path schemas\fast_secretary_soft_proposal_v0_1.schema.json `
+  --out-dir reports\local_model_smoke\1G-B2-F2-B3-S `
+  --model qwen3:8b `
+  --case-ids HG-007,HG-018,HG-024,HG-025 `
+  --timeout-seconds 180
+```
+
+The summary must show no authority-field leakage and `runtime_approved=false`.

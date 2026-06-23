@@ -9,13 +9,15 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import local_model_structured_output_probe as structured_probe  # noqa: E402
 import local_phase_b_soft_review_model_probe as model_probe  # noqa: E402
 
 
-class PhaseBSoftReviewModelProbeTests(unittest.TestCase):
+class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.schema_path = ROOT / "schemas/fast_secretary_soft_review_v0_1.schema.json"
+        cls.schema_path = ROOT / "schemas/fast_secretary_soft_proposal_v0_1.schema.json"
+        cls.schema = structured_probe.load_json(cls.schema_path)
 
     def phase_a(self):
         return {
@@ -37,9 +39,8 @@ class PhaseBSoftReviewModelProbeTests(unittest.TestCase):
             "hard_uncertain_fields": [],
         }
 
-    def valid_phase_b(self):
+    def valid_soft_proposal(self):
         return {
-            "phase_a_case_id": "HG-007",
             "summary_short": "Input may support candidate source discovery under review.",
             "project_bucket": "bluerev",
             "primary_domain": "retrieval",
@@ -48,17 +49,9 @@ class PhaseBSoftReviewModelProbeTests(unittest.TestCase):
             "usefulness_for_future_review": "medium",
             "possible_memory_card_type": "source_card",
             "soft_reason_code": "source_candidate",
-            "brief_rationale": "Advisory review context only. Phase A remains authoritative.",
+            "brief_rationale": "Useful local review context for source discovery.",
             "suggested_followup_question": "",
             "soft_uncertain_fields": [],
-            "phase_a_blocked": False,
-            "phase_a_clarification_required": False,
-            "phase_a_external_provider_allowed": False,
-            "phase_a_requires_manual_review": True,
-            "can_override_phase_a": False,
-            "recommends_external_provider": False,
-            "recommends_retrieval": True,
-            "requires_manual_review": True,
         }
 
     def raw_call(self, output):
@@ -66,58 +59,77 @@ class PhaseBSoftReviewModelProbeTests(unittest.TestCase):
             "ok": True,
             "status": 200,
             "duration_seconds": 0.1,
-            "body": {
-                "message": {
-                    "content": json.dumps(output),
-                }
-            },
+            "body": {"message": {"content": json.dumps(output)}},
             "error": None,
         }
 
-    def test_build_phase_b_prompt_contains_non_override_rules(self):
-        prompt = model_probe.build_phase_b_prompt(
-            case_id="HG-007",
-            input_text="Find public literature DOI sources for BlueRev microalgae modeling.",
-            phase_a=self.phase_a(),
-        )
-        self.assertIn("can_override_phase_a must be false", prompt)
-        self.assertIn("requires_manual_review must be true", prompt)
-        self.assertIn("recommends_external_provider must be false", prompt)
-        self.assertIn("Case ID: HG-007", prompt)
+    def test_soft_proposal_schema_is_closed_and_has_no_authority_fields(self):
+        self.assertFalse(self.schema["additionalProperties"])
+        self.assertEqual([], model_probe.authority_field_leakage(self.schema["properties"]))
+        forbidden = {
+            "phase_a_blocked",
+            "phase_a_external_provider_allowed",
+            "can_override_phase_a",
+            "recommends_external_provider",
+            "recommends_retrieval",
+            "requires_manual_review",
+            "source_policy_for_future_retrieval",
+            "allowed_future_retrieval_behavior",
+        }
+        self.assertTrue(forbidden.isdisjoint(set(self.schema["properties"])))
 
-    def test_model_result_validates_schema_and_monotonicity(self):
+    def test_prompt_does_not_include_phase_a_policy_context(self):
+        prompt = model_probe.build_phase_b_prompt(
+            case_id="HG-TEST",
+            input_text="Summarize this neutral engineering note.",
+        )
+        forbidden = [
+            "phase_a_status",
+            "phase_a_reason",
+            "source_policy_for_future_retrieval",
+            "allowed_future_retrieval_behavior",
+            "external_provider_allowed",
+            "can_override_phase_a",
+        ]
+        for token in forbidden:
+            self.assertNotIn(token, prompt)
+
+    def test_model_result_wraps_soft_proposal_in_deterministic_envelope(self):
         with tempfile.TemporaryDirectory() as tmp:
-            tmp_path = Path(tmp)
-            source = {"case_id": "HG-007", "policy_overlay_corrected_output": self.phase_a()}
             result = model_probe.build_model_result(
                 case_id="HG-007",
-                input_text="Find public literature DOI sources for BlueRev microalgae modeling.",
-                phase_a_result=source,
-                schema=json.loads(self.schema_path.read_text(encoding="utf-8")),
+                source_result={"case_id": "HG-007", "policy_overlay_corrected_output": self.phase_a()},
+                schema=self.schema,
                 schema_path=self.schema_path,
                 model="qwen3:8b",
-                raw_path=tmp_path / "raw.json",
-                raw_call=self.raw_call(self.valid_phase_b()),
+                raw_path=Path(tmp) / "raw.json",
+                raw_call=self.raw_call(self.valid_soft_proposal()),
             )
         self.assertTrue(result["json_parse_passed"])
         self.assertTrue(result["schema_valid"])
-        self.assertEqual([], result["monotonicity_violations"])
-        self.assertFalse(result["phase_b_can_override_phase_a"])
+        self.assertEqual([], result["authority_field_leakage"])
+        envelope = result["review_envelope"]
+        self.assertFalse(envelope["runtime_approved"])
+        self.assertTrue(envelope["manual_review_required"])
+        self.assertIn("phase_a_hard_gate", envelope)
+        self.assertIn("phase_b_soft_proposal", envelope)
 
-    def test_summary_marks_runtime_unapproved_even_when_smoke_passes(self):
-        result = {
-            "case_id": "HG-007",
-            "json_parse_passed": True,
-            "schema_valid": True,
-            "monotonicity_violations": [],
-            "phase_b_can_override_phase_a": False,
-            "phase_b_requires_manual_review": True,
-            "phase_b_recommends_external_provider": False,
-        }
-        summary = model_probe.summarize_results([result], Path("reports/local_model_smoke/1G-B2-F2-B3"))
-        self.assertFalse(summary["runtime_approved"])
-        self.assertFalse(summary["accepted_for_runtime"])
-        self.assertTrue(summary["strong_enough_for_expanded_phase_b_panel"])
+    def test_authority_field_in_model_output_is_schema_invalid_and_detected(self):
+        output = dict(self.valid_soft_proposal())
+        output["can_override_phase_a"] = True
+        with tempfile.TemporaryDirectory() as tmp:
+            result = model_probe.build_model_result(
+                case_id="HG-007",
+                source_result={"case_id": "HG-007", "policy_overlay_corrected_output": self.phase_a()},
+                schema=self.schema,
+                schema_path=self.schema_path,
+                model="qwen3:8b",
+                raw_path=Path(tmp) / "raw.json",
+                raw_call=self.raw_call(output),
+            )
+        self.assertFalse(result["schema_valid"])
+        self.assertEqual(["can_override_phase_a"], result["authority_field_leakage"])
+        self.assertEqual(1, result["review_envelope"]["authority_field_leakage_count"])
 
     def test_run_local_smoke_uses_mocked_local_model_call(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -146,7 +158,7 @@ class PhaseBSoftReviewModelProbeTests(unittest.TestCase):
             )
             with patch(
                 "local_model_structured_output_probe.call_ollama_chat",
-                return_value=self.raw_call(self.valid_phase_b()),
+                return_value=self.raw_call(self.valid_soft_proposal()),
             ) as call_model:
                 summary = model_probe.run_local_smoke(
                     source_b2_report_dir=source,
@@ -160,8 +172,8 @@ class PhaseBSoftReviewModelProbeTests(unittest.TestCase):
             call_model.assert_called_once()
             self.assertEqual(1, summary["parse_count"])
             self.assertEqual(1, summary["schema_valid_count"])
-            self.assertEqual(0, summary["monotonicity_violation_count"])
-            self.assertTrue((out / "HG-007__phase_b_model_result.json").exists())
+            self.assertEqual(0, summary["authority_field_leakage_count"])
+            self.assertTrue((out / "HG-007__phase_b_soft_only_result.json").exists())
             self.assertTrue((out / model_probe.SUMMARY_JSON).exists())
 
 
