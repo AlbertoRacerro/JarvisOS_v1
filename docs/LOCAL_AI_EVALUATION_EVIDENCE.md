@@ -965,3 +965,28 @@ Recommended next milestone:
 ```text
 1G-B2-F2-B1 - Phase B soft-review fixture prototype
 ```
+
+### 1G-B2-F2-B1 - Phase B Soft-Review Fixture Prototype
+
+1G-B2-F2-B1 adds a deterministic, no-model fixture probe for Phase B soft review.
+
+Files:
+
+- `scripts/local_phase_b_soft_review_probe.py`
+- `tests/test_local_phase_b_soft_review_probe.py`
+- `reports/local_model_smoke/1G-B2-F2-B1/`
+
+Decision:
+
+- Phase B fixture outputs remain advisory only.
+- Phase B cannot override Phase A.
+- Phase B cannot approve memory writes, retrieval, provider use, tool execution,
+  route selection, or runtime action.
+- The fixture does not call local models, external providers, memory runtime, or
+  retrieval runtime.
+
+Recommended next milestone:
+
+```text
+1G-B2-F2-B2 - Phase B soft-review harness integration
+```

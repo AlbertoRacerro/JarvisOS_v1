@@ -123,3 +123,26 @@ This milestone does not run a model and does not approve Phase B for runtime use
 B1 should create fixture-only Phase B examples from existing corrected Phase A
 objects, without model calls, runtime memory, retrieval, provider routing, or
 tool behavior.
+
+## 1G-B2-F2-B1 Fixture Prototype
+
+`1G-B2-F2-B1` adds a deterministic, no-model fixture probe:
+
+```text
+scripts/local_phase_b_soft_review_probe.py
+tests/test_local_phase_b_soft_review_probe.py
+reports/local_model_smoke/1G-B2-F2-B1/
+```
+
+The fixture reads overlay-corrected Phase A results from the C report directory,
+uses holdout text only as fixture input, emits Phase B soft-review objects, and
+validates:
+
+- schema validity;
+- manual-review stickiness;
+- no Phase A override;
+- no provider recommendation when Phase A disallows provider use;
+- no retrieval recommendation when Phase A blocks or requires clarification.
+
+No model, provider, runtime memory, retrieval, tool, route, UI, or BlueRev
+modeling behavior is added.

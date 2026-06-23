@@ -1197,3 +1197,25 @@ Recommended next milestone:
 ```text
 1G-B2-F2-B1 - Phase B soft-review fixture prototype
 ```
+
+## 1G-B2-F2-B1 Phase B Soft-Review Fixture Prototype
+
+`1G-B2-F2-B1` adds a deterministic fixture probe for Phase B:
+
+```powershell
+python scripts\local_phase_b_soft_review_probe.py `
+  --phase-a-report-dir reports\local_model_smoke\1G-B2-F2-C `
+  --schema-path schemas\fast_secretary_soft_review_v0_1.schema.json `
+  --out-dir reports\local_model_smoke\1G-B2-F2-B1
+```
+
+The fixture is no-model and no-network. It creates one Phase B soft-review JSON
+per saved Phase A result and a summary report. The summary must keep
+`phase_b_can_override_phase_a = false`, `runtime_approved = false`, and
+`semantic_truth_scored = false`.
+
+Recommended next milestone:
+
+```text
+1G-B2-F2-B2 - Phase B soft-review harness integration
+```

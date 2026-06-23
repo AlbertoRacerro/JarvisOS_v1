@@ -158,12 +158,12 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F2-B1 - Phase B soft-review fixture prototype
+1G-B2-F2-B2 - Phase B soft-review harness integration
 ```
 
-`1G-B2-F2-B` adds the Phase B soft-review schema and design. Phase B is advisory
-only: it can summarize and label for review, but cannot override Phase A,
-approve memory writes, unblock retrieval, allow provider use, execute tools, or
-clear manual review.
+`1G-B2-F2-B1` adds a deterministic, no-model Phase B fixture probe. It builds
+soft-review records from overlay-corrected Phase A outputs, validates them
+against `schemas/fast_secretary_soft_review_v0_1.schema.json`, and checks
+monotonicity so Phase B cannot override Phase A.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.
