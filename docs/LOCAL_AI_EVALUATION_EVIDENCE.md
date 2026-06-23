@@ -757,6 +757,13 @@ Current implementation status:
   `HG-018` provider/memory-boundary risk persisted as a parse/gate failure.
   Recommendation: `1G-B2-E-R - Full holdout Qwen failure analysis`. This remains
   manual-review smoke evidence only and is not runtime approval.
+- 1G-B2-F0 reinterprets the full-holdout failures as a structured-output
+  contract problem rather than another context-pack wording problem. It adds
+  `docs/STRUCTURED_OUTPUT_REFERENCE_AUDIT.md` and
+  `docs/FAST_SECRETARY_JSON_SCHEMA_DESIGN.md`, and ADR-056 accepts that Qwen
+  fast secretary must move schema-first before runtime or default queue
+  approval. The optional prototype is deferred to
+  `1G-B2-F1 - Ollama structured-output schema smoke prototype`.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
 The accepted next local AI sequence is:
@@ -793,6 +800,8 @@ The accepted next local AI sequence is:
 1G-B2-D-R  Qwen profile failure analysis
 1G-B2-E    Full holdout Qwen secretary smoke run
 1G-B2-E-R  Full holdout Qwen failure analysis
+1G-B2-F0   Structured-output reference audit and schema-first redesign
+1G-B2-F1   Ollama structured-output schema smoke prototype
 1H         Showcase files generator design
 1I         Context access from showcase files
 1J         Provider/tool intent form design

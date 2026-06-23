@@ -457,3 +457,25 @@ clarification, `not_decided`, or block.
 This milestone adds no validator runtime, Pydantic models, scorer, harness,
 model calls, memory runtime, retrieval runtime, Context Pack Broker runtime,
 provider calls, tool execution, or BlueRev modeling.
+
+## ADR-056: Fast secretary structured output should become schema-first before runtime use
+
+Status: Accepted
+
+Qwen fast secretary should not rely only on prompt-only JSON generation for
+future approval. The 1G-B2-E full-holdout smoke run improved with
+`qwen_hybrid_parse_safe_v0_4`, but still produced 28/32 parse, 4 critical gate
+failures, and significant hard-field misses.
+
+Future fast secretary experiments must move toward schema-first structured
+output before any runtime use, default queue decision, memory write path,
+retrieval gate, provider route, tool route, or safety decision. JSON Schema or
+equivalent constrained-output mechanisms should own shape, required fields,
+enum values, booleans, and bounded arrays. JarvisOS must still own structural
+validation, semantic scoring, policy gates, persistence decisions, promotion,
+audit, and manual review.
+
+Structured-output experiments must precede runtime/default queue decisions.
+This milestone adds no runtime memory, retrieval runtime, Context Pack Broker
+runtime, provider calls, tool execution, backend route, frontend UI, model call,
+database migration, vendored structured-output library, or BlueRev modeling.

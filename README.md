@@ -156,15 +156,14 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-E-R - Full holdout Qwen failure analysis
+1G-B2-F1 - Ollama structured-output schema smoke prototype
 ```
 
-The 1G-B2-E full holdout Qwen secretary smoke run tested only `qwen3:8b` with
-`qwen_hybrid_parse_safe_v0_4` across all 32 holdout cases. Reports live under
-`reports/local_model_smoke/1G-B2-E/`. Result: 28/32 parse, 169/256 hard,
-103/160 soft exact, 104/160 soft tolerant, and 4 critical gates. Parse/gate
-failures were `HG-007`, `HG-017`, `HG-018`, and `HG-024`. This is below the
-30/32 parse threshold for moving to default-pack decision; run failure analysis
-before any default queue decision.
+The 1G-B2-F0 structured-output audit concluded that prompt-only JSON generation
+is not robust enough for Qwen fast secretary approval. The 1G-B2-E full holdout
+run reached only 28/32 parse and had 4 critical gates. New design docs are
+`docs/STRUCTURED_OUTPUT_REFERENCE_AUDIT.md` and
+`docs/FAST_SECRETARY_JSON_SCHEMA_DESIGN.md`. ADR-056 accepts that structured
+output experiments must precede runtime/default queue decisions.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

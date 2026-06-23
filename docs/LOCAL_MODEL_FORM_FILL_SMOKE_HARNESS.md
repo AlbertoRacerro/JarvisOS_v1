@@ -448,6 +448,46 @@ Recommended next milestone:
 Do not treat v0.4 as runtime-approved or default-queue-approved. The full
 holdout parse score is below 30/32, and hard-field misses remain significant.
 
+## 1G-B2-F0 Structured-Output Reference Audit And Schema-First Redesign
+
+1G-B2-F0 changes the next direction from more prompt-only context-pack tuning
+to schema-first structured-output experiments.
+
+Design docs:
+
+- `docs/STRUCTURED_OUTPUT_REFERENCE_AUDIT.md`
+- `docs/FAST_SECRETARY_JSON_SCHEMA_DESIGN.md`
+
+Decision:
+
+```text
+ADR-056 - Fast secretary structured output should become schema-first before runtime use
+```
+
+Core conclusion:
+
+```text
+Prompt-only JSON generation through the CLI is not robust enough for future
+fast secretary approval. JSON Schema / structured-output experiments must come
+before any runtime/default queue decision.
+```
+
+Prototype status:
+
+```text
+deferred to 1G-B2-F1
+```
+
+The optional prototype is deferred because 1G-B2-F0 is a design/audit milestone
+and `1G-B2-F1` is already scoped as the local Ollama structured-output schema
+smoke prototype.
+
+Recommended next milestone:
+
+```text
+1G-B2-F1 - Ollama structured-output schema smoke prototype
+```
+
 ## Dry-Run Behavior
 
 Example:
@@ -518,22 +558,22 @@ The tests cover:
 
 ## Future 1G-B
 
-After 1G-B2-E, the next milestone is:
+After 1G-B2-F0, the next milestone is:
 
 ```text
-1G-B2-E-R - Full holdout Qwen failure analysis
+1G-B2-F1 - Ollama structured-output schema smoke prototype
 ```
 
-1G-B2-E-R should analyze the full-holdout parse/gate failures and hard-field
-miss clusters before any default-pack decision.
+1G-B2-F1 should test local Ollama structured output with JSON Schema on a small
+difficult-case panel before any default-pack decision.
 Any live run must remain local, explicit, bounded, auditable, and separate from
 runtime memory, retrieval, provider routing, tool execution, and BlueRev
 modeling.
 
 ## Milestone Boundary Confirmation
 
-1G-B2-E adds full-holdout Qwen smoke reports, docs, and eval-harness guard
-coverage allowing exactly 32 real local cases while still rejecting larger runs.
+1G-B2-F0 adds reference/design docs, ADR-056, and documentation updates only.
+It does not add the structured-output prototype.
 
 It adds no:
 
