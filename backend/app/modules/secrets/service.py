@@ -19,7 +19,7 @@ def read_scaleway_secret_status(*, log_status_check: bool = False) -> ScalewaySe
     return status
 
 
-def save_scaleway_api_key(api_key: str) -> ScalewaySecretStatus:
+def save_scaleway_api_key(api_key: str | None) -> ScalewaySecretStatus:
     secret = set_runtime_scaleway_api_key(normalize_scaleway_api_key(api_key))
     status = _status_from_secret(secret)
     _log_secret_event("ScalewayApiKeySaved", "scaleway_key_saved", status)

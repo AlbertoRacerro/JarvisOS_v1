@@ -1,7 +1,7 @@
 import json
 import mimetypes
-from pathlib import Path
 import shutil
+from pathlib import Path
 from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
@@ -284,7 +284,11 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
     input_file.write_text(_pretty_json(simulation_run.input_payload), encoding="utf-8")
 
     started_at = utc_now()
-    _mark_running(runner_job_id, workspace_id, simulation_run_id, started_at)
+    if not _claim_and_mark_running(runner_job_id, workspace_id, simulation_run_id, started_at):
+        # Another concurrent /run already claimed this queued job. Only one
+        # caller may transition queued -> running, so we refuse here instead of
+        # executing the script a second time.
+        raise RunnerSafetyError("runner_job_not_queued", "Only queued jobs can be run in V0.")
     result = execute_python_script(
         script_path=script_path,
         input_file=input_file,
@@ -318,11 +322,16 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
 
     try:
         output = _load_result_json(output_dir, int(job["max_output_json_bytes"]))
+        declared_artifacts = output.get("artifacts") or []
+        if not isinstance(declared_artifacts, list):
+            raise RunnerSafetyError(
+                "runner_result_invalid_json", "Artifacts declaration must be a list."
+            )
         artifact_ids = _register_declared_artifacts(
             workspace_id,
             simulation_run_id,
             output_dir,
-            output.get("artifacts") or [],
+            declared_artifacts,
             int(job["max_artifact_bytes"]),
         )
     except RunnerSafetyError as exc:
@@ -451,15 +460,27 @@ def list_run_artifacts(workspace_id: str, simulation_run_id: str) -> list[RunArt
     return [_run_artifact_from_row(row) for row in rows]
 
 
-def _mark_running(runner_job_id: str, workspace_id: str, simulation_run_id: str, started_at: str) -> None:
+def _claim_and_mark_running(
+    runner_job_id: str, workspace_id: str, simulation_run_id: str, started_at: str
+) -> bool:
+    """Atomically transition a queued job to running.
+
+    The ``WHERE status = 'queued'`` clause is the concurrency guard: SQLite
+    serializes writers, so only the first caller's UPDATE affects a row. Returns
+    ``True`` if this caller won the claim, ``False`` if the job was no longer
+    queued (already claimed by a concurrent /run, or already finished).
+    """
     with open_sqlite_connection() as connection:
+        cursor = connection.execute(
+            "UPDATE runner_jobs SET status = ?, updated_at = ? WHERE id = ? AND status = 'queued'",
+            ("running", started_at, runner_job_id),
+        )
+        if cursor.rowcount != 1:
+            connection.rollback()
+            return False
         connection.execute(
             "UPDATE simulation_runs SET status = ?, started_at = ? WHERE id = ?",
             ("running", started_at, simulation_run_id),
-        )
-        connection.execute(
-            "UPDATE runner_jobs SET status = ?, updated_at = ? WHERE id = ?",
-            ("running", started_at, runner_job_id),
         )
         _log_event(
             connection,
@@ -470,6 +491,7 @@ def _mark_running(runner_job_id: str, workspace_id: str, simulation_run_id: str,
             payload={"simulation_run_id": simulation_run_id, "status": "running"},
         )
         connection.commit()
+    return True
 
 
 def _finish_failed(

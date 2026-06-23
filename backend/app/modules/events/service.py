@@ -1,6 +1,7 @@
 import json
 import re
 import sqlite3
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -59,7 +60,7 @@ def log_event(
     target_type: str,
     target_id: str | None = None,
     workspace_id: str | None = None,
-    payload: dict[str, object] | None = None,
+    payload: Mapping[str, object] | None = None,
 ) -> str:
     event_id = str(uuid4())
     connection.execute(

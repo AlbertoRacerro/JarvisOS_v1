@@ -1,7 +1,7 @@
-from collections.abc import Iterator
 import json
-from pathlib import Path
 import subprocess
+from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -579,3 +579,22 @@ def test_local_python_executor_does_not_use_shell_or_inherit_secret_env(monkeypa
     assert kwargs["env"] == {"PYTHONIOENCODING": "utf-8"}
     assert "SCALEWAY_API_KEY" not in json.dumps(result.environment_metadata)
     assert result.stdout == "ok"
+
+
+def test_runner_job_atomic_claim_runs_only_once(client: TestClient) -> None:
+    from app.modules.events.service import utc_now
+    from app.modules.runner.service import _claim_and_mark_running
+
+    implementation = _create_implementation(client)
+    job = _create_job(client, str(implementation["id"]))
+    runner_job_id = str(job["runner_job"]["id"])
+    simulation_run_id = str(job["simulation_run"]["id"])
+
+    # Two concurrent /run calls both reach the claim; only the first may win the
+    # queued -> running transition. The second must lose so the script is never
+    # executed twice for the same job.
+    first = _claim_and_mark_running(runner_job_id, "bluerev", simulation_run_id, utc_now())
+    second = _claim_and_mark_running(runner_job_id, "bluerev", simulation_run_id, utc_now())
+
+    assert first is True
+    assert second is False
