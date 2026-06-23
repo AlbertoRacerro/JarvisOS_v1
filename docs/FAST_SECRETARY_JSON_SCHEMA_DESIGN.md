@@ -399,3 +399,66 @@ Interpretation:
 - The next milestone should run
   `1G-B2-F2-R - Structured-output semantic failure analysis` before any full
   32-case structured-output Qwen smoke.
+
+## F2-R Two-Phase Reinterpretation
+
+`1G-B2-F2-R` concludes that the F2 result should not be treated as one flat
+semantic failure. The structured-output channel is stable, but the current
+`FastIntakeDraft` contract asks one pass to produce both hard authority gates
+and soft memory-review signals.
+
+Corrected architecture:
+
+```text
+Phase A: hard schema-oriented gate pass
+Phase B: soft hybrid review pass
+```
+
+Phase A should be smaller than the current full schema and focus on:
+
+- secret or credential detection;
+- raw private or IP-sensitive context;
+- external provider or upload intent;
+- memory boundary or write-authority claims;
+- retrieval/source-use requests;
+- unresolved assumptions or open decisions;
+- clarification and redaction;
+- source/retrieval policy;
+- lifecycle and sensitivity;
+- manual review.
+
+Phase B should inherit Phase A constraints and focus on:
+
+- summary;
+- project and domain labels;
+- domain tags;
+- storage relevance;
+- soft rationale;
+- possible memory-card type;
+- suggested follow-up;
+- usefulness for future review.
+
+Phase B is advisory. It cannot override Phase A, unblock blocked or
+review-gated content, approve provider use, approve retrieval, or approve memory
+writes.
+
+F2 miss reinterpretation:
+
+- `HG-018` is a Phase A hard-gate failure and deterministic overlay candidate
+  because external-provider plus whole-memory-folder intent should force
+  blocked source/retrieval behavior.
+- `HG-010`, `HG-013`, and `HG-025` are Phase A clarification/scope failures
+  with deterministic overlay candidates for ambiguous prior-context, cross-
+  project leakage, and unspecified source/entity references.
+- `HG-007` and `HG-024` include Phase A retrieval/conflict issues but also show
+  comparator/schema-mapping ambiguity.
+- domain, tag, storage, and rationale misses are Phase B advisory failures.
+
+The next milestone should run:
+
+```text
+1G-B2-F2-A - Hard-gate schema prototype
+```
+
+Do not proceed to a full 32-case structured-output Qwen smoke until Phase A
+hard-gate behavior is isolated and tested.

@@ -13,6 +13,7 @@ Milestones:
 - 1G-B2-F0 - Structured-output reference audit and schema-first redesign
 - 1G-B2-F1 - Ollama structured-output schema smoke prototype
 - 1G-B2-F2 - Structured-output 12-case Qwen panel
+- 1G-B2-F2-R - Two-phase structured secretary semantic analysis
 
 ## Purpose
 
@@ -633,6 +634,80 @@ Recommended next milestone:
 1G-B2-F2-R - Structured-output semantic failure analysis
 ```
 
+## 1G-B2-F2-R Two-Phase Structured Secretary Semantic Analysis
+
+1G-B2-F2-R reinterprets the F2 result as a schema/field-ownership problem.
+
+Design doc:
+
+```text
+docs/TWO_PHASE_SECRETARY_ANALYSIS_DESIGN_1G_B2_F2_R.md
+```
+
+Core conclusion:
+
+```text
+Structured output fixed the parse/schema channel, but the current single pass
+mixes hard policy gates with soft review fields.
+```
+
+Corrected split:
+
+- Phase A - hard schema-oriented gate pass.
+- Phase B - soft hybrid review pass.
+
+Phase A owns:
+
+- secret/credential detection;
+- raw private or IP-sensitive context detection;
+- external provider or upload intent;
+- memory boundary or write-authority claims;
+- retrieval/source-use requests;
+- unresolved assumptions or open decisions;
+- clarification, redaction, provider permission, retrieval/source policy,
+  lifecycle, sensitivity, and review gates.
+
+Phase B owns:
+
+- summary;
+- project/domain labels;
+- domain tags;
+- storage relevance;
+- soft rationale;
+- possible memory-card type;
+- follow-up question;
+- usefulness for future review.
+
+Phase B constraints:
+
+```text
+Phase B is advisory.
+Phase B cannot override Phase A.
+Phase B cannot unblock blocked/review-gated content.
+Phase B cannot approve memory writes.
+```
+
+F2 miss interpretation:
+
+- `HG-018`, `HG-010`, `HG-013`, and `HG-025` expose Phase A hard-gate
+  failures around provider/raw-memory, ambiguous previous context, cross-project
+  leakage, and ambiguous source/entity references.
+- `HG-007` and `HG-024` include Phase A retrieval/conflict issues but also show
+  comparator/schema-mapping ambiguity.
+- project/domain/reason-code misses are mostly Phase B advisory failures.
+- obvious secrets, provider upload intent, raw memory folders, forbidden paths,
+  cross-project leakage, and ambiguous source IDs should receive deterministic
+  policy overlays.
+
+Recommended next milestone:
+
+```text
+1G-B2-F2-A - Hard-gate schema prototype
+```
+
+Do not run a full 32-case structured-output Qwen smoke until Phase A hard gates
+are isolated and tested.
+
 ## Dry-Run Behavior
 
 Example:
@@ -709,22 +784,21 @@ The tests cover:
 
 ## Future 1G-B
 
-After 1G-B2-F2, the next milestone is:
+After 1G-B2-F2-R, the next milestone is:
 
 ```text
-1G-B2-F2-R - Structured-output semantic failure analysis
+1G-B2-F2-A - Hard-gate schema prototype
 ```
 
-1G-B2-F2-R should inspect semantic misses before any full holdout
-structured-output Qwen smoke run. The schema-first path must remain local,
-explicit, bounded, auditable, and separate from runtime memory, retrieval,
-provider routing, tool execution, and BlueRev modeling.
+1G-B2-F2-A should test a smaller hard-gate Phase A contract before any full
+holdout structured-output Qwen smoke run. The schema-first path must remain
+local, explicit, bounded, auditable, and separate from runtime memory,
+retrieval, provider routing, tool execution, and BlueRev modeling.
 
 ## Milestone Boundary Confirmation
 
-1G-B2-F2 adds semantic comparison logic, unit tests, bounded smoke reports, and
-documentation updates. It does not integrate structured output into runtime
-behavior.
+1G-B2-F2-R adds design analysis and documentation updates only. It does not
+integrate structured output into runtime behavior.
 
 It adds no:
 
@@ -733,12 +807,10 @@ It adds no:
 - database migration;
 - runtime models;
 - repository or storage classes;
-- model inference outside the explicit local Ollama structured-output smoke
-  command;
+- model inference;
 - Ollama model pull;
 - Ollama model serve;
-- Ollama generation call outside the explicit local structured-output smoke
-  command;
+- Ollama generation call;
 - provider call;
 - memory runtime;
 - retrieval runtime;
@@ -750,4 +822,4 @@ It adds no:
 - BlueRev modeling;
 - vendored code.
 
-This milestone does not start `1G-B2-F2-R - Structured-output semantic failure analysis`.
+This milestone does not start `1G-B2-F2-A - Hard-gate schema prototype`.

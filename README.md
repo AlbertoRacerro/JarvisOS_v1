@@ -47,6 +47,7 @@ The current local Gemma conclusion is:
 - Form protocol catalog: `docs/FORM_PROTOCOL_CATALOG.md`
 - Structural validator retry loop design: `docs/STRUCTURAL_VALIDATOR_RETRY_LOOP_DESIGN.md`
 - Local model form-fill smoke harness: `docs/LOCAL_MODEL_FORM_FILL_SMOKE_HARNESS.md`
+- Two-phase secretary analysis: `docs/TWO_PHASE_SECRETARY_ANALYSIS_DESIGN_1G_B2_F2_R.md`
 - Staged memory intake: `docs/STAGED_MEMORY_INTAKE.md`
 - Cavemem/Caveman reference audit: `docs/CAVEMEM_CAVEMAN_REFERENCE_AUDIT.md`
 - Local-model-facing showcase files: `docs/LOCAL_MODEL_SHOWCASE_FILES.md`
@@ -156,16 +157,13 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F2-R - Structured-output semantic failure analysis
+1G-B2-F2-A - Hard-gate schema prototype
 ```
 
-The 1G-B2-F2 structured-output Qwen panel used only `qwen3:8b`,
-`schemas/fast_secretary_intake_v0_1.schema.json`, and
-`qwen_hybrid_parse_safe_v0_4` on 12 bounded holdout cases. Reports are under
-`reports/local_model_smoke/1G-B2-F2/`. Result: 12/12 parse, 12/12
-schema-valid, no validation failures, hard semantic comparison 72/113, and
-soft tolerant comparison 5/12. `HG-018` still missed provider and
-memory-boundary hard fields. Structured output fixed the channel, but semantic
-policy quality is not strong enough for full holdout expansion yet.
+The 1G-B2-F2-R analysis concluded that F2 should not be treated as one flat
+semantic failure. Structured output fixed the parse/schema channel, but the
+single-pass secretary schema mixed hard gates with soft review fields. The next
+step is a smaller Phase A hard-gate schema prototype; Phase B soft hybrid review
+must remain advisory and cannot override Phase A.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.
