@@ -835,6 +835,18 @@ Current implementation status:
   extra schema fields, make zero model/network calls, and remain evaluation
   evidence only. Recommendation: `1G-B2-F2-P2 - Policy-gate overlay replay on
   saved F2-A outputs`.
+- 1G-B2-F2-P2 replays the deterministic overlay on the saved F2-A outputs in
+  `reports/local_model_smoke/1G-B2-F2-A/` and writes derived replay evidence to
+  `reports/local_model_smoke/1G-B2-F2-P2/`. Corrected outputs validate 8/8
+  against `schemas/fast_secretary_hard_gate_v0_1.schema.json`. Hard score
+  improves from 61/93 to 74/93. `HG-018` remains blocked/blocked, `HG-007`
+  becomes candidate discovery, `HG-013` and `HG-025` become clarification
+  required, `HG-017` blocks the secret path without false provider intent, and
+  `HG-024` becomes review-gated. Remaining misses concentrate in unresolved
+  assumptions, lifecycle proposal, and comparator/holdout mapping ambiguity.
+  The replay makes zero model/network calls and remains evaluation evidence
+  only. Recommendation: `1G-B2-F2-P3 - Integrate policy overlay into
+  structured-output evaluation harness`.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
 The accepted next local AI sequence is:
@@ -879,6 +891,7 @@ The accepted next local AI sequence is:
 1G-B2-F2-P Fast secretary policy-gate overlay design
 1G-B2-F2-P1 Policy-gate overlay fixture prototype
 1G-B2-F2-P2 Policy-gate overlay replay on saved F2-A outputs
+1G-B2-F2-P3 Integrate policy overlay into structured-output evaluation harness
 1H         Showcase files generator design
 1I         Context access from showcase files
 1J         Provider/tool intent form design

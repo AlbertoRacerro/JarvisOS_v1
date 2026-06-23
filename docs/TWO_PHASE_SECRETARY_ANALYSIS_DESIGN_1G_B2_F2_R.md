@@ -38,13 +38,15 @@ must inherit Phase A constraints and remain advisory.
 Recommended next milestone:
 
 ```text
-1G-B2-F2-P2 - Policy-gate overlay replay on saved F2-A outputs
+1G-B2-F2-P3 - Integrate policy overlay into structured-output evaluation harness
 ```
 
 Phase A has now been tested in `1G-B2-F2-A`, and `1G-B2-F2-P` has designed the
 deterministic policy overlay. `1G-B2-F2-P1` has implemented fixture-level
-overlay behavior. Do not run a full 32-case structured-output Qwen smoke or
-Phase B panel until the overlay is replayed on saved F2-A outputs.
+overlay behavior. `1G-B2-F2-P2` replayed the overlay on saved F2-A outputs and
+improved hard score from 61/93 to 74/93. Do not run a full 32-case
+structured-output Qwen smoke or Phase B panel until the overlay is integrated
+into the evaluation harness or deliberately deferred with this evidence.
 
 ## Why F2 Is Not One Flat Failure
 
@@ -445,20 +447,23 @@ for stale or superseded memory.
 Recommended next milestone:
 
 ```text
-1G-B2-F2-P2 - Policy-gate overlay replay on saved F2-A outputs
+1G-B2-F2-P3 - Integrate policy overlay into structured-output evaluation harness
 ```
 
 Scope for that milestone:
 
-- replay the deterministic overlay on saved F2-A outputs;
-- compare corrected outputs against the Phase A hard-gate expectations;
+- integrate deterministic overlay application into the structured-output
+  evaluation harness;
+- preserve both original model draft and corrected overlay output;
+- compare corrected outputs against Phase A hard-gate expectations;
 - preserve blocked/review/clarification gates;
-- keep Phase B out of scope until saved-output replay is explicit;
+- keep Phase B out of scope until harness integration is explicit;
 - keep all output advisory and manual-review only.
 
 Do not recommend `1G-B2-F3 - Full holdout structured-output Qwen smoke run`
-yet. The structural channel is stable, and the overlay fixture behavior is now
-explicit, but saved-output replay is still needed before broader model runs.
+yet. The structural channel is stable, fixture behavior is explicit, and
+saved-output replay improved the score, but harness integration is still needed
+before broader model runs.
 
 ## Boundary Confirmation
 

@@ -552,10 +552,14 @@ Case replay:
 The next milestone should run:
 
 ```text
-1G-B2-F2-P2 - Policy-gate overlay replay on saved F2-A outputs
+1G-B2-F2-P3 - Integrate policy overlay into structured-output evaluation harness
 ```
 
 `1G-B2-F2-P1` implemented fixture-level overlay behavior in
 `scripts/local_policy_gate_overlay_probe.py` and validated corrected outputs
-against `schemas/fast_secretary_hard_gate_v0_1.schema.json`. Do not start Phase
-B soft review until the overlay is replayed on saved F2-A outputs.
+against `schemas/fast_secretary_hard_gate_v0_1.schema.json`. `1G-B2-F2-P2`
+replayed the overlay on saved F2-A outputs in
+`reports/local_model_smoke/1G-B2-F2-P2/`; corrected outputs validate 8/8 and
+hard score improves from 61/93 to 74/93. Do not start Phase B soft review until
+the overlay is integrated into the structured-output evaluation harness or
+deliberately deferred with this evidence.

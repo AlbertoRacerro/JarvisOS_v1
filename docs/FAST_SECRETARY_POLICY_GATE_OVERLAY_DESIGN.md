@@ -506,11 +506,24 @@ model calls.
 Recommended next milestone:
 
 ```text
-1G-B2-F2-P2 - Policy-gate overlay replay on saved F2-A outputs
+1G-B2-F2-P3 - Integrate policy overlay into structured-output evaluation harness
 ```
 
-Do not start Phase B soft hybrid review until the overlay is replayed on saved
-F2-A outputs.
+`1G-B2-F2-P2` replayed the overlay on saved F2-A outputs. Corrected outputs
+validated 8/8 and improved hard score from 61/93 to 74/93. The replay fixed
+the intended severe case behavior:
+
+- `HG-018` remains blocked/blocked;
+- `HG-007` becomes candidate discovery;
+- `HG-013` and `HG-025` become clarification-required;
+- `HG-017` blocks the secret path without false provider/upload intent;
+- `HG-024` becomes review-gated.
+
+Remaining misses are concentrated in unresolved-assumption booleans,
+lifecycle-status proposals, sensitivity proposals, and likely comparator or
+holdout-mapping ambiguity. Do not start Phase B soft hybrid review until the
+overlay is integrated into the structured-output evaluation harness or
+deliberately deferred with this evidence.
 
 ## Milestone Boundary Confirmation
 

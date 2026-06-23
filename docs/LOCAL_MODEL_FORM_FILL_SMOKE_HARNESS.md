@@ -17,6 +17,7 @@ Milestones:
 - 1G-B2-F2-A - Hard-gate schema prototype
 - 1G-B2-F2-P - Fast secretary policy-gate overlay design
 - 1G-B2-F2-P1 - Policy-gate overlay fixture prototype
+- 1G-B2-F2-P2 - Policy-gate overlay replay on saved F2-A outputs
 
 ## Purpose
 
@@ -907,6 +908,70 @@ Recommended next milestone:
 1G-B2-F2-P2 - Policy-gate overlay replay on saved F2-A outputs
 ```
 
+## 1G-B2-F2-P2 Policy-Gate Overlay Replay
+
+1G-B2-F2-P2 replays the deterministic overlay on saved F2-A hard-gate outputs.
+
+Command:
+
+```powershell
+python scripts/local_policy_gate_overlay_probe.py --replay-report-dir reports/local_model_smoke/1G-B2-F2-A --holdout docs/holdout/intake_generalization_v0.jsonl --schema-path schemas/fast_secretary_hard_gate_v0_1.schema.json --out-dir reports/local_model_smoke/1G-B2-F2-P2
+```
+
+Reports:
+
+```text
+reports/local_model_smoke/1G-B2-F2-P2/
+```
+
+Replay results:
+
+- cases replayed: 8
+- corrected outputs schema-valid: 8/8
+- baseline hard score: 61/93
+- overlay-corrected hard score: 74/93
+- model calls: 0
+- network calls: 0
+
+Intended case outcomes:
+
+- `HG-018`: remains blocked/blocked with external provider blocked.
+- `HG-007`: becomes `review_only` plus `candidate_discovery_only`.
+- `HG-013`: becomes clarification-required.
+- `HG-017`: blocks secret path and clears false provider/upload intent.
+- `HG-024`: becomes `review_only` plus `review_gate_required`.
+- `HG-025`: becomes clarification-required.
+
+Remaining hard boolean misses:
+
+```text
+contains_raw_private_or_ip_sensitive_context: 1
+memory_boundary_or_write_authority_claim: 2
+retrieval_or_source_use_request: 1
+unresolved_assumption_or_open_decision: 5
+```
+
+Remaining policy field misses:
+
+```text
+lifecycle_status_proposal: 8
+sensitivity_bucket_proposal: 2
+```
+
+Probable comparator/holdout-mapping ambiguities:
+
+- `HG-018` memory-boundary flag: broad memory-folder provider upload is already
+  blocked as provider/raw-private context, while the comparator also expects a
+  memory-boundary claim.
+- `HG-024` lifecycle: `superseded` can describe the old referenced memory,
+  while the new instruction can still be `proposed_memory`.
+
+Recommended next milestone:
+
+```text
+1G-B2-F2-P3 - Integrate policy overlay into structured-output evaluation harness
+```
+
 ## Dry-Run Behavior
 
 Example:
@@ -983,22 +1048,22 @@ The tests cover:
 
 ## Future 1G-B
 
-After 1G-B2-F2-P1, the next milestone is:
+After 1G-B2-F2-P2, the next milestone is:
 
 ```text
-1G-B2-F2-P2 - Policy-gate overlay replay on saved F2-A outputs
+1G-B2-F2-P3 - Integrate policy overlay into structured-output evaluation harness
 ```
 
-1G-B2-F2-P2 should replay the deterministic overlay on saved F2-A outputs
-before any Phase B soft hybrid review or full holdout structured-output Qwen
-smoke run. The schema-first path must remain local, explicit, bounded,
-auditable, and separate from runtime memory, retrieval, provider routing, tool
-execution, and BlueRev modeling.
+1G-B2-F2-P3 should integrate the deterministic overlay into the
+structured-output evaluation harness before any Phase B soft hybrid review or
+full holdout structured-output Qwen smoke run. The schema-first path must
+remain local, explicit, bounded, auditable, and separate from runtime memory,
+retrieval, provider routing, tool execution, and BlueRev modeling.
 
 ## Milestone Boundary Confirmation
 
-1G-B2-F2-P1 adds a fixture-only deterministic overlay prototype and unit tests.
-It does not integrate structured output into runtime behavior.
+1G-B2-F2-P2 adds replay support for saved F2-A evaluation outputs and derived
+reports. It does not integrate structured output into runtime behavior.
 
 It adds no:
 
@@ -1022,4 +1087,4 @@ It adds no:
 - BlueRev modeling;
 - vendored code.
 
-This milestone does not start `1G-B2-F2-P2 - Policy-gate overlay replay on saved F2-A outputs`.
+This milestone does not start `1G-B2-F2-P3 - Integrate policy overlay into structured-output evaluation harness`.

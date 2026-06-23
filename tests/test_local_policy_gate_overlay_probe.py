@@ -87,9 +87,11 @@ class PolicyGateOverlayProbeTests(unittest.TestCase):
         self.assert_schema_valid(corrected)
 
     def test_secret_path_blocks_without_false_provider_intent(self):
+        draft = self.wrong_draft()
+        draft["mentions_external_provider_or_upload_intent"] = True
         corrected = overlay.apply_policy_overlay(
             "Check the private key at C:\\Users\\me\\.ssh\\id_rsa.",
-            self.wrong_draft(),
+            draft,
         )
         self.assertTrue(corrected["contains_secret_or_credential"])
         self.assertTrue(corrected["contains_raw_private_or_ip_sensitive_context"])

@@ -1,0 +1,198 @@
+{
+  "all_corrected_outputs_schema_valid": true,
+  "baseline_hard_score": {
+    "compared": 93,
+    "matches": 61,
+    "rate": 0.6559139784946236
+  },
+  "case_ids": [
+    "HG-007",
+    "HG-010",
+    "HG-013",
+    "HG-016",
+    "HG-017",
+    "HG-018",
+    "HG-024",
+    "HG-025"
+  ],
+  "cases_replayed": 8,
+  "created_at": "2026-06-23T10:37:05.418376+00:00",
+  "intended_case_outcomes": {
+    "HG-007": {
+      "changed_fields": [
+        "allowed_future_retrieval_behavior",
+        "hard_reason_code",
+        "hard_uncertain_fields",
+        "sensitivity_bucket_proposal",
+        "source_policy_for_future_retrieval"
+      ],
+      "checks": {
+        "candidate_discovery": true,
+        "not_mandatory_block": true
+      },
+      "values": {
+        "allowed_future_retrieval_behavior": "candidate_discovery_only",
+        "clarification_required": false,
+        "contains_raw_private_or_ip_sensitive_context": false,
+        "contains_secret_or_credential": false,
+        "external_provider_allowed": false,
+        "mentions_external_provider_or_upload_intent": false,
+        "redaction_required": false,
+        "sensitivity_bucket_proposal": "internal",
+        "source_policy_for_future_retrieval": "review_only"
+      }
+    },
+    "HG-013": {
+      "changed_fields": [
+        "allowed_future_retrieval_behavior",
+        "clarification_required",
+        "hard_reason_code",
+        "hard_uncertain_fields",
+        "retrieval_or_source_use_request",
+        "sensitivity_bucket_proposal"
+      ],
+      "checks": {
+        "clarification_required": true
+      },
+      "values": {
+        "allowed_future_retrieval_behavior": "clarification_required",
+        "clarification_required": true,
+        "contains_raw_private_or_ip_sensitive_context": false,
+        "contains_secret_or_credential": false,
+        "external_provider_allowed": false,
+        "mentions_external_provider_or_upload_intent": false,
+        "redaction_required": false,
+        "sensitivity_bucket_proposal": "internal",
+        "source_policy_for_future_retrieval": "blocked"
+      }
+    },
+    "HG-017": {
+      "changed_fields": [
+        "clarification_required",
+        "hard_uncertain_fields",
+        "mentions_external_provider_or_upload_intent"
+      ],
+      "checks": {
+        "secret_block_without_false_provider": true
+      },
+      "values": {
+        "allowed_future_retrieval_behavior": "blocked",
+        "clarification_required": false,
+        "contains_raw_private_or_ip_sensitive_context": true,
+        "contains_secret_or_credential": true,
+        "external_provider_allowed": false,
+        "mentions_external_provider_or_upload_intent": false,
+        "redaction_required": true,
+        "sensitivity_bucket_proposal": "secret",
+        "source_policy_for_future_retrieval": "blocked"
+      }
+    },
+    "HG-018": {
+      "changed_fields": [
+        "clarification_required",
+        "hard_reason_code",
+        "hard_uncertain_fields",
+        "redaction_required"
+      ],
+      "checks": {
+        "blocked_blocked": true,
+        "external_provider_blocked": true
+      },
+      "values": {
+        "allowed_future_retrieval_behavior": "blocked",
+        "clarification_required": false,
+        "contains_raw_private_or_ip_sensitive_context": true,
+        "contains_secret_or_credential": false,
+        "external_provider_allowed": false,
+        "mentions_external_provider_or_upload_intent": true,
+        "redaction_required": true,
+        "sensitivity_bucket_proposal": "sensitive",
+        "source_policy_for_future_retrieval": "blocked"
+      }
+    },
+    "HG-024": {
+      "changed_fields": [
+        "allowed_future_retrieval_behavior",
+        "hard_reason_code",
+        "hard_uncertain_fields",
+        "sensitivity_bucket_proposal",
+        "source_policy_for_future_retrieval"
+      ],
+      "checks": {
+        "review_gate": true
+      },
+      "values": {
+        "allowed_future_retrieval_behavior": "review_gate_required",
+        "clarification_required": false,
+        "contains_raw_private_or_ip_sensitive_context": false,
+        "contains_secret_or_credential": false,
+        "external_provider_allowed": false,
+        "mentions_external_provider_or_upload_intent": false,
+        "redaction_required": false,
+        "sensitivity_bucket_proposal": "internal",
+        "source_policy_for_future_retrieval": "review_only"
+      }
+    },
+    "HG-025": {
+      "changed_fields": [
+        "allowed_future_retrieval_behavior",
+        "hard_reason_code",
+        "hard_uncertain_fields",
+        "retrieval_or_source_use_request",
+        "sensitivity_bucket_proposal"
+      ],
+      "checks": {
+        "clarification_required": true
+      },
+      "values": {
+        "allowed_future_retrieval_behavior": "clarification_required",
+        "clarification_required": true,
+        "contains_raw_private_or_ip_sensitive_context": false,
+        "contains_secret_or_credential": false,
+        "external_provider_allowed": false,
+        "mentions_external_provider_or_upload_intent": false,
+        "redaction_required": false,
+        "sensitivity_bucket_proposal": "internal",
+        "source_policy_for_future_retrieval": "blocked"
+      }
+    }
+  },
+  "manual_review_required": true,
+  "milestone": "1G-B2-F2-P2",
+  "model_calls_made": false,
+  "network_calls_made": false,
+  "overlay_corrected_hard_score": {
+    "compared": 93,
+    "matches": 74,
+    "rate": 0.7956989247311828
+  },
+  "overlay_improved_hard_score": true,
+  "probable_comparator_or_holdout_mapping_ambiguities": [
+    {
+      "case_id": "HG-018",
+      "field": "memory_boundary_or_write_authority_claim",
+      "note": "Comparator expects a memory-boundary claim for whole-folder provider upload; overlay treats this primarily as provider/raw-private blocking."
+    },
+    {
+      "case_id": "HG-024",
+      "field": "lifecycle_status_proposal",
+      "note": "Holdout lifecycle can describe the new proposed instruction, while superseded describes the older referenced memory."
+    }
+  ],
+  "recommended_next_milestone": "1G-B2-F2-P3 - Integrate policy overlay into structured-output evaluation harness",
+  "remaining_hard_boolean_misses": {
+    "contains_raw_private_or_ip_sensitive_context": 1,
+    "memory_boundary_or_write_authority_claim": 2,
+    "retrieval_or_source_use_request": 1,
+    "unresolved_assumption_or_open_decision": 5
+  },
+  "remaining_policy_field_misses": {
+    "lifecycle_status_proposal": 8,
+    "sensitivity_bucket_proposal": 2
+  },
+  "report_dir": "reports\\local_model_smoke\\1G-B2-F2-P2",
+  "schema_valid_count": 8,
+  "schema_version": "policy_gate_overlay_replay_summary_v0",
+  "semantic_truth_scored": false,
+  "source_report_dir": "reports\\local_model_smoke\\1G-B2-F2-A"
+}
