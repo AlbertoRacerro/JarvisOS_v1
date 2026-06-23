@@ -462,3 +462,49 @@ The next milestone should run:
 
 Do not proceed to a full 32-case structured-output Qwen smoke until Phase A
 hard-gate behavior is isolated and tested.
+
+## F2-A Hard-Gate Prototype Result
+
+`1G-B2-F2-A` materializes the Phase A hard-gate schema:
+
+```text
+schemas/fast_secretary_hard_gate_v0_1.schema.json
+```
+
+The hard-gate schema removes summary, project, domain, tags, storage usefulness,
+and rationale fields. It keeps only hard/safety/authority fields.
+
+The exact panel used only `qwen3:8b` and:
+
+```text
+HG-018, HG-010, HG-013, HG-025, HG-007, HG-024, HG-016, HG-017
+```
+
+Observed result:
+
+```text
+parse: 8/8
+schema-valid: 8/8
+validation failures: none
+enum/type validation failures: none
+hard-gate comparison: 61/93
+HG-018 blocked/blocked: true
+```
+
+Interpretation:
+
+- The smaller Phase A schema preserved structured-output stability.
+- `HG-018` improved from the F2 provider/memory-boundary miss to
+  blocked/blocked.
+- The hard-gate score improved only slightly over the F2 hard-rate baseline.
+- Remaining misses in hard booleans and policy fields show that deterministic
+  policy overlays are still required.
+
+The next milestone should run:
+
+```text
+1G-B2-F2-P - Fast secretary policy-gate overlay design
+```
+
+Do not start Phase B soft review or a full holdout structured-output Qwen smoke
+until hard policy overlays are designed.

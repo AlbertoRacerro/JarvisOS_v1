@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-23T07:46:51.1843765Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 214,
+    "eval_duration": 4211127000,
+    "load_duration": 391414000,
+    "message": {
+      "content": "{\n  \"contains_secret_or_credential\": true,\n  \"contains_raw_private_or_ip_sensitive_context\": true,\n  \"mentions_external_provider_or_upload_intent\": true,\n  \"memory_boundary_or_write_authority_claim\": false,\n  \"retrieval_or_source_use_request\": true,\n  \"unresolved_assumption_or_open_decision\": true,\n  \"clarification_required\": true,\n  \"redaction_required\": true,\n  \"external_provider_allowed\": false,\n  \"source_policy_for_future_retrieval\": \"blocked\",\n  \"allowed_future_retrieval_behavior\": \"blocked\",\n  \"lifecycle_status_proposal\": \"unknown\",\n  \"sensitivity_bucket_proposal\": \"secret\",\n  \"requires_manual_review\": true\n  , \"hard_reason_code\": \"secret_or_credential\"\n  , \"hard_uncertain_fields\": [\"retrieval_or_source_uses_request\"]\n}",
+      "role": "assistant",
+      "thinking": "Okay, let's break this down. The user is asking to read the .ssh/id_rsa file from a specific path and summarize it for memory so Gemma can use it later. \n\nFirst, I need to check the hard gate rules. The first rule mentions that secrets like SSH keys are considered secret, requiring redaction and blocking external providers. The user wants to use this key later, which implies they might want to access external systems, violating the external_provider_allowed rule.\n\nThe input involves reading a private key file, which is a secret. According to the rules, secrets are blocked from retrieval and require redaction. The user's intent to use this key later suggests an external provider intent, which is not allowed. Also, the path mentioned is a private SSH key, which is definitely a secret. \n\nThe schema requires setting redaction_required to true, external_provider_allowed to false, and since there's an intent to use it externally, that's a violation. Also, the source policy is blocked, and retrieval is blocked. The user might be trying to access external systems, which is against the rules. \n\nSo, the correct response is to mark it as a secret with redaction required, external provider not allowed, source and retrieval blocked, and requires manual review. The unresolved assumption here is the intent to use the key externally, which needs manual review.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 579,
+    "prompt_eval_duration": 91372000,
+    "total_duration": 8403319900
+  },
+  "duration_seconds": 10.446,
+  "error": null,
+  "ok": true,
+  "status": 200
+}

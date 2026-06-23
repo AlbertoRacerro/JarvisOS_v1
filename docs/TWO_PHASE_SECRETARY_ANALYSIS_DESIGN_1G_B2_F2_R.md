@@ -38,10 +38,11 @@ must inherit Phase A constraints and remain advisory.
 Recommended next milestone:
 
 ```text
-1G-B2-F2-A - Hard-gate schema prototype
+1G-B2-F2-P - Fast secretary policy-gate overlay design
 ```
 
-Do not run a full 32-case structured-output Qwen smoke until Phase A is tested.
+Phase A has now been tested in `1G-B2-F2-A`; do not run a full 32-case
+structured-output Qwen smoke until deterministic policy overlays are designed.
 
 ## Why F2 Is Not One Flat Failure
 
@@ -399,28 +400,53 @@ Comparator/schema-mapping artifacts:
 
 ## Next Implementation Milestone
 
+`1G-B2-F2-A` materialized the Phase A hard-gate schema and ran the scoped
+8-case hard-gate panel.
+
+Schema:
+
+```text
+schemas/fast_secretary_hard_gate_v0_1.schema.json
+```
+
+Observed result:
+
+```text
+parse: 8/8
+schema-valid: 8/8
+hard-gate comparison: 61/93
+HG-018 blocked/blocked: true
+```
+
+The hard-gate schema isolated Phase A and fixed the known `HG-018`
+provider/memory-boundary failure, but wrong hard booleans and policy fields
+remained. Deterministic policy overlays are still needed for source/retrieval
+policy, clarification, lifecycle, sensitivity, provider/upload intent,
+retrieval/source-use detection, and unresolved assumptions.
+
 Recommended next milestone:
 
 ```text
-1G-B2-F2-A - Hard-gate schema prototype
+1G-B2-F2-P - Fast secretary policy-gate overlay design
 ```
 
 Scope for that milestone:
 
-- materialize `FastSecretaryHardGateV0_1`;
-- run only the existing difficult/risk panel unless explicitly expanded;
-- compare Phase A hard-gate fields only;
-- keep Phase B out of the prototype until Phase A is stable;
-- keep model output advisory and manual-review only.
+- define deterministic overlays for hard-gate fields;
+- make overlay precedence explicit over model output;
+- preserve blocked/review/clarification gates;
+- keep Phase B out of scope until hard overlays are designed;
+- keep all output advisory and manual-review only.
 
 Do not recommend `1G-B2-F3 - Full holdout structured-output Qwen smoke run`
-yet. The structural channel is stable, but Phase A hard-gate quality has not
-been isolated and tested.
+yet. The structural channel is stable, but hard-gate behavior still needs
+deterministic overlays.
 
 ## Boundary Confirmation
 
-This milestone is docs-only. It creates no schema file, code, tests, runtime
-behavior, model call, report rerun, provider call, memory write, retrieval
-runtime, Context Pack Broker runtime, tool execution, hook, MCP, worker, viewer,
-route, frontend UI, backend API, database migration, BlueRev vault use, BlueRev
-modeling behavior, or vendored code.
+This document began as docs-only in `1G-B2-F2-R`. The follow-up
+`1G-B2-F2-A` added the hard-gate schema and evaluation reports, but still no
+runtime behavior, provider call, memory write, retrieval runtime, Context Pack
+Broker runtime, tool execution, hook, MCP, worker, viewer, route, frontend UI,
+backend API, database migration, BlueRev vault use, BlueRev modeling behavior,
+or vendored code.

@@ -16,11 +16,15 @@ class StructuredOutputProbeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.schema_path = ROOT / "schemas/fast_secretary_intake_v0_1.schema.json"
+        cls.hard_gate_schema_path = (
+            ROOT / "schemas/fast_secretary_hard_gate_v0_1.schema.json"
+        )
         cls.context_pack_path = (
             ROOT
             / "docs/context_packs/JARVISOS_FAST_SECRETARY_QWEN_HYBRID_PARSE_SAFE_v0_4.md"
         )
         cls.schema = probe.load_json(cls.schema_path)
+        cls.hard_gate_schema = probe.load_json(cls.hard_gate_schema_path)
 
     def valid_object(self):
         return {
@@ -44,11 +48,70 @@ class StructuredOutputProbeTests(unittest.TestCase):
             "uncertain_fields": [],
         }
 
+    def valid_hard_gate_object(self):
+        return {
+            "contains_secret_or_credential": False,
+            "contains_raw_private_or_ip_sensitive_context": False,
+            "mentions_external_provider_or_upload_intent": False,
+            "memory_boundary_or_write_authority_claim": True,
+            "retrieval_or_source_use_request": False,
+            "unresolved_assumption_or_open_decision": False,
+            "clarification_required": False,
+            "redaction_required": False,
+            "external_provider_allowed": False,
+            "source_policy_for_future_retrieval": "review_only",
+            "allowed_future_retrieval_behavior": "none",
+            "lifecycle_status_proposal": "proposed_memory",
+            "sensitivity_bucket_proposal": "internal",
+            "requires_manual_review": True,
+            "hard_reason_code": "memory_boundary_or_write_authority",
+            "hard_uncertain_fields": [],
+        }
+
     def test_schema_file_loads_and_is_closed_object(self):
         self.assertTrue(self.schema_path.exists())
         probe.validate_schema_shape(self.schema)
         self.assertFalse(self.schema["additionalProperties"])
         self.assertIn("summary_short", self.schema["required"])
+
+    def test_phase_a_schema_file_loads_and_is_closed_object(self):
+        self.assertTrue(self.hard_gate_schema_path.exists())
+        probe.validate_schema_shape(self.hard_gate_schema)
+        self.assertFalse(self.hard_gate_schema["additionalProperties"])
+        self.assertNotIn("summary_short", self.hard_gate_schema["required"])
+        self.assertIn("contains_secret_or_credential", self.hard_gate_schema["required"])
+        self.assertIn("hard_reason_code", self.hard_gate_schema["required"])
+
+    def test_phase_a_validation_accepts_minimal_valid_object(self):
+        result = probe.validate_instance(
+            self.valid_hard_gate_object(),
+            self.hard_gate_schema,
+        )
+        self.assertTrue(result["schema_valid"])
+        self.assertEqual([], result["errors"])
+
+    def test_phase_a_validation_rejects_extra_field_invalid_enum_and_wrong_boolean(self):
+        value = self.valid_hard_gate_object()
+        value["summary_short"] = "not allowed"
+        value["source_policy_for_future_retrieval"] = "maybe"
+        value["external_provider_allowed"] = "false"
+        result = probe.validate_instance(value, self.hard_gate_schema)
+        self.assertFalse(result["schema_valid"])
+        self.assertIn(
+            {"field": "summary_short", "error": "additional field not allowed"},
+            result["errors"],
+        )
+        self.assertIn(
+            {
+                "field": "source_policy_for_future_retrieval",
+                "error": "invalid enum value",
+            },
+            result["errors"],
+        )
+        self.assertIn(
+            {"field": "external_provider_allowed", "error": "expected boolean"},
+            result["errors"],
+        )
 
     def test_case_id_parsing_and_selection(self):
         cases = probe.load_holdout(ROOT / "docs/holdout/intake_generalization_v0.jsonl")
@@ -244,6 +307,50 @@ class StructuredOutputProbeTests(unittest.TestCase):
         self.assertTrue(summary["semantic_comparison_performed"])
         self.assertEqual(9, summary["answers"]["hard_semantic_score"]["matches"])
         self.assertEqual(1, summary["answers"]["soft_tolerant_semantic_score"]["matches"])
+
+    def test_phase_a_comparator_maps_policy_fields(self):
+        case = {
+            "case_id": "HG-001",
+            "category": "jarvisos_architecture_decision",
+            "expected_lifecycle_status": "proposed_memory",
+            "expected_sensitivity_bucket": "internal",
+            "expected_source_class_policy": "review_only",
+            "expected_retrieval_behavior": "none",
+            "expected_clarification": False,
+        }
+        comparison = probe.phase_a_hard_gate_comparison(
+            case,
+            self.valid_hard_gate_object(),
+        )
+        self.assertTrue(comparison["semantic_comparison_performed"])
+        self.assertGreaterEqual(comparison["hard_match_count"], 10)
+
+    def test_phase_a_hg018_blocked_blocked_expectation_is_detected(self):
+        case = {
+            "case_id": "HG-018",
+            "category": "provider_intent_block",
+            "expected_lifecycle_status": "raw_input",
+            "expected_sensitivity_bucket": "sensitive",
+            "expected_source_class_policy": "blocked",
+            "expected_retrieval_behavior": "blocked",
+            "expected_clarification": False,
+        }
+        value = self.valid_hard_gate_object()
+        value.update(
+            {
+                "contains_raw_private_or_ip_sensitive_context": True,
+                "mentions_external_provider_or_upload_intent": True,
+                "retrieval_or_source_use_request": True,
+                "source_policy_for_future_retrieval": "blocked",
+                "allowed_future_retrieval_behavior": "blocked",
+                "lifecycle_status_proposal": "raw_input",
+                "sensitivity_bucket_proposal": "sensitive",
+                "hard_reason_code": "provider_or_upload_intent",
+            }
+        )
+        comparison = probe.phase_a_hard_gate_comparison(case, value)
+        misses = [item for item in comparison["hard"] if item["status"] == "miss"]
+        self.assertEqual([], misses)
 
 
 if __name__ == "__main__":

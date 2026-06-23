@@ -802,6 +802,18 @@ Current implementation status:
   Phase B is advisory and cannot override Phase A. The recommended next
   milestone is `1G-B2-F2-A - Hard-gate schema prototype`, not a full 32-case
   structured-output run.
+- 1G-B2-F2-A materializes the Phase A hard-gate schema at
+  `schemas/fast_secretary_hard_gate_v0_1.schema.json` and runs a bounded
+  8-case local `qwen3:8b` panel. Reports are under
+  `reports/local_model_smoke/1G-B2-F2-A/`. Result: 8/8 parse, 8/8
+  schema-valid, no validation failures, and hard-gate comparison 61/93.
+  `HG-018` improved to blocked/blocked with no provider/memory-boundary miss.
+  The run still had wrong hard booleans for memory boundary/write authority,
+  external provider/upload intent, retrieval/source requests, and unresolved
+  assumptions, plus wrong policy fields for retrieval behavior, clarification,
+  lifecycle, sensitivity, and source policy. Recommendation:
+  `1G-B2-F2-P - Fast secretary policy-gate overlay design`. This remains
+  manual-review evidence only and is not runtime approval.
 - Deterministic sensitivity checks are hard overrides for obvious cases such as API keys, passwords, tokens, `.env` content, forbidden paths, disallowed providers, invalid enums, and explicit confirmation requirements. They cannot reliably distinguish public literature data from proprietary prototype experimental data.
 
 The accepted next local AI sequence is:
@@ -843,6 +855,7 @@ The accepted next local AI sequence is:
 1G-B2-F2   Structured-output 12-case Qwen panel
 1G-B2-F2-R Structured-output semantic failure analysis
 1G-B2-F2-A Hard-gate schema prototype
+1G-B2-F2-P Fast secretary policy-gate overlay design
 1H         Showcase files generator design
 1I         Context access from showcase files
 1J         Provider/tool intent form design

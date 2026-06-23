@@ -14,6 +14,7 @@ Milestones:
 - 1G-B2-F1 - Ollama structured-output schema smoke prototype
 - 1G-B2-F2 - Structured-output 12-case Qwen panel
 - 1G-B2-F2-R - Two-phase structured secretary semantic analysis
+- 1G-B2-F2-A - Hard-gate schema prototype
 
 ## Purpose
 
@@ -708,6 +709,88 @@ Recommended next milestone:
 Do not run a full 32-case structured-output Qwen smoke until Phase A hard gates
 are isolated and tested.
 
+## 1G-B2-F2-A Hard-Gate Schema Prototype
+
+1G-B2-F2-A materializes and tests the Phase A hard-gate schema.
+
+Schema:
+
+```text
+schemas/fast_secretary_hard_gate_v0_1.schema.json
+```
+
+The schema intentionally omits summary, project, domain, tags, storage
+usefulness, and rationale fields. It includes only hard gate fields for secrets,
+raw private/IP-sensitive context, provider/upload intent, memory boundary,
+retrieval/source use, unresolved assumptions, clarification, redaction,
+provider permission, source/retrieval policy, lifecycle, sensitivity, review,
+hard reason, and hard uncertainty.
+
+The exact matrix:
+
+```text
+model: qwen3:8b
+schema: schemas/fast_secretary_hard_gate_v0_1.schema.json
+cases: HG-018, HG-010, HG-013, HG-025, HG-007, HG-024, HG-016, HG-017
+total: 8 local Ollama API calls
+context pack: none
+```
+
+Reports are written under:
+
+```text
+reports/local_model_smoke/1G-B2-F2-A/
+```
+
+Summary files:
+
+- `reports/local_model_smoke/1G-B2-F2-A/hard_gate_schema_smoke_summary.json`
+- `reports/local_model_smoke/1G-B2-F2-A/hard_gate_schema_smoke_summary.md`
+
+High-level result:
+
+```text
+parse: 8/8
+schema-valid: 8/8
+validation failures: none
+enum/type validation failures: none
+hard-gate comparison: 61/93
+HG-018 blocked/blocked: true
+```
+
+Wrong hard boolean counts:
+
+```text
+memory_boundary_or_write_authority_claim: 1
+mentions_external_provider_or_upload_intent: 1
+retrieval_or_source_use_request: 4
+unresolved_assumption_or_open_decision: 5
+```
+
+Wrong policy field counts:
+
+```text
+allowed_future_retrieval_behavior: 4
+clarification_required: 4
+lifecycle_status_proposal: 8
+sensitivity_bucket_proposal: 3
+source_policy_for_future_retrieval: 2
+```
+
+Interpretation:
+
+- Phase A kept the structured-output channel stable.
+- `HG-018` improved to blocked/blocked.
+- Hard-gate comparison only improved slightly over the F2 hard-rate baseline.
+- Deterministic policy overlays are still needed for hard booleans and policy
+  fields before Phase B soft review or full holdout expansion.
+
+Recommended next milestone:
+
+```text
+1G-B2-F2-P - Fast secretary policy-gate overlay design
+```
+
 ## Dry-Run Behavior
 
 Example:
@@ -784,21 +867,23 @@ The tests cover:
 
 ## Future 1G-B
 
-After 1G-B2-F2-R, the next milestone is:
+After 1G-B2-F2-A, the next milestone is:
 
 ```text
-1G-B2-F2-A - Hard-gate schema prototype
+1G-B2-F2-P - Fast secretary policy-gate overlay design
 ```
 
-1G-B2-F2-A should test a smaller hard-gate Phase A contract before any full
-holdout structured-output Qwen smoke run. The schema-first path must remain
-local, explicit, bounded, auditable, and separate from runtime memory,
-retrieval, provider routing, tool execution, and BlueRev modeling.
+1G-B2-F2-P should define deterministic overlays for hard-gate fields before any
+Phase B soft hybrid review or full holdout structured-output Qwen smoke run. The
+schema-first path must remain local, explicit, bounded, auditable, and separate
+from runtime memory, retrieval, provider routing, tool execution, and BlueRev
+modeling.
 
 ## Milestone Boundary Confirmation
 
-1G-B2-F2-R adds design analysis and documentation updates only. It does not
-integrate structured output into runtime behavior.
+1G-B2-F2-A adds a local evaluation schema, narrow probe support, unit tests,
+bounded smoke reports, and documentation updates. It does not integrate
+structured output into runtime behavior.
 
 It adds no:
 
@@ -807,10 +892,10 @@ It adds no:
 - database migration;
 - runtime models;
 - repository or storage classes;
-- model inference;
+- model inference outside the explicit local Ollama hard-gate smoke command;
 - Ollama model pull;
 - Ollama model serve;
-- Ollama generation call;
+- Ollama generation call outside the explicit local hard-gate smoke command;
 - provider call;
 - memory runtime;
 - retrieval runtime;
@@ -822,4 +907,4 @@ It adds no:
 - BlueRev modeling;
 - vendored code.
 
-This milestone does not start `1G-B2-F2-A - Hard-gate schema prototype`.
+This milestone does not start `1G-B2-F2-P - Fast secretary policy-gate overlay design`.

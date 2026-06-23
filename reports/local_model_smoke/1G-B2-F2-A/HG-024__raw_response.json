@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-23T07:46:28.8625829Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 211,
+    "eval_duration": 4120412999,
+    "load_duration": 389179500,
+    "message": {
+      "content": "{\n  \"contains_secret_or_credential\": false,\n  \"contains_raw_private_or_ip_sensitive_context\": false,\n  \"mentions_external_provider_or_upload_intent\": false,\n  \"memory_boundary_or_write_authority_claim\": false,\n  \"retrieval_or_source_use_request\": false,\n  \"unresolved_assumption_or_open_decision\": true,\n  \"clarification_required\": false,\n  \"redaction_required\": false,\n  \"external_provider_allowed\": false,\n  \"source_policy_for_future_retrieval\": \"blocked\",\n  \"allowed_future_retrieval_behavior\": \"blocked\",\n  \"lifecycle_status_proposal\": \"superseded\",\n  \"sensitivity_bucket_proposal\": \"public\",\n  \"requires_manual_review\": true\n  , \"hard_reason_code\": \"unresolved_assumption\"\n  , \"hard_uncertain_fields\": [\"lifecycle_status_proposa1\"]\n}",
+      "role": "assistant",
+      "thinking": "Okay, let's tackle this. The user is asking me to act as Phase A hard gate for JarvisOS fast secretary intake. They want me to return an object that matches the provided JSON Schema, without any extra text like summaries or markdown.\n\nFirst, I need to parse the input. The case ID is HG-024, and the input says that if an older memory mentions Gemma 12B being approved for routing, it should be treated as superseded by current local-AI evidence and not used. \n\nLooking at the hard gate rules, I need to check which apply here. The key points are about secrets, external providers, and ambiguous contexts. The input mentions Gemma 12B, which is an AI model. The rule about external providers says that any intent to send, upload, or ask other providers is blocked. Since the input is about routing an AI model, maybe that's related. \n\nWait, the input is about superseding old memory with current evidence. The rules mention that if there's ambiguity or unclear source, clarification is needed. But here, the input is a directive to ignore old data if current evidence exists. So maybe there's no ambiguity here. \n\nBut the JSON schema requires certain fields. The example output has \"clarification_required\", \"external_provider_allowed\", \"redaction_required\", etc. The input doesn't mention secrets or credentials, so redaction_required is false. The mention of Gemma 12B might relate to external providers, but the input is about routing, not uploading. \n\nWait, the input says to treat older memory as superseded. The hard gate rules mention that unresolved assumptions or open decisions require manual review. Since the input is a directive, maybe there's no unresolved assumption. However, the schema requires \"requires_manual_review\" to be true. \n\nPutting it all together, the input is a policy directive, so maybe it's a case where the system needs to manually review the decision to supersede the old memory. Therefore, \"requires_manual_review\" should be true. The other fields like \"clarification_required\" might be false unless there's ambiguity. Since the input is clear, maybe clarification isn't needed. \n\nSo the final object should have \"requires_manual_review\": true, and other fields as per the rules. Let me check the schema again to make sure all required fields are included.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 797,
+    "prompt_eval_duration": 136041000,
+    "total_duration": 11108314800
+  },
+  "duration_seconds": 13.149,
+  "error": null,
+  "ok": true,
+  "status": 200
+}

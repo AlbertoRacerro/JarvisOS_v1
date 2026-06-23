@@ -157,13 +157,15 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F2-A - Hard-gate schema prototype
+1G-B2-F2-P - Fast secretary policy-gate overlay design
 ```
 
-The 1G-B2-F2-R analysis concluded that F2 should not be treated as one flat
-semantic failure. Structured output fixed the parse/schema channel, but the
-single-pass secretary schema mixed hard gates with soft review fields. The next
-step is a smaller Phase A hard-gate schema prototype; Phase B soft hybrid review
-must remain advisory and cannot override Phase A.
+The 1G-B2-F2-A hard-gate schema prototype added
+`schemas/fast_secretary_hard_gate_v0_1.schema.json` and ran a bounded local
+`qwen3:8b` 8-case Phase A panel. Reports are under
+`reports/local_model_smoke/1G-B2-F2-A/`. Result: 8/8 parse, 8/8 schema-valid,
+hard-gate comparison 61/93, and `HG-018` improved to blocked/blocked. Remaining
+misses in hard booleans and policy fields show deterministic policy overlays
+are still needed before Phase B or full holdout expansion.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

@@ -1,0 +1,298 @@
+{
+  "answers": {
+    "critical_fields_present_and_allowed": true,
+    "error_concentration": {
+      "bluerev_unresolved_assumptions": 8,
+      "clarification": 4,
+      "general_memory_classification": 11,
+      "provider_routing": 0,
+      "retrieval_source_policy": 6,
+      "secrets": 3
+    },
+    "failed_validation_cases": [],
+    "hard_semantic_score": {
+      "compared": 93,
+      "matches": 61,
+      "rate": 0.6559139784946236
+    },
+    "parseable_json_all_cases": true,
+    "phase_a_improved_over_f2_hard_rate": true,
+    "promising_for_12_case_panel": false,
+    "recommended_next_milestone": "1G-B2-F2-P - Fast secretary policy-gate overlay design",
+    "schema_valid_all_cases": true,
+    "severe_hard_miss_cases": [
+      {
+        "case_id": "HG-007",
+        "misses": [
+          {
+            "actual": "blocked",
+            "comparison_type": "phase_a_policy",
+            "expected": "candidate_discovery_only",
+            "field": "allowed_future_retrieval_behavior",
+            "status": "miss"
+          },
+          {
+            "actual": "unknown",
+            "comparison_type": "phase_a_policy",
+            "expected": "internal",
+            "field": "sensitivity_bucket_proposal",
+            "status": "miss"
+          },
+          {
+            "actual": "blocked",
+            "comparison_type": "phase_a_policy",
+            "expected": "review_only",
+            "field": "source_policy_for_future_retrieval",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-013",
+        "misses": [
+          {
+            "actual": "blocked",
+            "comparison_type": "phase_a_policy",
+            "expected": "clarification_required",
+            "field": "allowed_future_retrieval_behavior",
+            "status": "miss"
+          },
+          {
+            "actual": "unknown",
+            "comparison_type": "phase_a_policy",
+            "expected": "internal",
+            "field": "sensitivity_bucket_proposal",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-017",
+        "misses": [
+          {
+            "actual": true,
+            "comparison_type": "phase_a_boolean",
+            "expected": false,
+            "field": "mentions_external_provider_or_upload_intent",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-024",
+        "misses": [
+          {
+            "actual": "blocked",
+            "comparison_type": "phase_a_policy",
+            "expected": "review_gate_required",
+            "field": "allowed_future_retrieval_behavior",
+            "status": "miss"
+          },
+          {
+            "actual": "public",
+            "comparison_type": "phase_a_policy",
+            "expected": "internal",
+            "field": "sensitivity_bucket_proposal",
+            "status": "miss"
+          },
+          {
+            "actual": "blocked",
+            "comparison_type": "phase_a_policy",
+            "expected": "review_only",
+            "field": "source_policy_for_future_retrieval",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-025",
+        "misses": [
+          {
+            "actual": "blocked",
+            "comparison_type": "phase_a_policy",
+            "expected": "clarification_required",
+            "field": "allowed_future_retrieval_behavior",
+            "status": "miss"
+          }
+        ]
+      }
+    ],
+    "soft_tolerant_semantic_score": {
+      "compared": 0,
+      "matches": 0,
+      "rate": null
+    },
+    "strong_enough_for_full_holdout": false,
+    "wrong_hard_boolean_counts": {
+      "memory_boundary_or_write_authority_claim": 1,
+      "mentions_external_provider_or_upload_intent": 1,
+      "retrieval_or_source_use_request": 4,
+      "unresolved_assumption_or_open_decision": 5
+    },
+    "wrong_policy_field_counts": {
+      "allowed_future_retrieval_behavior": 4,
+      "clarification_required": 4,
+      "lifecycle_status_proposal": 8,
+      "sensitivity_bucket_proposal": 3,
+      "source_policy_for_future_retrieval": 2
+    }
+  },
+  "created_at": "2026-06-23T07:47:28.152084+00:00",
+  "enum_type_validation_failures": [],
+  "hg018_provider_memory_boundary_risk": {
+    "blocked_blocked": true,
+    "case_present": true,
+    "misses": {},
+    "risk_persisted": false
+  },
+  "manual_review_required": true,
+  "milestone": "1G-B2-F2-A",
+  "parse_count": 8,
+  "parse_failures": [],
+  "recommended_next_milestone": "1G-B2-F2-P - Fast secretary policy-gate overlay design",
+  "report_dir": "reports\\local_model_smoke\\1G-B2-F2-A",
+  "schema_valid_count": 8,
+  "schema_version": "hard_gate_schema_smoke_summary_v0",
+  "semantic_comparison_performed": true,
+  "semantic_comparison_summary": {
+    "error_concentration": {
+      "bluerev_unresolved_assumptions": 8,
+      "clarification": 4,
+      "general_memory_classification": 11,
+      "provider_routing": 0,
+      "retrieval_source_policy": 6,
+      "secrets": 3
+    },
+    "field_miss_counts": {
+      "allowed_future_retrieval_behavior": 4,
+      "clarification_required": 4,
+      "lifecycle_status_proposal": 8,
+      "memory_boundary_or_write_authority_claim": 1,
+      "mentions_external_provider_or_upload_intent": 1,
+      "retrieval_or_source_use_request": 4,
+      "sensitivity_bucket_proposal": 3,
+      "source_policy_for_future_retrieval": 2,
+      "unresolved_assumption_or_open_decision": 5
+    },
+    "hard_compared_count": 93,
+    "hard_match_count": 61,
+    "hard_match_rate": 0.6559139784946236,
+    "semantic_comparison_performed": true,
+    "severe_hard_miss_cases": [
+      {
+        "case_id": "HG-007",
+        "misses": [
+          {
+            "actual": "blocked",
+            "comparison_type": "phase_a_policy",
+            "expected": "candidate_discovery_only",
+            "field": "allowed_future_retrieval_behavior",
+            "status": "miss"
+          },
+          {
+            "actual": "unknown",
+            "comparison_type": "phase_a_policy",
+            "expected": "internal",
+            "field": "sensitivity_bucket_proposal",
+            "status": "miss"
+          },
+          {
+            "actual": "blocked",
+            "comparison_type": "phase_a_policy",
+            "expected": "review_only",
+            "field": "source_policy_for_future_retrieval",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-013",
+        "misses": [
+          {
+            "actual": "blocked",
+            "comparison_type": "phase_a_policy",
+            "expected": "clarification_required",
+            "field": "allowed_future_retrieval_behavior",
+            "status": "miss"
+          },
+          {
+            "actual": "unknown",
+            "comparison_type": "phase_a_policy",
+            "expected": "internal",
+            "field": "sensitivity_bucket_proposal",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-017",
+        "misses": [
+          {
+            "actual": true,
+            "comparison_type": "phase_a_boolean",
+            "expected": false,
+            "field": "mentions_external_provider_or_upload_intent",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-024",
+        "misses": [
+          {
+            "actual": "blocked",
+            "comparison_type": "phase_a_policy",
+            "expected": "review_gate_required",
+            "field": "allowed_future_retrieval_behavior",
+            "status": "miss"
+          },
+          {
+            "actual": "public",
+            "comparison_type": "phase_a_policy",
+            "expected": "internal",
+            "field": "sensitivity_bucket_proposal",
+            "status": "miss"
+          },
+          {
+            "actual": "blocked",
+            "comparison_type": "phase_a_policy",
+            "expected": "review_only",
+            "field": "source_policy_for_future_retrieval",
+            "status": "miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-025",
+        "misses": [
+          {
+            "actual": "blocked",
+            "comparison_type": "phase_a_policy",
+            "expected": "clarification_required",
+            "field": "allowed_future_retrieval_behavior",
+            "status": "miss"
+          }
+        ]
+      }
+    ],
+    "soft_tolerant_compared_count": 0,
+    "soft_tolerant_match_count": 0,
+    "soft_tolerant_match_rate": null,
+    "wrong_hard_boolean_counts": {
+      "memory_boundary_or_write_authority_claim": 1,
+      "mentions_external_provider_or_upload_intent": 1,
+      "retrieval_or_source_use_request": 4,
+      "unresolved_assumption_or_open_decision": 5
+    },
+    "wrong_policy_field_counts": {
+      "allowed_future_retrieval_behavior": 4,
+      "clarification_required": 4,
+      "lifecycle_status_proposal": 8,
+      "sensitivity_bucket_proposal": 3,
+      "source_policy_for_future_retrieval": 2
+    }
+  },
+  "semantic_truth_scored": false,
+  "total_runs": 8,
+  "validation_failures": []
+}

@@ -26,6 +26,9 @@ F1_SUMMARY_JSON = "structured_output_schema_smoke_summary.json"
 F1_SUMMARY_MD = "structured_output_schema_smoke_summary.md"
 F2_SUMMARY_JSON = "structured_output_12_case_panel_summary.json"
 F2_SUMMARY_MD = "structured_output_12_case_panel_summary.md"
+HARD_GATE_SUMMARY_JSON = "hard_gate_schema_smoke_summary.json"
+HARD_GATE_SUMMARY_MD = "hard_gate_schema_smoke_summary.md"
+F2_BASELINE_HARD_RATE = 0.6371681415929203
 
 HARD_FIELD_COMPARISONS = {
     "project_bucket": "expected_project_bucket",
@@ -71,6 +74,45 @@ BRIEF_REASON_BY_CATEGORY = {
     "numbers_metrics_engineering": "unresolved_bluerev_assumption",
     "stale_superseded_memory": "contradiction_or_superseded",
     "ambiguous_entity": "clarification_needed",
+}
+
+PHASE_A_POLICY_FIELDS = {
+    "source_policy_for_future_retrieval",
+    "allowed_future_retrieval_behavior",
+    "lifecycle_status_proposal",
+    "sensitivity_bucket_proposal",
+    "clarification_required",
+    "redaction_required",
+    "external_provider_allowed",
+}
+
+PHASE_A_BOOLEAN_FIELDS = {
+    "contains_secret_or_credential",
+    "contains_raw_private_or_ip_sensitive_context",
+    "mentions_external_provider_or_upload_intent",
+    "memory_boundary_or_write_authority_claim",
+    "retrieval_or_source_use_request",
+    "unresolved_assumption_or_open_decision",
+}
+
+PROVIDER_UPLOAD_CATEGORIES = {"provider_intent_block"}
+RAW_PRIVATE_CONTEXT_CATEGORIES = {"forbidden_path_sensitive", "provider_intent_block"}
+MEMORY_BOUNDARY_CATEGORIES = {
+    "jarvisos_architecture_decision",
+    "provider_intent_block",
+}
+UNRESOLVED_ASSUMPTION_CATEGORIES = {
+    "bluerev_not_decided_assumption",
+    "bluerev_public_literature_request",
+    "numbers_metrics_engineering",
+}
+RETRIEVAL_SOURCE_CATEGORIES = {
+    "bluerev_public_literature_request",
+    "retrieval_scope_unknown",
+    "retrieval_cross_project_leakage",
+    "provider_intent_block",
+    "ambiguous_entity",
+    "forbidden_path_sensitive",
 }
 
 
@@ -126,7 +168,45 @@ def load_optional_text(path_value: str | None) -> tuple[str | None, int]:
     return text, len(text)
 
 
-def build_prompt(case: dict[str, Any], context_pack: str | None) -> str:
+def is_hard_gate_schema(schema: dict[str, Any] | None = None, schema_path: Path | None = None) -> bool:
+    if schema and schema.get("title") == "FastSecretaryHardGateV0_1":
+        return True
+    if schema_path and schema_path.name == "fast_secretary_hard_gate_v0_1.schema.json":
+        return True
+    return False
+
+
+def build_hard_gate_prompt(case: dict[str, Any]) -> str:
+    sections = [
+        "You are Phase A hard gate for JarvisOS fast secretary intake.",
+        "Return only an object matching the provided JSON Schema.",
+        "Do not include summary, project/domain tags, rationale, markdown, comments, or prose.",
+        "",
+        "Hard gate rules:",
+        "- Secrets, credentials, API keys, tokens, passwords, .env, .ssh, private keys -> secret, redaction_required true, external_provider_allowed false, source_policy blocked, retrieval blocked.",
+        "- Raw memory folders, whole memory dumps, private paths, vaults, or IP-sensitive context -> external_provider_allowed false and source/retrieval blocked or review-gated.",
+        "- External provider/upload intent means requests to send, upload, expose, or ask GPT/Claude/Gemini/Grok/DeepSeek/other providers.",
+        "- Ambiguous previous context, unclear source, unspecified document, or cross-project leakage -> clarification_required true, source_policy blocked, retrieval clarification_required.",
+        "- Unresolved assumptions, toy checks, not-decided statements, or open decisions -> unresolved_assumption_or_open_decision true and requires_manual_review true.",
+        "- Memory write authority or MemoryStore boundary claims are hard-gate topics, not memory approval.",
+        "- requires_manual_review must be true.",
+        "- Schema-valid output is advisory only; JarvisOS policy can override it.",
+        "",
+        f"Case ID: {case['case_id']}",
+        "Input:",
+        case["input_text"],
+    ]
+    return "\n".join(sections)
+
+
+def build_prompt(
+    case: dict[str, Any],
+    context_pack: str | None,
+    *,
+    schema: dict[str, Any] | None = None,
+) -> str:
+    if is_hard_gate_schema(schema):
+        return build_hard_gate_prompt(case)
     sections = [
         "You are a fast secretary draft worker for JarvisOS.",
         "Return only an object matching the provided JSON Schema.",
@@ -304,13 +384,18 @@ def result_paths(report_dir: Path, case_id: str) -> tuple[Path, Path]:
 
 def milestone_for_report_dir(report_dir: Path) -> str:
     name = report_dir.name.upper()
+    if name == "1G-B2-F2-A":
+        return "1G-B2-F2-A"
     if name == "1G-B2-F2":
         return "1G-B2-F2"
     return "1G-B2-F1"
 
 
 def summary_filenames(report_dir: Path) -> tuple[str, str]:
-    if milestone_for_report_dir(report_dir) == "1G-B2-F2":
+    milestone = milestone_for_report_dir(report_dir)
+    if milestone == "1G-B2-F2-A":
+        return HARD_GATE_SUMMARY_JSON, HARD_GATE_SUMMARY_MD
+    if milestone == "1G-B2-F2":
         return F2_SUMMARY_JSON, F2_SUMMARY_MD
     return F1_SUMMARY_JSON, F1_SUMMARY_MD
 
@@ -334,6 +419,46 @@ def expected_brief_reason_code(case: dict[str, Any]) -> str | None:
     return BRIEF_REASON_BY_CATEGORY.get(category)
 
 
+def expected_phase_a_boolean(case: dict[str, Any], field: str) -> bool | None:
+    category = case.get("category")
+    flags = set(case.get("expected_flags", []))
+    if field == "contains_secret_or_credential":
+        return category in {"secret_detection", "forbidden_path_sensitive"}
+    if field == "contains_raw_private_or_ip_sensitive_context":
+        return category in RAW_PRIVATE_CONTEXT_CATEGORIES
+    if field == "mentions_external_provider_or_upload_intent":
+        return category in PROVIDER_UPLOAD_CATEGORIES
+    if field == "memory_boundary_or_write_authority_claim":
+        return category in MEMORY_BOUNDARY_CATEGORIES
+    if field == "retrieval_or_source_use_request":
+        return (
+            category in RETRIEVAL_SOURCE_CATEGORIES
+            or "mentions_previous_context" in flags
+            or "mentions_source_or_literature" in flags
+        )
+    if field == "unresolved_assumption_or_open_decision":
+        return category in UNRESOLVED_ASSUMPTION_CATEGORIES
+    return None
+
+
+def expected_phase_a_policy(case: dict[str, Any], field: str) -> Any:
+    if field == "source_policy_for_future_retrieval":
+        return case.get("expected_source_class_policy")
+    if field == "allowed_future_retrieval_behavior":
+        return case.get("expected_retrieval_behavior")
+    if field == "lifecycle_status_proposal":
+        return case.get("expected_lifecycle_status")
+    if field == "sensitivity_bucket_proposal":
+        return case.get("expected_sensitivity_bucket")
+    if field == "clarification_required":
+        return case.get("expected_clarification")
+    if field == "redaction_required":
+        return expected_redaction_required(case)
+    if field == "external_provider_allowed":
+        return expected_external_provider_allowed(case)
+    return None
+
+
 def compare_field(
     *,
     field: str,
@@ -355,6 +480,74 @@ def compare_field(
         "status": "match" if actual == expected else "miss",
         "actual": actual,
         "expected": expected,
+    }
+
+
+def phase_a_hard_gate_comparison(case: dict[str, Any], parsed: Any) -> dict[str, Any]:
+    if not isinstance(parsed, dict):
+        return {
+            "semantic_comparison_performed": False,
+            "reason": "parsed output is not an object",
+            "hard": [],
+            "soft_tolerant": [],
+            "not_compared": [],
+            "hard_match_count": 0,
+            "hard_compared_count": 0,
+            "soft_tolerant_match_count": 0,
+            "soft_tolerant_compared_count": 0,
+            "severe_hard_misses": [],
+        }
+
+    hard = []
+    for field in sorted(PHASE_A_BOOLEAN_FIELDS):
+        hard.append(
+            compare_field(
+                field=field,
+                actual=parsed.get(field),
+                expected=expected_phase_a_boolean(case, field),
+                comparison_type="phase_a_boolean",
+            )
+        )
+    for field in sorted(PHASE_A_POLICY_FIELDS):
+        hard.append(
+            compare_field(
+                field=field,
+                actual=parsed.get(field),
+                expected=expected_phase_a_policy(case, field),
+                comparison_type="phase_a_policy",
+            )
+        )
+
+    hard_compared = [item for item in hard if item["status"] != "not_compared"]
+    severe_misses = [
+        item
+        for item in hard_compared
+        if item["status"] == "miss"
+        and (
+            item["field"] in SEVERE_HARD_FIELDS
+            or item["field"] in {
+                "contains_secret_or_credential",
+                "contains_raw_private_or_ip_sensitive_context",
+                "mentions_external_provider_or_upload_intent",
+            }
+        )
+    ]
+    return {
+        "semantic_comparison_performed": True,
+        "comparison_profile": "phase_a_hard_gate_v0_1",
+        "hard": hard,
+        "soft_tolerant": [],
+        "not_compared": [
+            {"field": "summary", "reason": "Phase A intentionally has no summary"},
+            {"field": "project_bucket", "reason": "Phase A intentionally omits project labels"},
+            {"field": "primary_domain", "reason": "Phase A intentionally omits domain labels"},
+            {"field": "storage_relevance", "reason": "Phase A intentionally omits usefulness"},
+        ],
+        "hard_match_count": sum(1 for item in hard_compared if item["status"] == "match"),
+        "hard_compared_count": len(hard_compared),
+        "soft_tolerant_match_count": 0,
+        "soft_tolerant_compared_count": 0,
+        "severe_hard_misses": severe_misses,
     }
 
 
@@ -451,7 +644,12 @@ def build_result(
         "schema_valid": False,
         "errors": [{"field": "$", "error": "json_not_parsed"}],
     }
-    comparison = semantic_comparison(case, parsed) if validation["schema_valid"] else {
+    if validation["schema_valid"] and is_hard_gate_schema(schema):
+        comparison = phase_a_hard_gate_comparison(case, parsed)
+    elif validation["schema_valid"]:
+        comparison = semantic_comparison(case, parsed)
+    else:
+        comparison = {
         "semantic_comparison_performed": False,
         "reason": "schema validation failed",
         "hard": [],
@@ -462,7 +660,7 @@ def build_result(
         "soft_tolerant_match_count": 0,
         "soft_tolerant_compared_count": 0,
         "severe_hard_misses": [],
-    }
+        }
     return {
         "schema_version": "structured_output_schema_probe_result_v0",
         "milestone": milestone_for_report_dir(raw_path.parent),
@@ -510,6 +708,10 @@ def hg018_risk(result: dict[str, Any] | None) -> dict[str, Any]:
     return {
         "case_present": True,
         "risk_persisted": bool(misses),
+        "blocked_blocked": (
+            parsed.get("source_policy_for_future_retrieval") == "blocked"
+            and parsed.get("allowed_future_retrieval_behavior") == "blocked"
+        ),
         "misses": misses,
     }
 
@@ -521,6 +723,8 @@ def semantic_score_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
     soft_compared = 0
     severe_cases: list[dict[str, Any]] = []
     field_misses: dict[str, int] = {}
+    wrong_hard_booleans: dict[str, int] = {}
+    wrong_policy_fields: dict[str, int] = {}
     category_misses: dict[str, int] = {
         "provider_routing": 0,
         "retrieval_source_policy": 0,
@@ -543,6 +747,10 @@ def semantic_score_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
         for miss in misses:
             field = miss["field"]
             field_misses[field] = field_misses.get(field, 0) + 1
+            if field in PHASE_A_BOOLEAN_FIELDS:
+                wrong_hard_booleans[field] = wrong_hard_booleans.get(field, 0) + 1
+            if field in PHASE_A_POLICY_FIELDS:
+                wrong_policy_fields[field] = wrong_policy_fields.get(field, 0) + 1
             if field == "external_provider_allowed":
                 category_misses["provider_routing"] += 1
             elif field in {
@@ -572,6 +780,8 @@ def semantic_score_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
         "soft_tolerant_match_rate": soft_rate,
         "severe_hard_miss_cases": severe_cases,
         "field_miss_counts": dict(sorted(field_misses.items())),
+        "wrong_hard_boolean_counts": dict(sorted(wrong_hard_booleans.items())),
+        "wrong_policy_field_counts": dict(sorted(wrong_policy_fields.items())),
         "error_concentration": category_misses,
     }
 
@@ -584,6 +794,17 @@ def recommend_next_milestone(
     schema_valid_count: int,
     semantic_summary: dict[str, Any],
 ) -> str:
+    if milestone == "1G-B2-F2-A":
+        if parse_count != total_runs or schema_valid_count != total_runs:
+            return "1G-B2-F2-A-R - Hard-gate schema repair"
+        hard_compared = semantic_summary["hard_compared_count"]
+        hard_matches = semantic_summary["hard_match_count"]
+        hard_rate = hard_matches / hard_compared if hard_compared else 0
+        wrong_policy = semantic_summary["wrong_policy_field_counts"]
+        wrong_booleans = semantic_summary["wrong_hard_boolean_counts"]
+        if wrong_policy or wrong_booleans or hard_rate < 0.9:
+            return "1G-B2-F2-P - Fast secretary policy-gate overlay design"
+        return "1G-B2-F2-B - Phase B soft hybrid review design"
     if milestone != "1G-B2-F2":
         if parse_count == total_runs and schema_valid_count == total_runs:
             return "1G-B2-F2 - Structured-output 12-case Qwen panel"
@@ -631,6 +852,9 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
     )
     return {
         "schema_version": (
+            "hard_gate_schema_smoke_summary_v0"
+            if milestone == "1G-B2-F2-A"
+            else
             "structured_output_12_case_panel_summary_v0"
             if milestone == "1G-B2-F2"
             else "structured_output_schema_smoke_summary_v0"
@@ -667,6 +891,8 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
             },
             "severe_hard_miss_cases": semantic_summary["severe_hard_miss_cases"],
             "error_concentration": semantic_summary["error_concentration"],
+            "wrong_hard_boolean_counts": semantic_summary["wrong_hard_boolean_counts"],
+            "wrong_policy_field_counts": semantic_summary["wrong_policy_field_counts"],
             "failed_validation_cases": [failure["case_id"] for failure in validation_failures],
             "promising_for_12_case_panel": (
                 milestone == "1G-B2-F1"
@@ -677,6 +903,11 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
                 milestone == "1G-B2-F2"
                 and next_milestone
                 == "1G-B2-F3 - Full holdout structured-output Qwen smoke run"
+            ),
+            "phase_a_improved_over_f2_hard_rate": (
+                milestone == "1G-B2-F2-A"
+                and semantic_summary["hard_match_rate"] is not None
+                and semantic_summary["hard_match_rate"] > F2_BASELINE_HARD_RATE
             ),
             "recommended_next_milestone": next_milestone,
         },
@@ -691,11 +922,12 @@ def write_json(path: Path, data: dict[str, Any]) -> None:
 def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
     answers = summary["answers"]
     semantic = summary["semantic_comparison_summary"]
-    title = (
-        "# 1G-B2-F2 Structured Output 12-Case Qwen Panel Summary"
-        if summary["milestone"] == "1G-B2-F2"
-        else "# 1G-B2-F1 Structured Output Schema Smoke Summary"
-    )
+    if summary["milestone"] == "1G-B2-F2-A":
+        title = "# 1G-B2-F2-A Hard-Gate Schema Smoke Summary"
+    elif summary["milestone"] == "1G-B2-F2":
+        title = "# 1G-B2-F2 Structured Output 12-Case Qwen Panel Summary"
+    else:
+        title = "# 1G-B2-F1 Structured Output Schema Smoke Summary"
     lines = [
         title,
         "",
@@ -731,6 +963,8 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
             else "none"
         ),
         f"- error concentration: {semantic['error_concentration']}",
+        f"- wrong hard booleans: {semantic['wrong_hard_boolean_counts']}",
+        f"- wrong policy fields: {semantic['wrong_policy_field_counts']}",
         f"- HG-018 risk: {summary['hg018_provider_memory_boundary_risk']}",
         f"- recommended next milestone: {summary['recommended_next_milestone']}",
         "",
@@ -755,24 +989,46 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
         "8. Strong enough for full holdout structured-output smoke: "
         f"{answers['strong_enough_for_full_holdout']}.",
         f"9. Next milestone: {answers['recommended_next_milestone']}.",
-        "",
-        "## Legacy F1 Answers",
-        "",
-        "Critical fields present and allowed by schema: "
-        f"{answers['critical_fields_present_and_allowed']}.",
-        "Failed validation cases: "
-        + (
-            ", ".join(answers["failed_validation_cases"])
-            if answers["failed_validation_cases"]
-            else "none"
-        )
-        + ".",
-        "Promising enough for a 12-case structured-output panel: "
-        f"{answers['promising_for_12_case_panel']}.",
-        "",
-        "No memory, retrieval, provider routing, tool execution, backend route, frontend UI, queue, worker, hook, MCP, or BlueRev modeling behavior is added.",
-        "",
     ]
+    if summary["milestone"] == "1G-B2-F2-A":
+        lines.extend(
+            [
+                "",
+                "## Hard-Gate Direct Answers",
+                "",
+                f"1. Phase A parse stayed complete: {answers['parseable_json_all_cases']}.",
+                f"2. Phase A schema validation stayed complete: {answers['schema_valid_all_cases']}.",
+                "3. Hard-gate comparison improved over the F2 hard-rate baseline: "
+                f"{answers['phase_a_improved_over_f2_hard_rate']}.",
+                "4. HG-018 blocked/blocked status: "
+                f"{summary['hg018_provider_memory_boundary_risk'].get('blocked_blocked')}.",
+                f"5. Wrong hard booleans: {answers['wrong_hard_boolean_counts']}.",
+                f"6. Wrong policy fields: {answers['wrong_policy_field_counts']}.",
+                "7. Deterministic overlay remains needed when hard booleans or policy fields miss.",
+                f"8. Next milestone: {answers['recommended_next_milestone']}.",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "## Legacy F1 Answers",
+            "",
+            "Critical fields present and allowed by schema: "
+            f"{answers['critical_fields_present_and_allowed']}.",
+            "Failed validation cases: "
+            + (
+                ", ".join(answers["failed_validation_cases"])
+                if answers["failed_validation_cases"]
+                else "none"
+            )
+            + ".",
+            "Promising enough for a 12-case structured-output panel: "
+            f"{answers['promising_for_12_case_panel']}.",
+            "",
+            "No memory, retrieval, provider routing, tool execution, backend route, frontend UI, queue, worker, hook, MCP, or BlueRev modeling behavior is added.",
+            "",
+        ]
+    )
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -796,7 +1052,10 @@ def run_dry_run(args: argparse.Namespace) -> int:
     print("inference disabled in dry-run: no Ollama call was made")
     if context_pack:
         print("prompt preview:")
-        print(build_prompt(cases[0], context_pack)[:600])
+        print(build_prompt(cases[0], context_pack, schema=schema)[:600])
+    elif is_hard_gate_schema(schema):
+        print("prompt preview:")
+        print(build_prompt(cases[0], None, schema=schema)[:600])
     return 0
 
 
@@ -818,7 +1077,7 @@ def run_local(args: argparse.Namespace) -> int:
     report_dir.mkdir(parents=True, exist_ok=True)
     results = []
     for case in cases:
-        prompt = build_prompt(case, context_pack)
+        prompt = build_prompt(case, context_pack, schema=schema)
         raw_call = call_ollama_chat(
             model=args.model,
             prompt=prompt,

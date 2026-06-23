@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-23T07:45:30.1057526Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 215,
+    "eval_duration": 4191118000,
+    "load_duration": 402581700,
+    "message": {
+      "content": "{\n  \"contains_secret_or_credential\": false,\n  \"contains_raw_private_or_ip_sensitive_context\": false,\n  \"mentions_external_provider_or_upload_intent\": false,\n  \"memory_boundary_or_write_authority_claim\": false,\n  \"retrieval_or_source_use_request\": false,\n  \"unresolved_assumption_or_open_decision\": true,\n  \"clarification_required\": true,\n  \"redaction_required\": false,\n  \"external_provider_allowed\": false,\n  \"source_policy_for_future_retrieval\": \"blocked\",\n  \"allowed_future_retrieval_behavior\": \"clarification_required\",\n  \"lifecycle_status_proposal\": \"unknown\",\n  \"sensitivity_bucket_proposal\": \"unknown\",\n  \"requires_manual_review\": true\n  , \"hard_reason_code\": \"unresolved_assumption\"\n  , \"hard_uncertain_fields\": [\"material\", \"next_step\"]\n}",
+      "role": "assistant",
+      "thinking": "Okay, let's tackle this. The user is asking to use the thing we decided last time about the material and prepare the next step. But according to the hard gate rules, I need to check if there's any secret info, external provider intent, or ambiguous context.\n\nFirst, the input doesn't mention any secrets, credentials, or API keys. So the secret/redaction part might not apply here. Then, there's no mention of sending data to an external provider like GPT or others. The user is just referring to a previous decision and planning the next step. \n\nBut wait, the rules say that if there's ambiguous previous context or cross-project leakage, clarification is needed. The input refers to \"the thing we decided last time,\" which might be ambiguous. The source policy is blocked unless clarified. Also, since there's no specific document or project mentioned, maybe the source is unclear. \n\nAdditionally, the user hasn't provided any specific details about the material or the next step. So, there's an unresolved assumption here. The rules state that unresolved assumptions require manual review. Also, requires_manual_review must be true. \n\nPutting it all together, the output should have clarification_required true because the source is ambiguous. Also, unresolved_assumption_or_open_decision true since the next step isn't decided. And requires_manual_review must be true as per the rules. The other fields like external_provider_allowed and source_policy can be set based on the ambiguity. So the final object should reflect these conditions.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 599,
+    "prompt_eval_duration": 93544000,
+    "total_duration": 8794845700
+  },
+  "duration_seconds": 10.851,
+  "error": null,
+  "ok": true,
+  "status": 200
+}
