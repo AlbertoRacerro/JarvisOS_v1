@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-23T22:12:11.416591Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 191,
+    "eval_duration": 3120496000,
+    "load_duration": 381185200,
+    "message": {
+      "content": "{\n  \"summary_short\": \"Supersede older Gemma 12B routing approval with current local-AI evidence\",\n  \"project_bucket\": \"jarvisos\",\n  \"primary_domain\": \"memory\",\n  \"domain_tags\": [\"decision_update\", \"policy_enforcement\", \"local_ai_eval\"],\n  \"storage_relevance\": \"high\",\n  \"usefulness_for_future_review\": \"high\",\n  \"possible_memory_card_type\": \"decision_card\",\n  \"soft_reason_code\": \"decision_candidate\",\n  \"brief_rationale\": \"This proposal updates routing policy by replacing outdated Gemma 12B approval with current local-AI evidence, ensuring memory consistency with latest validation standards.\",\n  \"suggested_followup_question\": \"What specific local-AI evidence establishes the current routing approval for Gemma 12B?\"\n, \"soft_uncertain_fields\": []\n}",
+      "role": "assistant",
+      "thinking": "Okay, let's tackle this. The user provided an input about handling an older memory regarding Gemma 12B being approved for routing, but it's now superseded by current local-AI evidence. My task is to create a soft-review proposal as per the schema.\n\nFirst, I need to parse the input. The main point is that an older memory entry is being superseded. So, the card type here is likely a decision_card because it's about changing or updating a decision. The reason code would be decision_candidate since it's about superseding a previous decision.\n\nThe primary domain here is \"memory\" because it's about handling memory entries. The project bucket is \"jarvisos\" since it relates to the system's memory infrastructure and policy. \n\nThe rationale should explain that this is a decision update to replace old routing approval with new evidence. I need to mention that it's for local review and policy enforcement. \n\nThe suggested follow-up question might be asking for the specific current local-AI evidence to confirm the supersedence. But since the input doesn't mention any ambiguity, maybe it's not needed. Wait, the input says \"treat it as superseded by the current local-AI evidence,\" so maybe there's no need for a follow-up. But the user might want to ensure that the current evidence is properly referenced. However, the input doesn't specify what that evidence is, so maybe the follow-up is to get more details on the current evidence. But according to the guidelines, if there's an unresolved reference, we should ask for it. Here, \"current local-AI evidence\" is a reference, so the follow-up should ask what specific evidence is being used.\n\nPutting it all together, the JSON should have the card type as decision_card, reason code as decision_candidate, primary domain as memory, project bucket as jarvisos, and the follow-up question asking for the current local-AI evidence. The rationale explains that this is a decision to supersede old routing approval with new evidence for local policy enforcement.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 2200,
+    "prompt_eval_duration": 139185000,
+    "total_duration": 9481669700
+  },
+  "duration_seconds": 11.521,
+  "error": null,
+  "ok": true,
+  "status": 200
+}

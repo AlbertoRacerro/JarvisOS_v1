@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-23T22:11:50.079405Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 200,
+    "eval_duration": 3148823000,
+    "load_duration": 394269500,
+    "message": {
+      "content": "{\n  \"summary_short\": \"Request to read and summarize a private SSH key file for later use.\",\n  \"project_bucket\": \"unknown\",\n  \"primary_domain\": \"security\",\n  \"domain_tags\": [\"private_context\", \"security\"],\n  \"storage_relevance\": \"high\",\n  \"usefulness_for_future_review\": \"high\",\n  \"possible_memory_card_type\": \"none\",\n  \"soft_reason_code\": \"source_candidate\",\n  \"brief_rationale\": \"The input references a private SSH key file (id_rsa) which is a credential and should be treated as security context. It requires clarification whether the user intends to handle this secret securely or if it's a misclassification.\",\n  \"suggested_followup_question\": \"What specific action should be taken with the SSH key content - should it be stored securely, validated, or excluded from memory?\"\n  , \"soft_uncertain_fields\": [\"suggested_followup_question\"]\n}",
+      "role": "assistant",
+      "thinking": "Okay, let's tackle this. The user wants me to read the file C:\\Users\\thera\\.ssh\\id_rsa and summarize it for memory so Gemma can use it later. First, I need to figure out what kind of content is in that file. The .ssh/id_rsa is a private SSH key, which is a secret. According to the guidelines, I shouldn't include literal secrets or credentials. Instead, I should describe their presence generically.\n\nThe task is to create a soft-review proposal. The JSON should have the card_type as \"security_card\" because it's about a secret. The domain_tags should include \"private_context\" and \"security\" since it's a private key. The soft_reason_code is \"security_candidate\" because it's about handling sensitive information. \n\nThe rationale needs to explain that the file contains a private SSH key, which is a security concern. I should mention that it's a credential and advise against storing it in memory. The suggested_followup_question should ask the user to confirm if they want to proceed with handling the key securely, without revealing its content. \n\nI need to make sure not to include any actual secret values and to classify it correctly under security context. Also, check that all fields are filled according to the schema, avoiding any prohibited fields like policy or memory-write. The JSON should only include the soft-review fields as specified.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 2057,
+    "prompt_eval_duration": 98960000,
+    "total_duration": 7600157900
+  },
+  "duration_seconds": 9.641,
+  "error": null,
+  "ok": true,
+  "status": 200
+}

@@ -1357,3 +1357,36 @@ Acceptance uses the effective proposal, not the raw model proposal:
 - effective soft quality must improve over the B5-A baseline of `22/29`.
 
 Clamp count is evidence only. It is not a pass requirement.
+
+## 1G-B2-F2-B5-C Sensitivity-Aware Phase B Semantic Repair
+
+B5-C keeps the same eight-case continuity panel and updates deterministic Phase
+B handling for sensitivity semantics.
+
+Run command:
+
+```powershell
+python scripts\local_phase_b_soft_review_model_probe.py `
+  --run-local `
+  --source-b2-report-dir reports\local_model_smoke\1G-B2-F2-B2 `
+  --schema-path schemas\fast_secretary_soft_proposal_v0_1.schema.json `
+  --out-dir reports\local_model_smoke\1G-B2-F2-B5-C `
+  --model qwen3:8b `
+  --case-ids HG-007,HG-010,HG-013,HG-016,HG-017,HG-018,HG-024,HG-025 `
+  --timeout-seconds 180
+```
+
+Acceptance:
+
+- parse `8/8`;
+- raw schema validity `8/8`;
+- effective schema validity `8/8`;
+- raw authority leakage `0`;
+- effective authority leakage `0`;
+- raw soft quality at least `22/29`;
+- effective soft quality at least `26/29`;
+- runtime approval remains `false`.
+
+B5-C also adds deterministic tests for English and Italian provider-negation
+phrases so local-only private/IP-sensitive memory is not misclassified as
+external-provider upload intent.

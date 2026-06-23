@@ -1,0 +1,280 @@
+{
+  "authority_field_leakage": [],
+  "authority_field_leakage_count": 0,
+  "case_id": "HG-025",
+  "created_at": "2026-06-23T22:12:35.945385+00:00",
+  "duration_seconds": 24.524,
+  "effective_soft_quality_diagnostic": {
+    "case_id": "HG-025",
+    "quality_compared": true,
+    "quality_compared_count": 4,
+    "quality_match_count": 4,
+    "quality_misses": []
+  },
+  "json_parse_error": null,
+  "json_parse_passed": true,
+  "manual_review_required": true,
+  "milestone": "1G-B2-F2-B5-C",
+  "model": "qwen3:8b",
+  "ollama_ok": true,
+  "ollama_status": 200,
+  "phase_a_result_source": "reports\\local_model_smoke\\1G-B2-F2-B2\\HG-025__result.json",
+  "phase_b_sensitive_context_class": "clarification_blocked",
+  "phase_b_soft_proposal": {
+    "brief_rationale": "Tracks policy update based on memory document decision, critical for maintaining aligned system behavior",
+    "domain_tags": [
+      "memory",
+      "policy_update"
+    ],
+    "possible_memory_card_type": "none",
+    "primary_domain": "memory",
+    "project_bucket": "jarvisos",
+    "soft_reason_code": "clarification_context",
+    "soft_uncertain_fields": [
+      "memory_document_reference"
+    ],
+    "storage_relevance": "low",
+    "suggested_followup_question": "Which specific memory document contains the decision to be applied?",
+    "summary_short": "Update policy using latest memory decision",
+    "usefulness_for_future_review": "high"
+  },
+  "phase_b_soft_proposal_effective": {
+    "brief_rationale": "Tracks policy update based on memory document decision, critical for maintaining aligned system behavior",
+    "domain_tags": [
+      "memory",
+      "policy_update"
+    ],
+    "possible_memory_card_type": "none",
+    "primary_domain": "memory",
+    "project_bucket": "jarvisos",
+    "soft_reason_code": "clarification_context",
+    "soft_uncertain_fields": [
+      "memory_document_reference"
+    ],
+    "storage_relevance": "low",
+    "suggested_followup_question": "Which specific memory document contains the decision to be applied?",
+    "summary_short": "Update policy using latest memory decision",
+    "usefulness_for_future_review": "high"
+  },
+  "phase_b_soft_proposal_effective_authority_field_leakage": [],
+  "phase_b_soft_proposal_effective_authority_field_leakage_count": 0,
+  "phase_b_soft_proposal_effective_schema_valid": true,
+  "phase_b_soft_proposal_effective_validation_errors": [],
+  "phase_b_soft_proposal_model_raw": {
+    "brief_rationale": "Tracks policy update based on memory document decision, critical for maintaining aligned system behavior",
+    "domain_tags": [
+      "memory",
+      "policy_update"
+    ],
+    "possible_memory_card_type": "decision_card",
+    "primary_domain": "memory",
+    "project_bucket": "jarvisos",
+    "soft_reason_code": "decision_candidate",
+    "soft_uncertain_fields": [
+      "memory_document_reference"
+    ],
+    "storage_relevance": "high",
+    "suggested_followup_question": "Which specific memory document contains the decision to be applied?",
+    "summary_short": "Update policy using latest memory decision",
+    "usefulness_for_future_review": "high"
+  },
+  "phase_b_soft_proposal_model_raw_authority_field_leakage": [],
+  "phase_b_soft_proposal_model_raw_authority_field_leakage_count": 0,
+  "phase_b_soft_proposal_model_raw_schema_valid": true,
+  "phase_b_soft_proposal_model_raw_validation_errors": [],
+  "raw_response_path": "reports\\local_model_smoke\\1G-B2-F2-B5-C\\HG-025__phase_b_soft_only_raw_response.json",
+  "raw_soft_quality_diagnostic": {
+    "case_id": "HG-025",
+    "quality_compared": true,
+    "quality_compared_count": 4,
+    "quality_match_count": 3,
+    "quality_misses": [
+      {
+        "actual": "decision_candidate",
+        "expected_any": [
+          "clarification_context",
+          "memory_candidate",
+          "contextual_summary"
+        ],
+        "field": "soft_reason_code",
+        "reason": "advisory soft-quality expectation miss"
+      }
+    ]
+  },
+  "review_envelope": {
+    "authority_field_leakage": [],
+    "authority_field_leakage_count": 0,
+    "case_id": "HG-025",
+    "effective_soft_quality_diagnostic": {
+      "case_id": "HG-025",
+      "quality_compared": true,
+      "quality_compared_count": 4,
+      "quality_match_count": 4,
+      "quality_misses": []
+    },
+    "external_provider_calls_made": false,
+    "local_model_calls_made": true,
+    "manual_review_required": true,
+    "phase_a_hard_gate": {
+      "allowed_future_retrieval_behavior": "clarification_required",
+      "clarification_required": true,
+      "contains_raw_private_or_ip_sensitive_context": false,
+      "contains_secret_or_credential": false,
+      "external_provider_allowed": false,
+      "hard_reason_code": "clarification_needed",
+      "mentions_external_provider_or_upload_intent": false,
+      "redaction_required": false,
+      "requires_manual_review": true,
+      "sensitivity_bucket_proposal": "internal",
+      "source_policy_for_future_retrieval": "blocked"
+    },
+    "phase_b_soft_proposal": {
+      "brief_rationale": "Tracks policy update based on memory document decision, critical for maintaining aligned system behavior",
+      "domain_tags": [
+        "memory",
+        "policy_update"
+      ],
+      "possible_memory_card_type": "none",
+      "primary_domain": "memory",
+      "project_bucket": "jarvisos",
+      "soft_reason_code": "clarification_context",
+      "soft_uncertain_fields": [
+        "memory_document_reference"
+      ],
+      "storage_relevance": "low",
+      "suggested_followup_question": "Which specific memory document contains the decision to be applied?",
+      "summary_short": "Update policy using latest memory decision",
+      "usefulness_for_future_review": "high"
+    },
+    "phase_b_soft_proposal_effective": {
+      "brief_rationale": "Tracks policy update based on memory document decision, critical for maintaining aligned system behavior",
+      "domain_tags": [
+        "memory",
+        "policy_update"
+      ],
+      "possible_memory_card_type": "none",
+      "primary_domain": "memory",
+      "project_bucket": "jarvisos",
+      "soft_reason_code": "clarification_context",
+      "soft_uncertain_fields": [
+        "memory_document_reference"
+      ],
+      "storage_relevance": "low",
+      "suggested_followup_question": "Which specific memory document contains the decision to be applied?",
+      "summary_short": "Update policy using latest memory decision",
+      "usefulness_for_future_review": "high"
+    },
+    "phase_b_soft_proposal_effective_authority_field_leakage_count": 0,
+    "phase_b_soft_proposal_effective_schema_valid": true,
+    "phase_b_soft_proposal_effective_validation_errors": [],
+    "phase_b_soft_proposal_model_raw": {
+      "brief_rationale": "Tracks policy update based on memory document decision, critical for maintaining aligned system behavior",
+      "domain_tags": [
+        "memory",
+        "policy_update"
+      ],
+      "possible_memory_card_type": "decision_card",
+      "primary_domain": "memory",
+      "project_bucket": "jarvisos",
+      "soft_reason_code": "decision_candidate",
+      "soft_uncertain_fields": [
+        "memory_document_reference"
+      ],
+      "storage_relevance": "high",
+      "suggested_followup_question": "Which specific memory document contains the decision to be applied?",
+      "summary_short": "Update policy using latest memory decision",
+      "usefulness_for_future_review": "high"
+    },
+    "phase_b_soft_proposal_model_raw_authority_field_leakage_count": 0,
+    "phase_b_soft_proposal_model_raw_schema_valid": true,
+    "phase_b_soft_proposal_model_raw_validation_errors": [],
+    "phase_b_soft_proposal_schema_valid": true,
+    "phase_b_soft_proposal_validation_errors": [],
+    "raw_soft_quality_diagnostic": {
+      "case_id": "HG-025",
+      "quality_compared": true,
+      "quality_compared_count": 4,
+      "quality_match_count": 3,
+      "quality_misses": [
+        {
+          "actual": "decision_candidate",
+          "expected_any": [
+            "clarification_context",
+            "memory_candidate",
+            "contextual_summary"
+          ],
+          "field": "soft_reason_code",
+          "reason": "advisory soft-quality expectation miss"
+        }
+      ]
+    },
+    "runtime_approved": false,
+    "schema_version": "fast_secretary_review_envelope_v0_1",
+    "semantic_truth_scored": false,
+    "soft_generation_mode": "local_model",
+    "soft_proposal_deterministic_clamps": [
+      {
+        "field": "storage_relevance",
+        "previous": "high",
+        "reason": "clarification_blocked",
+        "replacement": "low"
+      },
+      {
+        "field": "possible_memory_card_type",
+        "previous": "decision_card",
+        "reason": "clarification_blocked",
+        "replacement": "none"
+      },
+      {
+        "field": "soft_reason_code",
+        "previous": "decision_candidate",
+        "reason": "clarification_blocked",
+        "replacement": "clarification_context"
+      }
+    ],
+    "soft_quality_diagnostic": {
+      "case_id": "HG-025",
+      "quality_compared": true,
+      "quality_compared_count": 4,
+      "quality_match_count": 4,
+      "quality_misses": []
+    },
+    "soft_quality_review_required": true,
+    "soft_quality_truth_scored": false
+  },
+  "runtime_approved": false,
+  "schema_path": "schemas\\fast_secretary_soft_proposal_v0_1.schema.json",
+  "schema_valid": true,
+  "schema_version": "phase_b_sensitivity_semantic_repair_result_v0",
+  "semantic_truth_scored": false,
+  "soft_proposal_deterministic_clamps": [
+    {
+      "field": "storage_relevance",
+      "previous": "high",
+      "reason": "clarification_blocked",
+      "replacement": "low"
+    },
+    {
+      "field": "possible_memory_card_type",
+      "previous": "decision_card",
+      "reason": "clarification_blocked",
+      "replacement": "none"
+    },
+    {
+      "field": "soft_reason_code",
+      "previous": "decision_candidate",
+      "reason": "clarification_blocked",
+      "replacement": "clarification_context"
+    }
+  ],
+  "soft_quality_diagnostic": {
+    "case_id": "HG-025",
+    "quality_compared": true,
+    "quality_compared_count": 4,
+    "quality_match_count": 4,
+    "quality_misses": []
+  },
+  "soft_quality_review_required": true,
+  "soft_quality_truth_scored": false,
+  "validation_errors": []
+}

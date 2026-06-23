@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import local_model_structured_output_probe as structured_probe  # noqa: E402
+import local_policy_gate_overlay_probe as overlay_probe  # noqa: E402
 import local_phase_b_soft_review_model_probe as model_probe  # noqa: E402
 
 
@@ -44,6 +45,9 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
             "case_id": "HG-007",
             "policy_overlay_corrected_output": phase_a or self.phase_a(),
         }
+
+    def source_result_from_overlay(self, input_text):
+        return self.source_result(overlay_probe.apply_policy_overlay(input_text, self.phase_a()))
 
     def valid_soft_proposal(self):
         return {
@@ -92,6 +96,21 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
         ]
         for token in forbidden_tokens:
             self.assertNotIn(token, instruction)
+
+    def test_instruction_block_contains_sensitivity_aware_semantic_core(self):
+        instruction = model_probe.build_general_instruction_block()
+        expected = [
+            "local semantic-review component inside JarvisOS",
+            "Sensitive does not mean useless",
+            "Sensitive means protect boundaries",
+            "Secrets and credentials are different",
+            "highly valuable local memory",
+            "provider-boundary",
+            "clarification_context",
+        ]
+        for phrase in expected:
+            self.assertIn(phrase, instruction)
+        self.assertNotIn("never promote uncertain or sensitive content as ready memory", instruction)
 
     def test_case_selection_rejects_more_than_eight_cases(self):
         with self.assertRaises(ValueError):
@@ -220,6 +239,154 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
         self.assertEqual("contextual_summary", effective["soft_reason_code"])
         self.assertTrue(result["soft_proposal_deterministic_clamps"])
 
+    def test_secret_still_clamps_hard(self):
+        phase_a = dict(self.phase_a())
+        phase_a.update(
+            {
+                "contains_secret_or_credential": True,
+                "sensitivity_bucket_proposal": "secret",
+                "hard_reason_code": "secret_or_credential",
+            }
+        )
+        raw = dict(self.valid_soft_proposal())
+        raw.update(
+            {
+                "summary_short": "Save sk-secret-literal as memory.",
+                "storage_relevance": "high",
+                "possible_memory_card_type": "memory_card",
+                "suggested_followup_question": "What is the full sk-secret-literal value?",
+            }
+        )
+        result = model_probe.build_model_result(
+            case_id="HG-016",
+            source_result=self.source_result(phase_a),
+            schema=self.schema,
+            schema_path=self.schema_path,
+            model="qwen3:8b",
+            raw_path=Path("raw.json"),
+            raw_call=self.raw_call(raw),
+            input_text="Store this API key: sk-secret-literal.",
+        )
+        effective = result["phase_b_soft_proposal_effective"]
+        self.assertEqual("none", effective["possible_memory_card_type"])
+        self.assertIn(effective["storage_relevance"], {"none", "low"})
+        self.assertEqual("", effective["suggested_followup_question"])
+        self.assertEqual("security", effective["primary_domain"])
+        self.assertNotIn("sk-secret-literal", json.dumps(effective))
+
+    def test_provider_private_export_risk_preserves_local_policy_meaning(self):
+        input_text = "Send the whole private JarvisOS memory folder to DeepSeek for architecture advice."
+        raw = dict(self.valid_soft_proposal())
+        raw.update(
+            {
+                "project_bucket": "jarvisos",
+                "primary_domain": "memory",
+                "domain_tags": ["memory", "provider"],
+                "storage_relevance": "high",
+                "usefulness_for_future_review": "high",
+                "possible_memory_card_type": "memory_card",
+                "soft_reason_code": "memory_candidate",
+            }
+        )
+        result = model_probe.build_model_result(
+            case_id="HG-018",
+            source_result=self.source_result_from_overlay(input_text),
+            schema=self.schema,
+            schema_path=self.schema_path,
+            model="qwen3:8b",
+            raw_path=Path("raw.json"),
+            raw_call=self.raw_call(raw),
+            input_text=input_text,
+        )
+        effective = result["phase_b_soft_proposal_effective"]
+        self.assertEqual("security", effective["primary_domain"])
+        self.assertTrue({"provider_boundary", "private_context"} & set(effective["domain_tags"]))
+        self.assertEqual("medium", effective["storage_relevance"])
+        self.assertEqual("decision_card", effective["possible_memory_card_type"])
+        self.assertRegex(effective["brief_rationale"].lower(), r"(boundary|review|approv)")
+        self.assertEqual("", effective["suggested_followup_question"])
+        self.assertFalse(result["runtime_approved"])
+
+    def assert_local_ip_sensitive_memory_preserved(self, input_text):
+        raw = dict(self.valid_soft_proposal())
+        raw.update(
+            {
+                "project_bucket": "bluerev",
+                "primary_domain": "reactor_design",
+                "domain_tags": ["ip_sensitive", "local_memory", "calculation", "reactor_geometry"],
+                "storage_relevance": "high",
+                "usefulness_for_future_review": "high",
+                "possible_memory_card_type": "assumption_card",
+                "soft_reason_code": "assumption_candidate",
+            }
+        )
+        result = model_probe.build_model_result(
+            case_id="HG-LOCAL",
+            source_result=self.source_result_from_overlay(input_text),
+            schema=self.schema,
+            schema_path=self.schema_path,
+            model="qwen3:8b",
+            raw_path=Path("raw.json"),
+            raw_call=self.raw_call(raw),
+            input_text=input_text,
+        )
+        effective = result["phase_b_soft_proposal_effective"]
+        hard_gate = result["review_envelope"]["phase_a_hard_gate"]
+        self.assertTrue(hard_gate["contains_raw_private_or_ip_sensitive_context"])
+        self.assertFalse(hard_gate["mentions_external_provider_or_upload_intent"])
+        self.assertFalse(hard_gate["external_provider_allowed"])
+        self.assertNotEqual("security", effective["primary_domain"])
+        self.assertNotEqual("low", effective["storage_relevance"])
+        self.assertNotEqual("none", effective["possible_memory_card_type"])
+        self.assertIn(effective["storage_relevance"], {"medium", "high"})
+        self.assertEqual(0, result["authority_field_leakage_count"])
+        self.assertFalse(result["runtime_approved"])
+
+    def test_local_ip_sensitive_bluerev_design_remains_valuable_local_memory(self):
+        self.assert_local_ip_sensitive_memory_preserved(
+            "Save this proprietary BlueRev reactor geometry calculation as local project memory; "
+            "do not send it to any external provider."
+        )
+
+    def test_local_ip_sensitive_bluerev_design_italian_remains_valuable_local_memory(self):
+        self.assert_local_ip_sensitive_memory_preserved(
+            "Salva questo calcolo proprietario BlueRev come memoria locale; "
+            "non mandarlo a DeepSeek o ad altri provider esterni."
+        )
+
+    def test_ambiguous_prior_reference_still_clamps_to_clarification(self):
+        phase_a = dict(self.phase_a())
+        phase_a.update(
+            {
+                "clarification_required": True,
+                "hard_reason_code": "clarification_needed",
+                "source_policy_for_future_retrieval": "blocked",
+                "allowed_future_retrieval_behavior": "clarification_required",
+            }
+        )
+        raw = dict(self.valid_soft_proposal())
+        raw.update(
+            {
+                "storage_relevance": "high",
+                "possible_memory_card_type": "memory_card",
+                "suggested_followup_question": "",
+            }
+        )
+        result = model_probe.build_model_result(
+            case_id="HG-025",
+            source_result=self.source_result(phase_a),
+            schema=self.schema,
+            schema_path=self.schema_path,
+            model="qwen3:8b",
+            raw_path=Path("raw.json"),
+            raw_call=self.raw_call(raw),
+            input_text="Use the thing we decided last time about the material.",
+        )
+        effective = result["phase_b_soft_proposal_effective"]
+        self.assertEqual("low", effective["storage_relevance"])
+        self.assertEqual("none", effective["possible_memory_card_type"])
+        self.assertTrue(effective["suggested_followup_question"].strip())
+
     def test_raw_private_phase_a_clamps_raw_model_soft_proposal(self):
         phase_a = dict(self.phase_a())
         phase_a.update(
@@ -240,9 +407,9 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
         )
         effective = result["phase_b_soft_proposal_effective"]
         self.assertEqual("security", effective["primary_domain"])
-        self.assertEqual("none", effective["possible_memory_card_type"])
-        self.assertEqual("low", effective["storage_relevance"])
-        self.assertEqual(["security", "private-context"], effective["domain_tags"])
+        self.assertEqual("decision_card", effective["possible_memory_card_type"])
+        self.assertEqual("medium", effective["storage_relevance"])
+        self.assertTrue({"provider_boundary", "private_context"} & set(effective["domain_tags"]))
 
     def test_phase_a_blocked_clamps_card_and_storage(self):
         phase_a = dict(self.phase_a())
@@ -375,12 +542,12 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
             "phase_b_soft_proposal_effective_authority_field_leakage": [],
             "soft_proposal_deterministic_clamps": [],
             "raw_soft_quality_diagnostic": {
-                "quality_match_count": 23,
+                "quality_match_count": 22,
                 "quality_compared_count": 29,
                 "quality_misses": [],
             },
             "effective_soft_quality_diagnostic": {
-                "quality_match_count": 23,
+                "quality_match_count": 26,
                 "quality_compared_count": 29,
                 "quality_misses": [],
             },
@@ -401,12 +568,12 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
             "phase_b_soft_proposal_effective_authority_field_leakage": [],
             "soft_proposal_deterministic_clamps": [{"field": "storage_relevance"}],
             "raw_soft_quality_diagnostic": {
-                "quality_match_count": 10,
+                "quality_match_count": 22,
                 "quality_compared_count": 29,
                 "quality_misses": [],
             },
             "effective_soft_quality_diagnostic": {
-                "quality_match_count": 23,
+                "quality_match_count": 26,
                 "quality_compared_count": 29,
                 "quality_misses": [],
             },
@@ -415,8 +582,8 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
         self.assertFalse(summary["runtime_approved"])
         self.assertFalse(summary["accepted_for_runtime"])
         self.assertTrue(summary["strong_enough_for_semantic_quality_review"])
-        self.assertEqual(10, summary["raw_soft_quality_summary"]["soft_quality_match_count"])
-        self.assertEqual(23, summary["effective_soft_quality_summary"]["soft_quality_match_count"])
+        self.assertEqual(22, summary["raw_soft_quality_summary"]["soft_quality_match_count"])
+        self.assertEqual(26, summary["effective_soft_quality_summary"]["soft_quality_match_count"])
         self.assertTrue(summary["effective_soft_quality_summary"]["improved_over_b5a_baseline"])
         self.assertTrue(summary["soft_quality_summary"]["soft_quality_review_required"])
         self.assertFalse(summary["soft_quality_summary"]["soft_quality_truth_scored"])

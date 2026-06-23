@@ -24,16 +24,18 @@ import local_phase_b_soft_review_probe as phase_b_probe
 DEFAULT_SOURCE_B2_REPORT_DIR = Path("reports/local_model_smoke/1G-B2-F2-B2")
 DEFAULT_HOLDOUT = Path("docs/holdout/intake_generalization_v0.jsonl")
 DEFAULT_SCHEMA = Path("schemas/fast_secretary_soft_proposal_v0_1.schema.json")
-DEFAULT_OUT_DIR = Path("reports/local_model_smoke/1G-B2-F2-B5-B")
+DEFAULT_OUT_DIR = Path("reports/local_model_smoke/1G-B2-F2-B5-C")
 DEFAULT_MODEL = "qwen3:8b"
 DEFAULT_CASE_IDS = "HG-007,HG-010,HG-013,HG-016,HG-017,HG-018,HG-024,HG-025"
-SUMMARY_JSON = "phase_b_deterministic_soft_clamp_summary.json"
-SUMMARY_MD = "phase_b_deterministic_soft_clamp_summary.md"
+SUMMARY_JSON = "phase_b_sensitivity_semantic_repair_summary.json"
+SUMMARY_MD = "phase_b_sensitivity_semantic_repair_summary.md"
 MAX_CASES = 8
 BASELINE_B4_SOFT_QUALITY_MATCH_COUNT = 14
 BASELINE_B4_SOFT_QUALITY_COMPARED_COUNT = 29
 BASELINE_B5A_SOFT_QUALITY_MATCH_COUNT = 22
 BASELINE_B5A_SOFT_QUALITY_COMPARED_COUNT = 29
+B5C_RAW_SOFT_QUALITY_MIN_MATCH_COUNT = 22
+B5C_EFFECTIVE_SOFT_QUALITY_MIN_MATCH_COUNT = 26
 
 AUTHORITY_FIELD_NAMES = {
     "phase_a_case_id",
@@ -149,7 +151,7 @@ def compact_hard_envelope(phase_a: dict[str, Any]) -> dict[str, Any]:
 
 def build_general_instruction_block() -> str:
     return """
-You are a local-only soft-review worker.
+You are a local semantic-review component inside JarvisOS.
 
 Return exactly one JSON object matching the supplied JSON Schema.
 Fill only the soft-review fields in the schema.
@@ -158,10 +160,56 @@ Do not include markdown, comments, code fences, or prose outside JSON.
 If exact credentials or private keys appear, describe their presence generically instead of copying literal values.
 
 Goal:
-Create a useful reviewer-facing soft proposal. Describe what the input is about,
-why it may matter later, and what type of review card it could become. You are
-not deciding safety, policy, provider use, retrieval use, memory writes, or any
-runtime action.
+Create useful soft-review proposals for later deterministic processing and
+human review. You are part of the JarvisOS intake pipeline, but you do not
+decide safety, memory writes, retrieval, provider use, routing, tools, or
+runtime actions.
+
+Think like a careful reviewer:
+- preserve useful project meaning;
+- identify ambiguity and state it clearly instead of guessing;
+- classify durable context accurately;
+- separate source, decision, assumption, evidence, task, memory, security, and provider-boundary context;
+- do not confuse sensitivity with low memory value.
+
+Sensitive does not mean useless. Sensitive means protect boundaries.
+
+Proprietary engineering results, BlueRev design decisions, modeling assumptions,
+calculations, internal architecture notes, and project/IP-sensitive context may
+be highly valuable local memory. Classify them accurately and preserve their
+local review value, but never imply external provider use, retrieval approval,
+memory-write authority, or runtime permission.
+
+Secrets and credentials are different. Literal API keys, passwords, private
+keys, tokens, .env content, or credential-like strings must not be treated as
+memory candidates. Keep only generic security-review context and never ask for
+the secret value.
+
+If the input asks to send private memory, folders, local files, project context,
+or IP-sensitive material to an external model/provider, classify as
+security/provider-boundary context. Preserve the local policy/review meaning,
+but do not imply external approval.
+
+If the input explicitly says not to send/upload/share/expose content externally,
+or says to keep it local-only, do not treat that as provider upload approval or
+provider permission.
+
+If the input references "the thing", "latest decision", "last time", "that
+document", "the material", or another unresolved prior context, treat it as
+clarification_context unless the referenced decision is explicitly stated.
+
+If the input clearly changes, supersedes, approves, rejects, or establishes a
+durable rule, use decision_candidate.
+
+If the input asks to find, review, cite, or validate papers, sources,
+literature, correlations, datasets, or documents, use source_candidate and
+include tags for both the evidence type and the technical object.
+
+If the input contains modeling assumptions, constraints, correlations, validity
+limits, geometry, units, parameters, or dependencies, include
+modeling/assumption context.
+
+Use unknown only when no better project/domain/category is defensible.
 
 Use general categories, not one-off labels.
 
@@ -197,6 +245,11 @@ Domain tags:
 Use 2 to 6 compact, reusable conceptual tags. Prefer tags that describe:
 system/component, evidence type, engineering area, review state, or uncertainty.
 Avoid overly narrow tags unless the input itself is specifically about that concept.
+Use compact tags that help a future reviewer understand the object, not just the
+broad domain. Prefer tags like: source, literature, correlation, validation,
+assumption, memory_update, policy_update, provider_boundary, private_context,
+ip_sensitive, local_memory, local_ai_eval, structured_output, bioprocess,
+photobioreactor, gas_transfer, reactor_geometry, calculation, design_decision.
 
 Card type guidance:
 - "source_card": source, literature, document discovery, or candidate evidence.
@@ -227,12 +280,20 @@ tracking, evidence review, ambiguity resolution, security/privacy context, or
 durable project memory. Avoid generic filler such as "this aligns with the
 criteria". Do not grant permission, approve actions, or make policy decisions.
 
+Storage and usefulness:
+Use high when the content is durable and important for local review, even if it
+is sensitive/IP-sensitive. Use none or low for literal secrets/credentials,
+transient content, or unresolved ambiguous references that cannot be safely or
+usefully promoted yet.
+
 Follow-up question:
 Use suggested_followup_question only when a concrete ambiguity remains.
 Good follow-up questions ask for the missing entity, source, scope, decision,
 assumption, or reference. Do not ask meta-questions like whether a card should
-be created. Return an empty string when no useful clarification question is
-needed.
+be created. For ambiguous references, ask what specific decision, source,
+document, or entity is meant. For secrets or private keys, never ask for the
+value or content. Return an empty string when no useful clarification question
+is needed.
 """.strip()
 
 
@@ -394,6 +455,91 @@ def phase_a_raw_private_or_provider_sensitive(phase_a: dict[str, Any]) -> bool:
     )
 
 
+def text_suggests_local_project_memory(input_text: str | None) -> bool:
+    text = (input_text or "").lower()
+    return any(
+        marker in text
+        for marker in (
+            "local project memory",
+            "local memory",
+            "memoria locale",
+            "save this proprietary",
+            "salva questo calcolo proprietario",
+            "keep it local",
+            "local only",
+            "solo in locale",
+            "non mandarlo",
+            "do not send",
+            "never upload",
+        )
+    )
+
+
+def project_bucket_from_text(input_text: str | None, fallback: Any) -> str:
+    text = (input_text or "").lower()
+    if "bluerev" in text:
+        return "bluerev"
+    if "jarvisos" in text:
+        return "jarvisos"
+    return fallback if fallback in {"jarvisos", "bluerev", "coursework", "personal", "general"} else "unknown"
+
+
+def primary_domain_from_text(input_text: str | None, fallback: Any) -> str:
+    text = (input_text or "").lower()
+    if any(marker in text for marker in ("reactor geometry", "reattore", "geometry", "geometria")):
+        return "reactor_design"
+    if any(marker in text for marker in ("calculation", "calcolo", "modeling", "assumption")):
+        return "modeling"
+    if any(marker in text for marker in ("jarvisos", "architecture", "structured-output", "schema")):
+        return "software"
+    if fallback in {
+        "memory",
+        "software",
+        "retrieval",
+        "local_ai",
+        "modeling",
+        "bioprocess",
+        "reactor_design",
+        "coursework",
+        "personal",
+        "security",
+        "general",
+    }:
+        return fallback
+    return "memory"
+
+
+def classify_phase_b_sensitive_context(
+    *,
+    phase_a: dict[str, Any],
+    input_text: str | None = None,
+) -> str:
+    if phase_a_secret_or_credential(phase_a):
+        return "secret_or_credential"
+    if (
+        phase_a.get("mentions_external_provider_or_upload_intent") is True
+        or phase_a.get("hard_reason_code") == "provider_or_upload_intent"
+    ):
+        return "provider_or_private_export_risk"
+    if (
+        phase_a.get("clarification_required") is True
+        or phase_a.get("hard_reason_code") == "clarification_needed"
+        or phase_a.get("allowed_future_retrieval_behavior") == "clarification_required"
+    ):
+        return "clarification_blocked"
+    if (
+        phase_a.get("contains_raw_private_or_ip_sensitive_context") is True
+        or phase_a.get("sensitivity_bucket_proposal") == "sensitive"
+    ) and (
+        phase_a.get("external_provider_allowed") is False
+        or text_suggests_local_project_memory(input_text)
+    ):
+        return "local_ip_sensitive_memory"
+    if phase_b_probe.phase_a_blocked(phase_a):
+        return "clarification_blocked"
+    return "none"
+
+
 def deterministic_soft_clamp_reasons(phase_a: dict[str, Any]) -> list[str]:
     reasons: list[str] = []
     if phase_a_secret_or_credential(phase_a):
@@ -409,6 +555,7 @@ def apply_deterministic_soft_clamp(
     *,
     phase_a: dict[str, Any],
     raw_proposal: dict[str, Any] | None,
+    input_text: str | None = None,
 ) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
     """Return the effective proposal used by the envelope.
 
@@ -418,16 +565,14 @@ def apply_deterministic_soft_clamp(
     if not isinstance(raw_proposal, dict):
         return raw_proposal, []
 
+    sensitivity_class = classify_phase_b_sensitive_context(phase_a=phase_a, input_text=input_text)
     reasons = deterministic_soft_clamp_reasons(phase_a)
     effective = dict(raw_proposal)
     clamps: list[dict[str, Any]] = []
-    if not reasons:
+    if sensitivity_class == "none" and not reasons:
         return effective, clamps
 
-    secret = "secret_or_credential" in reasons
-    private = "raw_private_or_provider_sensitive" in reasons
-
-    if secret:
+    if sensitivity_class == "secret_or_credential":
         replacements = {
             "summary_short": "Security-sensitive input was detected and withheld from memory candidacy.",
             "primary_domain": "security",
@@ -443,22 +588,70 @@ def apply_deterministic_soft_clamp(
             "suggested_followup_question": "",
         }
         severity = "secret_or_credential"
-    elif private:
+    elif sensitivity_class == "provider_or_private_export_risk":
         replacements = {
-            "summary_short": "Sensitive private context was detected and requires review without exposing raw content.",
+            "summary_short": "Private context was requested for external provider review and requires boundary review.",
             "primary_domain": "security",
-            "domain_tags": ["security", "private-context"],
-            "storage_relevance": "low",
-            "usefulness_for_future_review": "low",
-            "possible_memory_card_type": "none",
-            "soft_reason_code": "contextual_summary",
+            "domain_tags": ["security", "provider_boundary", "private_context"],
+            "storage_relevance": "medium",
+            "usefulness_for_future_review": "medium",
+            "possible_memory_card_type": "decision_card",
+            "soft_reason_code": (
+                "decision_candidate"
+                if effective.get("soft_reason_code") == "decision_candidate"
+                else "contextual_summary"
+            ),
             "brief_rationale": (
-                "Phase A flagged private or provider-sensitive context. The effective soft proposal keeps only "
-                "generic security-review context."
+                "Phase A flagged a private external-provider boundary risk. The effective soft proposal preserves "
+                "local policy-review meaning without approving provider use."
             ),
             "suggested_followup_question": "",
         }
-        severity = "raw_private_or_provider_sensitive"
+        severity = "provider_or_private_export_risk"
+    elif sensitivity_class == "local_ip_sensitive_memory":
+        tags = [
+            tag
+            for tag in effective.get("domain_tags", [])
+            if isinstance(tag, str) and tag.strip()
+        ]
+        for tag in ("ip_sensitive", "local_memory"):
+            if tag not in tags:
+                tags.append(tag)
+        replacements = {
+            "project_bucket": project_bucket_from_text(input_text, effective.get("project_bucket")),
+            "primary_domain": primary_domain_from_text(input_text, effective.get("primary_domain")),
+            "domain_tags": tags[:6],
+            "storage_relevance": (
+                effective.get("storage_relevance")
+                if effective.get("storage_relevance") in {"medium", "high"}
+                else "medium"
+            ),
+            "usefulness_for_future_review": (
+                effective.get("usefulness_for_future_review")
+                if effective.get("usefulness_for_future_review") in {"medium", "high"}
+                else "medium"
+            ),
+            "possible_memory_card_type": (
+                effective.get("possible_memory_card_type")
+                if effective.get("possible_memory_card_type")
+                not in {None, "", "none", "unknown"}
+                else "memory_card"
+            ),
+        }
+        severity = "local_ip_sensitive_memory"
+    elif sensitivity_class == "clarification_blocked":
+        question = effective.get("suggested_followup_question")
+        replacements = {
+            "storage_relevance": "low",
+            "possible_memory_card_type": "none",
+            "soft_reason_code": "clarification_context",
+            "suggested_followup_question": (
+                question
+                if isinstance(question, str) and question.strip()
+                else "Which specific prior decision, source, document, or entity should be used?"
+            ),
+        }
+        severity = "clarification_blocked"
     else:
         replacements = {
             "storage_relevance": "low",
@@ -538,6 +731,7 @@ def build_model_result(
     model: str,
     raw_path: Path,
     raw_call: dict[str, Any],
+    input_text: str | None = None,
 ) -> dict[str, Any]:
     parsed, parse_error = (None, raw_call["error"])
     if raw_call["ok"] and isinstance(raw_call["body"], dict):
@@ -550,6 +744,11 @@ def build_model_result(
     effective_proposal, deterministic_clamps = apply_deterministic_soft_clamp(
         phase_a=phase_a,
         raw_proposal=parsed,
+        input_text=input_text,
+    )
+    sensitivity_class = classify_phase_b_sensitive_context(
+        phase_a=phase_a,
+        input_text=input_text,
     )
     effective_validation = (
         structured_probe.validate_instance(effective_proposal, schema)
@@ -577,8 +776,8 @@ def build_model_result(
         deterministic_clamps=deterministic_clamps,
     )
     return {
-        "schema_version": "phase_b_deterministic_soft_clamp_result_v0",
-        "milestone": "1G-B2-F2-B5-B",
+        "schema_version": "phase_b_sensitivity_semantic_repair_result_v0",
+        "milestone": "1G-B2-F2-B5-C",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "case_id": case_id,
         "model": model,
@@ -608,6 +807,7 @@ def build_model_result(
         "phase_b_soft_proposal_model_raw": parsed,
         "phase_b_soft_proposal_effective": effective_proposal,
         "phase_b_soft_proposal": effective_proposal,
+        "phase_b_sensitive_context_class": sensitivity_class,
         "soft_proposal_deterministic_clamps": deterministic_clamps,
         "soft_quality_review_required": True,
         "soft_quality_truth_scored": False,
@@ -731,10 +931,14 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
         and effective_schema_valid_count == len(results)
         and not effective_leakage_results
     )
-    pass_deterministic_clamp = pass_structural and effective_quality["improved_over_b5a_baseline"]
+    pass_sensitivity_semantic_repair = (
+        pass_structural
+        and raw_quality["soft_quality_match_count"] >= B5C_RAW_SOFT_QUALITY_MIN_MATCH_COUNT
+        and effective_quality["soft_quality_match_count"] >= B5C_EFFECTIVE_SOFT_QUALITY_MIN_MATCH_COUNT
+    )
     return {
-        "schema_version": "phase_b_deterministic_soft_clamp_summary_v0",
-        "milestone": "1G-B2-F2-B5-B",
+        "schema_version": "phase_b_sensitivity_semantic_repair_summary_v0",
+        "milestone": "1G-B2-F2-B5-C",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "report_dir": str(report_dir),
         "total_runs": len(results),
@@ -765,15 +969,23 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
         "external_provider_calls_made": False,
         "network_calls_made": False,
         "accepted_for_runtime": False,
-        "strong_enough_for_semantic_quality_review": pass_deterministic_clamp,
+        "strong_enough_for_semantic_quality_review": pass_sensitivity_semantic_repair,
         "strong_enough_for_runtime": False,
         "raw_soft_quality_summary": raw_quality,
         "effective_soft_quality_summary": effective_quality,
         "soft_quality_summary": effective_quality,
+        "b5c_acceptance": {
+            "raw_soft_quality_min_match_count": B5C_RAW_SOFT_QUALITY_MIN_MATCH_COUNT,
+            "effective_soft_quality_min_match_count": B5C_EFFECTIVE_SOFT_QUALITY_MIN_MATCH_COUNT,
+            "raw_soft_quality_passed": raw_quality["soft_quality_match_count"]
+            >= B5C_RAW_SOFT_QUALITY_MIN_MATCH_COUNT,
+            "effective_soft_quality_passed": effective_quality["soft_quality_match_count"]
+            >= B5C_EFFECTIVE_SOFT_QUALITY_MIN_MATCH_COUNT,
+        },
         "recommended_next_milestone": (
             "1G-B2-F2-B5 - Phase B semantic quality review"
-            if pass_deterministic_clamp
-            else "1G-B2-F2-B5-B-R - Deterministic secret/private soft clamp repair"
+            if pass_sensitivity_semantic_repair
+            else "1G-B2-F2-B5-C-R - Sensitivity-aware Phase B semantic repair"
         ),
         "answers": {
             "parseable_json_all_cases": parse_count == len(results),
@@ -795,7 +1007,7 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
                 "improved_over_b5a_baseline"
             ],
             "deterministic_soft_clamp_count": deterministic_clamp_count,
-            "strong_enough_for_semantic_quality_review": pass_deterministic_clamp,
+            "strong_enough_for_semantic_quality_review": pass_sensitivity_semantic_repair,
         },
     }
 
@@ -804,7 +1016,7 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
     raw_quality = summary["raw_soft_quality_summary"]
     effective_quality = summary["effective_soft_quality_summary"]
     lines = [
-        "# 1G-B2-F2-B5-B Deterministic Phase B Soft Clamp Summary",
+        "# 1G-B2-F2-B5-C Sensitivity-Aware Phase B Semantic Repair Summary",
         "",
         "Manual review is required. This smoke does not prove semantic truth or approve runtime use.",
         "",
@@ -824,6 +1036,8 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
         f"- raw soft quality: {raw_quality['soft_quality_match_count']}/{raw_quality['soft_quality_compared_count']}",
         f"- effective soft quality: {effective_quality['soft_quality_match_count']}/{effective_quality['soft_quality_compared_count']}",
         f"- B5-A baseline: {effective_quality['baseline_b5a_match_count']}/{effective_quality['baseline_b5a_compared_count']}",
+        f"- B5-C raw minimum: {summary['b5c_acceptance']['raw_soft_quality_min_match_count']}/{raw_quality['soft_quality_compared_count']}",
+        f"- B5-C effective minimum: {summary['b5c_acceptance']['effective_soft_quality_min_match_count']}/{effective_quality['soft_quality_compared_count']}",
         f"- effective improved over B5-A baseline: {effective_quality['improved_over_b5a_baseline']}",
         f"- raw soft quality miss count: {raw_quality['soft_quality_miss_count']}",
         f"- effective soft quality miss count: {effective_quality['soft_quality_miss_count']}",
@@ -833,6 +1047,8 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
         "Qwen receives only the soft-only proposal schema and the input text. Phase A hard fields are merged later by deterministic Python into an internal review envelope.",
         "",
         "The raw Qwen soft proposal is preserved for audit. The review envelope uses the deterministic effective soft proposal.",
+        "",
+        "B5-C distinguishes secret/credential material, provider/private export risk, local IP-sensitive memory, and ambiguous unresolved references.",
         "",
         "Raw quality describes Qwen behavior. Effective quality describes Qwen plus deterministic clamp behavior. Neither approves runtime behavior, memory writes, retrieval, provider use, tool execution, or semantic truth.",
         "",
@@ -892,6 +1108,7 @@ def run_local_smoke(
             model=model,
             raw_path=raw_path,
             raw_call=raw_call,
+            input_text=holdout[case_id]["input_text"],
         )
         write_json(result_path, result)
         results.append(result)
@@ -919,7 +1136,7 @@ def run_local_smoke(
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Deterministic Phase B soft-review clamp smoke.")
+    parser = argparse.ArgumentParser(description="Sensitivity-aware Phase B semantic repair smoke.")
     parser.add_argument("--source-b2-report-dir", default=str(DEFAULT_SOURCE_B2_REPORT_DIR))
     parser.add_argument("--holdout", default=str(DEFAULT_HOLDOUT))
     parser.add_argument("--schema-path", default=str(DEFAULT_SCHEMA))
@@ -947,7 +1164,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     except ValueError as exc:
-        print(f"phase b deterministic soft clamp failed: {exc}")
+        print(f"phase b sensitivity semantic repair failed: {exc}")
         return 2
 
 

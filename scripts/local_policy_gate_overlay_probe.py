@@ -54,7 +54,8 @@ SECRET_PATTERN = re.compile(
 )
 RAW_PRIVATE_PATTERN = re.compile(
     r"(whole .*memory folder|raw .*memory|memory folder|private path|vault|"
-    r"c:\\users\\|\.ssh\b|id_rsa\b|private key|proprietary)",
+    r"c:\\users\\|\.ssh\b|id_rsa\b|private key|proprietary|proprietario|"
+    r"privata|privato|memoria privata)",
     re.IGNORECASE,
 )
 PROVIDER_PATTERN = re.compile(
@@ -62,7 +63,23 @@ PROVIDER_PATTERN = re.compile(
     re.IGNORECASE,
 )
 UPLOAD_PATTERN = re.compile(
-    r"\b(upload|send|share|expose|paste|give|forward)\b",
+    r"\b(upload|send|share|expose|paste|give|forward|manda|mandare|mandalo|mandarlo|"
+    r"mandala|mandarla|invia|inviare|invialo|inviarlo|carica|caricare|condividi|"
+    r"condividere|esporre)\b",
+    re.IGNORECASE,
+)
+NEGATED_EXTERNAL_EXPORT_PATTERN = re.compile(
+    r"(do not send|don't send|do not upload|don't upload|never send|never upload|"
+    r"do not share|do not expose|without sending|without uploading|keep local|"
+    r"keep it local|local only|only locally|do not send to external provider|"
+    r"never send to external provider|do not send to deepseek|do not send to gpt|"
+    r"do not send to claude|do not send to gemini|"
+    r"non mandare|non mandarlo|non mandarla|non inviare|non inviarlo|"
+    r"non caricare|non condividere|non esporre|non mandare a deepseek|"
+    r"non inviare a provider esterni|non mandarlo a gpt|non mandarlo a claude|"
+    r"non mandarlo a gemini|tienilo locale|tenerlo locale|solo locale|"
+    r"solo in locale|salva localmente|mantieni localmente|senza inviarlo|"
+    r"senza caricarlo|non deve uscire|non mandarlo fuori)",
     re.IGNORECASE,
 )
 PUBLIC_DISCOVERY_PATTERN = re.compile(
@@ -85,7 +102,8 @@ REVIEW_GATE_PATTERN = re.compile(
 )
 MEMORY_BOUNDARY_PATTERN = re.compile(
     r"(put .* in memory|write .*memory|durable memory|memorystore|memorystore|"
-    r"canonical state|accepted memory|hooks?.*write.*memory)",
+    r"canonical state|accepted memory|hooks?.*write.*memory|save .*memory|"
+    r"save .*local project memory|salva .*memoria locale|memoria locale)",
     re.IGNORECASE,
 )
 UNRESOLVED_PATTERN = re.compile(
@@ -103,13 +121,30 @@ def _matches(pattern: re.Pattern[str], text: str) -> bool:
     return bool(pattern.search(text))
 
 
+def has_external_provider_mention(text: str) -> bool:
+    return _matches(PROVIDER_PATTERN, text or "")
+
+
+def has_external_export_action(text: str) -> bool:
+    return _matches(UPLOAD_PATTERN, text or "")
+
+
+def has_negated_external_export_or_local_only_instruction(text: str) -> bool:
+    return _matches(NEGATED_EXTERNAL_EXPORT_PATTERN, text or "")
+
+
+def detects_provider_or_upload_intent(text: str) -> bool:
+    provider_mentioned = has_external_provider_mention(text)
+    export_action = has_external_export_action(text)
+    negated_or_local_only = has_negated_external_export_or_local_only_instruction(text)
+    return provider_mentioned and export_action and not negated_or_local_only
+
+
 def classify_policy_triggers(input_text: str) -> dict[str, bool]:
     text = input_text or ""
     contains_secret = _matches(SECRET_PATTERN, text)
     contains_raw_private = contains_secret or _matches(RAW_PRIVATE_PATTERN, text)
-    mentions_provider = _matches(PROVIDER_PATTERN, text)
-    mentions_upload = _matches(UPLOAD_PATTERN, text)
-    provider_intent = mentions_provider and mentions_upload
+    provider_intent = detects_provider_or_upload_intent(text)
     public_discovery = _matches(PUBLIC_DISCOVERY_PATTERN, text)
     clarification = _matches(AMBIGUOUS_SOURCE_PATTERN, text)
     review_gate = _matches(REVIEW_GATE_PATTERN, text)

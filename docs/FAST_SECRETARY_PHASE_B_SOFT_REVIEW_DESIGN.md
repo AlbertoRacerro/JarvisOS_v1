@@ -288,3 +288,39 @@ B5-B reports raw quality and effective quality separately:
 The clamp is evaluation-only in this milestone. It does not approve runtime
 memory writes, retrieval, provider use, tool execution, route selection,
 semantic truth, or BlueRev modeling.
+
+## 1G-B2-F2-B5-C Sensitivity-Aware Semantic Repair
+
+`1G-B2-F2-B5-C` refines the deterministic Phase B effective-proposal path.
+
+The repair separates four classes:
+
+- literal secrets or credentials;
+- provider/private export risk;
+- local IP-sensitive engineering, design, or calculation memory;
+- ambiguous unresolved references.
+
+Core rule:
+
+```text
+Sensitive does not mean useless.
+Sensitive means protect boundaries.
+```
+
+Phase A provider/export intent detection is now negation-aware. Explicit
+local-only instructions such as "do not send", "keep local", "non mandarlo", or
+"solo in locale" do not become provider-upload intent merely because they
+mention an external provider.
+
+Phase B behavior:
+
+- literal secrets remain non-memory candidates with generic security-review
+  context only;
+- provider/private export requests remain local policy-review context without
+  external-provider approval;
+- local IP-sensitive BlueRev/JarvisOS design or calculation content can remain
+  medium/high value local memory context;
+- ambiguous prior references remain clarification context.
+
+No runtime memory, retrieval, provider routing, tool execution, route, worker,
+MCP, or BlueRev modeling behavior is added.

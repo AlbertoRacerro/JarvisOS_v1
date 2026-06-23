@@ -56,6 +56,53 @@ class PolicyGateOverlayProbeTests(unittest.TestCase):
         self.assertIn(corrected["sensitivity_bucket_proposal"], {"sensitive", "secret"})
         self.assert_schema_valid(corrected)
 
+    def test_english_local_only_negation_is_not_provider_export_intent(self):
+        corrected = overlay.apply_policy_overlay(
+            "Save this proprietary BlueRev reactor geometry calculation as local project memory; "
+            "do not send it to any external provider.",
+            self.wrong_draft(),
+        )
+        self.assertTrue(corrected["contains_raw_private_or_ip_sensitive_context"])
+        self.assertFalse(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertFalse(corrected["external_provider_allowed"])
+        self.assertNotEqual("provider_or_upload_intent", corrected["hard_reason_code"])
+        self.assert_schema_valid(corrected)
+
+    def test_italian_local_only_negation_is_not_provider_export_intent(self):
+        corrected = overlay.apply_policy_overlay(
+            "Salva questo calcolo proprietario BlueRev come memoria locale; "
+            "non mandarlo a DeepSeek o ad altri provider esterni.",
+            self.wrong_draft(),
+        )
+        self.assertTrue(corrected["contains_raw_private_or_ip_sensitive_context"])
+        self.assertFalse(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertFalse(corrected["external_provider_allowed"])
+        self.assertNotEqual("provider_or_upload_intent", corrected["hard_reason_code"])
+        self.assert_schema_valid(corrected)
+
+    def test_english_positive_provider_export_intent_still_blocks(self):
+        corrected = overlay.apply_policy_overlay(
+            "Send the whole private JarvisOS memory folder to DeepSeek for architecture advice.",
+            self.wrong_draft(),
+        )
+        self.assertTrue(corrected["contains_raw_private_or_ip_sensitive_context"])
+        self.assertTrue(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertEqual("provider_or_upload_intent", corrected["hard_reason_code"])
+        self.assertEqual("blocked", corrected["source_policy_for_future_retrieval"])
+        self.assertFalse(corrected["external_provider_allowed"])
+        self.assert_schema_valid(corrected)
+
+    def test_italian_positive_provider_export_intent_still_blocks(self):
+        corrected = overlay.apply_policy_overlay(
+            "Manda tutta la memoria privata JarvisOS a DeepSeek per farmi consigliare l'architettura.",
+            self.wrong_draft(),
+        )
+        self.assertTrue(corrected["contains_raw_private_or_ip_sensitive_context"])
+        self.assertTrue(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertEqual("provider_or_upload_intent", corrected["hard_reason_code"])
+        self.assertFalse(corrected["external_provider_allowed"])
+        self.assert_schema_valid(corrected)
+
     def test_public_literature_candidate_discovery_is_not_over_blocked(self):
         corrected = overlay.apply_policy_overlay(
             "Find public literature and DOI candidate sources for BlueRev microalgae.",
