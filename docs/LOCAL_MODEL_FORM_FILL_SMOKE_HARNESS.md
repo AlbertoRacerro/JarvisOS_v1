@@ -1307,3 +1307,24 @@ reports/local_model_smoke/1G-B2-F2-B4/
 The structural acceptance criteria are parse, schema validity, and zero
 authority-field leakage. B4 also records separate soft-quality diagnostics, but
 those diagnostics do not approve semantic truth or runtime use.
+
+## 1G-B2-F2-B5-A General Phase B Instruction Repair
+
+B5-A keeps the B4 eight-case panel but repairs the model-facing instruction
+profile with general reusable category guidance.
+
+Run command:
+
+```powershell
+python scripts\local_phase_b_soft_review_model_probe.py `
+  --run-local `
+  --source-b2-report-dir reports\local_model_smoke\1G-B2-F2-B2 `
+  --schema-path schemas\fast_secretary_soft_proposal_v0_1.schema.json `
+  --out-dir reports\local_model_smoke\1G-B2-F2-B5-A `
+  --model qwen3:8b `
+  --case-ids HG-007,HG-010,HG-013,HG-016,HG-017,HG-018,HG-024,HG-025 `
+  --timeout-seconds 180
+```
+
+Acceptance compares against the B4 soft-quality baseline of `14/29` while
+preserving parse, schema validity, and zero authority-field leakage.

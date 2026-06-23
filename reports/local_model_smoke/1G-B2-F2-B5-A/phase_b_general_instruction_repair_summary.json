@@ -1,0 +1,150 @@
+{
+  "accepted_for_runtime": false,
+  "answers": {
+    "authority_field_leakage_count": 0,
+    "external_provider_calls_made": false,
+    "improved_over_b4_baseline": true,
+    "instruction_profile_case_specific": false,
+    "model_facing_schema_has_authority_fields": false,
+    "parseable_json_all_cases": true,
+    "runtime_approved": false,
+    "schema_valid_all_cases": true,
+    "soft_quality_review_required": true,
+    "soft_quality_truth_scored": false,
+    "strong_enough_for_semantic_quality_review": true
+  },
+  "authority_field_leakage": [],
+  "authority_field_leakage_count": 0,
+  "created_at": "2026-06-23T16:35:38.709917+00:00",
+  "external_provider_calls_made": false,
+  "instruction_profile_case_specific": false,
+  "local_ollama_calls_made": true,
+  "manual_review_required": true,
+  "milestone": "1G-B2-F2-B5-A",
+  "model_facing_instruction_profile": "general_soft_review_v0_2",
+  "model_facing_schema": "fast_secretary_soft_proposal_v0_1.schema.json",
+  "model_facing_schema_has_authority_fields": false,
+  "network_calls_made": false,
+  "parse_count": 8,
+  "recommended_next_milestone": "1G-B2-F2-B5 - Phase B semantic quality review",
+  "report_dir": "reports\\local_model_smoke\\1G-B2-F2-B5-A",
+  "runtime_approved": false,
+  "schema_valid_all_cases": true,
+  "schema_valid_count": 8,
+  "schema_version": "phase_b_general_instruction_repair_summary_v0",
+  "semantic_truth_scored": false,
+  "soft_quality_summary": {
+    "baseline_b4_compared_count": 29,
+    "baseline_b4_match_count": 14,
+    "baseline_b4_match_rate": 0.4827586206896552,
+    "cases_with_soft_quality_misses": [
+      {
+        "case_id": "HG-007",
+        "misses": [
+          {
+            "actual": [
+              "retrieval",
+              "bioprocess",
+              "modeling"
+            ],
+            "expected_any_substring": [
+              "literature",
+              "source",
+              "photobioreactors",
+              "gas-liquid",
+              "kla"
+            ],
+            "field": "domain_tags",
+            "reason": "advisory soft-quality missing useful tag"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-010",
+        "misses": [
+          {
+            "actual": "decision_candidate",
+            "expected_any": [
+              "clarification_context",
+              "contextual_summary",
+              "unknown"
+            ],
+            "field": "soft_reason_code",
+            "reason": "advisory soft-quality expectation miss"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-016",
+        "misses": [
+          {
+            "actual": "memory_card",
+            "expected_any": [
+              "none",
+              "decision_card"
+            ],
+            "field": "possible_memory_card_type",
+            "reason": "advisory soft-quality expectation miss"
+          },
+          {
+            "actual": "high",
+            "field": "storage_relevance",
+            "forbidden": [
+              "high"
+            ],
+            "reason": "advisory soft-quality forbidden value"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-017",
+        "misses": [
+          {
+            "actual": "memory_card",
+            "expected_any": [
+              "none",
+              "decision_card"
+            ],
+            "field": "possible_memory_card_type",
+            "reason": "advisory soft-quality expectation miss"
+          },
+          {
+            "actual": "high",
+            "field": "storage_relevance",
+            "forbidden": [
+              "high"
+            ],
+            "reason": "advisory soft-quality forbidden value"
+          }
+        ]
+      },
+      {
+        "case_id": "HG-025",
+        "misses": [
+          {
+            "actual": "decision_candidate",
+            "expected_any": [
+              "clarification_context",
+              "memory_candidate",
+              "contextual_summary"
+            ],
+            "field": "soft_reason_code",
+            "reason": "advisory soft-quality expectation miss"
+          }
+        ]
+      }
+    ],
+    "improved_over_b4_baseline": true,
+    "note": "Diagnostic only: soft-quality checks do not approve runtime behavior or semantic truth.",
+    "soft_quality_compared_count": 29,
+    "soft_quality_match_count": 22,
+    "soft_quality_match_rate": 0.7586206896551724,
+    "soft_quality_miss_count": 7,
+    "soft_quality_review_required": true,
+    "soft_quality_truth_scored": false
+  },
+  "strong_enough_for_runtime": false,
+  "strong_enough_for_semantic_quality_review": true,
+  "total_runs": 8,
+  "validation_failures": []
+}

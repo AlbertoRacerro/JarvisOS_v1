@@ -1,0 +1,99 @@
+{
+  "authority_field_leakage": [],
+  "authority_field_leakage_count": 0,
+  "case_id": "HG-024",
+  "created_at": "2026-06-23T16:35:28.222937+00:00",
+  "duration_seconds": 11.243,
+  "json_parse_error": null,
+  "json_parse_passed": true,
+  "manual_review_required": true,
+  "milestone": "1G-B2-F2-B5-A",
+  "model": "qwen3:8b",
+  "ollama_ok": true,
+  "ollama_status": 200,
+  "phase_a_result_source": "reports\\local_model_smoke\\1G-B2-F2-B2\\HG-024__result.json",
+  "phase_b_soft_proposal": {
+    "brief_rationale": "This establishes a clear policy for handling outdated memory entries about local AI model approvals, ensuring future reviewers use current evidence instead of superseded records.",
+    "domain_tags": [
+      "memory",
+      "local_ai"
+    ],
+    "possible_memory_card_type": "decision_card",
+    "primary_domain": "memory",
+    "project_bucket": "jarvisos",
+    "soft_reason_code": "decision_candidate",
+    "soft_uncertain_fields": [],
+    "storage_relevance": "high",
+    "suggested_followup_question": "What is the current local-AI evidence that supersedes the Gemma 12B approval status?",
+    "summary_short": "Update memory to supersede Gemma 12B approval status with current local-AI evidence",
+    "usefulness_for_future_review": "high"
+  },
+  "raw_response_path": "reports\\local_model_smoke\\1G-B2-F2-B5-A\\HG-024__phase_b_soft_only_raw_response.json",
+  "review_envelope": {
+    "authority_field_leakage": [],
+    "authority_field_leakage_count": 0,
+    "case_id": "HG-024",
+    "external_provider_calls_made": false,
+    "local_model_calls_made": true,
+    "manual_review_required": true,
+    "phase_a_hard_gate": {
+      "allowed_future_retrieval_behavior": "review_gate_required",
+      "clarification_required": false,
+      "contains_raw_private_or_ip_sensitive_context": false,
+      "contains_secret_or_credential": false,
+      "external_provider_allowed": false,
+      "hard_reason_code": "contradiction_or_superseded",
+      "mentions_external_provider_or_upload_intent": false,
+      "redaction_required": false,
+      "requires_manual_review": true,
+      "sensitivity_bucket_proposal": "internal",
+      "source_policy_for_future_retrieval": "review_only"
+    },
+    "phase_b_soft_proposal": {
+      "brief_rationale": "This establishes a clear policy for handling outdated memory entries about local AI model approvals, ensuring future reviewers use current evidence instead of superseded records.",
+      "domain_tags": [
+        "memory",
+        "local_ai"
+      ],
+      "possible_memory_card_type": "decision_card",
+      "primary_domain": "memory",
+      "project_bucket": "jarvisos",
+      "soft_reason_code": "decision_candidate",
+      "soft_uncertain_fields": [],
+      "storage_relevance": "high",
+      "suggested_followup_question": "What is the current local-AI evidence that supersedes the Gemma 12B approval status?",
+      "summary_short": "Update memory to supersede Gemma 12B approval status with current local-AI evidence",
+      "usefulness_for_future_review": "high"
+    },
+    "phase_b_soft_proposal_schema_valid": true,
+    "phase_b_soft_proposal_validation_errors": [],
+    "runtime_approved": false,
+    "schema_version": "fast_secretary_review_envelope_v0_1",
+    "semantic_truth_scored": false,
+    "soft_generation_mode": "local_model",
+    "soft_quality_diagnostic": {
+      "case_id": "HG-024",
+      "quality_compared": true,
+      "quality_compared_count": 4,
+      "quality_match_count": 4,
+      "quality_misses": []
+    },
+    "soft_quality_review_required": true,
+    "soft_quality_truth_scored": false
+  },
+  "runtime_approved": false,
+  "schema_path": "schemas\\fast_secretary_soft_proposal_v0_1.schema.json",
+  "schema_valid": true,
+  "schema_version": "phase_b_soft_instruction_repair_result_v0",
+  "semantic_truth_scored": false,
+  "soft_quality_diagnostic": {
+    "case_id": "HG-024",
+    "quality_compared": true,
+    "quality_compared_count": 4,
+    "quality_match_count": 4,
+    "quality_misses": []
+  },
+  "soft_quality_review_required": true,
+  "soft_quality_truth_scored": false,
+  "validation_errors": []
+}

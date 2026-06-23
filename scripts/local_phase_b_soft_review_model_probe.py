@@ -24,12 +24,14 @@ import local_phase_b_soft_review_probe as phase_b_probe
 DEFAULT_SOURCE_B2_REPORT_DIR = Path("reports/local_model_smoke/1G-B2-F2-B2")
 DEFAULT_HOLDOUT = Path("docs/holdout/intake_generalization_v0.jsonl")
 DEFAULT_SCHEMA = Path("schemas/fast_secretary_soft_proposal_v0_1.schema.json")
-DEFAULT_OUT_DIR = Path("reports/local_model_smoke/1G-B2-F2-B4")
+DEFAULT_OUT_DIR = Path("reports/local_model_smoke/1G-B2-F2-B5-A")
 DEFAULT_MODEL = "qwen3:8b"
 DEFAULT_CASE_IDS = "HG-007,HG-010,HG-013,HG-016,HG-017,HG-018,HG-024,HG-025"
-SUMMARY_JSON = "phase_b_expanded_local_soft_review_panel_summary.json"
-SUMMARY_MD = "phase_b_expanded_local_soft_review_panel_summary.md"
+SUMMARY_JSON = "phase_b_general_instruction_repair_summary.json"
+SUMMARY_MD = "phase_b_general_instruction_repair_summary.md"
 MAX_CASES = 8
+BASELINE_B4_SOFT_QUALITY_MATCH_COUNT = 14
+BASELINE_B4_SOFT_QUALITY_COMPARED_COUNT = 29
 
 AUTHORITY_FIELD_NAMES = {
     "phase_a_case_id",
@@ -142,22 +144,108 @@ def compact_hard_envelope(phase_a: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+
+def build_general_instruction_block() -> str:
+    return """
+You are a local-only soft-review worker.
+
+Return exactly one JSON object matching the supplied JSON Schema.
+Fill only the soft-review fields in the schema.
+Do not add policy, permission, routing, retrieval authorization, provider authorization, tool, memory-write, or runtime fields.
+Do not include markdown, comments, code fences, or prose outside JSON.
+If exact credentials or private keys appear, describe their presence generically instead of copying literal values.
+
+Goal:
+Create a useful reviewer-facing soft proposal. Describe what the input is about,
+why it may matter later, and what type of review card it could become. You are
+not deciding safety, policy, provider use, retrieval use, memory writes, or any
+runtime action.
+
+Use general categories, not one-off labels.
+
+Project bucket guidance:
+- "jarvisos": AI-system architecture, local model evaluation, memory infrastructure, retrieval systems, provider policy, structured-output probes, validation, schemas, automation infrastructure.
+- "bluerev": the user's microalgae, photobioreactor, cleantech, process-engineering, reactor-design, or engineering-modeling project.
+- "coursework": exams, university exercises, lecture notes, academic problem solving, or study material.
+- "personal": personal life, relationships, habits, preferences, logistics, health, or emotional context.
+- "general": broad information not tied to a durable project.
+- "unknown": only when there is no reliable project signal.
+
+Primary domain guidance:
+- "memory": memory records, saved context, previous decisions, canonical or superseded information, memory promotion, memory review.
+- "local_ai": local models, structured output, model evaluation, benchmark evidence, context packs, or AI capability testing.
+- "software": application architecture, code, scripts, tests, schemas, repositories, automation, or implementation workflow.
+- "retrieval": finding, selecting, reviewing, or using sources, documents, or literature as evidence.
+- "security": credentials, secrets, private keys, sensitive paths, privacy exposure, external upload risk, or provider-boundary risk.
+- "modeling": mathematical, engineering, simulation, or computational modeling assumptions.
+- "bioprocess": biological or process-engineering systems, cultivation, reactors, growth, gas/liquid transfer, nutrients, biomass, or process constraints.
+- "reactor_design": reactor geometry, hydraulics, materials, modules, equipment, architecture, or physical design choices.
+- "coursework": academic study, exam, or exercise context.
+- "personal": personal life context.
+- "general": broad uncategorized information.
+- "unknown": only when no domain signal is reliable.
+
+Unknown policy:
+Do not use "unknown" as a safe default. Use it only when the input lacks enough
+signal to choose a better enum. If the input clearly concerns a system, project,
+domain, source, decision, security issue, memory update, or modeling assumption,
+choose the closest available category.
+
+Domain tags:
+Use 2 to 6 compact, reusable conceptual tags. Prefer tags that describe:
+system/component, evidence type, engineering area, review state, or uncertainty.
+Avoid overly narrow tags unless the input itself is specifically about that concept.
+
+Card type guidance:
+- "source_card": source, literature, document discovery, or candidate evidence.
+- "decision_card": explicit decision, policy change, approval, rejection, supersession, or canonical update.
+- "assumption_card": assumption, constraint, dependency, uncertainty, or condition affecting later reasoning or modeling.
+- "evidence_card": benchmark result, test result, experimental evidence, report finding, or measured outcome.
+- "memory_card": durable user or project context useful later but not clearly a decision, source, evidence, or assumption.
+- "knowledge_card": general stable knowledge that may be reusable.
+- "task_card": concrete future task or action request.
+- "none": content should not become a memory candidate, especially raw secrets or low-value transient content.
+- "unknown": only when the card type cannot be inferred.
+
+Soft reason code guidance:
+- "source_candidate": asks to find, review, or use sources or literature.
+- "decision_candidate": changes, supersedes, approves, rejects, or establishes a decision.
+- "assumption_candidate": contains assumptions, constraints, dependencies, or conditions to verify.
+- "evidence_candidate": reports test results, benchmark evidence, measurements, or observed outcomes.
+- "memory_candidate": contains durable context that may be useful later.
+- "clarification_context": depends on an ambiguous reference, missing entity, unclear scope, or unresolved source.
+- "contextual_summary": useful summary, but not clearly source, decision, assumption, evidence, or memory.
+- "low_value": transient or low-value context.
+- "unknown": last resort only.
+
+Rationale:
+brief_rationale should explain why the proposal is useful for a future reviewer.
+Mention the general reason: source discovery, decision update, assumption
+tracking, evidence review, ambiguity resolution, security/privacy context, or
+durable project memory. Avoid generic filler such as "this aligns with the
+criteria". Do not grant permission, approve actions, or make policy decisions.
+
+Follow-up question:
+Use suggested_followup_question only when a concrete ambiguity remains.
+Good follow-up questions ask for the missing entity, source, scope, decision,
+assumption, or reference. Do not ask meta-questions like whether a card should
+be created. Return an empty string when no useful clarification question is
+needed.
+""".strip()
+
+
 def build_phase_b_prompt(*, case_id: str, input_text: str) -> str:
+    # Do not expose Phase A policy fields. The case_id is retained for reportability
+    # only; the instruction profile remains general and case-agnostic.
     return "\n".join(
         [
-            "You are a local-only soft-review worker.",
-            "Return exactly one JSON object matching the supplied JSON Schema.",
-            "Fill only the soft-review fields in the schema.",
-            "Do not add policy, permission, routing, retrieval, provider, tool, or runtime fields.",
-            "Do not include markdown, comments, code fences, or prose outside JSON.",
-            "If exact credentials or private keys appear, describe their presence generically instead of copying literal values.",
+            build_general_instruction_block(),
             "",
             f"Case ID: {case_id}",
             "Input text:",
             input_text,
         ]
     )
-
 
 def authority_field_leakage(value: Any) -> list[str]:
     if not isinstance(value, dict):
@@ -347,8 +435,8 @@ def build_model_result(
         soft_quality=soft_quality,
     )
     return {
-        "schema_version": "phase_b_soft_only_local_smoke_result_v0",
-        "milestone": "1G-B2-F2-B4",
+        "schema_version": "phase_b_soft_instruction_repair_result_v0",
+        "milestone": "1G-B2-F2-B5-A",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "case_id": case_id,
         "model": model,
@@ -387,13 +475,20 @@ def soft_quality_summary(results: list[dict[str, Any]]) -> dict[str, Any]:
         if misses:
             cases_with_misses.append({"case_id": result["case_id"], "misses": misses})
     miss_count = compared - matched
+    baseline_rate = BASELINE_B4_SOFT_QUALITY_MATCH_COUNT / BASELINE_B4_SOFT_QUALITY_COMPARED_COUNT
+    current_rate = matched / compared if compared else None
+    improved_over_b4 = matched > BASELINE_B4_SOFT_QUALITY_MATCH_COUNT
     return {
         "soft_quality_review_required": True,
         "soft_quality_truth_scored": False,
         "soft_quality_match_count": matched,
         "soft_quality_compared_count": compared,
         "soft_quality_miss_count": miss_count,
-        "soft_quality_match_rate": matched / compared if compared else None,
+        "soft_quality_match_rate": current_rate,
+        "baseline_b4_match_count": BASELINE_B4_SOFT_QUALITY_MATCH_COUNT,
+        "baseline_b4_compared_count": BASELINE_B4_SOFT_QUALITY_COMPARED_COUNT,
+        "baseline_b4_match_rate": baseline_rate,
+        "improved_over_b4_baseline": improved_over_b4,
         "cases_with_soft_quality_misses": cases_with_misses,
         "note": "Diagnostic only: soft-quality checks do not approve runtime behavior or semantic truth.",
     }
@@ -425,9 +520,10 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
         and schema_valid_count == len(results)
         and not leakage_results
     )
+    pass_instruction_repair = pass_structural and quality["improved_over_b4_baseline"]
     return {
-        "schema_version": "phase_b_expanded_local_soft_review_panel_summary_v0",
-        "milestone": "1G-B2-F2-B4",
+        "schema_version": "phase_b_general_instruction_repair_summary_v0",
+        "milestone": "1G-B2-F2-B5-A",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "report_dir": str(report_dir),
         "total_runs": len(results),
@@ -442,28 +538,32 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
         "authority_field_leakage": leakage_results,
         "model_facing_schema": "fast_secretary_soft_proposal_v0_1.schema.json",
         "model_facing_schema_has_authority_fields": False,
+        "model_facing_instruction_profile": "general_soft_review_v0_2",
+        "instruction_profile_case_specific": False,
         "local_ollama_calls_made": True,
         "external_provider_calls_made": False,
         "network_calls_made": False,
         "accepted_for_runtime": False,
-        "strong_enough_for_semantic_quality_review": pass_structural,
+        "strong_enough_for_semantic_quality_review": pass_instruction_repair,
         "strong_enough_for_runtime": False,
         "soft_quality_summary": quality,
         "recommended_next_milestone": (
             "1G-B2-F2-B5 - Phase B semantic quality review"
-            if pass_structural
-            else "1G-B2-F2-B4-R - Phase B expanded local soft-review panel repair"
+            if pass_instruction_repair
+            else "1G-B2-F2-B5-A-R - General Phase B soft-review instruction repair"
         ),
         "answers": {
             "parseable_json_all_cases": parse_count == len(results),
             "schema_valid_all_cases": schema_valid_count == len(results),
             "authority_field_leakage_count": len(leakage_results),
             "model_facing_schema_has_authority_fields": False,
+            "instruction_profile_case_specific": False,
             "runtime_approved": False,
             "external_provider_calls_made": False,
             "soft_quality_review_required": True,
             "soft_quality_truth_scored": False,
-            "strong_enough_for_semantic_quality_review": pass_structural,
+            "improved_over_b4_baseline": quality["improved_over_b4_baseline"],
+            "strong_enough_for_semantic_quality_review": pass_instruction_repair,
         },
     }
 
@@ -471,7 +571,7 @@ def summarize_results(results: list[dict[str, Any]], report_dir: Path) -> dict[s
 def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
     quality = summary["soft_quality_summary"]
     lines = [
-        "# 1G-B2-F2-B4 Phase B Expanded Local Soft-Review Panel Summary",
+        "# 1G-B2-F2-B5-A General Phase B Soft-Review Instruction Repair Summary",
         "",
         "Manual review is required. This smoke does not prove semantic truth or approve runtime use.",
         "",
@@ -480,17 +580,22 @@ def write_summary_markdown(path: Path, summary: dict[str, Any]) -> None:
         f"- schema valid: {summary['schema_valid_count']}/{summary['total_runs']}",
         f"- authority field leakage count: {summary['authority_field_leakage_count']}",
         f"- model-facing schema has authority fields: {summary['model_facing_schema_has_authority_fields']}",
+        f"- instruction profile case-specific: {summary['instruction_profile_case_specific']}",
         f"- local Ollama calls made: {summary['local_ollama_calls_made']}",
         f"- external provider calls made: {summary['external_provider_calls_made']}",
         f"- runtime approved: {summary['runtime_approved']}",
         f"- soft quality review required: {quality['soft_quality_review_required']}",
         f"- soft quality truth scored: {quality['soft_quality_truth_scored']}",
         f"- soft quality diagnostic: {quality['soft_quality_match_count']}/{quality['soft_quality_compared_count']}",
+        f"- B4 baseline: {quality['baseline_b4_match_count']}/{quality['baseline_b4_compared_count']}",
+        f"- improved over B4 baseline: {quality['improved_over_b4_baseline']}",
         f"- soft quality miss count: {quality['soft_quality_miss_count']}",
         f"- strong enough for semantic quality review: {summary['strong_enough_for_semantic_quality_review']}",
         f"- recommended next milestone: {summary['recommended_next_milestone']}",
         "",
         "Qwen receives only the soft-only proposal schema and the input text. Phase A hard fields are merged later by deterministic Python into an internal review envelope.",
+        "",
+        "The B5-A instruction profile uses general reusable categories. It must not use case IDs or holdout-specific examples as model-facing instruction content.",
         "",
         "Soft-quality diagnostics are advisory only. They do not approve runtime behavior, memory writes, retrieval, provider use, tool execution, or semantic truth.",
         "",
@@ -572,7 +677,7 @@ def run_local_smoke(
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Phase B expanded local soft-review panel.")
+    parser = argparse.ArgumentParser(description="General Phase B soft-review instruction repair.")
     parser.add_argument("--source-b2-report-dir", default=str(DEFAULT_SOURCE_B2_REPORT_DIR))
     parser.add_argument("--holdout", default=str(DEFAULT_HOLDOUT))
     parser.add_argument("--schema-path", default=str(DEFAULT_SCHEMA))

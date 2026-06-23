@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-23T16:35:38.7054376Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 156,
+    "eval_duration": 2557684000,
+    "load_duration": 420508000,
+    "message": {
+      "content": "{\n  \"summary_short\": \"Policy update based on memory decision\",\n  \"project_bucket\": \"jarvisos\",\n  \"primary_domain\": \"memory\",\n  \"domain_tags\": [\"memory_update\", \"policy_change\"],\n  \"storage_relevance\": \"low\",\n  \"usefulness_for_future_review\": \"medium\",\n  \"possible_memory_card_type\": \"decision_card\",\n  \"soft_reason_code\": \"decision_candidate\",\n  \"brief_rationale\": \"This proposal indicates a need to align policy with recent memory decisions, ensuring consistency between system policies and current operational context.\",\n  \"suggested_followup_question\": \"Which specific memory document or decision is referenced here?\"\n  , \"soft_uncertain_fields\": []\n}",
+      "role": "assistant",
+      "thinking": "Okay, let's tackle this. The user provided an input text: \"Use the latest decision from the memory document to update the policy.\" They want a JSON object based on the schema they provided. \n\nFirst, I need to figure out the project bucket. The mention of \"memory document\" and \"policy\" makes me think it's related to \"jarvisos\" since that's about memory infrastructure and provider policy. \n\nNext, the primary domain. The input is about using a memory document to update a policy, which relates to \"memory\" and \"security\" because policies can involve security aspects. But since the main focus is on memory and policy updates, \"memory\" might be the primary domain here.\n\nDomain tags should be compact. \"memory_update\" and \"policy_change\" seem relevant. Maybe also \"security\" if the policy update is security-related, but the input doesn't specify that. Let's stick with \"memory_update\" and \"policy_change\".\n\nCard type guidance: The input is about updating a policy based on a memory decision. That sounds like a \"decision_card\" because it's about changing or updating a policy. \n\nSoft reason code: \"decision_candidate\" since it's about making a decision to update the policy. \n\nRationale: The input is useful for a future reviewer because it indicates a need to check the latest memory decision to ensure the policy is up-to-date. This helps in maintaining consistent policy enforcement based on recent decisions.\n\nFollow-up question: The input mentions using the latest decision but doesn't specify which one. So a good follow-up would be to ask which specific memory document or decision is referenced here.\n\nPutting it all together, the JSON should have the project bucket as \"jarvisos\", primary domain as \"memory\", domain tags as [\"memory_update\", \"policy_change\"], card type \"decision_card\", soft reason code \"decision_candidate\", rationale explaining the need to update policy based on memory, and the follow-up question about the specific memory document.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 1564,
+    "prompt_eval_duration": 136630000,
+    "total_duration": 8437568700
+  },
+  "duration_seconds": 10.483,
+  "error": null,
+  "ok": true,
+  "status": 200
+}

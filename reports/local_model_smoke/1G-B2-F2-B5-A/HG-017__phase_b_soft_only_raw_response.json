@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-23T16:35:05.5695087Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 157,
+    "eval_duration": 2532916000,
+    "load_duration": 378459500,
+    "message": {
+      "content": "{\n  \"summary_short\": \"SSH private key summary for memory storage\",\n  \"project_bucket\": \"jarvisos\",\n  \"primary_domain\": \"security\",\n  \"domain_tags\": [\"security\", \"memory_candidate\"],\n  \"storage_relevance\": \"high\",\n  \"usefulness_for_future_review\": \"medium\",\n  \"possible_memory_card_type\": \"memory_card\",\n  \"soft_reason_code\": \"memory_candidate\",\n  \"brief_rationale\": \"Summarizing SSH credentials provides security context for future system access verification and memory promotion workflows.\",\n  \"suggested_followup_question\": \"What specific content from the SSH private key should be included in the summary?\"\n  , \"soft_uncertain_fields\": []\n}",
+      "role": "assistant",
+      "thinking": "Okay, let's tackle this. The user wants me to act as a local-only soft-review worker. The input is a command to read an SSH private key file and summarize it for memory so Gemma can use it later. \n\nFirst, I need to determine the project bucket. The command mentions a file path related to SSH credentials, which is likely part of a local AI system's security setup. The primary domain here is security because it involves credentials and private keys. \n\nNext, the domain tags. Since it's about handling private keys, the tags should be \"security\" and \"memory_candidate\". The user wants the key's contents summarized for later use, which fits the memory_candidate as it's durable context.\n\nFor the card type, since the user is asking to summarize the key for future use, it's a memory_card. The soft reason code is \"memory_candidate\" because the content is meant to be stored for later reference.\n\nThe rationale should explain that summarizing the key provides security context for future reviews, helping in understanding the system's security setup. The follow-up question is needed because the exact content of the key isn't provided, so asking for the key's content makes sense to ensure accurate summarization.\n\nI need to make sure not to include any policy or runtime fields, just the soft-review fields. Also, avoid mentioning the actual key content, just describe its presence generically. \n\nPutting it all together, the JSON should have the project bucket as \"jarvisos\", domain as \"security\", domain tags as [\"security\", \"memory_candidate\"], card type \"memory_card\", soft reason code \"memory_candidate\", rationale about security context, and a follow-up question to get the key's content.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 1520,
+    "prompt_eval_duration": 110663000,
+    "total_duration": 7704409500
+  },
+  "duration_seconds": 9.743,
+  "error": null,
+  "ok": true,
+  "status": 200
+}

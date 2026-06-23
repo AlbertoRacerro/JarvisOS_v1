@@ -63,7 +63,7 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
             "error": None,
         }
 
-    def test_default_b4_case_selection_has_eight_cases(self):
+    def test_default_b5a_case_selection_has_eight_cases(self):
         self.assertEqual(
             [
                 "HG-007",
@@ -77,6 +77,15 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
             ],
             model_probe.select_case_ids(model_probe.DEFAULT_CASE_IDS),
         )
+
+    def test_general_instruction_block_is_not_case_specific(self):
+        instruction = model_probe.build_general_instruction_block()
+        forbidden_tokens = [
+            "HG-007", "HG-010", "HG-013", "HG-016", "HG-017", "HG-018", "HG-024", "HG-025",
+            "kLa", "GPT-5.5", ".ssh/id_rsa", "Gemma 12B routing", "memory folder to GPT",
+        ]
+        for token in forbidden_tokens:
+            self.assertNotIn(token, instruction)
 
     def test_case_selection_rejects_more_than_eight_cases(self):
         with self.assertRaises(ValueError):
@@ -167,22 +176,24 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
         self.assertIn("project_bucket", fields)
         self.assertGreater(diagnostic["quality_compared_count"], diagnostic["quality_match_count"])
 
-    def test_summary_keeps_soft_quality_separate_from_runtime_approval(self):
+    def test_summary_compares_against_b4_baseline_without_runtime_approval(self):
         result = {
             "case_id": "HG-007",
             "json_parse_passed": True,
             "schema_valid": True,
             "validation_errors": [],
             "authority_field_leakage": [],
-            "soft_quality_diagnostic": model_probe.evaluate_soft_quality(
-                "HG-007",
-                self.valid_soft_proposal(),
-            ),
+            "soft_quality_diagnostic": {
+                "quality_match_count": 15,
+                "quality_compared_count": 29,
+                "quality_misses": [],
+            },
         }
-        summary = model_probe.summarize_results([result], Path("reports/local_model_smoke/1G-B2-F2-B4"))
+        summary = model_probe.summarize_results([result], Path("reports/local_model_smoke/1G-B2-F2-B5-A"))
         self.assertFalse(summary["runtime_approved"])
         self.assertFalse(summary["accepted_for_runtime"])
         self.assertTrue(summary["strong_enough_for_semantic_quality_review"])
+        self.assertTrue(summary["soft_quality_summary"]["improved_over_b4_baseline"])
         self.assertTrue(summary["soft_quality_summary"]["soft_quality_review_required"])
         self.assertFalse(summary["soft_quality_summary"]["soft_quality_truth_scored"])
 

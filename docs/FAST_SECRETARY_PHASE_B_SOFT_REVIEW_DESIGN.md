@@ -239,3 +239,19 @@ python scripts\local_phase_b_soft_review_model_probe.py `
 
 B4 records soft-quality diagnostics for reviewer triage. These diagnostics are
 not semantic truth scoring and cannot approve runtime behavior.
+
+## 1G-B2-F2-B5-A General Instruction Repair
+
+`1G-B2-F2-B5-A` repairs the Phase B model-facing instruction profile.
+
+The repair is general, not case-specific:
+
+- no holdout IDs as instruction examples;
+- no narrow benchmark examples as instruction examples;
+- no Phase A policy fields in the model-facing prompt;
+- no hard/policy fields in the soft-only schema.
+
+The instruction profile now explains general reusable categories for project
+bucket, primary domain, card type, reason code, rationale quality, and follow-up
+question quality. B5-A reruns the same eight B4 cases only as a regression
+panel against the B4 soft-quality baseline.

@@ -1058,3 +1058,17 @@ Decision boundary:
 - B4 adds soft-quality diagnostics for later review, but those diagnostics do
   not approve runtime memory, retrieval, provider use, tool execution, route
   selection, semantic truth, or BlueRev modeling.
+
+### 1G-B2-F2-B5-A - General Phase B Instruction Repair
+
+1G-B2-F2-B5-A repairs Phase B soft-only instructions using general reusable
+taxonomy guidance rather than holdout-specific examples.
+
+Decision boundary:
+
+- Qwen local receives only input text and the soft-only schema.
+- Qwen local may process sensitive local text for advisory soft review.
+- Qwen does not receive or emit Phase A policy fields.
+- Python/JarvisOS merges saved Phase A hard-gate state with the soft proposal.
+- The eight-case run is a regression panel against the B4 soft-quality baseline,
+  not runtime approval.

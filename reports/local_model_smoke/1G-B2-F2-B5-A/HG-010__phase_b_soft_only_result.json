@@ -1,0 +1,121 @@
+{
+  "authority_field_leakage": [],
+  "authority_field_leakage_count": 0,
+  "case_id": "HG-010",
+  "created_at": "2026-06-23T16:34:36.575424+00:00",
+  "duration_seconds": 9.725,
+  "json_parse_error": null,
+  "json_parse_passed": true,
+  "manual_review_required": true,
+  "milestone": "1G-B2-F2-B5-A",
+  "model": "qwen3:8b",
+  "ollama_ok": true,
+  "ollama_status": 200,
+  "phase_a_result_source": "reports\\local_model_smoke\\1G-B2-F2-B2\\HG-010__result.json",
+  "phase_b_soft_proposal": {
+    "brief_rationale": "This input references a prior decision that may influence current actions, helping reviewers understand the context of previous choices and their impact on next steps.",
+    "domain_tags": [
+      "memory",
+      "decision"
+    ],
+    "possible_memory_card_type": "decision_card",
+    "primary_domain": "memory",
+    "project_bucket": "unknown",
+    "soft_reason_code": "decision_candidate",
+    "soft_uncertain_fields": [],
+    "storage_relevance": "low",
+    "suggested_followup_question": "What was the specific decision made about the material last time?",
+    "summary_short": "Referencing a prior decision to guide next steps",
+    "usefulness_for_future_review": "medium"
+  },
+  "raw_response_path": "reports\\local_model_smoke\\1G-B2-F2-B5-A\\HG-010__phase_b_soft_only_raw_response.json",
+  "review_envelope": {
+    "authority_field_leakage": [],
+    "authority_field_leakage_count": 0,
+    "case_id": "HG-010",
+    "external_provider_calls_made": false,
+    "local_model_calls_made": true,
+    "manual_review_required": true,
+    "phase_a_hard_gate": {
+      "allowed_future_retrieval_behavior": "clarification_required",
+      "clarification_required": true,
+      "contains_raw_private_or_ip_sensitive_context": false,
+      "contains_secret_or_credential": false,
+      "external_provider_allowed": false,
+      "hard_reason_code": "clarification_needed",
+      "mentions_external_provider_or_upload_intent": false,
+      "redaction_required": false,
+      "requires_manual_review": true,
+      "sensitivity_bucket_proposal": "internal",
+      "source_policy_for_future_retrieval": "blocked"
+    },
+    "phase_b_soft_proposal": {
+      "brief_rationale": "This input references a prior decision that may influence current actions, helping reviewers understand the context of previous choices and their impact on next steps.",
+      "domain_tags": [
+        "memory",
+        "decision"
+      ],
+      "possible_memory_card_type": "decision_card",
+      "primary_domain": "memory",
+      "project_bucket": "unknown",
+      "soft_reason_code": "decision_candidate",
+      "soft_uncertain_fields": [],
+      "storage_relevance": "low",
+      "suggested_followup_question": "What was the specific decision made about the material last time?",
+      "summary_short": "Referencing a prior decision to guide next steps",
+      "usefulness_for_future_review": "medium"
+    },
+    "phase_b_soft_proposal_schema_valid": true,
+    "phase_b_soft_proposal_validation_errors": [],
+    "runtime_approved": false,
+    "schema_version": "fast_secretary_review_envelope_v0_1",
+    "semantic_truth_scored": false,
+    "soft_generation_mode": "local_model",
+    "soft_quality_diagnostic": {
+      "case_id": "HG-010",
+      "quality_compared": true,
+      "quality_compared_count": 2,
+      "quality_match_count": 1,
+      "quality_misses": [
+        {
+          "actual": "decision_candidate",
+          "expected_any": [
+            "clarification_context",
+            "contextual_summary",
+            "unknown"
+          ],
+          "field": "soft_reason_code",
+          "reason": "advisory soft-quality expectation miss"
+        }
+      ]
+    },
+    "soft_quality_review_required": true,
+    "soft_quality_truth_scored": false
+  },
+  "runtime_approved": false,
+  "schema_path": "schemas\\fast_secretary_soft_proposal_v0_1.schema.json",
+  "schema_valid": true,
+  "schema_version": "phase_b_soft_instruction_repair_result_v0",
+  "semantic_truth_scored": false,
+  "soft_quality_diagnostic": {
+    "case_id": "HG-010",
+    "quality_compared": true,
+    "quality_compared_count": 2,
+    "quality_match_count": 1,
+    "quality_misses": [
+      {
+        "actual": "decision_candidate",
+        "expected_any": [
+          "clarification_context",
+          "contextual_summary",
+          "unknown"
+        ],
+        "field": "soft_reason_code",
+        "reason": "advisory soft-quality expectation miss"
+      }
+    ]
+  },
+  "soft_quality_review_required": true,
+  "soft_quality_truth_scored": false,
+  "validation_errors": []
+}
