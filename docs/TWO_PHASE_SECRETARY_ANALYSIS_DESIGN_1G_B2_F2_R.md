@@ -475,3 +475,16 @@ runtime behavior, provider call, memory write, retrieval runtime, Context Pack
 Broker runtime, tool execution, hook, MCP, worker, viewer, route, frontend UI,
 backend API, database migration, BlueRev vault use, BlueRev modeling behavior,
 or vendored code.
+
+## 1G-B2-F2-B Phase B Design Update
+
+`1G-B2-F2-B` materializes Phase B as a closed soft-review schema and design doc.
+
+Phase B receives the overlay-corrected Phase A hard gate and comparator cleanup
+evidence. It may add reviewer context, but it cannot weaken or override Phase A.
+
+Recommended next milestone:
+
+```text
+1G-B2-F2-B1 - Phase B soft-review fixture prototype
+```

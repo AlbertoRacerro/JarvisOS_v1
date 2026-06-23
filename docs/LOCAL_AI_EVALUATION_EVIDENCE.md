@@ -940,3 +940,28 @@ Then external provider hardening:
 ```
 
 Do not start Context Pack Broker runtime, local gatekeeper runtime, provider routing, chat, memory runtime, retrieval runtime, tool execution, or BlueRev modeling before the form/protocol/memory foundation and reliability gates prove stable.
+
+### 1G-B2-F2-B - Phase B Soft Hybrid Review Design
+
+1G-B2-F2-B adds a closed Phase B soft-review schema and design while preserving
+the local-AI boundary.
+
+Files:
+
+- `schemas/fast_secretary_soft_review_v0_1.schema.json`
+- `docs/FAST_SECRETARY_PHASE_B_SOFT_REVIEW_DESIGN.md`
+- `tests/test_fast_secretary_phase_b_soft_review_schema.py`
+
+Decision:
+
+- Phase B is advisory only.
+- Phase B cannot override Phase A.
+- Phase B cannot approve memory writes, retrieval, provider use, tool execution,
+  route selection, or runtime action.
+- Phase B remains evaluation/design only.
+
+Recommended next milestone:
+
+```text
+1G-B2-F2-B1 - Phase B soft-review fixture prototype
+```

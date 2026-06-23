@@ -158,15 +158,12 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F2-C - Hard-gate comparator and holdout expectation cleanup
+1G-B2-F2-B1 - Phase B soft-review fixture prototype
 ```
 
-The 1G-B2-F2-P3 integration adds the explicit `--apply-policy-overlay` option
-to the structured-output evaluation harness and writes P3 evidence under
-`reports/local_model_smoke/1G-B2-F2-P3/`. The no-model replay keeps raw Phase A
-drafts separate from overlay-corrected hard-gate objects, validates corrected
-outputs 8/8, and preserves the 61/93 -> 74/93 hard-score improvement. Remaining
-misses are now mostly comparator/holdout cleanup work, especially lifecycle and
-unresolved-assumption expectations.
+`1G-B2-F2-B` adds the Phase B soft-review schema and design. Phase B is advisory
+only: it can summarize and label for review, but cannot override Phase A,
+approve memory writes, unblock retrieval, allow provider use, execute tools, or
+clear manual review.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

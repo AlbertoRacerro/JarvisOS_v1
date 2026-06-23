@@ -19,6 +19,8 @@ Milestones:
 - 1G-B2-F2-P1 - Policy-gate overlay fixture prototype
 - 1G-B2-F2-P2 - Policy-gate overlay replay on saved F2-A outputs
 - 1G-B2-F2-P3 - Integrate policy overlay into structured-output evaluation harness
+- 1G-B2-F2-C - Hard-gate comparator and holdout expectation cleanup
+- 1G-B2-F2-B - Phase B soft hybrid review design
 
 ## Purpose
 
@@ -1173,3 +1175,25 @@ It adds no:
 - vendored code.
 
 This milestone does not start `1G-B2-F2-C - Hard-gate comparator and holdout expectation cleanup`.
+
+## 1G-B2-F2-B Phase B Soft Hybrid Review Design
+
+`1G-B2-F2-B` adds the Phase B soft-review schema and design:
+
+```text
+schemas/fast_secretary_soft_review_v0_1.schema.json
+docs/FAST_SECRETARY_PHASE_B_SOFT_REVIEW_DESIGN.md
+tests/test_fast_secretary_phase_b_soft_review_schema.py
+```
+
+Phase B is advisory and monotonic. It receives Phase A constraints and may add
+summary, labels, usefulness, rationale, and follow-up context for human review.
+It cannot override Phase A, unblock blocked or clarification-required content,
+approve provider use, approve retrieval, approve memory writes, execute tools,
+or clear manual review.
+
+Recommended next milestone:
+
+```text
+1G-B2-F2-B1 - Phase B soft-review fixture prototype
+```

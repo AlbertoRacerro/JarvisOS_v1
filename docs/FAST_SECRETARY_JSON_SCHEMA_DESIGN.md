@@ -567,3 +567,27 @@ flag `--apply-policy-overlay`, produced
 preserved the 74/93 corrected hard score without model or network calls. Do not
 start Phase B soft review until comparator/holdout cleanup is addressed or
 deliberately deferred with this evidence.
+
+## Phase B Soft Review Schema v0.1
+
+`1G-B2-F2-B` adds a closed Phase B advisory schema:
+
+```text
+schemas/fast_secretary_soft_review_v0_1.schema.json
+```
+
+This schema is not a runtime approval. It exists so future Phase B fixture tests
+can validate reviewer-facing summaries, labels, usefulness estimates, rationale,
+and follow-up questions while preserving Phase A authority.
+
+Phase B keeps sticky constraints:
+
+- `can_override_phase_a = false`;
+- `requires_manual_review = true`;
+- provider and retrieval recommendations remain false when Phase A forbids them.
+
+Recommended next milestone:
+
+```text
+1G-B2-F2-B1 - Phase B soft-review fixture prototype
+```
