@@ -23,6 +23,8 @@ Control:
 
 ```text
 external_network_allowed_now=false when redaction pending/failed
+external_network_allowed_now=true requires external_allowed=true
+browser/tool/MCP execution requires external_network_allowed_now=true
 ```
 
 ### FM-003 Payload exists without digest binding
@@ -55,6 +57,7 @@ Control:
 
 ```text
 provider tiers are enum and allowed/blocked sets must be disjoint
+external provider_candidate is forbidden while external_allowed=false
 ```
 
 ### FM-007 Budget tier ambiguity
@@ -64,3 +67,27 @@ Control:
 ```text
 explicit TIER_RANK; USER_CONFIRM/BLOCKED are control states
 ```
+
+### FM-008 Audit note secret echo after Phase A miss
+
+Control:
+
+```text
+audit_notes are scanned for obvious secret patterns independently of Phase A
+```
+
+### FM-009 Memory/file/terminal environment drift
+
+Control:
+
+```text
+memory_write requires memory_policy_result
+file_write requires file_system/codebase environment
+terminal_command requires terminal environment
+```
+
+## Schema validation note
+
+Current tests use a local schema checker, not complete Draft 2020-12 JSON Schema
+validation. Runtime safety claims must come from semantic validator invariants
+and direct adversarial tests, not from local schema checking alone.

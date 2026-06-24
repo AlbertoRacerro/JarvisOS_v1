@@ -174,6 +174,14 @@ def _check_blocked(decision: dict[str, Any], violations: list[dict]) -> None:
 
 
 def _check_external_candidate(decision: dict[str, Any], violations: list[dict]) -> None:
+    provider = decision.get("provider_candidate")
+    if decision.get("external_allowed") is False and isinstance(provider, str) and provider.startswith("external:"):
+        _add(
+            violations,
+            "EXTERNAL_CANDIDATE_WHILE_EXTERNAL_FORBIDDEN",
+            "External provider_candidate requires external_allowed true.",
+            "provider_candidate",
+        )
     if decision.get("route_action") != "route_external_candidate":
         return
     if decision.get("external_allowed") is not True:
@@ -190,7 +198,6 @@ def _check_external_candidate(decision: dict[str, Any], violations: list[dict]) 
             "External candidate requires provider_call_allowed_now true.",
             "provider_call_allowed_now",
         )
-    provider = decision.get("provider_candidate")
     if not (isinstance(provider, str) and provider.startswith("external:")):
         _add(
             violations,
@@ -406,6 +413,32 @@ def _check_expiry(
 
 
 def _check_redaction(input_obj: dict[str, Any], decision: dict[str, Any], violations: list[dict]) -> None:
+    if decision.get("external_network_allowed_now") is True:
+        if decision.get("external_allowed") is not True:
+            _add(
+                violations,
+                "EXTERNAL_NETWORK_WITHOUT_EXTERNAL_ALLOWED",
+                "External network permission requires external_allowed true.",
+                "external_allowed",
+            )
+        if decision.get("redaction_status") in {"required_pending", "failed"}:
+            _add(
+                violations,
+                "EXTERNAL_NETWORK_WITHOUT_EXTERNAL_ALLOWED",
+                "External network permission requires completed or unnecessary redaction.",
+                "redaction_status",
+            )
+    if (
+        decision.get("requested_action_type") in EXTERNAL_NETWORK_ACTIONS
+        and decision.get("tool_execution_allowed_now") is True
+        and decision.get("external_network_allowed_now") is not True
+    ):
+        _add(
+            violations,
+            "TOOL_EXECUTION_WITHOUT_EXTERNAL_NETWORK_PERMISSION",
+            "Network-capable browser/tool/MCP execution requires external_network_allowed_now true.",
+            "external_network_allowed_now",
+        )
     if decision.get("redaction_status") in {"required_pending", "failed"}:
         for field in ("external_allowed", "provider_call_allowed_now", "external_network_allowed_now"):
             if decision.get(field) is not False:
@@ -581,15 +614,14 @@ def _check_reason_and_audit(input_obj: dict[str, Any], decision: dict[str, Any],
     if not isinstance(notes, list) or not notes:
         _add(violations, "MISSING_AUDIT_NOTE", "Decision requires audit notes.", "audit_notes")
         return
-    if _has_secret_signal(input_obj):
-        for index, note in enumerate(notes):
-            if isinstance(note, str) and SECRET_ECHO_PATTERN.search(note):
-                _add(
-                    violations,
-                    "AUDIT_NOTE_CONTAINS_SECRET",
-                    "Audit notes must not echo literal secrets.",
-                    f"audit_notes[{index}]",
-                )
+    for index, note in enumerate(notes):
+        if isinstance(note, str) and SECRET_ECHO_PATTERN.search(note):
+            _add(
+                violations,
+                "AUDIT_NOTE_CONTAINS_SECRET",
+                "Audit notes must not echo literal secrets.",
+                f"audit_notes[{index}]",
+            )
 
 
 def validate_router_decision_semantics(

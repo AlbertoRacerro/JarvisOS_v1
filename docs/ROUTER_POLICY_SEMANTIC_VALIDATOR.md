@@ -18,6 +18,8 @@ def validate_router_decision_semantics(input_obj, decision, previous_decision=No
 
 ```text
 EXTERNAL_CANDIDATE_WHILE_EXTERNAL_FORBIDDEN
+EXTERNAL_NETWORK_WITHOUT_EXTERNAL_ALLOWED
+TOOL_EXECUTION_WITHOUT_EXTERNAL_NETWORK_PERMISSION
 LOCAL_ONLY_WITH_EXTERNAL_PROVIDER
 BLOCKED_BUT_EXECUTABLE
 ANSWER_ONLY_WITH_SIDE_EFFECT
@@ -62,6 +64,14 @@ if lifecycle_stage == confirmed_execution:
 ### Browser/search redaction
 
 ```text
+if external_network_allowed_now == true:
+    external_allowed == true
+    redaction_status not in {required_pending, failed}
+
+if requested_action_type in {browser_search, tool_call, mcp_call}
+and tool_execution_allowed_now == true:
+    external_network_allowed_now == true
+
 if redaction_status in {required_pending, failed}:
     external_allowed == false
     provider_call_allowed_now == false
@@ -102,6 +112,8 @@ if allowed_execution_mode == answer_only:
 
 ```text
 allowed_provider_tiers and blocked_provider_tiers must be disjoint
+if external_allowed == false:
+    provider_candidate must not start with external:
 ```
 
 ### Budget
@@ -136,3 +148,18 @@ if sensitivity_bucket_proposal == unknown and requested_action_type in {provider
     provider_call_allowed_now=false
     external_network_allowed_now=false
 ```
+
+### Audit notes
+
+```text
+audit_notes must not contain obvious secret, token, API-key, password, or
+private-key patterns even if Phase A did not mark the input as secret
+```
+
+## Schema validation note
+
+Current tests use a local schema checker for fixture validation. That checker is
+not complete Draft 2020-12 JSON Schema validation and does not validate
+`format` such as `date-time`. The semantic validator remains the authority for
+cross-field policy enforcement. Real Draft 2020-12 validation may be added in a
+later dependency-approved milestone.

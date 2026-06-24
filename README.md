@@ -158,15 +158,15 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F3-A1 - RouterPolicy contract implementation
+1G-B2-F3-A2 - RouterPolicy deterministic decision probe
 ```
 
-`1G-B2-F3-A1` introduces the RouterPolicy contract layer: input/decision JSON
-Schemas, a semantic validator, core/adversarial fixtures, and contract evidence
-under `reports/router_policy/1G-B2-F3-A1/`. It is not runtime routing. It adds
-no provider calls, tool execution, browser/terminal/MCP/file actions, memory
-writes, retrieval runtime, backend/frontend routes, or database changes.
+`1G-B2-F3-A1-R1` repairs RouterPolicy contract-validator invariants before A2:
+external network permission must imply external allowance, browser/tool/MCP
+execution must carry external-network permission, external provider candidates
+cannot be active while external is forbidden, and audit notes cannot echo
+obvious secrets. Reports are under `reports/router_policy/1G-B2-F3-A1-R1/`.
 
-Passing F3-A1 does not approve runtime router-policy use.
+Passing F3-A1-R1 does not approve runtime router-policy use.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

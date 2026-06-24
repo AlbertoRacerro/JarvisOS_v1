@@ -1281,3 +1281,32 @@ routes, user confirmation, side effects, digest reuse, expiry, redaction,
 provider/budget policy, sensitivity policy, and memory-write denial. It does not
 execute routing, call providers, launch tools, read/write memory, run retrieval,
 or approve runtime behavior.
+
+### 1G-B2-F3-A1-R1 - RouterPolicy Contract Validator Invariant Repair
+
+1G-B2-F3-A1-R1 repairs concrete cross-field gaps found in the F3-A1 audit before
+any A2 deterministic decision probe work.
+
+Repaired invariants:
+
+- `external_network_allowed_now=true` requires `external_allowed=true`;
+- browser/tool/MCP execution requires `external_network_allowed_now=true`;
+- external `provider_candidate` is forbidden while `external_allowed=false`;
+- `audit_notes` are scanned for obvious secret literals independent of Phase A;
+- direct test coverage now exists for missing memory policy, file-write
+  environment mismatch, and terminal environment mismatch.
+
+Observed contract result:
+
+- router-policy validator tests: `39/39`;
+- new adversarial tests: `9`;
+- external provider calls: `false`;
+- local Ollama calls: `false`;
+- runtime routing added: `false`;
+- tool execution added: `false`;
+- memory writes added: `false`;
+- report: `reports/router_policy/1G-B2-F3-A1-R1/`.
+
+Schema validation note: current tests use a local schema checker and do not
+constitute complete Draft 2020-12 JSON Schema validation. The semantic validator
+remains the cross-field policy authority.

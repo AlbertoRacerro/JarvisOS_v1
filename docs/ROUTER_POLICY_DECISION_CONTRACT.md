@@ -54,6 +54,19 @@ This is true even when `confirmation_required=false`.
 If:
 
 ```text
+external_network_allowed_now=true
+```
+
+then:
+
+```text
+external_allowed=true
+redaction_status not in {required_pending, failed}
+```
+
+If:
+
+```text
 redaction_status in {required_pending, failed}
 ```
 
@@ -66,6 +79,18 @@ external_network_allowed_now=false
 ```
 
 Browser/search/network tools cannot proceed while redaction is pending.
+
+If `requested_action_type` is `browser_search`, `tool_call`, or `mcp_call` and
+`tool_execution_allowed_now=true`, then `external_network_allowed_now=true` is
+required. Current schema has no richer local/remote tool target field, so these
+action types are conservatively treated as network-capable.
+
+## Provider candidate
+
+If `external_allowed=false`, `provider_candidate` must not start with
+`external:`. `proposed_external_target` may still record a candidate target for
+review, but the active provider candidate cannot be external until policy allows
+external routing.
 
 ## answer_only
 
@@ -95,3 +120,8 @@ If memory policy failed or contains literal secret:
 state_change_allowed_now=false
 redaction_required=true if secret present
 ```
+
+## Schema validation note
+
+Current tests use a local schema checker, not complete Draft 2020-12 JSON Schema
+validation. The semantic validator is the cross-field policy authority.

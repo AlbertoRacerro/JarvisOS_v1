@@ -104,12 +104,94 @@ Expected:
 MEMORY_POLICY_FAILED_BUT_STATE_CHANGE_ALLOWED
 ```
 
+### ADV-028 external network without external allowed
+
+Expected:
+
+```text
+EXTERNAL_NETWORK_WITHOUT_EXTERNAL_ALLOWED
+```
+
+### ADV-029 browser execution without external network permission
+
+Expected:
+
+```text
+TOOL_EXECUTION_WITHOUT_EXTERNAL_NETWORK_PERMISSION
+```
+
+### ADV-030 tool execution without external network permission
+
+Expected:
+
+```text
+TOOL_EXECUTION_WITHOUT_EXTERNAL_NETWORK_PERMISSION
+```
+
+### ADV-031 MCP execution without external network permission
+
+Expected:
+
+```text
+TOOL_EXECUTION_WITHOUT_EXTERNAL_NETWORK_PERMISSION
+```
+
+### ADV-032 external provider candidate while external forbidden
+
+Expected:
+
+```text
+EXTERNAL_CANDIDATE_WHILE_EXTERNAL_FORBIDDEN
+```
+
+### ADV-033 audit note secret echo when Phase A missed secret
+
+Expected:
+
+```text
+AUDIT_NOTE_CONTAINS_SECRET
+```
+
+### ADV-034 memory write without policy result
+
+Expected:
+
+```text
+MEMORY_WRITE_WITHOUT_POLICY
+```
+
+### ADV-035 file write environment mismatch
+
+Expected:
+
+```text
+FILE_WRITE_ENVIRONMENT_MISMATCH
+```
+
+### ADV-036 terminal command environment mismatch
+
+Expected:
+
+```text
+TERMINAL_ENVIRONMENT_MISMATCH
+```
+
 ## Pass criteria
 
 ```text
 all schema-valid but semantically invalid fixtures fail
 all confirmation lifecycle fixtures are digest/expiry/consent-bound
 redaction pending blocks provider and external network/tool execution
+external_network_allowed_now cannot bypass external_allowed
+browser/tool/MCP execution cannot bypass external_network_allowed_now
+external provider_candidate cannot be active while external_allowed=false
+audit notes cannot echo obvious secret literals
 answer_only cannot carry tool/provider/state permissions
 budget and provider policy are enforced
 ```
+
+## Schema validation note
+
+Current fixture tests use a local schema checker and are not complete Draft
+2020-12 JSON Schema validation. The semantic validator tests cover cross-field
+policy invariants directly.

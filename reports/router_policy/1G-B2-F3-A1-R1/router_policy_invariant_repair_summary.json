@@ -1,0 +1,59 @@
+{
+  "schema_version": "router_policy_invariant_repair_summary_v0",
+  "milestone": "1G-B2-F3-A1-R1",
+  "start_head": "ab80d40ecbba9d1237c77d42190eb2a7bbd24d1d",
+  "final_head": "recorded in final handoff after commit",
+  "files_changed": [
+    "README.md",
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md",
+    "docs/ROUTER_POLICY_DECISION_CONTRACT.md",
+    "docs/ROUTER_POLICY_FAILURE_MODES.md",
+    "docs/ROUTER_POLICY_SEMANTIC_VALIDATOR.md",
+    "docs/ROUTER_POLICY_TEST_MATRIX.md",
+    "reports/router_policy/1G-B2-F3-A1-R1/router_policy_invariant_repair_summary.json",
+    "reports/router_policy/1G-B2-F3-A1-R1/router_policy_invariant_repair_summary.md",
+    "scripts/router_policy_semantic_validator.py",
+    "tests/test_router_policy_semantic_validator.py"
+  ],
+  "tests_run": [
+    "python -m unittest tests.test_router_policy_semantic_validator",
+    "python -m unittest discover -s tests",
+    "git diff --check",
+    "rg -n \"requests|httpx|openai|anthropic|ollama|subprocess|Popen|os\\\\.system|socket|browser|selenium|playwright|mcp|memory_write|write_text|open\\\\(\" scripts tests docs schemas reports README.md"
+  ],
+  "new_tests_added": [
+    "ADV-022 external network requires external allowed",
+    "ADV-023 browser execution requires external network permission",
+    "ADV-024 tool call execution requires external network permission",
+    "ADV-025 MCP call execution requires external network permission",
+    "ADV-026 external provider candidate forbidden while external is not allowed",
+    "ADV-027 audit note secret rejected even when Phase A missed secret",
+    "ADV-028 memory write without policy",
+    "ADV-029 file write environment mismatch",
+    "ADV-030 terminal environment mismatch"
+  ],
+  "validator_invariants_added": [
+    "external_network_allowed_now true requires external_allowed true",
+    "external_network_allowed_now true requires redaction_status not required_pending or failed",
+    "network-capable browser/tool/MCP execution requires external_network_allowed_now true",
+    "external provider_candidate is forbidden while external_allowed is false",
+    "audit notes are scanned for obvious secret patterns independent of Phase A"
+  ],
+  "new_violation_codes_added": [
+    "EXTERNAL_NETWORK_WITHOUT_EXTERNAL_ALLOWED",
+    "TOOL_EXECUTION_WITHOUT_EXTERNAL_NETWORK_PERMISSION"
+  ],
+  "schema_validation_note": "Current tests use a local schema checker and do not constitute complete Draft 2020-12 JSON Schema validation. The semantic validator remains the authority for cross-field policy enforcement. Real Draft 2020-12 validation may be added in a later dependency-approved milestone.",
+  "runtime_boundary": {
+    "runtime_routing_added": false,
+    "external_provider_calls_made": false,
+    "local_ollama_calls_made": false,
+    "tool_browser_terminal_mcp_execution_added": false,
+    "memory_retrieval_file_write_runtime_added": false,
+    "backend_frontend_db_bluerev_added": false
+  },
+  "known_residual_risks": [
+    "Schema fixture tests still use a local checker rather than a complete Draft 2020-12 validator.",
+    "RouterPolicy remains a contract validator only and does not approve runtime routing."
+  ]
+}

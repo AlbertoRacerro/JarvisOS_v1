@@ -502,6 +502,146 @@ class RouterPolicySemanticValidatorTests(unittest.TestCase):
         )
         self.assert_violation(self.base_input(), decision, "MEMORY_POLICY_FAILED_BUT_STATE_CHANGE_ALLOWED")
 
+    def test_adv022_external_network_requires_external_allowed(self):
+        decision = self.base_decision()
+        decision.update(
+            {
+                "requested_action_type": "browser_search",
+                "environment_type": "browser",
+                "state_scope": "browser",
+                "allowed_execution_mode": "dry_run",
+                "side_effect_level": "low",
+                "tool_execution_allowed_now": True,
+                "external_network_allowed_now": True,
+                "external_allowed": False,
+                "reason_codes": ["browser_search_boundary"],
+                "audit_notes": ["Browser search requires external network policy."],
+            }
+        )
+        self.assert_violation(self.base_input(), decision, "EXTERNAL_NETWORK_WITHOUT_EXTERNAL_ALLOWED")
+
+    def test_adv023_browser_tool_execution_requires_external_network_permission(self):
+        decision = self.base_decision()
+        decision.update(
+            {
+                "requested_action_type": "browser_search",
+                "environment_type": "browser",
+                "state_scope": "browser",
+                "allowed_execution_mode": "dry_run",
+                "side_effect_level": "low",
+                "tool_execution_allowed_now": True,
+                "external_network_allowed_now": False,
+                "external_allowed": True,
+                "reason_codes": ["browser_search_boundary"],
+                "audit_notes": ["Browser execution must carry explicit network permission."],
+            }
+        )
+        self.assert_violation(self.base_input(), decision, "TOOL_EXECUTION_WITHOUT_EXTERNAL_NETWORK_PERMISSION")
+
+    def test_adv024_tool_call_execution_requires_external_network_permission(self):
+        decision = self.base_decision()
+        decision.update(
+            {
+                "requested_action_type": "tool_call",
+                "environment_type": "mcp",
+                "state_scope": "mcp",
+                "allowed_execution_mode": "dry_run",
+                "side_effect_level": "low",
+                "tool_execution_allowed_now": True,
+                "external_network_allowed_now": False,
+                "external_allowed": True,
+                "reason_codes": ["external_network_blocked"],
+                "audit_notes": ["Tool execution must carry explicit network permission."],
+            }
+        )
+        self.assert_violation(self.base_input(), decision, "TOOL_EXECUTION_WITHOUT_EXTERNAL_NETWORK_PERMISSION")
+
+    def test_adv025_mcp_call_execution_requires_external_network_permission(self):
+        decision = self.base_decision()
+        decision.update(
+            {
+                "requested_action_type": "mcp_call",
+                "environment_type": "mcp",
+                "state_scope": "mcp",
+                "allowed_execution_mode": "dry_run",
+                "side_effect_level": "low",
+                "tool_execution_allowed_now": True,
+                "external_network_allowed_now": False,
+                "external_allowed": True,
+                "reason_codes": ["external_network_blocked"],
+                "audit_notes": ["MCP execution must carry explicit network permission."],
+            }
+        )
+        self.assert_violation(self.base_input(), decision, "TOOL_EXECUTION_WITHOUT_EXTERNAL_NETWORK_PERMISSION")
+
+    def test_adv026_external_provider_candidate_forbidden_when_external_not_allowed(self):
+        decision = self.base_decision()
+        decision.update(
+            {
+                "route_action": "require_preflight",
+                "route_tier": "LOCAL_FAST",
+                "provider_candidate": "external:cheap",
+                "external_allowed": False,
+                "allowed_execution_mode": "dry_run",
+                "reason_codes": ["provider_boundary"],
+                "audit_notes": ["External provider candidate must wait for external policy allowance."],
+            }
+        )
+        self.assert_violation(self.base_input(), decision, "EXTERNAL_CANDIDATE_WHILE_EXTERNAL_FORBIDDEN")
+
+    def test_adv027_audit_note_secret_rejected_even_when_phase_a_missed_secret(self):
+        input_obj = self.base_input()
+        input_obj["phase_a_signals"]["contains_secret_or_credential"] = False
+        decision = self.base_decision()
+        decision["audit_notes"] = ["Generated note includes sk-test-secret-12345678."]
+        self.assert_violation(input_obj, decision, "AUDIT_NOTE_CONTAINS_SECRET")
+
+    def test_adv028_memory_write_without_policy(self):
+        decision = self.base_decision()
+        decision.update(
+            {
+                "requested_action_type": "memory_write",
+                "environment_type": "memory_store",
+                "state_scope": "memory",
+                "allowed_execution_mode": "dry_run",
+                "side_effect_level": "low",
+                "memory_policy_result": None,
+                "reason_codes": ["memory_policy_required"],
+                "audit_notes": ["Memory write requires policy result before state change."],
+            }
+        )
+        self.assert_violation(self.base_input(), decision, "MEMORY_WRITE_WITHOUT_POLICY")
+
+    def test_adv029_file_write_environment_mismatch(self):
+        decision = self.base_decision()
+        decision.update(
+            {
+                "requested_action_type": "file_write",
+                "environment_type": "chat",
+                "state_scope": "repo",
+                "allowed_execution_mode": "dry_run",
+                "side_effect_level": "low",
+                "reason_codes": ["file_write_requires_dry_run"],
+                "audit_notes": ["File write preflight must use a file or codebase environment."],
+            }
+        )
+        self.assert_violation(self.base_input(), decision, "FILE_WRITE_ENVIRONMENT_MISMATCH")
+
+    def test_adv030_terminal_environment_mismatch(self):
+        decision = self.base_decision()
+        decision.update(
+            {
+                "requested_action_type": "terminal_command",
+                "environment_type": "chat",
+                "state_scope": "os",
+                "allowed_execution_mode": "dry_run",
+                "side_effect_level": "low",
+                "reason_codes": ["terminal_requires_preflight"],
+                "audit_notes": ["Terminal command preflight must use a terminal environment."],
+            }
+        )
+        self.assert_violation(self.base_input(), decision, "TERMINAL_ENVIRONMENT_MISMATCH")
+
 
 def null_value():
     return None
