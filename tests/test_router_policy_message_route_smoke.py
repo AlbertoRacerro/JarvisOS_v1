@@ -93,7 +93,15 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
         input_obj["budget_policy"]["max_tier"] = "SCIENTIFIC_MEDIUM"
         return input_obj
 
-    def run_with_builder(self, message, built_input, responder=None, assume=False, use_phase_b_hints=False):
+    def run_with_builder(
+        self,
+        message,
+        built_input,
+        responder=None,
+        assume=False,
+        use_phase_b_hints=False,
+        phase_b_source_case_id=None,
+    ):
         builder = Mock(return_value=built_input)
         result = smoke.run_message_route_smoke(
             message,
@@ -102,6 +110,7 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
             input_builder=builder,
             assume_public_simple=assume,
             use_phase_b_hints=use_phase_b_hints,
+            phase_b_source_case_id=phase_b_source_case_id,
         )
         builder.assert_called_once_with(message, now=NOW, assume_public_simple=assume)
         return result
@@ -1243,6 +1252,190 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
         result = self.assert_malformed_default_rejected_without_mutation("hello", built)
         self.assertEqual("smoke", built["phase_b_soft_proposal"]["domain_tags"])
         self.assertEqual("pre_bridge_structural_validation_failed", self.malformed_failure_point(result))
+
+    def test_b4_001_fast_secretary_phase_b_shape_is_b1_compatible(self):
+        message = "Explain what a centrifugal pump is."
+        built = self.safe_input(message)
+        phase_b = smoke._BUILD_DETERMINISTIC_PHASE_B_SOFT_REVIEW(
+            case_id="B4-BENIGN",
+            input_text=message,
+            phase_a=built["phase_a_signals"],
+        )
+        self.assertEqual([], smoke._phase_b_b1_compatibility_errors(phase_b))
+        self.assertTrue(B2_PHASE_B_REQUIRED_FIELDS.issubset(phase_b))
+        self.assertNotIn("confidence", phase_b)
+
+    def test_b4_002_coherent_triple_provenance(self):
+        message = "Explain what a centrifugal pump is."
+        result = smoke.run_message_route_smoke(
+            message,
+            responder=Mock(return_value="local answer"),
+            now=NOW,
+            assume_public_simple=True,
+            phase_b_source_case_id="B4-BENIGN",
+        )
+        metadata = result["input_obj"]["context_metadata"]
+        phase_b = result["input_obj"]["phase_b_soft_proposal"]
+        self.assertEqual("B4-BENIGN", metadata["phase_b_source_case_id"])
+        self.assertEqual("B4-BENIGN", phase_b["phase_a_case_id"])
+        self.assertEqual("deterministic_overlay_builder", metadata["phase_a_source"])
+        self.assertEqual("deterministic_fast_secretary_soft_review", metadata["phase_b_source_kind"])
+        self.assertTrue(metadata["same_case_id_for_phase_a_and_phase_b"])
+        self.assertFalse(metadata["cross_case_mix"])
+
+    def test_b4_003_deterministic_phase_b_replaces_stub_only_in_explicit_path(self):
+        message = "Explain what a centrifugal pump is."
+        default_result = smoke.run_message_route_smoke(
+            message,
+            responder=Mock(return_value="local answer"),
+            now=NOW,
+            assume_public_simple=True,
+        )
+        default_phase_b = default_result["input_obj"]["phase_b_soft_proposal"]
+        self.assertEqual("Benign local-answer smoke message.", default_phase_b["summary_short"])
+        self.assertNotIn("phase_b_source_kind", default_result["input_obj"]["context_metadata"])
+
+        b4_result = smoke.run_message_route_smoke(
+            message,
+            responder=Mock(return_value="local answer"),
+            now=NOW,
+            assume_public_simple=True,
+            phase_b_source_case_id="B4-BENIGN",
+        )
+        b4_phase_b = b4_result["input_obj"]["phase_b_soft_proposal"]
+        self.assertNotEqual("Benign local-answer smoke message.", b4_phase_b["summary_short"])
+        self.assertEqual("B4-BENIGN", b4_phase_b["phase_a_case_id"])
+        self.assertEqual(
+            "local_phase_b_soft_review_probe.build_soft_review",
+            b4_result["input_obj"]["context_metadata"]["phase_b_source_function"],
+        )
+
+    def test_b4_004_benign_deterministic_phase_b_can_enrich_without_bypassing_a3(self):
+        message = "Explain what a centrifugal pump is."
+        responder = Mock(return_value="local answer")
+        result = smoke.run_message_route_smoke(
+            message,
+            responder=responder,
+            now=NOW,
+            assume_public_simple=True,
+            phase_b_source_case_id="B4-BENIGN",
+        )
+        responder.assert_called_once_with(message)
+        self.assertTrue(result["executed"])
+        self.assertTrue(result["phase_b_source_used"])
+        self.assertEqual("answer", result["input_obj"]["router_hint"]["task_type"])
+        self.assertEqual("answer", result["input_obj"]["action_hint"]["requested_action_type"])
+
+    def test_b4_005_source_current_info_deterministic_phase_b_remains_conservative(self):
+        message = "Find public DOI source for algae modeling."
+        responder = Mock(return_value="should not run")
+        result = smoke.run_message_route_smoke(
+            message,
+            responder=responder,
+            now=NOW,
+            assume_public_simple=True,
+            phase_b_source_case_id="B4-SOURCE",
+        )
+        responder.assert_not_called()
+        self.assertFalse(result["executed"])
+        phase_b = result["input_obj"]["phase_b_soft_proposal"]
+        router = result["input_obj"]["router_hint"]
+        self.assertEqual("source_candidate", phase_b["soft_reason_code"])
+        self.assertEqual("review", router["task_type"])
+        self.assertTrue(router["needs_current_info"])
+        self.assertTrue(router["needs_file_context"])
+
+    def test_b4_006_ambiguity_followup_deterministic_phase_b_remains_non_executable(self):
+        message = "Use the thing we decided last time."
+        responder = Mock(return_value="should not run")
+        result = smoke.run_message_route_smoke(
+            message,
+            responder=responder,
+            now=NOW,
+            assume_public_simple=True,
+            phase_b_source_case_id="B4-AMBIGUITY",
+        )
+        responder.assert_not_called()
+        self.assertFalse(result["executed"])
+        phase_b = result["input_obj"]["phase_b_soft_proposal"]
+        self.assertEqual("blocked_by_phase_a", phase_b["soft_reason_code"])
+        self.assertTrue(result["input_obj"]["phase_a_signals"]["clarification_required"])
+        self.assertNotEqual("answer", result["input_obj"]["router_hint"]["task_type"])
+
+    def test_b4_007_hard_gate_dominates_deterministic_phase_b(self):
+        message = "my API key is sk-test-1234567890"
+        responder = Mock(return_value="should not run")
+        result = smoke.run_message_route_smoke(
+            message,
+            responder=responder,
+            now=NOW,
+            assume_public_simple=True,
+            phase_b_source_case_id="B4-HARD-GATE",
+        )
+        responder.assert_not_called()
+        self.assertFalse(result["executed"])
+        self.assertTrue(result["input_obj"]["phase_a_signals"]["contains_secret_or_credential"])
+        self.assertEqual("blocked_by_phase_a", result["input_obj"]["phase_b_soft_proposal"]["soft_reason_code"])
+        self.assertEqual("phase_b_blocked_by_hard_gate", result["input_obj"]["context_metadata"]["router_hint_source"])
+
+    def test_b4_008_malformed_deterministic_phase_b_fails_closed(self):
+        message = "Explain what a centrifugal pump is."
+        responder = Mock(return_value="should not run")
+        malformed_phase_b = {
+            "phase_a_case_id": "B4-MALFORMED",
+            "summary_short": "malformed",
+        }
+        with patch.object(smoke, "_BUILD_DETERMINISTIC_PHASE_B_SOFT_REVIEW", return_value=malformed_phase_b):
+            with patch.object(smoke, "_RUN_LOCAL_ROUTE") as run_local_route:
+                result = smoke.run_message_route_smoke(
+                    message,
+                    responder=responder,
+                    now=NOW,
+                    assume_public_simple=True,
+                    phase_b_source_case_id="B4-MALFORMED",
+                )
+        responder.assert_not_called()
+        run_local_route.assert_not_called()
+        self.assertFalse(result["executed"])
+        self.assertEqual("invalid_deterministic_phase_b", result["reason"])
+        self.assertIn("missing B1 phase_b fields", result["validation_errors"])
+
+    def test_b4_009_cross_case_phase_a_phase_b_mix_rejected(self):
+        message_a = "Explain what a centrifugal pump is."
+        message_b = "Find public DOI source for algae modeling."
+        built_b = self.safe_input(message_b)
+        phase_b_from_b = smoke._BUILD_DETERMINISTIC_PHASE_B_SOFT_REVIEW(
+            case_id="B4-CASE-B",
+            input_text=message_b,
+            phase_a=built_b["phase_a_signals"],
+        )
+        responder = Mock(return_value="should not run")
+        with patch.object(smoke, "_BUILD_DETERMINISTIC_PHASE_B_SOFT_REVIEW", return_value=phase_b_from_b):
+            with patch.object(smoke, "_RUN_LOCAL_ROUTE") as run_local_route:
+                result = smoke.run_message_route_smoke(
+                    message_a,
+                    responder=responder,
+                    now=NOW,
+                    assume_public_simple=True,
+                    phase_b_source_case_id="B4-CASE-A",
+                )
+        responder.assert_not_called()
+        run_local_route.assert_not_called()
+        self.assertFalse(result["executed"])
+        self.assertEqual("invalid_deterministic_phase_b", result["reason"])
+        self.assertIn("phase_b case_id mismatch", result["validation_errors"])
+
+    def test_b4_010_privacy_report_redaction(self):
+        report = ROOT / "reports" / "router_policy" / "1G-B2-F3-B4" / (
+            "router_policy_message_route_deterministic_phase_b_summary.json"
+        )
+        if not report.exists():
+            self.skipTest("B4 report not generated yet")
+        text = report.read_text(encoding="utf-8")
+        self.assertIn("synthetic_or_sanitized_only", text)
+        self.assertNotIn("BlueRev proprietary", text)
+        self.assertNotIn("sk-test-1234567890", text)
+        self.assertNotIn("raw_model_output", text)
 
 
 if __name__ == "__main__":

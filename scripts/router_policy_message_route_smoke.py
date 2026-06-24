@@ -9,12 +9,14 @@ assume_public_simple=True and deterministic hard-gate signals do not fire.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import re
 from collections.abc import Sequence
 from typing import Any
 
 import local_policy_gate_overlay_probe as policy_overlay
+from local_phase_b_soft_review_probe import build_soft_review
 from router_policy_hint_bridge_probe import apply_phase_b_router_hint
 from router_policy_local_responder import LocalResponderError, build_local_responder
 from router_policy_local_route_probe import run_local_route
@@ -27,6 +29,7 @@ _RUN_LOCAL_ROUTE = run_local_route
 _BUILD_LOCAL_RESPONDER = build_local_responder
 _APPLY_POLICY_OVERLAY = policy_overlay.apply_policy_overlay
 _APPLY_PHASE_B_ROUTER_HINT = apply_phase_b_router_hint
+_BUILD_DETERMINISTIC_PHASE_B_SOFT_REVIEW = build_soft_review
 
 TOP_LEVEL_REQUIRED = {
     "message_text",
@@ -69,6 +72,30 @@ USER_POLICY_BOOL_FIELDS = {
 CONTEXT_BOOL_FIELDS = {
     "attached_files_present",
     "conversation_context_available",
+}
+B1_REQUIRED_PHASE_B_FIELDS = {
+    "summary_short",
+    "project_bucket",
+    "primary_domain",
+    "domain_tags",
+    "storage_relevance",
+    "usefulness_for_future_review",
+    "possible_memory_card_type",
+    "soft_reason_code",
+    "brief_rationale",
+    "suggested_followup_question",
+    "soft_uncertain_fields",
+}
+B1_PHASE_B_STRING_FIELDS = {
+    "summary_short",
+    "project_bucket",
+    "primary_domain",
+    "storage_relevance",
+    "usefulness_for_future_review",
+    "possible_memory_card_type",
+    "soft_reason_code",
+    "brief_rationale",
+    "suggested_followup_question",
 }
 HARD_REASON_CODES = {
     "low_risk",
@@ -551,6 +578,61 @@ def _list_values(value: Any, allowed: set[str] | None = None) -> bool:
     return all(isinstance(item, str) and item in allowed for item in value)
 
 
+def _phase_b_b1_compatibility_errors(phase_b: Any) -> list[str]:
+    if not isinstance(phase_b, dict):
+        return ["phase_b is not object"]
+    errors: list[str] = []
+    missing = sorted(B1_REQUIRED_PHASE_B_FIELDS - set(phase_b))
+    if missing:
+        errors.append("missing B1 phase_b fields")
+    for field in sorted(B1_PHASE_B_STRING_FIELDS):
+        if field in phase_b and not isinstance(phase_b.get(field), str):
+            errors.append(f"phase_b {field} invalid")
+    if "domain_tags" in phase_b and not _list_values(phase_b.get("domain_tags")):
+        errors.append("phase_b domain_tags invalid")
+    if "soft_uncertain_fields" in phase_b and not _list_values(phase_b.get("soft_uncertain_fields")):
+        errors.append("phase_b soft_uncertain_fields invalid")
+    return errors
+
+
+def _apply_deterministic_phase_b_soft_review(
+    input_obj: dict[str, Any],
+    *,
+    case_id: str,
+    message_text: str,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    if not isinstance(case_id, str) or not case_id.strip():
+        return None, ["phase_b case_id invalid"]
+    phase_a = input_obj.get("phase_a_signals")
+    if not isinstance(phase_a, dict):
+        return None, ["phase_a invalid for deterministic phase_b"]
+    phase_b = _BUILD_DETERMINISTIC_PHASE_B_SOFT_REVIEW(
+        case_id=case_id,
+        input_text=message_text,
+        phase_a=copy.deepcopy(phase_a),
+    )
+    errors = _phase_b_b1_compatibility_errors(phase_b)
+    if isinstance(phase_b, dict) and phase_b.get("phase_a_case_id") != case_id:
+        errors.append("phase_b case_id mismatch")
+    if errors:
+        return None, errors
+    output = copy.deepcopy(input_obj)
+    output["phase_b_soft_proposal"] = phase_b
+    metadata = output.setdefault("context_metadata", {})
+    metadata.update(
+        {
+            "phase_a_source": "deterministic_overlay_builder",
+            "phase_b_source_kind": "deterministic_fast_secretary_soft_review",
+            "phase_b_source_case_id": case_id,
+            "phase_b_source_function": "local_phase_b_soft_review_probe.build_soft_review",
+            "same_case_id_for_phase_a_and_phase_b": True,
+            "cross_case_mix": False,
+            "synthetic_or_sanitized_message": True,
+        }
+    )
+    return output, []
+
+
 def _router_policy_input_structural_errors(input_obj: Any, original_message: str) -> list[str]:
     errors: list[str] = []
     if not isinstance(input_obj, dict):
@@ -655,6 +737,7 @@ def run_message_route_smoke(
     input_builder=None,
     assume_public_simple: bool = False,
     use_phase_b_hints: bool = True,
+    phase_b_source_case_id: str | None = None,
 ) -> dict:
     if not _valid_message(message_text):
         return {
@@ -663,6 +746,7 @@ def run_message_route_smoke(
             "input_source": "none",
             "assume_public_simple_used": assume_public_simple,
             "use_phase_b_hints_used": use_phase_b_hints,
+            "phase_b_source_used": False,
         }
 
     source = "injected_builder" if input_builder is not None else "smoke_builder"
@@ -680,6 +764,7 @@ def run_message_route_smoke(
             "input_source": source,
             "assume_public_simple_used": assume_public_simple,
             "use_phase_b_hints_used": use_phase_b_hints,
+            "phase_b_source_used": phase_b_source_case_id is not None,
             "error_type": type(exc).__name__,
         }
 
@@ -691,9 +776,38 @@ def run_message_route_smoke(
             "input_source": source,
             "assume_public_simple_used": assume_public_simple,
             "use_phase_b_hints_used": use_phase_b_hints,
+            "phase_b_source_used": phase_b_source_case_id is not None,
             "validation_stage": "pre_phase_b_hint_bridge",
             "validation_errors": errors,
         }
+
+    if phase_b_source_case_id is not None:
+        try:
+            input_obj, phase_b_errors = _apply_deterministic_phase_b_soft_review(
+                input_obj,
+                case_id=phase_b_source_case_id,
+                message_text=message_text,
+            )
+        except Exception as exc:
+            return {
+                "executed": False,
+                "reason": "deterministic_phase_b_source_failed",
+                "input_source": source,
+                "assume_public_simple_used": assume_public_simple,
+                "use_phase_b_hints_used": use_phase_b_hints,
+                "phase_b_source_used": True,
+                "error_type": type(exc).__name__,
+            }
+        if phase_b_errors:
+            return {
+                "executed": False,
+                "reason": "invalid_deterministic_phase_b",
+                "input_source": source,
+                "assume_public_simple_used": assume_public_simple,
+                "use_phase_b_hints_used": use_phase_b_hints,
+                "phase_b_source_used": True,
+                "validation_errors": phase_b_errors,
+            }
 
     if use_phase_b_hints:
         try:
@@ -705,6 +819,7 @@ def run_message_route_smoke(
                 "input_source": source,
                 "assume_public_simple_used": assume_public_simple,
                 "use_phase_b_hints_used": True,
+                "phase_b_source_used": phase_b_source_case_id is not None,
                 "error_type": type(exc).__name__,
             }
 
@@ -716,6 +831,7 @@ def run_message_route_smoke(
             "input_source": source,
             "assume_public_simple_used": assume_public_simple,
             "use_phase_b_hints_used": use_phase_b_hints,
+            "phase_b_source_used": phase_b_source_case_id is not None,
             "validation_errors": errors,
         }
 
@@ -727,6 +843,7 @@ def run_message_route_smoke(
             "input_source": source,
             "assume_public_simple_used": assume_public_simple,
             "use_phase_b_hints_used": use_phase_b_hints,
+            "phase_b_source_used": phase_b_source_case_id is not None,
         }
     return {
         "executed": result["executed"],
@@ -737,6 +854,7 @@ def run_message_route_smoke(
         "input_source": source,
         "assume_public_simple_used": assume_public_simple,
         "use_phase_b_hints_used": use_phase_b_hints,
+        "phase_b_source_used": phase_b_source_case_id is not None,
     }
 
 

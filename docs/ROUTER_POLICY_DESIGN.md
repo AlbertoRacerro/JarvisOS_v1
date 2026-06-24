@@ -391,6 +391,34 @@ schemas, backend routes, frontend UI, DB schema, memory/retrieval runtime,
 provider/tool/MCP/browser/terminal runtime, workers, hooks, or BlueRev
 modeling.
 
+### 1G-B2-F3-B4 deterministic Phase B source
+
+`1G-B2-F3-B4` adds an explicit offline message-route smoke path that replaces
+the fixed benign Phase B stub with deterministic per-message Phase B soft-review
+output from `local_phase_b_soft_review_probe.build_soft_review`.
+
+The default B3 path still uses the fixed benign stub unless the explicit B4
+offline source is requested. The deterministic Phase B source receives the same
+synthetic/sanitized message and the same deterministic Phase A output generated
+by A5, preserving a coherent triple:
+
+```text
+same message/case_id
+-> deterministic Phase A overlay
+-> deterministic Phase B soft review
+-> B1
+-> RouterPolicy/A3
+```
+
+The Fast Secretary Phase B builder already emits the B1-compatible field shape,
+so no adapter is required. Cross-case Phase A/Phase B mixing is rejected before
+B1. Malformed deterministic Phase B output fails closed before RouterPolicy/A3.
+
+B4 does not add live Qwen/Gemma/Ollama calls, provider calls, tools, MCP,
+browser/terminal runtime, memory/retrieval runtime, backend routes, frontend UI,
+DB schema, or BlueRev behavior. Phase B remains advisory only; Phase A/gates,
+RouterPolicy, and A3 remain authority.
+
 ## 1G-B2-F3-A1 boundary
 
 This document is part of the RouterPolicy contract layer only. It does not add

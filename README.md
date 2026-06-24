@@ -158,7 +158,7 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F3-B3-R2 - Default Phase B Hint Bridge Audit Follow-up
+1G-B2-F3-B4-R - Deterministic Phase B Source Audit
 ```
 
 `1G-B2-F3-B3` makes the existing offline B1 Phase B RouterHint bridge default-on
@@ -213,5 +213,11 @@ validation proves builder output is structurally valid enough for B1, B1 remains
 advisory, and post-B1 validation checks enriched structure before RouterPolicy
 and A3. Future live Phase B output must be adapted and validated before B1; B1
 must not normalize arbitrary raw model output or authorize execution.
+
+`1G-B2-F3-B4` adds an explicit offline panel path that replaces the fixed
+benign Phase B stub with deterministic per-message Phase B soft-review output
+from `local_phase_b_soft_review_probe.build_soft_review`. The default B3 stub
+path remains unchanged. B4 adds no live model call and commits only synthetic or
+sanitized report messages.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

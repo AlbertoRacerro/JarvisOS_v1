@@ -1740,3 +1740,31 @@ valid, model-produced, or Phase-B-enriched output is not semantically safe by
 itself; execution still requires deterministic gates, `--assume-public-simple`
 in smoke, validator-valid RouterPolicy decision output, A3 safe-local approval,
 and an injected or explicit local responder.
+
+### 1G-B2-F3-B4 - Deterministic Phase B Soft-Review Source
+
+1G-B2-F3-B4 wires the existing deterministic Fast Secretary Phase B soft-review
+builder into an explicit offline A5 message-route smoke path.
+
+Observed B4 behavior:
+
+- source function:
+  `local_phase_b_soft_review_probe.build_soft_review(*, case_id, input_text, phase_a)`;
+- Phase B shape is directly compatible with B1's 11 required fields;
+- adapter required: false;
+- default B3 fixed-stub path remains unchanged;
+- coherent triples preserve the same synthetic/sanitized message and case ID
+  through Phase A and Phase B;
+- cross-case Phase A/Phase B mixing is rejected before RouterPolicy/A3;
+- malformed deterministic Phase B fails closed before RouterPolicy/A3;
+- source/current-info remains conservative;
+- ambiguity remains non-executable;
+- hard gates dominate deterministic Phase B.
+
+Report:
+
+- `reports/router_policy/1G-B2-F3-B4/`.
+
+B4 is offline/deterministic only. It does not call Qwen, Gemma, Ollama,
+providers, tools, MCP, browser, terminal, memory, retrieval, backend routes,
+frontend UI, DB migrations, workers, hooks, or BlueRev behavior.

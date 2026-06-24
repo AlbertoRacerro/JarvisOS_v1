@@ -1,0 +1,127 @@
+{
+  "milestone": "1G-B2-F3-B4",
+  "title": "Deterministic Phase B soft-review source into message route smoke",
+  "start_head": "9b9ec90537c4f387d276485d1a4bddeb5477a5b3",
+  "commit_base_checked": "9b9ec90537c4f387d276485d1a4bddeb5477a5b3",
+  "files_changed": [
+    "README.md",
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md",
+    "docs/ROUTER_POLICY_DESIGN.md",
+    "reports/router_policy/1G-B2-F3-B4/router_policy_message_route_deterministic_phase_b_summary.json",
+    "reports/router_policy/1G-B2-F3-B4/router_policy_message_route_deterministic_phase_b_summary.md",
+    "scripts/router_policy_message_route_smoke.py",
+    "tests/test_router_policy_message_route_smoke.py"
+  ],
+  "phase_b_source_function_detected": "local_phase_b_soft_review_probe.build_soft_review",
+  "phase_b_source_signature": "build_soft_review(*, case_id, input_text, phase_a)",
+  "phase_b_shape_compatible_with_b1": true,
+  "adapter_required": false,
+  "mapped_fields": [],
+  "b1_required_fields": [
+    "summary_short",
+    "project_bucket",
+    "primary_domain",
+    "domain_tags",
+    "storage_relevance",
+    "usefulness_for_future_review",
+    "possible_memory_card_type",
+    "soft_reason_code",
+    "brief_rationale",
+    "suggested_followup_question",
+    "soft_uncertain_fields"
+  ],
+  "coherent_triple_check_result": "pass",
+  "cross_case_mix_detected": false,
+  "same_case_id_for_phase_a_and_phase_b": true,
+  "synthetic_or_sanitized_only": true,
+  "default_stub_path_unchanged": true,
+  "panel_cases": [
+    {
+      "case_id": "B4-BENIGN",
+      "synthetic_or_sanitized_message": "Synthetic benign local-answer request about a centrifugal pump.",
+      "phase_b_source_kind": "deterministic_fast_secretary_soft_review",
+      "phase_b_soft_reason_code": "contextual_summary",
+      "routing_outcome": "local_answer",
+      "executed": true,
+      "responder_required": true
+    },
+    {
+      "case_id": "B4-SOURCE",
+      "synthetic_or_sanitized_message": "Synthetic public DOI/source review request about algae modeling.",
+      "phase_b_source_kind": "deterministic_fast_secretary_soft_review",
+      "phase_b_soft_reason_code": "source_candidate",
+      "routing_outcome": "not_safe_local_route",
+      "executed": false,
+      "needs_current_info": true,
+      "needs_file_context": true
+    },
+    {
+      "case_id": "B4-AMBIGUITY",
+      "synthetic_or_sanitized_message": "Synthetic unresolved-reference request.",
+      "phase_b_source_kind": "deterministic_fast_secretary_soft_review",
+      "phase_b_soft_reason_code": "blocked_by_phase_a",
+      "routing_outcome": "not_safe_local_route",
+      "executed": false,
+      "clarification_required": true
+    },
+    {
+      "case_id": "B4-HARD-GATE",
+      "synthetic_or_sanitized_message": "Synthetic secret-placeholder request; raw token omitted.",
+      "phase_b_source_kind": "deterministic_fast_secretary_soft_review",
+      "phase_b_soft_reason_code": "blocked_by_phase_a",
+      "routing_outcome": "not_safe_local_route",
+      "executed": false,
+      "hard_gate_dominated": true
+    }
+  ],
+  "case_ids": [
+    "B4-BENIGN",
+    "B4-SOURCE",
+    "B4-AMBIGUITY",
+    "B4-HARD-GATE"
+  ],
+  "hard_gate_dominance_result": "pass",
+  "source_candidate_result": "pass: source/current-info remained conservative and non-executable",
+  "ambiguity_result": "pass: unresolved-reference case remained non-executable",
+  "malformed_phase_b_result": "pass: invalid_deterministic_phase_b before RouterPolicy/A3",
+  "cross_case_mix_result": "pass: mismatched phase_a_case_id rejected before RouterPolicy/A3",
+  "privacy_report_check": {
+    "synthetic_or_sanitized_only": true,
+    "model_output_committed": false,
+    "raw_private_prompt_committed": false,
+    "raw_secret_token_committed": false,
+    "bluerev_private_content_committed": false
+  },
+  "tests_run": [
+    "python -m unittest tests.test_router_policy_message_route_smoke",
+    "python -m unittest tests.test_router_policy_hint_bridge_probe",
+    "python -m unittest tests.test_router_policy_local_route_probe",
+    "python -m unittest tests.test_router_policy_decision_probe",
+    "python -m unittest tests.test_router_policy_semantic_validator",
+    "python -m unittest discover -s tests",
+    "python -m json.tool reports/router_policy/1G-B2-F3-B4/router_policy_message_route_deterministic_phase_b_summary.json",
+    "git diff --check",
+    "focused runtime grep"
+  ],
+  "runtime_boundary_check": {
+    "qwen_phase_a_gate_producer_added": false,
+    "qwen_or_gemma_or_ollama_call_added": false,
+    "external_provider_runtime_added": false,
+    "tool_or_mcp_runtime_added": false,
+    "browser_or_terminal_runtime_added": false,
+    "memory_or_retrieval_runtime_added": false,
+    "backend_or_frontend_or_db_added": false,
+    "bluerev_behavior_added": false
+  },
+  "known_residual_risks": [
+    "B4 is offline/deterministic only.",
+    "B4 does not call Qwen, Gemma, Ollama, or providers.",
+    "B4 does not approve live Phase B.",
+    "B4 does not approve chat or removal of --assume-public-simple.",
+    "Phase B remains advisory only.",
+    "Phase A/gates remain deterministic authority.",
+    "B1 is a bridge over structurally valid Phase B proposals, not a raw model-output normalizer.",
+    "Prompt-real/private runs must remain outside committed reports unless sanitized."
+  ],
+  "recommended_next_milestone": "1G-B2-F3-B4-R - Deterministic Phase B source audit"
+}
