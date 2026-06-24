@@ -1,0 +1,75 @@
+{
+  "milestone": "1G-B2-F3-A3 - RouterPolicy local-route smoke integration",
+  "start_head": "d28a3c8aa520033b1e2639db880cb2894ce9502a",
+  "final_head": "reported in final handoff after commit",
+  "files_changed": [
+    "README.md",
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md",
+    "docs/ROUTER_POLICY_DESIGN.md",
+    "reports/router_policy/1G-B2-F3-A3/router_policy_local_route_smoke_summary.json",
+    "reports/router_policy/1G-B2-F3-A3/router_policy_local_route_smoke_summary.md",
+    "scripts/router_policy_local_route_probe.py",
+    "tests/test_router_policy_local_route_probe.py"
+  ],
+  "tests_run": [
+    "python -m unittest tests.test_router_policy_local_route_probe",
+    "python -m unittest tests.test_router_policy_decision_probe",
+    "python -m unittest tests.test_router_policy_semantic_validator",
+    "python -m unittest discover -s tests",
+    "git diff --check",
+    "git status --short",
+    "rg -n \"requests|httpx|openai|anthropic|ollama|subprocess|Popen|os\\\\.system|socket|selenium|playwright|mcp|memory_write|write_text|open\\\\(\" scripts tests docs schemas reports README.md",
+    "rg -n \"requests|httpx|openai|anthropic|ollama|subprocess|Popen|os\\\\.system|socket|selenium|playwright|mcp|memory_write|write_text|open\\\\(\" scripts/router_policy_local_route_probe.py tests/test_router_policy_local_route_probe.py"
+  ],
+  "local_route_smoke_behavior": {
+    "decision_producer": "decide_router_policy(input_obj)",
+    "semantic_validator": "validate_router_decision_semantics(input_obj, decision)",
+    "execution_path": "injected responder only",
+    "responder_contract": "Callable[[str], str]",
+    "default_responder_none_behavior": "local_responder_missing",
+    "message_source": "input_obj.message_text only"
+  },
+  "safe_local_guard": {
+    "allowed_route_actions": [
+      "answer_local",
+      "route_local"
+    ],
+    "route_tier": "LOCAL_FAST",
+    "provider_candidate": [
+      "local:gemma",
+      "local:qwen"
+    ],
+    "requires_response_allowed_now": true,
+    "requires_external_allowed_false": true,
+    "requires_provider_call_allowed_now_false": true,
+    "requires_external_network_allowed_now_false": true,
+    "requires_tool_execution_allowed_now_false": true,
+    "requires_state_change_allowed_now_false": true,
+    "requires_allowed_execution_mode": "answer_only",
+    "requires_modifies_state_false": true,
+    "requires_side_effect_level": "none",
+    "requires_environment_type": "chat"
+  },
+  "local_responder_mode": {
+    "unit_tests": "injected fake responder",
+    "library_default": "offline-safe",
+    "real_local_responder": "blocked pending approved local adapter",
+    "run_local_flag": "CLI accepts --run-local but does not invent an adapter"
+  },
+  "runtime_boundary": {
+    "external_calls_made": false,
+    "provider_api_calls_made": false,
+    "tool_browser_terminal_mcp_execution_added": false,
+    "memory_retrieval_file_writes_added": false,
+    "backend_routes_added": false,
+    "frontend_ui_added": false,
+    "database_migrations_added": false,
+    "bluerev_modeling_added": false
+  },
+  "known_residual_risks": [
+    "A3 does not approve broad runtime RouterPolicy routing.",
+    "A3 does not auto-execute LOCAL_ONLY sensitive local decisions.",
+    "A3 does not include a real local model adapter.",
+    "Responder metadata and richer response contracts are deferred."
+  ]
+}

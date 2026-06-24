@@ -44,6 +44,40 @@ smoke writer or any runtime report-generation path.
 A2-R1 adds the contract invariant that `external_allowed=true` requires
 `route_action=route_external_candidate`.
 
+## 1G-B2-F3-A3 local-route smoke integration
+
+`1G-B2-F3-A3` adds the first minimal usable local-route smoke path:
+
+```text
+normalized input
+-> decide_router_policy(input_obj)
+-> validate_router_decision_semantics(input_obj, decision)
+-> safe-local execution guard
+-> injected local responder
+-> local response
+```
+
+A3 executes only validator-valid safe `LOCAL_FAST` local-answer decisions. The
+execution guard checks permission booleans, not route labels alone. A decision
+must use `route_action in {answer_local, route_local}`,
+`route_tier=LOCAL_FAST`, a local provider candidate, `response_allowed_now=true`,
+`allowed_execution_mode=answer_only`, no side effects, chat environment, and all
+provider/network/tool/state permissions false.
+
+A3 intentionally does not execute `LOCAL_ONLY`, `USER_CONFIRM`, `BLOCKED`,
+`ask_clarification`, `ask_user_confirm`, external proposal decisions, or
+`allowed_execution_mode=propose_only`. Sensitive local-only answering remains
+future work.
+
+The library path is offline-safe by default. If `responder=None`, A3 returns
+`local_responder_missing` and calls no model. Tests use an injected fake
+responder. Real local model execution is not implemented in A3 and remains
+blocked pending an approved explicit local adapter.
+
+A3 does not call external providers, execute tools/browser/terminal/MCP, write
+memory/retrieval/file state, add backend routes, add frontend UI, add database
+schema, or add BlueRev modeling behavior.
+
 ## 1G-B2-F3-A1 boundary
 
 This document is part of the RouterPolicy contract layer only. It does not add

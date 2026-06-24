@@ -158,15 +158,21 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F3-A2-R - RouterPolicy deterministic decision probe audit
+1G-B2-F3-A3-R - RouterPolicy local-route smoke integration audit
 ```
 
-`1G-B2-F3-A2-R1` repairs external proposal consistency in the deterministic
-RouterPolicy producer. Proposal-only external escalation now uses
-`proposed_external_target`, keeps `external_allowed=false`, and does not set an
-external `provider_candidate`. It is not runtime chat routing and does not call
-providers or execute tools/browser/terminal/MCP.
+`1G-B2-F3-A3` adds a local-route smoke integration. It runs normalized
+RouterPolicy input through the deterministic producer and semantic validator,
+then executes only validator-valid safe `LOCAL_FAST` local-answer decisions
+through an injected responder. The guard checks permission booleans, not just
+route labels.
 
-Passing F3-A2-R1 does not approve runtime router-policy use.
+The A3 library default is offline-safe: `responder=None` does not call any
+model. Tests use an injected fake responder. A3 does not execute `LOCAL_ONLY`,
+`USER_CONFIRM`, `BLOCKED`, `ask_clarification`, `ask_user_confirm`,
+`allowed_execution_mode=propose_only`, or external proposal decisions. It does
+not call external providers, execute tools/browser/terminal/MCP, or write
+memory/retrieval/file state. Real local model execution remains blocked pending
+an approved explicit local adapter.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

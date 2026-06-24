@@ -1373,3 +1373,50 @@ Observed contract result:
 A2-R1 does not add runtime chat routing, provider calls, model calls,
 tool/browser/terminal/MCP execution, memory writes, retrieval, file-write
 runtime, backend routes, frontend UI, database migrations, or BlueRev modeling.
+
+### 1G-B2-F3-A3 - RouterPolicy Local-Route Smoke Integration
+
+1G-B2-F3-A3 adds the first minimal local-route smoke path:
+
+```text
+normalized input
+-> deterministic RouterPolicy decision
+-> semantic validation
+-> safe-local execution guard
+-> injected local responder
+```
+
+A3 executes only validator-valid safe `LOCAL_FAST` local-answer decisions. The
+guard checks permission booleans, not just `route_action` or `route_tier`.
+
+No-execution branches include:
+
+- semantic-validator failures;
+- missing responder;
+- missing `message_text`;
+- `LOCAL_ONLY`;
+- `USER_CONFIRM`;
+- `BLOCKED`;
+- `ask_clarification`;
+- `ask_user_confirm`;
+- external proposal decisions;
+- `allowed_execution_mode=propose_only`;
+- any unsafe provider, network, tool, or state permission boolean.
+
+Observed contract result:
+
+- local-route smoke test module: `11/11`;
+- producer test module: `14/14`;
+- semantic-validator test module: `40/40`;
+- full unittest suite: `218/218`;
+- tests use injected fake responder: `true`;
+- library default with `responder=None` calls a model: `false`;
+- external provider calls: `false`;
+- local Ollama calls: `false`;
+- tool/browser/terminal/MCP execution added: `false`;
+- memory/retrieval/file writes added: `false`;
+- report: `reports/router_policy/1G-B2-F3-A3/`.
+
+A3 does not add backend routes, frontend UI, database migrations, external
+provider calls, model calls, tool/browser/terminal/MCP execution, memory writes,
+retrieval, file-write runtime, or BlueRev modeling.
