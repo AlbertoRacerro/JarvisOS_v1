@@ -1,0 +1,89 @@
+{
+  "milestone": "1G-B2-F3-B3",
+  "title": "Default Phase B hints in message route smoke",
+  "start_head": "6a39a42d6d990cc4534b8fe47ab4af5ce3f81baa",
+  "files_changed": [
+    "README.md",
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md",
+    "docs/ROUTER_POLICY_DESIGN.md",
+    "reports/router_policy/1G-B2-F3-B3/router_policy_message_route_phase_b_default_summary.json",
+    "reports/router_policy/1G-B2-F3-B3/router_policy_message_route_phase_b_default_summary.md",
+    "scripts/router_policy_message_route_smoke.py",
+    "tests/test_router_policy_message_route_smoke.py"
+  ],
+  "default_behavior_changed": {
+    "library_default_use_phase_b_hints": true,
+    "cli_default_use_phase_b_hints": true,
+    "changed_only_default": true
+  },
+  "flags": {
+    "opt_out_flag": "--no-phase-b-hints",
+    "backward_compatible_alias": "--use-phase-b-hints",
+    "conflict_rejected_by_argparse": true,
+    "stdout_warning_added": false
+  },
+  "integration_order_preserved": [
+    "A5 builder completes policy overlay, operational overlay, hard gate check, and assume_public_simple safe path",
+    "B1 hint bridge applies if use_phase_b_hints is true",
+    "A5 structural validation",
+    "RouterPolicy decision",
+    "semantic validator",
+    "A3 safe-local guard",
+    "local responder only if safe"
+  ],
+  "anti_double_application_result": {
+    "default_cli_call_count": 1,
+    "explicit_alias_cli_call_count": 1,
+    "explicit_opt_out_cli_call_count": 0
+  },
+  "safety_invariants": {
+    "assume_public_simple_still_required": true,
+    "run_local_still_required_for_real_responder": true,
+    "run_local_alone_executes": false,
+    "hard_gate_dominance_preserved": true,
+    "operational_gate_dominance_preserved": true,
+    "source_current_info_conservative": true,
+    "scientific_depth_guard_preserved": true,
+    "b1_failure_fail_closed": true,
+    "b1_failure_reason": "phase_b_hint_bridge_failed",
+    "cli_output_safe_json": true
+  },
+  "tests_run": [
+    "python -m unittest tests.test_router_policy_message_route_smoke",
+    "python -m unittest tests.test_router_policy_hint_bridge_probe",
+    "python -m unittest tests.test_router_policy_local_responder",
+    "python -m unittest tests.test_router_policy_local_route_probe",
+    "python -m unittest tests.test_router_policy_decision_probe",
+    "python -m unittest tests.test_router_policy_semantic_validator",
+    "python -m unittest discover -s tests",
+    "git diff --check",
+    "focused runtime grep"
+  ],
+  "runtime_boundary_check": {
+    "real_model_calls_during_tests": false,
+    "external_provider_runtime_added": false,
+    "tool_runtime_added": false,
+    "browser_runtime_added": false,
+    "terminal_runtime_added": false,
+    "mcp_runtime_added": false,
+    "memory_runtime_added": false,
+    "retrieval_runtime_added": false,
+    "file_write_runtime_added": false,
+    "backend_routes_added": false,
+    "frontend_ui_added": false,
+    "db_schema_added": false,
+    "workers_or_hooks_added": false,
+    "bluerev_behavior_added": false
+  },
+  "known_residual_risks": [
+    "Phase B hints are default-on in smoke only.",
+    "Phase B hints are advisory and non-authoritative.",
+    "A5 remains smoke-only and not a production Phase A/B normalizer.",
+    "--assume-public-simple is still required for benign local execution.",
+    "--run-local is still required for real local responder construction.",
+    "The A5 Phase B stub remains a smoke placeholder, not live Qwen/Phase B semantic output.",
+    "B3 does not approve live Qwen/Gemma/Ollama classification.",
+    "B3 does not approve production chat or removal of --assume-public-simple."
+  ],
+  "recommended_next_milestone": "1G-B2-F3-B3-R - Default Phase B Hint Bridge Audit"
+}

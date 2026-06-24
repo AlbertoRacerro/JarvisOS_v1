@@ -158,11 +158,11 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F3-B2-R - Message Route Phase B Hint Bridge Audit
+1G-B2-F3-B3-R - Default Phase B Hint Bridge Audit
 ```
 
-`1G-B2-F3-B2` wires the existing offline B1 Phase B RouterHint bridge into the
-A5 real-message smoke path behind explicit `--use-phase-b-hints`.
+`1G-B2-F3-B3` makes the existing offline B1 Phase B RouterHint bridge default-on
+in the A5 real-message smoke path.
 
 The integration order is:
 
@@ -176,25 +176,31 @@ message
 -> local responder only if safe
 ```
 
-B2 also completes the A5 smoke default `phase_b_soft_proposal` stub with the
-full B1-compatible benign field set. `--use-phase-b-hints` alone does not make
-messages executable. Benign local answer smoke still requires
-`--assume-public-simple` and `--run-local`.
+B3 changes only the default advisory plumbing. `--use-phase-b-hints` remains a
+backward-compatible alias for default-on behavior, and `--no-phase-b-hints`
+disables Phase B hints for baseline/debug smoke comparisons.
+
+Default Phase B hints do not make messages executable. Benign local answer
+smoke still requires `--assume-public-simple`, and real local responder
+construction still requires `--run-local`. The A5 Phase B stub remains a smoke
+placeholder, not live Qwen/Gemma/Ollama classification or a production Phase
+A/B normalizer.
 
 Manual local smoke, optional and local-only:
 
 ```powershell
-python scripts\router_policy_message_route_smoke.py --message "Explain what a pump is" --assume-public-simple --use-phase-b-hints --run-local
+python scripts\router_policy_message_route_smoke.py --message "Explain what a pump is" --assume-public-simple --run-local
 ```
 
-B2 does not weaken B1 quality checks or A5/A3 authority. Phase A and
-operational gates remain fail-closed. B1 hints cannot authorize execution,
-provider calls, tools, memory writes, retrieval, route selection, or external
-network access, and can make a route more conservative.
+B3 does not weaken B1 quality checks or A5/A3 authority. Phase A hard gates and
+A5-R1 operational-intent gates dominate Phase B hints. A3 safe-local guard
+remains final authority before a local responder receives only
+`input_obj["message_text"]`.
 
-B2 does not add production chat, external providers, non-localhost network
+B3 does not add production chat, external providers, non-localhost network
 calls, tools, browser/terminal/MCP execution, memory, retrieval, file-write
 runtime, backend routes, frontend UI, database migrations, live Qwen/Gemma/
-Ollama classification, or BlueRev modeling.
+Ollama classification, or BlueRev modeling. B3 does not remove
+`--assume-public-simple`.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

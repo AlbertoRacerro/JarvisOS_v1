@@ -305,6 +305,41 @@ B2 does not add production chat, live Qwen/Gemma/Ollama classification, backend
 routes, frontend UI, database schema, workers, hooks, MCP execution, memory
 runtime, retrieval runtime, provider routing, file writes, or BlueRev modeling.
 
+### 1G-B2-F3-B3 Default Phase B Hints
+
+`1G-B2-F3-B3` makes B1 Phase B RouterHint bridge application default-on in the
+A5 real-message smoke path. The integration point remains unchanged from B2:
+B1 runs after the A5 builder, Phase A overlay, and A5-R1 operational gates have
+finished the smoke input shape, and before structural validation, RouterPolicy
+decision production, semantic validation, and the A3 safe-local guard.
+
+CLI behavior:
+
+- default: Phase B hints enabled;
+- `--use-phase-b-hints`: retained as a backward-compatible alias for enabled;
+- `--no-phase-b-hints`: explicit opt-out for baseline/debug smoke comparisons;
+- `--use-phase-b-hints` with `--no-phase-b-hints`: rejected by argparse.
+
+B3 changes only advisory hint plumbing. `--assume-public-simple` remains a
+separate manual safety assertion and is still required for benign local
+execution. `--run-local` remains required for real local responder
+construction. `--run-local` alone does not execute.
+
+Phase B hints remain advisory and non-authoritative. They can enrich a safe
+RouterPolicy hint or make a route more conservative, but cannot authorize
+execution, provider calls, tools, memory writes, retrieval, route selection, or
+external network access. Hard-gate and operational-intent signals dominate
+Phase B hints, and the A3 safe-local guard remains final authority before local
+responder execution.
+
+B3 is not production chat, not live Qwen/Gemma/Ollama classification, not a
+production Phase A/B normalizer, and not approval to remove
+`--assume-public-simple`. The A5 Phase B stub remains a smoke placeholder.
+
+B3 does not add backend routes, frontend UI, database schema, workers, hooks,
+MCP execution, memory runtime, retrieval runtime, provider routing, file writes,
+terminal/browser execution, or BlueRev modeling.
+
 ## 1G-B2-F3-A1 boundary
 
 This document is part of the RouterPolicy contract layer only. It does not add

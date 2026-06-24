@@ -654,7 +654,7 @@ def run_message_route_smoke(
     now: str | None = None,
     input_builder=None,
     assume_public_simple: bool = False,
-    use_phase_b_hints: bool = False,
+    use_phase_b_hints: bool = True,
 ) -> dict:
     if not _valid_message(message_text):
         return {
@@ -769,7 +769,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="RouterPolicy A5 message-route smoke bridge.")
     parser.add_argument("--message", required=True)
     parser.add_argument("--assume-public-simple", action="store_true")
-    parser.add_argument("--use-phase-b-hints", action="store_true")
+    parser.set_defaults(use_phase_b_hints=True)
+    phase_b_group = parser.add_mutually_exclusive_group()
+    phase_b_group.add_argument(
+        "--use-phase-b-hints",
+        dest="use_phase_b_hints",
+        action="store_true",
+        help="Enable Phase B RouterHint bridge; default in B3.",
+    )
+    phase_b_group.add_argument(
+        "--no-phase-b-hints",
+        dest="use_phase_b_hints",
+        action="store_false",
+        help="Disable Phase B RouterHint bridge for baseline/debug smoke comparisons.",
+    )
     parser.add_argument("--run-local", action="store_true")
     parser.add_argument("--model", default="gemma3:4b")
     parser.add_argument("--endpoint", default="http://127.0.0.1:11434/api/generate")

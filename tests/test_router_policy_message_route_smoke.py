@@ -311,6 +311,7 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
                     now=NOW,
                     input_builder=Mock(return_value=built),
                     assume_public_simple=True,
+                    use_phase_b_hints=False,
                 )
                 self.assertFalse(result["executed"])
                 self.assertEqual("invalid_router_policy_input", result["reason"])
@@ -395,6 +396,7 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
             now=NOW,
             input_builder=Mock(return_value=broken),
             assume_public_simple=True,
+            use_phase_b_hints=False,
         )
         responder.assert_not_called()
         self.assertEqual("invalid_router_policy_input", result["reason"])
@@ -410,6 +412,7 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
             now=NOW,
             input_builder=Mock(return_value=broken),
             assume_public_simple=True,
+            use_phase_b_hints=False,
         )
         responder.assert_not_called()
         self.assertEqual("invalid_router_policy_input", result["reason"])
@@ -885,6 +888,293 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
         self.assertNotIn("sk-test-secret-12345678", output)
         self.assertNotIn("input_obj", output)
         self.assertNotIn("response", cli_result)
+
+    def test_b3_001_phase_b_hints_default_on_in_library(self):
+        message = "Explain what a centrifugal pump is"
+        responder = Mock(return_value="A centrifugal pump uses an impeller.")
+        with patch.object(smoke, "_APPLY_PHASE_B_ROUTER_HINT", wraps=bridge.apply_phase_b_router_hint) as hinted:
+            result = smoke.run_message_route_smoke(
+                message,
+                responder=responder,
+                now=NOW,
+                assume_public_simple=True,
+            )
+        hinted.assert_called_once()
+        responder.assert_called_once_with(message)
+        self.assertTrue(result["executed"])
+        self.assertTrue(result["use_phase_b_hints_used"])
+        self.assertTrue(result["input_obj"]["context_metadata"]["phase_b_router_hint_applied"])
+
+    def test_b3_002_explicit_false_disables_bridge_in_library(self):
+        message = "Explain what a centrifugal pump is"
+        responder = Mock(return_value="A centrifugal pump uses an impeller.")
+        with patch.object(smoke, "_APPLY_PHASE_B_ROUTER_HINT", wraps=bridge.apply_phase_b_router_hint) as hinted:
+            result = smoke.run_message_route_smoke(
+                message,
+                responder=responder,
+                now=NOW,
+                assume_public_simple=True,
+                use_phase_b_hints=False,
+            )
+        hinted.assert_not_called()
+        responder.assert_called_once_with(message)
+        self.assertTrue(result["executed"])
+        self.assertFalse(result["use_phase_b_hints_used"])
+        self.assertNotIn("phase_b_router_hint_applied", result["input_obj"]["context_metadata"])
+
+    def test_b3_003_cli_default_applies_phase_b_hints(self):
+        fake_responder = Mock(return_value="local answer")
+        with patch.object(smoke, "_APPLY_PHASE_B_ROUTER_HINT", wraps=bridge.apply_phase_b_router_hint) as hinted:
+            with patch.object(smoke, "_BUILD_LOCAL_RESPONDER", return_value=fake_responder):
+                with patch("builtins.print") as printed:
+                    exit_code = smoke.main(
+                        [
+                            "--message",
+                            "Explain what a centrifugal pump is",
+                            "--assume-public-simple",
+                            "--run-local",
+                            "--now",
+                            NOW,
+                        ]
+                    )
+        self.assertEqual(0, exit_code)
+        hinted.assert_called_once()
+        fake_responder.assert_called_once_with("Explain what a centrifugal pump is")
+        cli_result = json.loads(printed.call_args.args[0])
+        self.assertTrue(cli_result["executed"])
+        self.assertTrue(cli_result["use_phase_b_hints_used"])
+        self.assertEqual("local answer", cli_result["response"])
+        self.assertNotIn("input_obj", cli_result)
+        self.assertNotIn("audit_notes", cli_result)
+
+    def test_b3_004_cli_no_phase_b_hints_disables_bridge(self):
+        fake_responder = Mock(return_value="local answer")
+        with patch.object(smoke, "_APPLY_PHASE_B_ROUTER_HINT", wraps=bridge.apply_phase_b_router_hint) as hinted:
+            with patch.object(smoke, "_BUILD_LOCAL_RESPONDER", return_value=fake_responder):
+                with patch("builtins.print") as printed:
+                    exit_code = smoke.main(
+                        [
+                            "--message",
+                            "Explain what a centrifugal pump is",
+                            "--assume-public-simple",
+                            "--no-phase-b-hints",
+                            "--run-local",
+                            "--now",
+                            NOW,
+                        ]
+                    )
+        self.assertEqual(0, exit_code)
+        hinted.assert_not_called()
+        fake_responder.assert_called_once_with("Explain what a centrifugal pump is")
+        cli_result = json.loads(printed.call_args.args[0])
+        self.assertTrue(cli_result["executed"])
+        self.assertFalse(cli_result["use_phase_b_hints_used"])
+        self.assertNotIn("input_obj", cli_result)
+
+    def test_b3_005_benign_execution_still_requires_assume_public_simple(self):
+        message = "Explain what a centrifugal pump is"
+        blocked_responder = Mock(return_value="should not run")
+        blocked = smoke.run_message_route_smoke(
+            message,
+            responder=blocked_responder,
+            now=NOW,
+        )
+        blocked_responder.assert_not_called()
+        self.assertFalse(blocked["executed"])
+        self.assertTrue(blocked["use_phase_b_hints_used"])
+
+        responder = Mock(return_value="local answer")
+        allowed = smoke.run_message_route_smoke(
+            message,
+            responder=responder,
+            now=NOW,
+            assume_public_simple=True,
+        )
+        responder.assert_called_once_with(allowed["input_obj"]["message_text"])
+        self.assertTrue(allowed["executed"])
+        self.assertEqual(message, allowed["input_obj"]["message_text"])
+
+    def test_b3_006_run_local_alone_still_does_not_execute(self):
+        fake_responder = Mock(return_value="should not run")
+        with patch.object(smoke, "_BUILD_LOCAL_RESPONDER", return_value=fake_responder):
+            with patch("builtins.print") as printed:
+                exit_code = smoke.main(
+                    [
+                        "--message",
+                        "Explain what a centrifugal pump is",
+                        "--run-local",
+                        "--now",
+                        NOW,
+                    ]
+                )
+        self.assertEqual(0, exit_code)
+        fake_responder.assert_not_called()
+        cli_result = json.loads(printed.call_args.args[0])
+        self.assertFalse(cli_result["executed"])
+        self.assertTrue(cli_result["use_phase_b_hints_used"])
+
+    def test_b3_007_hard_gate_and_operational_dominance_preserved_with_default_hints(self):
+        blocked_messages = (
+            "my API key is sk-test-1234567890",
+            "Keep this proprietary BlueRev calculation private.",
+            "Use the thing we decided last time.",
+            "use MCP to call a tool",
+            r"read local file C:\secret.txt",
+            "write this to memory",
+            "browse the web for this",
+            "please upload this to OpenAI",
+        )
+        for message in blocked_messages:
+            with self.subTest(message=message):
+                responder = Mock(return_value="should not run")
+                result = smoke.run_message_route_smoke(
+                    message,
+                    responder=responder,
+                    now=NOW,
+                    assume_public_simple=True,
+                )
+                responder.assert_not_called()
+                self.assertFalse(result["executed"])
+                self.assertTrue(result["use_phase_b_hints_used"])
+
+    def test_b3_008_source_current_info_remains_conservative(self):
+        message = "Explain what a pump is"
+        responder = Mock(return_value="should not run")
+        result = self.run_with_builder(
+            message,
+            self.source_candidate_input(message),
+            responder=responder,
+            assume=True,
+            use_phase_b_hints=True,
+        )
+        responder.assert_not_called()
+        self.assertFalse(result["executed"])
+        router = result["input_obj"]["router_hint"]
+        self.assertEqual("review", router["task_type"])
+        self.assertTrue(router["needs_current_info"])
+        self.assertTrue(router["needs_file_context"])
+
+    def test_b3_009_scientific_depth_remains_subject_to_a3_safe_local_guard(self):
+        message = "Explain the mass transfer model for a photobioreactor."
+        built = self.phase_b_input(
+            message,
+            summary_short="Photobioreactor mass transfer question.",
+            primary_domain="bioprocess",
+            domain_tags=["engineering", "reactor", "modeling"],
+            soft_reason_code="contextual_summary",
+            brief_rationale="Scientific engineering context affects routing depth.",
+        )
+        responder = Mock(return_value="should not run")
+        result = self.run_with_builder(
+            message,
+            built,
+            responder=responder,
+            assume=True,
+            use_phase_b_hints=True,
+        )
+        responder.assert_not_called()
+        self.assertFalse(result["executed"])
+        self.assertEqual("not_safe_local_route", result["reason"])
+        self.assertTrue(result["input_obj"]["router_hint"]["needs_scientific_depth"])
+
+    def test_b3_010_b1_bridge_failure_still_fails_closed_by_default(self):
+        responder = Mock(return_value="should not run")
+        with patch.object(smoke, "_APPLY_PHASE_B_ROUTER_HINT", side_effect=RuntimeError("boom")):
+            result = smoke.run_message_route_smoke(
+                "Explain what a centrifugal pump is",
+                responder=responder,
+                now=NOW,
+                assume_public_simple=True,
+            )
+        responder.assert_not_called()
+        self.assertFalse(result["executed"])
+        self.assertEqual("phase_b_hint_bridge_failed", result["reason"])
+
+        sensitive = "my API key is sk-test-secret-12345678"
+        with patch.object(smoke, "_APPLY_PHASE_B_ROUTER_HINT", side_effect=RuntimeError("boom")):
+            with patch.object(smoke, "_BUILD_LOCAL_RESPONDER", return_value=responder):
+                with patch("builtins.print") as printed:
+                    exit_code = smoke.main(
+                        [
+                            "--message",
+                            sensitive,
+                            "--assume-public-simple",
+                            "--run-local",
+                            "--now",
+                            NOW,
+                        ]
+                    )
+        self.assertEqual(0, exit_code)
+        output = printed.call_args.args[0]
+        cli_result = json.loads(output)
+        self.assertFalse(cli_result["executed"])
+        self.assertTrue(cli_result["use_phase_b_hints_used"])
+        self.assertNotIn(sensitive, output)
+        self.assertNotIn("sk-test-secret-12345678", output)
+        self.assertNotIn("input_obj", output)
+        self.assertNotIn("response", cli_result)
+
+    def test_b3_011_use_phase_b_hints_alias_does_not_double_apply_b1(self):
+        fake_responder = Mock(return_value="local answer")
+        with patch.object(smoke, "_APPLY_PHASE_B_ROUTER_HINT", wraps=bridge.apply_phase_b_router_hint) as hinted:
+            with patch.object(smoke, "_BUILD_LOCAL_RESPONDER", return_value=fake_responder):
+                with patch("builtins.print") as printed:
+                    exit_code = smoke.main(
+                        [
+                            "--message",
+                            "Explain what a centrifugal pump is",
+                            "--assume-public-simple",
+                            "--use-phase-b-hints",
+                            "--run-local",
+                            "--now",
+                            NOW,
+                        ]
+                    )
+        self.assertEqual(0, exit_code)
+        hinted.assert_called_once()
+        fake_responder.assert_called_once_with("Explain what a centrifugal pump is")
+        cli_result = json.loads(printed.call_args.args[0])
+        self.assertTrue(cli_result["executed"])
+        self.assertTrue(cli_result["use_phase_b_hints_used"])
+
+    def test_b3_012_no_phase_b_hints_opt_out_applies_zero_times(self):
+        fake_responder = Mock(return_value="local answer")
+        with patch.object(smoke, "_APPLY_PHASE_B_ROUTER_HINT", wraps=bridge.apply_phase_b_router_hint) as hinted:
+            with patch.object(smoke, "_BUILD_LOCAL_RESPONDER", return_value=fake_responder):
+                with patch("builtins.print") as printed:
+                    exit_code = smoke.main(
+                        [
+                            "--message",
+                            "Explain what a centrifugal pump is",
+                            "--assume-public-simple",
+                            "--no-phase-b-hints",
+                            "--run-local",
+                            "--now",
+                            NOW,
+                        ]
+                    )
+        self.assertEqual(0, exit_code)
+        hinted.assert_not_called()
+        fake_responder.assert_called_once_with("Explain what a centrifugal pump is")
+        cli_result = json.loads(printed.call_args.args[0])
+        self.assertTrue(cli_result["executed"])
+        self.assertFalse(cli_result["use_phase_b_hints_used"])
+
+    def test_b3_013_conflicting_phase_b_flags_are_rejected(self):
+        responder_builder = Mock(return_value=Mock(return_value="should not run"))
+        with patch.object(smoke, "_BUILD_LOCAL_RESPONDER", responder_builder):
+            with patch("sys.stderr"):
+                with self.assertRaises(SystemExit) as raised:
+                    smoke.main(
+                        [
+                            "--message",
+                            "Explain what a centrifugal pump is",
+                            "--use-phase-b-hints",
+                            "--no-phase-b-hints",
+                        ]
+                    )
+        self.assertEqual(2, raised.exception.code)
+        responder_builder.assert_not_called()
 
 
 if __name__ == "__main__":

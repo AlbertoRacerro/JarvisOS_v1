@@ -1660,3 +1660,38 @@ Report:
 B2 does not call Qwen, Gemma, Ollama, providers, tools, MCP, browser, terminal,
 memory, retrieval, backend routes, frontend UI, DB migrations, workers, hooks,
 or BlueRev modeling.
+
+### 1G-B2-F3-B3 - Default Phase B Hints In Message Route Smoke
+
+1G-B2-F3-B3 makes the existing offline B1 Phase B RouterHint bridge default-on
+in the A5 real-message smoke path.
+
+Observed B3 behavior:
+
+- library default is `use_phase_b_hints=True`;
+- `use_phase_b_hints=False` remains available for baseline/debug comparison;
+- CLI default enables Phase B hints;
+- `--use-phase-b-hints` remains a backward-compatible alias;
+- `--no-phase-b-hints` disables Phase B hints;
+- argparse rejects `--use-phase-b-hints` with `--no-phase-b-hints`;
+- B1 is called exactly once on default-on and explicit alias paths;
+- B1 is called zero times on opt-out paths;
+- `--assume-public-simple` remains required for benign local execution;
+- `--run-local` remains required for real local responder construction;
+- `--run-local` alone does not execute;
+- hard-gate and A5-R1 operational-intent signals dominate default Phase B
+  hints;
+- `source_candidate` / current-info hints remain conservative;
+- scientific-depth hints remain subject to the A3 safe-local guard;
+- B1 bridge failure still fails closed with `phase_b_hint_bridge_failed`;
+- CLI stdout remains safe machine-readable JSON.
+
+Report:
+
+- `reports/router_policy/1G-B2-F3-B3/`.
+
+B3 changes only smoke-path advisory hint plumbing. It does not call Qwen,
+Gemma, Ollama, providers, tools, MCP, browser, terminal, memory, retrieval,
+backend routes, frontend UI, DB migrations, workers, hooks, or BlueRev
+modeling. It is not production chat, not a production Phase A/B normalizer, and
+not approval to remove `--assume-public-simple`.
