@@ -1,0 +1,76 @@
+{
+  "milestone": "1G-B2-F3-A5 - Real message input to local-route smoke",
+  "start_head": "56d7266f34c7faaf452e539425a2c3e4ef2bceff",
+  "implementation_base_head": "56d7266f34c7faaf452e539425a2c3e4ef2bceff",
+  "working_tree_status_before_commit": "clean before implementation",
+  "files_changed": [
+    "README.md",
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md",
+    "docs/ROUTER_POLICY_DESIGN.md",
+    "reports/router_policy/1G-B2-F3-A5/router_policy_message_route_smoke_summary.json",
+    "reports/router_policy/1G-B2-F3-A5/router_policy_message_route_smoke_summary.md",
+    "scripts/router_policy_message_route_smoke.py",
+    "tests/test_router_policy_message_route_smoke.py"
+  ],
+  "docs_sections_changed": [
+    "README.md Current Next Milestone",
+    "docs/ROUTER_POLICY_DESIGN.md 1G-B2-F3-A5 real-message local-route smoke bridge",
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md 1G-B2-F3-A5 - Real Message Input To Local-Route Smoke"
+  ],
+  "tests_run": [
+    "python -m unittest tests.test_router_policy_message_route_smoke",
+    "python -m unittest tests.test_router_policy_local_responder",
+    "python -m unittest tests.test_router_policy_local_route_probe",
+    "python -m unittest tests.test_router_policy_decision_probe",
+    "python -m unittest tests.test_router_policy_semantic_validator",
+    "python -m unittest discover -s tests",
+    "git diff --check",
+    "git status --short",
+    "rg -n \"openai|anthropic|gemini|grok|httpx|requests|subprocess|Popen|os\\\\.system|selenium|playwright|mcp|memory_write|write_text|open\\\\(\" scripts tests docs schemas reports README.md",
+    "rg -n \"openai|anthropic|gemini|grok|httpx|requests|subprocess|Popen|os\\\\.system|selenium|playwright|mcp|memory_write|write_text\" scripts/router_policy_message_route_smoke.py tests/test_router_policy_message_route_smoke.py"
+  ],
+  "message_input_path": "message_text -> smoke-only RouterPolicyInput -> run_local_route -> injected responder only after A3 guard",
+  "normalizer_phase_ab_reuse_status": "No complete production message-to-RouterPolicy-input normalizer found.",
+  "complete_production_normalizer_found": false,
+  "smoke_only_fallback_status": "Used and documented; not production Phase A/B normalization.",
+  "assume_public_simple_gating": {
+    "arbitrary_message_default_executes": false,
+    "run_local_alone_executes": false,
+    "safe_cli_execution_requires_assume_public_simple_and_run_local": true,
+    "assume_public_simple_used_in_result": true
+  },
+  "hard_gate_dominance_over_assume_public_simple": true,
+  "router_policy_input_structural_validation_status": "schema validation unavailable; structural checks only",
+  "cli_output_redaction_status": {
+    "prints_full_input_obj": false,
+    "prints_raw_message_on_no_execution": false,
+    "prints_full_decision_json": false,
+    "prints_response_when_executed_false": false,
+    "bounds_response_when_executed_true": true
+  },
+  "cli_mode": {
+    "default_offline_safe": true,
+    "run_local_requires_explicit_flag": true,
+    "fallback_safe_execution_requires_assume_public_simple": true
+  },
+  "offline_test_strategy": "fake builders/responders only; no real Ollama/Gemma required",
+  "runtime_boundary": {
+    "real_local_calls_made_during_tests": false,
+    "external_calls_made": false,
+    "provider_api_calls_made": false,
+    "non_localhost_network_calls_added": false,
+    "tool_browser_terminal_mcp_execution_added": false,
+    "memory_retrieval_file_writes_added": false,
+    "backend_routes_added": false,
+    "frontend_ui_added": false,
+    "database_migrations_added": false,
+    "bluerev_modeling_added": false
+  },
+  "known_residual_risks": [
+    "A5 is not production Phase A/B normalization.",
+    "No complete production message normalizer was found.",
+    "RouterPolicy input validation is structural only, not full Draft 2020-12 schema validation.",
+    "Smoke hard-gate detection is conservative and not a general classifier.",
+    "Manual smoke depends on Ollama running and the selected model already being pulled."
+  ]
+}

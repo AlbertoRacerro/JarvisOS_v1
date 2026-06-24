@@ -1475,3 +1475,61 @@ python scripts\router_policy_local_route_probe.py --fixture tests\fixtures\route
 A4 does not add backend routes, frontend UI, database migrations, external
 provider routing, non-localhost network calls, tool/browser/terminal/MCP
 execution, memory writes, retrieval, file-write runtime, or BlueRev modeling.
+
+### 1G-B2-F3-A5 - Real Message Input To Local-Route Smoke
+
+1G-B2-F3-A5 adds a controlled real-message smoke bridge:
+
+```text
+real message text
+-> RouterPolicyInput v0_3_1_1
+-> run_local_route(...)
+-> injected/local responder only if A3 safe-local guard passes
+```
+
+Normalizer/Phase A-B reuse status:
+
+- complete production message normalizer found: `false`;
+- smoke-only fallback builder used: `true`;
+- schema validation unavailable; structural checks only.
+
+Fallback behavior:
+
+- arbitrary CLI `--message` input defaults to no-execution;
+- `--run-local` alone does not make fallback input executable;
+- safe fallback CLI execution requires `--assume-public-simple --run-local`;
+- `assume_public_simple` does not override deterministic hard-gate safety
+  signals;
+- original message is populated only as `input_obj["message_text"]`;
+- responder prompt equals exactly the original message string.
+
+Observed contract result:
+
+- message-route smoke test module: `21/21`;
+- local responder test module: `13/13`;
+- local-route smoke test module: `11/11`;
+- producer test module: `14/14`;
+- semantic-validator test module: `40/40`;
+- full unittest suite: `252/252`;
+- real local calls made during tests: `false`;
+- external provider calls: `false`;
+- non-localhost network calls: `false`;
+- tool/browser/terminal/MCP execution added: `false`;
+- memory/retrieval/file writes added: `false`;
+- report: `reports/router_policy/1G-B2-F3-A5/`.
+
+CLI output is redacted by default. It does not print full input objects, raw
+messages, full decision JSON, audit notes, or responses when `executed=false`.
+Executed responses are bounded.
+
+Manual smoke requires Ollama to be running and the selected model to already be
+pulled locally:
+
+```powershell
+python scripts\router_policy_message_route_smoke.py --message "Explain what a pump is" --assume-public-simple --run-local
+```
+
+A5 does not add production Phase A/B normalization, broad routing, backend
+routes, frontend UI, database migrations, external provider routing,
+non-localhost network calls, tool/browser/terminal/MCP execution, memory writes,
+retrieval, file-write runtime, or BlueRev modeling.

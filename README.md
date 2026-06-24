@@ -158,30 +158,35 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F3-A4-R - Approved local responder adapter audit
+1G-B2-F3-A5-R - Real message local-route smoke audit
 ```
 
-`1G-B2-F3-A4` adds the first approved localhost-only Ollama responder adapter
-for the A3 local-route smoke path. The adapter is injectable as
-`Callable[[str], str]`, uses Python standard library HTTP only, rejects
-non-localhost endpoints with URL parsing, bounds prompt/output length, and keeps
-`build_local_responder` side-effect free.
+`1G-B2-F3-A5` adds a real-message-to-local-route smoke bridge. It is not a
+production Phase A/B normalizer. Because no complete production
+message-to-RouterPolicy-input normalizer exists, A5 uses a smoke-only fallback
+builder with structural checks only.
 
-The library default remains offline-safe: `run_local_route(..., responder=None)`
-does not call a model. Real local model execution is available only through
-explicit CLI `--run-local`, only after RouterPolicy decision production,
-semantic validation, and the A3 safe-local guard pass. Unit tests use fake
-clients and do not require Ollama or Gemma. Manual smoke requires Ollama running
-and the selected model already pulled locally.
+In fallback mode, arbitrary `--message` input defaults to no-execution.
+`--run-local` alone does not make arbitrary input executable. Safe CLI local
+execution requires both `--assume-public-simple` and `--run-local`, and
+`assume_public_simple` does not override deterministic hard-gate safety signals.
+A5 populates exactly `input_obj["message_text"]` with the original message
+string; the responder receives only that string.
 
-Manual local smoke, optional:
+Default CLI output is redacted: no full input object, raw message, full decision
+JSON, or response is printed when `executed=false`. Real local model execution
+still goes through explicit `--run-local`, RouterPolicy, the semantic validator,
+the A3 safe-local guard, and the A4 localhost-only adapter.
+
+Manual local smoke, optional and local-only:
 
 ```powershell
-python scripts\router_policy_local_route_probe.py --fixture tests\fixtures\router_policy\base_router_policy_fixture.json --run-local
+python scripts\router_policy_message_route_smoke.py --message "Explain what a pump is" --assume-public-simple --run-local
 ```
 
-A4 does not add external provider routing, tools/browser/terminal/MCP, memory,
-retrieval, backend routes, frontend UI, database migrations, or BlueRev
+A5 does not add external providers, non-localhost network calls, tools,
+browser/terminal/MCP execution, memory, retrieval, file-write runtime, backend
+routes, frontend UI, database migrations, or BlueRev
 modeling.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

@@ -132,6 +132,55 @@ A4 does not add external provider routing, non-localhost network calls,
 tools/browser/terminal/MCP, memory writes, retrieval runtime, file-write
 runtime, backend routes, frontend UI, database schema, or BlueRev modeling.
 
+## 1G-B2-F3-A5 real-message local-route smoke bridge
+
+`1G-B2-F3-A5` adds a controlled real-message smoke bridge:
+
+```text
+message_text
+-> RouterPolicyInput v0_3_1_1
+-> run_local_route(...)
+-> injected/local responder only if all A3/A4 gates pass
+```
+
+A5 is not a production Phase A/B normalizer. No complete production
+message-to-RouterPolicy-input normalizer exists in the current repository, so
+A5 uses a clearly marked smoke-only fallback builder.
+
+Fallback behavior is conservative:
+
+- arbitrary CLI `--message` input defaults to no-execution;
+- `--run-local` alone does not make fallback input executable;
+- safe fallback CLI execution requires both `--assume-public-simple` and
+  `--run-local`;
+- `assume_public_simple` does not override deterministic hard-gate safety
+  signals;
+- detected secret/private/external/tool/memory/retrieval/clarification signals
+  force conservative no-execution input.
+
+A5 populates exactly `input_obj["message_text"]` with the original message
+string. A3 still passes only that string to the injected responder. A5 does not
+send RouterPolicy decision JSON, audit notes, memory, retrieval data, file
+contents, reports, or fixture paths to the model.
+
+A5 includes a private structural validator for the producer-used
+RouterPolicyInput fields. It checks required sections, `message_text` equality,
+critical boolean fields, string enum-like fields, list fields, and budget/router
+types before calling A3. This is not complete Draft 2020-12 validation; schema
+validation is unavailable, structural checks only.
+
+CLI output is redacted by default. It does not print full input objects, raw
+messages, full decision JSON, audit notes, or responses when `executed=false`.
+When `executed=true`, response output is bounded.
+
+`--run-local` still does not bypass RouterPolicy, the semantic validator, the
+A3 safe-local guard, or the A4 localhost-only adapter.
+
+A5 does not add broad routing, production Phase A/B classification, external
+providers, non-localhost network calls, tools/browser/terminal/MCP, memory
+writes, retrieval runtime, file-write runtime, backend routes, frontend UI,
+database schema, or BlueRev modeling.
+
 ## 1G-B2-F3-A1 boundary
 
 This document is part of the RouterPolicy contract layer only. It does not add
