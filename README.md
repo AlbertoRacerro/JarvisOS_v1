@@ -208,4 +208,10 @@ safety-critical builder output is rejected before B1 can normalize it. B1/A5
 must not mutate original malformed inputs in-place, malformed inputs must not
 reach `_RUN_LOCAL_ROUTE`, and malformed inputs must not execute.
 
+The pre/post validation boundary is part of the smoke contract: pre-B1
+validation proves builder output is structurally valid enough for B1, B1 remains
+advisory, and post-B1 validation checks enriched structure before RouterPolicy
+and A3. Future live Phase B output must be adapted and validated before B1; B1
+must not normalize arbitrary raw model output or authorize execution.
+
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

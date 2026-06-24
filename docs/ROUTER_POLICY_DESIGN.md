@@ -346,11 +346,44 @@ terminal/browser execution, or BlueRev modeling.
 message-route smoke wrapper. The A5 builder output is validated before the
 default-on B1 Phase B hint bridge runs, then validated again after B1 returns.
 
+The current smoke path intentionally uses the same private A5 structural
+validator before and after B1. This is acceptable because the A5 builder already
+emits a complete structurally valid `RouterPolicyInput`.
+
+Required interpretation:
+
+- pre-B1 validation proves the builder or future producer output is valid
+  enough to hand to B1;
+- B1 is an advisory Phase B RouterHint bridge, not a production normalizer;
+- post-B1 validation checks the enriched structure before RouterPolicy
+  decision production and A3.
+
 This prevents B1 from normalizing malformed safety-critical fields, such as
 string booleans or malformed policy lists, into executable-safe values before
 A5 rejects the input. The original mutable object returned by an injected
 builder must not be repaired in-place, malformed input must not reach
 `_RUN_LOCAL_ROUTE`, and malformed input must not execute.
+
+Safety-critical fields include at least Phase A hard-gate booleans, action
+execution-risk booleans, provider/user/budget policy fields, and router fields
+required before B1.
+
+For future live or per-message Phase B producer work, the live producer must
+emit a structurally valid Phase B proposal before B1 consumes it. Malformed live
+producer output must fail closed before B1 or inside B1. B1 must not normalize
+arbitrary raw model output into valid RouterPolicy input.
+
+Do not treat schema-valid, structurally valid, model-produced, or
+Phase-B-enriched output as semantically safe. Execution still requires
+deterministic hard gates, operational-intent gates, `--assume-public-simple` in
+smoke, validator-valid RouterPolicy decision output, the A3 safe-local guard,
+and an injected responder or explicit `--run-local`.
+
+Qwen/Phase B live output may propose hints only. It must not authorize
+execution, provider calls, tool/MCP/browser/terminal actions, memory writes,
+retrieval, route selection by itself, or removal of `--assume-public-simple`.
+Partial or greedy live Phase B output must go through a separate deterministic
+adapter/validator layer before reaching B1.
 
 B3-R1 does not change B1 behavior, A3 safe-local guard behavior, A4 local
 responder behavior, RouterPolicy decision production, semantic validation,

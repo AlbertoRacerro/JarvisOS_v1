@@ -1702,6 +1702,14 @@ not approval to remove `--assume-public-simple`.
 message-route smoke wrapper. The builder output is validated before B1 runs,
 then validated again after B1 returns.
 
+Interpretation:
+
+- pre-B1 validation checks that the builder or future producer output is
+  structurally valid enough to hand to B1;
+- B1 remains an advisory Phase B RouterHint bridge, not a production
+  normalizer;
+- post-B1 validation checks enriched structure before RouterPolicy/A3.
+
 Observed B3-R1 behavior:
 
 - B1/A5 did not mutate original malformed input in-place;
@@ -1724,3 +1732,11 @@ B3-R1 does not change B1, A3, A4, RouterPolicy decision production, semantic
 validation, schemas, backend routes, frontend UI, DB schema, model/provider
 calls, tool/MCP/browser/terminal runtime, memory/retrieval runtime, workers,
 hooks, or BlueRev behavior.
+
+Future live Phase B producer output must be structurally valid before B1
+consumes it, or fail closed before/inside B1. B1 must not normalize arbitrary
+raw model output into valid RouterPolicy input. Schema-valid, structurally
+valid, model-produced, or Phase-B-enriched output is not semantically safe by
+itself; execution still requires deterministic gates, `--assume-public-simple`
+in smoke, validator-valid RouterPolicy decision output, A3 safe-local approval,
+and an injected or explicit local responder.

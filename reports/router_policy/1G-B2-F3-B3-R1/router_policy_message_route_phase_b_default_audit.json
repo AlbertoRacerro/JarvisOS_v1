@@ -8,6 +8,41 @@
     "change": "A5 now structurally validates the builder output before applying the default-on B1 Phase B hint bridge.",
     "reason": "Default-on B1 must not repair malformed safety-critical fields into executable-safe values before A5 rejects them."
   },
+  "validation_boundary_interpretation": {
+    "pre_b1_validation": "Structural boundary proving builder or future producer output is valid enough to hand to B1.",
+    "b1": "Advisory Phase B RouterHint bridge; not a production normalizer and not authority.",
+    "post_b1_validation": "Structural check after B1 enrichment and before RouterPolicy/A3.",
+    "same_validator_used_pre_and_post": true,
+    "same_validator_rationale": "Acceptable for the current smoke path because the A5 builder emits complete structurally valid RouterPolicyInput."
+  },
+  "safety_critical_fields": [
+    "phase_a_signals hard-gate booleans",
+    "action_hint execution-risk booleans",
+    "provider_policy critical fields",
+    "user_policy critical fields",
+    "budget_policy critical fields",
+    "router_hint fields required before B1"
+  ],
+  "future_live_phase_b_boundary": {
+    "live_producer_must_emit_structurally_valid_phase_b_before_b1": true,
+    "malformed_live_output_must_fail_closed_before_or_inside_b1": true,
+    "b1_must_not_normalize_arbitrary_raw_model_output": true,
+    "partial_or_greedy_phase_b_output_requires_deterministic_adapter_validator": true,
+    "qwen_phase_b_output_advisory_only": true
+  },
+  "non_authority_clarification": {
+    "schema_valid_is_semantically_safe": false,
+    "structurally_valid_is_semantically_safe": false,
+    "model_produced_is_semantically_safe": false,
+    "phase_b_enriched_is_semantically_safe": false,
+    "phase_b_may_authorize_execution": false,
+    "phase_b_may_authorize_provider_calls": false,
+    "phase_b_may_authorize_tools_or_mcp_or_browser_or_terminal": false,
+    "phase_b_may_authorize_memory_writes": false,
+    "phase_b_may_authorize_retrieval": false,
+    "phase_b_may_authorize_route_selection_by_itself": false,
+    "phase_b_may_authorize_removal_of_assume_public_simple": false
+  },
   "files_changed": [
     "docs/LOCAL_AI_EVALUATION_EVIDENCE.md",
     "docs/ROUTER_POLICY_DESIGN.md",
