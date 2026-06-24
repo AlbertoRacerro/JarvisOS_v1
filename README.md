@@ -158,7 +158,7 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F3-B4-R - Deterministic Phase B Source Audit
+1G-B2-F3-B4-live-R - Local Qwen Phase B Soft-Review Audit
 ```
 
 `1G-B2-F3-B3` makes the existing offline B1 Phase B RouterHint bridge default-on
@@ -219,5 +219,18 @@ benign Phase B stub with deterministic per-message Phase B soft-review output
 from `local_phase_b_soft_review_probe.build_soft_review`. The default B3 stub
 path remains unchanged. B4 adds no live model call and commits only synthetic or
 sanitized report messages.
+
+`1G-B2-F3-B4-live` adds an explicit gated local-only Qwen Phase B soft-review
+smoke path. Qwen can produce advisory Phase B soft proposals only; deterministic
+Phase A gates, B1 validation/clamp/leakage checks, RouterPolicy, and A3 remain
+authority. The default stub path and deterministic B4 path remain unchanged.
+This does not approve production chat/UI, memory, retrieval, provider routing,
+tool execution, or removal of `--assume-public-simple`.
+
+Manual Phase B live smoke, optional and local-only:
+
+```powershell
+python scripts\router_policy_message_route_smoke.py --message "Explain what a centrifugal pump is." --assume-public-simple --use-phase-b-hints --phase-b-source live-local-qwen --phase-b-source-case-id B4-LIVE-BENIGN --run-local-phase-b --phase-b-model qwen3:8b --phase-b-endpoint http://localhost:11434
+```
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

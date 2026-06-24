@@ -1,0 +1,105 @@
+{
+  "milestone": "1G-B2-F3-B4-live",
+  "start_head": "609b5493891d7d9eb2d1de4ee5b652bf6e34f024",
+  "files_changed": [
+    "README.md",
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md",
+    "docs/ROUTER_POLICY_DESIGN.md",
+    "reports/router_policy/1G-B2-F3-B4-live/router_policy_message_route_live_phase_b_summary.json",
+    "reports/router_policy/1G-B2-F3-B4-live/router_policy_message_route_live_phase_b_summary.md",
+    "scripts/router_policy_message_route_smoke.py",
+    "tests/test_router_policy_message_route_smoke.py"
+  ],
+  "reused_live_phase_b_module": "local_phase_b_soft_review_model_probe",
+  "reused_live_phase_b_components": [
+    "AUTHORITY_FIELD_NAMES",
+    "authority_field_leakage",
+    "parse_soft_proposal",
+    "apply_deterministic_soft_clamp",
+    "local_model_structured_output_probe.call_ollama_chat"
+  ],
+  "new_qwen_caller_added": false,
+  "default_stub_path_unchanged": true,
+  "deterministic_b4_path_unchanged": true,
+  "selector_conflict_policy": {
+    "source_kinds": [
+      "stub",
+      "deterministic",
+      "live_local_qwen"
+    ],
+    "stub_with_case_id_rejected": true,
+    "deterministic_without_case_id_rejected": true,
+    "live_without_case_id_rejected": true,
+    "live_without_run_local_phase_b_rejected": true,
+    "deterministic_or_live_without_phase_b_hints_rejected": true
+  },
+  "live_phase_b_requires_explicit_flag": true,
+  "localhost_only_enforced": true,
+  "localhost_validation": {
+    "parser": "urllib.parse.urlparse",
+    "allowed_hosts": [
+      "localhost",
+      "127.0.0.1",
+      "::1"
+    ],
+    "scheme_required": "http",
+    "credentials_rejected": true,
+    "query_rejected": true,
+    "fragment_rejected": true,
+    "path_rejected_before_api_chat_build": true
+  },
+  "tests_use_fake_live_seam": true,
+  "b1_called_after_live_phase_b_result": "pass",
+  "raw_authority_leakage_result": "rejected_fail_closed",
+  "effective_authority_leakage_result": "rejected_fail_closed",
+  "malformed_live_output_result": "rejected_fail_closed",
+  "missing_field_effective_proposal_result": "rejected_fail_closed",
+  "live_exception_result": "rejected_fail_closed",
+  "hard_gate_dominance_result": "pass",
+  "source_candidate_result": "pass",
+  "privacy_report_check": {
+    "synthetic_or_sanitized_only": true,
+    "model_output_committed": false,
+    "raw_private_prompt_committed": false,
+    "raw_secret_token_committed": false,
+    "bluerev_private_content_committed": false
+  },
+  "runtime_boundary_check": {
+    "qwen_role": "Phase B advisory soft proposal only",
+    "phase_a_gate_producer_added": false,
+    "safety_authority_added": false,
+    "route_authority_added": false,
+    "execution_authority_added": false,
+    "provider_selector_added": false,
+    "tool_mcp_browser_terminal_authorizer_added": false,
+    "memory_write_authorizer_added": false,
+    "retrieval_authorizer_added": false,
+    "final_responder_added": false,
+    "backend_routes_added": false,
+    "frontend_ui_added": false,
+    "db_schema_added": false,
+    "bluerev_modeling_added": false
+  },
+  "tests_run": [
+    "python -m unittest tests.test_router_policy_message_route_smoke",
+    "python -m unittest tests.test_router_policy_hint_bridge_probe",
+    "python -m unittest tests.test_router_policy_local_route_probe",
+    "python -m unittest tests.test_router_policy_decision_probe",
+    "python -m unittest tests.test_router_policy_semantic_validator",
+    "python -m unittest discover -s tests",
+    "python -m json.tool reports/router_policy/1G-B2-F3-B4-live/router_policy_message_route_live_phase_b_summary.json",
+    "git diff --check",
+    "focused runtime grep",
+    "direct trailing-whitespace scan"
+  ],
+  "known_residual_risks": [
+    "B4-live is smoke-only.",
+    "Live Qwen Phase B remains advisory only.",
+    "Phase A/gates remain deterministic authority.",
+    "B1 is not a raw model-output normalizer.",
+    "No removal of --assume-public-simple is approved.",
+    "No production UI/chat/memory/retrieval/provider/tool routing is approved.",
+    "Real/private prompt runs must remain outside committed reports unless sanitized."
+  ],
+  "recommended_next_milestone": "1G-B2-F3-B4-live-R - Local Qwen Phase B soft-review audit"
+}

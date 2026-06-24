@@ -1768,3 +1768,41 @@ Report:
 B4 is offline/deterministic only. It does not call Qwen, Gemma, Ollama,
 providers, tools, MCP, browser, terminal, memory, retrieval, backend routes,
 frontend UI, DB migrations, workers, hooks, or BlueRev behavior.
+
+### 1G-B2-F3-B4-live - Local Qwen Phase B Soft-Review Smoke
+
+1G-B2-F3-B4-live wires an explicit gated local-only Qwen Phase B soft-review
+path into the A5 message-route smoke wrapper.
+
+Observed B4-live behavior:
+
+- reused live Phase B module:
+  `local_phase_b_soft_review_model_probe`;
+- new Qwen caller added: false;
+- default B3 fixed-stub path remains unchanged;
+- deterministic B4 source path remains unchanged;
+- source selection is explicit:
+  `stub | deterministic | live_local_qwen`;
+- live Phase B requires both `phase_b_source_kind="live_local_qwen"` and
+  `run_local_phase_b=True`;
+- `--run-local` alone does not call Qwen;
+- `--no-phase-b-hints` conflicts with deterministic/live Phase B sources;
+- localhost-only Phase B endpoint validation uses `urllib.parse.urlparse`;
+- unit tests use fake live seams and do not call Ollama/Qwen/Gemma;
+- B1 is called once after valid live/effective Phase B insertion;
+- raw and effective authority leakage fail closed;
+- malformed, missing-field, exception, and non-localhost endpoint live paths fail
+  closed before B1/RouterPolicy/A3;
+- hard gates dominate benign live Phase B proposals;
+- source/current-info proposals remain conservative;
+- CLI output remains redacted and does not print raw prompt, raw model output,
+  `input_obj`, or audit notes.
+
+Report:
+
+- `reports/router_policy/1G-B2-F3-B4-live/`.
+
+B4-live is smoke-only. Qwen remains Phase B advisory only. Phase A/gates,
+RouterPolicy, and A3 remain deterministic authority. B4-live does not approve
+production chat/UI, memory, retrieval, provider routing, tool execution, or
+removal of `--assume-public-simple`.

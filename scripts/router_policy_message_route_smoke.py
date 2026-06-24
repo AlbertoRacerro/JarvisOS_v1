@@ -12,10 +12,13 @@ import argparse
 import copy
 import json
 import re
+import urllib.parse
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 import local_policy_gate_overlay_probe as policy_overlay
+import local_phase_b_soft_review_model_probe as live_phase_b
 from local_phase_b_soft_review_probe import build_soft_review
 from router_policy_hint_bridge_probe import apply_phase_b_router_hint
 from router_policy_local_responder import LocalResponderError, build_local_responder
@@ -24,12 +27,18 @@ from router_policy_local_route_probe import run_local_route
 
 MAX_MESSAGE_CHARS = 12000
 MAX_CLI_RESPONSE_CHARS = 1000
+DEFAULT_PHASE_B_MODEL = "qwen3:8b"
+DEFAULT_PHASE_B_ENDPOINT = "http://localhost:11434"
+DEFAULT_PHASE_B_SCHEMA = Path("schemas/fast_secretary_soft_proposal_v0_1.schema.json")
+PHASE_B_SOURCE_KINDS = {"stub", "deterministic", "live_local_qwen"}
+LOCAL_PHASE_B_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 _RUN_LOCAL_ROUTE = run_local_route
 _BUILD_LOCAL_RESPONDER = build_local_responder
 _APPLY_POLICY_OVERLAY = policy_overlay.apply_policy_overlay
 _APPLY_PHASE_B_ROUTER_HINT = apply_phase_b_router_hint
 _BUILD_DETERMINISTIC_PHASE_B_SOFT_REVIEW = build_soft_review
+_BUILD_LIVE_LOCAL_PHASE_B_SOFT_REVIEW = None
 
 TOP_LEVEL_REQUIRED = {
     "message_text",
@@ -595,6 +604,91 @@ def _phase_b_b1_compatibility_errors(phase_b: Any) -> list[str]:
     return errors
 
 
+def _validate_live_phase_b_endpoint(endpoint: str) -> str:
+    if not isinstance(endpoint, str):
+        raise ValueError("phase_b_endpoint must be a string")
+    parsed = urllib.parse.urlparse(endpoint)
+    if parsed.scheme != "http":
+        raise ValueError("phase_b_endpoint must use http")
+    if parsed.hostname not in LOCAL_PHASE_B_HOSTS:
+        raise ValueError("phase_b_endpoint host must be localhost")
+    if parsed.username or parsed.password:
+        raise ValueError("phase_b_endpoint must not include credentials")
+    if parsed.query or parsed.fragment:
+        raise ValueError("phase_b_endpoint must not include query or fragment")
+    if parsed.path not in {"", "/"}:
+        raise ValueError("phase_b_endpoint must not include a path")
+    netloc = parsed.netloc
+    return urllib.parse.urlunparse(("http", netloc, "/api/chat", "", "", ""))
+
+
+def _load_live_phase_b_schema(schema_path: Path = DEFAULT_PHASE_B_SCHEMA) -> dict[str, Any]:
+    schema = live_phase_b.structured_probe.load_json(schema_path)
+    live_phase_b.structured_probe.validate_schema_shape(schema)
+    if live_phase_b.authority_field_leakage(schema.get("properties", {})):
+        raise ValueError("live Phase B schema contains authority fields")
+    return schema
+
+
+def _build_live_local_phase_b_soft_review(
+    *,
+    case_id: str,
+    input_text: str,
+    phase_a: dict[str, Any],
+    model: str = DEFAULT_PHASE_B_MODEL,
+    endpoint: str = DEFAULT_PHASE_B_ENDPOINT,
+    timeout_seconds: int = 180,
+) -> dict[str, Any]:
+    chat_url = _validate_live_phase_b_endpoint(endpoint)
+    schema = _load_live_phase_b_schema()
+    prompt = live_phase_b.build_phase_b_prompt(case_id=case_id, input_text=input_text)
+    raw_call = live_phase_b.structured_probe.call_ollama_chat(
+        model=model,
+        prompt=prompt,
+        schema=schema,
+        timeout_seconds=timeout_seconds,
+        url=chat_url,
+    )
+    if not raw_call.get("ok"):
+        raise ValueError("live Phase B local model call failed")
+    if not isinstance(raw_call.get("body"), dict):
+        raise ValueError("live Phase B response body invalid")
+    parsed, parse_error = live_phase_b.parse_soft_proposal(raw_call["body"])
+    if parsed is None:
+        raise ValueError(f"live Phase B parse failed: {parse_error}")
+    raw_validation = live_phase_b.structured_probe.validate_instance(parsed, schema)
+    if not raw_validation["schema_valid"]:
+        raise ValueError("live Phase B raw proposal schema invalid")
+    raw_leakage = live_phase_b.authority_field_leakage(parsed)
+    if raw_leakage:
+        raise ValueError("live Phase B raw proposal authority leakage")
+    effective, clamps = live_phase_b.apply_deterministic_soft_clamp(
+        phase_a=copy.deepcopy(phase_a),
+        raw_proposal=copy.deepcopy(parsed),
+        input_text=input_text,
+    )
+    effective_validation = live_phase_b.structured_probe.validate_instance(effective, schema)
+    if not effective_validation["schema_valid"]:
+        raise ValueError("live Phase B effective proposal schema invalid")
+    effective_leakage = live_phase_b.authority_field_leakage(effective)
+    if effective_leakage:
+        raise ValueError("live Phase B effective proposal authority leakage")
+    phase_b_errors = _phase_b_b1_compatibility_errors(effective)
+    if phase_b_errors:
+        raise ValueError("live Phase B effective proposal is not B1 compatible")
+    output = copy.deepcopy(effective)
+    output["phase_a_case_id"] = case_id
+    output["_live_phase_b_diagnostics"] = {
+        "raw_authority_leakage": raw_leakage,
+        "effective_authority_leakage": effective_leakage,
+        "deterministic_clamp_count": len(clamps),
+    }
+    return output
+
+
+_BUILD_LIVE_LOCAL_PHASE_B_SOFT_REVIEW = _build_live_local_phase_b_soft_review
+
+
 def _apply_deterministic_phase_b_soft_review(
     input_obj: dict[str, Any],
     *,
@@ -612,7 +706,7 @@ def _apply_deterministic_phase_b_soft_review(
         phase_a=copy.deepcopy(phase_a),
     )
     errors = _phase_b_b1_compatibility_errors(phase_b)
-    if isinstance(phase_b, dict) and phase_b.get("phase_a_case_id") != case_id:
+    if isinstance(phase_b, dict) and "phase_a_case_id" in phase_b and phase_b.get("phase_a_case_id") != case_id:
         errors.append("phase_b case_id mismatch")
     if errors:
         return None, errors
@@ -631,6 +725,106 @@ def _apply_deterministic_phase_b_soft_review(
         }
     )
     return output, []
+
+
+def _apply_live_local_phase_b_soft_review(
+    input_obj: dict[str, Any],
+    *,
+    case_id: str,
+    message_text: str,
+    model: str,
+    endpoint: str,
+    timeout_seconds: int,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    if not isinstance(case_id, str) or not case_id.strip():
+        return None, ["phase_b case_id invalid"]
+    phase_a = input_obj.get("phase_a_signals")
+    if not isinstance(phase_a, dict):
+        return None, ["phase_a invalid for live phase_b"]
+    raw_phase_b = _BUILD_LIVE_LOCAL_PHASE_B_SOFT_REVIEW(
+        case_id=case_id,
+        input_text=message_text,
+        phase_a=copy.deepcopy(phase_a),
+        model=model,
+        endpoint=endpoint,
+        timeout_seconds=timeout_seconds,
+    )
+    phase_b = copy.deepcopy(raw_phase_b)
+    diagnostics = {}
+    if isinstance(phase_b, dict):
+        diagnostics = phase_b.pop("_live_phase_b_diagnostics", {})
+    errors = _phase_b_b1_compatibility_errors(phase_b)
+    direct_leakage = live_phase_b.authority_field_leakage(phase_b)
+    if direct_leakage:
+        errors.append("live phase_b authority leakage")
+    if isinstance(phase_b, dict) and "phase_a_case_id" in phase_b and phase_b.get("phase_a_case_id") != case_id:
+        errors.append("phase_b case_id mismatch")
+    raw_leakage = diagnostics.get("raw_authority_leakage") if isinstance(diagnostics, dict) else None
+    effective_leakage = diagnostics.get("effective_authority_leakage") if isinstance(diagnostics, dict) else None
+    if raw_leakage:
+        errors.append("live phase_b raw authority leakage")
+    if effective_leakage:
+        errors.append("live phase_b effective authority leakage")
+    if errors:
+        return None, errors
+    phase_b["phase_a_case_id"] = case_id
+    output = copy.deepcopy(input_obj)
+    output["phase_b_soft_proposal"] = phase_b
+    metadata = output.setdefault("context_metadata", {})
+    metadata.update(
+        {
+            "phase_a_source": "deterministic_overlay_builder",
+            "phase_b_source_kind": "live_local_qwen_soft_review",
+            "phase_b_source_case_id": case_id,
+            "phase_b_source_function": (
+                "local_phase_b_soft_review_model_probe.build_phase_b_prompt/"
+                "local_model_structured_output_probe.call_ollama_chat"
+            ),
+            "phase_b_model": model,
+            "phase_b_endpoint_localhost_only": True,
+            "same_case_id_for_phase_a_and_phase_b": True,
+            "cross_case_mix": False,
+            "synthetic_or_sanitized_message": True,
+        }
+    )
+    if isinstance(diagnostics, dict):
+        metadata["live_phase_b_diagnostics"] = {
+            "raw_authority_leakage_count": len(diagnostics.get("raw_authority_leakage") or []),
+            "effective_authority_leakage_count": len(diagnostics.get("effective_authority_leakage") or []),
+            "deterministic_clamp_count": diagnostics.get("deterministic_clamp_count", 0),
+        }
+    return output, []
+
+
+def _source_selection_error(
+    *,
+    phase_b_source_kind: str,
+    phase_b_source_case_id: str | None,
+    run_local_phase_b: bool,
+    use_phase_b_hints: bool,
+) -> str | None:
+    if phase_b_source_kind not in PHASE_B_SOURCE_KINDS:
+        return "invalid_phase_b_source_kind"
+    if phase_b_source_kind == "stub":
+        if phase_b_source_case_id is not None:
+            return "phase_b_source_conflict"
+        if run_local_phase_b:
+            return "phase_b_source_conflict"
+    elif phase_b_source_kind == "deterministic":
+        if not phase_b_source_case_id:
+            return "phase_b_source_conflict"
+        if run_local_phase_b:
+            return "phase_b_source_conflict"
+        if not use_phase_b_hints:
+            return "phase_b_source_conflict"
+    elif phase_b_source_kind == "live_local_qwen":
+        if not phase_b_source_case_id:
+            return "phase_b_source_conflict"
+        if not run_local_phase_b:
+            return "phase_b_source_conflict"
+        if not use_phase_b_hints:
+            return "phase_b_source_conflict"
+    return None
 
 
 def _router_policy_input_structural_errors(input_obj: Any, original_message: str) -> list[str]:
@@ -737,8 +931,43 @@ def run_message_route_smoke(
     input_builder=None,
     assume_public_simple: bool = False,
     use_phase_b_hints: bool = True,
+    phase_b_source_kind: str = "stub",
     phase_b_source_case_id: str | None = None,
+    run_local_phase_b: bool = False,
+    phase_b_model: str = DEFAULT_PHASE_B_MODEL,
+    phase_b_endpoint: str = DEFAULT_PHASE_B_ENDPOINT,
+    phase_b_timeout_seconds: int = 180,
 ) -> dict:
+    source_error = _source_selection_error(
+        phase_b_source_kind=phase_b_source_kind,
+        phase_b_source_case_id=phase_b_source_case_id,
+        run_local_phase_b=run_local_phase_b,
+        use_phase_b_hints=use_phase_b_hints,
+    )
+    if source_error:
+        return {
+            "executed": False,
+            "reason": source_error,
+            "input_source": "none",
+            "assume_public_simple_used": assume_public_simple,
+            "use_phase_b_hints_used": use_phase_b_hints,
+            "phase_b_source_kind": phase_b_source_kind,
+            "phase_b_source_used": False,
+        }
+    if phase_b_source_kind == "live_local_qwen":
+        try:
+            _validate_live_phase_b_endpoint(phase_b_endpoint)
+        except ValueError as exc:
+            return {
+                "executed": False,
+                "reason": "invalid_phase_b_endpoint",
+                "input_source": "none",
+                "assume_public_simple_used": assume_public_simple,
+                "use_phase_b_hints_used": use_phase_b_hints,
+                "phase_b_source_kind": phase_b_source_kind,
+                "phase_b_source_used": False,
+                "error_type": type(exc).__name__,
+            }
     if not _valid_message(message_text):
         return {
             "executed": False,
@@ -746,6 +975,7 @@ def run_message_route_smoke(
             "input_source": "none",
             "assume_public_simple_used": assume_public_simple,
             "use_phase_b_hints_used": use_phase_b_hints,
+            "phase_b_source_kind": phase_b_source_kind,
             "phase_b_source_used": False,
         }
 
@@ -764,7 +994,8 @@ def run_message_route_smoke(
             "input_source": source,
             "assume_public_simple_used": assume_public_simple,
             "use_phase_b_hints_used": use_phase_b_hints,
-            "phase_b_source_used": phase_b_source_case_id is not None,
+            "phase_b_source_kind": phase_b_source_kind,
+            "phase_b_source_used": False,
             "error_type": type(exc).__name__,
         }
 
@@ -776,12 +1007,13 @@ def run_message_route_smoke(
             "input_source": source,
             "assume_public_simple_used": assume_public_simple,
             "use_phase_b_hints_used": use_phase_b_hints,
-            "phase_b_source_used": phase_b_source_case_id is not None,
+            "phase_b_source_kind": phase_b_source_kind,
+            "phase_b_source_used": phase_b_source_kind != "stub",
             "validation_stage": "pre_phase_b_hint_bridge",
             "validation_errors": errors,
         }
 
-    if phase_b_source_case_id is not None:
+    if phase_b_source_kind == "deterministic":
         try:
             input_obj, phase_b_errors = _apply_deterministic_phase_b_soft_review(
                 input_obj,
@@ -795,6 +1027,7 @@ def run_message_route_smoke(
                 "input_source": source,
                 "assume_public_simple_used": assume_public_simple,
                 "use_phase_b_hints_used": use_phase_b_hints,
+                "phase_b_source_kind": phase_b_source_kind,
                 "phase_b_source_used": True,
                 "error_type": type(exc).__name__,
             }
@@ -805,6 +1038,39 @@ def run_message_route_smoke(
                 "input_source": source,
                 "assume_public_simple_used": assume_public_simple,
                 "use_phase_b_hints_used": use_phase_b_hints,
+                "phase_b_source_kind": phase_b_source_kind,
+                "phase_b_source_used": True,
+                "validation_errors": phase_b_errors,
+            }
+    elif phase_b_source_kind == "live_local_qwen":
+        try:
+            input_obj, phase_b_errors = _apply_live_local_phase_b_soft_review(
+                input_obj,
+                case_id=phase_b_source_case_id,
+                message_text=message_text,
+                model=phase_b_model,
+                endpoint=phase_b_endpoint,
+                timeout_seconds=phase_b_timeout_seconds,
+            )
+        except Exception as exc:
+            return {
+                "executed": False,
+                "reason": "live_phase_b_source_failed",
+                "input_source": source,
+                "assume_public_simple_used": assume_public_simple,
+                "use_phase_b_hints_used": use_phase_b_hints,
+                "phase_b_source_kind": phase_b_source_kind,
+                "phase_b_source_used": True,
+                "error_type": type(exc).__name__,
+            }
+        if phase_b_errors:
+            return {
+                "executed": False,
+                "reason": "invalid_live_phase_b",
+                "input_source": source,
+                "assume_public_simple_used": assume_public_simple,
+                "use_phase_b_hints_used": use_phase_b_hints,
+                "phase_b_source_kind": phase_b_source_kind,
                 "phase_b_source_used": True,
                 "validation_errors": phase_b_errors,
             }
@@ -819,7 +1085,8 @@ def run_message_route_smoke(
                 "input_source": source,
                 "assume_public_simple_used": assume_public_simple,
                 "use_phase_b_hints_used": True,
-                "phase_b_source_used": phase_b_source_case_id is not None,
+                "phase_b_source_kind": phase_b_source_kind,
+                "phase_b_source_used": phase_b_source_kind != "stub",
                 "error_type": type(exc).__name__,
             }
 
@@ -831,7 +1098,8 @@ def run_message_route_smoke(
             "input_source": source,
             "assume_public_simple_used": assume_public_simple,
             "use_phase_b_hints_used": use_phase_b_hints,
-            "phase_b_source_used": phase_b_source_case_id is not None,
+            "phase_b_source_kind": phase_b_source_kind,
+            "phase_b_source_used": phase_b_source_kind != "stub",
             "validation_errors": errors,
         }
 
@@ -843,7 +1111,8 @@ def run_message_route_smoke(
             "input_source": source,
             "assume_public_simple_used": assume_public_simple,
             "use_phase_b_hints_used": use_phase_b_hints,
-            "phase_b_source_used": phase_b_source_case_id is not None,
+            "phase_b_source_kind": phase_b_source_kind,
+            "phase_b_source_used": phase_b_source_kind != "stub",
         }
     return {
         "executed": result["executed"],
@@ -854,7 +1123,8 @@ def run_message_route_smoke(
         "input_source": source,
         "assume_public_simple_used": assume_public_simple,
         "use_phase_b_hints_used": use_phase_b_hints,
-        "phase_b_source_used": phase_b_source_case_id is not None,
+        "phase_b_source_kind": phase_b_source_kind,
+        "phase_b_source_used": phase_b_source_kind != "stub",
     }
 
 
@@ -882,6 +1152,8 @@ def _safe_cli_result(result: dict[str, Any]) -> dict[str, Any]:
         "input_source": result.get("input_source", "none"),
         "assume_public_simple_used": result.get("assume_public_simple_used") is True,
         "use_phase_b_hints_used": result.get("use_phase_b_hints_used") is True,
+        "phase_b_source_kind": result.get("phase_b_source_kind", "stub"),
+        "phase_b_source_used": result.get("phase_b_source_used") is True,
     }
     decision = result.get("decision")
     if isinstance(decision, dict):
@@ -917,6 +1189,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--model", default="gemma3:4b")
     parser.add_argument("--endpoint", default="http://127.0.0.1:11434/api/generate")
     parser.add_argument("--timeout-s", type=float, default=30.0)
+    parser.add_argument(
+        "--phase-b-source",
+        choices=["stub", "deterministic", "live-local-qwen"],
+        default="stub",
+    )
+    parser.add_argument("--phase-b-source-case-id", default=None)
+    parser.add_argument("--run-local-phase-b", action="store_true")
+    parser.add_argument("--phase-b-model", default=DEFAULT_PHASE_B_MODEL)
+    parser.add_argument("--phase-b-endpoint", default=DEFAULT_PHASE_B_ENDPOINT)
+    parser.add_argument("--phase-b-timeout-seconds", type=int, default=180)
     parser.add_argument("--now", default=None)
     args = parser.parse_args(argv)
 
@@ -951,6 +1233,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             input_builder=_build_router_input_for_cli,
             assume_public_simple=args.assume_public_simple,
             use_phase_b_hints=args.use_phase_b_hints,
+            phase_b_source_kind=args.phase_b_source.replace("-", "_"),
+            phase_b_source_case_id=args.phase_b_source_case_id,
+            run_local_phase_b=args.run_local_phase_b,
+            phase_b_model=args.phase_b_model,
+            phase_b_endpoint=args.phase_b_endpoint,
+            phase_b_timeout_seconds=args.phase_b_timeout_seconds,
         )
     except Exception as exc:
         print(

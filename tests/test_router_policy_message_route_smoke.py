@@ -100,7 +100,10 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
         responder=None,
         assume=False,
         use_phase_b_hints=False,
+        phase_b_source_kind="stub",
         phase_b_source_case_id=None,
+        run_local_phase_b=False,
+        phase_b_endpoint="http://localhost:11434",
     ):
         builder = Mock(return_value=built_input)
         result = smoke.run_message_route_smoke(
@@ -110,7 +113,10 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
             input_builder=builder,
             assume_public_simple=assume,
             use_phase_b_hints=use_phase_b_hints,
+            phase_b_source_kind=phase_b_source_kind,
             phase_b_source_case_id=phase_b_source_case_id,
+            run_local_phase_b=run_local_phase_b,
+            phase_b_endpoint=phase_b_endpoint,
         )
         builder.assert_called_once_with(message, now=NOW, assume_public_simple=assume)
         return result
@@ -151,6 +157,24 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
         phase_b.update(phase_b_updates)
         input_obj["phase_b_soft_proposal"] = phase_b
         return input_obj
+
+    def valid_live_phase_b(self, case_id="B4-LIVE-BENIGN", **updates):
+        del case_id
+        phase_b = {
+            "summary_short": "Synthetic live Phase B local-answer proposal.",
+            "project_bucket": "general",
+            "primary_domain": "general",
+            "domain_tags": ["smoke", "local_answer"],
+            "storage_relevance": "low",
+            "usefulness_for_future_review": "low",
+            "possible_memory_card_type": "none",
+            "soft_reason_code": "contextual_summary",
+            "brief_rationale": "Synthetic advisory Phase B proposal for a local-only smoke case.",
+            "suggested_followup_question": "",
+            "soft_uncertain_fields": [],
+        }
+        phase_b.update(updates)
+        return phase_b
 
     def source_candidate_input(self, message):
         return self.phase_b_input(
@@ -1272,6 +1296,7 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
             responder=Mock(return_value="local answer"),
             now=NOW,
             assume_public_simple=True,
+            phase_b_source_kind="deterministic",
             phase_b_source_case_id="B4-BENIGN",
         )
         metadata = result["input_obj"]["context_metadata"]
@@ -1300,6 +1325,7 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
             responder=Mock(return_value="local answer"),
             now=NOW,
             assume_public_simple=True,
+            phase_b_source_kind="deterministic",
             phase_b_source_case_id="B4-BENIGN",
         )
         b4_phase_b = b4_result["input_obj"]["phase_b_soft_proposal"]
@@ -1318,6 +1344,7 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
             responder=responder,
             now=NOW,
             assume_public_simple=True,
+            phase_b_source_kind="deterministic",
             phase_b_source_case_id="B4-BENIGN",
         )
         responder.assert_called_once_with(message)
@@ -1334,6 +1361,7 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
             responder=responder,
             now=NOW,
             assume_public_simple=True,
+            phase_b_source_kind="deterministic",
             phase_b_source_case_id="B4-SOURCE",
         )
         responder.assert_not_called()
@@ -1353,6 +1381,7 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
             responder=responder,
             now=NOW,
             assume_public_simple=True,
+            phase_b_source_kind="deterministic",
             phase_b_source_case_id="B4-AMBIGUITY",
         )
         responder.assert_not_called()
@@ -1370,6 +1399,7 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
             responder=responder,
             now=NOW,
             assume_public_simple=True,
+            phase_b_source_kind="deterministic",
             phase_b_source_case_id="B4-HARD-GATE",
         )
         responder.assert_not_called()
@@ -1392,6 +1422,7 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
                     responder=responder,
                     now=NOW,
                     assume_public_simple=True,
+                    phase_b_source_kind="deterministic",
                     phase_b_source_case_id="B4-MALFORMED",
                 )
         responder.assert_not_called()
@@ -1417,6 +1448,7 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
                     responder=responder,
                     now=NOW,
                     assume_public_simple=True,
+                    phase_b_source_kind="deterministic",
                     phase_b_source_case_id="B4-CASE-A",
                 )
         responder.assert_not_called()
@@ -1436,6 +1468,350 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
         self.assertNotIn("BlueRev proprietary", text)
         self.assertNotIn("sk-test-1234567890", text)
         self.assertNotIn("raw_model_output", text)
+
+    def test_b4_live_001_default_path_does_not_call_live_phase_b(self):
+        message = "Explain what a centrifugal pump is."
+        responder = Mock(return_value="local answer")
+        with patch.object(smoke, "_BUILD_LIVE_LOCAL_PHASE_B_SOFT_REVIEW") as live_builder:
+            result = smoke.run_message_route_smoke(
+                message,
+                responder=responder,
+                now=NOW,
+                assume_public_simple=True,
+            )
+        live_builder.assert_not_called()
+        responder.assert_called_once_with(message)
+        self.assertTrue(result["executed"])
+        self.assertEqual("stub", result["phase_b_source_kind"])
+        self.assertFalse(result["phase_b_source_used"])
+        self.assertEqual(
+            "Benign local-answer smoke message.",
+            result["input_obj"]["phase_b_soft_proposal"]["summary_short"],
+        )
+
+    def test_b4_live_002_deterministic_path_unchanged_and_live_not_called(self):
+        message = "Explain what a centrifugal pump is."
+        responder = Mock(return_value="local answer")
+        with patch.object(smoke, "_BUILD_LIVE_LOCAL_PHASE_B_SOFT_REVIEW") as live_builder:
+            with patch.object(
+                smoke,
+                "_BUILD_DETERMINISTIC_PHASE_B_SOFT_REVIEW",
+                wraps=smoke.build_soft_review,
+            ) as deterministic_builder:
+                result = smoke.run_message_route_smoke(
+                    message,
+                    responder=responder,
+                    now=NOW,
+                    assume_public_simple=True,
+                    phase_b_source_kind="deterministic",
+                    phase_b_source_case_id="B4-BENIGN",
+                )
+        live_builder.assert_not_called()
+        deterministic_builder.assert_called_once()
+        responder.assert_called_once_with(message)
+        self.assertTrue(result["executed"])
+        self.assertEqual("deterministic", result["phase_b_source_kind"])
+        self.assertEqual(
+            "local_phase_b_soft_review_probe.build_soft_review",
+            result["input_obj"]["context_metadata"]["phase_b_source_function"],
+        )
+
+    def test_b4_live_003_explicit_live_path_uses_fake_seam_and_calls_b1_once(self):
+        message = "Explain what a centrifugal pump is."
+        responder = Mock(return_value="local answer")
+        fake_phase_b = self.valid_live_phase_b("B4-LIVE-BENIGN")
+        with patch.object(smoke, "_BUILD_LIVE_LOCAL_PHASE_B_SOFT_REVIEW", return_value=fake_phase_b) as live_builder:
+            with patch.object(smoke, "_APPLY_PHASE_B_ROUTER_HINT", wraps=bridge.apply_phase_b_router_hint) as b1:
+                result = smoke.run_message_route_smoke(
+                    message,
+                    responder=responder,
+                    now=NOW,
+                    assume_public_simple=True,
+                    phase_b_source_kind="live_local_qwen",
+                    phase_b_source_case_id="B4-LIVE-BENIGN",
+                    run_local_phase_b=True,
+                )
+        live_builder.assert_called_once()
+        b1.assert_called_once()
+        responder.assert_called_once_with(message)
+        self.assertTrue(result["executed"])
+        self.assertEqual("live_local_qwen", result["phase_b_source_kind"])
+        phase_b = result["input_obj"]["phase_b_soft_proposal"]
+        self.assertEqual("B4-LIVE-BENIGN", phase_b["phase_a_case_id"])
+        for field, value in fake_phase_b.items():
+            self.assertEqual(value, phase_b[field])
+        metadata = result["input_obj"]["context_metadata"]
+        self.assertEqual("live_local_qwen_soft_review", metadata["phase_b_source_kind"])
+        self.assertEqual("B4-LIVE-BENIGN", metadata["phase_b_source_case_id"])
+
+    def test_b4_live_004_live_requires_explicit_local_phase_b_flag(self):
+        message = "Explain what a centrifugal pump is."
+        responder = Mock(return_value="should not run")
+        with patch.object(smoke, "_BUILD_LIVE_LOCAL_PHASE_B_SOFT_REVIEW") as live_builder:
+            with patch.object(smoke, "_RUN_LOCAL_ROUTE") as run_local_route:
+                result = smoke.run_message_route_smoke(
+                    message,
+                    responder=responder,
+                    now=NOW,
+                    assume_public_simple=True,
+                    phase_b_source_kind="live_local_qwen",
+                    phase_b_source_case_id="B4-LIVE-BENIGN",
+                    run_local_phase_b=False,
+                )
+        live_builder.assert_not_called()
+        run_local_route.assert_not_called()
+        responder.assert_not_called()
+        self.assertFalse(result["executed"])
+        self.assertEqual("phase_b_source_conflict", result["reason"])
+
+    def test_b4_live_005_phase_b_source_conflict_rejected_when_b1_disabled(self):
+        message = "Explain what a centrifugal pump is."
+        for source_kind, run_local_phase_b in (("deterministic", False), ("live_local_qwen", True)):
+            with self.subTest(source_kind=source_kind):
+                responder = Mock(return_value="should not run")
+                with patch.object(smoke, "_APPLY_PHASE_B_ROUTER_HINT") as b1:
+                    with patch.object(smoke, "_RUN_LOCAL_ROUTE") as run_local_route:
+                        result = smoke.run_message_route_smoke(
+                            message,
+                            responder=responder,
+                            now=NOW,
+                            assume_public_simple=True,
+                            use_phase_b_hints=False,
+                            phase_b_source_kind=source_kind,
+                            phase_b_source_case_id="B4-LIVE-CONFLICT",
+                            run_local_phase_b=run_local_phase_b,
+                        )
+                b1.assert_not_called()
+                run_local_route.assert_not_called()
+                responder.assert_not_called()
+                self.assertFalse(result["executed"])
+                self.assertEqual("phase_b_source_conflict", result["reason"])
+
+        with patch("builtins.print") as printed:
+            exit_code = smoke.main(
+                [
+                    "--message",
+                    message,
+                    "--assume-public-simple",
+                    "--no-phase-b-hints",
+                    "--phase-b-source",
+                    "deterministic",
+                    "--phase-b-source-case-id",
+                    "B4-LIVE-CONFLICT",
+                ]
+            )
+        self.assertEqual(0, exit_code)
+        cli_result = json.loads(printed.call_args.args[0])
+        self.assertFalse(cli_result["executed"])
+        self.assertEqual("phase_b_source_conflict", cli_result["reason"])
+
+    def test_b4_live_006_malformed_live_output_fails_closed_without_stub_fallback(self):
+        message = "Explain what a centrifugal pump is."
+        responder = Mock(return_value="should not run")
+        malformed_phase_b = {"phase_a_case_id": "B4-LIVE-MALFORMED", "summary_short": "missing fields"}
+        with patch.object(smoke, "_BUILD_LIVE_LOCAL_PHASE_B_SOFT_REVIEW", return_value=malformed_phase_b):
+            with patch.object(smoke, "_RUN_LOCAL_ROUTE") as run_local_route:
+                result = smoke.run_message_route_smoke(
+                    message,
+                    responder=responder,
+                    now=NOW,
+                    assume_public_simple=True,
+                    phase_b_source_kind="live_local_qwen",
+                    phase_b_source_case_id="B4-LIVE-MALFORMED",
+                    run_local_phase_b=True,
+                )
+        run_local_route.assert_not_called()
+        responder.assert_not_called()
+        self.assertFalse(result["executed"])
+        self.assertEqual("invalid_live_phase_b", result["reason"])
+        self.assertIn("missing B1 phase_b fields", result["validation_errors"])
+
+    def test_b4_live_007_live_exception_fails_closed(self):
+        message = "Explain what a centrifugal pump is."
+        responder = Mock(return_value="should not run")
+        with patch.object(smoke, "_BUILD_LIVE_LOCAL_PHASE_B_SOFT_REVIEW", side_effect=TimeoutError("timeout")):
+            with patch.object(smoke, "_RUN_LOCAL_ROUTE") as run_local_route:
+                result = smoke.run_message_route_smoke(
+                    message,
+                    responder=responder,
+                    now=NOW,
+                    assume_public_simple=True,
+                    phase_b_source_kind="live_local_qwen",
+                    phase_b_source_case_id="B4-LIVE-TIMEOUT",
+                    run_local_phase_b=True,
+                )
+        run_local_route.assert_not_called()
+        responder.assert_not_called()
+        self.assertFalse(result["executed"])
+        self.assertEqual("live_phase_b_source_failed", result["reason"])
+        self.assertEqual("TimeoutError", result["error_type"])
+        self.assertNotIn("input_obj", result)
+
+    def test_b4_live_008_authority_leakage_rejected(self):
+        message = "Explain what a centrifugal pump is."
+        responder = Mock(return_value="should not run")
+        leakage_fields = {
+            "can_override_phase_a": True,
+            "external_provider_allowed": True,
+            "recommends_external_provider": True,
+            "recommends_retrieval": True,
+            "memory_write_allowed": True,
+            "tool_execution_allowed": True,
+            "runtime_approved": True,
+            "redaction_required": False,
+        }
+        leaked_phase_b = self.valid_live_phase_b("B4-LIVE-LEAK", **leakage_fields)
+        with patch.object(smoke, "_BUILD_LIVE_LOCAL_PHASE_B_SOFT_REVIEW", return_value=leaked_phase_b):
+            with patch.object(smoke, "_RUN_LOCAL_ROUTE") as run_local_route:
+                result = smoke.run_message_route_smoke(
+                    message,
+                    responder=responder,
+                    now=NOW,
+                    assume_public_simple=True,
+                    phase_b_source_kind="live_local_qwen",
+                    phase_b_source_case_id="B4-LIVE-LEAK",
+                    run_local_phase_b=True,
+                )
+        run_local_route.assert_not_called()
+        responder.assert_not_called()
+        self.assertFalse(result["executed"])
+        self.assertEqual("invalid_live_phase_b", result["reason"])
+        self.assertIn("live phase_b authority leakage", result["validation_errors"])
+        self.assertNotIn("input_obj", result)
+
+    def test_b4_live_009_hard_gate_dominates_live_benign_phase_b(self):
+        message = "my API key is sk-test-1234567890"
+        responder = Mock(return_value="should not run")
+        fake_phase_b = self.valid_live_phase_b("B4-LIVE-HARD-GATE")
+        with patch.object(smoke, "_BUILD_LIVE_LOCAL_PHASE_B_SOFT_REVIEW", return_value=fake_phase_b):
+            result = smoke.run_message_route_smoke(
+                message,
+                responder=responder,
+                now=NOW,
+                assume_public_simple=True,
+                phase_b_source_kind="live_local_qwen",
+                phase_b_source_case_id="B4-LIVE-HARD-GATE",
+                run_local_phase_b=True,
+            )
+        responder.assert_not_called()
+        self.assertFalse(result["executed"])
+        self.assertTrue(result["input_obj"]["phase_a_signals"]["contains_secret_or_credential"])
+        self.assertEqual("phase_b_blocked_by_hard_gate", result["input_obj"]["context_metadata"]["router_hint_source"])
+
+    def test_b4_live_010_source_current_info_remains_conservative(self):
+        message = "Find public DOI source for algae modeling."
+        responder = Mock(return_value="should not run")
+        fake_phase_b = self.valid_live_phase_b(
+            "B4-LIVE-SOURCE",
+            summary_short="Candidate source review request.",
+            primary_domain="source",
+            domain_tags=["source", "reference"],
+            usefulness_for_future_review="medium",
+            possible_memory_card_type="source_card",
+            soft_reason_code="source_candidate",
+            brief_rationale="The message asks about source-like context.",
+        )
+        with patch.object(smoke, "_BUILD_LIVE_LOCAL_PHASE_B_SOFT_REVIEW", return_value=fake_phase_b):
+            result = smoke.run_message_route_smoke(
+                message,
+                responder=responder,
+                now=NOW,
+                assume_public_simple=True,
+                phase_b_source_kind="live_local_qwen",
+                phase_b_source_case_id="B4-LIVE-SOURCE",
+                run_local_phase_b=True,
+            )
+        responder.assert_not_called()
+        self.assertFalse(result["executed"])
+        router = result["input_obj"]["router_hint"]
+        self.assertEqual("review", router["task_type"])
+        self.assertTrue(router["needs_current_info"])
+        self.assertTrue(router["needs_file_context"])
+
+    def test_b4_live_011_localhost_only_endpoint_rejected_before_live_call(self):
+        message = "Explain what a centrifugal pump is."
+        rejected_endpoints = (
+            "https://api.openai.com",
+            "http://192.168.1.10:11434",
+            "http://localhost.evil.com:11434",
+            "http://user:pass@localhost:11434",
+            "http://localhost:11434/api/chat?x=1",
+            "http://localhost:11434/#frag",
+        )
+        for endpoint in rejected_endpoints:
+            with self.subTest(endpoint=endpoint):
+                responder = Mock(return_value="should not run")
+                with patch.object(smoke, "_BUILD_LIVE_LOCAL_PHASE_B_SOFT_REVIEW") as live_builder:
+                    with patch.object(smoke.live_phase_b.structured_probe, "call_ollama_chat") as ollama_call:
+                        with patch.object(smoke, "_RUN_LOCAL_ROUTE") as run_local_route:
+                            result = smoke.run_message_route_smoke(
+                                message,
+                                responder=responder,
+                                now=NOW,
+                                assume_public_simple=True,
+                                phase_b_source_kind="live_local_qwen",
+                                phase_b_source_case_id="B4-LIVE-ENDPOINT",
+                                run_local_phase_b=True,
+                                phase_b_endpoint=endpoint,
+                            )
+                live_builder.assert_not_called()
+                ollama_call.assert_not_called()
+                run_local_route.assert_not_called()
+                responder.assert_not_called()
+                self.assertFalse(result["executed"])
+                self.assertEqual("invalid_phase_b_endpoint", result["reason"])
+
+    def test_b4_live_012_effective_passthrough_missing_field_fails_closed(self):
+        message = "Explain what a centrifugal pump is."
+        responder = Mock(return_value="should not run")
+        missing_field = self.valid_live_phase_b("B4-LIVE-MISSING")
+        del missing_field["soft_uncertain_fields"]
+        with patch.object(smoke, "_BUILD_LIVE_LOCAL_PHASE_B_SOFT_REVIEW", return_value=missing_field):
+            with patch.object(smoke, "_RUN_LOCAL_ROUTE") as run_local_route:
+                result = smoke.run_message_route_smoke(
+                    message,
+                    responder=responder,
+                    now=NOW,
+                    assume_public_simple=True,
+                    phase_b_source_kind="live_local_qwen",
+                    phase_b_source_case_id="B4-LIVE-MISSING",
+                    run_local_phase_b=True,
+                )
+        run_local_route.assert_not_called()
+        responder.assert_not_called()
+        self.assertFalse(result["executed"])
+        self.assertEqual("invalid_live_phase_b", result["reason"])
+        self.assertIn("missing B1 phase_b fields", result["validation_errors"])
+
+    def test_b4_live_013_cli_redaction_privacy_on_live_phase_b_failure(self):
+        sensitive = "my API key is sk-test-secret-12345678"
+        with patch("builtins.print") as printed:
+            exit_code = smoke.main(
+                [
+                    "--message",
+                    sensitive,
+                    "--assume-public-simple",
+                    "--phase-b-source",
+                    "live-local-qwen",
+                    "--phase-b-source-case-id",
+                    "B4-LIVE-SECRET",
+                    "--run-local-phase-b",
+                    "--phase-b-endpoint",
+                    "https://api.openai.com",
+                    "--now",
+                    NOW,
+                ]
+            )
+        self.assertEqual(0, exit_code)
+        output = printed.call_args.args[0]
+        cli_result = json.loads(output)
+        self.assertFalse(cli_result["executed"])
+        self.assertEqual("invalid_phase_b_endpoint", cli_result["reason"])
+        self.assertNotIn(sensitive, output)
+        self.assertNotIn("sk-test-secret-12345678", output)
+        self.assertNotIn("raw_model_output", output)
+        self.assertNotIn("input_obj", output)
+        self.assertNotIn("audit_notes", output)
 
 
 if __name__ == "__main__":

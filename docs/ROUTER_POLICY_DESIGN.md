@@ -419,6 +419,51 @@ browser/terminal runtime, memory/retrieval runtime, backend routes, frontend UI,
 DB schema, or BlueRev behavior. Phase B remains advisory only; Phase A/gates,
 RouterPolicy, and A3 remain authority.
 
+### 1G-B2-F3-B4-live local Qwen Phase B source
+
+`1G-B2-F3-B4-live` adds an explicit gated local-only Qwen Phase B soft-review
+smoke path. It reuses the existing live Phase B soft-review module:
+`local_phase_b_soft_review_model_probe`.
+
+The live path is selected only with:
+
+```text
+--phase-b-source live-local-qwen
+--phase-b-source-case-id <CASE_ID>
+--run-local-phase-b
+--phase-b-endpoint http://localhost:11434
+```
+
+`--run-local` alone does not call Qwen; it remains the local responder flag.
+The Phase B live endpoint is validated with `urllib.parse.urlparse` and must be
+HTTP localhost only. The wrapper builds the `/api/chat` call from a validated
+localhost origin and rejects credentials, non-localhost hosts, query strings,
+fragments, and endpoint paths.
+
+The live sequence is:
+
+```text
+message
+-> deterministic A5 Phase A overlay / operational gates
+-> local Qwen Phase B soft-only proposal
+-> parse / schema validation / authority leakage checks
+-> deterministic soft clamp
+-> effective-proposal validation / authority leakage checks
+-> B1 Phase B RouterHint bridge
+-> RouterPolicy/A3
+```
+
+Qwen remains advisory Phase B only. It does not produce Phase A gates, routing
+authority, execution authority, provider selection, memory writes, retrieval,
+tool/MCP/browser/terminal authorization, or final responses. B1 is not a raw
+model-output normalizer: malformed, missing-field, exception, endpoint, or
+authority-leaking live Phase B output fails closed before B1/RouterPolicy/A3.
+
+The default B3 stub path remains unchanged. The deterministic B4 path remains
+unchanged. B4-live adds no production chat/UI, memory runtime, retrieval
+runtime, provider/tool routing, backend route, frontend UI, DB schema, worker,
+hook, MCP, or BlueRev behavior.
+
 ## 1G-B2-F3-A1 boundary
 
 This document is part of the RouterPolicy contract layer only. It does not add
