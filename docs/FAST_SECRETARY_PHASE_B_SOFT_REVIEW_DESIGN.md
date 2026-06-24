@@ -324,3 +324,23 @@ Phase B behavior:
 
 No runtime memory, retrieval, provider routing, tool execution, route, worker,
 MCP, or BlueRev modeling behavior is added.
+
+## 1G-B2-F2-B5-C-R Compound Provider-Negation Repair
+
+`1G-B2-F2-B5-C-R` repairs the Phase A provider/export detector for compound
+clauses.
+
+Negation is now evaluated clause-locally, not sentence-globally:
+
+- a negated export to one provider does not suppress a later positive export to
+  another provider;
+- English and Italian blocker cases are covered;
+- elided export-verb cases such as "do not send it to DeepSeek, but to Claude"
+  and "non mandarlo a DeepSeek, ma a Claude" are detected.
+
+The detector remains deterministic and conservative, but regex/clause logic is
+not a full semantic parser. Ambiguous export intent should eventually route to
+clarification/review rather than being treated as safe by default.
+
+No runtime memory, retrieval, provider routing, tool execution, route, worker,
+MCP, Qwen/Ollama, external provider, or BlueRev modeling behavior is added.

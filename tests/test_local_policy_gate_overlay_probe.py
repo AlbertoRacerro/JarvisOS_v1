@@ -80,6 +80,111 @@ class PolicyGateOverlayProbeTests(unittest.TestCase):
         self.assertNotEqual("provider_or_upload_intent", corrected["hard_reason_code"])
         self.assert_schema_valid(corrected)
 
+    def test_simple_english_local_only_negation_remains_non_export(self):
+        corrected = overlay.apply_policy_overlay(
+            "Save this proprietary BlueRev calculation locally; do not send it to DeepSeek.",
+            self.wrong_draft(),
+        )
+        self.assertTrue(corrected["contains_raw_private_or_ip_sensitive_context"])
+        self.assertFalse(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertFalse(corrected["external_provider_allowed"])
+        self.assertNotEqual("provider_or_upload_intent", corrected["hard_reason_code"])
+        self.assert_schema_valid(corrected)
+
+    def test_simple_italian_local_only_negation_remains_non_export(self):
+        corrected = overlay.apply_policy_overlay(
+            "Salva questo calcolo proprietario BlueRev localmente; non mandarlo a DeepSeek.",
+            self.wrong_draft(),
+        )
+        self.assertTrue(corrected["contains_raw_private_or_ip_sensitive_context"])
+        self.assertFalse(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertFalse(corrected["external_provider_allowed"])
+        self.assertNotEqual("provider_or_upload_intent", corrected["hard_reason_code"])
+        self.assert_schema_valid(corrected)
+
+    def test_compound_english_negation_later_positive_export_blocks(self):
+        corrected = overlay.apply_policy_overlay(
+            "Save this proprietary BlueRev calculation locally; do not send it to DeepSeek, "
+            "but send a redacted summary to Claude.",
+            self.wrong_draft(),
+        )
+        self.assertTrue(corrected["contains_raw_private_or_ip_sensitive_context"])
+        self.assertTrue(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertFalse(corrected["external_provider_allowed"])
+        self.assertEqual("provider_or_upload_intent", corrected["hard_reason_code"])
+        self.assertEqual("blocked", corrected["source_policy_for_future_retrieval"])
+        self.assert_schema_valid(corrected)
+
+    def test_compound_italian_negation_later_positive_export_blocks(self):
+        corrected = overlay.apply_policy_overlay(
+            "Salva questo calcolo proprietario BlueRev localmente; non mandarlo a DeepSeek, "
+            "ma mandalo a Claude.",
+            self.wrong_draft(),
+        )
+        self.assertTrue(corrected["contains_raw_private_or_ip_sensitive_context"])
+        self.assertTrue(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertFalse(corrected["external_provider_allowed"])
+        self.assertEqual("provider_or_upload_intent", corrected["hard_reason_code"])
+        self.assertEqual("blocked", corrected["source_policy_for_future_retrieval"])
+        self.assert_schema_valid(corrected)
+
+    def test_redaction_only_conditional_without_provider_is_not_export_intent(self):
+        corrected = overlay.apply_policy_overlay(
+            "Save this proprietary BlueRev calculation locally; send only after redaction.",
+            self.wrong_draft(),
+        )
+        self.assertTrue(corrected["contains_raw_private_or_ip_sensitive_context"])
+        self.assertFalse(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertFalse(corrected["external_provider_allowed"])
+        # TODO: a future policy field may need to represent conditional export intent.
+        self.assert_schema_valid(corrected)
+
+    def test_conditional_english_provider_export_blocks(self):
+        corrected = overlay.apply_policy_overlay(
+            "Save this proprietary BlueRev calculation locally; send it to Claude only after redaction.",
+            self.wrong_draft(),
+        )
+        self.assertTrue(corrected["contains_raw_private_or_ip_sensitive_context"])
+        self.assertTrue(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertFalse(corrected["external_provider_allowed"])
+        self.assertEqual("provider_or_upload_intent", corrected["hard_reason_code"])
+        self.assert_schema_valid(corrected)
+
+    def test_conditional_italian_provider_export_blocks(self):
+        corrected = overlay.apply_policy_overlay(
+            "Salva questo calcolo proprietario BlueRev localmente; mandalo a Claude solo dopo redazione.",
+            self.wrong_draft(),
+        )
+        self.assertTrue(corrected["contains_raw_private_or_ip_sensitive_context"])
+        self.assertTrue(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertFalse(corrected["external_provider_allowed"])
+        self.assertEqual("provider_or_upload_intent", corrected["hard_reason_code"])
+        self.assert_schema_valid(corrected)
+
+    def test_english_elided_export_clause_blocks(self):
+        corrected = overlay.apply_policy_overlay(
+            "Save this proprietary BlueRev calculation locally; do not send it to DeepSeek, but to Claude.",
+            self.wrong_draft(),
+        )
+        self.assertTrue(corrected["contains_raw_private_or_ip_sensitive_context"])
+        self.assertTrue(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertFalse(corrected["external_provider_allowed"])
+        self.assertEqual("provider_or_upload_intent", corrected["hard_reason_code"])
+        self.assertEqual("blocked", corrected["source_policy_for_future_retrieval"])
+        self.assert_schema_valid(corrected)
+
+    def test_italian_elided_export_clause_blocks(self):
+        corrected = overlay.apply_policy_overlay(
+            "Salva questo calcolo proprietario BlueRev localmente; non mandarlo a DeepSeek, ma a Claude.",
+            self.wrong_draft(),
+        )
+        self.assertTrue(corrected["contains_raw_private_or_ip_sensitive_context"])
+        self.assertTrue(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertFalse(corrected["external_provider_allowed"])
+        self.assertEqual("provider_or_upload_intent", corrected["hard_reason_code"])
+        self.assertEqual("blocked", corrected["source_policy_for_future_retrieval"])
+        self.assert_schema_valid(corrected)
+
     def test_english_positive_provider_export_intent_still_blocks(self):
         corrected = overlay.apply_policy_overlay(
             "Send the whole private JarvisOS memory folder to DeepSeek for architecture advice.",

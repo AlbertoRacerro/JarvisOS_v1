@@ -1390,3 +1390,25 @@ Acceptance:
 B5-C also adds deterministic tests for English and Italian provider-negation
 phrases so local-only private/IP-sensitive memory is not misclassified as
 external-provider upload intent.
+
+## 1G-B2-F2-B5-C-R Compound Provider-Negation Repair
+
+B5-C-R is deterministic Phase A overlay repair only. It does not run Qwen,
+Ollama, external providers, or network services.
+
+It validates a trap matrix under:
+
+```text
+reports/local_model_smoke/1G-B2-F2-B5-C-R/
+```
+
+Acceptance:
+
+- simple local-only negation remains provider/export `false`;
+- compound negation plus later positive export becomes provider/export `true`;
+- English and Italian positive exports remain provider/export `true`;
+- conditional provider export remains provider/export `true`;
+- English and Italian elided export clauses become provider/export `true`.
+
+The repair evaluates negation clause-locally. A negated export to one provider
+must not suppress a later positive export to another provider.

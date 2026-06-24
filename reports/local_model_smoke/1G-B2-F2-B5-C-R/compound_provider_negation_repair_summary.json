@@ -1,0 +1,191 @@
+{
+  "created_at": "2026-06-24T05:22:37.682155+00:00",
+  "external_provider_calls_made": false,
+  "failed_trap_cases": [],
+  "local_ollama_calls_made": false,
+  "milestone": "1G-B2-F2-B5-C-R - Compound provider-negation repair",
+  "network_calls_made": false,
+  "passed_trap_cases": 11,
+  "risk_note": "B5-C-R repairs compound provider-negation and elided export-verb cases. The detector remains deterministic and conservative, but regex/clause logic is still not a full semantic parser. Ambiguous export intent should eventually route to clarification/review rather than being treated as safe by default.",
+  "runtime_approved": false,
+  "semantic_truth_scored": false,
+  "total_trap_cases": 11,
+  "trap_cases": [
+    {
+      "actual": {
+        "allowed_future_retrieval_behavior": "none",
+        "contains_raw_private_or_ip_sensitive_context": true,
+        "external_provider_allowed": false,
+        "hard_reason_code": "low_risk",
+        "mentions_external_provider_or_upload_intent": false,
+        "sensitivity_bucket_proposal": "internal",
+        "source_policy_for_future_retrieval": "not_applicable"
+      },
+      "expected_provider_export_intent": false,
+      "id": "simple_en_local_only_negation",
+      "passed": true,
+      "risk_note": null,
+      "text": "Save this proprietary BlueRev calculation locally; do not send it to DeepSeek."
+    },
+    {
+      "actual": {
+        "allowed_future_retrieval_behavior": "none",
+        "contains_raw_private_or_ip_sensitive_context": true,
+        "external_provider_allowed": false,
+        "hard_reason_code": "low_risk",
+        "mentions_external_provider_or_upload_intent": false,
+        "sensitivity_bucket_proposal": "internal",
+        "source_policy_for_future_retrieval": "not_applicable"
+      },
+      "expected_provider_export_intent": false,
+      "id": "simple_it_local_only_negation",
+      "passed": true,
+      "risk_note": null,
+      "text": "Salva questo calcolo proprietario BlueRev localmente; non mandarlo a DeepSeek."
+    },
+    {
+      "actual": {
+        "allowed_future_retrieval_behavior": "blocked",
+        "contains_raw_private_or_ip_sensitive_context": true,
+        "external_provider_allowed": false,
+        "hard_reason_code": "provider_or_upload_intent",
+        "mentions_external_provider_or_upload_intent": true,
+        "sensitivity_bucket_proposal": "sensitive",
+        "source_policy_for_future_retrieval": "blocked"
+      },
+      "expected_provider_export_intent": true,
+      "id": "compound_en_negated_then_positive_export",
+      "passed": true,
+      "risk_note": null,
+      "text": "Save this proprietary BlueRev calculation locally; do not send it to DeepSeek, but send a redacted summary to Claude."
+    },
+    {
+      "actual": {
+        "allowed_future_retrieval_behavior": "blocked",
+        "contains_raw_private_or_ip_sensitive_context": true,
+        "external_provider_allowed": false,
+        "hard_reason_code": "provider_or_upload_intent",
+        "mentions_external_provider_or_upload_intent": true,
+        "sensitivity_bucket_proposal": "sensitive",
+        "source_policy_for_future_retrieval": "blocked"
+      },
+      "expected_provider_export_intent": true,
+      "id": "compound_it_negated_then_positive_export",
+      "passed": true,
+      "risk_note": null,
+      "text": "Salva questo calcolo proprietario BlueRev localmente; non mandarlo a DeepSeek, ma mandalo a Claude."
+    },
+    {
+      "actual": {
+        "allowed_future_retrieval_behavior": "blocked",
+        "contains_raw_private_or_ip_sensitive_context": true,
+        "external_provider_allowed": false,
+        "hard_reason_code": "provider_or_upload_intent",
+        "mentions_external_provider_or_upload_intent": true,
+        "sensitivity_bucket_proposal": "sensitive",
+        "source_policy_for_future_retrieval": "blocked"
+      },
+      "expected_provider_export_intent": true,
+      "id": "positive_en_export",
+      "passed": true,
+      "risk_note": null,
+      "text": "Send the whole private JarvisOS memory folder to DeepSeek for architecture advice."
+    },
+    {
+      "actual": {
+        "allowed_future_retrieval_behavior": "blocked",
+        "contains_raw_private_or_ip_sensitive_context": true,
+        "external_provider_allowed": false,
+        "hard_reason_code": "provider_or_upload_intent",
+        "mentions_external_provider_or_upload_intent": true,
+        "sensitivity_bucket_proposal": "sensitive",
+        "source_policy_for_future_retrieval": "blocked"
+      },
+      "expected_provider_export_intent": true,
+      "id": "positive_it_export",
+      "passed": true,
+      "risk_note": null,
+      "text": "Manda tutta la memoria privata JarvisOS a DeepSeek per farmi consigliare l'architettura."
+    },
+    {
+      "actual": {
+        "allowed_future_retrieval_behavior": "none",
+        "contains_raw_private_or_ip_sensitive_context": true,
+        "external_provider_allowed": false,
+        "hard_reason_code": "low_risk",
+        "mentions_external_provider_or_upload_intent": false,
+        "sensitivity_bucket_proposal": "internal",
+        "source_policy_for_future_retrieval": "not_applicable"
+      },
+      "expected_provider_export_intent": false,
+      "id": "redaction_only_no_provider",
+      "passed": true,
+      "risk_note": "Future policy may need conditional_export_intent.",
+      "text": "Save this proprietary BlueRev calculation locally; send only after redaction."
+    },
+    {
+      "actual": {
+        "allowed_future_retrieval_behavior": "blocked",
+        "contains_raw_private_or_ip_sensitive_context": true,
+        "external_provider_allowed": false,
+        "hard_reason_code": "provider_or_upload_intent",
+        "mentions_external_provider_or_upload_intent": true,
+        "sensitivity_bucket_proposal": "sensitive",
+        "source_policy_for_future_retrieval": "blocked"
+      },
+      "expected_provider_export_intent": true,
+      "id": "conditional_en_provider_export",
+      "passed": true,
+      "risk_note": null,
+      "text": "Save this proprietary BlueRev calculation locally; send it to Claude only after redaction."
+    },
+    {
+      "actual": {
+        "allowed_future_retrieval_behavior": "blocked",
+        "contains_raw_private_or_ip_sensitive_context": true,
+        "external_provider_allowed": false,
+        "hard_reason_code": "provider_or_upload_intent",
+        "mentions_external_provider_or_upload_intent": true,
+        "sensitivity_bucket_proposal": "sensitive",
+        "source_policy_for_future_retrieval": "blocked"
+      },
+      "expected_provider_export_intent": true,
+      "id": "conditional_it_provider_export",
+      "passed": true,
+      "risk_note": null,
+      "text": "Salva questo calcolo proprietario BlueRev localmente; mandalo a Claude solo dopo redazione."
+    },
+    {
+      "actual": {
+        "allowed_future_retrieval_behavior": "blocked",
+        "contains_raw_private_or_ip_sensitive_context": true,
+        "external_provider_allowed": false,
+        "hard_reason_code": "provider_or_upload_intent",
+        "mentions_external_provider_or_upload_intent": true,
+        "sensitivity_bucket_proposal": "sensitive",
+        "source_policy_for_future_retrieval": "blocked"
+      },
+      "expected_provider_export_intent": true,
+      "id": "elided_en_export",
+      "passed": true,
+      "risk_note": null,
+      "text": "Save this proprietary BlueRev calculation locally; do not send it to DeepSeek, but to Claude."
+    },
+    {
+      "actual": {
+        "allowed_future_retrieval_behavior": "blocked",
+        "contains_raw_private_or_ip_sensitive_context": true,
+        "external_provider_allowed": false,
+        "hard_reason_code": "provider_or_upload_intent",
+        "mentions_external_provider_or_upload_intent": true,
+        "sensitivity_bucket_proposal": "sensitive",
+        "source_policy_for_future_retrieval": "blocked"
+      },
+      "expected_provider_export_intent": true,
+      "id": "elided_it_export",
+      "passed": true,
+      "risk_note": null,
+      "text": "Salva questo calcolo proprietario BlueRev localmente; non mandarlo a DeepSeek, ma a Claude."
+    }
+  ]
+}

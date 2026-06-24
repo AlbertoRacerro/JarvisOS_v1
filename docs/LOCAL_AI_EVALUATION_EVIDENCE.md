@@ -1138,3 +1138,38 @@ Decision boundary:
   policy allows it.
 - B5-C does not approve runtime memory, retrieval, provider use, tool
   execution, route selection, semantic truth, or BlueRev modeling.
+
+### 1G-B2-F2-B5-C-R - Compound Provider-Negation Repair
+
+1G-B2-F2-B5-C-R repairs the deterministic Phase A provider/export detector so
+negation is evaluated clause-locally rather than sentence-globally.
+
+Observed deterministic result:
+
+- trap cases: `11`;
+- passed trap cases: `11`;
+- failed trap cases: `0`;
+- local Ollama calls: `false`;
+- external provider calls: `false`;
+- network calls: `false`;
+- runtime approval: `false`;
+- semantic truth scored: `false`.
+
+Covered cases:
+
+- simple English/Italian local-only negation stays non-export;
+- compound English/Italian negation plus later positive export is blocked;
+- positive English/Italian export remains blocked;
+- conditional provider export remains blocked;
+- English/Italian elided export clauses are blocked.
+
+Risk note:
+
+- Regex/clause logic is deterministic and conservative, but it is not a full
+  semantic parser.
+- Ambiguous export intent should eventually route to clarification/review rather
+  than being treated as safe by default.
+
+B5-C-R does not add runtime memory, retrieval, provider routing, external
+provider calls, tool execution, routes, database schema, workers, MCP, Qwen,
+Ollama, or BlueRev modeling behavior.

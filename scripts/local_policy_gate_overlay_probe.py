@@ -59,13 +59,15 @@ RAW_PRIVATE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 PROVIDER_PATTERN = re.compile(
-    r"\b(gpt|chatgpt|claude|gemini|grok|deepseek|openai|anthropic|external provider)\b",
+    r"\b(gpt|chatgpt|claude|gemini|grok|deepseek|openai|anthropic|external provider|"
+    r"provider esterno|provider esterni|api esterna|api esterne)\b",
     re.IGNORECASE,
 )
 UPLOAD_PATTERN = re.compile(
     r"\b(upload|send|share|expose|paste|give|forward|manda|mandare|mandalo|mandarlo|"
-    r"mandala|mandarla|invia|inviare|invialo|inviarlo|carica|caricare|condividi|"
-    r"condividere|esporre)\b",
+    r"mandala|mandarla|mandali|mandale|invia|inviare|invialo|inviarlo|inviarla|"
+    r"carica|caricare|caricalo|condividi|condividere|condividilo|esporre|"
+    r"passa|passare|inoltra|inoltrare)\b",
     re.IGNORECASE,
 )
 NEGATED_EXTERNAL_EXPORT_PATTERN = re.compile(
@@ -80,6 +82,11 @@ NEGATED_EXTERNAL_EXPORT_PATTERN = re.compile(
     r"non mandarlo a gemini|tienilo locale|tenerlo locale|solo locale|"
     r"solo in locale|salva localmente|mantieni localmente|senza inviarlo|"
     r"senza caricarlo|non deve uscire|non mandarlo fuori)",
+    re.IGNORECASE,
+)
+EXPORT_CLAUSE_SPLIT_PATTERN = re.compile(
+    r"(?:;|\.|,?\s+\b(?:but|however|though|although|except|unless|ma|per[oò]|"
+    r"tuttavia|anche se|salvo|a meno che)\b)",
     re.IGNORECASE,
 )
 PUBLIC_DISCOVERY_PATTERN = re.compile(
@@ -133,11 +140,36 @@ def has_negated_external_export_or_local_only_instruction(text: str) -> bool:
     return _matches(NEGATED_EXTERNAL_EXPORT_PATTERN, text or "")
 
 
+def split_export_intent_clauses(text: str) -> list[str]:
+    return [
+        clause.strip(" ,")
+        for clause in EXPORT_CLAUSE_SPLIT_PATTERN.split(text or "")
+        if clause.strip(" ,")
+    ]
+
+
+def clause_has_provider_mention(clause: str) -> bool:
+    return has_external_provider_mention(clause)
+
+
+def clause_has_export_action(clause: str) -> bool:
+    return has_external_export_action(clause)
+
+
+def clause_has_local_negation_or_local_only_instruction(clause: str) -> bool:
+    return has_negated_external_export_or_local_only_instruction(clause)
+
+
 def detects_provider_or_upload_intent(text: str) -> bool:
-    provider_mentioned = has_external_provider_mention(text)
-    export_action = has_external_export_action(text)
-    negated_or_local_only = has_negated_external_export_or_local_only_instruction(text)
-    return provider_mentioned and export_action and not negated_or_local_only
+    export_action_exists = has_external_export_action(text)
+    if not export_action_exists:
+        return False
+    for clause in split_export_intent_clauses(text):
+        provider = clause_has_provider_mention(clause)
+        negated_or_local_only = clause_has_local_negation_or_local_only_instruction(clause)
+        if provider and not negated_or_local_only:
+            return True
+    return False
 
 
 def classify_policy_triggers(input_text: str) -> dict[str, bool]:

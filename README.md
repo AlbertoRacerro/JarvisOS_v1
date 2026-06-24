@@ -167,11 +167,13 @@ unresolved references.
 
 B5-C passed the eight-case local Qwen panel with raw soft quality `24/29`,
 effective soft quality `29/29`, raw/effective schema validity `8/8`, and
-effective authority leakage `0`. Phase A provider intent detection is now
-negation-aware for explicit local-only instructions. Sensitive local project/IP
-content may be high-value local memory, but external provider approval remains
-hard-gated and false unless deterministic policy allows it.
+effective authority leakage `0`. B5-C-R repairs compound provider-negation and
+elided export-verb cases: negation is evaluated clause-locally, so a negated
+export to one provider does not suppress a later positive export to another
+provider. Sensitive local project/IP content may be high-value local memory, but
+external provider approval remains hard-gated and false unless deterministic
+policy allows it.
 
-Passing B5-C does not approve runtime use.
+Passing B5-C-R does not approve runtime use.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.
