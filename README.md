@@ -158,20 +158,23 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F3-A5-R - Real message local-route smoke audit
+1G-B2-F3-A5-R1-R - Operational-intent hard-gate repair audit
 ```
 
-`1G-B2-F3-A5` adds a real-message-to-local-route smoke bridge. It is not a
-production Phase A/B normalizer. Because no complete production
-message-to-RouterPolicy-input normalizer exists, A5 uses a smoke-only fallback
-builder with structural checks only.
+`1G-B2-F3-A5-R1` patches the A5 real-message smoke bridge so obvious
+operational intent cannot be made executable by `--assume-public-simple`.
 
-In fallback mode, arbitrary `--message` input defaults to no-execution.
-`--run-local` alone does not make arbitrary input executable. Safe CLI local
-execution requires both `--assume-public-simple` and `--run-local`, and
-`assume_public_simple` does not override deterministic hard-gate safety signals.
-A5 populates exactly `input_obj["message_text"]` with the original message
-string; the responder receives only that string.
+`--assume-public-simple` cannot authorize tool/MCP, browser/search, terminal,
+memory-write, retrieval/file-access, or provider/upload intent. The repair uses
+a small deterministic smoke-only detector that sets existing RouterPolicy hard
+gate fields before the safe local-answer path can be selected. The detector is
+conservative substring/regex logic, not production Phase B/Qwen classification,
+and may over-block benign discussion of operational terms.
+
+Benign local answer smoke still requires both `--assume-public-simple` and
+`--run-local`. `--run-local` alone does not make arbitrary input executable.
+A5 still populates exactly `input_obj["message_text"]` with the original
+message string; the responder receives only that string.
 
 Default CLI output is redacted: no full input object, raw message, full decision
 JSON, or response is printed when `executed=false`. Real local model execution
@@ -184,9 +187,9 @@ Manual local smoke, optional and local-only:
 python scripts\router_policy_message_route_smoke.py --message "Explain what a pump is" --assume-public-simple --run-local
 ```
 
-A5 does not add external providers, non-localhost network calls, tools,
+A5-R1 does not add external providers, non-localhost network calls, tools,
 browser/terminal/MCP execution, memory, retrieval, file-write runtime, backend
-routes, frontend UI, database migrations, or BlueRev
+routes, frontend UI, database migrations, Phase B/Qwen runtime, or BlueRev
 modeling.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

@@ -1533,3 +1533,44 @@ A5 does not add production Phase A/B normalization, broad routing, backend
 routes, frontend UI, database migrations, external provider routing,
 non-localhost network calls, tool/browser/terminal/MCP execution, memory writes,
 retrieval, file-write runtime, or BlueRev modeling.
+
+### 1G-B2-F3-A5-R1 - Operational-intent Hard-gate Repair
+
+1G-B2-F3-A5-R1 repairs the A5-R audit blocker where:
+
+```text
+"use MCP to call a tool"
++ assume_public_simple=True
+-> executed=True
+-> reason=local_answer
+```
+
+The repair adds a small deterministic smoke-only operational-intent detector to
+the A5 message-route smoke builder. It runs before `_has_hard_gate_signal` and
+sets existing hard-gate fields so `--assume-public-simple` cannot authorize:
+
+- tool/MCP intent;
+- browser/search intent;
+- terminal/subprocess/shell intent;
+- memory-write intent;
+- retrieval/file-access intent;
+- provider/upload intent.
+
+Observed repair result:
+
+- message-route smoke test module: `31/31`;
+- `use MCP to call a tool` no longer executes with `assume_public_simple=True`;
+- `--assume-public-simple --run-local` no longer bypasses operational intent;
+- benign local answer smoke still executes with fake responder;
+- default without `assume_public_simple` remains no-execution;
+- responder prompt remains exactly `input_obj["message_text"]`;
+- real local calls made during tests: `false`;
+- external provider calls: `false`;
+- non-localhost network calls: `false`;
+- tool/browser/terminal/MCP execution added: `false`;
+- memory/retrieval/file-write runtime added: `false`;
+- report: `reports/router_policy/1G-B2-F3-A5-R1/`.
+
+The detector is conservative substring/regex smoke-only detection, not
+production Phase B/Qwen classification. It may over-block benign discussion of
+operational terms.

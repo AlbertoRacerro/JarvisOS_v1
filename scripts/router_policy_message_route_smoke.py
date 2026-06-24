@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from collections.abc import Sequence
 from typing import Any
 
@@ -126,6 +127,79 @@ OVERLAY_REASON_MAP = {
     "memory_boundary_or_write_authority": "manual_review_required",
     "retrieval_or_source_request": "manual_review_required",
     "contradiction_or_superseded": "manual_review_required",
+}
+OPERATIONAL_INTENT_PATTERNS = {
+    "tool_mcp": [
+        r"\buse\s+mcp\b",
+        r"\bmcp\s+call\b",
+        r"\bmcp_call\b",
+        r"\bcall\s+a\s+tool\b",
+        r"\buse\s+a\s+tool\b",
+        r"\buse\s+tool\b",
+        r"\btool\s+call\b",
+        r"\binvoke\s+tool\b",
+        r"\bexecute\s+tool\b",
+    ],
+    "terminal": [
+        r"\brun\s+command\b",
+        r"\bexecute\s+command\b",
+        r"\bterminal\b",
+        r"\bpowershell\b",
+        r"\bshell\b",
+        r"\bcmd\.exe\b",
+        r"\bsubprocess\b",
+        r"\bpopen\b",
+        r"\bos\.system\b",
+        r"\bbash\b",
+    ],
+    "memory_write": [
+        r"\bwrite\s+to\s+memory\b",
+        r"\bsave\s+to\s+memory\b",
+        r"\bstore\s+(?:this\s+)?in\s+memory\b",
+        r"\bremember\s+this\b",
+        r"\badd\s+to\s+memory\b",
+        r"\bmemory\s+write\b",
+    ],
+    "file_retrieval": [
+        r"\bread\s+file\b",
+        r"\bopen\s+file\b",
+        r"\bread\s+local\s+file\b",
+        r"\bretrieve\s+file\b",
+        r"\bload\s+file\b",
+        r"\baccess\s+file\b",
+        r"[a-z]:\\",
+        r"/home/",
+        r"\.env\b",
+        r"\bcredentials\b",
+    ],
+    "browser_search": [
+        r"\bbrowse\b",
+        r"\bopen\s+browser\b",
+        r"\bsearch\s+web\b",
+        r"\bweb\s+search\b",
+        r"\bgoogle\s+this\b",
+        r"\blook\s+it\s+up\s+online\b",
+    ],
+    "provider_upload": [
+        r"\bupload\b.{0,40}\bto\s+openai\b",
+        r"\bsend\b.{0,40}\bto\s+openai\b",
+        r"\bupload\b.{0,40}\bto\s+gemini\b",
+        r"\bsend\b.{0,40}\bto\s+gemini\b",
+        r"\bsend\b.{0,40}\bto\s+claude\b",
+        r"\bupload\s+to\s+openai\b",
+        r"\bsend\s+to\s+openai\b",
+        r"\bupload\s+to\s+gemini\b",
+        r"\bsend\s+to\s+gemini\b",
+        r"\bexternal\s+provider\b",
+        r"\bhosted\s+api\b",
+        r"\banthropic\b",
+        r"\bclaude\b",
+        r"\bgrok\b",
+        r"\bopenrouter\b",
+        r"\bmistral\b",
+        r"\bdeepseek\b",
+        r"\bqwen\s+api\b",
+    ],
 }
 
 
@@ -260,6 +334,102 @@ def _apply_conservative_overlay(input_obj: dict[str, Any], corrected: dict[str, 
         router_hint["task_type"] = "clarification"
 
 
+def _detect_operational_intent(message_text: str) -> dict[str, Any]:
+    """Detect obvious operational intent for smoke-only fail-closed routing."""
+
+    categories: list[str] = []
+    matches: dict[str, list[str]] = {}
+    for category, patterns in OPERATIONAL_INTENT_PATTERNS.items():
+        for pattern in patterns:
+            if re.search(pattern, message_text, flags=re.IGNORECASE):
+                categories.append(category)
+                matches.setdefault(category, []).append(pattern)
+                break
+    return {
+        "detected": bool(categories),
+        "categories": categories,
+        "matches": matches,
+    }
+
+
+def _append_hard_reason(phase_a: dict[str, Any], reason: str) -> None:
+    if reason not in HARD_REASON_CODES:
+        reason = "manual_review_required"
+    existing = phase_a.get("hard_reason_codes")
+    if not isinstance(existing, list):
+        existing = []
+    filtered = [item for item in existing if item != "low_risk"]
+    if reason not in filtered:
+        filtered.append(reason)
+    phase_a["hard_reason_codes"] = filtered or ["manual_review_required"]
+
+
+def _apply_operational_intent_overlay(input_obj: dict[str, Any], operational: dict[str, Any]) -> None:
+    if not operational.get("detected"):
+        return
+
+    phase_a = input_obj["phase_a_signals"]
+    router_hint = input_obj["router_hint"]
+    action_hint = input_obj["action_hint"]
+    context_metadata = input_obj["context_metadata"]
+    categories = set(operational.get("categories") or [])
+
+    phase_a["requires_manual_review"] = True
+    phase_a["external_provider_allowed"] = False
+    phase_a["source_policy_for_future_retrieval"] = "blocked"
+    phase_a["allowed_future_retrieval_behavior"] = "none"
+    if phase_a.get("sensitivity_bucket_proposal") == "public":
+        phase_a["sensitivity_bucket_proposal"] = "unknown"
+    if phase_a.get("sensitivity_bucket_proposal") not in SENSITIVITY_BUCKETS:
+        phase_a["sensitivity_bucket_proposal"] = "unknown"
+    router_hint["task_type"] = "review"
+    router_hint["complexity"] = "high"
+    router_hint["confidence"] = "low"
+    action_hint["confidence"] = "low"
+    context_metadata["assume_public_simple_safe_path"] = False
+    context_metadata["operational_intent_detected"] = True
+    context_metadata["operational_intent_categories"] = sorted(categories)
+
+    if "provider_upload" in categories:
+        phase_a["mentions_external_provider_or_upload_intent"] = True
+        action_hint["needs_provider_call"] = True
+        router_hint["needs_reasoning"] = True
+        _append_hard_reason(phase_a, "provider_or_upload_intent")
+
+    if "terminal" in categories:
+        action_hint["needs_terminal"] = True
+        action_hint["requested_action_type"] = "terminal_command"
+        action_hint["environment_type"] = "terminal"
+        action_hint["state_scope"] = "os"
+        router_hint["needs_code_execution"] = True
+        _append_hard_reason(phase_a, "manual_review_required")
+
+    if "memory_write" in categories:
+        action_hint["needs_memory_write"] = True
+        action_hint["requested_action_type"] = "memory_write"
+        action_hint["environment_type"] = "memory_store"
+        action_hint["state_scope"] = "memory"
+        _append_hard_reason(phase_a, "manual_review_required")
+
+    if "file_retrieval" in categories:
+        router_hint["needs_file_context"] = True
+        router_hint["needs_current_info"] = True
+        _append_hard_reason(phase_a, "manual_review_required")
+
+    if "browser_search" in categories:
+        router_hint["needs_current_info"] = True
+        action_hint["requested_action_type"] = "browser_search"
+        action_hint["environment_type"] = "browser"
+        action_hint["state_scope"] = "browser"
+        _append_hard_reason(phase_a, "manual_review_required")
+
+    if "tool_mcp" in categories:
+        phase_a["clarification_required"] = True
+        router_hint["task_type"] = "clarification"
+        router_hint["complexity"] = "unknown"
+        _append_hard_reason(phase_a, "clarification_required")
+
+
 def _has_hard_gate_signal(input_obj: dict[str, Any]) -> bool:
     phase_a = input_obj["phase_a_signals"]
     router_hint = input_obj["router_hint"]
@@ -295,6 +465,8 @@ def build_router_policy_input_from_message_for_smoke(
     input_obj = _base_router_input(message_text)
     corrected = _APPLY_POLICY_OVERLAY(message_text, {})
     _apply_conservative_overlay(input_obj, corrected)
+    operational = _detect_operational_intent(message_text)
+    _apply_operational_intent_overlay(input_obj, operational)
 
     hard_gate_detected = _has_hard_gate_signal(input_obj)
     if assume_public_simple and not hard_gate_detected:

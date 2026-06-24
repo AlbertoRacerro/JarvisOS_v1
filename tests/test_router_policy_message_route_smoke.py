@@ -91,6 +91,28 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
         builder.assert_called_once_with(message, now=NOW, assume_public_simple=assume)
         return result
 
+    def assert_operational_blocked(self, message, *, expected_action_field=None, expected_router_field=None):
+        responder = Mock(return_value="should not run")
+        result = smoke.run_message_route_smoke(
+            message,
+            responder=responder,
+            now=NOW,
+            assume_public_simple=True,
+        )
+        responder.assert_not_called()
+        self.assertFalse(result["executed"])
+        input_obj = result["input_obj"]
+        self.assertNotEqual("answer", input_obj["router_hint"]["task_type"])
+        self.assertNotEqual("low", input_obj["router_hint"]["complexity"])
+        self.assertFalse(input_obj["context_metadata"]["assume_public_simple_safe_path"])
+        self.assertNotEqual(["low_risk"], input_obj["phase_a_signals"]["hard_reason_codes"])
+        self.assertTrue(input_obj["context_metadata"]["operational_intent_detected"])
+        if expected_action_field is not None:
+            self.assertTrue(input_obj["action_hint"][expected_action_field])
+        if expected_router_field is not None:
+            self.assertTrue(input_obj["router_hint"][expected_router_field])
+        return result
+
     def test_a5_001_simple_public_message_reaches_injected_responder_through_real_a3(self):
         message = "Explain what a pump is"
         responder = Mock(return_value="A pump moves fluid.")
@@ -412,6 +434,117 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
         self.assertFalse(result["executed"])
         self.assertNotIn("overlay_only_code", result["input_obj"]["phase_a_signals"]["hard_reason_codes"])
         self.assertIn("manual_review_required", result["input_obj"]["phase_a_signals"]["hard_reason_codes"])
+
+    def test_a5_r1_001_mcp_tool_intent_does_not_execute_with_assume_public_simple(self):
+        for message in ("use MCP to call a tool", "call a tool for this", "invoke tool now"):
+            with self.subTest(message=message):
+                result = self.assert_operational_blocked(message)
+                self.assertTrue(result["input_obj"]["phase_a_signals"]["clarification_required"])
+                self.assertIn("clarification_required", result["input_obj"]["phase_a_signals"]["hard_reason_codes"])
+
+    def test_a5_r1_002_terminal_intent_does_not_execute_with_assume_public_simple(self):
+        for message in ("run command dir", "execute command in PowerShell", "use subprocess to run this"):
+            with self.subTest(message=message):
+                result = self.assert_operational_blocked(message, expected_action_field="needs_terminal")
+                self.assertTrue(result["input_obj"]["router_hint"]["needs_code_execution"])
+
+    def test_a5_r1_003_memory_intent_does_not_execute_with_assume_public_simple(self):
+        for message in ("remember this", "write to memory", "store this in memory"):
+            with self.subTest(message=message):
+                self.assert_operational_blocked(message, expected_action_field="needs_memory_write")
+
+    def test_a5_r1_004_retrieval_file_intent_does_not_execute_with_assume_public_simple(self):
+        for message in (r"read local file C:\secret.txt", "open file .env", "retrieve file credentials.json"):
+            with self.subTest(message=message):
+                self.assert_operational_blocked(message, expected_router_field="needs_file_context")
+
+    def test_a5_r1_005_browser_search_intent_does_not_execute_with_assume_public_simple(self):
+        for message in (
+            "browse the web for this",
+            "search web for current prices",
+            "open browser and look this up",
+            "look it up online",
+        ):
+            with self.subTest(message=message):
+                result = self.assert_operational_blocked(message)
+                self.assertTrue(result["input_obj"]["router_hint"]["needs_current_info"])
+
+    def test_a5_r1_006_provider_upload_intent_does_not_execute_with_assume_public_simple(self):
+        for message in ("please upload this to OpenAI", "send this to Claude", "use OpenRouter for this", "call Qwen API"):
+            with self.subTest(message=message):
+                result = self.assert_operational_blocked(message, expected_action_field="needs_provider_call")
+                self.assertIn("provider_or_upload_intent", result["input_obj"]["phase_a_signals"]["hard_reason_codes"])
+
+    def test_a5_r1_007_benign_answer_still_executes_with_assume_public_simple(self):
+        message = "Explain what a centrifugal pump is"
+        responder = Mock(return_value="A centrifugal pump uses a rotating impeller.")
+        result = smoke.run_message_route_smoke(
+            message,
+            responder=responder,
+            now=NOW,
+            assume_public_simple=True,
+        )
+        responder.assert_called_once_with(result["input_obj"]["message_text"])
+        self.assertEqual(message, result["input_obj"]["message_text"])
+        self.assertTrue(result["executed"])
+        self.assertEqual("A centrifugal pump uses a rotating impeller.", result["response"])
+
+    def test_a5_r1_008_default_without_assume_public_simple_remains_no_execution(self):
+        responder = Mock(return_value="should not run")
+        result = smoke.run_message_route_smoke(
+            "Explain what a centrifugal pump is",
+            responder=responder,
+            now=NOW,
+            assume_public_simple=False,
+        )
+        responder.assert_not_called()
+        self.assertFalse(result["executed"])
+
+    def test_a5_r1_009_cli_assume_public_simple_run_local_does_not_execute_operational_intent(self):
+        fake_responder = Mock(return_value="should not run")
+        with patch.object(smoke, "_BUILD_LOCAL_RESPONDER", return_value=fake_responder):
+            with patch("builtins.print") as printed:
+                exit_code = smoke.main(
+                    [
+                        "--message",
+                        "use MCP to call a tool",
+                        "--assume-public-simple",
+                        "--run-local",
+                        "--now",
+                        NOW,
+                    ]
+                )
+        self.assertEqual(0, exit_code)
+        fake_responder.assert_not_called()
+        cli_result = json.loads(printed.call_args.args[0])
+        self.assertFalse(cli_result["executed"])
+        self.assertNotIn("response", cli_result)
+        self.assertNotIn("input_obj", cli_result)
+
+    def test_a5_r1_010_cli_redaction_for_file_secret_like_no_execution_message(self):
+        message = r"read local file C:\secret.txt"
+        fake_responder = Mock(return_value="should not run")
+        with patch.object(smoke, "_BUILD_LOCAL_RESPONDER", return_value=fake_responder):
+            with patch("builtins.print") as printed:
+                exit_code = smoke.main(
+                    [
+                        "--message",
+                        message,
+                        "--assume-public-simple",
+                        "--run-local",
+                        "--now",
+                        NOW,
+                    ]
+                )
+        self.assertEqual(0, exit_code)
+        fake_responder.assert_not_called()
+        output = printed.call_args.args[0]
+        cli_result = json.loads(output)
+        self.assertFalse(cli_result["executed"])
+        self.assertNotIn(message, output)
+        self.assertNotIn(r"C:\secret.txt", output)
+        self.assertNotIn("input_obj", output)
+        self.assertNotIn("response", cli_result)
 
 
 if __name__ == "__main__":

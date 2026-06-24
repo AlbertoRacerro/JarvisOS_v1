@@ -181,6 +181,43 @@ providers, non-localhost network calls, tools/browser/terminal/MCP, memory
 writes, retrieval runtime, file-write runtime, backend routes, frontend UI,
 database schema, or BlueRev modeling.
 
+### 1G-B2-F3-A5-R1 operational-intent hard-gate repair
+
+`1G-B2-F3-A5-R1` patches the A5 smoke builder so `assume_public_simple` cannot
+authorize obvious operational intent.
+
+The smoke-only builder now applies a small deterministic operational-intent
+overlay before `_has_hard_gate_signal(input_obj)` runs. The overlay sets
+existing schema-compatible hard-gate fields for:
+
+- tool/MCP intent;
+- browser/search intent;
+- terminal/subprocess/shell intent;
+- memory-write intent;
+- retrieval/file-access intent;
+- provider/upload intent.
+
+If any such signal is detected, final input remains conservative even with
+`--assume-public-simple --run-local`:
+
+- `router_hint.task_type` is not `answer`;
+- `router_hint.complexity` is not `low`;
+- `context_metadata.assume_public_simple_safe_path` is `false`;
+- `hard_reason_codes` is not `["low_risk"]`;
+- category-specific fields such as `needs_terminal`,
+  `needs_memory_write`, `needs_file_context`, `needs_current_info`, or
+  `needs_provider_call` are set where schema-compatible.
+
+This detector is smoke-only and conservative. It is not production Phase B/Qwen
+classification, may over-block benign discussion of operational terms, and does
+not replace future intent classification. Benign local answer smoke still
+requires `--assume-public-simple --run-local`.
+
+A5-R1 does not add production Phase A/B normalization, Qwen runtime integration,
+external provider routing, tool/MCP/browser/terminal execution, memory writes,
+retrieval runtime, file-write runtime, backend routes, frontend UI, database
+schema, or BlueRev modeling.
+
 ## 1G-B2-F3-A1 boundary
 
 This document is part of the RouterPolicy contract layer only. It does not add

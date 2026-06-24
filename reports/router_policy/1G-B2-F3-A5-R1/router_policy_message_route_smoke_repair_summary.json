@@ -1,0 +1,110 @@
+{
+  "milestone": "1G-B2-F3-A5-R1 - Operational-intent hard-gate repair",
+  "start_head": "ccebd798c1c07209413cfc4989976abfa61aea41",
+  "implementation_base_head": "ccebd798c1c07209413cfc4989976abfa61aea41",
+  "files_changed": [
+    "README.md",
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md",
+    "docs/ROUTER_POLICY_DESIGN.md",
+    "reports/router_policy/1G-B2-F3-A5-R1/router_policy_message_route_smoke_repair_summary.json",
+    "reports/router_policy/1G-B2-F3-A5-R1/router_policy_message_route_smoke_repair_summary.md",
+    "scripts/router_policy_message_route_smoke.py",
+    "tests/test_router_policy_message_route_smoke.py"
+  ],
+  "blocker_fixed": {
+    "a5_r_blocker": "MCP/tool intent could execute under assume_public_simple.",
+    "fixed": true,
+    "evidence": {
+      "message": "use MCP to call a tool",
+      "assume_public_simple": true,
+      "executed": false,
+      "reason": "not_safe_local_route",
+      "hard_reason_codes": [
+        "clarification_required"
+      ],
+      "router_task_type": "clarification",
+      "router_complexity": "unknown",
+      "assume_public_simple_safe_path": false,
+      "responder_calls": 0
+    }
+  },
+  "operational_intent_categories_detected": [
+    "tool_mcp",
+    "terminal",
+    "memory_write",
+    "file_retrieval",
+    "browser_search",
+    "provider_upload"
+  ],
+  "assume_public_simple_dominance_repaired": true,
+  "real_a3_path_tests": {
+    "operational_intent_no_execution_uses_real_a3": true,
+    "benign_answer_execution_uses_real_a3": true,
+    "fake_responder_receives_only_message_text": true,
+    "default_without_assume_public_simple_remains_no_execution": true
+  },
+  "cli_redaction_check": {
+    "mcp_tool_intent_with_assume_public_simple_run_local_executes": false,
+    "file_secret_like_message_prints_raw_message": false,
+    "file_secret_like_message_prints_full_path": false,
+    "prints_full_input_obj": false,
+    "prints_full_decision_json": false,
+    "prints_response_when_executed_false": false
+  },
+  "tests_run": [
+    {
+      "command": "python -m unittest tests.test_router_policy_message_route_smoke",
+      "result": "pass: 31/31"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_local_responder",
+      "result": "pass: 13/13"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_local_route_probe",
+      "result": "pass: 11/11"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_decision_probe",
+      "result": "pass: 14/14"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_semantic_validator",
+      "result": "pass: 40/40"
+    },
+    {
+      "command": "python -m unittest discover -s tests",
+      "result": "pass: 262/262"
+    },
+    {
+      "command": "git diff --check",
+      "result": "pass with expected Windows CRLF warnings"
+    },
+    {
+      "command": "git status --short",
+      "result": "dirty with intended A5-R1 files before staging"
+    },
+    {
+      "command": "rg -n \"openai|anthropic|gemini|grok|httpx|requests|subprocess|Popen|os\\.system|selenium|playwright|mcp|memory_write|write_text|open\\(\" scripts/router_policy_message_route_smoke.py tests/test_router_policy_message_route_smoke.py",
+      "result": "literal blocked-pattern/schema/action-field hits only; no executable integration added"
+    }
+  ],
+  "runtime_boundary_check": {
+    "real_model_calls_during_tests": false,
+    "external_provider_runtime_added": false,
+    "non_localhost_network_runtime_added": false,
+    "tool_browser_terminal_mcp_runtime_added": false,
+    "memory_runtime_added": false,
+    "retrieval_runtime_added": false,
+    "file_write_runtime_added": false,
+    "backend_routes_added": false,
+    "frontend_ui_added": false,
+    "database_migrations_added": false,
+    "bluerev_modeling_added": false
+  },
+  "known_residual_risks": [
+    "Operational-intent detector is conservative substring/regex smoke-only detection, not production intent classification.",
+    "Detector may over-block benign discussion of operational terms.",
+    "Detector is not a substitute for Phase B/Qwen classification."
+  ]
+}
