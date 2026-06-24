@@ -1,0 +1,678 @@
+{
+  "$id": "https://jarvisos.local/schemas/router_policy_decision_v0_3_1_1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "allowed_execution_mode": {
+      "enum": [
+        "answer_only",
+        "propose_only",
+        "dry_run",
+        "execute_after_confirm",
+        "blocked"
+      ],
+      "type": "string"
+    },
+    "audit_notes": {
+      "items": {
+        "maxLength": 500,
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "budget_class": {
+      "enum": [
+        "local",
+        "cheap",
+        "medium",
+        "frontier",
+        "blocked",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "confirmation_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "confirmation_options": {
+      "items": {
+        "enum": [
+          "allow_once",
+          "deny",
+          "edit_payload",
+          "view_details"
+        ],
+        "type": "string"
+      },
+      "type": "array",
+      "uniqueItems": true
+    },
+    "confirmation_payload": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "maxLength": 1000,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cwd": {
+          "maxLength": 1000,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "destructive_command_detected": {
+          "type": "boolean"
+        },
+        "diff_summary": {
+          "maxLength": 2000,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "env_preview_redacted": {
+          "maxLength": 1000,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "estimated_cost_class": {
+          "enum": [
+            "local",
+            "cheap",
+            "medium",
+            "frontier",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "estimated_tokens": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "file_operations": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "after_digest": {
+                "pattern": "^sha256:[a-f0-9]{64}$",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "before_digest": {
+                "pattern": "^sha256:[a-f0-9]{64}$",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "operation": {
+                "enum": [
+                  "create",
+                  "modify",
+                  "delete",
+                  "rename",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              "path": {
+                "maxLength": 1000,
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "operation",
+              "before_digest",
+              "after_digest"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "file_paths": {
+          "items": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "full_diff_available_for_review": {
+          "type": "boolean"
+        },
+        "full_diff_digest": {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "full_payload_available_for_review": {
+          "type": "boolean"
+        },
+        "full_payload_digest": {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "network_access_expected": {
+          "type": "boolean"
+        },
+        "payload_digest": {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "payload_preview": {
+          "maxLength": 2000,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "payload_preview_truncated": {
+          "type": "boolean"
+        },
+        "redaction_status": {
+          "enum": [
+            "not_required",
+            "required_pending",
+            "redacted",
+            "failed"
+          ],
+          "type": "string"
+        },
+        "reversibility": {
+          "enum": [
+            "reversible",
+            "partially_reversible",
+            "irreversible",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "scope": {
+          "enum": [
+            "external_provider_call",
+            "file_write",
+            "terminal_command",
+            "memory_write",
+            "browser_search",
+            "tool_call",
+            "mcp_call",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "side_effect_level": {
+          "enum": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "irreversible",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "target": {
+          "maxLength": 256,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "terminal_risk_summary": {
+          "maxLength": 1000,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "writes_outside_workspace": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "scope",
+        "target",
+        "payload_preview",
+        "payload_preview_truncated",
+        "full_payload_available_for_review",
+        "payload_digest",
+        "full_payload_digest",
+        "redaction_status",
+        "estimated_tokens",
+        "estimated_cost_class",
+        "side_effect_level",
+        "reversibility",
+        "diff_summary",
+        "full_diff_available_for_review",
+        "full_diff_digest",
+        "file_operations",
+        "command",
+        "cwd",
+        "terminal_risk_summary",
+        "env_preview_redacted",
+        "network_access_expected",
+        "writes_outside_workspace",
+        "destructive_command_detected",
+        "file_paths"
+      ],
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "confirmation_payload_required": {
+      "type": "boolean"
+    },
+    "confirmation_required": {
+      "type": "boolean"
+    },
+    "consent_context": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmation_action": {
+          "enum": [
+            "allow_once",
+            "deny",
+            null
+          ],
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confirmed_at": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confirmed_confirmation_digest": {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "confirmed_previous_decision_id": {
+          "maxLength": 128,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "consent_id": {
+          "maxLength": 128,
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "consent_id",
+        "confirmed_previous_decision_id",
+        "confirmed_confirmation_digest",
+        "confirmation_action",
+        "confirmed_at"
+      ],
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "created_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "decision_id": {
+      "maxLength": 128,
+      "minLength": 8,
+      "type": "string"
+    },
+    "dry_run_required": {
+      "type": "boolean"
+    },
+    "environment_type": {
+      "enum": [
+        "chat",
+        "file_system",
+        "terminal",
+        "codebase",
+        "browser",
+        "mcp",
+        "os",
+        "provider_api",
+        "memory_store",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "expires_at": {
+      "format": "date-time",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "external_allowed": {
+      "type": "boolean"
+    },
+    "external_network_allowed_now": {
+      "type": "boolean"
+    },
+    "input_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "type": "string"
+    },
+    "lifecycle_stage": {
+      "enum": [
+        "initial_request",
+        "dry_run_ready",
+        "awaiting_confirmation",
+        "confirmed_execution",
+        "blocked"
+      ],
+      "type": "string"
+    },
+    "local_allowed": {
+      "type": "boolean"
+    },
+    "manual_review_required": {
+      "type": "boolean"
+    },
+    "max_tokens_allowed": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "memory_policy_result": {
+      "additionalProperties": false,
+      "properties": {
+        "contains_literal_secret": {
+          "type": "boolean"
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "preview": {
+          "maxLength": 1500,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sensitivity_bucket": {
+          "enum": [
+            "none",
+            "personal",
+            "project_ip",
+            "secret",
+            "unknown"
+          ],
+          "type": "string"
+        },
+        "write_type": {
+          "enum": [
+            "create",
+            "update",
+            "forget",
+            "skip",
+            "unknown"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "passed",
+        "write_type",
+        "sensitivity_bucket",
+        "contains_literal_secret",
+        "preview"
+      ],
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "modifies_state": {
+      "type": "boolean"
+    },
+    "policy_version": {
+      "const": "router_policy_v0_3_1_1",
+      "type": "string"
+    },
+    "proposed_external_target": {
+      "enum": [
+        "external:cheap",
+        "external:scientific_medium",
+        "external:frontier",
+        null
+      ],
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "provider_call_allowed_now": {
+      "type": "boolean"
+    },
+    "provider_candidate": {
+      "enum": [
+        "local:qwen",
+        "local:gemma",
+        "external:cheap",
+        "external:scientific_medium",
+        "external:frontier",
+        "none"
+      ],
+      "type": "string"
+    },
+    "reason_codes": {
+      "items": {
+        "enum": [
+          "secret_or_credential",
+          "local_only_sensitive_context",
+          "provider_boundary",
+          "ambiguous_external_routing",
+          "clarification_required",
+          "budget_cap",
+          "policy_external_disabled",
+          "low_complexity_local",
+          "high_complexity_external_candidate",
+          "high_side_effect_action",
+          "irreversible_action",
+          "file_write_requires_dry_run",
+          "terminal_requires_preflight",
+          "memory_policy_required",
+          "browser_search_boundary",
+          "redaction_required",
+          "redaction_pending",
+          "confirmation_required",
+          "confirmation_payload_required",
+          "stale_confirmation",
+          "consent_context_required",
+          "external_network_blocked",
+          "default_local_fallback"
+        ],
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "redaction_required": {
+      "type": "boolean"
+    },
+    "redaction_status": {
+      "enum": [
+        "not_required",
+        "required_pending",
+        "redacted",
+        "failed"
+      ],
+      "type": "string"
+    },
+    "requested_action_type": {
+      "enum": [
+        "answer",
+        "local_model_call",
+        "provider_call",
+        "browser_search",
+        "file_write",
+        "terminal_command",
+        "memory_write",
+        "tool_call",
+        "mcp_call",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "requires_new_decision_after_confirmation": {
+      "type": "boolean"
+    },
+    "response_allowed_now": {
+      "type": "boolean"
+    },
+    "reversibility": {
+      "enum": [
+        "reversible",
+        "partially_reversible",
+        "irreversible",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "route_action": {
+      "enum": [
+        "answer_local",
+        "route_local",
+        "route_external_candidate",
+        "ask_user_confirm",
+        "ask_clarification",
+        "require_preflight",
+        "blocked"
+      ],
+      "type": "string"
+    },
+    "route_tier": {
+      "enum": [
+        "LOCAL_ONLY",
+        "LOCAL_FAST",
+        "CHEAP_EXTERNAL",
+        "SCIENTIFIC_MEDIUM",
+        "FRONTIER",
+        "USER_CONFIRM",
+        "BLOCKED"
+      ],
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "router_policy_decision_v0_3_1_1",
+      "type": "string"
+    },
+    "side_effect_level": {
+      "enum": [
+        "none",
+        "low",
+        "medium",
+        "high",
+        "irreversible",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "simulation_required": {
+      "type": "boolean"
+    },
+    "state_change_allowed_now": {
+      "type": "boolean"
+    },
+    "state_scope": {
+      "enum": [
+        "none",
+        "local_file",
+        "repo",
+        "memory",
+        "external_provider",
+        "os",
+        "browser",
+        "mcp",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "tool_execution_allowed_now": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "policy_version",
+    "schema_version",
+    "decision_id",
+    "input_digest",
+    "created_at",
+    "expires_at",
+    "lifecycle_stage",
+    "route_action",
+    "route_tier",
+    "provider_candidate",
+    "proposed_external_target",
+    "external_allowed",
+    "external_network_allowed_now",
+    "local_allowed",
+    "response_allowed_now",
+    "tool_execution_allowed_now",
+    "provider_call_allowed_now",
+    "state_change_allowed_now",
+    "confirmation_required",
+    "requires_new_decision_after_confirmation",
+    "redaction_required",
+    "redaction_status",
+    "manual_review_required",
+    "simulation_required",
+    "dry_run_required",
+    "requested_action_type",
+    "modifies_state",
+    "state_scope",
+    "side_effect_level",
+    "reversibility",
+    "environment_type",
+    "allowed_execution_mode",
+    "confirmation_payload_required",
+    "confirmation_payload",
+    "confirmation_digest",
+    "confirmation_options",
+    "consent_context",
+    "memory_policy_result",
+    "reason_codes",
+    "audit_notes",
+    "budget_class",
+    "max_tokens_allowed"
+  ],
+  "title": "RouterPolicyDecisionV0311",
+  "type": "object"
+}

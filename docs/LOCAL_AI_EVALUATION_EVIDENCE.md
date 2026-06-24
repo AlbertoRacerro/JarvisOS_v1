@@ -1252,3 +1252,32 @@ B5-D does not change Phase A overlay, deterministic clamps, provider/export
 detection, schemas, runtime memory, retrieval, provider routing, external
 provider calls, tool execution, routes, database schema, workers, MCP, or
 BlueRev modeling behavior.
+
+### 1G-B2-F3-A1 - RouterPolicy Contract Implementation
+
+1G-B2-F3-A1 introduces a RouterPolicy contract layer after the structured-output
+and policy-overlay work. It adds schemas, a semantic validator, and
+core/adversarial fixtures for router-policy decisions.
+
+Observed contract result:
+
+- input schema: `schemas/router_policy_input_v0_3_1_1.schema.json`;
+- decision schema: `schemas/router_policy_decision_v0_3_1_1.schema.json`;
+- semantic validator: `scripts/router_policy_semantic_validator.py`;
+- core valid cases: `8`;
+- adversarial invalid cases: `21`;
+- router-policy validator tests: `30/30`;
+- full unittest suite: `183/183`;
+- report: `reports/router_policy/1G-B2-F3-A1/`;
+- external provider calls: `false`;
+- local Ollama calls: `false`;
+- runtime routing added: `false`;
+- tool execution added: `false`;
+- memory writes added: `false`;
+- manual review required: `true`.
+
+The validator checks contract semantics such as local-only constraints, blocked
+routes, user confirmation, side effects, digest reuse, expiry, redaction,
+provider/budget policy, sensitivity policy, and memory-write denial. It does not
+execute routing, call providers, launch tools, read/write memory, run retrieval,
+or approve runtime behavior.
