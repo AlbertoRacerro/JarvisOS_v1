@@ -1,0 +1,104 @@
+{
+  "milestone": "1G-B2-F3-B3-R1",
+  "title": "Default Phase B hint bridge malformed-input audit",
+  "start_head": "63ade8c7bdf06c1f459b59618b7fc22221331ba4",
+  "runtime_patch_required": true,
+  "runtime_patch": {
+    "file": "scripts/router_policy_message_route_smoke.py",
+    "change": "A5 now structurally validates the builder output before applying the default-on B1 Phase B hint bridge.",
+    "reason": "Default-on B1 must not repair malformed safety-critical fields into executable-safe values before A5 rejects them."
+  },
+  "files_changed": [
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md",
+    "docs/ROUTER_POLICY_DESIGN.md",
+    "reports/router_policy/1G-B2-F3-B3-R1/router_policy_message_route_phase_b_default_audit.json",
+    "reports/router_policy/1G-B2-F3-B3-R1/router_policy_message_route_phase_b_default_audit.md",
+    "scripts/router_policy_message_route_smoke.py",
+    "tests/test_router_policy_message_route_smoke.py"
+  ],
+  "in_place_mutation_check_result": {
+    "b1_or_a5_mutated_original_malformed_input_in_place": false,
+    "original_mutable_builder_output_retained_corrupted_values": true,
+    "deep_copy_before_after_checked": true
+  },
+  "malformed_phase_a_or_policy_result": {
+    "phase_a_contains_secret_or_credential_string_false": {
+      "executed": false,
+      "run_local_route_reached": false,
+      "original_corrupted_value_preserved": true,
+      "reason": "invalid_router_policy_input",
+      "failure_point": "pre_bridge_structural_validation_failed"
+    },
+    "provider_policy_allowed_provider_tiers_string": {
+      "executed": false,
+      "run_local_route_reached": false,
+      "original_corrupted_value_preserved": true,
+      "reason": "invalid_router_policy_input",
+      "failure_point": "pre_bridge_structural_validation_failed"
+    }
+  },
+  "failure_point_by_case": {
+    "malformed_action_and_router": "pre_bridge_structural_validation_failed",
+    "malformed_phase_a_hard_gate_bool": "pre_bridge_structural_validation_failed",
+    "malformed_provider_policy": "pre_bridge_structural_validation_failed",
+    "malformed_phase_b_domain_tags": "pre_bridge_structural_validation_failed"
+  },
+  "malformed_case_results": {
+    "malformed_action_and_router": {
+      "executed": false,
+      "responder_called": false,
+      "run_local_route_reached": false,
+      "original_corrupted_values_preserved": true,
+      "reason": "invalid_router_policy_input"
+    },
+    "malformed_phase_a_hard_gate_bool": {
+      "executed": false,
+      "responder_called": false,
+      "run_local_route_reached": false,
+      "original_corrupted_values_preserved": true,
+      "reason": "invalid_router_policy_input"
+    },
+    "malformed_provider_policy": {
+      "executed": false,
+      "responder_called": false,
+      "run_local_route_reached": false,
+      "original_corrupted_values_preserved": true,
+      "reason": "invalid_router_policy_input"
+    },
+    "malformed_phase_b_domain_tags": {
+      "executed": false,
+      "responder_called": false,
+      "run_local_route_reached": false,
+      "original_corrupted_values_preserved": true,
+      "reason": "invalid_router_policy_input"
+    }
+  },
+  "summary_assertions": {
+    "b1_or_a5_mutated_original_malformed_input_in_place": false,
+    "run_local_route_reached_for_any_malformed_case": false,
+    "any_malformed_input_executed": false
+  },
+  "tests_run": [
+    "python -m unittest tests.test_router_policy_message_route_smoke",
+    "python -m unittest tests.test_router_policy_hint_bridge_probe",
+    "python -m unittest tests.test_router_policy_local_responder",
+    "python -m unittest tests.test_router_policy_local_route_probe",
+    "python -m unittest tests.test_router_policy_decision_probe",
+    "python -m unittest tests.test_router_policy_semantic_validator",
+    "python -m unittest discover -s tests",
+    "git diff --check",
+    "focused runtime grep"
+  ],
+  "runtime_boundary_check": {
+    "model_calls_added": false,
+    "external_provider_runtime_added": false,
+    "tool_or_mcp_runtime_added": false,
+    "browser_or_terminal_runtime_added": false,
+    "memory_or_retrieval_runtime_added": false,
+    "file_write_runtime_added": false,
+    "backend_or_frontend_or_db_added": false,
+    "workers_or_hooks_added": false,
+    "bluerev_behavior_added": false
+  },
+  "recommended_next_milestone": "1G-B2-F3-B3-R2 - Default Phase B hint bridge audit follow-up"
+}

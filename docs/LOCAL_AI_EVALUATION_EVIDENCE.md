@@ -1695,3 +1695,32 @@ Gemma, Ollama, providers, tools, MCP, browser, terminal, memory, retrieval,
 backend routes, frontend UI, DB migrations, workers, hooks, or BlueRev
 modeling. It is not production chat, not a production Phase A/B normalizer, and
 not approval to remove `--assume-public-simple`.
+
+### 1G-B2-F3-B3-R1 - Default Phase B Hint Bridge Malformed-Input Audit
+
+1G-B2-F3-B3-R1 adds a pre-bridge structural validation boundary to the A5
+message-route smoke wrapper. The builder output is validated before B1 runs,
+then validated again after B1 returns.
+
+Observed B3-R1 behavior:
+
+- B1/A5 did not mutate original malformed input in-place;
+- malformed input did not reach `_RUN_LOCAL_ROUTE`;
+- malformed input did not execute;
+- malformed action/router fields failed at
+  `pre_bridge_structural_validation_failed`;
+- malformed `phase_a_signals.contains_secret_or_credential = "false"` failed at
+  `pre_bridge_structural_validation_failed`;
+- malformed `provider_policy.allowed_provider_tiers = "LOCAL_FAST"` failed at
+  `pre_bridge_structural_validation_failed`;
+- malformed Phase B `domain_tags = "smoke"` failed at
+  `pre_bridge_structural_validation_failed`.
+
+Report:
+
+- `reports/router_policy/1G-B2-F3-B3-R1/`.
+
+B3-R1 does not change B1, A3, A4, RouterPolicy decision production, semantic
+validation, schemas, backend routes, frontend UI, DB schema, model/provider
+calls, tool/MCP/browser/terminal runtime, memory/retrieval runtime, workers,
+hooks, or BlueRev behavior.

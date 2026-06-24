@@ -683,6 +683,18 @@ def run_message_route_smoke(
             "error_type": type(exc).__name__,
         }
 
+    errors = _router_policy_input_structural_errors(input_obj, message_text)
+    if errors:
+        return {
+            "executed": False,
+            "reason": "invalid_router_policy_input",
+            "input_source": source,
+            "assume_public_simple_used": assume_public_simple,
+            "use_phase_b_hints_used": use_phase_b_hints,
+            "validation_stage": "pre_phase_b_hint_bridge",
+            "validation_errors": errors,
+        }
+
     if use_phase_b_hints:
         try:
             input_obj = _APPLY_PHASE_B_ROUTER_HINT(input_obj, now=now)

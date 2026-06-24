@@ -156,6 +156,44 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
             brief_rationale="The message asks about source-like context.",
         )
 
+    def malformed_failure_point(self, result):
+        if result.get("reason") == "phase_b_hint_bridge_failed":
+            return "phase_b_hint_bridge_failed"
+        if (
+            result.get("reason") == "invalid_router_policy_input"
+            and result.get("validation_stage") == "pre_phase_b_hint_bridge"
+        ):
+            return "pre_bridge_structural_validation_failed"
+        if result.get("reason") == "invalid_router_policy_input":
+            return "post_bridge_structural_validation_failed"
+        return "unexpected"
+
+    def assert_malformed_default_rejected_without_mutation(self, message, built):
+        malformed_before = copy.deepcopy(built)
+        responder = Mock(return_value="should not run")
+        with patch.object(smoke, "_RUN_LOCAL_ROUTE") as run_local_route:
+            result = smoke.run_message_route_smoke(
+                message,
+                responder=responder,
+                now=NOW,
+                input_builder=Mock(return_value=built),
+                assume_public_simple=True,
+            )
+        responder.assert_not_called()
+        run_local_route.assert_not_called()
+        self.assertFalse(result["executed"])
+        self.assertIn(result["reason"], {"invalid_router_policy_input", "phase_b_hint_bridge_failed"})
+        self.assertEqual(malformed_before, built)
+        self.assertIn(
+            self.malformed_failure_point(result),
+            {
+                "phase_b_hint_bridge_failed",
+                "pre_bridge_structural_validation_failed",
+                "post_bridge_structural_validation_failed",
+            },
+        )
+        return result
+
     def test_a5_001_simple_public_message_reaches_injected_responder_through_real_a3(self):
         message = "Explain what a pump is"
         responder = Mock(return_value="A pump moves fluid.")
@@ -1175,6 +1213,36 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
                     )
         self.assertEqual(2, raised.exception.code)
         responder_builder.assert_not_called()
+
+    def test_b3_r1_001_malformed_action_router_input_is_not_repaired_in_place(self):
+        built = self.safe_input("hello")
+        built["action_hint"]["needs_provider_call"] = "false"
+        built["router_hint"]["complexity"] = "tiny"
+        result = self.assert_malformed_default_rejected_without_mutation("hello", built)
+        self.assertEqual("false", built["action_hint"]["needs_provider_call"])
+        self.assertEqual("tiny", built["router_hint"]["complexity"])
+        self.assertEqual("pre_bridge_structural_validation_failed", self.malformed_failure_point(result))
+
+    def test_b3_r1_002_malformed_phase_a_hard_gate_input_is_not_repaired_in_place(self):
+        built = self.safe_input("hello")
+        built["phase_a_signals"]["contains_secret_or_credential"] = "false"
+        result = self.assert_malformed_default_rejected_without_mutation("hello", built)
+        self.assertEqual("false", built["phase_a_signals"]["contains_secret_or_credential"])
+        self.assertEqual("pre_bridge_structural_validation_failed", self.malformed_failure_point(result))
+
+    def test_b3_r1_003_malformed_provider_policy_input_is_not_repaired_in_place(self):
+        built = self.safe_input("hello")
+        built["provider_policy"]["allowed_provider_tiers"] = "LOCAL_FAST"
+        result = self.assert_malformed_default_rejected_without_mutation("hello", built)
+        self.assertEqual("LOCAL_FAST", built["provider_policy"]["allowed_provider_tiers"])
+        self.assertEqual("pre_bridge_structural_validation_failed", self.malformed_failure_point(result))
+
+    def test_b3_r1_004_malformed_phase_b_input_is_not_repaired_in_place(self):
+        built = self.safe_input("hello")
+        built["phase_b_soft_proposal"]["domain_tags"] = "smoke"
+        result = self.assert_malformed_default_rejected_without_mutation("hello", built)
+        self.assertEqual("smoke", built["phase_b_soft_proposal"]["domain_tags"])
+        self.assertEqual("pre_bridge_structural_validation_failed", self.malformed_failure_point(result))
 
 
 if __name__ == "__main__":

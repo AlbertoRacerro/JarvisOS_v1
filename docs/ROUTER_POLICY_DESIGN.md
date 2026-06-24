@@ -340,6 +340,24 @@ B3 does not add backend routes, frontend UI, database schema, workers, hooks,
 MCP execution, memory runtime, retrieval runtime, provider routing, file writes,
 terminal/browser execution, or BlueRev modeling.
 
+### 1G-B2-F3-B3-R1 malformed-input boundary repair
+
+`1G-B2-F3-B3-R1` adds a pre-bridge structural validation boundary to the A5
+message-route smoke wrapper. The A5 builder output is validated before the
+default-on B1 Phase B hint bridge runs, then validated again after B1 returns.
+
+This prevents B1 from normalizing malformed safety-critical fields, such as
+string booleans or malformed policy lists, into executable-safe values before
+A5 rejects the input. The original mutable object returned by an injected
+builder must not be repaired in-place, malformed input must not reach
+`_RUN_LOCAL_ROUTE`, and malformed input must not execute.
+
+B3-R1 does not change B1 behavior, A3 safe-local guard behavior, A4 local
+responder behavior, RouterPolicy decision production, semantic validation,
+schemas, backend routes, frontend UI, DB schema, memory/retrieval runtime,
+provider/tool/MCP/browser/terminal runtime, workers, hooks, or BlueRev
+modeling.
+
 ## 1G-B2-F3-A1 boundary
 
 This document is part of the RouterPolicy contract layer only. It does not add

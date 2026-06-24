@@ -158,7 +158,7 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F3-B3-R - Default Phase B Hint Bridge Audit
+1G-B2-F3-B3-R2 - Default Phase B Hint Bridge Audit Follow-up
 ```
 
 `1G-B2-F3-B3` makes the existing offline B1 Phase B RouterHint bridge default-on
@@ -202,5 +202,10 @@ calls, tools, browser/terminal/MCP execution, memory, retrieval, file-write
 runtime, backend routes, frontend UI, database migrations, live Qwen/Gemma/
 Ollama classification, or BlueRev modeling. B3 does not remove
 `--assume-public-simple`.
+
+`1G-B2-F3-B3-R1` adds a pre-bridge structural validation boundary so malformed
+safety-critical builder output is rejected before B1 can normalize it. B1/A5
+must not mutate original malformed inputs in-place, malformed inputs must not
+reach `_RUN_LOCAL_ROUTE`, and malformed inputs must not execute.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.
