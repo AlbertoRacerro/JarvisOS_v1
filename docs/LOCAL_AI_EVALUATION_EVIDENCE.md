@@ -1806,3 +1806,6 @@ B4-live is smoke-only. Qwen remains Phase B advisory only. Phase A/gates,
 RouterPolicy, and A3 remain deterministic authority. B4-live does not approve
 production chat/UI, memory, retrieval, provider routing, tool execution, or
 removal of `--assume-public-simple`.
+
+B4-live-R1 fixes the live Phase B seam provenance boundary so `phase_a_case_id`
+is added only after live proposal validation and leakage checks.

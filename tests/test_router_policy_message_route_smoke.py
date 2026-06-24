@@ -1544,6 +1544,55 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
         self.assertEqual("live_local_qwen_soft_review", metadata["phase_b_source_kind"])
         self.assertEqual("B4-LIVE-BENIGN", metadata["phase_b_source_case_id"])
 
+    def test_b4_live_r1_real_build_seam_does_not_self_leak_phase_a_case_id(self):
+        message = "Explain what a centrifugal pump is."
+        phase_a = self.safe_input(message)["phase_a_signals"]
+        proposal = self.valid_live_phase_b("B4-LIVE-R1")
+        schema_valid = {"schema_valid": True, "errors": []}
+        with patch.object(smoke, "_load_live_phase_b_schema", return_value={}):
+            with patch.object(
+                smoke.live_phase_b.structured_probe,
+                "call_ollama_chat",
+                return_value={"ok": True, "body": {}},
+            ) as ollama_call:
+                with patch.object(smoke.live_phase_b, "parse_soft_proposal", return_value=(proposal, None)):
+                    with patch.object(smoke.live_phase_b.structured_probe, "validate_instance", return_value=schema_valid):
+                        built_phase_b = smoke._build_live_local_phase_b_soft_review(
+                            case_id="B4-LIVE-R1",
+                            input_text=message,
+                            phase_a=phase_a,
+                            model=smoke.DEFAULT_PHASE_B_MODEL,
+                            endpoint=smoke.DEFAULT_PHASE_B_ENDPOINT,
+                            timeout_seconds=180,
+                        )
+                        responder = Mock(return_value="local answer")
+                        result = smoke.run_message_route_smoke(
+                            message,
+                            responder=responder,
+                            now=NOW,
+                            assume_public_simple=True,
+                            phase_b_source_kind="live_local_qwen",
+                            phase_b_source_case_id="B4-LIVE-R1",
+                            run_local_phase_b=True,
+                        )
+
+        self.assertNotIn("phase_a_case_id", built_phase_b)
+        self.assertIn("_live_phase_b_diagnostics", built_phase_b)
+        self.assertEqual(
+            [],
+            smoke.live_phase_b.authority_field_leakage(
+                {key: value for key, value in built_phase_b.items() if key != "_live_phase_b_diagnostics"}
+            ),
+        )
+        self.assertGreaterEqual(ollama_call.call_count, 2)
+        responder.assert_called_once_with(message)
+        self.assertTrue(result["executed"])
+        self.assertEqual("local_answer", result["reason"])
+        self.assertEqual(
+            "B4-LIVE-R1",
+            result["input_obj"]["phase_b_soft_proposal"]["phase_a_case_id"],
+        )
+
     def test_b4_live_004_live_requires_explicit_local_phase_b_flag(self):
         message = "Explain what a centrifugal pump is."
         responder = Mock(return_value="should not run")

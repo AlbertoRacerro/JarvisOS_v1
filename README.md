@@ -233,4 +233,7 @@ Manual Phase B live smoke, optional and local-only:
 python scripts\router_policy_message_route_smoke.py --message "Explain what a centrifugal pump is." --assume-public-simple --use-phase-b-hints --phase-b-source live-local-qwen --phase-b-source-case-id B4-LIVE-BENIGN --run-local-phase-b --phase-b-model qwen3:8b --phase-b-endpoint http://localhost:11434
 ```
 
+B4-live-R1 fixes the live Phase B seam provenance boundary so `phase_a_case_id`
+is added only after live proposal validation and leakage checks.
+
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

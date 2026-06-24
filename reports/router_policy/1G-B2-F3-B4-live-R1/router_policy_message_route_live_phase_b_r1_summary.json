@@ -1,0 +1,58 @@
+{
+  "milestone": "1G-B2-F3-B4-live-R1",
+  "start_head": "4de1de0b6933bd2d28f1327f935ec5e0b2e0161f",
+  "files_changed": [
+    "README.md",
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md",
+    "docs/ROUTER_POLICY_DESIGN.md",
+    "reports/router_policy/1G-B2-F3-B4-live-R1/router_policy_message_route_live_phase_b_r1_summary.json",
+    "reports/router_policy/1G-B2-F3-B4-live-R1/router_policy_message_route_live_phase_b_r1_summary.md",
+    "scripts/router_policy_message_route_smoke.py",
+    "tests/test_router_policy_message_route_smoke.py"
+  ],
+  "bug_fixed": "live Phase B build seam no longer self-injects phase_a_case_id before authority leakage checks",
+  "removed_premature_phase_a_case_id_from_build_seam": true,
+  "provenance_added_only_in_apply_wrapper": true,
+  "mismatch_guard_preserved": true,
+  "regression_test_exercises_real_build_seam": true,
+  "lower_level_live_call_or_parse_path_patched_in_test": true,
+  "direct_build_assertion_passed": true,
+  "integration_assertion_passed": true,
+  "default_stub_path_unchanged": true,
+  "deterministic_b4_path_unchanged": true,
+  "live_selector_policy_unchanged": true,
+  "localhost_validation_unchanged": true,
+  "tests_run": [
+    "python -m unittest tests.test_router_policy_message_route_smoke",
+    "python -m unittest tests.test_router_policy_hint_bridge_probe",
+    "python -m unittest tests.test_router_policy_local_route_probe",
+    "python -m unittest tests.test_router_policy_decision_probe",
+    "python -m unittest tests.test_router_policy_semantic_validator",
+    "python -m unittest discover -s tests",
+    "python -m json.tool reports/router_policy/1G-B2-F3-B4-live-R1/router_policy_message_route_live_phase_b_r1_summary.json",
+    "git diff --check",
+    "focused provenance/runtime grep",
+    "direct trailing-whitespace scan"
+  ],
+  "runtime_boundary_check": {
+    "qwen_role": "Phase B advisory soft proposal only",
+    "new_qwen_caller_added": false,
+    "backend_routes_added": false,
+    "frontend_ui_added": false,
+    "db_schema_added": false,
+    "memory_runtime_added": false,
+    "retrieval_runtime_added": false,
+    "provider_routing_added": false,
+    "tool_mcp_browser_terminal_execution_added": false,
+    "bluerev_behavior_added": false
+  },
+  "known_residual_risks": [
+    "B4-live remains smoke-only.",
+    "Live Qwen Phase B remains advisory only.",
+    "Phase A/gates remain deterministic authority.",
+    "B1 is not a raw model-output normalizer.",
+    "No removal of --assume-public-simple is approved.",
+    "No production UI/chat/memory/retrieval/provider/tool routing is approved.",
+    "Real/private prompt runs must remain outside committed reports unless sanitized."
+  ]
+}

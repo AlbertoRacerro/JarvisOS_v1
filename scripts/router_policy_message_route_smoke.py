@@ -677,7 +677,6 @@ def _build_live_local_phase_b_soft_review(
     if phase_b_errors:
         raise ValueError("live Phase B effective proposal is not B1 compatible")
     output = copy.deepcopy(effective)
-    output["phase_a_case_id"] = case_id
     output["_live_phase_b_diagnostics"] = {
         "raw_authority_leakage": raw_leakage,
         "effective_authority_leakage": effective_leakage,

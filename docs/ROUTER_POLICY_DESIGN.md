@@ -464,6 +464,9 @@ unchanged. B4-live adds no production chat/UI, memory runtime, retrieval
 runtime, provider/tool routing, backend route, frontend UI, DB schema, worker,
 hook, MCP, or BlueRev behavior.
 
+B4-live-R1 fixes the live Phase B seam provenance boundary so `phase_a_case_id`
+is added only after live proposal validation and leakage checks.
+
 ## 1G-B2-F3-A1 boundary
 
 This document is part of the RouterPolicy contract layer only. It does not add
