@@ -158,37 +158,43 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F3-B1-R - Phase B RouterHint bridge audit
+1G-B2-F3-B2-R - Message Route Phase B Hint Bridge Audit
 ```
 
-`1G-B2-F3-B1` adds an offline Phase B/Qwen advisory-output bridge that maps
-existing Phase B soft-review fields into RouterPolicy `router_hint` and safe
-`action_hint` proposals.
+`1G-B2-F3-B2` wires the existing offline B1 Phase B RouterHint bridge into the
+A5 real-message smoke path behind explicit `--use-phase-b-hints`.
 
-Phase A and operational gates remain fail-closed authority. Phase B/Qwen cannot
-authorize execution, provider calls, tools, memory writes, retrieval, or route
-selection. B1 does not call models or responders and does not add chat.
+The integration order is:
 
-B1 uses `soft_reason_code` as the primary `router_hint.task_type` mapping
-driver. It derives `router_hint.confidence` from real Phase B fields such as
-`suggested_followup_question`, `soft_uncertain_fields`, and required-field
-shape; it does not rely on a Phase B `confidence` field. It derives
-complexity/scientific-depth heuristically from `primary_domain` and
-`domain_tags`.
+```text
+message
+-> A5 smoke builder / Phase A overlay / A5-R1 operational gates
+-> optional B1 Phase B RouterHint bridge
+-> RouterPolicy decision
+-> semantic validator
+-> A3 safe-local guard
+-> local responder only if safe
+```
 
-B1 is a bridge toward replacing `--assume-public-simple`, not the removal
-itself. Benign local answer smoke still requires both `--assume-public-simple`
-and `--run-local`.
+B2 also completes the A5 smoke default `phase_b_soft_proposal` stub with the
+full B1-compatible benign field set. `--use-phase-b-hints` alone does not make
+messages executable. Benign local answer smoke still requires
+`--assume-public-simple` and `--run-local`.
 
 Manual local smoke, optional and local-only:
 
 ```powershell
-python scripts\router_policy_message_route_smoke.py --message "Explain what a pump is" --assume-public-simple --run-local
+python scripts\router_policy_message_route_smoke.py --message "Explain what a pump is" --assume-public-simple --use-phase-b-hints --run-local
 ```
 
-B1 does not add external providers, non-localhost network calls, tools,
-browser/terminal/MCP execution, memory, retrieval, file-write runtime, backend
-routes, frontend UI, database migrations, live Qwen runtime, or BlueRev
-modeling.
+B2 does not weaken B1 quality checks or A5/A3 authority. Phase A and
+operational gates remain fail-closed. B1 hints cannot authorize execution,
+provider calls, tools, memory writes, retrieval, route selection, or external
+network access, and can make a route more conservative.
+
+B2 does not add production chat, external providers, non-localhost network
+calls, tools, browser/terminal/MCP execution, memory, retrieval, file-write
+runtime, backend routes, frontend UI, database migrations, live Qwen/Gemma/
+Ollama classification, or BlueRev modeling.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

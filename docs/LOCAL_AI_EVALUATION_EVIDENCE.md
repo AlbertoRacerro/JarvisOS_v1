@@ -1616,3 +1616,47 @@ from `primary_domain` and `domain_tags`.
 B1 does not call Qwen, Gemma, Ollama, providers, responders, A3, tools, MCP,
 browser, terminal, memory, retrieval, backend routes, frontend UI, DB
 migrations, workers, hooks, or BlueRev modeling.
+
+### 1G-B2-F3-B2 - Message Route Phase B Hint Bridge Flag
+
+1G-B2-F3-B2 wires the existing offline B1 Phase B RouterHint bridge into the
+A5 real-message local-route smoke path behind explicit `--use-phase-b-hints`.
+
+Smoke order:
+
+```text
+message
+-> A5 smoke builder / Phase A overlay / A5-R1 operational gates
+-> optional B1 Phase B RouterHint bridge
+-> RouterPolicy decision
+-> semantic validator
+-> A3 safe-local guard
+-> local responder only if safe
+```
+
+Observed B2 behavior:
+
+- A5 default `phase_b_soft_proposal` now includes all B1-required benign fields;
+- B1 derives high quality on the A5 benign default stub and maps it to
+  answer/no-side-effect hints;
+- default behavior without `--use-phase-b-hints` is unchanged;
+- `--use-phase-b-hints` alone does not execute arbitrary messages;
+- benign public smoke execution requires `--assume-public-simple`,
+  `--use-phase-b-hints`, and `--run-local`;
+- technical/scientific Phase B hints enrich router complexity and depth, then
+  remain subject to the A3 safe-local guard;
+- `source_candidate` Phase B hints make the route more conservative by setting
+  review/current-info/file-context needs;
+- Phase A hard gates and A5-R1 operational gates dominate Phase B hints;
+- baseline non-executable paths remain non-executable with Phase B hints;
+- CLI output includes `use_phase_b_hints_used` but remains redacted and omits
+  raw RouterPolicy input;
+- B1 bridge failure fails closed with `phase_b_hint_bridge_failed`.
+
+Report:
+
+- `reports/router_policy/1G-B2-F3-B2/`.
+
+B2 does not call Qwen, Gemma, Ollama, providers, tools, MCP, browser, terminal,
+memory, retrieval, backend routes, frontend UI, DB migrations, workers, hooks,
+or BlueRev modeling.

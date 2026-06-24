@@ -10,9 +10,23 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import router_policy_message_route_smoke as smoke  # noqa: E402
+import router_policy_hint_bridge_probe as bridge  # noqa: E402
 
 
 NOW = "2026-06-24T13:00:00+00:00"
+B2_PHASE_B_REQUIRED_FIELDS = {
+    "summary_short",
+    "project_bucket",
+    "primary_domain",
+    "domain_tags",
+    "storage_relevance",
+    "usefulness_for_future_review",
+    "possible_memory_card_type",
+    "soft_reason_code",
+    "brief_rationale",
+    "suggested_followup_question",
+    "soft_uncertain_fields",
+}
 
 
 class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
@@ -79,7 +93,7 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
         input_obj["budget_policy"]["max_tier"] = "SCIENTIFIC_MEDIUM"
         return input_obj
 
-    def run_with_builder(self, message, built_input, responder=None, assume=False):
+    def run_with_builder(self, message, built_input, responder=None, assume=False, use_phase_b_hints=False):
         builder = Mock(return_value=built_input)
         result = smoke.run_message_route_smoke(
             message,
@@ -87,17 +101,26 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
             now=NOW,
             input_builder=builder,
             assume_public_simple=assume,
+            use_phase_b_hints=use_phase_b_hints,
         )
         builder.assert_called_once_with(message, now=NOW, assume_public_simple=assume)
         return result
 
-    def assert_operational_blocked(self, message, *, expected_action_field=None, expected_router_field=None):
+    def assert_operational_blocked(
+        self,
+        message,
+        *,
+        expected_action_field=None,
+        expected_router_field=None,
+        use_phase_b_hints=False,
+    ):
         responder = Mock(return_value="should not run")
         result = smoke.run_message_route_smoke(
             message,
             responder=responder,
             now=NOW,
             assume_public_simple=True,
+            use_phase_b_hints=use_phase_b_hints,
         )
         responder.assert_not_called()
         self.assertFalse(result["executed"])
@@ -112,6 +135,26 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
         if expected_router_field is not None:
             self.assertTrue(input_obj["router_hint"][expected_router_field])
         return result
+
+    def phase_b_input(self, message, **phase_b_updates):
+        input_obj = self.safe_input(message)
+        phase_b = copy.deepcopy(input_obj["phase_b_soft_proposal"])
+        phase_b.update(phase_b_updates)
+        input_obj["phase_b_soft_proposal"] = phase_b
+        return input_obj
+
+    def source_candidate_input(self, message):
+        return self.phase_b_input(
+            message,
+            summary_short="Candidate source review request.",
+            primary_domain="source",
+            domain_tags=["source", "reference"],
+            storage_relevance="low",
+            usefulness_for_future_review="medium",
+            possible_memory_card_type="source_card",
+            soft_reason_code="source_candidate",
+            brief_rationale="The message asks about source-like context.",
+        )
 
     def test_a5_001_simple_public_message_reaches_injected_responder_through_real_a3(self):
         message = "Explain what a pump is"
@@ -543,6 +586,303 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
         self.assertFalse(cli_result["executed"])
         self.assertNotIn(message, output)
         self.assertNotIn(r"C:\secret.txt", output)
+        self.assertNotIn("input_obj", output)
+        self.assertNotIn("response", cli_result)
+
+    def test_b2_000_a5_base_phase_b_stub_is_b1_compatible(self):
+        built = smoke.build_router_policy_input_from_message_for_smoke(
+            "Explain what a pump is",
+            now=NOW,
+            assume_public_simple=True,
+        )
+        self.assertTrue(B2_PHASE_B_REQUIRED_FIELDS.issubset(built["phase_b_soft_proposal"]))
+        enriched = bridge.apply_phase_b_router_hint(built, now=NOW)
+        self.assertEqual("answer", enriched["router_hint"]["task_type"])
+        self.assertEqual("answer", enriched["action_hint"]["requested_action_type"])
+        self.assertIn(enriched["router_hint"]["confidence"], {"medium", "high"})
+        self.assertEqual("high", enriched["context_metadata"]["phase_b_quality_derived"])
+
+    def test_b2_001_default_behavior_unchanged_without_flag(self):
+        message = "Explain what a pump is"
+        responder = Mock(return_value="A pump moves fluid.")
+        result = smoke.run_message_route_smoke(
+            message,
+            responder=responder,
+            now=NOW,
+            assume_public_simple=True,
+            use_phase_b_hints=False,
+        )
+        responder.assert_called_once_with(message)
+        self.assertTrue(result["executed"])
+        self.assertFalse(result["use_phase_b_hints_used"])
+        self.assertNotIn("phase_b_router_hint_applied", result["input_obj"]["context_metadata"])
+
+    def test_b2_002_use_phase_b_hints_alone_does_not_execute(self):
+        responder = Mock(return_value="should not run")
+        result = smoke.run_message_route_smoke(
+            "Explain what a pump is",
+            responder=responder,
+            now=NOW,
+            assume_public_simple=False,
+            use_phase_b_hints=True,
+        )
+        responder.assert_not_called()
+        self.assertFalse(result["executed"])
+        self.assertTrue(result["use_phase_b_hints_used"])
+        self.assertEqual("phase_b_blocked_by_hard_gate", result["input_obj"]["context_metadata"]["router_hint_source"])
+
+    def test_b2_003_real_a5_stub_b1_hints_executes_benign_answer(self):
+        message = "Explain what a pump is"
+        responder = Mock(return_value="A pump moves fluid.")
+        result = smoke.run_message_route_smoke(
+            message,
+            responder=responder,
+            now=NOW,
+            assume_public_simple=True,
+            use_phase_b_hints=True,
+        )
+        responder.assert_called_once_with(message)
+        self.assertTrue(result["executed"])
+        self.assertEqual("local_answer", result["reason"])
+        input_obj = result["input_obj"]
+        self.assertTrue(B2_PHASE_B_REQUIRED_FIELDS.issubset(input_obj["phase_b_soft_proposal"]))
+        self.assertEqual([], smoke._router_policy_input_structural_errors(input_obj, message))
+        self.assertEqual("answer", input_obj["router_hint"]["task_type"])
+        self.assertEqual("low", input_obj["router_hint"]["complexity"])
+        self.assertEqual("answer", input_obj["action_hint"]["requested_action_type"])
+        self.assertEqual("none", input_obj["action_hint"]["side_effect_level"])
+
+    def test_b2_004_b1_enriches_technical_scientific_router_hint_under_safe_path(self):
+        message = "Explain the mass transfer model for a photobioreactor."
+        built = self.phase_b_input(
+            message,
+            summary_short="Photobioreactor mass transfer question.",
+            primary_domain="bioprocess",
+            domain_tags=["engineering", "reactor", "modeling"],
+            soft_reason_code="contextual_summary",
+            brief_rationale="Scientific engineering context affects routing depth.",
+        )
+        responder = Mock(return_value="A local scientific answer.")
+        result = self.run_with_builder(
+            message,
+            built,
+            responder=responder,
+            assume=True,
+            use_phase_b_hints=True,
+        )
+        responder.assert_not_called()
+        self.assertFalse(result["executed"])
+        self.assertEqual("not_safe_local_route", result["reason"])
+        router = result["input_obj"]["router_hint"]
+        self.assertEqual("answer", router["task_type"])
+        self.assertEqual("medium", router["complexity"])
+        self.assertTrue(router["needs_reasoning"])
+        self.assertTrue(router["needs_scientific_depth"])
+
+    def test_b2_005_b1_source_candidate_makes_route_more_conservative(self):
+        message = "Explain what a pump is"
+        responder = Mock(return_value="should not run")
+        result = self.run_with_builder(
+            message,
+            self.source_candidate_input(message),
+            responder=responder,
+            assume=True,
+            use_phase_b_hints=True,
+        )
+        responder.assert_not_called()
+        self.assertFalse(result["executed"])
+        router = result["input_obj"]["router_hint"]
+        self.assertEqual("review", router["task_type"])
+        self.assertTrue(router["needs_current_info"])
+        self.assertTrue(router["needs_file_context"])
+        self.assertEqual("source_candidate_review", result["input_obj"]["context_metadata"]["phase_b_router_hint_reason"])
+
+    def test_b2_006_hard_gate_dominance_with_phase_b_hints(self):
+        blocked_messages = (
+            "my API key is sk-test-secret-12345678",
+            "Keep this proprietary BlueRev calculation private.",
+            "Use the thing we decided last time.",
+        )
+        for message in blocked_messages:
+            with self.subTest(message=message):
+                responder = Mock(return_value="should not run")
+                result = smoke.run_message_route_smoke(
+                    message,
+                    responder=responder,
+                    now=NOW,
+                    assume_public_simple=True,
+                    use_phase_b_hints=True,
+                )
+                responder.assert_not_called()
+                self.assertFalse(result["executed"])
+                input_obj = result["input_obj"]
+                self.assertEqual("phase_b_blocked_by_hard_gate", input_obj["context_metadata"]["router_hint_source"])
+                self.assertNotEqual("answer", input_obj["router_hint"]["task_type"])
+                self.assertNotEqual("low", input_obj["router_hint"]["complexity"])
+
+    def test_b2_007_operational_gate_dominance_with_phase_b_hints(self):
+        cases = (
+            ("use MCP to call a tool", None, None),
+            ("run command dir", "needs_terminal", None),
+            ("write to memory", "needs_memory_write", None),
+            (r"read local file C:\secret.txt", None, "needs_file_context"),
+            ("browse the web for this", None, "needs_current_info"),
+            ("please upload this to OpenAI", "needs_provider_call", None),
+        )
+        for message, action_field, router_field in cases:
+            with self.subTest(message=message):
+                result = self.assert_operational_blocked(
+                    message,
+                    expected_action_field=action_field,
+                    expected_router_field=router_field,
+                    use_phase_b_hints=True,
+                )
+                self.assertEqual("phase_b_blocked_by_hard_gate", result["input_obj"]["context_metadata"]["router_hint_source"])
+
+    def test_b2_008_baseline_no_execution_cannot_become_execution(self):
+        default_message = "Explain what a pump is"
+        source_message = "Review this source for later retrieval."
+        no_hint_cases = (
+            (
+                default_message,
+                dict(assume_public_simple=False, input_builder=None),
+                dict(assume_public_simple=False, input_builder=None),
+            ),
+            (
+                r"read local file C:\secret.txt",
+                dict(assume_public_simple=True, input_builder=None),
+                dict(assume_public_simple=True, input_builder=None),
+            ),
+            (
+                source_message,
+                dict(assume_public_simple=True, input_builder=Mock(return_value=self.source_candidate_input(source_message))),
+                dict(assume_public_simple=True, input_builder=Mock(return_value=self.source_candidate_input(source_message))),
+            ),
+        )
+        for message, base_kwargs, hinted_kwargs in no_hint_cases:
+            with self.subTest(message=message):
+                baseline_responder = Mock(return_value="should not run")
+                hinted_responder = Mock(return_value="should not run")
+                baseline = smoke.run_message_route_smoke(
+                    message,
+                    responder=baseline_responder,
+                    now=NOW,
+                    use_phase_b_hints=False,
+                    **base_kwargs,
+                )
+                hinted = smoke.run_message_route_smoke(
+                    message,
+                    responder=hinted_responder,
+                    now=NOW,
+                    use_phase_b_hints=True,
+                    **hinted_kwargs,
+                )
+                self.assertFalse(baseline["executed"])
+                self.assertFalse(hinted["executed"])
+                baseline_responder.assert_not_called()
+                hinted_responder.assert_not_called()
+
+    def test_b2_009_context_metadata_compatibility(self):
+        message = "Explain what a pump is"
+        result = smoke.run_message_route_smoke(
+            message,
+            responder=Mock(return_value="local answer"),
+            now=NOW,
+            assume_public_simple=True,
+            use_phase_b_hints=True,
+        )
+        input_obj = result["input_obj"]
+        metadata = input_obj["context_metadata"]
+        self.assertEqual([], smoke._router_policy_input_structural_errors(input_obj, message))
+        self.assertTrue(metadata["attached_files_present"] is False)
+        self.assertTrue(metadata["conversation_context_available"] is False)
+        self.assertTrue(metadata["phase_b_router_hint_applied"])
+        self.assertEqual("phase_b_soft_review", metadata["router_hint_source"])
+        self.assertEqual("high", metadata["phase_b_quality_derived"])
+
+    def test_b2_010_cli_flag_exposed_and_safe_output_redacted(self):
+        fake_responder = Mock(return_value="local answer")
+        with patch.object(smoke, "_BUILD_LOCAL_RESPONDER", return_value=fake_responder):
+            with patch("builtins.print") as printed:
+                exit_code = smoke.main(
+                    [
+                        "--message",
+                        "Explain what a pump is",
+                        "--assume-public-simple",
+                        "--use-phase-b-hints",
+                        "--run-local",
+                        "--now",
+                        NOW,
+                    ]
+                )
+        self.assertEqual(0, exit_code)
+        fake_responder.assert_called_once_with("Explain what a pump is")
+        cli_result = json.loads(printed.call_args.args[0])
+        self.assertTrue(cli_result["executed"])
+        self.assertTrue(cli_result["use_phase_b_hints_used"])
+        self.assertEqual("local answer", cli_result["response"])
+        self.assertNotIn("input_obj", cli_result)
+        self.assertNotIn("audit_notes", cli_result)
+
+        blocked_responder = Mock(return_value="should not run")
+        with patch.object(smoke, "_BUILD_LOCAL_RESPONDER", return_value=blocked_responder):
+            with patch("builtins.print") as printed:
+                exit_code = smoke.main(
+                    [
+                        "--message",
+                        "use MCP to call a tool",
+                        "--assume-public-simple",
+                        "--use-phase-b-hints",
+                        "--run-local",
+                        "--now",
+                        NOW,
+                    ]
+                )
+        self.assertEqual(0, exit_code)
+        blocked_responder.assert_not_called()
+        cli_result = json.loads(printed.call_args.args[0])
+        self.assertFalse(cli_result["executed"])
+        self.assertTrue(cli_result["use_phase_b_hints_used"])
+        self.assertNotIn("response", cli_result)
+        self.assertNotIn("input_obj", cli_result)
+
+    def test_b2_011_b1_bridge_failure_fails_closed(self):
+        responder = Mock(return_value="should not run")
+        with patch.object(smoke, "_APPLY_PHASE_B_ROUTER_HINT", side_effect=RuntimeError("boom")):
+            result = smoke.run_message_route_smoke(
+                "Explain what a pump is",
+                responder=responder,
+                now=NOW,
+                assume_public_simple=True,
+                use_phase_b_hints=True,
+            )
+        responder.assert_not_called()
+        self.assertFalse(result["executed"])
+        self.assertEqual("phase_b_hint_bridge_failed", result["reason"])
+        self.assertEqual("RuntimeError", result["error_type"])
+
+        sensitive = "my API key is sk-test-secret-12345678"
+        with patch.object(smoke, "_APPLY_PHASE_B_ROUTER_HINT", side_effect=RuntimeError("boom")):
+            with patch.object(smoke, "_BUILD_LOCAL_RESPONDER", return_value=responder):
+                with patch("builtins.print") as printed:
+                    exit_code = smoke.main(
+                        [
+                            "--message",
+                            sensitive,
+                            "--assume-public-simple",
+                            "--use-phase-b-hints",
+                            "--run-local",
+                            "--now",
+                            NOW,
+                        ]
+                    )
+        self.assertEqual(0, exit_code)
+        output = printed.call_args.args[0]
+        cli_result = json.loads(output)
+        self.assertFalse(cli_result["executed"])
+        self.assertTrue(cli_result["use_phase_b_hints_used"])
+        self.assertNotIn(sensitive, output)
+        self.assertNotIn("sk-test-secret-12345678", output)
         self.assertNotIn("input_obj", output)
         self.assertNotIn("response", cli_result)
 

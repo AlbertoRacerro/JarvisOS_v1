@@ -15,6 +15,7 @@ from collections.abc import Sequence
 from typing import Any
 
 import local_policy_gate_overlay_probe as policy_overlay
+from router_policy_hint_bridge_probe import apply_phase_b_router_hint
 from router_policy_local_responder import LocalResponderError, build_local_responder
 from router_policy_local_route_probe import run_local_route
 
@@ -25,6 +26,7 @@ MAX_CLI_RESPONSE_CHARS = 1000
 _RUN_LOCAL_ROUTE = run_local_route
 _BUILD_LOCAL_RESPONDER = build_local_responder
 _APPLY_POLICY_OVERLAY = policy_overlay.apply_policy_overlay
+_APPLY_PHASE_B_ROUTER_HINT = apply_phase_b_router_hint
 
 TOP_LEVEL_REQUIRED = {
     "message_text",
@@ -219,11 +221,17 @@ def _base_router_input(message_text: str) -> dict[str, Any]:
             "allowed_future_retrieval_behavior": "none",
         },
         "phase_b_soft_proposal": {
+            "summary_short": "Benign local-answer smoke message.",
             "project_bucket": "general",
             "primary_domain": "general",
             "domain_tags": ["smoke"],
+            "storage_relevance": "low",
+            "usefulness_for_future_review": "low",
+            "possible_memory_card_type": "none",
             "soft_reason_code": "contextual_summary",
+            "brief_rationale": "Smoke-only default proposal for benign local-answer routing hints.",
             "suggested_followup_question": "",
+            "soft_uncertain_fields": [],
         },
         "router_hint": {
             "task_type": "review",
@@ -646,6 +654,7 @@ def run_message_route_smoke(
     now: str | None = None,
     input_builder=None,
     assume_public_simple: bool = False,
+    use_phase_b_hints: bool = False,
 ) -> dict:
     if not _valid_message(message_text):
         return {
@@ -653,6 +662,7 @@ def run_message_route_smoke(
             "reason": "invalid_message",
             "input_source": "none",
             "assume_public_simple_used": assume_public_simple,
+            "use_phase_b_hints_used": use_phase_b_hints,
         }
 
     source = "injected_builder" if input_builder is not None else "smoke_builder"
@@ -669,8 +679,22 @@ def run_message_route_smoke(
             "reason": "input_builder_failed",
             "input_source": source,
             "assume_public_simple_used": assume_public_simple,
+            "use_phase_b_hints_used": use_phase_b_hints,
             "error_type": type(exc).__name__,
         }
+
+    if use_phase_b_hints:
+        try:
+            input_obj = _APPLY_PHASE_B_ROUTER_HINT(input_obj, now=now)
+        except Exception as exc:
+            return {
+                "executed": False,
+                "reason": "phase_b_hint_bridge_failed",
+                "input_source": source,
+                "assume_public_simple_used": assume_public_simple,
+                "use_phase_b_hints_used": True,
+                "error_type": type(exc).__name__,
+            }
 
     errors = _router_policy_input_structural_errors(input_obj, message_text)
     if errors:
@@ -679,6 +703,7 @@ def run_message_route_smoke(
             "reason": "invalid_router_policy_input",
             "input_source": source,
             "assume_public_simple_used": assume_public_simple,
+            "use_phase_b_hints_used": use_phase_b_hints,
             "validation_errors": errors,
         }
 
@@ -689,6 +714,7 @@ def run_message_route_smoke(
             "reason": "local_route_invalid_result",
             "input_source": source,
             "assume_public_simple_used": assume_public_simple,
+            "use_phase_b_hints_used": use_phase_b_hints,
         }
     return {
         "executed": result["executed"],
@@ -698,6 +724,7 @@ def run_message_route_smoke(
         "input_obj": input_obj,
         "input_source": source,
         "assume_public_simple_used": assume_public_simple,
+        "use_phase_b_hints_used": use_phase_b_hints,
     }
 
 
@@ -724,6 +751,7 @@ def _safe_cli_result(result: dict[str, Any]) -> dict[str, Any]:
         "reason": result.get("reason"),
         "input_source": result.get("input_source", "none"),
         "assume_public_simple_used": result.get("assume_public_simple_used") is True,
+        "use_phase_b_hints_used": result.get("use_phase_b_hints_used") is True,
     }
     decision = result.get("decision")
     if isinstance(decision, dict):
@@ -741,6 +769,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="RouterPolicy A5 message-route smoke bridge.")
     parser.add_argument("--message", required=True)
     parser.add_argument("--assume-public-simple", action="store_true")
+    parser.add_argument("--use-phase-b-hints", action="store_true")
     parser.add_argument("--run-local", action="store_true")
     parser.add_argument("--model", default="gemma3:4b")
     parser.add_argument("--endpoint", default="http://127.0.0.1:11434/api/generate")
@@ -763,6 +792,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "executed": False,
                         "reason": "local_responder_setup_failed",
                         "error_type": type(exc).__name__,
+                        "use_phase_b_hints_used": args.use_phase_b_hints,
                     },
                     indent=2,
                     sort_keys=True,
@@ -777,6 +807,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             now=args.now,
             input_builder=_build_router_input_for_cli,
             assume_public_simple=args.assume_public_simple,
+            use_phase_b_hints=args.use_phase_b_hints,
         )
     except Exception as exc:
         print(

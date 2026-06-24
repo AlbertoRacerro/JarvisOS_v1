@@ -253,6 +253,58 @@ does not add external provider routing, tool/MCP/browser/terminal execution,
 memory writes, retrieval runtime, file-write runtime, backend routes, frontend
 UI, database schema, workers, hooks, or BlueRev modeling.
 
+### 1G-B2-F3-B2 Message Route Phase B Hint Bridge Flag
+
+`1G-B2-F3-B2` wires the existing B1 bridge into the A5 real-message smoke path
+behind explicit `--use-phase-b-hints`.
+
+The B2 smoke order is:
+
+```text
+message
+-> A5 smoke builder / Phase A overlay / A5-R1 operational gates
+-> optional B1 Phase B RouterHint bridge
+-> RouterPolicy decision
+-> semantic validator
+-> A3 safe-local guard
+-> local responder only if safe
+```
+
+B2 completes the A5 smoke default `phase_b_soft_proposal` with the full
+B1-compatible benign field set:
+
+- `summary_short`;
+- `project_bucket`;
+- `primary_domain`;
+- `domain_tags`;
+- `storage_relevance`;
+- `usefulness_for_future_review`;
+- `possible_memory_card_type`;
+- `soft_reason_code`;
+- `brief_rationale`;
+- `suggested_followup_question`;
+- `soft_uncertain_fields`.
+
+The new flag does not replace `--assume-public-simple`. `--use-phase-b-hints`
+alone cannot make an arbitrary message executable. B1 hints are applied only
+after the A5 builder and A5-R1 operational gates have produced the final smoke
+input shape, and before the A5 structural check, RouterPolicy decision,
+semantic validator, and A3 safe-local guard.
+
+B2 keeps the B1 invariant: Phase B can enrich safe advisory hints or make a
+route more conservative, but cannot authorize execution, provider calls, tools,
+memory writes, retrieval, route selection, or external network access. If the
+B1 bridge fails, the message-route smoke path fails closed with
+`phase_b_hint_bridge_failed`.
+
+`context_metadata` may contain B1 bridge metadata because the
+RouterPolicyInput schema permits additional metadata keys and the A5 structural
+validator checks only the required boolean metadata fields.
+
+B2 does not add production chat, live Qwen/Gemma/Ollama classification, backend
+routes, frontend UI, database schema, workers, hooks, MCP execution, memory
+runtime, retrieval runtime, provider routing, file writes, or BlueRev modeling.
+
 ## 1G-B2-F3-A1 boundary
 
 This document is part of the RouterPolicy contract layer only. It does not add

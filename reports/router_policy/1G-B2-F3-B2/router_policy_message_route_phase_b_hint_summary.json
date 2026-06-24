@@ -1,0 +1,107 @@
+{
+  "milestone": "1G-B2-F3-B2",
+  "title": "Message Route Phase B Hint Bridge Flag",
+  "start_head": "af1546995adcd7335ab90de67713789555c80951",
+  "flag_added": "--use-phase-b-hints",
+  "integration_order": [
+    "message",
+    "A5 smoke builder / Phase A overlay / A5-R1 operational gates",
+    "optional B1 Phase B RouterHint bridge",
+    "RouterPolicy decision",
+    "semantic validator",
+    "A3 safe-local guard",
+    "local responder only if safe"
+  ],
+  "files_changed": [
+    "README.md",
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md",
+    "docs/ROUTER_POLICY_DESIGN.md",
+    "reports/router_policy/1G-B2-F3-B2/router_policy_message_route_phase_b_hint_summary.json",
+    "reports/router_policy/1G-B2-F3-B2/router_policy_message_route_phase_b_hint_summary.md",
+    "scripts/router_policy_message_route_smoke.py",
+    "tests/test_router_policy_message_route_smoke.py"
+  ],
+  "a5_phase_b_stub": {
+    "b1_compatible": true,
+    "fields_added": [
+      "summary_short",
+      "storage_relevance",
+      "usefulness_for_future_review",
+      "possible_memory_card_type",
+      "brief_rationale",
+      "soft_uncertain_fields"
+    ],
+    "full_required_fields_present": [
+      "summary_short",
+      "project_bucket",
+      "primary_domain",
+      "domain_tags",
+      "storage_relevance",
+      "usefulness_for_future_review",
+      "possible_memory_card_type",
+      "soft_reason_code",
+      "brief_rationale",
+      "suggested_followup_question",
+      "soft_uncertain_fields"
+    ],
+    "b1_quality_on_default_stub": "high",
+    "default_stub_mapping": {
+      "router_task_type": "answer",
+      "action_type": "answer",
+      "side_effect_level": "none"
+    }
+  },
+  "behavior": {
+    "default_without_flag_unchanged": true,
+    "use_phase_b_hints_alone_executes": false,
+    "benign_assume_public_simple_with_hints_executes": true,
+    "technical_scientific_hint_enriched": true,
+    "technical_scientific_execution_blocked_by_a3_safe_local_guard": true,
+    "source_candidate_makes_route_more_conservative": true,
+    "hard_gates_dominate_phase_b_hints": true,
+    "operational_gates_dominate_phase_b_hints": true,
+    "baseline_non_executable_paths_remain_non_executable": true,
+    "cli_redaction_preserved": true,
+    "b1_bridge_failure_fails_closed": true,
+    "b1_bridge_failure_reason": "phase_b_hint_bridge_failed"
+  },
+  "context_metadata_compatibility": {
+    "schema_additional_properties": true,
+    "a5_structural_validator_tolerates_extra_metadata": true,
+    "metadata_keys_added_by_b1": [
+      "router_hint_source",
+      "phase_b_router_hint_applied",
+      "phase_b_router_hint_reason",
+      "phase_b_quality_derived"
+    ]
+  },
+  "tests_run": [
+    "python -m unittest tests.test_router_policy_message_route_smoke",
+    "python -m unittest tests.test_router_policy_hint_bridge_probe",
+    "python -m unittest tests.test_router_policy_local_responder",
+    "python -m unittest tests.test_router_policy_local_route_probe",
+    "python -m unittest tests.test_router_policy_decision_probe",
+    "python -m unittest tests.test_router_policy_semantic_validator",
+    "python -m unittest discover -s tests"
+  ],
+  "boundary": {
+    "production_chat_added": false,
+    "live_qwen_or_gemma_or_ollama_classification_added": false,
+    "external_provider_calls_added": false,
+    "tools_or_mcp_or_browser_or_terminal_execution_added": false,
+    "memory_or_retrieval_runtime_added": false,
+    "backend_routes_added": false,
+    "frontend_ui_added": false,
+    "db_schema_added": false,
+    "workers_or_hooks_added": false,
+    "bluerev_modeling_added": false
+  },
+  "known_residual_risks": [
+    "A5 remains a smoke-only real-message builder, not a production Phase A/B normalizer.",
+    "--assume-public-simple is still required for benign local answer smoke execution.",
+    "B1 complexity/scientific-depth mapping is heuristic and remains subject to A3 safe-local guard.",
+    "The B2 bridge uses existing offline Phase B soft-review fields; it does not make Phase B a full routing classifier.",
+    "A future audit should verify the flag-gated integration before expanding beyond smoke usage."
+  ],
+  "recommended_next_milestone": "1G-B2-F3-B2-R - Message Route Phase B Hint Bridge Audit"
+}
