@@ -1173,3 +1173,46 @@ Risk note:
 B5-C-R does not add runtime memory, retrieval, provider routing, external
 provider calls, tool execution, routes, database schema, workers, MCP, Qwen,
 Ollama, or BlueRev modeling behavior.
+
+### 1G-B2-F2-B5-C-R2 - Target-Based Provider/Export Repair
+
+1G-B2-F2-B5-C-R2 repairs provider-as-topic over-blocking in the deterministic
+Phase A overlay and adds a Phase B guard against inconsistent provider booleans.
+
+Observed deterministic result:
+
+- trap cases: `16`;
+- passed trap cases: `16`;
+- failed trap cases: `0`;
+- local Ollama calls: `false`;
+- external provider calls: `false`;
+- network calls: `false`;
+- runtime approval: `false`;
+- semantic truth scored: `false`.
+
+Covered cases:
+
+- provider-as-topic English/Italian notes stay non-export;
+- self-email provider-topic English/Italian notes stay non-export;
+- bare contrastive provider-as-topic English/Italian clauses stay non-export;
+- prepositional elided export English/Italian clauses are blocked;
+- explicit compound export English/Italian clauses remain blocked;
+- positive export English/Italian clauses remain blocked;
+- Phase B preserves local provider-topic memory value;
+- Phase B does not classify `provider_or_private_export_risk` from an
+  inconsistent provider boolean alone.
+
+Risk note:
+
+- The deterministic detector now uses a target-based export interpretation.
+- B5-C-R2 intentionally requires a destination preposition for elided
+  contrastive provider exports.
+- Bare contrastive provider mentions are ambiguous and should not be forced to
+  provider/export intent by deterministic regex.
+- Further regex expansion should be avoided unless a blocker remains.
+- Future ambiguous export intent should route to `clarification_required` /
+  `USER_CONFIRM` rather than another broad True/False heuristic.
+
+B5-C-R2 does not add runtime memory, retrieval, provider routing, external
+provider calls, tool execution, routes, database schema, workers, MCP, Qwen,
+Ollama, or BlueRev modeling behavior.

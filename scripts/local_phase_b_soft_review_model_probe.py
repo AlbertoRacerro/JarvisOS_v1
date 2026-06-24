@@ -516,10 +516,15 @@ def classify_phase_b_sensitive_context(
 ) -> str:
     if phase_a_secret_or_credential(phase_a):
         return "secret_or_credential"
-    if (
+    provider_export_authorized_by_hard_gate = (
         phase_a.get("mentions_external_provider_or_upload_intent") is True
-        or phase_a.get("hard_reason_code") == "provider_or_upload_intent"
-    ):
+        and (
+            phase_a.get("hard_reason_code") == "provider_or_upload_intent"
+            or phase_a.get("source_policy_for_future_retrieval") == "blocked"
+            or phase_a.get("allowed_future_retrieval_behavior") == "blocked"
+        )
+    )
+    if provider_export_authorized_by_hard_gate:
         return "provider_or_private_export_risk"
     if (
         phase_a.get("clarification_required") is True

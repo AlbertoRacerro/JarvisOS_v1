@@ -344,3 +344,34 @@ clarification/review rather than being treated as safe by default.
 
 No runtime memory, retrieval, provider routing, tool execution, route, worker,
 MCP, Qwen/Ollama, external provider, or BlueRev modeling behavior is added.
+
+## 1G-B2-F2-B5-C-R2 Target-Based Provider/Export Repair
+
+`1G-B2-F2-B5-C-R2` repairs provider-as-topic over-blocking in the deterministic
+Phase A overlay and adds a Phase B defense-in-depth guard.
+
+Provider names mentioned as note topics are not provider/export intent. A
+provider must be the target/destination of an export action to trigger provider
+export intent:
+
+- `send to Claude`, `share with DeepSeek`, `manda a Claude`, and `carica su
+  Gemini` are provider/export intent;
+- local notes comparing DeepSeek, Claude, OpenAI, or Anthropic are not
+  provider/export intent;
+- self-emailing notes about providers is not provider/export intent.
+
+B5-C-R2 intentionally requires a destination preposition for elided contrastive
+provider exports. `but to Claude` and `ma a Claude` remain provider/export
+intent. Bare contrastive provider mentions such as `but Claude` and `ma Claude`
+are ambiguous and should not be forced to provider/export intent by
+deterministic regex.
+
+Phase B no longer treats an inconsistent provider boolean alone as enough to
+classify `provider_or_private_export_risk`; the boolean must be corroborated by
+the hard reason or blocked retrieval policy.
+
+Future ambiguous export intent should route to `clarification_required` /
+`USER_CONFIRM` rather than another broad True/False heuristic.
+
+No runtime memory, retrieval, provider routing, tool execution, route, worker,
+MCP, Qwen/Ollama, external provider, or BlueRev modeling behavior is added.

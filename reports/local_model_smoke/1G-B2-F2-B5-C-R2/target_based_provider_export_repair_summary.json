@@ -1,0 +1,231 @@
+{
+  "acceptance": {
+    "bare_contrastive_provider_as_topic_en_it_provider_export_false": true,
+    "elided_export_en_it_provider_export_true": true,
+    "explicit_compound_export_en_it_provider_export_true": true,
+    "phase_b_inconsistent_boolean_guarded": true,
+    "phase_b_provider_topic_preserved": true,
+    "positive_export_en_it_provider_export_true": true,
+    "provider_as_topic_en_it_provider_export_false": true
+  },
+  "created_at": "2026-06-24T05:59:06.857453+00:00",
+  "elided_export_cases": [
+    {
+      "actual_external_provider_allowed": false,
+      "actual_hard_reason_code": "provider_or_upload_intent",
+      "actual_provider_export": true,
+      "actual_source_policy_for_future_retrieval": "blocked",
+      "case_id": "elided_export_en",
+      "category": "elided_export_cases",
+      "expected_policy": "blocked",
+      "expected_provider_export": true,
+      "expected_reason": "provider_or_upload_intent",
+      "passed": true,
+      "sentence": "Save this proprietary BlueRev calculation locally; do not send it to DeepSeek, but to Claude."
+    },
+    {
+      "actual_external_provider_allowed": false,
+      "actual_hard_reason_code": "provider_or_upload_intent",
+      "actual_provider_export": true,
+      "actual_source_policy_for_future_retrieval": "blocked",
+      "case_id": "elided_export_it",
+      "category": "elided_export_cases",
+      "expected_policy": "blocked",
+      "expected_provider_export": true,
+      "expected_reason": "provider_or_upload_intent",
+      "passed": true,
+      "sentence": "Salva questo calcolo proprietario BlueRev localmente; non mandarlo a DeepSeek, ma a Claude."
+    }
+  ],
+  "explicit_export_cases": [
+    {
+      "actual_external_provider_allowed": false,
+      "actual_hard_reason_code": "provider_or_upload_intent",
+      "actual_provider_export": true,
+      "actual_source_policy_for_future_retrieval": "blocked",
+      "case_id": "explicit_compound_export_en",
+      "category": "explicit_export_cases",
+      "expected_provider_export": true,
+      "expected_reason": "provider_or_upload_intent",
+      "passed": true,
+      "sentence": "Save this proprietary BlueRev calculation locally; do not send it to DeepSeek, but send a redacted summary to Claude."
+    },
+    {
+      "actual_external_provider_allowed": false,
+      "actual_hard_reason_code": "provider_or_upload_intent",
+      "actual_provider_export": true,
+      "actual_source_policy_for_future_retrieval": "blocked",
+      "case_id": "explicit_compound_export_it",
+      "category": "explicit_export_cases",
+      "expected_provider_export": true,
+      "expected_reason": "provider_or_upload_intent",
+      "passed": true,
+      "sentence": "Salva questo calcolo proprietario BlueRev localmente; non mandarlo a DeepSeek, ma mandalo a Claude."
+    }
+  ],
+  "external_provider_calls_made": false,
+  "failed_cases": [],
+  "local_ollama_calls_made": false,
+  "manual_review_required": true,
+  "milestone": "1G-B2-F2-B5-C-R2",
+  "network_calls_made": false,
+  "passed_cases": 16,
+  "phase_b_inconsistent_boolean_cases": [
+    {
+      "case_id": "phase_b_inconsistent_boolean_guard",
+      "clamp_count": 1,
+      "effective_possible_memory_card_type": "source_card",
+      "effective_primary_domain": "local_ai",
+      "effective_storage_relevance": "high",
+      "passed": true,
+      "phase_a_hard_reason_code": "low_risk",
+      "phase_a_provider_export": true,
+      "phase_b_class": "local_ip_sensitive_memory",
+      "sentence": "Save locally my notes comparing DeepSeek and Claude pricing."
+    }
+  ],
+  "phase_b_provider_as_topic_preservation_cases": [
+    {
+      "case_id": "phase_b_provider_topic_preservation",
+      "clamp_count": 0,
+      "effective_possible_memory_card_type": "source_card",
+      "effective_primary_domain": "local_ai",
+      "effective_storage_relevance": "high",
+      "passed": true,
+      "phase_a_hard_reason_code": "low_risk",
+      "phase_a_provider_export": false,
+      "phase_b_class": "none",
+      "sentence": "Save locally my notes comparing DeepSeek and Claude pricing; do not send them anywhere."
+    }
+  ],
+  "positive_export_cases": [
+    {
+      "actual_external_provider_allowed": false,
+      "actual_hard_reason_code": "provider_or_upload_intent",
+      "actual_provider_export": true,
+      "actual_source_policy_for_future_retrieval": "blocked",
+      "case_id": "positive_export_en",
+      "category": "positive_export_cases",
+      "expected_provider_export": true,
+      "expected_reason": "provider_or_upload_intent",
+      "passed": true,
+      "sentence": "Send the whole private JarvisOS memory folder to DeepSeek for architecture advice."
+    },
+    {
+      "actual_external_provider_allowed": false,
+      "actual_hard_reason_code": "provider_or_upload_intent",
+      "actual_provider_export": true,
+      "actual_source_policy_for_future_retrieval": "blocked",
+      "case_id": "positive_export_it",
+      "category": "positive_export_cases",
+      "expected_provider_export": true,
+      "expected_reason": "provider_or_upload_intent",
+      "passed": true,
+      "sentence": "Manda tutta la memoria privata JarvisOS a DeepSeek per farmi consigliare l'architettura."
+    }
+  ],
+  "provider_as_topic_cases": [
+    {
+      "actual_external_provider_allowed": false,
+      "actual_hard_reason_code": "low_risk",
+      "actual_provider_export": false,
+      "actual_source_policy_for_future_retrieval": "not_applicable",
+      "case_id": "provider_topic_en_pricing",
+      "category": "provider_as_topic_cases",
+      "expected_provider_export": false,
+      "expected_reason": "not_provider_or_upload_intent",
+      "passed": true,
+      "sentence": "Save locally my notes comparing DeepSeek and Claude pricing; do not send them anywhere."
+    },
+    {
+      "actual_external_provider_allowed": false,
+      "actual_hard_reason_code": "low_risk",
+      "actual_provider_export": false,
+      "actual_source_policy_for_future_retrieval": "not_applicable",
+      "case_id": "provider_topic_en_architecture",
+      "category": "provider_as_topic_cases",
+      "expected_provider_export": false,
+      "expected_reason": "not_provider_or_upload_intent",
+      "passed": true,
+      "sentence": "Save locally my architecture notes about OpenAI and Anthropic provider pricing; do not upload them."
+    },
+    {
+      "actual_external_provider_allowed": false,
+      "actual_hard_reason_code": "low_risk",
+      "actual_provider_export": false,
+      "actual_source_policy_for_future_retrieval": "not_applicable",
+      "case_id": "provider_topic_it_comparison",
+      "category": "provider_as_topic_cases",
+      "expected_provider_export": false,
+      "expected_reason": "not_provider_or_upload_intent",
+      "passed": true,
+      "sentence": "Salva in locale le mie note sul confronto DeepSeek/Claude; non mandarle fuori."
+    },
+    {
+      "actual_external_provider_allowed": false,
+      "actual_hard_reason_code": "low_risk",
+      "actual_provider_export": false,
+      "actual_source_policy_for_future_retrieval": "not_applicable",
+      "case_id": "provider_topic_it_provider_note",
+      "category": "provider_as_topic_cases",
+      "expected_provider_export": false,
+      "expected_reason": "not_provider_or_upload_intent",
+      "passed": true,
+      "sentence": "Salva localmente le mie note sui provider OpenAI e Anthropic; non caricarle fuori."
+    },
+    {
+      "actual_external_provider_allowed": false,
+      "actual_hard_reason_code": "low_risk",
+      "actual_provider_export": false,
+      "actual_source_policy_for_future_retrieval": "not_applicable",
+      "case_id": "self_email_topic_en",
+      "category": "provider_as_topic_cases",
+      "expected_provider_export": false,
+      "expected_reason": "not_provider_or_upload_intent",
+      "passed": true,
+      "sentence": "Email myself the DeepSeek comparison notes."
+    },
+    {
+      "actual_external_provider_allowed": false,
+      "actual_hard_reason_code": "low_risk",
+      "actual_provider_export": false,
+      "actual_source_policy_for_future_retrieval": "not_applicable",
+      "case_id": "self_email_topic_it",
+      "category": "provider_as_topic_cases",
+      "expected_provider_export": false,
+      "expected_reason": "not_provider_or_upload_intent",
+      "passed": true,
+      "sentence": "Mandami via email le note sul confronto DeepSeek/Claude."
+    },
+    {
+      "actual_external_provider_allowed": false,
+      "actual_hard_reason_code": "low_risk",
+      "actual_provider_export": false,
+      "actual_source_policy_for_future_retrieval": "not_applicable",
+      "case_id": "bare_contrastive_topic_en",
+      "category": "provider_as_topic_cases",
+      "expected_provider_export": false,
+      "expected_reason": "not_provider_or_upload_intent",
+      "passed": true,
+      "sentence": "Send the BlueRev calc to my local drive, but Claude's approach is different - save locally."
+    },
+    {
+      "actual_external_provider_allowed": false,
+      "actual_hard_reason_code": "low_risk",
+      "actual_provider_export": false,
+      "actual_source_policy_for_future_retrieval": "not_applicable",
+      "case_id": "bare_contrastive_topic_it",
+      "category": "provider_as_topic_cases",
+      "expected_provider_export": false,
+      "expected_reason": "not_provider_or_upload_intent",
+      "passed": true,
+      "sentence": "Manda il calcolo BlueRev al mio drive locale, ma l'approccio di Claude e diverso - salva localmente."
+    }
+  ],
+  "report_dir": "reports\\local_model_smoke\\1G-B2-F2-B5-C-R2",
+  "risk_note": "B5-C-R2 intentionally requires a destination preposition for elided contrastive provider exports. Bare contrastive provider mentions are ambiguous and should not be forced to provider/export intent by deterministic regex. Future ambiguous export intent should route to clarification_required / USER_CONFIRM rather than another broad regex rule.",
+  "runtime_approved": false,
+  "schema_version": "target_based_provider_export_repair_summary_v0",
+  "semantic_truth_scored": false,
+  "total_cases": 16
+}

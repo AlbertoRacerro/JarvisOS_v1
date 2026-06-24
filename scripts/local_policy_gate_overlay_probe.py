@@ -63,11 +63,31 @@ PROVIDER_PATTERN = re.compile(
     r"provider esterno|provider esterni|api esterna|api esterne)\b",
     re.IGNORECASE,
 )
+PROVIDER_TARGET = (
+    r"(?:gpt|chatgpt|claude|gemini|grok|deepseek|openai|anthropic|"
+    r"external providers?|provider estern[oi]|api estern[ae])"
+)
 UPLOAD_PATTERN = re.compile(
     r"\b(upload|send|share|expose|paste|give|forward|manda|mandare|mandalo|mandarlo|"
     r"mandala|mandarla|mandali|mandale|invia|inviare|invialo|inviarlo|inviarla|"
     r"carica|caricare|caricalo|condividi|condividere|condividilo|esporre|"
     r"passa|passare|inoltra|inoltrare)\b",
+    re.IGNORECASE,
+)
+EXPLICIT_EXPORT_TARGET_PATTERN = re.compile(
+    rf"\b(?:upload|send|share|expose|paste|give|forward|email)\b"
+    rf"(?:\s+\S+){{0,10}}\s+(?:to|with)\s+{PROVIDER_TARGET}\b|"
+    rf"\b(?:manda|mandare|mandalo|mandarlo|mandala|mandarla|mandali|mandale|"
+    rf"invia|inviare|invialo|inviarlo|inviarla|passa|passare|inoltra|inoltrare)\b"
+    rf"(?:\s+\S+){{0,10}}\s+a\s+{PROVIDER_TARGET}\b|"
+    rf"\b(?:condividi|condividere|condividilo)\b"
+    rf"(?:\s+\S+){{0,10}}\s+con\s+{PROVIDER_TARGET}\b|"
+    rf"\b(?:carica|caricare|caricalo)\b"
+    rf"(?:\s+\S+){{0,10}}\s+su\s+{PROVIDER_TARGET}\b",
+    re.IGNORECASE,
+)
+ELIDED_EXPORT_TARGET_PATTERN = re.compile(
+    rf"^\s*(?:to|with|a|su|con)\s+{PROVIDER_TARGET}\b",
     re.IGNORECASE,
 )
 NEGATED_EXTERNAL_EXPORT_PATTERN = re.compile(
@@ -160,14 +180,37 @@ def clause_has_local_negation_or_local_only_instruction(clause: str) -> bool:
     return has_negated_external_export_or_local_only_instruction(clause)
 
 
-def detects_provider_or_upload_intent(text: str) -> bool:
-    export_action_exists = has_external_export_action(text)
-    if not export_action_exists:
+def provider_is_explicit_export_target(clause: str) -> bool:
+    return _matches(EXPLICIT_EXPORT_TARGET_PATTERN, clause or "")
+
+
+def provider_is_elided_contrastive_export_target(
+    clause: str,
+    *,
+    export_action_exists_before: bool,
+) -> bool:
+    if not export_action_exists_before:
         return False
+    return _matches(ELIDED_EXPORT_TARGET_PATTERN, clause or "")
+
+
+def detects_provider_or_upload_intent(text: str) -> bool:
+    export_action_seen = False
     for clause in split_export_intent_clauses(text):
-        provider = clause_has_provider_mention(clause)
         negated_or_local_only = clause_has_local_negation_or_local_only_instruction(clause)
-        if provider and not negated_or_local_only:
+        if clause_has_export_action(clause):
+            export_action_seen = True
+
+        if negated_or_local_only:
+            continue
+
+        if provider_is_explicit_export_target(clause):
+            return True
+
+        if provider_is_elided_contrastive_export_target(
+            clause,
+            export_action_exists_before=export_action_seen,
+        ):
             return True
     return False
 

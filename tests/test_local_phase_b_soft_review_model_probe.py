@@ -64,6 +64,23 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
             "soft_uncertain_fields": [],
         }
 
+    def local_provider_note_proposal(self):
+        proposal = dict(self.valid_soft_proposal())
+        proposal.update(
+            {
+                "summary_short": "Local provider pricing comparison note.",
+                "project_bucket": "jarvisos",
+                "primary_domain": "local_ai",
+                "domain_tags": ["provider_pricing", "local_notes"],
+                "storage_relevance": "high",
+                "usefulness_for_future_review": "high",
+                "possible_memory_card_type": "source_card",
+                "soft_reason_code": "memory_candidate",
+                "brief_rationale": "Useful local review context for provider pricing comparison.",
+            }
+        )
+        return proposal
+
     def raw_call(self, output):
         return {
             "ok": True,
@@ -307,6 +324,64 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
         self.assertEqual("", effective["suggested_followup_question"])
         self.assertFalse(result["runtime_approved"])
 
+    def test_provider_as_topic_local_note_does_not_clamp_to_provider_risk(self):
+        input_text = (
+            "Save locally my notes comparing DeepSeek and Claude pricing; "
+            "do not send them anywhere."
+        )
+        result = model_probe.build_model_result(
+            case_id="HG-PROVIDER-TOPIC",
+            source_result=self.source_result_from_overlay(input_text),
+            schema=self.schema,
+            schema_path=self.schema_path,
+            model="qwen3:8b",
+            raw_path=Path("raw.json"),
+            raw_call=self.raw_call(self.local_provider_note_proposal()),
+            input_text=input_text,
+        )
+        effective = result["phase_b_soft_proposal_effective"]
+        self.assertNotEqual(
+            "provider_or_private_export_risk",
+            result["phase_b_sensitive_context_class"],
+        )
+        self.assertNotEqual("security", effective["primary_domain"])
+        self.assertIn(effective["storage_relevance"], {"high", "medium"})
+        self.assertNotEqual("decision_card", effective["possible_memory_card_type"])
+        self.assertNotEqual("none", effective["possible_memory_card_type"])
+        self.assertEqual([], result["soft_proposal_deterministic_clamps"])
+
+    def test_inconsistent_provider_boolean_alone_does_not_force_provider_risk_clamp(self):
+        phase_a = dict(self.phase_a())
+        phase_a.update(
+            {
+                "contains_raw_private_or_ip_sensitive_context": True,
+                "mentions_external_provider_or_upload_intent": True,
+                "external_provider_allowed": False,
+                "hard_reason_code": "low_risk",
+                "source_policy_for_future_retrieval": "review_only",
+                "allowed_future_retrieval_behavior": "none",
+                "sensitivity_bucket_proposal": "internal",
+            }
+        )
+        result = model_probe.build_model_result(
+            case_id="HG-INCONSISTENT-BOOLEAN",
+            source_result=self.source_result(phase_a),
+            schema=self.schema,
+            schema_path=self.schema_path,
+            model="qwen3:8b",
+            raw_path=Path("raw.json"),
+            raw_call=self.raw_call(self.local_provider_note_proposal()),
+            input_text="Save locally my notes comparing DeepSeek and Claude pricing.",
+        )
+        effective = result["phase_b_soft_proposal_effective"]
+        self.assertNotEqual(
+            "provider_or_private_export_risk",
+            result["phase_b_sensitive_context_class"],
+        )
+        self.assertNotEqual("security", effective["primary_domain"])
+        self.assertNotEqual("decision_card", effective["possible_memory_card_type"])
+        self.assertNotEqual("none", effective["possible_memory_card_type"])
+
     def assert_local_ip_sensitive_memory_preserved(self, input_text):
         raw = dict(self.valid_soft_proposal())
         raw.update(
@@ -392,6 +467,7 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
         phase_a.update(
             {
                 "contains_raw_private_or_ip_sensitive_context": True,
+                "mentions_external_provider_or_upload_intent": True,
                 "sensitivity_bucket_proposal": "sensitive",
                 "hard_reason_code": "provider_or_upload_intent",
             }

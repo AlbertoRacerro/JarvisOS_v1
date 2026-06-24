@@ -208,6 +208,82 @@ class PolicyGateOverlayProbeTests(unittest.TestCase):
         self.assertFalse(corrected["external_provider_allowed"])
         self.assert_schema_valid(corrected)
 
+    def test_english_provider_as_topic_pricing_note_is_not_export(self):
+        corrected = overlay.apply_policy_overlay(
+            "Save locally my notes comparing DeepSeek and Claude pricing; do not send them anywhere.",
+            self.wrong_draft(),
+        )
+        self.assertFalse(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertFalse(corrected["external_provider_allowed"])
+        self.assertNotEqual("provider_or_upload_intent", corrected["hard_reason_code"])
+        self.assert_schema_valid(corrected)
+
+    def test_english_provider_as_topic_architecture_note_is_not_export(self):
+        corrected = overlay.apply_policy_overlay(
+            "Save locally my architecture notes about OpenAI and Anthropic provider pricing; do not upload them.",
+            self.wrong_draft(),
+        )
+        self.assertFalse(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertFalse(corrected["external_provider_allowed"])
+        self.assertNotEqual("provider_or_upload_intent", corrected["hard_reason_code"])
+        self.assert_schema_valid(corrected)
+
+    def test_italian_provider_as_topic_comparison_note_is_not_export(self):
+        corrected = overlay.apply_policy_overlay(
+            "Salva in locale le mie note sul confronto DeepSeek/Claude; non mandarle fuori.",
+            self.wrong_draft(),
+        )
+        self.assertFalse(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertNotEqual("provider_or_upload_intent", corrected["hard_reason_code"])
+        self.assert_schema_valid(corrected)
+
+    def test_italian_provider_as_topic_provider_note_is_not_export(self):
+        corrected = overlay.apply_policy_overlay(
+            "Salva localmente le mie note sui provider OpenAI e Anthropic; non caricarle fuori.",
+            self.wrong_draft(),
+        )
+        self.assertFalse(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertNotEqual("provider_or_upload_intent", corrected["hard_reason_code"])
+        self.assert_schema_valid(corrected)
+
+    def test_english_self_email_provider_topic_note_is_not_provider_export(self):
+        corrected = overlay.apply_policy_overlay(
+            "Email myself the DeepSeek comparison notes.",
+            self.wrong_draft(),
+        )
+        self.assertFalse(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertNotEqual("provider_or_upload_intent", corrected["hard_reason_code"])
+        self.assert_schema_valid(corrected)
+
+    def test_italian_self_email_provider_topic_note_is_not_provider_export(self):
+        corrected = overlay.apply_policy_overlay(
+            "Mandami via email le note sul confronto DeepSeek/Claude.",
+            self.wrong_draft(),
+        )
+        self.assertFalse(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertNotEqual("provider_or_upload_intent", corrected["hard_reason_code"])
+        self.assert_schema_valid(corrected)
+
+    def test_english_bare_contrastive_provider_topic_is_not_export(self):
+        corrected = overlay.apply_policy_overlay(
+            "Send the BlueRev calc to my local drive, but Claude's approach is different - save locally.",
+            self.wrong_draft(),
+        )
+        self.assertFalse(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertFalse(corrected["external_provider_allowed"])
+        self.assertNotEqual("provider_or_upload_intent", corrected["hard_reason_code"])
+        self.assert_schema_valid(corrected)
+
+    def test_italian_bare_contrastive_provider_topic_is_not_export(self):
+        corrected = overlay.apply_policy_overlay(
+            "Manda il calcolo BlueRev al mio drive locale, ma l'approccio di Claude e diverso - salva localmente.",
+            self.wrong_draft(),
+        )
+        self.assertFalse(corrected["mentions_external_provider_or_upload_intent"])
+        self.assertFalse(corrected["external_provider_allowed"])
+        self.assertNotEqual("provider_or_upload_intent", corrected["hard_reason_code"])
+        self.assert_schema_valid(corrected)
+
     def test_public_literature_candidate_discovery_is_not_over_blocked(self):
         corrected = overlay.apply_policy_overlay(
             "Find public literature and DOI candidate sources for BlueRev microalgae.",

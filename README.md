@@ -174,6 +174,14 @@ provider. Sensitive local project/IP content may be high-value local memory, but
 external provider approval remains hard-gated and false unless deterministic
 policy allows it.
 
-Passing B5-C-R does not approve runtime use.
+B5-C-R2 repairs provider-as-topic over-blocking. Provider names mentioned as
+note topics are not provider/export intent; prepositional elided contrastive
+export targets such as `but to Claude` and `ma a Claude` remain provider/export
+intent. Bare contrastive provider mentions are ambiguous and should not be
+forced to provider/export intent by deterministic regex. Phase B no longer
+treats an inconsistent provider boolean alone as enough to classify
+`provider_or_private_export_risk`.
+
+Passing B5-C-R2 does not approve runtime use.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

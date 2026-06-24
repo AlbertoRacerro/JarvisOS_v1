@@ -1412,3 +1412,34 @@ Acceptance:
 
 The repair evaluates negation clause-locally. A negated export to one provider
 must not suppress a later positive export to another provider.
+
+## 1G-B2-F2-B5-C-R2 Target-Based Provider/Export Repair
+
+B5-C-R2 is deterministic Phase A/Phase B repair only. It does not run Qwen,
+Ollama, external providers, or network services.
+
+It validates a target-based trap matrix under:
+
+```text
+reports/local_model_smoke/1G-B2-F2-B5-C-R2/
+```
+
+Acceptance:
+
+- provider-as-topic English/Italian notes stay provider/export `false`;
+- self-email provider-topic English/Italian notes stay provider/export `false`;
+- bare contrastive provider-as-topic English/Italian clauses stay
+  provider/export `false`;
+- prepositional elided export English/Italian clauses become provider/export
+  `true`;
+- explicit compound export English/Italian clauses remain provider/export
+  `true`;
+- positive export English/Italian clauses remain provider/export `true`;
+- Phase B preserves local provider-topic memory value;
+- Phase B does not trust an inconsistent provider boolean alone.
+
+B5-C-R2 intentionally requires a destination preposition for elided contrastive
+provider exports. Bare contrastive provider mentions are ambiguous and should
+not be forced to provider/export intent by deterministic regex. Future ambiguous
+export intent should route to `clarification_required` / `USER_CONFIRM` rather
+than another broad True/False heuristic.
