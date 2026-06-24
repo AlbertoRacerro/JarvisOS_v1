@@ -218,6 +218,41 @@ external provider routing, tool/MCP/browser/terminal execution, memory writes,
 retrieval runtime, file-write runtime, backend routes, frontend UI, database
 schema, or BlueRev modeling.
 
+### 1G-B2-F3-B1 Phase B RouterHint bridge
+
+`1G-B2-F3-B1` adds an offline deterministic bridge from existing Phase B/Qwen
+soft-review output to RouterPolicy `router_hint` and safe `action_hint` fields.
+
+B1 maps advisory Phase B fields only:
+
+- `soft_reason_code` is the primary `router_hint.task_type` driver;
+- `primary_domain` maps to `router_hint.domain`;
+- `domain_tags` help derive complexity and scientific-depth hints;
+- `suggested_followup_question` forces clarification/review when required;
+- `soft_uncertain_fields` lowers derived quality and can force review.
+
+B1 does not depend on a Phase B `confidence` field. The Phase B soft-review
+schema does not expose one. Instead, B1 derives `router_hint.confidence` from
+real fields: required-field shape, recognized `soft_reason_code`, empty or
+non-empty `suggested_followup_question`, and bounded uncertainty fields.
+
+Phase A and operational gates remain fail-closed authority. If the input already
+contains a hard gate, B1 cannot produce `task_type="answer"`,
+`complexity="low"`, provider/tool/memory/retrieval permission, or route
+selection authority. Phase B/Qwen cannot authorize execution, provider calls,
+tools, memory writes, retrieval, or route selection.
+
+B1 derives complexity and scientific-depth heuristically from
+`primary_domain`/`domain_tags`. Phase B soft review was designed for
+memory/review usefulness, not full routing classification, so a later dedicated
+routing classifier or Phase B schema extension may be needed before removing
+`--assume-public-simple` from real user-facing chat.
+
+B1 does not call models or responders, does not run A3, does not add chat, and
+does not add external provider routing, tool/MCP/browser/terminal execution,
+memory writes, retrieval runtime, file-write runtime, backend routes, frontend
+UI, database schema, workers, hooks, or BlueRev modeling.
+
 ## 1G-B2-F3-A1 boundary
 
 This document is part of the RouterPolicy contract layer only. It does not add

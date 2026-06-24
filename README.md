@@ -158,28 +158,27 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F3-A5-R1-R - Operational-intent hard-gate repair audit
+1G-B2-F3-B1-R - Phase B RouterHint bridge audit
 ```
 
-`1G-B2-F3-A5-R1` patches the A5 real-message smoke bridge so obvious
-operational intent cannot be made executable by `--assume-public-simple`.
+`1G-B2-F3-B1` adds an offline Phase B/Qwen advisory-output bridge that maps
+existing Phase B soft-review fields into RouterPolicy `router_hint` and safe
+`action_hint` proposals.
 
-`--assume-public-simple` cannot authorize tool/MCP, browser/search, terminal,
-memory-write, retrieval/file-access, or provider/upload intent. The repair uses
-a small deterministic smoke-only detector that sets existing RouterPolicy hard
-gate fields before the safe local-answer path can be selected. The detector is
-conservative substring/regex logic, not production Phase B/Qwen classification,
-and may over-block benign discussion of operational terms.
+Phase A and operational gates remain fail-closed authority. Phase B/Qwen cannot
+authorize execution, provider calls, tools, memory writes, retrieval, or route
+selection. B1 does not call models or responders and does not add chat.
 
-Benign local answer smoke still requires both `--assume-public-simple` and
-`--run-local`. `--run-local` alone does not make arbitrary input executable.
-A5 still populates exactly `input_obj["message_text"]` with the original
-message string; the responder receives only that string.
+B1 uses `soft_reason_code` as the primary `router_hint.task_type` mapping
+driver. It derives `router_hint.confidence` from real Phase B fields such as
+`suggested_followup_question`, `soft_uncertain_fields`, and required-field
+shape; it does not rely on a Phase B `confidence` field. It derives
+complexity/scientific-depth heuristically from `primary_domain` and
+`domain_tags`.
 
-Default CLI output is redacted: no full input object, raw message, full decision
-JSON, or response is printed when `executed=false`. Real local model execution
-still goes through explicit `--run-local`, RouterPolicy, the semantic validator,
-the A3 safe-local guard, and the A4 localhost-only adapter.
+B1 is a bridge toward replacing `--assume-public-simple`, not the removal
+itself. Benign local answer smoke still requires both `--assume-public-simple`
+and `--run-local`.
 
 Manual local smoke, optional and local-only:
 
@@ -187,9 +186,9 @@ Manual local smoke, optional and local-only:
 python scripts\router_policy_message_route_smoke.py --message "Explain what a pump is" --assume-public-simple --run-local
 ```
 
-A5-R1 does not add external providers, non-localhost network calls, tools,
+B1 does not add external providers, non-localhost network calls, tools,
 browser/terminal/MCP execution, memory, retrieval, file-write runtime, backend
-routes, frontend UI, database migrations, Phase B/Qwen runtime, or BlueRev
+routes, frontend UI, database migrations, live Qwen runtime, or BlueRev
 modeling.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

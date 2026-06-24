@@ -1574,3 +1574,45 @@ Observed repair result:
 The detector is conservative substring/regex smoke-only detection, not
 production Phase B/Qwen classification. It may over-block benign discussion of
 operational terms.
+
+### 1G-B2-F3-B1 - Phase B RouterHint Bridge
+
+1G-B2-F3-B1 adds an offline deterministic bridge from existing Phase B/Qwen
+soft-review output into RouterPolicy `router_hint` and safe `action_hint`
+fields.
+
+Actual Phase B fields used:
+
+- `soft_reason_code`;
+- `summary_short`;
+- `project_bucket`;
+- `primary_domain`;
+- `domain_tags`;
+- `storage_relevance`;
+- `usefulness_for_future_review`;
+- `possible_memory_card_type`;
+- `suggested_followup_question`;
+- `soft_uncertain_fields`.
+
+Observed B1 contract:
+
+- Phase A hard gates dominate Phase B answer proposals;
+- A5-R1 operational gates dominate Phase B answer proposals;
+- benign general Phase B output maps to answer/no-side-effect hints;
+- technical/scientific domains map to medium reasoning hints;
+- source/current-info soft reasons map to review with current/file context;
+- ambiguity or follow-up questions map to clarification/review;
+- malformed or unknown Phase B output does not create a safe answer route;
+- `memory_candidate` uses storage/card tie-breakers and defaults to review when
+  uncertain;
+- producer deep-copies input and does not mutate the caller object;
+- produced objects pass B1 structural checks.
+
+B1 derives `router_hint.confidence` from real Phase B fields and does not rely
+on a Phase B `confidence` field. `soft_reason_code` is the primary task-type
+mapping driver. Complexity and scientific-depth are heuristic outputs derived
+from `primary_domain` and `domain_tags`.
+
+B1 does not call Qwen, Gemma, Ollama, providers, responders, A3, tools, MCP,
+browser, terminal, memory, retrieval, backend routes, frontend UI, DB
+migrations, workers, hooks, or BlueRev modeling.

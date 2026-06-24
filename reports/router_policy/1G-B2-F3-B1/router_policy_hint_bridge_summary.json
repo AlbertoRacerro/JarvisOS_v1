@@ -1,0 +1,116 @@
+{
+  "milestone": "1G-B2-F3-B1 - Phase B/Qwen RouterHint Producer",
+  "start_head": "a75b15160b0bd17ae1d9b789dfbbce2e7c3f2407",
+  "files_changed": [
+    "README.md",
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md",
+    "docs/ROUTER_POLICY_DESIGN.md",
+    "reports/router_policy/1G-B2-F3-B1/router_policy_hint_bridge_summary.json",
+    "reports/router_policy/1G-B2-F3-B1/router_policy_hint_bridge_summary.md",
+    "scripts/router_policy_hint_bridge_probe.py",
+    "tests/test_router_policy_hint_bridge_probe.py"
+  ],
+  "actual_phase_b_fields_used": [
+    "summary_short",
+    "project_bucket",
+    "primary_domain",
+    "domain_tags",
+    "storage_relevance",
+    "usefulness_for_future_review",
+    "possible_memory_card_type",
+    "soft_reason_code",
+    "brief_rationale",
+    "suggested_followup_question",
+    "soft_uncertain_fields"
+  ],
+  "soft_reason_code_mapping_table": {
+    "clarification_context": "clarification/unknown/low confidence",
+    "source_candidate": "review/medium/current-info/file-context",
+    "contextual_summary": "answer when no hard gate, no follow-up, and quality is high or medium",
+    "memory_candidate": "answer only for low-storage benign none/knowledge card; otherwise review",
+    "low_value": "answer when no hard gate, no follow-up, and quality is high or medium",
+    "decision_candidate": "review",
+    "assumption_candidate": "review",
+    "evidence_candidate": "review",
+    "blocked_by_phase_a": "review or hard-gate blocked",
+    "unknown_or_missing_or_malformed": "review/unknown/low confidence"
+  },
+  "derived_quality_logic": {
+    "high": "required fields valid, recognized non-ambiguous soft_reason_code, no follow-up, no uncertain fields",
+    "medium": "recognized soft_reason_code, no follow-up, bounded non-route-relevant uncertain fields",
+    "low": "missing or malformed fields, unknown/malformed/clarification/blocking soft reason, non-empty follow-up, or route-relevant uncertainty"
+  },
+  "hard_gate_dominance_result": "pass: Phase A hard gates block Phase B answer proposals",
+  "operational_gate_dominance_result": "pass: A5-R1 operational gate fields block Phase B answer proposals",
+  "benign_answer_mapping_result": "pass: contextual_summary/low_value style benign general output maps to answer/no-side-effect hints",
+  "technical_scientific_mapping_result": "pass: technical/scientific domains map to medium reasoning with scientific-depth hint",
+  "source_current_info_mapping_result": "pass: source_candidate maps to review with needs_current_info and needs_file_context",
+  "ambiguity_followup_mapping_result": "pass: suggested_followup_question maps to clarification/review and low confidence",
+  "low_quality_fallback_result": "pass: missing/malformed/unknown Phase B output does not create a safe answer route",
+  "memory_candidate_tie_breaker_result": "pass: benign low-storage none/knowledge card may answer; card/status/source-like memory candidates review",
+  "structural_validation_result": "pass: produced objects pass B1 structural checks; no full Draft 2020-12 validation claimed",
+  "tests_run": [
+    {
+      "command": "python -m unittest tests.test_router_policy_hint_bridge_probe",
+      "result": "pass: 15/15"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_message_route_smoke",
+      "result": "pass: 31/31"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_local_route_probe",
+      "result": "pass: 11/11"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_decision_probe",
+      "result": "pass: 14/14"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_semantic_validator",
+      "result": "pass: 40/40"
+    },
+    {
+      "command": "python -m unittest discover -s tests",
+      "result": "pass: 277/277"
+    },
+    {
+      "command": "git diff --check",
+      "result": "pass with expected Windows CRLF warnings"
+    },
+    {
+      "command": "git status --short",
+      "result": "dirty with intended B1 files before staging"
+    },
+    {
+      "command": "rg -n \"ollama|urlopen|httpx|requests|subprocess|Popen|os\\.system|selenium|playwright|mcp|memory_write|write_text|open\\(\" scripts/router_policy_hint_bridge_probe.py tests/test_router_policy_hint_bridge_probe.py",
+      "result": "literal schema/action-field and forbidden-name test hits only; no executable runtime integrations"
+    }
+  ],
+  "runtime_boundary": {
+    "model_calls_added": false,
+    "responder_calls_added": false,
+    "a3_route_execution_added": false,
+    "external_provider_calls_added": false,
+    "tool_browser_terminal_mcp_runtime_added": false,
+    "memory_runtime_added": false,
+    "retrieval_runtime_added": false,
+    "file_write_runtime_added": false,
+    "backend_routes_added": false,
+    "frontend_ui_added": false,
+    "database_migrations_added": false,
+    "workers_queues_hooks_added": false,
+    "bluerev_modeling_added": false
+  },
+  "known_residual_risks": [
+    "B1 maps existing Phase B/Qwen advisory output only; it does not prove semantic truth.",
+    "B1 does not approve live Qwen runtime routing.",
+    "B1 does not remove deterministic Phase A or operational gates.",
+    "B1 does not approve chat without --assume-public-simple yet.",
+    "B1 derives confidence/quality from real Phase B fields; it does not rely on a Phase B confidence field.",
+    "B1 derives complexity and scientific-depth heuristically from Phase B domain fields.",
+    "Phase B soft review was designed for memory/review usefulness, not full routing classification.",
+    "A later dedicated routing classifier or Phase B schema extension may be needed before removing --assume-public-simple from real user-facing chat.",
+    "Field mapping may need adjustment after live Phase B/Qwen output audit."
+  ]
+}
