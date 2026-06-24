@@ -30,15 +30,19 @@ action/preflight fields use fail-safe restrictive defaults: no provider call, no
 external network, no tool/browser/terminal/MCP execution, no memory/retrieval/file
 state change, and no runtime execution.
 
-Because the current semantic validator still treats `route_external_candidate`
-as provider-call-ready, A2 represents high-complexity external routing as a
-proposal: an external `provider_candidate` and `proposed_external_target` may be
-shown with `external_allowed=true`, but `provider_call_allowed_now=false` and
+Because the current semantic validator treats `external_allowed=true` as an
+externally-authorizing route shape, A2-R1 represents high-complexity external
+routing as proposal-only metadata: `proposed_external_target` may name the
+external target, but `provider_candidate` remains non-external,
+`external_allowed=false`, `provider_call_allowed_now=false`, and
 `external_network_allowed_now=false`. Confirmation only creates review context;
 it does not execute.
 
 A2 keeps the producer as a module with unittest coverage. It does not add a CLI
 smoke writer or any runtime report-generation path.
+
+A2-R1 adds the contract invariant that `external_allowed=true` requires
+`route_action=route_external_candidate`.
 
 ## 1G-B2-F3-A1 boundary
 

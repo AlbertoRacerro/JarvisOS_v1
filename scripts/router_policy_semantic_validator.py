@@ -175,6 +175,13 @@ def _check_blocked(decision: dict[str, Any], violations: list[dict]) -> None:
 
 def _check_external_candidate(decision: dict[str, Any], violations: list[dict]) -> None:
     provider = decision.get("provider_candidate")
+    if decision.get("external_allowed") is True and decision.get("route_action") != "route_external_candidate":
+        _add(
+            violations,
+            "EXTERNAL_ALLOWED_WITHOUT_EXTERNAL_ROUTE_ACTION",
+            "external_allowed true requires route_external_candidate route_action.",
+            "route_action",
+        )
     if decision.get("external_allowed") is False and isinstance(provider, str) and provider.startswith("external:"):
         _add(
             violations,

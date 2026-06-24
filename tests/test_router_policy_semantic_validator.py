@@ -642,6 +642,24 @@ class RouterPolicySemanticValidatorTests(unittest.TestCase):
         )
         self.assert_violation(self.base_input(), decision, "TERMINAL_ENVIRONMENT_MISMATCH")
 
+    def test_adv031_external_allowed_requires_external_route_action(self):
+        decision = self.base_decision()
+        decision.update(
+            {
+                "route_action": "ask_user_confirm",
+                "route_tier": "USER_CONFIRM",
+                "provider_candidate": "external:scientific_medium",
+                "proposed_external_target": "external:scientific_medium",
+                "external_allowed": True,
+                "provider_call_allowed_now": False,
+                "external_network_allowed_now": False,
+                "allowed_execution_mode": "propose_only",
+                "reason_codes": ["high_complexity_external_candidate"],
+                "audit_notes": ["External proposal requires confirmation before any provider call."],
+            }
+        )
+        self.assert_violation(self.base_input(), decision, "EXTERNAL_ALLOWED_WITHOUT_EXTERNAL_ROUTE_ACTION")
+
 
 def null_value():
     return None

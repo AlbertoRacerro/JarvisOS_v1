@@ -291,10 +291,10 @@ def _external_candidate_proposal(input_obj: dict[str, Any], decision: dict[str, 
     decision.update(
         {
             "route_action": "ask_user_confirm",
-            "route_tier": tier,
-            "provider_candidate": target,
+            "route_tier": "USER_CONFIRM",
+            "provider_candidate": "none",
             "proposed_external_target": target,
-            "external_allowed": True,
+            "external_allowed": False,
             "allowed_execution_mode": "propose_only",
             "response_allowed_now": True,
             "confirmation_required": _user_policy(input_obj).get("external_requires_confirmation") is True,

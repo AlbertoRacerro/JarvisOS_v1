@@ -198,13 +198,28 @@ class RouterPolicyDecisionProbeTests(unittest.TestCase):
     def test_a2_006_high_complexity_public_external_policy_gets_candidate_proposal(self):
         input_obj = self.make_high_complexity_public()
         decision = self.decide(input_obj)
-        self.assertEqual("SCIENTIFIC_MEDIUM", decision["route_tier"])
-        self.assertEqual("external:scientific_medium", decision["provider_candidate"])
+        self.assertEqual("ask_user_confirm", decision["route_action"])
+        self.assertEqual("USER_CONFIRM", decision["route_tier"])
+        self.assertFalse(str(decision["provider_candidate"]).startswith("external:"))
         self.assertEqual("external:scientific_medium", decision["proposed_external_target"])
-        self.assertTrue(decision["external_allowed"])
+        self.assertFalse(decision["external_allowed"])
         self.assertFalse(decision["provider_call_allowed_now"])
         self.assertFalse(decision["external_network_allowed_now"])
+        self.assertFalse(decision["tool_execution_allowed_now"])
+        self.assertFalse(decision["state_change_allowed_now"])
         self.assertTrue(decision["confirmation_required"])
+
+    def test_producer_never_emits_external_allowed_with_user_confirm(self):
+        input_obj = self.make_high_complexity_public()
+        decision = self.decide(input_obj)
+        self.assertFalse(decision["external_allowed"] and decision["route_action"] == "ask_user_confirm")
+
+    def test_producer_never_emits_external_provider_candidate_for_proposal_only(self):
+        input_obj = self.make_high_complexity_public()
+        decision = self.decide(input_obj)
+        self.assertEqual("ask_user_confirm", decision["route_action"])
+        self.assertEqual("propose_only", decision["allowed_execution_mode"])
+        self.assertFalse(str(decision["provider_candidate"]).startswith("external:"))
 
     def test_a2_007_budget_max_local_fast_blocks_external_tier(self):
         input_obj = self.make_high_complexity_public()

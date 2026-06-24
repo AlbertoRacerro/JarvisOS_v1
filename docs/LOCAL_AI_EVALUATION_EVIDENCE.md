@@ -1343,3 +1343,33 @@ Observed contract result:
 A2 does not add runtime chat routing, provider calls, model calls,
 tool/browser/terminal/MCP execution, memory writes, retrieval, file-write
 runtime, backend routes, frontend UI, database migrations, or BlueRev modeling.
+
+### 1G-B2-F3-A2-R1 - RouterPolicy External Proposal Consistency Repair
+
+1G-B2-F3-A2-R1 repairs the A2 producer's external proposal representation. A
+proposal-only external escalation now uses descriptive metadata only:
+
+- `route_action=ask_user_confirm`;
+- `route_tier=USER_CONFIRM`;
+- `provider_candidate` is not external;
+- `proposed_external_target` may name the external target;
+- `external_allowed=false`;
+- provider, network, tool, and state permissions stay false.
+
+The semantic validator now rejects `external_allowed=true` unless
+`route_action=route_external_candidate`.
+
+Observed contract result:
+
+- producer test module: `14/14`;
+- semantic-validator test module: `40/40`;
+- external provider calls: `false`;
+- local Ollama calls: `false`;
+- runtime routing added: `false`;
+- tool execution added: `false`;
+- memory writes added: `false`;
+- report: `reports/router_policy/1G-B2-F3-A2-R1/`.
+
+A2-R1 does not add runtime chat routing, provider calls, model calls,
+tool/browser/terminal/MCP execution, memory writes, retrieval, file-write
+runtime, backend routes, frontend UI, database migrations, or BlueRev modeling.

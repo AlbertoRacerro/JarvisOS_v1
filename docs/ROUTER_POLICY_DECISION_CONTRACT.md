@@ -106,10 +106,15 @@ review, but the active provider candidate cannot be external until policy allows
 external routing.
 
 In A2, high-complexity positively non-sensitive external routing is a proposal
-only. It may set an external `provider_candidate` only when `external_allowed`
-is true, while keeping:
+only. It records the target in `proposed_external_target` and keeps
+`provider_candidate` non-external:
 
 ```text
+route_action=ask_user_confirm
+route_tier=USER_CONFIRM
+provider_candidate=none or local provider
+proposed_external_target=external:...
+external_allowed=false
 provider_call_allowed_now=false
 external_network_allowed_now=false
 tool_execution_allowed_now=false
@@ -118,6 +123,9 @@ allowed_execution_mode=propose_only
 ```
 
 This does not call or authorize an external provider.
+
+`external_allowed=true` is reserved for externally-authorizing route shapes and
+requires `route_action=route_external_candidate`.
 
 ## answer_only
 

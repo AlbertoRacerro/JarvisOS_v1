@@ -1,0 +1,61 @@
+{
+  "schema_version": "router_policy_external_proposal_consistency_summary_v0",
+  "milestone": "1G-B2-F3-A2-R1",
+  "start_head": "5cb3eb97f7dca133edebe5e14826ef0fff18949a",
+  "final_head": "recorded in final handoff after commit",
+  "files_changed": [
+    "README.md",
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md",
+    "docs/ROUTER_POLICY_DECISION_CONTRACT.md",
+    "docs/ROUTER_POLICY_DESIGN.md",
+    "docs/ROUTER_POLICY_TEST_MATRIX.md",
+    "reports/router_policy/1G-B2-F3-A2-R1/router_policy_external_proposal_consistency_summary.json",
+    "reports/router_policy/1G-B2-F3-A2-R1/router_policy_external_proposal_consistency_summary.md",
+    "scripts/router_policy_decision_probe.py",
+    "scripts/router_policy_semantic_validator.py",
+    "tests/test_router_policy_decision_probe.py",
+    "tests/test_router_policy_semantic_validator.py"
+  ],
+  "tests_run": [
+    "python -m unittest tests.test_router_policy_decision_probe",
+    "python -m unittest tests.test_router_policy_semantic_validator",
+    "python -m unittest discover -s tests",
+    "git diff --check",
+    "rg -n \"requests|httpx|openai|anthropic|ollama|subprocess|Popen|os\\\\.system|socket|selenium|playwright|mcp|memory_write|write_text|open\\\\(\" scripts tests docs schemas reports README.md"
+  ],
+  "producer_representation_changed": {
+    "high_complexity_external_proposal": {
+      "route_action": "ask_user_confirm",
+      "route_tier": "USER_CONFIRM",
+      "provider_candidate": "none",
+      "proposed_external_target": "external:scientific_medium",
+      "external_allowed": false,
+      "provider_call_allowed_now": false,
+      "external_network_allowed_now": false,
+      "tool_execution_allowed_now": false,
+      "state_change_allowed_now": false,
+      "allowed_execution_mode": "propose_only"
+    }
+  },
+  "validator_invariant_added": "external_allowed=true requires route_action=route_external_candidate",
+  "new_violation_codes_added": [
+    "EXTERNAL_ALLOWED_WITHOUT_EXTERNAL_ROUTE_ACTION"
+  ],
+  "new_tests_added": [
+    "producer never emits external_allowed=true with ask_user_confirm",
+    "producer never emits external provider_candidate for proposal-only confirmation decisions",
+    "semantic validator rejects external_allowed=true with ask_user_confirm"
+  ],
+  "runtime_boundary": {
+    "external_provider_calls_made": false,
+    "local_ollama_calls_made": false,
+    "runtime_routing_added": false,
+    "tool_browser_terminal_mcp_execution_added": false,
+    "memory_retrieval_file_write_runtime_added": false,
+    "backend_frontend_db_bluerev_added": false
+  },
+  "known_residual_risks": [
+    "RouterPolicy remains a contract probe and validator, not runtime routing.",
+    "Current schema tests use a local checker, not complete Draft 2020-12 validation."
+  ]
+}

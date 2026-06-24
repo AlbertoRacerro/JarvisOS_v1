@@ -217,3 +217,19 @@ checker and semantic-validator-valid. The producer regression checks also assert
 that it never emits external network without external allowance, browser/tool/MCP
 execution without network permission, external provider candidates while
 external is forbidden, or secret-like audit notes.
+
+## A2-R1 external proposal consistency
+
+```text
+High-complexity positive-safe external proposal:
+  route_action=ask_user_confirm
+  route_tier=USER_CONFIRM
+  provider_candidate is not external
+  proposed_external_target is external
+  external_allowed=false
+  provider_call_allowed_now=false
+  external_network_allowed_now=false
+
+Semantic validator rejects:
+  external_allowed=true with route_action=ask_user_confirm
+```
