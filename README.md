@@ -158,21 +158,30 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F3-A3-R - RouterPolicy local-route smoke integration audit
+1G-B2-F3-A4-R - Approved local responder adapter audit
 ```
 
-`1G-B2-F3-A3` adds a local-route smoke integration. It runs normalized
-RouterPolicy input through the deterministic producer and semantic validator,
-then executes only validator-valid safe `LOCAL_FAST` local-answer decisions
-through an injected responder. The guard checks permission booleans, not just
-route labels.
+`1G-B2-F3-A4` adds the first approved localhost-only Ollama responder adapter
+for the A3 local-route smoke path. The adapter is injectable as
+`Callable[[str], str]`, uses Python standard library HTTP only, rejects
+non-localhost endpoints with URL parsing, bounds prompt/output length, and keeps
+`build_local_responder` side-effect free.
 
-The A3 library default is offline-safe: `responder=None` does not call any
-model. Tests use an injected fake responder. A3 does not execute `LOCAL_ONLY`,
-`USER_CONFIRM`, `BLOCKED`, `ask_clarification`, `ask_user_confirm`,
-`allowed_execution_mode=propose_only`, or external proposal decisions. It does
-not call external providers, execute tools/browser/terminal/MCP, or write
-memory/retrieval/file state. Real local model execution remains blocked pending
-an approved explicit local adapter.
+The library default remains offline-safe: `run_local_route(..., responder=None)`
+does not call a model. Real local model execution is available only through
+explicit CLI `--run-local`, only after RouterPolicy decision production,
+semantic validation, and the A3 safe-local guard pass. Unit tests use fake
+clients and do not require Ollama or Gemma. Manual smoke requires Ollama running
+and the selected model already pulled locally.
+
+Manual local smoke, optional:
+
+```powershell
+python scripts\router_policy_local_route_probe.py --fixture tests\fixtures\router_policy\base_router_policy_fixture.json --run-local
+```
+
+A4 does not add external provider routing, tools/browser/terminal/MCP, memory,
+retrieval, backend routes, frontend UI, database migrations, or BlueRev
+modeling.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

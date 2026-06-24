@@ -1,0 +1,83 @@
+{
+  "milestone": "1G-B2-F3-A4 - Approved local responder adapter smoke",
+  "start_head": "e620de4d7df65ad5b35c80fe9bf2398fbdaccd58",
+  "implementation_base_head": "e620de4d7df65ad5b35c80fe9bf2398fbdaccd58",
+  "working_tree_status_before_commit": "clean before implementation",
+  "files_changed": [
+    "README.md",
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md",
+    "docs/ROUTER_POLICY_DESIGN.md",
+    "reports/router_policy/1G-B2-F3-A4/router_policy_local_responder_summary.json",
+    "reports/router_policy/1G-B2-F3-A4/router_policy_local_responder_summary.md",
+    "scripts/router_policy_local_responder.py",
+    "scripts/router_policy_local_route_probe.py",
+    "tests/test_router_policy_local_responder.py"
+  ],
+  "docs_sections_changed": [
+    "README.md Current Next Milestone",
+    "docs/ROUTER_POLICY_DESIGN.md 1G-B2-F3-A4 approved local responder adapter",
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md 1G-B2-F3-A4 - Approved Local Responder Adapter Smoke"
+  ],
+  "tests_run": [
+    "python -m unittest tests.test_router_policy_local_responder",
+    "python -m unittest tests.test_router_policy_local_route_probe",
+    "python -m unittest tests.test_router_policy_decision_probe",
+    "python -m unittest tests.test_router_policy_semantic_validator",
+    "python -m unittest discover -s tests",
+    "git diff --check",
+    "git status --short",
+    "rg -n \"openai|anthropic|gemini|grok|httpx|requests|subprocess|Popen|os\\\\.system|selenium|playwright|mcp|memory_write|write_text|open\\\\(\" scripts tests docs schemas reports README.md",
+    "rg -n \"openai|anthropic|gemini|grok|httpx|requests|subprocess|Popen|os\\\\.system|selenium|playwright|mcp|memory_write|write_text\" scripts/router_policy_local_responder.py scripts/router_policy_local_route_probe.py tests/test_router_policy_local_responder.py tests/test_router_policy_local_route_probe.py"
+  ],
+  "adapter_added": "localhost-only Ollama /api/generate responder adapter",
+  "client_contract": "client(endpoint: str, payload: dict, timeout_s: float) -> dict",
+  "endpoint_validation": {
+    "parser": "urllib.parse.urlparse",
+    "scheme": "http",
+    "hosts": [
+      "127.0.0.1",
+      "localhost",
+      "::1"
+    ],
+    "path": "/api/generate",
+    "rejects_credentials": true,
+    "rejects_query": true,
+    "rejects_fragment": true
+  },
+  "parameter_validation": [
+    "prompt must be str",
+    "model must be non-empty str",
+    "endpoint must be str",
+    "timeout_s must be finite and positive",
+    "temperature must be 0.0",
+    "max_prompt_chars must be positive int",
+    "max_output_chars must be positive int",
+    "client must be callable when provided"
+  ],
+  "input_output_bounds": {
+    "max_prompt_chars_default": 12000,
+    "max_output_chars_default": 4000,
+    "prompt_truncation": "rejected, not truncated",
+    "output_truncation": "deterministic slicing"
+  },
+  "localhost_only_enforcement": true,
+  "offline_test_strategy": "fake injected clients and patched urllib only; no real Ollama/Gemma required",
+  "cli_run_local_wiring": "CLI constructs responder only when --run-local is explicit and still calls run_local_route",
+  "runtime_boundary": {
+    "real_local_calls_made_during_tests": false,
+    "external_calls_made": false,
+    "provider_api_calls_made": false,
+    "tool_browser_terminal_mcp_execution_added": false,
+    "memory_retrieval_file_writes_added": false,
+    "backend_routes_added": false,
+    "frontend_ui_added": false,
+    "database_migrations_added": false,
+    "bluerev_modeling_added": false
+  },
+  "known_residual_risks": [
+    "A4 does not approve broad runtime RouterPolicy routing.",
+    "A4 does not add a backend route or UI for local responder use.",
+    "Manual smoke depends on Ollama running and the selected model already being pulled.",
+    "Responder metadata and richer response contracts remain deferred."
+  ]
+}

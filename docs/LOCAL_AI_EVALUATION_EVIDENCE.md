@@ -1420,3 +1420,58 @@ Observed contract result:
 A3 does not add backend routes, frontend UI, database migrations, external
 provider calls, model calls, tool/browser/terminal/MCP execution, memory writes,
 retrieval, file-write runtime, or BlueRev modeling.
+
+### 1G-B2-F3-A4 - Approved Local Responder Adapter Smoke
+
+1G-B2-F3-A4 adds the first approved local responder adapter for the A3
+local-route smoke path:
+
+```text
+explicit CLI --run-local
+-> construct localhost-only Ollama responder
+-> inject responder into run_local_route
+-> RouterPolicy decision
+-> semantic validation
+-> safe-local guard
+-> local /api/generate request
+```
+
+The adapter is injectable as `Callable[[str], str]`. `build_local_responder` is
+side-effect free: no network call, no model availability check, no subprocess,
+and no import-time model call.
+
+Safety constraints:
+
+- real local model execution is only through explicit CLI `--run-local`;
+- `run_local_route(..., responder=None)` still does not call any model;
+- `--run-local` does not bypass RouterPolicy;
+- endpoint validation uses `urllib.parse.urlparse`, not substring matching;
+- only HTTP localhost `/api/generate` endpoints are accepted;
+- non-localhost endpoints are rejected;
+- prompt length and output length are bounded;
+- non-zero temperature is rejected;
+- tests use fake clients only.
+
+Observed contract result:
+
+- local responder test module: `13/13`;
+- local-route smoke test module: `11/11`;
+- producer test module: `14/14`;
+- semantic-validator test module: `40/40`;
+- full unittest suite: `231/231`;
+- real local calls made during tests: `false`;
+- external provider calls: `false`;
+- tool/browser/terminal/MCP execution added: `false`;
+- memory/retrieval/file writes added: `false`;
+- report: `reports/router_policy/1G-B2-F3-A4/`.
+
+Manual smoke requires Ollama to be running and the selected model to already be
+pulled locally:
+
+```powershell
+python scripts\router_policy_local_route_probe.py --fixture tests\fixtures\router_policy\base_router_policy_fixture.json --run-local
+```
+
+A4 does not add backend routes, frontend UI, database migrations, external
+provider routing, non-localhost network calls, tool/browser/terminal/MCP
+execution, memory writes, retrieval, file-write runtime, or BlueRev modeling.

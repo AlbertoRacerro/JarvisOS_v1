@@ -78,6 +78,60 @@ A3 does not call external providers, execute tools/browser/terminal/MCP, write
 memory/retrieval/file state, add backend routes, add frontend UI, add database
 schema, or add BlueRev modeling behavior.
 
+## 1G-B2-F3-A4 approved local responder adapter
+
+`1G-B2-F3-A4` adds a narrow approved localhost-only Ollama `/api/generate`
+responder adapter for injection into the A3 local-route smoke path.
+
+The adapter is exposed as:
+
+```text
+build_local_responder(...) -> Callable[[str], str]
+call_local_ollama_generate(prompt, ...) -> str
+```
+
+`build_local_responder` is side-effect free. It performs no network request, no
+model availability check, no subprocess call, and no import-time model call.
+Only the returned callable can contact Ollama, and only when caller code
+injects it into `run_local_route`.
+
+Endpoint validation uses `urllib.parse.urlparse`, not substring matching. A4
+accepts only HTTP URLs for `127.0.0.1`, `localhost`, or `::1` with path
+`/api/generate`, no credentials, no query string, and no fragment. Non-localhost
+hosts, private LAN IPs, external domains, HTTPS external APIs, localhost-like
+suffixes, and query/path tricks are rejected.
+
+The payload is deterministic and bounded:
+
+```json
+{
+  "model": "<model>",
+  "prompt": "<message_text>",
+  "stream": false,
+  "options": {
+    "temperature": 0
+  }
+}
+```
+
+The adapter sends only the prompt string received from A3. It does not include
+RouterPolicy decision JSON, audit notes, memory, retrieval, file contents,
+provider metadata, or tool instructions. Prompt length is bounded by
+`max_prompt_chars`; output text is sliced to `max_output_chars`. Non-zero
+temperature is rejected.
+
+CLI `--run-local` constructs the local responder and injects it into A3. It does
+not bypass RouterPolicy: decision production, semantic validation, and the
+safe-local guard still run before the responder is called. Without `--run-local`
+or with `responder=None`, no model is called.
+
+Unit tests are offline and use fake clients. Manual smoke requires Ollama to be
+running and the selected model to already be pulled locally.
+
+A4 does not add external provider routing, non-localhost network calls,
+tools/browser/terminal/MCP, memory writes, retrieval runtime, file-write
+runtime, backend routes, frontend UI, database schema, or BlueRev modeling.
+
 ## 1G-B2-F3-A1 boundary
 
 This document is part of the RouterPolicy contract layer only. It does not add

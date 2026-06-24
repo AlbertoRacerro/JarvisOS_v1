@@ -1,0 +1,189 @@
+"""Approved localhost-only Ollama responder adapter for RouterPolicy A4.
+
+The builder is side-effect free. Only the returned callable may perform the
+localhost HTTP request, and only when it is explicitly injected by caller code.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections.abc import Callable
+from typing import Any
+
+
+DEFAULT_MODEL = "gemma3:4b"
+DEFAULT_ENDPOINT = "http://127.0.0.1:11434/api/generate"
+LOCALHOST_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+class LocalResponderError(Exception):
+    """Base class for local responder adapter failures."""
+
+
+class LocalResponderPolicyError(LocalResponderError):
+    """Raised when local responder policy or bounds are violated."""
+
+
+class LocalResponderTransportError(LocalResponderError):
+    """Raised when localhost transport fails."""
+
+
+class LocalResponderResponseError(LocalResponderError):
+    """Raised when localhost response content is malformed."""
+
+
+def _validate_endpoint(endpoint: str) -> None:
+    if not isinstance(endpoint, str):
+        raise LocalResponderPolicyError("endpoint must be a string")
+    parsed = urllib.parse.urlparse(endpoint)
+    if parsed.scheme != "http":
+        raise LocalResponderPolicyError("endpoint must use http")
+    if parsed.hostname not in LOCALHOST_HOSTS:
+        raise LocalResponderPolicyError("endpoint host must be localhost")
+    if parsed.username is not None or parsed.password is not None:
+        raise LocalResponderPolicyError("endpoint must not include credentials")
+    if parsed.path != "/api/generate":
+        raise LocalResponderPolicyError("endpoint path must be /api/generate")
+    if parsed.query or parsed.fragment:
+        raise LocalResponderPolicyError("endpoint must not include query or fragment")
+
+
+def _validate_static_params(
+    *,
+    model: str,
+    endpoint: str,
+    timeout_s: float,
+    temperature: float,
+    max_prompt_chars: int,
+    max_output_chars: int,
+    client,
+) -> None:
+    if not isinstance(model, str) or not model:
+        raise LocalResponderPolicyError("model must be a non-empty string")
+    _validate_endpoint(endpoint)
+    if not isinstance(timeout_s, (int, float)) or not math.isfinite(timeout_s) or timeout_s <= 0:
+        raise LocalResponderPolicyError("timeout_s must be finite and positive")
+    if not isinstance(max_prompt_chars, int) or max_prompt_chars <= 0:
+        raise LocalResponderPolicyError("max_prompt_chars must be a positive integer")
+    if not isinstance(max_output_chars, int) or max_output_chars <= 0:
+        raise LocalResponderPolicyError("max_output_chars must be a positive integer")
+    if temperature != 0.0:
+        raise LocalResponderPolicyError("temperature must be 0.0")
+    if client is not None and not callable(client):
+        raise LocalResponderPolicyError("client must be callable")
+
+
+def _validate_prompt(prompt: str, max_prompt_chars: int) -> None:
+    if not isinstance(prompt, str):
+        raise LocalResponderPolicyError("prompt must be a string")
+    if len(prompt) > max_prompt_chars:
+        raise LocalResponderPolicyError("prompt exceeds max_prompt_chars")
+
+
+def _stdlib_json_post_client(endpoint: str, payload: dict, timeout_s: float) -> dict:
+    encoded = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        endpoint,
+        data=encoded,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_s) as response:
+            status = getattr(response, "status", response.getcode())
+            if status < 200 or status >= 300:
+                raise LocalResponderTransportError(f"localhost Ollama returned HTTP {status}")
+            body = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        raise LocalResponderTransportError(f"localhost Ollama returned HTTP {exc.code}") from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise LocalResponderTransportError(str(exc)) from exc
+    try:
+        decoded = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise LocalResponderResponseError("localhost Ollama returned invalid JSON") from exc
+    if not isinstance(decoded, dict):
+        raise LocalResponderResponseError("localhost Ollama response must be an object")
+    return decoded
+
+
+def call_local_ollama_generate(
+    prompt: str,
+    *,
+    model: str,
+    endpoint: str,
+    timeout_s: float,
+    temperature: float,
+    max_prompt_chars: int,
+    max_output_chars: int,
+    client=None,
+) -> str:
+    """Call localhost Ollama /api/generate and return bounded response text."""
+
+    _validate_static_params(
+        model=model,
+        endpoint=endpoint,
+        timeout_s=timeout_s,
+        temperature=temperature,
+        max_prompt_chars=max_prompt_chars,
+        max_output_chars=max_output_chars,
+        client=client,
+    )
+    _validate_prompt(prompt, max_prompt_chars)
+    payload: dict[str, Any] = {
+        "model": model,
+        "prompt": prompt,
+        "stream": False,
+        "options": {
+            "temperature": 0,
+        },
+    }
+    post_client = client or _stdlib_json_post_client
+    raw = post_client(endpoint, payload, float(timeout_s))
+    if not isinstance(raw, dict):
+        raise LocalResponderResponseError("localhost Ollama response must be an object")
+    response_text = raw.get("response")
+    if not isinstance(response_text, str):
+        raise LocalResponderResponseError("localhost Ollama response missing string response")
+    return response_text[:max_output_chars]
+
+
+def build_local_responder(
+    *,
+    model: str = DEFAULT_MODEL,
+    endpoint: str = DEFAULT_ENDPOINT,
+    timeout_s: float = 30.0,
+    temperature: float = 0.0,
+    max_prompt_chars: int = 12000,
+    max_output_chars: int = 4000,
+    client=None,
+) -> Callable[[str], str]:
+    """Build a side-effect-free local responder callable."""
+
+    _validate_static_params(
+        model=model,
+        endpoint=endpoint,
+        timeout_s=timeout_s,
+        temperature=temperature,
+        max_prompt_chars=max_prompt_chars,
+        max_output_chars=max_output_chars,
+        client=client,
+    )
+
+    def responder(prompt: str) -> str:
+        return call_local_ollama_generate(
+            prompt,
+            model=model,
+            endpoint=endpoint,
+            timeout_s=timeout_s,
+            temperature=temperature,
+            max_prompt_chars=max_prompt_chars,
+            max_output_chars=max_output_chars,
+            client=client,
+        )
+
+    return responder

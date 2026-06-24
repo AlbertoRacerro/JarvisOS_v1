@@ -14,12 +14,14 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
+from router_policy_local_responder import LocalResponderError, build_local_responder
 from router_policy_decision_probe import decide_router_policy
 from router_policy_semantic_validator import validate_router_decision_semantics
 
 
 _DECIDE_ROUTER_POLICY = decide_router_policy
 _VALIDATE_ROUTER_DECISION_SEMANTICS = validate_router_decision_semantics
+_BUILD_LOCAL_RESPONDER = build_local_responder
 
 SAFE_LOCAL_ROUTE_ACTIONS = {"answer_local", "route_local"}
 SAFE_LOCAL_PROVIDERS = {"local:gemma", "local:qwen"}
@@ -120,14 +122,44 @@ def _load_fixture(path: Path) -> dict[str, Any]:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="RouterPolicy A3 local-route smoke probe.")
     parser.add_argument("--fixture", required=True, help="Path to a normalized RouterPolicy input fixture.")
-    parser.add_argument("--run-local", action="store_true", help="Reserved for an approved explicit local responder.")
+    parser.add_argument("--run-local", action="store_true", help="Explicitly enable localhost-only local responder.")
+    parser.add_argument("--model", default="gemma3:4b", help="Ollama model name already pulled locally.")
+    parser.add_argument("--endpoint", default="http://127.0.0.1:11434/api/generate")
+    parser.add_argument("--timeout-s", type=float, default=30.0)
     parser.add_argument("--now", default=None)
     args = parser.parse_args(argv)
 
     input_obj = _load_fixture(Path(args.fixture))
-    result = run_local_route(input_obj, responder=None, now=args.now)
+    responder = None
     if args.run_local:
-        result["cli_note"] = "real local model execution blocked pending approved local adapter"
+        try:
+            responder = _BUILD_LOCAL_RESPONDER(
+                model=args.model,
+                endpoint=args.endpoint,
+                timeout_s=args.timeout_s,
+            )
+        except LocalResponderError as exc:
+            result = {
+                "decision": None,
+                "executed": False,
+                "response": None,
+                "reason": "local_responder_setup_failed",
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            }
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return 0
+    try:
+        result = run_local_route(input_obj, responder=responder, now=args.now)
+    except LocalResponderError as exc:
+        result = {
+            "decision": None,
+            "executed": False,
+            "response": None,
+            "reason": "local_responder_error",
+            "error_type": type(exc).__name__,
+            "error": str(exc),
+        }
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0
 
