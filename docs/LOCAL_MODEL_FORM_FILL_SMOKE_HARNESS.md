@@ -1443,3 +1443,39 @@ provider exports. Bare contrastive provider mentions are ambiguous and should
 not be forced to provider/export intent by deterministic regex. Future ambiguous
 export intent should route to `clarification_required` / `USER_CONFIRM` rather
 than another broad True/False heuristic.
+
+## 1G-B2-F2-B5-D Phase B Ambiguity Prompt Repair
+
+B5-D is a prompt-only semantic repair for unresolved prior references. It keeps
+the existing eight-case local Qwen panel and writes:
+
+```text
+reports/local_model_smoke/1G-B2-F2-B5-D/
+```
+
+Target:
+
+- improve raw Qwen ambiguity behavior;
+- avoid over-claiming `decision_candidate` or `source_candidate` when a message
+  refers to an unnamed prior decision, document, source, material, memory
+  document, or previous context;
+- preserve the rule that sensitive/IP-sensitive local project content can be
+  high-value local memory;
+- leave secret/credential safety to deterministic effective clamps.
+
+Observed B5-D result:
+
+- parse: `8/8`;
+- raw schema valid: `8/8`;
+- effective schema valid: `8/8`;
+- raw authority leakage: `0`;
+- effective authority leakage: `0`;
+- raw soft quality: `28/29`;
+- effective soft quality: `29/29`;
+- `HG-013` improved;
+- `HG-025` improved;
+- `HG-024` did not regress;
+- `HG-007` did not regress.
+
+B5-D does not change Phase A overlay, deterministic clamps, provider/export
+detection, schemas, runtime memory, retrieval, provider routing, or tools.

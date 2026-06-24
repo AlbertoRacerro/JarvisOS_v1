@@ -345,6 +345,29 @@ clarification/review rather than being treated as safe by default.
 No runtime memory, retrieval, provider routing, tool execution, route, worker,
 MCP, Qwen/Ollama, external provider, or BlueRev modeling behavior is added.
 
+## 1G-B2-F2-B5-D Phase B Ambiguity Prompt Repair
+
+`1G-B2-F2-B5-D` repairs the model-facing Phase B instruction for unresolved
+prior references. The instruction now tells Qwen to run an ambiguity check
+before choosing any source, decision, or memory candidate:
+
+- if the message points to an unnamed prior decision, document, source, item,
+  material, memory document, or previous context, treat the referent as
+  unresolved;
+- use `clarification_context` or `contextual_summary`;
+- avoid high storage relevance and ready memory-card claims for unresolved
+  references;
+- ask a concrete follow-up question naming what is missing.
+
+The repair targets raw Qwen ambiguity behavior, especially avoiding
+over-claiming decision/source candidates when the referent is not stated.
+
+Sensitive/IP-sensitive local project content can still be high-value local
+memory. Secret and credential handling remains deterministic-clamp territory.
+
+B5-D does not change Phase A overlay, deterministic clamps, provider/export
+detection, schemas, runtime memory, retrieval, provider routing, or tools.
+
 ## 1G-B2-F2-B5-C-R2 Target-Based Provider/Export Repair
 
 `1G-B2-F2-B5-C-R2` repairs provider-as-topic over-blocking in the deterministic

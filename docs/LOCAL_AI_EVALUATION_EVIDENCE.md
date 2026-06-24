@@ -1216,3 +1216,39 @@ Risk note:
 B5-C-R2 does not add runtime memory, retrieval, provider routing, external
 provider calls, tool execution, routes, database schema, workers, MCP, Qwen,
 Ollama, or BlueRev modeling behavior.
+
+### 1G-B2-F2-B5-D - Phase B Ambiguity Prompt Repair
+
+1G-B2-F2-B5-D repairs only the Phase B model-facing prompt for unresolved prior
+references. It targets raw Qwen behavior when a message refers to an unnamed
+prior decision, document, source, item, material, memory document, or previous
+context.
+
+Observed local Qwen result:
+
+- model: `qwen3:8b`;
+- case count: `8`;
+- parse: `8/8`;
+- raw schema valid: `8/8`;
+- effective schema valid: `8/8`;
+- raw authority leakage: `0`;
+- effective authority leakage: `0`;
+- raw soft quality: `28/29`;
+- effective soft quality: `29/29`;
+- `HG-013` improved;
+- `HG-025` improved;
+- `HG-024` did not regress;
+- `HG-007` did not regress;
+- external provider calls: `false`;
+- runtime approval: `false`;
+- semantic truth scored: `false`.
+
+Remaining raw miss:
+
+- `HG-017` remains raw-imperfect on a secret/credential case. Deterministic
+  effective clamp keeps the output safe and effective quality remains `29/29`.
+
+B5-D does not change Phase A overlay, deterministic clamps, provider/export
+detection, schemas, runtime memory, retrieval, provider routing, external
+provider calls, tool execution, routes, database schema, workers, MCP, or
+BlueRev modeling behavior.

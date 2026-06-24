@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-24T06:55:51.5843599Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 165,
+    "eval_duration": 2703947000,
+    "load_duration": 388770100,
+    "message": {
+      "content": "{\n  \"summary_short\": \"Supersede older Gemma 12B routing approval with current local-AI evidence\",\n  \"project_bucket\": \"jarvisos\",\n  \"primary_domain\": \"memory\",\n  \"domain_tags\": [\"memory_update\", \"local_ai_eval\"],\n  \"storage_relevance\": \"high\",\n  \"usefulness_for_future_review\": \"high\",\n  \"possible_memory_card_type\": \"decision_card\",\n  \"soft_reason_code\": \"decision_candidate\",\n  \"brief_rationale\": \"This updates a prior decision to supersede Gemma 12B routing approval with current local-AI evidence, ensuring memory consistency with latest validation.\",\n  \"suggested_followup_question\": \"\"\n  , \"soft_uncertain_fields\": []\n}",
+      "role": "assistant",
+      "thinking": "Okay, let's tackle this. The user provided an input text that says if an older memory mentions Gemma 12B being approved for routing, it should be treated as superseded by current local-AI evidence and not used. My task is to create a JSON object based on the given schema, focusing on soft-review fields.\n\nFirst, I need to parse the input. The key point here is that the older memory about Gemma 12B is being superseded. So, this seems like a decision update. The current local-AI evidence is overriding the previous approval. \n\nLooking at the schema, the primary domain should be \"memory\" since it's about updating a memory entry. The domain tags would include \"memory_update\" and \"local_ai_eval\" because it's about a local AI model's evidence affecting a memory decision.\n\nThe soft_reason_code is \"decision_candidate\" because the input is changing a prior decision. The rationale should explain that this is updating a decision based on new evidence. \n\nThe card type is \"decision_card\" since it's about a decision being superseded. The storage_relevance is \"high\" because it's a durable project memory. \n\nI need to make sure not to include any policy or routing fields. Also, check for any secrets or credentials, but there are none here. The input doesn't mention any ambiguous references, so no need for clarification. \n\nPutting it all together, the JSON should have the primary domain as \"memory\", domain tags as [\"memory_update\", \"local_ai_eval\"], soft_reason_code as \"decision_candidate\", rationale about updating the decision, card type as \"decision_card\", storage_relevance \"high\", and no follow-up question needed.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 2357,
+    "prompt_eval_duration": 114312000,
+    "total_duration": 8127889600
+  },
+  "duration_seconds": 10.194,
+  "error": null,
+  "ok": true,
+  "status": 200
+}

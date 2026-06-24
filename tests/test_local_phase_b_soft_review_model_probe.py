@@ -128,6 +128,19 @@ class PhaseBSoftOnlyModelProbeTests(unittest.TestCase):
         for phrase in expected:
             self.assertIn(phrase, instruction)
         self.assertNotIn("never promote uncertain or sensitive content as ready memory", instruction)
+        self.assertNotIn("sensitive content is not memory", instruction)
+
+    def test_instruction_prioritizes_ambiguity_before_source_or_decision(self):
+        instruction = model_probe.build_general_instruction_block()
+        expected = [
+            "Ambiguity check",
+            "apply BEFORE choosing any source/decision/memory card",
+            "From THIS message alone",
+            "exact decision, document, source, item, material",
+            'Mentioning the word "decision", "source", "memory", "document", or "material" is not enough',
+        ]
+        for phrase in expected:
+            self.assertIn(phrase, instruction)
 
     def test_case_selection_rejects_more_than_eight_cases(self):
         with self.assertRaises(ValueError):

@@ -1,0 +1,252 @@
+{
+  "authority_field_leakage": [],
+  "authority_field_leakage_count": 0,
+  "case_id": "HG-010",
+  "created_at": "2026-06-24T06:54:55.220992+00:00",
+  "duration_seconds": 9.82,
+  "effective_soft_quality_diagnostic": {
+    "case_id": "HG-010",
+    "quality_compared": true,
+    "quality_compared_count": 2,
+    "quality_match_count": 2,
+    "quality_misses": []
+  },
+  "json_parse_error": null,
+  "json_parse_passed": true,
+  "manual_review_required": true,
+  "milestone": "1G-B2-F2-B5-C",
+  "model": "qwen3:8b",
+  "ollama_ok": true,
+  "ollama_status": 200,
+  "phase_a_result_source": "reports\\local_model_smoke\\1G-B2-F2-B2\\HG-010__result.json",
+  "phase_b_sensitive_context_class": "clarification_blocked",
+  "phase_b_soft_proposal": {
+    "brief_rationale": "The message refers to an unresolved prior decision about 'the material' without specifying which decision or material, making it impossible to determine the exact context for review.",
+    "domain_tags": [
+      "clarification_context",
+      "provider_boundary",
+      "unresolved_reference"
+    ],
+    "possible_memory_card_type": "none",
+    "primary_domain": "memory",
+    "project_bucket": "jarvisos",
+    "soft_reason_code": "clarification_context",
+    "soft_uncertain_fields": [
+      "decision_candidate",
+      "source_candidate",
+      "memory_card_type"
+    ],
+    "storage_relevance": "low",
+    "suggested_followup_question": "Which specific decision or material are you referring to when mentioning 'the thing we decided last time'?",
+    "summary_short": "Reference to unresolved prior decision about material",
+    "usefulness_for_future_review": "low"
+  },
+  "phase_b_soft_proposal_effective": {
+    "brief_rationale": "The message refers to an unresolved prior decision about 'the material' without specifying which decision or material, making it impossible to determine the exact context for review.",
+    "domain_tags": [
+      "clarification_context",
+      "provider_boundary",
+      "unresolved_reference"
+    ],
+    "possible_memory_card_type": "none",
+    "primary_domain": "memory",
+    "project_bucket": "jarvisos",
+    "soft_reason_code": "clarification_context",
+    "soft_uncertain_fields": [
+      "decision_candidate",
+      "source_candidate",
+      "memory_card_type"
+    ],
+    "storage_relevance": "low",
+    "suggested_followup_question": "Which specific decision or material are you referring to when mentioning 'the thing we decided last time'?",
+    "summary_short": "Reference to unresolved prior decision about material",
+    "usefulness_for_future_review": "low"
+  },
+  "phase_b_soft_proposal_effective_authority_field_leakage": [],
+  "phase_b_soft_proposal_effective_authority_field_leakage_count": 0,
+  "phase_b_soft_proposal_effective_schema_valid": true,
+  "phase_b_soft_proposal_effective_validation_errors": [],
+  "phase_b_soft_proposal_model_raw": {
+    "brief_rationale": "The message refers to an unresolved prior decision about 'the material' without specifying which decision or material, making it impossible to determine the exact context for review.",
+    "domain_tags": [
+      "clarification_context",
+      "provider_boundary",
+      "unresolved_reference"
+    ],
+    "possible_memory_card_type": "unknown",
+    "primary_domain": "memory",
+    "project_bucket": "jarvisos",
+    "soft_reason_code": "clarification_context",
+    "soft_uncertain_fields": [
+      "decision_candidate",
+      "source_candidate",
+      "memory_card_type"
+    ],
+    "storage_relevance": "low",
+    "suggested_followup_question": "Which specific decision or material are you referring to when mentioning 'the thing we decided last time'?",
+    "summary_short": "Reference to unresolved prior decision about material",
+    "usefulness_for_future_review": "low"
+  },
+  "phase_b_soft_proposal_model_raw_authority_field_leakage": [],
+  "phase_b_soft_proposal_model_raw_authority_field_leakage_count": 0,
+  "phase_b_soft_proposal_model_raw_schema_valid": true,
+  "phase_b_soft_proposal_model_raw_validation_errors": [],
+  "raw_response_path": "reports\\local_model_smoke\\1G-B2-F2-B5-D\\HG-010__phase_b_soft_only_raw_response.json",
+  "raw_soft_quality_diagnostic": {
+    "case_id": "HG-010",
+    "quality_compared": true,
+    "quality_compared_count": 2,
+    "quality_match_count": 2,
+    "quality_misses": []
+  },
+  "review_envelope": {
+    "authority_field_leakage": [],
+    "authority_field_leakage_count": 0,
+    "case_id": "HG-010",
+    "effective_soft_quality_diagnostic": {
+      "case_id": "HG-010",
+      "quality_compared": true,
+      "quality_compared_count": 2,
+      "quality_match_count": 2,
+      "quality_misses": []
+    },
+    "external_provider_calls_made": false,
+    "local_model_calls_made": true,
+    "manual_review_required": true,
+    "phase_a_hard_gate": {
+      "allowed_future_retrieval_behavior": "clarification_required",
+      "clarification_required": true,
+      "contains_raw_private_or_ip_sensitive_context": false,
+      "contains_secret_or_credential": false,
+      "external_provider_allowed": false,
+      "hard_reason_code": "clarification_needed",
+      "mentions_external_provider_or_upload_intent": false,
+      "redaction_required": false,
+      "requires_manual_review": true,
+      "sensitivity_bucket_proposal": "internal",
+      "source_policy_for_future_retrieval": "blocked"
+    },
+    "phase_b_soft_proposal": {
+      "brief_rationale": "The message refers to an unresolved prior decision about 'the material' without specifying which decision or material, making it impossible to determine the exact context for review.",
+      "domain_tags": [
+        "clarification_context",
+        "provider_boundary",
+        "unresolved_reference"
+      ],
+      "possible_memory_card_type": "none",
+      "primary_domain": "memory",
+      "project_bucket": "jarvisos",
+      "soft_reason_code": "clarification_context",
+      "soft_uncertain_fields": [
+        "decision_candidate",
+        "source_candidate",
+        "memory_card_type"
+      ],
+      "storage_relevance": "low",
+      "suggested_followup_question": "Which specific decision or material are you referring to when mentioning 'the thing we decided last time'?",
+      "summary_short": "Reference to unresolved prior decision about material",
+      "usefulness_for_future_review": "low"
+    },
+    "phase_b_soft_proposal_effective": {
+      "brief_rationale": "The message refers to an unresolved prior decision about 'the material' without specifying which decision or material, making it impossible to determine the exact context for review.",
+      "domain_tags": [
+        "clarification_context",
+        "provider_boundary",
+        "unresolved_reference"
+      ],
+      "possible_memory_card_type": "none",
+      "primary_domain": "memory",
+      "project_bucket": "jarvisos",
+      "soft_reason_code": "clarification_context",
+      "soft_uncertain_fields": [
+        "decision_candidate",
+        "source_candidate",
+        "memory_card_type"
+      ],
+      "storage_relevance": "low",
+      "suggested_followup_question": "Which specific decision or material are you referring to when mentioning 'the thing we decided last time'?",
+      "summary_short": "Reference to unresolved prior decision about material",
+      "usefulness_for_future_review": "low"
+    },
+    "phase_b_soft_proposal_effective_authority_field_leakage_count": 0,
+    "phase_b_soft_proposal_effective_schema_valid": true,
+    "phase_b_soft_proposal_effective_validation_errors": [],
+    "phase_b_soft_proposal_model_raw": {
+      "brief_rationale": "The message refers to an unresolved prior decision about 'the material' without specifying which decision or material, making it impossible to determine the exact context for review.",
+      "domain_tags": [
+        "clarification_context",
+        "provider_boundary",
+        "unresolved_reference"
+      ],
+      "possible_memory_card_type": "unknown",
+      "primary_domain": "memory",
+      "project_bucket": "jarvisos",
+      "soft_reason_code": "clarification_context",
+      "soft_uncertain_fields": [
+        "decision_candidate",
+        "source_candidate",
+        "memory_card_type"
+      ],
+      "storage_relevance": "low",
+      "suggested_followup_question": "Which specific decision or material are you referring to when mentioning 'the thing we decided last time'?",
+      "summary_short": "Reference to unresolved prior decision about material",
+      "usefulness_for_future_review": "low"
+    },
+    "phase_b_soft_proposal_model_raw_authority_field_leakage_count": 0,
+    "phase_b_soft_proposal_model_raw_schema_valid": true,
+    "phase_b_soft_proposal_model_raw_validation_errors": [],
+    "phase_b_soft_proposal_schema_valid": true,
+    "phase_b_soft_proposal_validation_errors": [],
+    "raw_soft_quality_diagnostic": {
+      "case_id": "HG-010",
+      "quality_compared": true,
+      "quality_compared_count": 2,
+      "quality_match_count": 2,
+      "quality_misses": []
+    },
+    "runtime_approved": false,
+    "schema_version": "fast_secretary_review_envelope_v0_1",
+    "semantic_truth_scored": false,
+    "soft_generation_mode": "local_model",
+    "soft_proposal_deterministic_clamps": [
+      {
+        "field": "possible_memory_card_type",
+        "previous": "unknown",
+        "reason": "clarification_blocked",
+        "replacement": "none"
+      }
+    ],
+    "soft_quality_diagnostic": {
+      "case_id": "HG-010",
+      "quality_compared": true,
+      "quality_compared_count": 2,
+      "quality_match_count": 2,
+      "quality_misses": []
+    },
+    "soft_quality_review_required": true,
+    "soft_quality_truth_scored": false
+  },
+  "runtime_approved": false,
+  "schema_path": "schemas\\fast_secretary_soft_proposal_v0_1.schema.json",
+  "schema_valid": true,
+  "schema_version": "phase_b_sensitivity_semantic_repair_result_v0",
+  "semantic_truth_scored": false,
+  "soft_proposal_deterministic_clamps": [
+    {
+      "field": "possible_memory_card_type",
+      "previous": "unknown",
+      "reason": "clarification_blocked",
+      "replacement": "none"
+    }
+  ],
+  "soft_quality_diagnostic": {
+    "case_id": "HG-010",
+    "quality_compared": true,
+    "quality_compared_count": 2,
+    "quality_match_count": 2,
+    "quality_misses": []
+  },
+  "soft_quality_review_required": true,
+  "soft_quality_truth_scored": false,
+  "validation_errors": []
+}

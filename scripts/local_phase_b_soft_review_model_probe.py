@@ -194,9 +194,29 @@ If the input explicitly says not to send/upload/share/expose content externally,
 or says to keep it local-only, do not treat that as provider upload approval or
 provider permission.
 
-If the input references "the thing", "latest decision", "last time", "that
-document", "the material", or another unresolved prior context, treat it as
-clarification_context unless the referenced decision is explicitly stated.
+Ambiguity check - apply BEFORE choosing any source/decision/memory card:
+Ask: "From THIS message alone, could a reviewer identify the exact decision, document, source, item, material, or prior context being referred to?"
+
+If the message only points to a prior thing without stating it - for example
+"the latest decision", "what we decided last time", "that document", "the
+material", "the previous one", or "the thing from before" - the referent is
+unresolved.
+
+For unresolved references:
+- use soft_reason_code = clarification_context or contextual_summary;
+- possible_memory_card_type should be none or unknown;
+- storage_relevance should not be high;
+- ask a concrete follow-up question naming what is missing, such as:
+  "Which specific decision/document/source/material are you referring to?"
+
+If the message asks to use an unnamed latest decision, source, memory document,
+material, or previous context to update something else, the update target does
+not make the prior referent concrete. Treat it as unresolved until the exact
+prior item is stated.
+
+Use decision_candidate or source_candidate only when the actual
+decision/source/document is concretely stated or named in the message itself.
+Mentioning the word "decision", "source", "memory", "document", or "material" is not enough.
 
 If the input clearly changes, supersedes, approves, rejects, or establishes a
 durable rule, use decision_candidate.

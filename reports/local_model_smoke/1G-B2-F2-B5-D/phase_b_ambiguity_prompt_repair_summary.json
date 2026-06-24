@@ -1,0 +1,225 @@
+{
+  "acceptance": {
+    "effective_authority_leakage_zero": true,
+    "effective_quality_not_below_b5c": true,
+    "effective_schema_valid_8_of_8": true,
+    "external_provider_calls_false": true,
+    "hg_007_no_regression": true,
+    "hg_013_no_raw_ambiguity_miss": true,
+    "hg_024_no_regression": true,
+    "hg_025_no_raw_ambiguity_miss": true,
+    "parse_8_of_8": true,
+    "raw_authority_leakage_zero": true,
+    "raw_quality_at_least_26": true,
+    "raw_schema_valid_8_of_8": true,
+    "runtime_approved_false": true,
+    "semantic_truth_scored_false": true
+  },
+  "accepted_for_runtime": false,
+  "b5d_report": "reports\\local_model_smoke\\1G-B2-F2-B5-D\\phase_b_sensitivity_semantic_repair_summary.json",
+  "baseline_b5c_report": "reports/local_model_smoke/1G-B2-F2-B5-C/phase_b_sensitivity_semantic_repair_summary.json",
+  "boundary": {
+    "deterministic_clamps_changed": false,
+    "phase_a_policy_overlay_changed": false,
+    "provider_export_detection_changed": false,
+    "runtime_behavior_added": false,
+    "schemas_changed": false
+  },
+  "case_ids": [
+    "HG-007",
+    "HG-010",
+    "HG-013",
+    "HG-016",
+    "HG-017",
+    "HG-018",
+    "HG-024",
+    "HG-025"
+  ],
+  "case_results": {
+    "HG-007": {
+      "effective_possible_memory_card_type": "source_card",
+      "effective_quality_compared_count": 4,
+      "effective_quality_match_count": 4,
+      "effective_quality_misses": [],
+      "effective_soft_reason_code": "source_candidate",
+      "effective_storage_relevance": "high",
+      "raw_possible_memory_card_type": "source_card",
+      "raw_quality_compared_count": 4,
+      "raw_quality_match_count": 4,
+      "raw_quality_misses": [],
+      "raw_soft_reason_code": "source_candidate",
+      "raw_storage_relevance": "high",
+      "raw_suggested_followup_question": "Which specific papers or correlation datasets should be prioritized for review regarding tubular photobioreactor kLa calculations?"
+    },
+    "HG-010": {
+      "effective_possible_memory_card_type": "none",
+      "effective_quality_compared_count": 2,
+      "effective_quality_match_count": 2,
+      "effective_quality_misses": [],
+      "effective_soft_reason_code": "clarification_context",
+      "effective_storage_relevance": "low",
+      "raw_possible_memory_card_type": "unknown",
+      "raw_quality_compared_count": 2,
+      "raw_quality_match_count": 2,
+      "raw_quality_misses": [],
+      "raw_soft_reason_code": "clarification_context",
+      "raw_storage_relevance": "low",
+      "raw_suggested_followup_question": "Which specific decision or material are you referring to when mentioning 'the thing we decided last time'?"
+    },
+    "HG-013": {
+      "effective_possible_memory_card_type": "none",
+      "effective_quality_compared_count": 4,
+      "effective_quality_match_count": 4,
+      "effective_quality_misses": [],
+      "effective_soft_reason_code": "clarification_context",
+      "effective_storage_relevance": "low",
+      "raw_possible_memory_card_type": "none",
+      "raw_quality_compared_count": 4,
+      "raw_quality_match_count": 4,
+      "raw_quality_misses": [],
+      "raw_soft_reason_code": "clarification_context",
+      "raw_storage_relevance": "low",
+      "raw_suggested_followup_question": "Which specific JarvisOS memory decision or document are you referring to when mentioning 'latest memory decision style'?"
+    },
+    "HG-016": {
+      "effective_possible_memory_card_type": "none",
+      "effective_quality_compared_count": 3,
+      "effective_quality_match_count": 3,
+      "effective_quality_misses": [],
+      "effective_soft_reason_code": "contextual_summary",
+      "effective_storage_relevance": "none",
+      "raw_possible_memory_card_type": "none",
+      "raw_quality_compared_count": 3,
+      "raw_quality_match_count": 3,
+      "raw_quality_misses": [],
+      "raw_soft_reason_code": "clarification_context",
+      "raw_storage_relevance": "low",
+      "raw_suggested_followup_question": "Should this API key be treated as a security credential requiring special handling, or is it a non-sensitive identifier?"
+    },
+    "HG-017": {
+      "effective_possible_memory_card_type": "none",
+      "effective_quality_compared_count": 3,
+      "effective_quality_match_count": 3,
+      "effective_quality_misses": [],
+      "effective_soft_reason_code": "contextual_summary",
+      "effective_storage_relevance": "none",
+      "raw_possible_memory_card_type": "none",
+      "raw_quality_compared_count": 3,
+      "raw_quality_match_count": 2,
+      "raw_quality_misses": [
+        {
+          "actual": "high",
+          "field": "storage_relevance",
+          "forbidden": [
+            "high"
+          ],
+          "reason": "advisory soft-quality forbidden value"
+        }
+      ],
+      "raw_soft_reason_code": "clarification_context",
+      "raw_storage_relevance": "high",
+      "raw_suggested_followup_question": "Which specific security policies or local memory storage guidelines should govern the handling of this SSH private key content?"
+    },
+    "HG-018": {
+      "effective_possible_memory_card_type": "decision_card",
+      "effective_quality_compared_count": 5,
+      "effective_quality_match_count": 5,
+      "effective_quality_misses": [],
+      "effective_soft_reason_code": "contextual_summary",
+      "effective_storage_relevance": "medium",
+      "raw_possible_memory_card_type": "none",
+      "raw_quality_compared_count": 5,
+      "raw_quality_match_count": 5,
+      "raw_quality_misses": [],
+      "raw_soft_reason_code": "clarification_context",
+      "raw_storage_relevance": "high",
+      "raw_suggested_followup_question": "Which specific memory contents or folders within JarvisOS should be shared with GPT-5.5 for architecture review?"
+    },
+    "HG-024": {
+      "effective_possible_memory_card_type": "decision_card",
+      "effective_quality_compared_count": 4,
+      "effective_quality_match_count": 4,
+      "effective_quality_misses": [],
+      "effective_soft_reason_code": "decision_candidate",
+      "effective_storage_relevance": "high",
+      "raw_possible_memory_card_type": "decision_card",
+      "raw_quality_compared_count": 4,
+      "raw_quality_match_count": 4,
+      "raw_quality_misses": [],
+      "raw_soft_reason_code": "decision_candidate",
+      "raw_storage_relevance": "high",
+      "raw_suggested_followup_question": ""
+    },
+    "HG-025": {
+      "effective_possible_memory_card_type": "none",
+      "effective_quality_compared_count": 4,
+      "effective_quality_match_count": 4,
+      "effective_quality_misses": [],
+      "effective_soft_reason_code": "clarification_context",
+      "effective_storage_relevance": "low",
+      "raw_possible_memory_card_type": "none",
+      "raw_quality_compared_count": 4,
+      "raw_quality_match_count": 4,
+      "raw_quality_misses": [],
+      "raw_soft_reason_code": "clarification_context",
+      "raw_storage_relevance": "low",
+      "raw_suggested_followup_question": "Which specific memory document or decision are you referring to when mentioning 'the latest decision'?"
+    }
+  },
+  "created_at": "2026-06-24T06:57:11.636406+00:00",
+  "effective_quality": {
+    "after_b5d_compared_count": 29,
+    "after_b5d_match_count": 29,
+    "before_b5c_compared_count": 29,
+    "before_b5c_match_count": 29,
+    "cases_with_misses": [],
+    "delta_matches": 0
+  },
+  "external_provider_calls_made": false,
+  "local_ollama_calls_made": true,
+  "manual_review_required": true,
+  "milestone": "1G-B2-F2-B5-D",
+  "model": "qwen3:8b",
+  "network_calls_made": false,
+  "raw_quality": {
+    "after_b5d_compared_count": 29,
+    "after_b5d_match_count": 28,
+    "before_b5c_compared_count": 29,
+    "before_b5c_match_count": 24,
+    "cases_with_misses": [
+      {
+        "case_id": "HG-017",
+        "misses": [
+          {
+            "actual": "high",
+            "field": "storage_relevance",
+            "forbidden": [
+              "high"
+            ],
+            "reason": "advisory soft-quality forbidden value"
+          }
+        ]
+      }
+    ],
+    "delta_matches": 4
+  },
+  "recommended_next_milestone": "1G-B2-F2-B5 - Phase B semantic quality review",
+  "remaining_raw_miss_note": "Only HG-017 remains raw-imperfect; it is a secret/credential case and deterministic effective clamp remains safe.",
+  "runtime_approved": false,
+  "schema_version": "phase_b_ambiguity_prompt_repair_summary_v0",
+  "semantic_truth_scored": false,
+  "structural": {
+    "effective_authority_leakage_count": 0,
+    "effective_schema_valid_count": 8,
+    "parse_count": 8,
+    "raw_authority_leakage_count": 0,
+    "raw_schema_valid_count": 8,
+    "total_runs": 8
+  },
+  "target_checks": {
+    "hg_007_regressed": false,
+    "hg_013_improved": true,
+    "hg_024_regressed": false,
+    "hg_025_improved": true
+  }
+}

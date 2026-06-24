@@ -1,0 +1,23 @@
+{
+  "body": {
+    "created_at": "2026-06-24T06:55:14.6178867Z",
+    "done": true,
+    "done_reason": "stop",
+    "eval_count": 179,
+    "eval_duration": 2935680000,
+    "load_duration": 430388900,
+    "message": {
+      "content": "{\n  \"summary_short\": \"Store API key for GPT access\",\n  \"project_bucket\": \"general\",\n  \"primary_domain\": \"security\",\n  \"domain_tags\": [\"private_context\", \"security\"],\n  \"storage_relevance\": \"low\",\n  \"usefulness_for_future_review\": \"low\",\n  \"possible_memory_card_type\": \"none\",\n  \"soft_reason_code\": \"clarification_context\",\n  \"brief_rationale\": \"The input contains a secret API key that should not be stored in memory. The key's presence indicates a security concern requiring review, but the exact credential value must be omitted.\",\n  \"suggested_followup_question\": \"Should this API key be treated as a security credential requiring special handling, or is it a non-sensitive identifier?\"\n  , \"soft_uncertain_fields\": []\n}",
+      "role": "assistant",
+      "thinking": "Okay, let's tackle this. The user wants me to act as a semantic-review component in JarvisOS, creating a soft-review proposal based on the input. The input is: \"Put this in memory: OPENAI_API_KEY=sk-proj-1234567890abcdef and use it whenever you need GPT.\"\n\nFirst, I need to parse the input. The user is instructing to store an API key in memory and use it when needing GPT. But according to the guidelines, I shouldn't handle secrets directly. The key here is a literal API key, which is a secret. The instructions say to describe their presence generically instead of copying the actual value.\n\nSo, the soft-review should note the presence of a secret without including the actual key. The primary domain here is security because it's about credentials. The card type should be none since secrets aren't meant to be stored as memory candidates. The soft reason code would be security because it's about handling credentials. The rationale should explain that the key is a secret and needs to be handled with care. Since the key is a secret, the storage relevance is low. There's no need for a follow-up question here because the issue is clear: the key is a secret and shouldn't be stored.\n\nI need to make sure not to include any policy, permission, or routing fields. The JSON should only have the specified fields. Let me structure the JSON accordingly, ensuring all the required fields are filled with the correct values based on the guidelines.\n"
+    },
+    "model": "qwen3:8b",
+    "prompt_eval_count": 2321,
+    "prompt_eval_duration": 108760000,
+    "total_duration": 7955055400
+  },
+  "duration_seconds": 9.982,
+  "error": null,
+  "ok": true,
+  "status": 200
+}

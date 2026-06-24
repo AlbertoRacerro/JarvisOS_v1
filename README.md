@@ -182,6 +182,12 @@ forced to provider/export intent by deterministic regex. Phase B no longer
 treats an inconsistent provider boolean alone as enough to classify
 `provider_or_private_export_risk`.
 
-Passing B5-C-R2 does not approve runtime use.
+B5-D is a prompt-only semantic repair for unresolved prior references. It
+targets raw Qwen ambiguity behavior, especially avoiding over-claiming
+decision/source candidates when the referent is not stated. It does not change
+Phase A overlay, deterministic clamps, provider/export detection, schemas,
+runtime memory, retrieval, provider routing, or tools.
+
+Passing B5-D does not approve runtime use.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.
