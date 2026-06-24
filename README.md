@@ -158,15 +158,15 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F3-A2 - RouterPolicy deterministic decision probe
+1G-B2-F3-A2-R - RouterPolicy deterministic decision probe audit
 ```
 
-`1G-B2-F3-A1-R1` repairs RouterPolicy contract-validator invariants before A2:
-external network permission must imply external allowance, browser/tool/MCP
-execution must carry external-network permission, external provider candidates
-cannot be active while external is forbidden, and audit notes cannot echo
-obvious secrets. Reports are under `reports/router_policy/1G-B2-F3-A1-R1/`.
+`1G-B2-F3-A2` adds the first deterministic RouterPolicy decision producer. It
+emits full v3.1.1 decision objects with minimal first-match routing behavior and
+fail-safe action/preflight defaults. It is not runtime chat routing: it does not
+call providers, execute tools/browser/terminal/MCP, write memory/retrieval/file
+state, or add backend/frontend runtime.
 
-Passing F3-A1-R1 does not approve runtime router-policy use.
+Passing F3-A2 does not approve runtime router-policy use.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

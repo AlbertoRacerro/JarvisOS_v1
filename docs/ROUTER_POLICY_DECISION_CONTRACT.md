@@ -20,6 +20,19 @@ expires_at
 
 Confirmation-related lifecycle decisions must have `expires_at`.
 
+`1G-B2-F3-A2` producer output uses these fields deterministically:
+
+```text
+policy_version = router_policy_v0_3_1_1
+schema_version = router_policy_decision_v0_3_1_1
+decision_id = digest-derived stable id
+input_digest = sha256(canonical input JSON)
+created_at = supplied now when available
+```
+
+The producer fills the full canonical v3.1.1 decision object. It does not create
+a smaller replacement schema.
+
 ## Consent context
 
 For `lifecycle_stage=confirmed_execution`:
@@ -91,6 +104,20 @@ If `external_allowed=false`, `provider_candidate` must not start with
 `external:`. `proposed_external_target` may still record a candidate target for
 review, but the active provider candidate cannot be external until policy allows
 external routing.
+
+In A2, high-complexity positively non-sensitive external routing is a proposal
+only. It may set an external `provider_candidate` only when `external_allowed`
+is true, while keeping:
+
+```text
+provider_call_allowed_now=false
+external_network_allowed_now=false
+tool_execution_allowed_now=false
+state_change_allowed_now=false
+allowed_execution_mode=propose_only
+```
+
+This does not call or authorize an external provider.
 
 ## answer_only
 

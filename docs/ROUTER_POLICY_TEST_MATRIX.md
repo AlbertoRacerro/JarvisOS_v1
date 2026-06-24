@@ -195,3 +195,25 @@ budget and provider policy are enforced
 Current fixture tests use a local schema checker and are not complete Draft
 2020-12 JSON Schema validation. The semantic validator tests cover cross-field
 policy invariants directly.
+
+## A2 deterministic producer cases
+
+```text
+A2-001 secret literal -> blocked/local-only, no external/network/provider/tool/state
+A2-002 BlueRev/IP-sensitive -> LOCAL_ONLY or USER_CONFIRM, no external provider_candidate
+A2-003 private JarvisOS memory folder + external provider intent -> review boundary
+A2-004 clarification_context -> ask_clarification, USER_CONFIRM, no external
+A2-005 simple non-sensitive question -> LOCAL_FAST local provider, answer_only
+A2-006 high-complexity non-sensitive scientific task with external policy -> external proposal, semantic-valid
+A2-007 high-complexity non-sensitive task but budget max LOCAL_FAST -> no tier above LOCAL_FAST or USER_CONFIRM
+A2-008 sensitivity unknown + external hint -> USER_CONFIRM/local-only, no external/network
+A2-009 secret + high-complexity scientific task -> Rule 1 wins, no external
+A2-010 high-complexity non-sensitive with external disabled -> Rule 9 fallback
+A2-011 unknown sensitivity + high-complexity + external enabled + budget ok -> not external
+```
+
+Every produced decision must be full-schema-valid under the current local schema
+checker and semantic-validator-valid. The producer regression checks also assert
+that it never emits external network without external allowance, browser/tool/MCP
+execution without network permission, external provider candidates while
+external is forbidden, or secret-like audit notes.

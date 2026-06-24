@@ -1310,3 +1310,36 @@ Observed contract result:
 Schema validation note: current tests use a local schema checker and do not
 constitute complete Draft 2020-12 JSON Schema validation. The semantic validator
 remains the cross-field policy authority.
+
+### 1G-B2-F3-A2 - RouterPolicy Deterministic Decision Probe
+
+1G-B2-F3-A2 adds the first deterministic RouterPolicy decision producer. It
+turns normalized RouterPolicy input into full v3.1.1 decision objects and keeps
+decision logic intentionally minimal.
+
+Implemented behavior:
+
+- explicit first-match evaluation order with safety rules before routing rules;
+- secret and private/IP rules override high-complexity external routing;
+- external escalation is allowlist-based and requires positive safe sensitivity
+  (`public` or `internal`);
+- unknown, sensitive, or secret sensitivity never routes externally by default;
+- Rule 9 fallback prevents undefined behavior when external routing is not
+  available;
+- action/preflight fields default to fail-safe restrictive values.
+
+Observed contract result:
+
+- producer cases: `11`;
+- producer test module: `12/12`;
+- every produced decision passes local schema checking and semantic validation;
+- external provider calls: `false`;
+- local Ollama calls: `false`;
+- runtime routing added: `false`;
+- tool execution added: `false`;
+- memory writes added: `false`;
+- report: `reports/router_policy/1G-B2-F3-A2/`.
+
+A2 does not add runtime chat routing, provider calls, model calls,
+tool/browser/terminal/MCP execution, memory writes, retrieval, file-write
+runtime, backend routes, frontend UI, database migrations, or BlueRev modeling.

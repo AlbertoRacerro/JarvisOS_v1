@@ -4,6 +4,42 @@
 
 RouterPolicy is the deterministic layer that decides what a JarvisOS message is allowed to do next. It decides permission and routing; it does not execute.
 
+## 1G-B2-F3-A2 deterministic probe
+
+`1G-B2-F3-A2` adds a deterministic decision producer/probe, not runtime chat
+routing. The producer emits full v3.1.1 RouterPolicy decision objects but
+implements only minimal first-match routing behavior.
+
+Evaluation order is:
+
+1. secret/credential hard rule;
+2. raw private/IP-sensitive context and provider/export boundary;
+3. clarification or ambiguity;
+4. unknown or not-positively-safe sensitivity before external escalation;
+5. positively non-sensitive high-complexity external candidate proposal;
+6. non-sensitive simple local chat;
+7. deterministic safe fallback.
+
+Safety rules run before routing/escalation rules. External escalation is
+allowlist-based and requires `sensitivity_bucket_proposal in {public,
+internal}`. Unknown, sensitive, or secret sensitivity never routes externally by
+default, even for high-complexity scientific tasks.
+
+ActionPreflight/world-model fields are populated conservatively. Non-routed
+action/preflight fields use fail-safe restrictive defaults: no provider call, no
+external network, no tool/browser/terminal/MCP execution, no memory/retrieval/file
+state change, and no runtime execution.
+
+Because the current semantic validator still treats `route_external_candidate`
+as provider-call-ready, A2 represents high-complexity external routing as a
+proposal: an external `provider_candidate` and `proposed_external_target` may be
+shown with `external_allowed=true`, but `provider_call_allowed_now=false` and
+`external_network_allowed_now=false`. Confirmation only creates review context;
+it does not execute.
+
+A2 keeps the producer as a module with unittest coverage. It does not add a CLI
+smoke writer or any runtime report-generation path.
+
 ## 1G-B2-F3-A1 boundary
 
 This document is part of the RouterPolicy contract layer only. It does not add
@@ -85,3 +121,7 @@ allowed_execution_mode=propose_only or blocked
 ```
 
 Unknown is not executable.
+
+Rule 9 fallback prevents undefined behavior when high-complexity external
+routing is unavailable because of budget, provider policy, external-disabled
+policy, or non-safe sensitivity.

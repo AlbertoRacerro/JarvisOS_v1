@@ -1,0 +1,35 @@
+{
+  "schema_version": "router_policy_decision_probe_summary_v0",
+  "milestone": "1G-B2-F3-A2",
+  "start_head": "dc31c6546a19becd577adeb9baed28ba183ef928",
+  "final_head": "recorded in final handoff after commit",
+  "cases_run": 11,
+  "cases_passed": 11,
+  "schema_valid_count": 11,
+  "semantic_valid_count": 11,
+  "produced_route_tiers": [
+    "BLOCKED",
+    "LOCAL_ONLY",
+    "LOCAL_FAST",
+    "SCIENTIFIC_MEDIUM",
+    "USER_CONFIRM"
+  ],
+  "produced_route_actions": [
+    "answer_local",
+    "ask_clarification",
+    "ask_user_confirm",
+    "blocked",
+    "route_local"
+  ],
+  "external_provider_calls_made": false,
+  "local_ollama_calls_made": false,
+  "runtime_routing_added": false,
+  "tool_execution_added": false,
+  "memory_write_added": false,
+  "known_residual_risks": [
+    "A2 is a deterministic contract probe only, not runtime chat routing.",
+    "Current schema tests use a local checker, not complete Draft 2020-12 validation.",
+    "The semantic validator requires provider-call-ready fields for route_external_candidate, so A2 represents external escalation as a proposal with provider calls and external network disabled.",
+    "A2 keeps the producer as a module with unittest coverage and does not add a CLI smoke writer."
+  ]
+}
