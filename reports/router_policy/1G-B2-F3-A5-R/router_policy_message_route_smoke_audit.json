@@ -1,0 +1,186 @@
+{
+  "milestone": "1G-B2-F3-A5-R - Read-only audit of message route smoke",
+  "start_head": "de967d487458f1bd5dd7ce2668371c639cb01322",
+  "a5_commit_audited": "de967d487458f1bd5dd7ce2668371c639cb01322",
+  "worktree_status_before_audit": "clean",
+  "files_inspected": [
+    "README.md",
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md",
+    "docs/ROUTER_POLICY_DESIGN.md",
+    "reports/router_policy/1G-B2-F3-A5/router_policy_message_route_smoke_summary.json",
+    "reports/router_policy/1G-B2-F3-A5/router_policy_message_route_smoke_summary.md",
+    "scripts/router_policy_message_route_smoke.py",
+    "tests/test_router_policy_message_route_smoke.py",
+    "scripts/router_policy_local_route_probe.py",
+    "scripts/router_policy_local_responder.py",
+    "scripts/router_policy_decision_probe.py",
+    "scripts/router_policy_semantic_validator.py",
+    "schemas/router_policy_input_v0_3_1_1.schema.json",
+    "tests/fixtures/router_policy/"
+  ],
+  "tests_run": [
+    {
+      "command": "git status --short",
+      "result": "pass: clean before audit"
+    },
+    {
+      "command": "git merge-base --is-ancestor de967d487458f1bd5dd7ce2668371c639cb01322 HEAD",
+      "result": "pass"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_message_route_smoke",
+      "result": "pass: 21/21"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_local_responder",
+      "result": "pass: 13/13"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_local_route_probe",
+      "result": "pass: 11/11"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_decision_probe",
+      "result": "pass: 14/14"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_semantic_validator",
+      "result": "pass: 40/40"
+    },
+    {
+      "command": "python -m unittest discover -s tests",
+      "result": "pass: 252/252"
+    },
+    {
+      "command": "git diff --check",
+      "result": "pass"
+    },
+    {
+      "command": "rg -n \"openai|anthropic|gemini|grok|httpx|requests|subprocess|Popen|os\\.system|selenium|playwright|mcp|memory_write|write_text|open\\(\" scripts/router_policy_message_route_smoke.py tests/test_router_policy_message_route_smoke.py",
+      "result": "schema/action-field literal hits only: memory_write, mcp_call, mcp, needs_memory_write"
+    },
+    {
+      "command": "python scripts\\router_policy_message_route_smoke.py --message \"my API key is sk-test-1234567890\"",
+      "result": "pass: no raw message, no input_obj, no full decision JSON, no response when executed=false"
+    }
+  ],
+  "hard_gate_dominance_verdict": {
+    "verdict": "fail",
+    "blocker": true,
+    "summary": "assume_public_simple is applied after _has_hard_gate_signal, but the deterministic helper does not identify MCP/tool intent in 'use MCP to call a tool'. The resulting input is converted to public low-risk answer mode and A3 calls the fake responder.",
+    "sample_results": [
+      {
+        "message": "my API key is sk-test-1234567890",
+        "executed": false,
+        "reason": "not_safe_local_route",
+        "hard_reason_codes": [
+          "secret_or_credential",
+          "redaction_required"
+        ],
+        "router_task_type": "review",
+        "router_complexity": "medium"
+      },
+      {
+        "message": "please upload this to OpenAI",
+        "executed": false,
+        "reason": "not_safe_local_route",
+        "hard_reason_codes": [
+          "low_risk"
+        ],
+        "provider_signal": true,
+        "needs_provider_call": true,
+        "router_task_type": "analysis",
+        "router_complexity": "high"
+      },
+      {
+        "message": "write this to memory",
+        "executed": false,
+        "reason": "not_safe_local_route",
+        "hard_reason_codes": [
+          "manual_review_required"
+        ],
+        "needs_memory_write": true,
+        "router_task_type": "review",
+        "router_complexity": "high"
+      },
+      {
+        "message": "read local file C:\\secret.txt",
+        "executed": false,
+        "reason": "not_safe_local_route",
+        "hard_reason_codes": [
+          "secret_or_credential",
+          "redaction_required"
+        ],
+        "needs_file_context": true,
+        "router_task_type": "review",
+        "router_complexity": "high"
+      },
+      {
+        "message": "use MCP to call a tool",
+        "executed": true,
+        "reason": "local_answer",
+        "hard_reason_codes": [
+          "low_risk"
+        ],
+        "router_task_type": "answer",
+        "router_complexity": "low",
+        "responder_calls": 1
+      }
+    ]
+  },
+  "real_a3_safe_path_test_verdict": {
+    "verdict": "pass",
+    "evidence": "tests/test_router_policy_message_route_smoke.py test_a5_001 calls run_message_route_smoke without patching _RUN_LOCAL_ROUTE; scripts/router_policy_message_route_smoke.py delegates to _RUN_LOCAL_ROUTE(input_obj, responder=responder, now=now). Fake responder receives exactly message_text."
+  },
+  "real_a3_no_execution_test_verdict": {
+    "verdict": "pass",
+    "evidence": "tests/test_router_policy_message_route_smoke.py test_a5_003 uses real A3 without assume_public_simple and responder is not called; test_a5_004 verifies --run-local alone does not execute fallback input."
+  },
+  "cli_redaction_verdict": {
+    "verdict": "pass",
+    "evidence": "_safe_cli_result omits input_obj, raw message_text, full decision JSON, audit notes, fixture/report paths, and response unless executed=true; sensitive CLI command confirmed no response on executed=false."
+  },
+  "structural_validator_verdict": {
+    "verdict": "pass",
+    "evidence": "Private structural validator rejects missing top-level sections, missing nested booleans used by the decider, string booleans, non-list list fields, and invalid critical enum-like values before responder call."
+  },
+  "overlay_reason_code_mapping_verdict": {
+    "verdict": "pass",
+    "evidence": "Unsupported overlay hard_reason_code maps to manual_review_required plus unknown_sensitivity, remains structurally compatible, and responder is not called."
+  },
+  "direct_responder_call_verdict": {
+    "verdict": "pass",
+    "evidence": "run_message_route_smoke builds and structurally validates input, then delegates to _RUN_LOCAL_ROUTE; no direct responder call exists in the A5 wrapper."
+  },
+  "runtime_boundary_verdict": {
+    "verdict": "pass",
+    "evidence": "Focused grep found no executable external provider, non-localhost network, subprocess, browser, MCP client, memory/retrieval, or file-write path in A5 files. Hits were schema/action-field literals only."
+  },
+  "blockers": [
+    {
+      "id": "A5-R-BLOCKER-001",
+      "severity": "high",
+      "summary": "MCP/tool intent can execute under assume_public_simple.",
+      "details": "The smoke fallback does not classify 'use MCP to call a tool' as unsafe. With assume_public_simple=True, _has_hard_gate_signal returns false, the builder sets hard_reason_codes=['low_risk'], router_hint.task_type='answer', router_hint.complexity='low', and A3 calls the responder.",
+      "required_next_step": "A5-R1 patch required before A5 approval or A6."
+    }
+  ],
+  "bugs": [
+    {
+      "id": "A5-R-BUG-001",
+      "severity": "medium",
+      "summary": "Provider/upload sample blocks execution but retains hard_reason_codes=['low_risk'].",
+      "details": "'please upload this to OpenAI' sets provider_signal and needs_provider_call, so A3 blocks execution, but hard_reason_codes remains ['low_risk']. This is internally confusing and should be cleaned up in A5-R1 if the hard reason code is used for audit or downstream policy."
+    }
+  ],
+  "docs_test_only_issues": [],
+  "known_residual_risks": [
+    "A5 remains smoke-only and is not production Phase A/B normalization.",
+    "RouterPolicy input validation is structural only, not full Draft 2020-12 schema validation.",
+    "The fallback detector is conservative but incomplete for tool/MCP/browser/terminal/file-access intent.",
+    "Manual local smoke still depends on Ollama running and the selected model already being pulled."
+  ],
+  "recommendation": "require A5-R1 patch",
+  "approve_a5": false,
+  "block_a6": true
+}
