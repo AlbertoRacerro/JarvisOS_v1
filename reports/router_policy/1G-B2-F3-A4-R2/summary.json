@@ -1,0 +1,62 @@
+{
+  "milestone": "A4-R2",
+  "start_head": "11201d1e1a420bc949290cadd4393ccdac0e3348",
+  "working_tree_status_before_commit": "clean before implementation",
+  "files_changed": [
+    "backend/app/modules/dev_message_route/smoke_adapter.py",
+    "backend/tests/test_dev_local_chat.py",
+    "reports/router_policy/1G-B2-F3-A4-R2/summary.json",
+    "reports/router_policy/1G-B2-F3-A4-R2/summary.md",
+    "scripts/router_policy_local_responder.py"
+  ],
+  "generic_adapter_default_keep_alive_none": true,
+  "dev_keep_alive_added": true,
+  "dev_keep_alive_default": "30m",
+  "keep_alive_env_var": "JARVISOS_DEV_MESSAGE_ROUTE_KEEP_ALIVE",
+  "keep_alive_manual_minus_one_supported": true,
+  "keep_alive_minus_one_default": false,
+  "num_predict_env_added": true,
+  "num_predict_env_var": "JARVISOS_DEV_MESSAGE_ROUTE_NUM_PREDICT",
+  "num_predict_default_forced": false,
+  "ollama_timing_metadata_captured": true,
+  "ollama_timing_metadata_exposed_safely": true,
+  "backend_e2e_timing_added": true,
+  "backend_e2e_timing_exposed_safely": true,
+  "response_contract_additive_change": true,
+  "early_return_timing_behavior_defined": true,
+  "endpoint_request_contract_modified": false,
+  "streaming_added": false,
+  "frontend_modified": false,
+  "deterministic_gate_or_router_modified": false,
+  "operational_detector_modified": false,
+  "prompt_contract_modified": false,
+  "history_filtering_semantics_modified": false,
+  "memory_runtime_added": false,
+  "retrieval_added": false,
+  "provider_routing_added": false,
+  "tool_mcp_browser_terminal_added": false,
+  "model_selector_ui_added": false,
+  "manual_latency_measurement_summary": {
+    "cold_call_total_duration_s_approx": 9.58,
+    "cold_call_load_duration_s_approx": 8.24,
+    "warm_call_total_duration_s_approx": 1.76,
+    "warm_call_load_duration_s_approx": 0.58,
+    "prompt_eval_duration_s_range_approx": [
+      0.05,
+      0.09
+    ],
+    "eval_duration_s_range_approx": [
+      1.11,
+      1.24
+    ],
+    "ollama_processor": "100% GPU",
+    "interpretation": "Direct Ollama cold load is significant, but backend end-to-end timing is still required to explain the full UI path latency."
+  },
+  "known_residual_risks": [
+    "keep_alive reduces reload latency but does not solve inference-bound latency.",
+    "multi-model benchmarking can cause VRAM contention and evictions.",
+    "keep_alive='-1' should not be used during multi-model benchmark unless intentionally pinning one model.",
+    "backend_timing is diagnostic and should not be treated as production observability.",
+    "if backend_timing shows large gate/history-filter durations, the next fix is Python path optimization, not keep_alive."
+  ]
+}

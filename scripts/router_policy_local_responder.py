@@ -84,6 +84,49 @@ def _validate_prompt(prompt: str, max_prompt_chars: int) -> None:
         raise LocalResponderPolicyError("prompt exceeds max_prompt_chars")
 
 
+def _normalize_num_predict(num_predict: Any) -> int | None:
+    if not isinstance(num_predict, int) or isinstance(num_predict, bool) or num_predict <= 0:
+        return None
+    return num_predict
+
+
+def _build_generate_payload(
+    *,
+    model: str,
+    prompt: str,
+    temperature: float,
+    keep_alive: str | None,
+    num_predict: int | None,
+) -> dict[str, Any]:
+    options: dict[str, Any] = {
+        "temperature": 0,
+    }
+    normalized_num_predict = _normalize_num_predict(num_predict)
+    if normalized_num_predict is not None:
+        options["num_predict"] = normalized_num_predict
+
+    payload: dict[str, Any] = {
+        "model": model,
+        "prompt": prompt,
+        "stream": False,
+        "options": options,
+    }
+    if keep_alive is not None:
+        payload["keep_alive"] = keep_alive
+    return payload
+
+
+def _extract_timing_metadata(raw: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "total_duration_ns": raw.get("total_duration"),
+        "load_duration_ns": raw.get("load_duration"),
+        "prompt_eval_count": raw.get("prompt_eval_count"),
+        "prompt_eval_duration_ns": raw.get("prompt_eval_duration"),
+        "eval_count": raw.get("eval_count"),
+        "eval_duration_ns": raw.get("eval_duration"),
+    }
+
+
 def _stdlib_json_post_client(endpoint: str, payload: dict, timeout_s: float) -> dict:
     encoded = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
@@ -120,6 +163,8 @@ def _call_local_ollama_generate_result(
     temperature: float,
     max_prompt_chars: int,
     max_output_chars: int,
+    keep_alive: str | None = None,
+    num_predict: int | None = None,
     client=None,
 ) -> dict[str, Any]:
     _validate_static_params(
@@ -132,14 +177,13 @@ def _call_local_ollama_generate_result(
         client=client,
     )
     _validate_prompt(prompt, max_prompt_chars)
-    payload: dict[str, Any] = {
-        "model": model,
-        "prompt": prompt,
-        "stream": False,
-        "options": {
-            "temperature": 0,
-        },
-    }
+    payload = _build_generate_payload(
+        model=model,
+        prompt=prompt,
+        temperature=temperature,
+        keep_alive=keep_alive,
+        num_predict=num_predict,
+    )
     post_client = client or _stdlib_json_post_client
     raw = post_client(endpoint, payload, float(timeout_s))
     if not isinstance(raw, dict):
@@ -154,6 +198,7 @@ def _call_local_ollama_generate_result(
         "response_char_count_returned": len(bounded),
         "response_char_limit": max_output_chars,
         "response_limit_source": "local_responder_max_output_chars",
+        "local_responder_timing": _extract_timing_metadata(raw),
     }
 
 
@@ -166,6 +211,8 @@ def call_local_ollama_generate(
     temperature: float,
     max_prompt_chars: int,
     max_output_chars: int,
+    keep_alive: str | None = None,
+    num_predict: int | None = None,
     client=None,
 ) -> str:
     """Call localhost Ollama /api/generate and return bounded response text."""
@@ -178,6 +225,8 @@ def call_local_ollama_generate(
         temperature=temperature,
         max_prompt_chars=max_prompt_chars,
         max_output_chars=max_output_chars,
+        keep_alive=keep_alive,
+        num_predict=num_predict,
         client=client,
     )["response"]
 
@@ -191,6 +240,8 @@ def call_local_ollama_generate_with_metadata(
     temperature: float,
     max_prompt_chars: int,
     max_output_chars: int,
+    keep_alive: str | None = None,
+    num_predict: int | None = None,
     client=None,
 ) -> dict[str, Any]:
     """Call localhost Ollama /api/generate and return bounded text plus slice metadata."""
@@ -203,6 +254,8 @@ def call_local_ollama_generate_with_metadata(
         temperature=temperature,
         max_prompt_chars=max_prompt_chars,
         max_output_chars=max_output_chars,
+        keep_alive=keep_alive,
+        num_predict=num_predict,
         client=client,
     )
 
@@ -215,6 +268,8 @@ def build_local_responder(
     temperature: float = 0.0,
     max_prompt_chars: int = 12000,
     max_output_chars: int = 4000,
+    keep_alive: str | None = None,
+    num_predict: int | None = None,
     client=None,
 ) -> Callable[[str], str]:
     """Build a side-effect-free local responder callable."""
@@ -238,6 +293,8 @@ def build_local_responder(
             temperature=temperature,
             max_prompt_chars=max_prompt_chars,
             max_output_chars=max_output_chars,
+            keep_alive=keep_alive,
+            num_predict=num_predict,
             client=client,
         )
 

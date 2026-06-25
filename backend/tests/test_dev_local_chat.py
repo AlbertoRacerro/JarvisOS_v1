@@ -663,3 +663,313 @@ def test_c2_r2_005_local_chat_uses_imported_safe_local_predicate(client: TestCli
     assert authorized.status_code == 200
     assert authorized.json()["executed"] is True
     responder_builder.assert_called_once()
+
+
+def test_a4r2_generic_adapter_does_not_send_keep_alive_or_num_predict_by_default() -> None:
+    from app.modules.dev_message_route import smoke_adapter
+
+    import router_policy_local_responder as local_responder
+
+    seen: dict[str, object] = {}
+
+    def fake_client(endpoint: str, payload: dict[str, object], timeout_s: float) -> dict[str, object]:
+        seen["endpoint"] = endpoint
+        seen["payload"] = payload
+        seen["timeout_s"] = timeout_s
+        return {"response": "ok"}
+
+    assert smoke_adapter.SCRIPTS_DIR.exists()
+
+    result = local_responder.call_local_ollama_generate_with_metadata(
+        "hello",
+        model="gemma3:4b",
+        endpoint="http://127.0.0.1:11434/api/generate",
+        timeout_s=30.0,
+        temperature=0.0,
+        max_prompt_chars=12000,
+        max_output_chars=4000,
+        client=fake_client,
+    )
+
+    payload = seen["payload"]
+    assert isinstance(payload, dict)
+    assert payload["stream"] is False
+    assert "keep_alive" not in payload
+    assert payload["options"] == {"temperature": 0}
+    assert result["local_responder_timing"] == {
+        "total_duration_ns": None,
+        "load_duration_ns": None,
+        "prompt_eval_count": None,
+        "prompt_eval_duration_ns": None,
+        "eval_count": None,
+        "eval_duration_ns": None,
+    }
+
+
+def test_a4r2_generic_adapter_sends_keep_alive_and_positive_num_predict_when_provided() -> None:
+    import router_policy_local_responder as local_responder
+
+    payloads: list[dict[str, object]] = []
+
+    def fake_client(endpoint: str, payload: dict[str, object], timeout_s: float) -> dict[str, object]:
+        payloads.append(payload)
+        return {
+            "response": "ok",
+            "total_duration": 10,
+            "load_duration": 4,
+            "prompt_eval_count": 3,
+            "prompt_eval_duration": 2,
+            "eval_count": 5,
+            "eval_duration": 6,
+        }
+
+    response_text = local_responder.call_local_ollama_generate(
+        "hello",
+        model="gemma3:4b",
+        endpoint="http://127.0.0.1:11434/api/generate",
+        timeout_s=30.0,
+        temperature=0.0,
+        max_prompt_chars=12000,
+        max_output_chars=4000,
+        keep_alive="30m",
+        num_predict=128,
+        client=fake_client,
+    )
+    metadata = local_responder.call_local_ollama_generate_with_metadata(
+        "hello again",
+        model="gemma3:4b",
+        endpoint="http://127.0.0.1:11434/api/generate",
+        timeout_s=30.0,
+        temperature=0.0,
+        max_prompt_chars=12000,
+        max_output_chars=4000,
+        keep_alive="-1",
+        num_predict=64,
+        client=fake_client,
+    )
+
+    assert response_text == "ok"
+    assert len(payloads) == 2
+    assert payloads[0]["keep_alive"] == "30m"
+    assert payloads[0]["options"]["num_predict"] == 128
+    assert payloads[1]["keep_alive"] == "-1"
+    assert payloads[1]["options"]["num_predict"] == 64
+    assert metadata["local_responder_timing"] == {
+        "total_duration_ns": 10,
+        "load_duration_ns": 4,
+        "prompt_eval_count": 3,
+        "prompt_eval_duration_ns": 2,
+        "eval_count": 5,
+        "eval_duration_ns": 6,
+    }
+
+
+@pytest.mark.parametrize("invalid_value", [None, 0, -1, True])
+def test_a4r2_generic_adapter_ignores_invalid_num_predict(invalid_value: object) -> None:
+    import router_policy_local_responder as local_responder
+
+    seen: dict[str, object] = {}
+
+    def fake_client(endpoint: str, payload: dict[str, object], timeout_s: float) -> dict[str, object]:
+        seen["payload"] = payload
+        return {"response": "ok"}
+
+    local_responder.call_local_ollama_generate_with_metadata(
+        "hello",
+        model="gemma3:4b",
+        endpoint="http://127.0.0.1:11434/api/generate",
+        timeout_s=30.0,
+        temperature=0.0,
+        max_prompt_chars=12000,
+        max_output_chars=4000,
+        num_predict=invalid_value,  # type: ignore[arg-type]
+        client=fake_client,
+    )
+
+    payload = seen["payload"]
+    assert isinstance(payload, dict)
+    assert payload["options"] == {"temperature": 0}
+
+
+def test_a4r2_dev_local_responder_defaults_keep_alive_to_30m(monkeypatch) -> None:
+    from app.modules.dev_message_route import smoke_adapter
+
+    captured: dict[str, object] = {}
+
+    def fake_generate(prompt: str, **kwargs) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"response": "ok"}
+
+    monkeypatch.delenv("JARVISOS_DEV_MESSAGE_ROUTE_KEEP_ALIVE", raising=False)
+    monkeypatch.delenv("JARVISOS_DEV_MESSAGE_ROUTE_NUM_PREDICT", raising=False)
+    monkeypatch.setattr(smoke_adapter, "call_local_ollama_generate_with_metadata", fake_generate)
+
+    responder = smoke_adapter.build_dev_local_responder()
+    assert responder("hello") == "ok"
+    assert captured["keep_alive"] == "30m"
+    assert captured["num_predict"] is None
+
+
+def test_a4r2_dev_local_responder_passes_env_overrides(monkeypatch) -> None:
+    from app.modules.dev_message_route import smoke_adapter
+
+    captured: dict[str, object] = {}
+
+    def fake_generate(prompt: str, **kwargs) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"response": "ok"}
+
+    monkeypatch.setenv("JARVISOS_DEV_MESSAGE_ROUTE_KEEP_ALIVE", "-1")
+    monkeypatch.setenv("JARVISOS_DEV_MESSAGE_ROUTE_NUM_PREDICT", "256")
+    monkeypatch.setattr(smoke_adapter, "call_local_ollama_generate_with_metadata", fake_generate)
+
+    responder = smoke_adapter.build_dev_local_responder()
+    assert responder("hello") == "ok"
+    assert captured["keep_alive"] == "-1"
+    assert captured["num_predict"] == 256
+
+
+@pytest.mark.parametrize("raw_value", ["", "0", "-5", "abc"])
+def test_a4r2_dev_local_responder_ignores_invalid_num_predict_env(monkeypatch, raw_value: str) -> None:
+    from app.modules.dev_message_route import smoke_adapter
+
+    captured: dict[str, object] = {}
+
+    def fake_generate(prompt: str, **kwargs) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"response": "ok"}
+
+    monkeypatch.setenv("JARVISOS_DEV_MESSAGE_ROUTE_NUM_PREDICT", raw_value)
+    monkeypatch.setattr(smoke_adapter, "call_local_ollama_generate_with_metadata", fake_generate)
+
+    responder = smoke_adapter.build_dev_local_responder()
+    assert responder("hello") == "ok"
+    assert captured["num_predict"] is None
+
+
+def test_a4r2_response_exposes_local_responder_timing_without_prompt_leak(client: TestClient, monkeypatch) -> None:
+    from app.modules.dev_message_route import smoke_adapter
+
+    _enable_chat(monkeypatch)
+    monkeypatch.setattr(
+        smoke_adapter,
+        "call_local_ollama_generate_with_metadata",
+        Mock(
+            return_value={
+                "response": "safe answer",
+                "response_truncated": False,
+                "response_char_count_returned": 11,
+                "response_char_limit": 16000,
+                "response_limit_source": "local_responder_max_output_chars",
+                "local_responder_timing": {
+                    "total_duration_ns": 100,
+                    "load_duration_ns": 40,
+                    "prompt_eval_count": 3,
+                    "prompt_eval_duration_ns": 20,
+                    "eval_count": 5,
+                    "eval_duration_ns": 60,
+                },
+            }
+        ),
+    )
+
+    response = client.post(DEV_ENDPOINT, json={"message": "hello"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["executed"] is True
+    assert body["local_responder_timing"] == {
+        "total_duration_ns": 100,
+        "load_duration_ns": 40,
+        "prompt_eval_count": 3,
+        "prompt_eval_duration_ns": 20,
+        "eval_count": 5,
+        "eval_duration_ns": 60,
+    }
+    assert "prompt" not in body["local_responder_timing"]
+    assert "response" not in body["local_responder_timing"]
+    assert "hello" not in response.text
+
+
+def test_a4r2_backend_timing_is_additive_for_executed_local_chat(client: TestClient, monkeypatch) -> None:
+    _enable_chat(monkeypatch)
+    _safe_responder(monkeypatch, "ok")
+
+    response = client.post(
+        DEV_ENDPOINT,
+        json={"message": "hello", "history": [{"role": "user", "content": "safe prior"}]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    timing = body["backend_timing"]
+    assert body["executed"] is True
+    assert "response_truncated_false_semantics" in body
+    assert set(timing) == {
+        "total_dev_local_chat_duration_ms",
+        "current_gate_duration_ms",
+        "history_filter_duration_ms",
+        "prompt_selection_and_assembly_duration_ms",
+        "local_responder_call_duration_ms",
+    }
+    for value in timing.values():
+        assert isinstance(value, float)
+
+
+def test_a4r2_backend_timing_for_early_return_omits_unexecuted_stages(client: TestClient, monkeypatch) -> None:
+    from app.modules.dev_message_route import smoke_adapter
+
+    _enable_chat(monkeypatch)
+    unsafe = _safe_local_decision()
+    unsafe["tool_execution_allowed_now"] = True
+    monkeypatch.setattr(smoke_adapter, "run_message_route_smoke", Mock(return_value=_gate_result(decision=unsafe)))
+
+    response = client.post(DEV_ENDPOINT, json={"message": "hello"})
+
+    assert response.status_code == 200
+    body = response.json()
+    timing = body["backend_timing"]
+    assert body["executed"] is False
+    assert "total_dev_local_chat_duration_ms" in timing
+    assert "current_gate_duration_ms" in timing
+    assert "history_filter_duration_ms" not in timing
+    assert "prompt_selection_and_assembly_duration_ms" not in timing
+    assert "local_responder_call_duration_ms" not in timing
+
+
+def test_a4r2_instrumentation_preserves_gate_filter_assembly_responder_order(client: TestClient, monkeypatch) -> None:
+    from app.modules.dev_message_route import smoke_adapter
+
+    _enable_chat(monkeypatch)
+    events: list[str] = []
+
+    def fake_authorize(message: str) -> tuple[bool, dict[str, object]]:
+        events.append("gate")
+        return True, _gate_result()
+
+    def fake_filter(history: list[dict[str, str]]) -> tuple[list[dict[str, str]], dict[str, object]]:
+        events.append("filter")
+        return history, smoke_adapter.empty_context_filter()
+
+    def fake_assemble(*, clean_history: list[dict[str, str]], message: str) -> str:
+        events.append("assembly")
+        return "prompt"
+
+    responder = Mock(side_effect=lambda prompt: events.append("responder") or "ok")
+
+    monkeypatch.setattr(smoke_adapter, "authorize_current_message_for_local_chat", fake_authorize)
+    monkeypatch.setattr(smoke_adapter, "filter_clean_history", fake_filter)
+    monkeypatch.setattr(smoke_adapter, "assemble_local_chat_prompt", fake_assemble)
+    monkeypatch.setattr(smoke_adapter, "build_dev_local_responder", Mock(return_value=responder))
+
+    response = client.post(
+        DEV_ENDPOINT,
+        json={"message": "hello", "history": [{"role": "user", "content": "safe prior"}]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["executed"] is True
+    assert events[0:2] == ["gate", "filter"]
+    assert events[-1] == "responder"
+    assert events.count("responder") == 1
+    assert all(event == "assembly" for event in events[2:-1])

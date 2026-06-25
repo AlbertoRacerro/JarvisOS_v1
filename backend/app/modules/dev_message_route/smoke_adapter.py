@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -37,10 +38,13 @@ ALLOW_LOCAL_RESPONDER_ENV = "JARVISOS_DEV_MESSAGE_ROUTE_ALLOW_LOCAL_RESPONDER"
 MODEL_ENV = "JARVISOS_DEV_MESSAGE_ROUTE_MODEL"
 ENDPOINT_ENV = "JARVISOS_DEV_MESSAGE_ROUTE_ENDPOINT"
 TIMEOUT_ENV = "JARVISOS_DEV_MESSAGE_ROUTE_TIMEOUT_S"
+KEEP_ALIVE_ENV = "JARVISOS_DEV_MESSAGE_ROUTE_KEEP_ALIVE"
+NUM_PREDICT_ENV = "JARVISOS_DEV_MESSAGE_ROUTE_NUM_PREDICT"
 
 DEFAULT_MODEL = "gemma3:4b"
 DEFAULT_ENDPOINT = "http://127.0.0.1:11434/api/generate"
 DEFAULT_TIMEOUT_S = 30.0
+DEFAULT_KEEP_ALIVE = "30m"
 MAX_HISTORY_TURNS = 20
 MAX_HISTORY_TURN_CHARS = MAX_MESSAGE_CHARS
 LOCAL_CHAT_MAX_PROMPT_CHARS = 32000
@@ -68,6 +72,28 @@ def _timeout_from_env() -> float:
     except ValueError:
         return DEFAULT_TIMEOUT_S
     return parsed if parsed > 0 else DEFAULT_TIMEOUT_S
+
+
+def _keep_alive_from_env() -> str:
+    raw = os.getenv(KEEP_ALIVE_ENV)
+    if raw is None or not raw.strip():
+        return DEFAULT_KEEP_ALIVE
+    return raw
+
+
+def _num_predict_from_env() -> int | None:
+    raw = os.getenv(NUM_PREDICT_ENV)
+    if raw is None or not raw.strip():
+        return None
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _duration_ms(start: float, end: float) -> float:
+    return round((end - start) * 1000.0, 3)
 
 
 def _smoke_result(
@@ -187,6 +213,8 @@ def build_dev_local_responder():
     model = os.getenv(MODEL_ENV, DEFAULT_MODEL)
     endpoint = os.getenv(ENDPOINT_ENV, DEFAULT_ENDPOINT)
     timeout_s = _timeout_from_env()
+    keep_alive = _keep_alive_from_env()
+    num_predict = _num_predict_from_env()
 
     def responder(prompt: str) -> str:
         metadata = call_local_ollama_generate_with_metadata(
@@ -197,6 +225,8 @@ def build_dev_local_responder():
             temperature=0.0,
             max_prompt_chars=LOCAL_CHAT_MAX_PROMPT_CHARS,
             max_output_chars=LOCAL_CHAT_MAX_OUTPUT_CHARS,
+            keep_alive=keep_alive,
+            num_predict=num_predict,
         )
         responder.last_metadata = metadata
         return metadata["response"]
@@ -353,6 +383,9 @@ def add_chat_response_metadata(body: dict[str, Any], raw_result: dict[str, Any],
     body["response_char_limit"] = metadata.get("response_char_limit", LOCAL_CHAT_MAX_OUTPUT_CHARS)
     body["response_limit_source"] = metadata.get("response_limit_source", "local_responder_max_output_chars")
     body["response_truncated_false_semantics"] = "not_sliced_by_jarvisos_not_completion_guarantee"
+    local_responder_timing = metadata.get("local_responder_timing")
+    if isinstance(local_responder_timing, dict):
+        body["local_responder_timing"] = local_responder_timing
     return body
 
 
@@ -363,8 +396,18 @@ def run_dev_local_chat(
     run_local_responder: bool,
     trace_id: str,
 ) -> tuple[int, dict[str, Any]]:
+    overall_start = time.perf_counter()
+
+    def finalize(status_code: int, body: dict[str, Any], timing: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        timing["total_dev_local_chat_duration_ms"] = _duration_ms(overall_start, time.perf_counter())
+        body["backend_timing"] = timing
+        return status_code, body
+
+    timing: dict[str, Any] = {}
+
     if not dev_message_route_enabled():
-        return disabled_response(trace_id=trace_id)
+        status_code, body = disabled_response(trace_id=trace_id)
+        return finalize(status_code, body, timing)
 
     if not run_local_responder:
         result = run_message_route_smoke(
@@ -377,7 +420,7 @@ def run_dev_local_chat(
         )
         body = safe_endpoint_response(result, trace_id=trace_id)
         body["context_filter"] = empty_context_filter()
-        return 200, body
+        return finalize(200, body, timing)
 
     if not _truthy_env(ALLOW_LOCAL_RESPONDER_ENV):
         body = safe_endpoint_response(
@@ -389,23 +432,33 @@ def run_dev_local_chat(
             trace_id=trace_id,
         )
         body["context_filter"] = empty_context_filter()
-        return 200, body
+        return finalize(200, body, timing)
 
+    gate_start = time.perf_counter()
     authorized, current_gate = authorize_current_message_for_local_chat(message)
+    timing["current_gate_duration_ms"] = _duration_ms(gate_start, time.perf_counter())
     if not authorized:
         body = safe_endpoint_response(current_gate, trace_id=trace_id)
         body["context_filter"] = empty_context_filter()
-        return 200, body
+        return finalize(200, body, timing)
 
+    history_start = time.perf_counter()
     clean_history, context_filter = filter_clean_history(history)
+    timing["history_filter_duration_ms"] = _duration_ms(history_start, time.perf_counter())
+
+    prompt_start = time.perf_counter()
     prompt_history, prompt_omitted = select_prompt_history_within_budget(clean_history, message)
     context_filter["history_turns_prompted"] = len(prompt_history)
     context_filter["history_turns_omitted_for_prompt_budget"] = prompt_omitted
     context_filter["prompt_char_limit"] = LOCAL_CHAT_MAX_PROMPT_CHARS
     prompt = assemble_local_chat_prompt(clean_history=prompt_history, message=message)
     context_filter["assembled_prompt_chars"] = len(prompt)
+    timing["prompt_selection_and_assembly_duration_ms"] = _duration_ms(prompt_start, time.perf_counter())
+
     responder = build_dev_local_responder()
+    responder_start = time.perf_counter()
     response = responder(prompt)
+    timing["local_responder_call_duration_ms"] = _duration_ms(responder_start, time.perf_counter())
     result = {
         "executed": True,
         "reason": "local_answer",
@@ -420,4 +473,4 @@ def run_dev_local_chat(
     body = safe_endpoint_response(result, trace_id=trace_id)
     body["context_filter"] = context_filter
     add_chat_response_metadata(body, result, responder)
-    return 200, body
+    return finalize(200, body, timing)
