@@ -419,6 +419,28 @@ def test_a5r2r1_ricorda_clitic_reminiscence_and_safe_regressions_execute(
     fake_responder.assert_called_once()
 
 
+def test_a5r3_bluerev_ip_sensitive_answer_only_executes_with_mocked_responder(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    _enable_chat(monkeypatch)
+    fake_responder = _safe_responder(monkeypatch, "Risposta locale.")
+
+    response = client.post(
+        DEV_ENDPOINT,
+        json={"message": "usa i parametri proprietari BlueRev per dimensionare concettualmente una pompa"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["executed"] is True
+    assert body["reason"] == "local_answer"
+    assert body["decision_summary"]["route_action"] == "answer_local"
+    assert body["decision_summary"]["route_tier"] == "LOCAL_FAST"
+    assert body["decision_summary"]["allowed_execution_mode"] == "answer_only"
+    fake_responder.assert_called_once()
+
+
 def test_a5r2_italian_unsafe_history_excluded_current_harmless_executes(client: TestClient, monkeypatch) -> None:
     _enable_chat(monkeypatch)
     fake_responder = _safe_responder(monkeypatch, "Risposta sicura.")

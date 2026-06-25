@@ -1,0 +1,64 @@
+{
+  "milestone": "1G-B2-F3-A5-R3",
+  "title": "Deterministic BlueRev/IP sensitivity floor",
+  "starting_head": "df2179cbcaa4e67692d54fee42754120ac8ae40b",
+  "implementation": {
+    "floor_function": "scripts/router_policy_message_route_smoke.py::_apply_bluerev_ip_sensitivity_floor",
+    "marker_detector": "scripts/router_policy_message_route_smoke.py::_has_bluerev_ip_sensitive_marker",
+    "exact_insertion_point": "scripts/router_policy_message_route_smoke.py:631, immediately after the assume_public_simple/else normalization block sets assume_public_simple_safe_path and immediately before return input_obj",
+    "runs_after_assume_public_simple_safe_path_normalization": true,
+    "mutates_only": [
+      "phase_a_signals.sensitivity_bucket_proposal"
+    ],
+    "monotonic_floor": "public/internal/unknown -> sensitive; sensitive remains sensitive; secret remains secret",
+    "does_not_downgrade_secret_to_sensitive": true,
+    "marker_examples": [
+      "parametri proprietari BlueRev",
+      "correlazioni riservate BlueRev",
+      "proprietà intellettuale BlueRev",
+      "dati proprietari BlueRev",
+      "assunzioni proprietarie BlueRev",
+      "design riservato BlueRev",
+      "brevetto BlueRev non pubblicato",
+      "segreto industriale BlueRev",
+      "IP sensibile BlueRev"
+    ]
+  },
+  "compatibility": {
+    "phase_b_bridge_change": "scripts/router_policy_hint_bridge_probe.py keeps secret/unknown as bucket-only hard gates but no longer treats bucket-only sensitive+low_risk as a hard gate; existing raw-private/manual-review/secret hard gates still dominate.",
+    "no_live_ollama_dependent_tests_added": true,
+    "generated_answer_content_tested": false,
+    "contains_raw_private_or_ip_sensitive_context_used_for_bluerev_external_deny": false,
+    "external_allowed_set_true_for_future_external_eligibility": false,
+    "unconsumed_diagnostic_field_used_as_only_deny_mechanism": false,
+    "hard_reason_added_for_bluerev_marker": false
+  },
+  "tests": {
+    "public_internal_to_sensitive": "tests/test_router_policy_message_route_smoke.py::test_a5_r3_002_bluerev_ip_floor_overrides_public_and_internal_external_candidates sets public/internal, applies floor, asserts sensitive, _qualifies_for_external_candidate false, external_allowed false.",
+    "assume_public_simple_public_to_sensitive": "tests/test_router_policy_message_route_smoke.py::test_a5_r3_001_bluerev_ip_floor_runs_after_assume_public_simple asserts assume_public_simple_safe_path true, hard_reason_codes ['low_risk'], final bucket sensitive, local answer-only route.",
+    "secret_preservation": "tests/test_router_policy_message_route_smoke.py::test_a5_r3_003_bluerev_ip_floor_does_not_downgrade_secret asserts mixed credential+BlueRev remains secret and blocked by existing credential/write behavior.",
+    "false_positive_coverage": "tests/test_router_policy_message_route_smoke.py::test_a5_r3_004_bluerev_and_naked_nouns_do_not_trigger_ip_floor covers bare BlueRev, pompa, parametri, brevetto, and Python code false positives.",
+    "backend_mocked_responder": "backend/tests/test_dev_local_chat.py::test_a5r3_bluerev_ip_sensitive_answer_only_executes_with_mocked_responder asserts executed true, reason local_answer, answer_local, LOCAL_FAST, answer_only, responder called."
+  },
+  "test_harness": {
+    "backend_import_path_fixture": "backend/tests/conftest.py adds backend and scripts to sys.path for backend pytest invocations from repo root."
+  },
+  "commands": [
+    {
+      "command": "python -m unittest tests.test_router_policy_message_route_smoke",
+      "result": "pass: 93 tests"
+    },
+    {
+      "command": "python -m pytest backend/tests/test_dev_local_chat.py backend/tests/test_dev_message_route_smoke.py -q",
+      "result": "pass: 120 tests"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_hint_bridge_probe",
+      "result": "pass: 16 tests"
+    }
+  ],
+  "residual_risks": [
+    "The active Python initially lacked pytest; backend/requirements-dev.txt was installed before backend verification.",
+    "A5-R3 detector is phrase-based by design; near-miss wording without an explicit marker is intentionally not floored."
+  ]
+}

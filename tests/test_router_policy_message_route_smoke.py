@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import router_policy_message_route_smoke as smoke  # noqa: E402
 import router_policy_hint_bridge_probe as bridge  # noqa: E402
+import router_policy_decision_probe as decision_probe  # noqa: E402
 
 
 NOW = "2026-06-24T13:00:00+00:00"
@@ -239,6 +240,99 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
             },
         )
         return result
+
+    def external_candidate_shaped_input(self, message, sensitivity):
+        input_obj = self.safe_input(message)
+        input_obj["phase_a_signals"]["sensitivity_bucket_proposal"] = sensitivity
+        input_obj["router_hint"].update(
+            {
+                "task_type": "analysis",
+                "complexity": "high",
+                "domain": "scientific",
+                "needs_reasoning": True,
+                "needs_scientific_depth": True,
+            }
+        )
+        input_obj["user_policy"]["external_routing_enabled"] = True
+        return input_obj
+
+    def test_a5_r3_001_bluerev_ip_floor_runs_after_assume_public_simple(self):
+        message = "usa i parametri proprietari BlueRev per dimensionare una pompa"
+        input_obj = self.safe_input(message)
+        phase_a = input_obj["phase_a_signals"]
+
+        self.assertTrue(input_obj["context_metadata"]["assume_public_simple_safe_path"])
+        self.assertEqual(["low_risk"], phase_a["hard_reason_codes"])
+        self.assertEqual("sensitive", phase_a["sensitivity_bucket_proposal"])
+        self.assertFalse(phase_a["contains_raw_private_or_ip_sensitive_context"])
+        self.assertFalse(phase_a["contains_secret_or_credential"])
+        self.assertFalse(phase_a["requires_manual_review"])
+
+        responder = Mock(return_value="local answer")
+        result = smoke.run_message_route_smoke(
+            message,
+            responder=responder,
+            now=NOW,
+            assume_public_simple=True,
+        )
+        responder.assert_called_once_with(message)
+        self.assertTrue(result["executed"])
+        self.assertEqual("local_answer", result["reason"])
+        self.assertEqual("answer_local", result["decision"]["route_action"])
+        self.assertEqual("LOCAL_FAST", result["decision"]["route_tier"])
+        self.assertEqual("answer_only", result["decision"]["allowed_execution_mode"])
+        self.assertFalse(result["decision"]["external_allowed"])
+
+    def test_a5_r3_002_bluerev_ip_floor_overrides_public_and_internal_external_candidates(self):
+        message = "valuta le correlazioni riservate BlueRev senza usare provider esterni"
+        for sensitivity in ("public", "internal"):
+            with self.subTest(sensitivity=sensitivity):
+                input_obj = self.external_candidate_shaped_input(message, sensitivity)
+
+                smoke._apply_bluerev_ip_sensitivity_floor(input_obj)
+                decision = decision_probe.decide_router_policy(input_obj, now=NOW)
+
+                self.assertEqual("sensitive", input_obj["phase_a_signals"]["sensitivity_bucket_proposal"])
+                self.assertFalse(input_obj["phase_a_signals"]["contains_raw_private_or_ip_sensitive_context"])
+                self.assertFalse(decision_probe._qualifies_for_external_candidate(input_obj))
+                self.assertFalse(decision["external_allowed"])
+
+    def test_a5_r3_003_bluerev_ip_floor_does_not_downgrade_secret(self):
+        message = "salva il token dati proprietari BlueRev abc123"
+        result = self.assert_operational_blocked(message, expected_action_field="needs_memory_write")
+        phase_a = result["input_obj"]["phase_a_signals"]
+
+        self.assertTrue(phase_a["contains_secret_or_credential"])
+        self.assertEqual("secret", phase_a["sensitivity_bucket_proposal"])
+        self.assertFalse(result["decision"]["external_allowed"])
+
+    def test_a5_r3_004_bluerev_and_naked_nouns_do_not_trigger_ip_floor(self):
+        for message in (
+            "spiegami a cosa serve una pompa in BlueRev",
+            "BlueRev usa pompe e tubi",
+            "spiegami cosa sono i parametri di una pompa",
+            "che cos'e un brevetto?",
+            "scrivi codice Python per calcolare P = rho*g*Q*H",
+        ):
+            with self.subTest(message=message):
+                input_obj = self.assert_no_new_italian_write_block(message)
+                phase_a = input_obj["phase_a_signals"]
+
+                self.assertEqual("public", phase_a["sensitivity_bucket_proposal"])
+                self.assertFalse(phase_a["contains_raw_private_or_ip_sensitive_context"])
+                self.assertEqual(["low_risk"], phase_a["hard_reason_codes"])
+
+                responder = Mock(return_value="local answer")
+                result = smoke.run_message_route_smoke(
+                    message,
+                    responder=responder,
+                    now=NOW,
+                    assume_public_simple=True,
+                )
+                responder.assert_called_once_with(message)
+                self.assertTrue(result["executed"])
+                self.assertEqual("answer_local", result["decision"]["route_action"])
+                self.assertFalse(result["decision"]["external_allowed"])
 
     def test_a5_001_simple_public_message_reaches_injected_responder_through_real_a3(self):
         message = "Explain what a pump is"

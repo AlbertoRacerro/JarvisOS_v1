@@ -109,7 +109,7 @@ def _has_hard_gate(input_obj: dict[str, Any]) -> bool:
             phase_a.get("mentions_external_provider_or_upload_intent") is True,
             phase_a.get("clarification_required") is True,
             phase_a.get("requires_manual_review") is True and _has_non_low_reason(phase_a),
-            phase_a.get("sensitivity_bucket_proposal") in {"secret", "sensitive", "unknown"},
+            phase_a.get("sensitivity_bucket_proposal") in {"secret", "unknown"},
             _has_non_low_reason(phase_a),
             action.get("needs_terminal") is True,
             action.get("needs_file_write") is True,

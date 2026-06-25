@@ -172,6 +172,22 @@ class RouterPolicyHintBridgeProbeTests(unittest.TestCase):
         self.assertFalse(produced["action_hint"]["needs_memory_write"])
         self.assert_structurally_valid(produced)
 
+    def test_a5_r3_bucket_only_sensitive_low_risk_does_not_block_phase_b_answer_hint(self):
+        obj = base_input()
+        obj["phase_a_signals"]["sensitivity_bucket_proposal"] = "sensitive"
+
+        produced = bridge.apply_phase_b_router_hint(
+            obj,
+            phase_b_soft_proposal=phase_b(soft_reason_code="contextual_summary"),
+        )
+
+        self.assertEqual("answer", produced["router_hint"]["task_type"])
+        self.assertEqual("low", produced["router_hint"]["complexity"])
+        self.assertEqual("answer", produced["action_hint"]["requested_action_type"])
+        self.assertEqual("phase_b_soft_review", produced["context_metadata"]["router_hint_source"])
+        self.assertTrue(produced["context_metadata"]["phase_b_router_hint_applied"])
+        self.assert_structurally_valid(produced)
+
     def test_b1_004_technical_scientific_answer_maps_to_medium_reasoning(self):
         produced = bridge.apply_phase_b_router_hint(
             base_input(),

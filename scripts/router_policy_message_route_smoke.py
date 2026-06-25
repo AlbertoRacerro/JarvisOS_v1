@@ -119,6 +119,17 @@ HARD_REASON_CODES = {
 SENSITIVITY_BUCKETS = {"public", "internal", "sensitive", "secret", "unknown"}
 ROUTER_COMPLEXITY = {"low", "medium", "high", "unknown"}
 CONFIDENCE_VALUES = {"low", "medium", "high", "unknown"}
+BLUEREV_IP_SENSITIVE_MARKER_PATTERNS = (
+    re.compile(r"\bparametri\s+proprietari\s+bluerev\b", re.IGNORECASE),
+    re.compile(r"\bcorrelazioni\s+riservate\s+bluerev\b", re.IGNORECASE),
+    re.compile(r"\bpropriet[aà]\s+intellettuale\s+bluerev\b", re.IGNORECASE),
+    re.compile(r"\bdati\s+proprietari\s+bluerev\b", re.IGNORECASE),
+    re.compile(r"\bassunzioni\s+proprietarie\s+bluerev\b", re.IGNORECASE),
+    re.compile(r"\bdesign\s+riservato\s+bluerev\b", re.IGNORECASE),
+    re.compile(r"\bbrevetto\s+bluerev\s+non\s+pubblicato\b", re.IGNORECASE),
+    re.compile(r"\bsegreto\s+industriale\s+bluerev\b", re.IGNORECASE),
+    re.compile(r"\bip\s+sensibile\s+bluerev\b", re.IGNORECASE),
+)
 ACTION_TYPES = {
     "answer",
     "local_model_call",
@@ -537,6 +548,19 @@ def _has_hard_gate_signal(input_obj: dict[str, Any]) -> bool:
     )
 
 
+def _has_bluerev_ip_sensitive_marker(message_text: str) -> bool:
+    return any(pattern.search(message_text) for pattern in BLUEREV_IP_SENSITIVE_MARKER_PATTERNS)
+
+
+def _apply_bluerev_ip_sensitivity_floor(input_obj: dict[str, Any]) -> None:
+    if not _has_bluerev_ip_sensitive_marker(input_obj.get("message_text", "")):
+        return
+
+    phase_a = input_obj["phase_a_signals"]
+    if phase_a.get("sensitivity_bucket_proposal") != "secret":
+        phase_a["sensitivity_bucket_proposal"] = "sensitive"
+
+
 def build_router_policy_input_from_message_for_smoke(
     message_text: str,
     *,
@@ -604,6 +628,7 @@ def build_router_policy_input_from_message_for_smoke(
                 }
             )
         input_obj["context_metadata"]["assume_public_simple_safe_path"] = False
+    _apply_bluerev_ip_sensitivity_floor(input_obj)
     return input_obj
 
 
