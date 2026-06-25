@@ -1830,3 +1830,12 @@ C1-R1 moves validation for the dev message-route endpoint behind the dev gate,
 so schema-invalid requests do not bypass the disabled boundary or return raw
 validation input. It also preserves a single route-generated `trace_id` across
 disabled, validation, normal, and internal-error paths.
+
+### 1G-B2-F3-C2 - Stateless Local Chat Context Backend
+
+C2 adds stateless local chat backend support:
+`POST /api/dev/local-chat`. The client may send recent transcript/history, but
+the backend rescans and filters every turn before assembling clean context for
+the local responder. This does not add frontend UI, persistent memory,
+retrieval, provider routing, tools/MCP/browser/terminal execution, production
+chat, or BlueRev runtime behavior.

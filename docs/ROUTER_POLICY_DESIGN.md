@@ -492,6 +492,35 @@ dev gate, so schema-invalid requests do not bypass the disabled boundary or
 return raw validation input. It also preserves a single route-generated
 `trace_id` across disabled, validation, normal, and internal-error paths.
 
+### 1G-B2-F3-C2 stateless local chat context backend
+
+`1G-B2-F3-C2` adds stateless local chat backend support:
+`POST /api/dev/local-chat`. The client may send recent transcript/history, but
+the backend rescans and filters every turn before assembling clean context for
+the local responder. This does not add frontend UI, persistent memory,
+retrieval, provider routing, tools/MCP/browser/terminal execution, production
+chat, or BlueRev runtime behavior.
+
+Future external/cheap provider routing for client-provided transcripts or
+BlueRev/private project context must remain blocked until the deterministic
+Phase A / overlay sensitivity detector has been explicitly hardened and tested
+for Italian sensitive terminology and BlueRev/domain-specific IP markers.
+
+C2 reuses the existing deterministic overlay for stateless local context
+filtering, but this does not prove the filtered context is safe for non-local
+providers. The current detector is more reliable for English-centric
+secret/private/provider/upload patterns than for Italian or project-domain
+phrasing. Therefore, future provider routing must treat Italian/BlueRev
+detector hardening as a precondition before sending transcript context to any
+external or cheaper non-local model.
+
+Future detector hardening must be phrase/intention-based, not based on naked
+technical nouns. Do not treat words such as modello, parametri, correlazioni,
+reattore, dati, assunzioni, algoritmo, or simulazione as standalone sensitive
+markers. Use confidentiality/IP/project-private phrases such as parametri
+proprietari, correlazioni riservate, proprieta intellettuale, dati sperimentali
+non pubblici, or explicit BlueRev-private markers.
+
 ## 1G-B2-F3-A1 boundary
 
 This document is part of the RouterPolicy contract layer only. It does not add

@@ -1,0 +1,150 @@
+{
+  "milestone": "1G-B2-F3-C2 - Stateless local chat context backend",
+  "start_head": "1c026ac4d6854cff1d1291e4c3002274be85e519",
+  "files_changed": [
+    "backend/app/api/dev_message_route.py",
+    "backend/app/modules/dev_message_route/smoke_adapter.py",
+    "backend/tests/test_dev_local_chat.py",
+    "reports/router_policy/1G-B2-F3-C2/router_policy_stateless_local_chat_context_summary.json",
+    "reports/router_policy/1G-B2-F3-C2/router_policy_stateless_local_chat_context_summary.md",
+    "README.md",
+    "docs/ROUTER_POLICY_DESIGN.md",
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md"
+  ],
+  "endpoint_added": true,
+  "endpoint_path": "POST /api/dev/local-chat",
+  "request_contract": {
+    "message": "required nonblank string, max 12000 chars",
+    "history": "optional list, max 20 turns",
+    "history_turn": "role user|assistant plus nonblank capped content; extra fields forbidden",
+    "run_local_responder": "boolean, default true"
+  },
+  "history_supported": true,
+  "backend_stateless": true,
+  "client_history_untrusted": true,
+  "history_rescanned_server_side": true,
+  "history_filtering_added": true,
+  "history_classifier_reuses_message_route_builder": true,
+  "deterministic_overlay_reused": true,
+  "unknown_sensitivity_history_included_when_no_positive_exclusion_signal": true,
+  "manual_review_required_history_included_when_no_positive_exclusion_signal": true,
+  "positive_exclusion_signals": [
+    "contains_secret_or_credential",
+    "contains_raw_private_or_ip_sensitive_context",
+    "mentions_external_provider_or_upload_intent",
+    "operational/tool/file/browser/terminal/MCP intent",
+    "malformed scan result",
+    "scan failure"
+  ],
+  "max_history_turns": 20,
+  "oversized_history_rejected": true,
+  "current_message_gated": true,
+  "current_message_gate_scope": "existing run_message_route_smoke / RouterPolicy / A3 path before context assembly and responder build",
+  "clean_context_assembly_added": true,
+  "excluded_turns_not_prompted": true,
+  "excluded_turns_not_returned_raw": true,
+  "prior_secret_does_not_poison_future_harmless_turn": true,
+  "prior_secret_not_sent_to_responder": true,
+  "current_secret_blocks_execution": true,
+  "client_safety_labels_ignored_or_rejected": "rejected",
+  "operational_history_excluded": true,
+  "c1_r1_boundary_helpers_reused": true,
+  "single_trace_id_per_request": true,
+  "manual_parse_after_dev_gate": true,
+  "safe_500_preserved": true,
+  "chat_response_projection_uses_safe_cli_result_plus_response_cap": true,
+  "response_truncation_indicator_added": true,
+  "response_char_limit": 4000,
+  "safe_response_contract": "trace_id, audit_ref=null, safe projection, context_filter counts only, no raw excluded content",
+  "detector_language_domain_limit_documented": true,
+  "italian_sensitive_terms_not_hardened_in_c2": true,
+  "bluerev_domain_sensitive_terms_not_hardened_in_c2": true,
+  "overlay_pattern_hardening_deferred": true,
+  "future_external_provider_unlock_precondition_documented": true,
+  "external_provider_routing_not_enabled_by_c2": true,
+  "english_centric_detector_residual_risk": true,
+  "technical_term_overexclusion_residual_risk": true,
+  "history_pair_coherence_residual_risk_documented": true,
+  "no_persistent_memory_added": true,
+  "no_retrieval_added": true,
+  "no_provider_routing_added": true,
+  "no_tool_mcp_browser_terminal_added": true,
+  "no_frontend_added": true,
+  "no_db_conversation_persistence_added": true,
+  "local_responder_existing_seam_used": true,
+  "new_model_caller_added": false,
+  "tests_run": [
+    {
+      "command": "cd backend; .\\.venv\\Scripts\\python -m pytest tests\\test_dev_local_chat.py -q",
+      "result": "18 passed"
+    },
+    {
+      "command": "cd backend; .\\.venv\\Scripts\\python -m pytest tests\\test_dev_message_route_smoke.py -q",
+      "result": "52 passed"
+    },
+    {
+      "command": "cd backend; .\\.venv\\Scripts\\python -m pytest -q",
+      "result": "395 passed"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_message_route_smoke",
+      "result": "84 tests OK"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_hint_bridge_probe",
+      "result": "15 tests OK"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_local_route_probe",
+      "result": "11 tests OK"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_decision_probe",
+      "result": "14 tests OK"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_semantic_validator",
+      "result": "40 tests OK"
+    },
+    {
+      "command": "python -m unittest discover -s tests",
+      "result": "330 tests OK"
+    },
+    {
+      "command": "python -m json.tool reports/router_policy/1G-B2-F3-C2/router_policy_stateless_local_chat_context_summary.json",
+      "result": "valid JSON"
+    }
+  ],
+  "runtime_boundary_check": {
+    "production_chat_approved": false,
+    "frontend_ui_added": false,
+    "persistent_memory_added": false,
+    "retrieval_runtime_added": false,
+    "provider_routing_added": false,
+    "external_provider_calls_added": false,
+    "tool_mcp_browser_terminal_execution_added": false,
+    "file_write_runtime_added": false,
+    "db_conversation_persistence_added": false,
+    "workers_hooks_added": false,
+    "live_qwen_phase_b_exposed": false,
+    "new_local_model_caller_added": false,
+    "bluerev_runtime_behavior_added": false
+  },
+  "known_residual_risks": [
+    "C2 is stateless local chat backend support, not production chat.",
+    "No frontend UI is added by C2.",
+    "No persistent memory is approved.",
+    "No retrieval runtime is approved.",
+    "No provider routing is approved.",
+    "No external provider calls are approved.",
+    "No tool/MCP/browser/terminal execution is approved.",
+    "No BlueRev runtime behavior is approved.",
+    "Client-provided history is untrusted and rescanned, but adversarially fragmented sensitive information across multiple individually-benign turns remains a known residual risk.",
+    "History filtering is per-turn and may leave semantically incomplete context if an assistant turn refers to an excluded user turn.",
+    "Benign unknown_sensitivity/manual_review_required history turns are included unless positive exclusion signals are present; this is intentional to make multi-turn context useful, but still relies on deterministic positive signal detection quality.",
+    "The deterministic history filter reuses the existing Phase A / overlay sensitivity seam. That seam is currently more reliable for English-centric secret/private/provider/upload patterns than for Italian or BlueRev-domain phrasing. Sensitive content phrased in Italian or as project-specific IP may be missed and included as clean context. This is acceptable for C2 local-only dev use but must be addressed before any external/cheap provider routing over transcript/private/project context.",
+    "Future Italian/BlueRev detector hardening must avoid naked technical nouns such as modello, parametri, correlazioni, dati, assunzioni, reattore, or simulazione as standalone exclusion patterns. Hardening should be phrase/intention-based, e.g. parametri proprietari, correlazioni riservate, proprieta intellettuale, dati sperimentali non pubblici, or explicit BlueRev-private markers. Otherwise the detector may over-exclude benign engineering discussion and make multi-turn context useless.",
+    "Over-exclusion is already possible for English technical terms such as token, API key, private key, or provider when discussed conceptually. This conservative behavior is acceptable for C2 but should be evaluated when improving detector precision.",
+    "The endpoint is dev-only and must not be exposed on LAN/internet."
+  ]
+}
