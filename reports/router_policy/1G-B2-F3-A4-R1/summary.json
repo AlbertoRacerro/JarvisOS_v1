@@ -1,0 +1,35 @@
+{
+  "milestone": "A4-R1",
+  "start_head": "a6ca7ee66a18c42212b67a763f214162cb4f9439",
+  "prompt_contract_repaired": true,
+  "exclusive_context_boundary_removed": true,
+  "general_knowledge_allowed": true,
+  "no_false_access_clause_added": true,
+  "no_false_persistence_clause_added": true,
+  "project_fact_assumption_clause_added": true,
+  "session_only_persona_clause_added": true,
+  "internal_policy_language_avoidance_added": true,
+  "runtime_code_files_changed": [
+    "backend/app/modules/dev_message_route/smoke_adapter.py"
+  ],
+  "deterministic_gate_or_router_modified": false,
+  "operational_detector_modified": false,
+  "endpoint_contract_modified": false,
+  "history_filtering_modified": false,
+  "budget_metadata_modified": false,
+  "memory_runtime_added": false,
+  "retrieval_added": false,
+  "provider_routing_added": false,
+  "tool_mcp_browser_terminal_added": false,
+  "frontend_modified": false,
+  "tests_run": "88 passed (78 pre-existing + 10 new A4-R1 prompt-contract tests)",
+  "manual_local_model_smoke": "Not performed in this automated run. Required after commit: (1) gemma4:12b-it-qat: 'che cos'e una pompa?' -> should use general knowledge, not refuse for lack of context. If still refuses, flag as adapter/template/QAT issue, not model quality. (2) qwen3:14b: BlueRev/R203/P101 question -> must not invent project memory; should state assumptions. (3) mistral-small3.2:24b: persona request then technical question -> must not claim persistence ('da ora in poi').",
+  "known_residual_risks": [
+    "A4-R1 is a behavioral instruction, not a deterministic enforcement barrier. A sufficiently disobedient or misaligned model may still fabricate project facts or false persistence claims despite the prompt.",
+    "The public/general vs project-specific boundary is model-side judgment: models may err in both directions (too restrictive or too inventive).",
+    "Preference/persona requests ('chiamami Signore') remain allowed as session-only; the deterministic gate does not intercept them. False persistence risk mitigated by the no-persistence clause, but not eliminated.",
+    "Italian memory-write and document/IP-write intents not yet detected by the operational detector. Deferred to A5-R2.",
+    "Model benchmark comparisons remain invalid until manual smoke with fixed prompt is completed for all candidate models.",
+    "Gemma refusal behavior may be adapter/template/QAT issue rather than model quality; A4-R1 is necessary but may not be sufficient to enable Gemma correctly."
+  ]
+}

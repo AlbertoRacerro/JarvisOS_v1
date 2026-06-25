@@ -9,6 +9,110 @@ from fastapi.testclient import TestClient
 DEV_ENDPOINT = "/api/dev/local-chat"
 
 
+# ---------------------------------------------------------------------------
+# A4-R1 — Prompt contract deterministic tests (no live model call)
+# ---------------------------------------------------------------------------
+
+def _assembled(message: str, history: list[dict] | None = None) -> str:
+    from app.modules.dev_message_route.smoke_adapter import assemble_local_chat_prompt
+    return assemble_local_chat_prompt(clean_history=history or [], message=message)
+
+
+def test_a4r1_exclusive_boundary_removed() -> None:
+    prompt = _assembled("hello")
+    assert "using only the clean conversation context below" not in prompt
+    assert "answer only from" not in prompt.lower()
+    assert "only from the provided" not in prompt.lower()
+    assert "only from the clean" not in prompt.lower()
+
+
+def test_a4r1_general_knowledge_allowed() -> None:
+    prompt = _assembled("hello")
+    lower = prompt.lower()
+    assert "general knowledge" in lower or "general-knowledge" in lower or "own knowledge" in lower
+
+
+def test_a4r1_no_false_access_clause() -> None:
+    prompt = _assembled("hello")
+    lower = prompt.lower()
+    assert "no access to memory" in lower or "you have no access" in lower
+    assert "retrieval" in lower
+    assert "files" in lower
+    assert "tools" in lower
+    assert "external providers" in lower or "providers" in lower
+
+
+def test_a4r1_no_false_persistence_clause() -> None:
+    prompt = _assembled("hello")
+    lower = prompt.lower()
+    assert "never claim you saved" in lower or "never claim" in lower
+    assert any(
+        term in lower
+        for term in ("saved", "stored", "remembered", "persisted", "wrote to memory")
+    )
+
+
+def test_a4r1_project_private_assumption_clause() -> None:
+    prompt = _assembled("hello")
+    lower = prompt.lower()
+    assert any(
+        phrase in lower
+        for phrase in (
+            "project-specific",
+            "domain-specific",
+            "private",
+            "do not invent",
+            "state your assumptions",
+            "ask for the missing",
+        )
+    )
+
+
+def test_a4r1_session_only_persona_clause() -> None:
+    prompt = _assembled("hello")
+    lower = prompt.lower()
+    assert any(
+        phrase in lower
+        for phrase in (
+            "from now on",
+            "da ora in poi",
+            "persistence",
+            "this conversation",
+            "persona",
+            "formality",
+        )
+    )
+
+
+def test_a4r1_internal_policy_language_not_exposed() -> None:
+    prompt = _assembled("hello")
+    assert "clean context" not in prompt
+    assert "policy gate" not in prompt
+    assert "filtered history" not in prompt
+
+
+def test_a4r1_message_still_present() -> None:
+    msg = "spiegami cosa è una pompa"
+    prompt = _assembled(msg)
+    assert msg in prompt
+
+
+def test_a4r1_history_still_rendered() -> None:
+    history = [
+        {"role": "user", "content": "ciao"},
+        {"role": "assistant", "content": "Ciao!"},
+    ]
+    prompt = _assembled("seconda domanda", history=history)
+    assert "User: ciao" in prompt
+    assert "Assistant: Ciao!" in prompt
+    assert "seconda domanda" in prompt
+
+
+def test_a4r1_empty_history_marker() -> None:
+    prompt = _assembled("hello", history=[])
+    assert "(none)" in prompt
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch) -> Iterator[TestClient]:
     monkeypatch.setenv("JARVISOS_DATA_ROOT", str(tmp_path / "JarvisOS"))
