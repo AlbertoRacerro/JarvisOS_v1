@@ -197,6 +197,27 @@ OPERATIONAL_INTENT_PATTERNS = {
         r"\bremember\s+this\b",
         r"\badd\s+to\s+memory\b",
         r"\bmemory\s+write\b",
+        r"\bsalv\w*\s+in\s+memoria\b",
+        r"\bmemorizza(?:lo|la|li|le|mi|ci|te|ti)?\b(?:\s+(?:che|di|quest\w+|il|lo|la|i|gli|le))?",
+        r"\bricorda(?:ti)?\s+(?:che|di|quest\w+|il|lo|la|i|gli|le)\b",
+        r"\btieni(?:lo)?\s+a\s+mente\b",
+        r"\bprendi\s+nota\s+di\b",
+        r"\bannota\s+(?:quest\w+|il|lo|la|i|gli|le)\b",
+        r"\bnon\s+dimenticare\s+che\b",
+        r"\bsalva\s+(?:quest\w+\s+)?preferenz\w*\b",
+    ],
+    "document_project_write": [
+        r"\bmetti\s+nel\s+brevetto\b",
+        r"\baggiungi\s+al\s+brevetto\b",
+        r"\bscrivi\s+(?:nel|nello|nella|nei|negli|nelle|sul|sullo|sulla|sui|sugli|sulle)\s+(?:documento|file|brevetto|progetto|relazione)\b",
+        r"\baggiorna\s+(?:il|lo|la|i|gli|le)\s+(?:documento|file|progetto)\b",
+        r"\bsalva\s+nel\s+progetto\b",
+        r"\bmetti\s+agli\s+atti\b",
+        r"\bverbalizza\s+(?:quest\w+|il|lo|la|i|gli|le)\b",
+        r"\binserisci\b.{0,40}\b(?:nel|nello|nella|nei|negli|nelle|al|allo|alla|ai|agli|alle)\s+(?:documento|file|brevetto|progetto|relazione)\b",
+    ],
+    "credential_like_save": [
+        r"\b(?:salva|memorizza(?:lo|la|li|le|mi|ci|te|ti)?|ricorda(?:ti)?|conserva)\b.{0,25}\b(?:codice(?:\s+di\s+accesso)?|pin|token|password|chiave|credenziale)\b",
     ],
     "file_retrieval": [
         r"\bread\s+file\b",
@@ -454,6 +475,25 @@ def _apply_operational_intent_overlay(input_obj: dict[str, Any], operational: di
         action_hint["environment_type"] = "memory_store"
         action_hint["state_scope"] = "memory"
         _append_hard_reason(phase_a, "manual_review_required")
+
+    if "document_project_write" in categories:
+        action_hint["modifies_state"] = True
+        action_hint["needs_file_write"] = True
+        action_hint["requested_action_type"] = "file_write"
+        action_hint["environment_type"] = "codebase"
+        action_hint["state_scope"] = "repo"
+        _append_hard_reason(phase_a, "manual_review_required")
+
+    if "credential_like_save" in categories:
+        phase_a["contains_secret_or_credential"] = True
+        phase_a["sensitivity_bucket_proposal"] = "secret"
+        action_hint["modifies_state"] = True
+        action_hint["needs_memory_write"] = True
+        action_hint["requested_action_type"] = "memory_write"
+        action_hint["environment_type"] = "memory_store"
+        action_hint["state_scope"] = "memory"
+        _append_hard_reason(phase_a, "secret_or_credential")
+        _append_hard_reason(phase_a, "redaction_required")
 
     if "file_retrieval" in categories:
         router_hint["needs_file_context"] = True

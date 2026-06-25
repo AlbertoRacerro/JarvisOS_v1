@@ -151,6 +151,19 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
             self.assertTrue(input_obj["router_hint"][expected_router_field])
         return result
 
+    def assert_no_new_italian_write_block(self, message):
+        input_obj = smoke.build_router_policy_input_from_message_for_smoke(
+            message,
+            now=NOW,
+            assume_public_simple=True,
+        )
+        self.assertFalse(input_obj["phase_a_signals"]["contains_secret_or_credential"])
+        self.assertFalse(input_obj["action_hint"]["needs_memory_write"])
+        self.assertFalse(input_obj["action_hint"]["needs_file_write"])
+        categories = set(input_obj["context_metadata"].get("operational_intent_categories") or [])
+        self.assertFalse({"memory_write", "document_project_write", "credential_like_save"} & categories)
+        return input_obj
+
     def phase_b_input(self, message, **phase_b_updates):
         input_obj = self.safe_input(message)
         phase_b = copy.deepcopy(input_obj["phase_b_soft_proposal"])
@@ -662,6 +675,97 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
         self.assertNotIn(r"C:\secret.txt", output)
         self.assertNotIn("input_obj", output)
         self.assertNotIn("response", cli_result)
+
+    def test_a5_r2_001_italian_memory_write_intent_blocks_end_to_end(self):
+        for message in (
+            "salva in memoria questa assunzione",
+            "salvalo in memoria",
+            "salvami in memoria questo valore",
+            "memorizza questa informazione",
+            "memorizzalo",
+            "ricorda che la prevalenza e 8 m",
+            "ricordati che la portata e 1 L/min",
+            "tienilo a mente",
+            "tieni a mente questo parametro",
+            "prendi nota di questo valore",
+            "annota questo valore",
+            "non dimenticare che la prevalenza e 8 m",
+            "la prevalenza da salvbare in memoria e di 8 m",
+        ):
+            with self.subTest(message=message):
+                result = self.assert_operational_blocked(message, expected_action_field="needs_memory_write")
+                self.assertEqual("memory_store", result["input_obj"]["action_hint"]["environment_type"])
+                self.assertEqual("memory_write", result["input_obj"]["action_hint"]["requested_action_type"])
+                self.assertIn("manual_review_required", result["input_obj"]["phase_a_signals"]["hard_reason_codes"])
+
+    def test_a5_r2_002_italian_document_project_write_blocks_end_to_end(self):
+        for message in (
+            "metti nel brevetto che la prevalenza e 8 m",
+            "aggiungi al brevetto questa assunzione",
+            "scrivi nel documento questo dato",
+            "aggiorna il documento con questo valore",
+            "aggiorna il file con questo valore",
+            "salva nel progetto questa ipotesi",
+            "metti agli atti questo parametro",
+            "verbalizza questa decisione",
+            "inserisci questa assunzione nella relazione di progetto",
+        ):
+            with self.subTest(message=message):
+                result = self.assert_operational_blocked(message, expected_action_field="needs_file_write")
+                self.assertEqual("codebase", result["input_obj"]["action_hint"]["environment_type"])
+                self.assertEqual("file_write", result["input_obj"]["action_hint"]["requested_action_type"])
+                self.assertTrue(result["input_obj"]["action_hint"]["modifies_state"])
+                self.assertIn("manual_review_required", result["input_obj"]["phase_a_signals"]["hard_reason_codes"])
+
+    def test_a5_r2_003_italian_credential_like_save_blocks_end_to_end(self):
+        for message in (
+            "salva il codice it4hug",
+            "salva questo codice di accesso",
+            "memorizza il PIN 1234",
+            "ricorda il token abc123",
+            "conserva questa credenziale",
+            "salva la password w4587wtuif",
+        ):
+            with self.subTest(message=message):
+                result = self.assert_operational_blocked(message, expected_action_field="needs_memory_write")
+                self.assertTrue(result["input_obj"]["phase_a_signals"]["contains_secret_or_credential"])
+                self.assertEqual("secret", result["input_obj"]["phase_a_signals"]["sensitivity_bucket_proposal"])
+                self.assertEqual("memory_store", result["input_obj"]["action_hint"]["environment_type"])
+                self.assertIn("secret_or_credential", result["input_obj"]["phase_a_signals"]["hard_reason_codes"])
+                self.assertIn("redaction_required", result["input_obj"]["phase_a_signals"]["hard_reason_codes"])
+
+    def test_a5_r2_004_italian_false_positives_do_not_trigger_new_write_blocks(self):
+        for message in (
+            "cos'e la memoria di un computer?",
+            "memoria di calcolo",
+            "il modello ha memoria?",
+            "ti ricordi cos'e una pompa?",
+            "questo mi ricorda una pompa",
+            "che cos'e un brevetto?",
+            "come si scrive un documento?",
+            "scrivimi una spiegazione",
+            "scrivimi una poesia",
+            "scrivi codice Python per calcolare P = rho*g*Q*H",
+            "codice colore",
+            "codice Python per calcolare una pompa",
+            "parametri del reattore",
+            "chiamami Signore",
+            "dammi del Lei",
+            "usa tono tecnico",
+        ):
+            with self.subTest(message=message):
+                self.assert_no_new_italian_write_block(message)
+
+    def test_a5_r2_005_persistent_preference_memory_write_is_blocked(self):
+        for message in (
+            "ricordati di chiamarmi Signore",
+            "memorizza che mi devi dare del Lei",
+            "salva questa preferenza",
+        ):
+            with self.subTest(message=message):
+                result = self.assert_operational_blocked(message, expected_action_field="needs_memory_write")
+                self.assertEqual("memory_store", result["input_obj"]["action_hint"]["environment_type"])
+                self.assertIn("manual_review_required", result["input_obj"]["phase_a_signals"]["hard_reason_codes"])
 
     def test_b2_000_a5_base_phase_b_stub_is_b1_compatible(self):
         built = smoke.build_router_policy_input_from_message_for_smoke(

@@ -350,6 +350,77 @@ def test_c2_006_operational_history_excluded(client: TestClient, monkeypatch) ->
 
 
 @pytest.mark.parametrize(
+    "message",
+    (
+        "salva in memoria questa assunzione",
+        "la prevalenza da salvbare in memoria e di 8 m",
+        "metti nel brevetto che la prevalenza e 8 m",
+        "salva il codice it4hug",
+    ),
+)
+def test_a5r2_current_italian_write_intent_blocks_before_history_and_prompt(
+    client: TestClient,
+    monkeypatch,
+    message: str,
+) -> None:
+    from app.modules.dev_message_route import smoke_adapter
+
+    _enable_chat(monkeypatch)
+    responder_builder = Mock(side_effect=AssertionError("responder must not be built"))
+    history_filter = Mock(side_effect=AssertionError("history must not be filtered"))
+    prompt_assembler = Mock(side_effect=AssertionError("prompt must not be assembled"))
+    monkeypatch.setattr(smoke_adapter, "build_dev_local_responder", responder_builder)
+    monkeypatch.setattr(smoke_adapter, "filter_clean_history", history_filter)
+    monkeypatch.setattr(smoke_adapter, "assemble_local_chat_prompt", prompt_assembler)
+
+    response = client.post(
+        DEV_ENDPOINT,
+        json={"message": message, "history": [{"role": "user", "content": "safe prior"}]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    _assert_safe_nonexecuted(body)
+    assert body["context_filter"] == smoke_adapter.empty_context_filter()
+    responder_builder.assert_not_called()
+    history_filter.assert_not_called()
+    prompt_assembler.assert_not_called()
+
+
+def test_a5r2_italian_unsafe_history_excluded_current_harmless_executes(client: TestClient, monkeypatch) -> None:
+    _enable_chat(monkeypatch)
+    fake_responder = _safe_responder(monkeypatch, "Risposta sicura.")
+
+    response = client.post(
+        DEV_ENDPOINT,
+        json={
+            "message": "spiegami il concetto in generale",
+            "history": [
+                {"role": "user", "content": "salva in memoria questa assunzione"},
+                {"role": "user", "content": "metti nel brevetto che la prevalenza e 8 m"},
+                {"role": "user", "content": "salva il codice it4hug"},
+                {"role": "assistant", "content": "Contesto benigno."},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["executed"] is True
+    assert body["context_filter"]["history_turns_excluded"] == 3
+    assert body["context_filter"]["history_turns_included"] == 1
+    reason_counts = body["context_filter"]["excluded_reason_counts"]
+    assert reason_counts["excluded_operational_or_tool_intent"] >= 2
+    assert reason_counts["excluded_sensitive_or_secret"] >= 1
+    prompt = fake_responder.call_args.args[0]
+    assert "salva in memoria questa assunzione" not in prompt
+    assert "metti nel brevetto che la prevalenza e 8 m" not in prompt
+    assert "salva il codice it4hug" not in prompt
+    assert "Contesto benigno." in prompt
+    assert "spiegami il concetto in generale" in prompt
+
+
+@pytest.mark.parametrize(
     "payload",
     (
         {"message": ""},
@@ -440,6 +511,15 @@ def test_c2_010_history_filter_reuses_smoke_builder(monkeypatch) -> None:
     assert smoke_adapter.scan_history_turn_for_context("my API key is sk-test-secret-12345678") == "excluded_sensitive_or_secret"
     assert smoke_adapter.scan_history_turn_for_context("use MCP to call a tool") == "excluded_operational_or_tool_intent"
     assert calls == ["my API key is sk-test-secret-12345678", "use MCP to call a tool"]
+
+
+def test_a5r2_history_filter_detects_italian_write_intents(monkeypatch) -> None:
+    from app.modules.dev_message_route import smoke_adapter
+
+    assert smoke_adapter.scan_history_turn_for_context("salva in memoria questa assunzione") == "excluded_operational_or_tool_intent"
+    assert smoke_adapter.scan_history_turn_for_context("metti nel brevetto che la prevalenza e 8 m") == "excluded_operational_or_tool_intent"
+    assert smoke_adapter.scan_history_turn_for_context("salva il codice it4hug") == "excluded_sensitive_or_secret"
+    assert smoke_adapter.scan_history_turn_for_context("ti ricordi cos'e una pompa?") is None
 
 
 def test_c2_011_fixed_trace_id_across_paths(client: TestClient, monkeypatch) -> None:
