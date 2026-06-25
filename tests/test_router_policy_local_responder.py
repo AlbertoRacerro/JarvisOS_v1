@@ -254,6 +254,88 @@ class RouterPolicyLocalResponderTests(unittest.TestCase):
             short_result,
         )
 
+    def test_a4_r2_r1_001_timing_metadata_omitted_when_raw_timing_missing(self):
+        client = RecordingClient(response={"response": "ok"})
+        result = responder.call_local_ollama_generate_with_metadata(
+            "prompt",
+            model="gemma3:4b",
+            endpoint=responder.DEFAULT_ENDPOINT,
+            timeout_s=3,
+            temperature=0.0,
+            max_prompt_chars=100,
+            max_output_chars=100,
+            client=client,
+        )
+        self.assertNotIn("local_responder_timing", result)
+
+    def test_a4_r2_r1_002_timing_metadata_present_when_raw_timing_present(self):
+        client = RecordingClient(
+            response={
+                "response": "ok",
+                "total_duration": 10,
+                "load_duration": 4,
+                "prompt_eval_count": 3,
+                "prompt_eval_duration": 2,
+                "eval_count": 5,
+                "eval_duration": 6,
+            }
+        )
+        result = responder.call_local_ollama_generate_with_metadata(
+            "prompt",
+            model="gemma3:4b",
+            endpoint=responder.DEFAULT_ENDPOINT,
+            timeout_s=3,
+            temperature=0.0,
+            max_prompt_chars=100,
+            max_output_chars=100,
+            client=client,
+        )
+        self.assertEqual(
+            {
+                "total_duration_ns": 10,
+                "load_duration_ns": 4,
+                "prompt_eval_count": 3,
+                "prompt_eval_duration_ns": 2,
+                "eval_count": 5,
+                "eval_duration_ns": 6,
+            },
+            result["local_responder_timing"],
+        )
+
+    def test_a4_r2_r1_003_timing_presence_uses_key_presence_not_truthiness(self):
+        client = RecordingClient(
+            response={
+                "response": "ok",
+                "total_duration": 0,
+                "load_duration": 0,
+                "prompt_eval_count": 0,
+                "prompt_eval_duration": 0,
+                "eval_count": 0,
+                "eval_duration": 0,
+            }
+        )
+        result = responder.call_local_ollama_generate_with_metadata(
+            "prompt",
+            model="gemma3:4b",
+            endpoint=responder.DEFAULT_ENDPOINT,
+            timeout_s=3,
+            temperature=0.0,
+            max_prompt_chars=100,
+            max_output_chars=100,
+            client=client,
+        )
+        self.assertEqual(
+            {
+                "total_duration_ns": 0,
+                "load_duration_ns": 0,
+                "prompt_eval_count": 0,
+                "prompt_eval_duration_ns": 0,
+                "eval_count": 0,
+                "eval_duration_ns": 0,
+            },
+            result["local_responder_timing"],
+        )
+
     def test_a4_004_deterministic_bounded_payload(self):
         client = RecordingClient()
         text = responder.call_local_ollama_generate(

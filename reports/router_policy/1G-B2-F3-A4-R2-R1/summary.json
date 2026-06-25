@@ -1,0 +1,30 @@
+{
+  "milestone": "A4-R2-R1",
+  "base_commit": "c7c334856e2a53d866baa3f76d21a8e460fb7e76",
+  "root_local_responder_tests_fixed": true,
+  "backend_tests_still_pass": true,
+  "local_responder_timing_omitted_when_raw_timing_missing": true,
+  "local_responder_timing_present_when_raw_timing_present": true,
+  "timing_presence_uses_key_presence_not_truthiness": true,
+  "zero_timing_values_preserved": true,
+  "contradictory_backend_test_updated": true,
+  "backend_timing_preserved": true,
+  "keep_alive_behavior_changed": false,
+  "num_predict_behavior_changed": false,
+  "streaming_added": false,
+  "frontend_modified": false,
+  "deterministic_gate_or_router_modified": false,
+  "operational_detector_modified": false,
+  "prompt_contract_modified": false,
+  "history_filtering_modified": false,
+  "memory_runtime_added": false,
+  "retrieval_added": false,
+  "provider_routing_added": false,
+  "tool_mcp_browser_terminal_added": false,
+  "known_residual_risks": [
+    "A4-R2 timing metadata is diagnostic only.",
+    "A4-R2-R1 does not change live latency behavior.",
+    "A4-R1a prompt wording remains separate and must not be fixed in this milestone.",
+    "A5-R2 Italian detector hardening remains separate and must not be fixed in this milestone."
+  ]
+}

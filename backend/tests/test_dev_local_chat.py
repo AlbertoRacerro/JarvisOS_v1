@@ -696,14 +696,7 @@ def test_a4r2_generic_adapter_does_not_send_keep_alive_or_num_predict_by_default
     assert payload["stream"] is False
     assert "keep_alive" not in payload
     assert payload["options"] == {"temperature": 0}
-    assert result["local_responder_timing"] == {
-        "total_duration_ns": None,
-        "load_duration_ns": None,
-        "prompt_eval_count": None,
-        "prompt_eval_duration_ns": None,
-        "eval_count": None,
-        "eval_duration_ns": None,
-    }
+    assert "local_responder_timing" not in result
 
 
 def test_a4r2_generic_adapter_sends_keep_alive_and_positive_num_predict_when_provided() -> None:

@@ -18,6 +18,14 @@ from typing import Any
 DEFAULT_MODEL = "gemma3:4b"
 DEFAULT_ENDPOINT = "http://127.0.0.1:11434/api/generate"
 LOCALHOST_HOSTS = {"127.0.0.1", "localhost", "::1"}
+TIMING_KEYS = (
+    "total_duration",
+    "load_duration",
+    "prompt_eval_count",
+    "prompt_eval_duration",
+    "eval_count",
+    "eval_duration",
+)
 
 
 class LocalResponderError(Exception):
@@ -127,6 +135,10 @@ def _extract_timing_metadata(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _raw_has_timing_metadata(raw: dict[str, Any]) -> bool:
+    return any(key in raw for key in TIMING_KEYS)
+
+
 def _stdlib_json_post_client(endpoint: str, payload: dict, timeout_s: float) -> dict:
     encoded = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
@@ -192,14 +204,16 @@ def _call_local_ollama_generate_result(
     if not isinstance(response_text, str):
         raise LocalResponderResponseError("localhost Ollama response missing string response")
     bounded = response_text[:max_output_chars]
-    return {
+    result = {
         "response": bounded,
         "response_truncated": len(response_text) > max_output_chars,
         "response_char_count_returned": len(bounded),
         "response_char_limit": max_output_chars,
         "response_limit_source": "local_responder_max_output_chars",
-        "local_responder_timing": _extract_timing_metadata(raw),
     }
+    if _raw_has_timing_metadata(raw):
+        result["local_responder_timing"] = _extract_timing_metadata(raw)
+    return result
 
 
 def call_local_ollama_generate(
