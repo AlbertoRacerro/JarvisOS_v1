@@ -56,6 +56,38 @@ def _safe_responder(monkeypatch, response: str = "local answer") -> Mock:
     return fake_responder
 
 
+def _safe_local_decision() -> dict[str, object]:
+    return {
+        "route_action": "answer_local",
+        "route_tier": "LOCAL_FAST",
+        "provider_candidate": "local:gemma",
+        "response_allowed_now": True,
+        "external_allowed": False,
+        "provider_call_allowed_now": False,
+        "external_network_allowed_now": False,
+        "tool_execution_allowed_now": False,
+        "state_change_allowed_now": False,
+        "allowed_execution_mode": "answer_only",
+        "modifies_state": False,
+        "side_effect_level": "none",
+        "environment_type": "chat",
+    }
+
+
+def _gate_result(*, reason: str = "local_responder_missing", decision: dict[str, object] | None = None) -> dict[str, object]:
+    return {
+        "executed": False,
+        "reason": reason,
+        "response": None,
+        "decision": _safe_local_decision() if decision is None else decision,
+        "input_source": "dev_message_route_endpoint",
+        "assume_public_simple_used": True,
+        "use_phase_b_hints_used": True,
+        "phase_b_source_kind": "stub",
+        "phase_b_source_used": False,
+    }
+
+
 def _assert_safe_nonexecuted(body: dict[str, object]) -> None:
     assert isinstance(body["trace_id"], str)
     assert body["audit_ref"] is None
@@ -388,3 +420,142 @@ def test_c2_r1_prompt_budget_selects_recent_clean_history(client: TestClient, mo
     prompt = fake_responder.call_args.args[0]
     assert recent in prompt
     assert len(prompt) <= 32000
+
+
+def test_c2_r2_001_benign_current_message_authorizes_by_positive_predicate(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    from app.modules.dev_message_route import smoke_adapter
+
+    _enable_chat(monkeypatch)
+    fake_responder = _safe_responder(monkeypatch, "ok")
+    monkeypatch.setattr(smoke_adapter, "run_message_route_smoke", Mock(return_value=_gate_result()))
+
+    response = client.post(DEV_ENDPOINT, json={"message": "hello"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["executed"] is True
+    assert body["reason"] == "local_answer"
+    fake_responder.assert_called_once()
+
+
+def test_c2_r2_002_unsafe_current_message_does_not_authorize(client: TestClient, monkeypatch) -> None:
+    from app.modules.dev_message_route import smoke_adapter
+
+    _enable_chat(monkeypatch)
+    responder_builder = Mock(side_effect=AssertionError("responder must not be built"))
+    history_filter = Mock(side_effect=AssertionError("history must not be filtered"))
+    prompt_assembler = Mock(side_effect=AssertionError("prompt must not be assembled"))
+    unsafe = _safe_local_decision()
+    unsafe["tool_execution_allowed_now"] = True
+    monkeypatch.setattr(smoke_adapter, "build_dev_local_responder", responder_builder)
+    monkeypatch.setattr(smoke_adapter, "filter_clean_history", history_filter)
+    monkeypatch.setattr(smoke_adapter, "assemble_local_chat_prompt", prompt_assembler)
+    monkeypatch.setattr(smoke_adapter, "run_message_route_smoke", Mock(return_value=_gate_result(decision=unsafe)))
+
+    response = client.post(
+        DEV_ENDPOINT,
+        json={"message": "hello", "history": [{"role": "user", "content": "safe prior"}]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    _assert_safe_nonexecuted(body)
+    assert body["context_filter"] == smoke_adapter.empty_context_filter()
+    responder_builder.assert_not_called()
+    history_filter.assert_not_called()
+    prompt_assembler.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "gate",
+    (
+        {"executed": False, "reason": "local_responder_missing", "response": None},
+        {"executed": False, "reason": "local_responder_missing", "response": None, "decision": None},
+        {
+            "executed": False,
+            "reason": "local_responder_missing",
+            "response": None,
+            "decision": {"route_action": "answer_local"},
+        },
+    ),
+)
+def test_c2_r2_003_missing_or_malformed_decision_fails_closed(
+    client: TestClient,
+    monkeypatch,
+    gate: dict[str, object],
+) -> None:
+    from app.modules.dev_message_route import smoke_adapter
+
+    _enable_chat(monkeypatch)
+    responder_builder = Mock(side_effect=AssertionError("responder must not be built"))
+    prompt_assembler = Mock(side_effect=AssertionError("prompt must not be assembled"))
+    monkeypatch.setattr(smoke_adapter, "build_dev_local_responder", responder_builder)
+    monkeypatch.setattr(smoke_adapter, "assemble_local_chat_prompt", prompt_assembler)
+    monkeypatch.setattr(smoke_adapter, "run_message_route_smoke", Mock(return_value=gate))
+
+    response = client.post(DEV_ENDPOINT, json={"message": "hello"})
+
+    assert response.status_code == 200
+    body = response.json()
+    _assert_safe_nonexecuted(body)
+    assert body["reason"] == "local_responder_missing"
+    assert body["context_filter"] == smoke_adapter.empty_context_filter()
+    responder_builder.assert_not_called()
+    prompt_assembler.assert_not_called()
+
+
+def test_c2_r2_004_unexpected_reason_with_safe_decision_still_authorizes(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    from app.modules.dev_message_route import smoke_adapter
+
+    _enable_chat(monkeypatch)
+    fake_responder = _safe_responder(monkeypatch, "ok")
+    monkeypatch.setattr(
+        smoke_adapter,
+        "run_message_route_smoke",
+        Mock(return_value=_gate_result(reason="renamed_missing_responder_reason")),
+    )
+
+    response = client.post(DEV_ENDPOINT, json={"message": "hello"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["executed"] is True
+    assert body["reason"] == "local_answer"
+    fake_responder.assert_called_once()
+
+
+def test_c2_r2_005_local_chat_uses_imported_safe_local_predicate(client: TestClient, monkeypatch) -> None:
+    from app.modules.dev_message_route import smoke_adapter
+
+    _enable_chat(monkeypatch)
+    responder_builder = Mock(return_value=Mock(return_value="ok"))
+    monkeypatch.setattr(smoke_adapter, "build_dev_local_responder", responder_builder)
+    monkeypatch.setattr(smoke_adapter, "run_message_route_smoke", Mock(return_value=_gate_result()))
+    monkeypatch.setattr(smoke_adapter, "is_safe_local_execution", Mock(return_value=False))
+
+    blocked = client.post(DEV_ENDPOINT, json={"message": "hello"})
+
+    assert blocked.status_code == 200
+    assert blocked.json()["executed"] is False
+    responder_builder.assert_not_called()
+
+    monkeypatch.setattr(
+        smoke_adapter,
+        "run_message_route_smoke",
+        Mock(return_value=_gate_result(reason="renamed_missing_responder_reason")),
+    )
+    monkeypatch.setattr(smoke_adapter, "is_safe_local_execution", Mock(return_value=True))
+    responder_builder = Mock(return_value=Mock(return_value="ok"))
+    monkeypatch.setattr(smoke_adapter, "build_dev_local_responder", responder_builder)
+
+    authorized = client.post(DEV_ENDPOINT, json={"message": "hello"})
+
+    assert authorized.status_code == 200
+    assert authorized.json()["executed"] is True
+    responder_builder.assert_called_once()

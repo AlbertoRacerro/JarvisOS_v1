@@ -263,4 +263,11 @@ context window or long-term memory. `response_truncated=false` means
 JarvisOS/local responder did not slice the returned response; it does not
 guarantee the model answer is semantically complete.
 
+`1G-B2-F3-C2-R2` replaces the local-chat authorization dependency on the
+diagnostic `local_responder_missing` reason with the public safe-local predicate
+`is_safe_local_execution(decision)`, the same predicate used by the local-route
+smoke path. `local_responder_missing` remains diagnostic only. Local-chat still
+uses the existing A5/A3 message-route gate for the current user message, then
+calls A4 directly only after positive safe-local authorization.
+
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

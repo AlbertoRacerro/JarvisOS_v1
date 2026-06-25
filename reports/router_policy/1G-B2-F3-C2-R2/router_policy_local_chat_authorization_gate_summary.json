@@ -1,0 +1,81 @@
+{
+  "milestone": "1G-B2-F3-C2-R2 - Explicit local-chat authorization gate",
+  "start_head": "d513b40ea0ab5f9e5e4e17e791bedd9749365184",
+  "files_changed": [
+    "README.md",
+    "backend/app/modules/dev_message_route/smoke_adapter.py",
+    "backend/tests/test_dev_local_chat.py",
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md",
+    "docs/ROUTER_POLICY_DESIGN.md",
+    "reports/router_policy/1G-B2-F3-C2-R2/router_policy_local_chat_authorization_gate_summary.json",
+    "reports/router_policy/1G-B2-F3-C2-R2/router_policy_local_chat_authorization_gate_summary.md",
+    "scripts/router_policy_local_route_probe.py",
+    "tests/test_router_policy_local_route_probe.py"
+  ],
+  "local_route_positive_predicate_promoted": true,
+  "public_predicate_name": "is_safe_local_execution",
+  "private_alias_preserved": true,
+  "local_chat_uses_positive_predicate": true,
+  "local_chat_authorization_uses_reason_string": false,
+  "local_responder_missing_treated_as_diagnostic_only": true,
+  "missing_decision_fails_closed": true,
+  "malformed_decision_fails_closed": true,
+  "unexpected_reason_with_safe_decision_authorizes": true,
+  "unsafe_decision_blocks_a4": true,
+  "a4_direct_call_before_authorization": false,
+  "execution_split_documented": true,
+  "current_message_authorized_by_a5_a3": true,
+  "assembled_prompt_executed_by_a4_direct_after_authorization": true,
+  "frontend_added": false,
+  "persistent_memory_added": false,
+  "retrieval_added": false,
+  "provider_routing_added": false,
+  "external_provider_calls_added": false,
+  "tool_mcp_browser_terminal_added": false,
+  "db_conversation_persistence_added": false,
+  "a4_modified": false,
+  "real_ollama_calls_in_tests": false,
+  "tests_run": [
+    {
+      "command": "git status --short",
+      "result": "pass; clean at start"
+    },
+    {
+      "command": "git merge-base --is-ancestor d513b40ea0ab5f9e5e4e17e791bedd9749365184 HEAD",
+      "result": "pass"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_local_route_probe",
+      "result": "pass; 12 tests"
+    },
+    {
+      "command": "cd backend; .\\.venv\\Scripts\\python -m pytest tests\\test_dev_local_chat.py -q",
+      "result": "pass; 26 tests"
+    },
+    {
+      "command": "cd backend; .\\.venv\\Scripts\\python -m pytest tests\\test_dev_message_route_smoke.py -q",
+      "result": "pass; 52 tests"
+    },
+    {
+      "command": "cd backend; .\\.venv\\Scripts\\python -m pytest -q",
+      "result": "pass; 403 tests"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_local_responder",
+      "result": "pass; 20 tests"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_message_route_smoke",
+      "result": "pass; 84 tests"
+    },
+    {
+      "command": "python -m unittest discover -s tests",
+      "result": "pass; 338 tests"
+    }
+  ],
+  "known_residual_risks": [
+    "The dev local-chat endpoint remains smoke/dev-only and gated by environment flags.",
+    "Positive safe-local authorization does not make model output semantically complete or production-safe.",
+    "Local-chat history filtering remains deterministic smoke filtering, not persistent memory or retrieval."
+  ]
+}

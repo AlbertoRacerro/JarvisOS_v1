@@ -27,7 +27,7 @@ SAFE_LOCAL_ROUTE_ACTIONS = {"answer_local", "route_local"}
 SAFE_LOCAL_PROVIDERS = {"local:gemma", "local:qwen"}
 
 
-def _is_safe_local_execution(decision: dict) -> bool:
+def is_safe_local_execution(decision: dict) -> bool:
     """Return true only for validator-valid, no-side-effect LOCAL_FAST answers."""
 
     return all(
@@ -49,6 +49,10 @@ def _is_safe_local_execution(decision: dict) -> bool:
     )
 
 
+def _is_safe_local_execution(decision: dict) -> bool:
+    return is_safe_local_execution(decision)
+
+
 def run_local_route(
     input_obj: dict,
     *,
@@ -68,7 +72,7 @@ def run_local_route(
             "violations": violations,
         }
 
-    if not _is_safe_local_execution(decision):
+    if not is_safe_local_execution(decision):
         return {
             "decision": decision,
             "executed": False,

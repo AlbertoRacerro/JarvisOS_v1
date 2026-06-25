@@ -76,6 +76,7 @@ class RouterPolicyLocalRouteProbeTests(unittest.TestCase):
         responder = Mock(return_value="mock local response")
         result = local_route.run_local_route(input_obj, responder=responder, now=NOW)
         decision = result["decision"]
+        self.assertTrue(local_route.is_safe_local_execution(decision))
         self.assertTrue(local_route._is_safe_local_execution(decision))
         responder.assert_called_once_with(input_obj["message_text"])
         self.assertTrue(result["executed"])
@@ -182,6 +183,16 @@ class RouterPolicyLocalRouteProbeTests(unittest.TestCase):
         result = self.run_with_decision(self.base_input(), decision, responder=responder)
         self.assert_no_execution(result, responder)
         self.assertEqual("not_safe_local_route", result["reason"])
+
+    def test_c2_r2_public_safe_local_predicate_preserves_private_alias(self):
+        safe = self.safe_decision()
+        unsafe = self.safe_decision()
+        unsafe["tool_execution_allowed_now"] = True
+
+        self.assertTrue(local_route.is_safe_local_execution(safe))
+        self.assertEqual(local_route.is_safe_local_execution(safe), local_route._is_safe_local_execution(safe))
+        self.assertFalse(local_route.is_safe_local_execution(unsafe))
+        self.assertEqual(local_route.is_safe_local_execution(unsafe), local_route._is_safe_local_execution(unsafe))
 
 
 if __name__ == "__main__":

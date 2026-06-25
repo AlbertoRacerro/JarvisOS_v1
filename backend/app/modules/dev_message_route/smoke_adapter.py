@@ -18,7 +18,11 @@ SCRIPTS_DIR = REPO_ROOT / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-from router_policy_local_responder import build_local_responder, call_local_ollama_generate_with_metadata  # noqa: E402
+from router_policy_local_responder import (  # noqa: E402
+    build_local_responder,
+    call_local_ollama_generate_with_metadata,
+)
+from router_policy_local_route_probe import is_safe_local_execution  # noqa: E402
 from router_policy_message_route_smoke import (  # noqa: E402
     MAX_MESSAGE_CHARS,
     _safe_cli_result,
@@ -296,6 +300,30 @@ def select_prompt_history_within_budget(clean_history: list[dict[str, str]], mes
     return selected, omitted
 
 
+def authorize_current_message_for_local_chat(message: str) -> tuple[bool, dict[str, Any]]:
+    current_gate = run_message_route_smoke(
+        message,
+        responder=None,
+        now=utc_now_iso(),
+        assume_public_simple=_truthy_env(ASSUME_PUBLIC_ENV),
+        use_phase_b_hints=True,
+        phase_b_source_kind="stub",
+    )
+    if not isinstance(current_gate, dict):
+        return False, _smoke_result(
+            executed=False,
+            reason="current_message_gate_invalid",
+            assume_public_simple_used=_truthy_env(ASSUME_PUBLIC_ENV),
+        )
+
+    decision = current_gate.get("decision")
+    try:
+        authorized = isinstance(decision, dict) and is_safe_local_execution(decision)
+    except Exception:
+        authorized = False
+    return authorized, current_gate
+
+
 def add_chat_response_metadata(body: dict[str, Any], raw_result: dict[str, Any], responder: Any) -> dict[str, Any]:
     if body.get("executed") is not True:
         return body
@@ -355,15 +383,8 @@ def run_dev_local_chat(
         body["context_filter"] = empty_context_filter()
         return 200, body
 
-    current_gate = run_message_route_smoke(
-        message,
-        responder=None,
-        now=utc_now_iso(),
-        assume_public_simple=_truthy_env(ASSUME_PUBLIC_ENV),
-        use_phase_b_hints=True,
-        phase_b_source_kind="stub",
-    )
-    if current_gate.get("reason") != "local_responder_missing":
+    authorized, current_gate = authorize_current_message_for_local_chat(message)
+    if not authorized:
         body = safe_endpoint_response(current_gate, trace_id=trace_id)
         body["context_filter"] = empty_context_filter()
         return 200, body

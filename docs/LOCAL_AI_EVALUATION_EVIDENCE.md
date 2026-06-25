@@ -1848,3 +1848,12 @@ localhost-only responder seam and adds measured truncation metadata. The
 context window or long-term memory. `response_truncated=false` means
 JarvisOS/local responder did not slice the returned response; it does not
 guarantee the model answer is semantically complete.
+
+### 1G-B2-F3-C2-R2 - Explicit Local Chat Authorization Gate
+
+C2-R2 replaces the local-chat authorization dependency on the diagnostic
+`local_responder_missing` reason with the public safe-local predicate
+`is_safe_local_execution(decision)`, the same predicate used by the local-route
+smoke path. `local_responder_missing` remains diagnostic only. Local-chat still
+uses the existing A5/A3 message-route gate for the current user message, then
+calls A4 directly only after positive safe-local authorization.

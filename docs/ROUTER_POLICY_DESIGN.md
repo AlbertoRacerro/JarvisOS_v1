@@ -538,6 +538,18 @@ only a limited number of substantial recent turns.
 returned response due to `max_output_chars`. It does not guarantee the model's
 answer is semantically complete.
 
+`1G-B2-F3-C2-R2` replaces the local-chat authorization dependency on the
+diagnostic `local_responder_missing` reason with the public safe-local predicate
+`is_safe_local_execution(decision)`, the same predicate used by the local-route
+smoke path. `local_responder_missing` remains diagnostic only.
+
+Local-chat uses the existing A5/A3 route machinery only to authorize the
+current user message. After positive safe-local authorization, local-chat
+assembles clean recent history plus the current message and calls the A4
+localhost-only responder directly. This is intentional because the assembled
+prompt uses the local-chat adapter prompt budget and does not fit the
+single-message A5 smoke execution path.
+
 ## 1G-B2-F3-A1 boundary
 
 This document is part of the RouterPolicy contract layer only. It does not add
