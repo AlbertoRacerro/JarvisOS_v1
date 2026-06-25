@@ -158,7 +158,7 @@ npm run build
 Recommended next milestone:
 
 ```text
-1G-B2-F3-B4-live-R - Local Qwen Phase B Soft-Review Audit
+1G-B2-F3-C1-R - Dev Message Route Endpoint Smoke Audit
 ```
 
 `1G-B2-F3-B3` makes the existing offline B1 Phase B RouterHint bridge default-on
@@ -235,5 +235,13 @@ python scripts\router_policy_message_route_smoke.py --message "Explain what a ce
 
 B4-live-R1 fixes the live Phase B seam provenance boundary so `phase_a_case_id`
 is added only after live proposal validation and leakage checks.
+
+`1G-B2-F3-C1` adds a dev-only backend endpoint for message-route smoke testing:
+`POST /api/dev/message-route-smoke`. It reuses the existing RouterPolicy/A3/A4
+path, keeps `assume_public_simple` server-side and dev-gated, rejects
+unsupported client fields, projects responses through `_safe_cli_result`, and
+does not approve production chat, frontend UI, memory, retrieval, provider
+routing, tools, MCP, browser/terminal execution, live Qwen Phase B exposure, or
+BlueRev runtime behavior.
 
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

@@ -1809,3 +1809,17 @@ removal of `--assume-public-simple`.
 
 B4-live-R1 fixes the live Phase B seam provenance boundary so `phase_a_case_id`
 is added only after live proposal validation and leakage checks.
+
+### 1G-B2-F3-C1 - Dev Message Route Endpoint Smoke
+
+1G-B2-F3-C1 adds a dev-only backend endpoint,
+`POST /api/dev/message-route-smoke`, that exposes the existing A5
+message-route smoke path through the backend for local smoke testing. The
+endpoint is disabled by default, keeps `assume_public_simple` and
+model/endpoint/timeout server-side only, rejects unsupported request fields, and
+returns only a redacted `_safe_cli_result` projection with `trace_id` and
+`audit_ref=null`.
+
+C1 does not add production chat, frontend UI, memory, retrieval, provider
+routing, tools, MCP, browser/terminal execution, live Qwen Phase B exposure, or
+BlueRev runtime behavior.

@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.dev_message_route import router as dev_message_route_router
 from app.api.health import router as health_router
 from app.api.system import router as system_router
 from app.core.config import get_settings
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(system_router)
+    app.include_router(dev_message_route_router)
     app.include_router(ai_router)
     app.include_router(secrets_router)
     app.include_router(workspaces_router)

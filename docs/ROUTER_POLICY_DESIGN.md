@@ -467,6 +467,26 @@ hook, MCP, or BlueRev behavior.
 B4-live-R1 fixes the live Phase B seam provenance boundary so `phase_a_case_id`
 is added only after live proposal validation and leakage checks.
 
+### 1G-B2-F3-C1 dev message-route endpoint smoke
+
+`1G-B2-F3-C1` exposes the existing A5 message-route smoke path through a
+dev-only backend endpoint: `POST /api/dev/message-route-smoke`. The endpoint is
+disabled unless `JARVISOS_ENABLE_DEV_MESSAGE_ROUTE_SMOKE` is truthy. It accepts
+only `message` and `run_local_responder`; `assume_public_simple`,
+model/endpoint/timeout, live Phase B, provider/tool/runtime controls, and other
+smoke options remain server-side only.
+
+The endpoint returns a redacted `_safe_cli_result` projection plus `trace_id`
+and `audit_ref=null`. It does not return `input_obj`, full RouterPolicy
+decisions, audit notes, memory/retrieval data, provider metadata, or tool
+payloads. Real local responder construction still requires the separate server
+gate `JARVISOS_DEV_MESSAGE_ROUTE_ALLOW_LOCAL_RESPONDER`.
+
+C1 is a dev smoke surface only. It does not add production chat, frontend UI,
+memory runtime, retrieval runtime, provider routing, tools, MCP,
+browser/terminal execution, live Qwen Phase B exposure, DB schema, worker,
+hooks, or BlueRev runtime behavior.
+
 ## 1G-B2-F3-A1 boundary
 
 This document is part of the RouterPolicy contract layer only. It does not add

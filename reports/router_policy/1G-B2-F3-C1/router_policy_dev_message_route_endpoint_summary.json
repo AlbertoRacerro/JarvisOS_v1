@@ -1,0 +1,136 @@
+{
+  "milestone": "1G-B2-F3-C1 - Dev Message Route Endpoint Smoke",
+  "start_head": "8ac0944079d8411da779153fcfe29169c187df64",
+  "files_changed": [
+    "backend/app/api/dev_message_route.py",
+    "backend/app/main.py",
+    "backend/app/modules/dev_message_route/__init__.py",
+    "backend/app/modules/dev_message_route/smoke_adapter.py",
+    "backend/tests/test_dev_message_route_smoke.py",
+    "reports/router_policy/1G-B2-F3-C1/router_policy_dev_message_route_endpoint_summary.json",
+    "reports/router_policy/1G-B2-F3-C1/router_policy_dev_message_route_endpoint_summary.md",
+    "README.md",
+    "docs/ROUTER_POLICY_DESIGN.md",
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md"
+  ],
+  "endpoint_path": "POST /api/dev/message-route-smoke",
+  "dev_gate": {
+    "env": "JARVISOS_ENABLE_DEV_MESSAGE_ROUTE_SMOKE",
+    "default": "disabled",
+    "disabled_status_code": 404,
+    "read_timing": "request_time"
+  },
+  "assume_public_simple_source": {
+    "env": "JARVISOS_DEV_MESSAGE_ROUTE_ASSUME_PUBLIC_SIMPLE",
+    "request_body_allowed": false,
+    "read_timing": "request_time"
+  },
+  "client_assume_public_simple_rejected": true,
+  "local_responder_server_gate": {
+    "request_field": "run_local_responder",
+    "server_gate_env": "JARVISOS_DEV_MESSAGE_ROUTE_ALLOW_LOCAL_RESPONDER",
+    "default": "disabled",
+    "builds_responder_when_request_and_server_gate_are_enabled": true
+  },
+  "model_endpoint_timeout_server_side_only": {
+    "model_env": "JARVISOS_DEV_MESSAGE_ROUTE_MODEL",
+    "endpoint_env": "JARVISOS_DEV_MESSAGE_ROUTE_ENDPOINT",
+    "timeout_env": "JARVISOS_DEV_MESSAGE_ROUTE_TIMEOUT_S",
+    "request_body_allowed": false
+  },
+  "request_extra_fields_forbidden": true,
+  "message_length_cap": 12000,
+  "safe_response_uses_safe_cli_result": true,
+  "safe_response_drops_or_keeps_input_source": "drops_input_source",
+  "decision_summary_optional_nullable": true,
+  "trace_id_audit_ref_contract": {
+    "trace_id": "uuid_per_request",
+    "audit_ref": null
+  },
+  "env_read_timing": "request_time",
+  "backend_layout_followed": {
+    "api_module": "backend/app/api/dev_message_route.py",
+    "adapter_module": "backend/app/modules/dev_message_route/smoke_adapter.py",
+    "router_registration": "backend/app/main.py"
+  },
+  "scripts_import_adapter": {
+    "script_imports": [
+      "scripts/router_policy_message_route_smoke.py",
+      "scripts/router_policy_local_responder.py"
+    ],
+    "seam": "backend adapter inserts scripts directory into sys.path for this dev smoke endpoint"
+  },
+  "scripts_import_seam_risk_documented": true,
+  "import_safety_result": {
+    "no_model_call_at_import": true,
+    "no_responder_build_at_import": true,
+    "no_smoke_call_at_import": true
+  },
+  "now_source": "datetime.now(timezone.utc).isoformat()",
+  "default_no_model_call": true,
+  "explicit_local_responder_required": true,
+  "assume_public_simple_required_for_benign_execution": true,
+  "hard_gate_dominance_result": "hard-gated messages did not execute and did not call responder",
+  "operational_gate_dominance_result": "provider/tool/MCP/browser/terminal/action intents did not execute and did not call responder",
+  "response_redaction_result": "input_obj, full decision, raw audit notes, and secret-bearing raw text were not returned",
+  "unsupported_options_result": "client-supplied smoke/runtime/provider/tool options rejected by request schema",
+  "internal_exception_http_behavior": "HTTP 500 with safe internal_error projection and coarse error_type only",
+  "db_memory_retrieval_side_effect_check": "no DB, memory, retrieval, event, or artifact writes observed in endpoint tests",
+  "provider_tool_browser_terminal_mcp_check": "no provider/tool/browser/terminal/MCP execution exposed by endpoint",
+  "frontend_changed": false,
+  "tests_run": [
+    {
+      "command": "cd backend; .\\.venv\\Scripts\\python -m pytest tests\\test_dev_message_route_smoke.py -q",
+      "result": "42 passed"
+    },
+    {
+      "command": "cd backend; .\\.venv\\Scripts\\python -m pytest -q",
+      "result": "367 passed"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_message_route_smoke",
+      "result": "84 tests OK"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_hint_bridge_probe",
+      "result": "15 tests OK"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_local_route_probe",
+      "result": "11 tests OK"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_decision_probe",
+      "result": "14 tests OK"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_semantic_validator",
+      "result": "40 tests OK"
+    },
+    {
+      "command": "python -m unittest discover -s tests",
+      "result": "330 tests OK"
+    }
+  ],
+  "runtime_boundary_check": {
+    "production_chat_approved": false,
+    "frontend_ui_added": false,
+    "memory_runtime_added": false,
+    "retrieval_runtime_added": false,
+    "provider_routing_added": false,
+    "tool_mcp_browser_terminal_execution_added": false,
+    "live_qwen_phase_b_exposed": false,
+    "bluerev_runtime_behavior_added": false
+  },
+  "known_residual_risks": [
+    "C1 is a dev smoke endpoint, not production chat.",
+    "No production UI is approved.",
+    "No memory runtime is approved.",
+    "No retrieval runtime is approved.",
+    "No provider routing is approved.",
+    "No tool/MCP/browser/terminal execution is approved.",
+    "No BlueRev runtime behavior is approved.",
+    "B4-live remains separate and no real Qwen Phase B run is approved by C1.",
+    "The dev endpoint must not be enabled on a LAN/internet-exposed backend."
+  ]
+}
