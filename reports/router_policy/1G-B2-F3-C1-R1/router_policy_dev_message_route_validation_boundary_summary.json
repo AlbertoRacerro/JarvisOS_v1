@@ -1,0 +1,110 @@
+{
+  "milestone": "1G-B2-F3-C1-R1 - Safe validation boundary for dev message-route endpoint",
+  "start_head": "f2f0b60e2e8e0b36a3eb414fe8ed37e9791c3165",
+  "files_changed": [
+    "backend/app/api/dev_message_route.py",
+    "backend/app/modules/dev_message_route/smoke_adapter.py",
+    "backend/tests/test_dev_message_route_smoke.py",
+    "reports/router_policy/1G-B2-F3-C1-R1/router_policy_dev_message_route_validation_boundary_summary.json",
+    "reports/router_policy/1G-B2-F3-C1-R1/router_policy_dev_message_route_validation_boundary_summary.md",
+    "README.md",
+    "docs/ROUTER_POLICY_DESIGN.md",
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md"
+  ],
+  "validation_error_boundary_added": true,
+  "validation_strategy": "manual_parse_after_dev_gate",
+  "manual_parse_after_dev_gate": true,
+  "global_request_validation_handler_added": false,
+  "disabled_endpoint_masks_validation_errors": true,
+  "enabled_validation_errors_redacted": true,
+  "invalid_json_returns_safe_validation_error": true,
+  "empty_body_returns_safe_validation_error": true,
+  "manual_validation_exception_type": "pydantic.ValidationError",
+  "validation_failures_do_not_fall_to_internal_error": true,
+  "pydantic_input_not_returned": true,
+  "single_trace_id_per_request": true,
+  "route_generates_trace_id_once": true,
+  "adapter_accepts_trace_id": true,
+  "adapter_internal_uuid_removed_for_c1_path": true,
+  "internal_error_uses_route_trace_id": true,
+  "adapter_runtime_exception_safe_500_preserved": true,
+  "fastapi_default_500_not_used_for_c1_runtime_errors": true,
+  "canonical_dev_gate_helper": true,
+  "disabled_response_single_builder": true,
+  "gate_duplication_avoided": true,
+  "request_validation_error_handler_scope": "none_added",
+  "normal_c1_behavior_preserved": true,
+  "safe_response_contract_preserved": true,
+  "assume_public_simple_still_server_side": true,
+  "local_responder_gate_preserved": true,
+  "live_qwen_phase_b_still_not_exposed": true,
+  "adapter_uuid4_removed": true,
+  "smoke_adapter_unused_uuid4_import_removed": true,
+  "fixed_trace_id_test_covers_internal_error": true,
+  "frontend_changed": false,
+  "tests_run": [
+    {
+      "command": "cd backend; .\\.venv\\Scripts\\python -m pytest tests\\test_dev_message_route_smoke.py -q",
+      "result": "52 passed"
+    },
+    {
+      "command": "cd backend; .\\.venv\\Scripts\\python -m pytest -q",
+      "result": "377 passed"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_message_route_smoke",
+      "result": "84 tests OK"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_hint_bridge_probe",
+      "result": "15 tests OK"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_local_route_probe",
+      "result": "11 tests OK"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_decision_probe",
+      "result": "14 tests OK"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_semantic_validator",
+      "result": "40 tests OK"
+    },
+    {
+      "command": "python -m unittest discover -s tests",
+      "result": "330 tests OK"
+    },
+    {
+      "command": "python -m json.tool reports/router_policy/1G-B2-F3-C1-R1/router_policy_dev_message_route_validation_boundary_summary.json",
+      "result": "valid JSON"
+    }
+  ],
+  "runtime_boundary_check": {
+    "production_chat_approved": false,
+    "frontend_ui_added": false,
+    "memory_runtime_added": false,
+    "retrieval_runtime_added": false,
+    "provider_routing_added": false,
+    "external_provider_calls_added": false,
+    "tool_mcp_browser_terminal_execution_added": false,
+    "file_write_runtime_added": false,
+    "db_conversation_persistence_added": false,
+    "workers_hooks_added": false,
+    "live_qwen_phase_b_exposed": false,
+    "new_local_model_caller_added": false,
+    "bluerev_runtime_behavior_added": false
+  },
+  "known_residual_risks": [
+    "C1-R1 remains a dev smoke endpoint, not production chat.",
+    "No production UI is approved by C1-R1.",
+    "No memory runtime is approved.",
+    "No retrieval runtime is approved.",
+    "No provider routing is approved.",
+    "No tool/MCP/browser/terminal execution is approved.",
+    "No BlueRev runtime behavior is approved.",
+    "B4-live remains separate and no real Qwen Phase B run is approved by C1-R1.",
+    "The dev endpoint must not be enabled on a LAN/internet-exposed backend.",
+    "The disabled dev endpoint response still exposes limited server config state through fields such as assume_public_simple_used. A future cleanup should make disabled responses more inert if stricter endpoint-hiding is required."
+  ]
+}

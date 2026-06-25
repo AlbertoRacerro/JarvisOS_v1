@@ -244,4 +244,9 @@ does not approve production chat, frontend UI, memory, retrieval, provider
 routing, tools, MCP, browser/terminal execution, live Qwen Phase B exposure, or
 BlueRev runtime behavior.
 
+`1G-B2-F3-C1-R1` moves validation for the dev message-route endpoint behind the
+dev gate, so schema-invalid requests do not bypass the disabled boundary or
+return raw validation input. It also preserves a single route-generated
+`trace_id` across disabled, validation, normal, and internal-error paths.
+
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.

@@ -487,6 +487,11 @@ memory runtime, retrieval runtime, provider routing, tools, MCP,
 browser/terminal execution, live Qwen Phase B exposure, DB schema, worker,
 hooks, or BlueRev runtime behavior.
 
+`1G-B2-F3-C1-R1` moves validation for the dev message-route endpoint behind the
+dev gate, so schema-invalid requests do not bypass the disabled boundary or
+return raw validation input. It also preserves a single route-generated
+`trace_id` across disabled, validation, normal, and internal-error paths.
+
 ## 1G-B2-F3-A1 boundary
 
 This document is part of the RouterPolicy contract layer only. It does not add

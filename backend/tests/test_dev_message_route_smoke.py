@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from uuid import UUID
 from unittest.mock import Mock
 
 import pytest
@@ -79,6 +80,27 @@ def _assert_safe_blocked_body(body: dict[str, object]) -> None:
     assert "response" not in body
 
 
+def _assert_safe_validation_body(body: dict[str, object]) -> None:
+    _assert_safe_blocked_body(body)
+    assert body["reason"] == "validation_error"
+    assert isinstance(body["error_type"], str)
+
+
+def _assert_no_validation_leakage(body_text: str) -> None:
+    for forbidden in (
+        "input_obj",
+        "decision",
+        "audit_notes",
+        "raw prompt",
+        "raw_model_output",
+        "stack trace",
+        "Traceback",
+        "pydantic",
+        "url",
+    ):
+        assert forbidden not in body_text
+
+
 def test_c1_001_endpoint_disabled_by_default(client: TestClient, monkeypatch) -> None:
     from app.modules.dev_message_route import smoke_adapter
 
@@ -94,6 +116,45 @@ def test_c1_001_endpoint_disabled_by_default(client: TestClient, monkeypatch) ->
     _assert_safe_blocked_body(body)
     assert body["reason"] == "dev_message_route_smoke_disabled"
     smoke_call.assert_not_called()
+    responder_builder.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "payload",
+    (
+        {"message": ""},
+        {"message": "   "},
+        {"message": "x" * 12001},
+        {"message": 42},
+        {"message": "Explain what a pump is.", "assume_public_simple": True},
+    ),
+)
+def test_c1_r1_disabled_endpoint_masks_validation_errors(
+    client: TestClient,
+    monkeypatch,
+    payload: dict[str, object],
+) -> None:
+    import app.api.dev_message_route as route
+    from app.modules.dev_message_route import smoke_adapter
+
+    route_smoke = Mock(side_effect=AssertionError("route smoke path must not run"))
+    responder_builder = Mock(side_effect=AssertionError("responder must not be built"))
+    monkeypatch.setattr(route, "run_dev_message_route_smoke", route_smoke)
+    monkeypatch.setattr(smoke_adapter, "build_local_responder", responder_builder)
+
+    response = client.post(DEV_ENDPOINT, json=payload)
+
+    assert response.status_code == 404
+    body_text = response.text
+    body = response.json()
+    _assert_safe_blocked_body(body)
+    assert body["reason"] == "dev_message_route_smoke_disabled"
+    assert "validation_error" not in body_text
+    assert "pydantic" not in body_text
+    assert "extra_forbidden" not in body_text
+    assert "string_too_short" not in body_text
+    assert "string_too_long" not in body_text
+    route_smoke.assert_not_called()
     responder_builder.assert_not_called()
 
 
@@ -193,12 +254,13 @@ def test_c1_local_responder_gate_blocks_before_builder(client: TestClient, monke
 
 
 def test_c1_005_assume_public_simple_is_not_accepted_from_client(client: TestClient, monkeypatch) -> None:
+    import app.api.dev_message_route as route
     from app.modules.dev_message_route import smoke_adapter
 
     monkeypatch.setenv("JARVISOS_ENABLE_DEV_MESSAGE_ROUTE_SMOKE", "1")
-    smoke_call = Mock(side_effect=AssertionError("smoke path must not run"))
+    route_smoke = Mock(side_effect=AssertionError("route smoke path must not run"))
     responder_builder = Mock(side_effect=AssertionError("responder must not be built"))
-    monkeypatch.setattr(smoke_adapter, "run_message_route_smoke", smoke_call)
+    monkeypatch.setattr(route, "run_dev_message_route_smoke", route_smoke)
     monkeypatch.setattr(smoke_adapter, "build_local_responder", responder_builder)
 
     response = client.post(
@@ -207,7 +269,10 @@ def test_c1_005_assume_public_simple_is_not_accepted_from_client(client: TestCli
     )
 
     assert response.status_code == 422
-    smoke_call.assert_not_called()
+    body = response.json()
+    _assert_safe_validation_body(body)
+    assert body["error_type"] == "ValidationError"
+    route_smoke.assert_not_called()
     responder_builder.assert_not_called()
 
 
@@ -217,18 +282,21 @@ def test_c1_006_client_cannot_select_model_endpoint_timeout(
     monkeypatch,
     field: str,
 ) -> None:
+    import app.api.dev_message_route as route
     from app.modules.dev_message_route import smoke_adapter
 
     monkeypatch.setenv("JARVISOS_ENABLE_DEV_MESSAGE_ROUTE_SMOKE", "1")
-    smoke_call = Mock(side_effect=AssertionError("smoke path must not run"))
+    route_smoke = Mock(side_effect=AssertionError("route smoke path must not run"))
     responder_builder = Mock(side_effect=AssertionError("responder must not be built"))
-    monkeypatch.setattr(smoke_adapter, "run_message_route_smoke", smoke_call)
+    monkeypatch.setattr(route, "run_dev_message_route_smoke", route_smoke)
     monkeypatch.setattr(smoke_adapter, "build_local_responder", responder_builder)
 
     response = client.post(DEV_ENDPOINT, json={"message": "Explain what a pump is.", field: "bad"})
 
     assert response.status_code == 422
-    smoke_call.assert_not_called()
+    body = response.json()
+    _assert_safe_validation_body(body)
+    route_smoke.assert_not_called()
     responder_builder.assert_not_called()
 
 
@@ -265,18 +333,21 @@ def test_c1_008_unsupported_options_rejected_loudly(
     monkeypatch,
     field: str,
 ) -> None:
+    import app.api.dev_message_route as route
     from app.modules.dev_message_route import smoke_adapter
 
     monkeypatch.setenv("JARVISOS_ENABLE_DEV_MESSAGE_ROUTE_SMOKE", "1")
-    smoke_call = Mock(side_effect=AssertionError("smoke path must not run"))
+    route_smoke = Mock(side_effect=AssertionError("route smoke path must not run"))
     responder_builder = Mock(side_effect=AssertionError("responder must not be built"))
-    monkeypatch.setattr(smoke_adapter, "run_message_route_smoke", smoke_call)
+    monkeypatch.setattr(route, "run_dev_message_route_smoke", route_smoke)
     monkeypatch.setattr(smoke_adapter, "build_local_responder", responder_builder)
 
     response = client.post(DEV_ENDPOINT, json={"message": "Explain what a pump is.", field: True})
 
     assert response.status_code == 422
-    smoke_call.assert_not_called()
+    body = response.json()
+    _assert_safe_validation_body(body)
+    route_smoke.assert_not_called()
     responder_builder.assert_not_called()
 
 
@@ -351,6 +422,7 @@ def test_c1_012_trace_contract(client: TestClient, monkeypatch) -> None:
 def test_c1_internal_exception_returns_safe_500(client: TestClient, monkeypatch) -> None:
     import app.api.dev_message_route as route
 
+    monkeypatch.setenv("JARVISOS_ENABLE_DEV_MESSAGE_ROUTE_SMOKE", "1")
     monkeypatch.setattr(route, "run_dev_message_route_smoke", Mock(side_effect=RuntimeError("boom")))
 
     response = client.post(DEV_ENDPOINT, json={"message": "Explain what a pump is."})
@@ -367,6 +439,155 @@ def test_c1_internal_exception_returns_safe_500(client: TestClient, monkeypatch)
     assert "audit_notes" not in body_text
 
 
+def test_c1_r1_enabled_invalid_message_does_not_echo_sensitive_input(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    import app.api.dev_message_route as route
+    from app.modules.dev_message_route import smoke_adapter
+
+    monkeypatch.setenv("JARVISOS_ENABLE_DEV_MESSAGE_ROUTE_SMOKE", "1")
+    route_smoke = Mock(side_effect=AssertionError("route smoke path must not run"))
+    responder_builder = Mock(side_effect=AssertionError("responder must not be built"))
+    monkeypatch.setattr(route, "run_dev_message_route_smoke", route_smoke)
+    monkeypatch.setattr(smoke_adapter, "build_local_responder", responder_builder)
+    secret_message = "sk-test-secret-12345678" + ("x" * 12000)
+
+    response = client.post(DEV_ENDPOINT, json={"message": secret_message})
+
+    assert response.status_code == 422
+    body_text = response.text
+    body = response.json()
+    _assert_safe_validation_body(body)
+    assert body["error_type"] == "ValidationError"
+    assert body["validation_error_count"] == 1
+    assert "sk-test-secret-12345678" not in body_text
+    assert secret_message not in body_text
+    assert '"input"' not in body_text
+    _assert_no_validation_leakage(body_text)
+    route_smoke.assert_not_called()
+    responder_builder.assert_not_called()
+
+
+def test_c1_r1_enabled_malformed_json_returns_safe_validation_response(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    import app.api.dev_message_route as route
+    from app.modules.dev_message_route import smoke_adapter
+
+    monkeypatch.setenv("JARVISOS_ENABLE_DEV_MESSAGE_ROUTE_SMOKE", "1")
+    route_smoke = Mock(side_effect=AssertionError("route smoke path must not run"))
+    responder_builder = Mock(side_effect=AssertionError("responder must not be built"))
+    monkeypatch.setattr(route, "run_dev_message_route_smoke", route_smoke)
+    monkeypatch.setattr(smoke_adapter, "build_local_responder", responder_builder)
+
+    response = client.post(
+        DEV_ENDPOINT,
+        content="not valid json",
+        headers={"content-type": "application/json"},
+    )
+
+    assert response.status_code == 422
+    body_text = response.text
+    body = response.json()
+    _assert_safe_validation_body(body)
+    assert body["error_type"] == "InvalidJSON"
+    assert "not valid json" not in body_text
+    _assert_no_validation_leakage(body_text)
+    route_smoke.assert_not_called()
+    responder_builder.assert_not_called()
+
+
+def test_c1_r1_enabled_empty_body_returns_safe_validation_response(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    import app.api.dev_message_route as route
+    from app.modules.dev_message_route import smoke_adapter
+
+    monkeypatch.setenv("JARVISOS_ENABLE_DEV_MESSAGE_ROUTE_SMOKE", "1")
+    route_smoke = Mock(side_effect=AssertionError("route smoke path must not run"))
+    responder_builder = Mock(side_effect=AssertionError("responder must not be built"))
+    monkeypatch.setattr(route, "run_dev_message_route_smoke", route_smoke)
+    monkeypatch.setattr(smoke_adapter, "build_local_responder", responder_builder)
+
+    response = client.post(DEV_ENDPOINT, content=b"")
+
+    assert response.status_code == 422
+    body = response.json()
+    _assert_safe_validation_body(body)
+    assert body["error_type"] == "InvalidJSON"
+    route_smoke.assert_not_called()
+    responder_builder.assert_not_called()
+
+
+def test_c1_r1_enabled_validation_error_does_not_fall_to_internal_error(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    import app.api.dev_message_route as route
+
+    monkeypatch.setenv("JARVISOS_ENABLE_DEV_MESSAGE_ROUTE_SMOKE", "1")
+    route_smoke = Mock(side_effect=AssertionError("route smoke path must not run"))
+    monkeypatch.setattr(route, "run_dev_message_route_smoke", route_smoke)
+
+    response = client.post(DEV_ENDPOINT, json={"message": "x" * 12001})
+
+    assert response.status_code == 422
+    body = response.json()
+    _assert_safe_validation_body(body)
+    assert body["error_type"] == "ValidationError"
+    assert body["reason"] != "internal_error"
+    route_smoke.assert_not_called()
+
+
+def test_c1_r1_fixed_trace_id_covers_all_endpoint_paths(client: TestClient, monkeypatch) -> None:
+    import app.api.dev_message_route as route
+    from app.modules.dev_message_route import smoke_adapter
+
+    fixed = UUID("00000000-0000-0000-0000-000000000123")
+    monkeypatch.setattr(route, "uuid4", Mock(return_value=fixed))
+
+    disabled_valid = client.post(DEV_ENDPOINT, json={"message": "Explain what a pump is."})
+    disabled_invalid = client.post(DEV_ENDPOINT, json={"message": ""})
+
+    monkeypatch.setenv("JARVISOS_ENABLE_DEV_MESSAGE_ROUTE_SMOKE", "1")
+    enabled_invalid_json = client.post(
+        DEV_ENDPOINT,
+        content="not valid json",
+        headers={"content-type": "application/json"},
+    )
+    enabled_validation_error = client.post(DEV_ENDPOINT, json={"message": ""})
+    enabled_valid_default = client.post(DEV_ENDPOINT, json={"message": "Explain what a pump is."})
+
+    monkeypatch.setenv("JARVISOS_DEV_MESSAGE_ROUTE_ASSUME_PUBLIC_SIMPLE", "1")
+    monkeypatch.setenv("JARVISOS_DEV_MESSAGE_ROUTE_ALLOW_LOCAL_RESPONDER", "1")
+    fake_responder = Mock(return_value="A pump moves fluid.")
+    monkeypatch.setattr(smoke_adapter, "build_local_responder", Mock(return_value=fake_responder))
+    enabled_fully_gated = client.post(
+        DEV_ENDPOINT,
+        json={"message": "Explain what a pump is.", "run_local_responder": True},
+    )
+
+    monkeypatch.setattr(route, "run_dev_message_route_smoke", Mock(side_effect=RuntimeError("boom")))
+    internal_error = client.post(DEV_ENDPOINT, json={"message": "Explain what a pump is."})
+
+    for response in (
+        disabled_valid,
+        disabled_invalid,
+        enabled_invalid_json,
+        enabled_validation_error,
+        enabled_valid_default,
+        enabled_fully_gated,
+        internal_error,
+    ):
+        assert response.json()["trace_id"] == str(fixed)
+
+    assert internal_error.status_code == 500
+    assert internal_error.json()["reason"] == "internal_error"
+
+
 @pytest.mark.parametrize(
     "payload",
     (
@@ -377,13 +598,15 @@ def test_c1_internal_exception_returns_safe_500(client: TestClient, monkeypatch)
     ),
 )
 def test_c1_message_validation_rejects_invalid_messages(client: TestClient, monkeypatch, payload: dict[str, object]) -> None:
-    from app.modules.dev_message_route import smoke_adapter
+    import app.api.dev_message_route as route
 
     monkeypatch.setenv("JARVISOS_ENABLE_DEV_MESSAGE_ROUTE_SMOKE", "1")
-    smoke_call = Mock(side_effect=AssertionError("smoke path must not run"))
-    monkeypatch.setattr(smoke_adapter, "run_message_route_smoke", smoke_call)
+    route_smoke = Mock(side_effect=AssertionError("route smoke path must not run"))
+    monkeypatch.setattr(route, "run_dev_message_route_smoke", route_smoke)
 
     response = client.post(DEV_ENDPOINT, json=payload)
 
     assert response.status_code == 422
-    smoke_call.assert_not_called()
+    body = response.json()
+    _assert_safe_validation_body(body)
+    route_smoke.assert_not_called()

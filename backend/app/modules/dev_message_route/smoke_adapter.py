@@ -11,7 +11,6 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -41,6 +40,10 @@ DEFAULT_TIMEOUT_S = 30.0
 
 def _truthy_env(name: str) -> bool:
     return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def dev_message_route_enabled() -> bool:
+    return _truthy_env(DEV_GATE_ENV)
 
 
 def utc_now_iso() -> str:
@@ -100,19 +103,48 @@ def internal_error_response(*, trace_id: str, error_type: str | None = None) -> 
     return response
 
 
-def run_dev_message_route_smoke(*, message: str, run_local_responder: bool) -> tuple[int, dict[str, Any]]:
-    trace_id = str(uuid4())
+def disabled_response(*, trace_id: str) -> tuple[int, dict[str, Any]]:
+    assume_public_simple = _truthy_env(ASSUME_PUBLIC_ENV)
+    return 404, safe_endpoint_response(
+        _smoke_result(
+            executed=False,
+            reason="dev_message_route_smoke_disabled",
+            assume_public_simple_used=assume_public_simple,
+        ),
+        trace_id=trace_id,
+    )
+
+
+def validation_error_response(
+    *,
+    trace_id: str,
+    error_type: str = "ValidationError",
+    validation_error_count: int | None = None,
+) -> dict[str, Any]:
+    response = safe_endpoint_response(
+        _smoke_result(
+            executed=False,
+            reason="validation_error",
+            assume_public_simple_used=_truthy_env(ASSUME_PUBLIC_ENV),
+        ),
+        trace_id=trace_id,
+    )
+    response["error_type"] = error_type
+    if validation_error_count is not None:
+        response["validation_error_count"] = validation_error_count
+    return response
+
+
+def run_dev_message_route_smoke(
+    *,
+    message: str,
+    run_local_responder: bool,
+    trace_id: str,
+) -> tuple[int, dict[str, Any]]:
     assume_public_simple = _truthy_env(ASSUME_PUBLIC_ENV)
 
-    if not _truthy_env(DEV_GATE_ENV):
-        return 404, safe_endpoint_response(
-            _smoke_result(
-                executed=False,
-                reason="dev_message_route_smoke_disabled",
-                assume_public_simple_used=assume_public_simple,
-            ),
-            trace_id=trace_id,
-        )
+    if not dev_message_route_enabled():
+        return disabled_response(trace_id=trace_id)
 
     responder = None
     if run_local_responder:
