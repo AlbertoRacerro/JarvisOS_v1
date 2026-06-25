@@ -1,0 +1,41 @@
+{
+  "milestone": "A5-R2-R1",
+  "base_commit": "190f13e0ae286765707ce8bb333a23c094ec07e5",
+  "ricorda_clitic_false_positive_fixed": true,
+  "third_person_clitics_gli_le_covered": true,
+  "memory_write_ricorda_still_blocked": true,
+  "credential_save_ricorda_still_blocked": true,
+  "clitic_reminiscence_allowed": true,
+  "credential_ricorda_clitic_false_positive_fixed": true,
+  "a5_r2_existing_blocks_preserved": true,
+  "false_positive_tests_added": true,
+  "naked_technical_noun_blockers_added": false,
+  "bluerev_ip_sensitive_marker_detector_added": false,
+  "bluerev_ip_sensitive_deferred_to_a5_r3": true,
+  "external_provider_routing_added": false,
+  "frontend_modified": false,
+  "local_responder_modified": false,
+  "prompt_contract_modified": false,
+  "streaming_added": false,
+  "memory_runtime_added": false,
+  "retrieval_added": false,
+  "provider_runtime_added": false,
+  "tool_mcp_browser_terminal_added": false,
+  "tests_run": [
+    "python -m unittest tests.test_router_policy_message_route_smoke",
+    "cd backend && .\\.venv\\Scripts\\python -m pytest tests\\test_dev_local_chat.py tests\\test_dev_message_route_smoke.py -q",
+    "git diff --check",
+    "git status --short",
+    "git diff --name-only",
+    "rg -n \"mi ricorda|ti ricorda|ci ricorda|vi ricorda|gli ricorda|le ricorda|ricorda il token|ricorda che|A5-R2-R1|BlueRev|parametri proprietari|correlazioni riservate|propriet[aà] intellettuale\" scripts backend tests reports"
+  ],
+  "known_residual_risks": [
+    "A5-R2-R1 fixes confirmed false positives in ricorda/clitic forms only.",
+    "A5-R2-R1 does not broaden Italian detector coverage.",
+    "ricordami di salvare questo remains a possible future false negative.",
+    "Declarative third-person phrases such as il sistema ricorda che... may remain conservative false positives.",
+    "Additional paraphrases such as segnati/documenta/metti nel verbale remain possible future detector work.",
+    "BlueRev/IP-sensitive marker detection remains deferred to A5-R3.",
+    "External routing remains disabled."
+  ]
+}

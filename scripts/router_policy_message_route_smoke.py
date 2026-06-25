@@ -199,7 +199,7 @@ OPERATIONAL_INTENT_PATTERNS = {
         r"\bmemory\s+write\b",
         r"\bsalv\w*\s+in\s+memoria\b",
         r"\bmemorizza(?:lo|la|li|le|mi|ci|te|ti)?\b(?:\s+(?:che|di|quest\w+|il|lo|la|i|gli|le))?",
-        r"\bricorda(?:ti)?\s+(?:che|di|quest\w+|il|lo|la|i|gli|le)\b",
+        r"(?<!mi )(?<!ti )(?<!si )(?<!ci )(?<!vi )(?<!gli )(?<!le )\bricorda(?:ti)?\s+(?:che|di|quest\w+|il|lo|la|i|gli|le)\b",
         r"\btieni(?:lo)?\s+a\s+mente\b",
         r"\bprendi\s+nota\s+di\b",
         r"\bannota\s+(?:quest\w+|il|lo|la|i|gli|le)\b",
@@ -217,7 +217,7 @@ OPERATIONAL_INTENT_PATTERNS = {
         r"\binserisci\b.{0,40}\b(?:nel|nello|nella|nei|negli|nelle|al|allo|alla|ai|agli|alle)\s+(?:documento|file|brevetto|progetto|relazione)\b",
     ],
     "credential_like_save": [
-        r"\b(?:salva|memorizza(?:lo|la|li|le|mi|ci|te|ti)?|ricorda(?:ti)?|conserva)\b.{0,25}\b(?:codice(?:\s+di\s+accesso)?|pin|token|password|chiave|credenziale)\b",
+        r"\b(?:salva|memorizza(?:lo|la|li|le|mi|ci|te|ti)?|conserva|(?<!mi )(?<!ti )(?<!si )(?<!ci )(?<!vi )(?<!gli )(?<!le )ricorda(?:ti)?)\b.{0,25}\b(?:codice(?:\s+di\s+accesso)?|pin|token|password|chiave|credenziale)\b",
     ],
     "file_retrieval": [
         r"\bread\s+file\b",

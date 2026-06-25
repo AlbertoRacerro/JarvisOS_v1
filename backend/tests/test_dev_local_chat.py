@@ -352,6 +352,8 @@ def test_c2_006_operational_history_excluded(client: TestClient, monkeypatch) ->
 @pytest.mark.parametrize(
     "message",
     (
+        "ricorda che la prevalenza e 8 m",
+        "ricorda il token abc123",
         "salva in memoria questa assunzione",
         "la prevalenza da salvbare in memoria e di 8 m",
         "metti nel brevetto che la prevalenza e 8 m",
@@ -385,6 +387,36 @@ def test_a5r2_current_italian_write_intent_blocks_before_history_and_prompt(
     responder_builder.assert_not_called()
     history_filter.assert_not_called()
     prompt_assembler.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "message",
+    (
+        "questo mi ricorda la pompa",
+        "questo mi ricorda il codice fiscale",
+        "questo gli ricorda il reattore",
+        "questo le ricorda la relazione",
+        "ti ricordi cos'e una pompa?",
+        "scrivi codice Python",
+        "chiamami Signore",
+    ),
+)
+def test_a5r2r1_ricorda_clitic_reminiscence_and_safe_regressions_execute(
+    client: TestClient,
+    monkeypatch,
+    message: str,
+) -> None:
+    _enable_chat(monkeypatch)
+    fake_responder = _safe_responder(monkeypatch, "Risposta locale.")
+
+    response = client.post(DEV_ENDPOINT, json={"message": message})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["executed"] is True
+    assert body["decision_summary"]["route_action"] == "answer_local"
+    assert body["decision_summary"]["allowed_execution_mode"] == "answer_only"
+    fake_responder.assert_called_once()
 
 
 def test_a5r2_italian_unsafe_history_excluded_current_harmless_executes(client: TestClient, monkeypatch) -> None:
