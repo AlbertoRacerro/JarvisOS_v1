@@ -259,8 +259,22 @@ def test_c2_008_invalid_json_safe_422(client: TestClient, monkeypatch) -> None:
 
 
 def test_c2_009_response_truncation_indicator(client: TestClient, monkeypatch) -> None:
+    from app.modules.dev_message_route import smoke_adapter
+
     _enable_chat(monkeypatch)
-    _safe_responder(monkeypatch, "x" * 4500)
+    monkeypatch.setattr(
+        smoke_adapter,
+        "call_local_ollama_generate_with_metadata",
+        Mock(
+            return_value={
+                "response": "x" * 16000,
+                "response_truncated": True,
+                "response_char_count_returned": 16000,
+                "response_char_limit": 16000,
+                "response_limit_source": "local_responder_max_output_chars",
+            }
+        ),
+    )
 
     response = client.post(DEV_ENDPOINT, json={"message": "hello"})
 
@@ -268,9 +282,11 @@ def test_c2_009_response_truncation_indicator(client: TestClient, monkeypatch) -
     body = response.json()
     assert body["executed"] is True
     assert body["response_truncated"] is True
-    assert body["response_char_limit"] == 4000
-    assert body["response_char_count_returned"] == 4000
-    assert len(body["response"]) == 4000
+    assert body["response_char_limit"] == 16000
+    assert body["response_char_count_returned"] == 16000
+    assert body["response_limit_source"] == "local_responder_max_output_chars"
+    assert body["response_truncated_false_semantics"] == "not_sliced_by_jarvisos_not_completion_guarantee"
+    assert len(body["response"]) == 16000
 
 
 def test_c2_010_history_filter_reuses_smoke_builder(monkeypatch) -> None:
@@ -342,3 +358,33 @@ def test_c2_013_import_safety(monkeypatch, tmp_path) -> None:
 
     responder_builder.assert_not_called()
     get_settings.cache_clear()
+
+
+def test_c2_r1_prompt_budget_selects_recent_clean_history(client: TestClient, monkeypatch) -> None:
+    _enable_chat(monkeypatch)
+    fake_responder = _safe_responder(monkeypatch, "ok")
+    older = "older clean turn " + ("a" * 11900)
+    recent = "recent clean turn"
+
+    response = client.post(
+        DEV_ENDPOINT,
+        json={
+            "message": "hello",
+            "history": [
+                {"role": "user", "content": older},
+                {"role": "assistant", "content": "middle clean turn " + ("b" * 11900)},
+                {"role": "user", "content": "newer clean turn " + ("c" * 11900)},
+                {"role": "user", "content": recent},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["executed"] is True
+    assert body["context_filter"]["history_turns_included"] == 4
+    assert body["context_filter"]["history_turns_omitted_for_prompt_budget"] >= 1
+    assert body["context_filter"]["prompt_char_limit"] == 32000
+    prompt = fake_responder.call_args.args[0]
+    assert recent in prompt
+    assert len(prompt) <= 32000

@@ -18,7 +18,7 @@ SCRIPTS_DIR = REPO_ROOT / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-from router_policy_local_responder import build_local_responder  # noqa: E402
+from router_policy_local_responder import build_local_responder, call_local_ollama_generate_with_metadata  # noqa: E402
 from router_policy_message_route_smoke import (  # noqa: E402
     MAX_MESSAGE_CHARS,
     _safe_cli_result,
@@ -39,7 +39,8 @@ DEFAULT_ENDPOINT = "http://127.0.0.1:11434/api/generate"
 DEFAULT_TIMEOUT_S = 30.0
 MAX_HISTORY_TURNS = 20
 MAX_HISTORY_TURN_CHARS = MAX_MESSAGE_CHARS
-CHAT_RESPONSE_CHAR_LIMIT = 4000
+LOCAL_CHAT_MAX_PROMPT_CHARS = 32000
+LOCAL_CHAT_MAX_OUTPUT_CHARS = 16000
 
 
 def _truthy_env(name: str) -> bool:
@@ -179,11 +180,25 @@ def run_dev_message_route_smoke(
 
 
 def build_dev_local_responder():
-    return build_local_responder(
-        model=os.getenv(MODEL_ENV, DEFAULT_MODEL),
-        endpoint=os.getenv(ENDPOINT_ENV, DEFAULT_ENDPOINT),
-        timeout_s=_timeout_from_env(),
-    )
+    model = os.getenv(MODEL_ENV, DEFAULT_MODEL)
+    endpoint = os.getenv(ENDPOINT_ENV, DEFAULT_ENDPOINT)
+    timeout_s = _timeout_from_env()
+
+    def responder(prompt: str) -> str:
+        metadata = call_local_ollama_generate_with_metadata(
+            prompt,
+            model=model,
+            endpoint=endpoint,
+            timeout_s=timeout_s,
+            temperature=0.0,
+            max_prompt_chars=LOCAL_CHAT_MAX_PROMPT_CHARS,
+            max_output_chars=LOCAL_CHAT_MAX_OUTPUT_CHARS,
+        )
+        responder.last_metadata = metadata
+        return metadata["response"]
+
+    responder.last_metadata = None
+    return responder
 
 
 def scan_history_turn_for_context(content: str) -> str | None:
@@ -273,18 +288,35 @@ def assemble_local_chat_prompt(*, clean_history: list[dict[str, str]], message: 
     return "\n".join(lines)
 
 
-def add_chat_response_metadata(body: dict[str, Any], raw_result: dict[str, Any]) -> dict[str, Any]:
+def select_prompt_history_within_budget(clean_history: list[dict[str, str]], message: str) -> tuple[list[dict[str, str]], int]:
+    selected = list(clean_history)
+    while selected and len(assemble_local_chat_prompt(clean_history=selected, message=message)) > LOCAL_CHAT_MAX_PROMPT_CHARS:
+        selected.pop(0)
+    omitted = len(clean_history) - len(selected)
+    return selected, omitted
+
+
+def add_chat_response_metadata(body: dict[str, Any], raw_result: dict[str, Any], responder: Any) -> dict[str, Any]:
     if body.get("executed") is not True:
         return body
     raw_response = raw_result.get("response")
     if not isinstance(raw_response, str):
         return body
-    truncated = len(raw_response) > CHAT_RESPONSE_CHAR_LIMIT
-    response = raw_response[:CHAT_RESPONSE_CHAR_LIMIT]
+    metadata = getattr(responder, "last_metadata", None)
+    if not isinstance(metadata, dict):
+        body["response"] = raw_response
+        body["response_may_be_truncated"] = True
+        body["response_truncated_false_semantics"] = "not_sliced_by_jarvisos_not_completion_guarantee"
+        return body
+    response = metadata.get("response")
+    if not isinstance(response, str):
+        response = raw_response
     body["response"] = response
-    body["response_truncated"] = truncated
-    body["response_char_count_returned"] = len(response)
-    body["response_char_limit"] = CHAT_RESPONSE_CHAR_LIMIT
+    body["response_truncated"] = metadata.get("response_truncated") is True
+    body["response_char_count_returned"] = metadata.get("response_char_count_returned", len(response))
+    body["response_char_limit"] = metadata.get("response_char_limit", LOCAL_CHAT_MAX_OUTPUT_CHARS)
+    body["response_limit_source"] = metadata.get("response_limit_source", "local_responder_max_output_chars")
+    body["response_truncated_false_semantics"] = "not_sliced_by_jarvisos_not_completion_guarantee"
     return body
 
 
@@ -337,17 +369,25 @@ def run_dev_local_chat(
         return 200, body
 
     clean_history, context_filter = filter_clean_history(history)
-    prompt = assemble_local_chat_prompt(clean_history=clean_history, message=message)
+    prompt_history, prompt_omitted = select_prompt_history_within_budget(clean_history, message)
+    context_filter["history_turns_prompted"] = len(prompt_history)
+    context_filter["history_turns_omitted_for_prompt_budget"] = prompt_omitted
+    context_filter["prompt_char_limit"] = LOCAL_CHAT_MAX_PROMPT_CHARS
+    prompt = assemble_local_chat_prompt(clean_history=prompt_history, message=message)
     responder = build_dev_local_responder()
-    result = run_message_route_smoke(
-        prompt,
-        responder=responder,
-        now=utc_now_iso(),
-        assume_public_simple=_truthy_env(ASSUME_PUBLIC_ENV),
-        use_phase_b_hints=True,
-        phase_b_source_kind="stub",
-    )
+    response = responder(prompt)
+    result = {
+        "executed": True,
+        "reason": "local_answer",
+        "response": response,
+        "decision": current_gate.get("decision"),
+        "input_source": current_gate.get("input_source", "smoke_builder"),
+        "assume_public_simple_used": current_gate.get("assume_public_simple_used") is True,
+        "use_phase_b_hints_used": current_gate.get("use_phase_b_hints_used") is True,
+        "phase_b_source_kind": current_gate.get("phase_b_source_kind", "stub"),
+        "phase_b_source_used": current_gate.get("phase_b_source_used") is True,
+    }
     body = safe_endpoint_response(result, trace_id=trace_id)
     body["context_filter"] = context_filter
-    add_chat_response_metadata(body, result)
+    add_chat_response_metadata(body, result, responder)
     return 200, body

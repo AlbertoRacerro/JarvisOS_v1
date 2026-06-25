@@ -521,6 +521,23 @@ markers. Use confidentiality/IP/project-private phrases such as parametri
 proprietari, correlazioni riservate, proprieta intellettuale, dati sperimentali
 non pubblici, or explicit BlueRev-private markers.
 
+`1G-B2-F3-C2-R1` crosses the A4 local responder boundary explicitly to expose
+measured local responder truncation metadata without duplicating Ollama POST
+logic. The existing A4 public API remains stable:
+`build_local_responder(...) -> Callable[[str], str]` and
+`call_local_ollama_generate(...) -> str`. A metadata-returning helper shares the
+same localhost-only validation, payload construction, POST, response parse, and
+output bounding path.
+
+The local-chat prompt budget is a conservative char-based adapter limit, not the
+full model token context window. It improves multi-turn usefulness versus the
+single-message smoke default, but it is not long-term memory and may include
+only a limited number of substantial recent turns.
+
+`response_truncated=false` means JarvisOS/local responder did not slice the
+returned response due to `max_output_chars`. It does not guarantee the model's
+answer is semantically complete.
+
 ## 1G-B2-F3-A1 boundary
 
 This document is part of the RouterPolicy contract layer only. It does not add

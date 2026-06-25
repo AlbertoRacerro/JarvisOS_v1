@@ -1839,3 +1839,12 @@ the backend rescans and filters every turn before assembling clean context for
 the local responder. This does not add frontend UI, persistent memory,
 retrieval, provider routing, tools/MCP/browser/terminal execution, production
 chat, or BlueRev runtime behavior.
+
+### 1G-B2-F3-C2-R1 - Local Chat Budget And Truncation Metadata
+
+C2-R1 increases the dev local-chat prompt/output budgets through the A4
+localhost-only responder seam and adds measured truncation metadata. The
+32000-char prompt budget is a conservative adapter limit, not the model token
+context window or long-term memory. `response_truncated=false` means
+JarvisOS/local responder did not slice the returned response; it does not
+guarantee the model answer is semantically complete.

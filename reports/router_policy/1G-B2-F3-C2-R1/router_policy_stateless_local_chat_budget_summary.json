@@ -1,0 +1,112 @@
+{
+  "milestone": "1G-B2-F3-C2-R1 - Local chat budget and A4 truncation metadata",
+  "start_head": "82182ac9d4e686b95b16cd4e332c5e1d5b8fc2f9",
+  "files_changed": [
+    "scripts/router_policy_local_responder.py",
+    "backend/app/modules/dev_message_route/smoke_adapter.py",
+    "backend/tests/test_dev_local_chat.py",
+    "tests/test_router_policy_local_responder.py",
+    "reports/router_policy/1G-B2-F3-C2-R1/router_policy_stateless_local_chat_budget_summary.json",
+    "reports/router_policy/1G-B2-F3-C2-R1/router_policy_stateless_local_chat_budget_summary.md",
+    "README.md",
+    "docs/ROUTER_POLICY_DESIGN.md",
+    "docs/LOCAL_AI_EVALUATION_EVIDENCE.md"
+  ],
+  "a4_local_responder_modified": true,
+  "a4_boundary_crossing_declared": true,
+  "a4_modification_reason": "Expose measured local responder output truncation without duplicating Ollama POST logic",
+  "a4_localhost_only_invariants_preserved": true,
+  "a4_validation_before_post_preserved": true,
+  "a4_existing_public_api_preserved": true,
+  "a4_non_localhost_rejection_tested": true,
+  "a4_credentials_query_fragment_rejection_tested": true,
+  "a4_wrong_path_rejection_tested": true,
+  "a4_prompt_too_long_rejection_tested": true,
+  "ollama_post_logic_duplicated": false,
+  "metadata_path_uses_same_validation_path": true,
+  "response_truncated_false_semantics": "not_sliced_by_jarvisos_not_completion_guarantee",
+  "local_chat_prompt_budget_is_conservative": true,
+  "local_chat_prompt_char_limit": 32000,
+  "local_chat_output_char_limit": 16000,
+  "long_term_memory_added": false,
+  "model_token_context_window_meter_added": false,
+  "larger_local_chat_output_budget_added": true,
+  "no_extra_4000_char_local_chat_cap": true,
+  "recent_clean_history_selected_within_prompt_budget": true,
+  "clean_turns_omitted_metadata_added": true,
+  "response_continuation_added": false,
+  "response_pagination_added": false,
+  "streaming_added": false,
+  "runtime_boundary_check": {
+    "production_chat_approved": false,
+    "frontend_ui_added": false,
+    "persistent_memory_added": false,
+    "retrieval_runtime_added": false,
+    "provider_routing_added": false,
+    "external_provider_calls_added": false,
+    "tool_mcp_browser_terminal_execution_added": false,
+    "file_write_runtime_added": false,
+    "db_conversation_persistence_added": false,
+    "live_qwen_phase_b_exposed": false,
+    "new_external_model_caller_added": false,
+    "bluerev_runtime_behavior_added": false
+  },
+  "tests_run": [
+    {
+      "command": "cd backend; .\\.venv\\Scripts\\python -m pytest tests\\test_dev_local_chat.py -q",
+      "result": "19 passed"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_local_responder",
+      "result": "20 tests OK"
+    },
+    {
+      "command": "cd backend; .\\.venv\\Scripts\\python -m pytest tests\\test_dev_message_route_smoke.py -q",
+      "result": "52 passed"
+    },
+    {
+      "command": "cd backend; .\\.venv\\Scripts\\python -m pytest -q",
+      "result": "396 passed"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_message_route_smoke",
+      "result": "84 tests OK"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_hint_bridge_probe",
+      "result": "15 tests OK"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_local_route_probe",
+      "result": "11 tests OK"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_decision_probe",
+      "result": "14 tests OK"
+    },
+    {
+      "command": "python -m unittest tests.test_router_policy_semantic_validator",
+      "result": "40 tests OK"
+    },
+    {
+      "command": "python -m unittest discover -s tests",
+      "result": "337 tests OK"
+    },
+    {
+      "command": "python -m json.tool reports/router_policy/1G-B2-F3-C2-R1/router_policy_stateless_local_chat_budget_summary.json",
+      "result": "valid JSON"
+    }
+  ],
+  "known_residual_risks": [
+    "C2-R1 increases local-chat prompt/output budgets and adds honest metadata, but it does not guarantee complete model answers. response_truncated=false only means JarvisOS/local responder did not slice the returned response; the model or Ollama may still stop upstream.",
+    "The 32000-char local prompt budget is conservative and char-based. It is not the model's token context window and does not provide long-term memory. Long conversations still require future context refresh/checkpointing or retrieval/memory work.",
+    "C2-R1 remains dev-only local chat backend support, not production chat.",
+    "No frontend UI is added by C2-R1.",
+    "No persistent memory is approved.",
+    "No retrieval runtime is approved.",
+    "No provider routing is approved.",
+    "No external provider calls are approved.",
+    "No tool/MCP/browser/terminal execution is approved.",
+    "No BlueRev runtime behavior is approved."
+  ]
+}

@@ -111,7 +111,7 @@ def _stdlib_json_post_client(endpoint: str, payload: dict, timeout_s: float) -> 
     return decoded
 
 
-def call_local_ollama_generate(
+def _call_local_ollama_generate_result(
     prompt: str,
     *,
     model: str,
@@ -121,9 +121,7 @@ def call_local_ollama_generate(
     max_prompt_chars: int,
     max_output_chars: int,
     client=None,
-) -> str:
-    """Call localhost Ollama /api/generate and return bounded response text."""
-
+) -> dict[str, Any]:
     _validate_static_params(
         model=model,
         endpoint=endpoint,
@@ -149,7 +147,64 @@ def call_local_ollama_generate(
     response_text = raw.get("response")
     if not isinstance(response_text, str):
         raise LocalResponderResponseError("localhost Ollama response missing string response")
-    return response_text[:max_output_chars]
+    bounded = response_text[:max_output_chars]
+    return {
+        "response": bounded,
+        "response_truncated": len(response_text) > max_output_chars,
+        "response_char_count_returned": len(bounded),
+        "response_char_limit": max_output_chars,
+        "response_limit_source": "local_responder_max_output_chars",
+    }
+
+
+def call_local_ollama_generate(
+    prompt: str,
+    *,
+    model: str,
+    endpoint: str,
+    timeout_s: float,
+    temperature: float,
+    max_prompt_chars: int,
+    max_output_chars: int,
+    client=None,
+) -> str:
+    """Call localhost Ollama /api/generate and return bounded response text."""
+
+    return _call_local_ollama_generate_result(
+        prompt,
+        model=model,
+        endpoint=endpoint,
+        timeout_s=timeout_s,
+        temperature=temperature,
+        max_prompt_chars=max_prompt_chars,
+        max_output_chars=max_output_chars,
+        client=client,
+    )["response"]
+
+
+def call_local_ollama_generate_with_metadata(
+    prompt: str,
+    *,
+    model: str,
+    endpoint: str,
+    timeout_s: float,
+    temperature: float,
+    max_prompt_chars: int,
+    max_output_chars: int,
+    client=None,
+) -> dict[str, Any]:
+    """Call localhost Ollama /api/generate and return bounded text plus slice metadata."""
+
+    return _call_local_ollama_generate_result(
+        prompt,
+        model=model,
+        endpoint=endpoint,
+        timeout_s=timeout_s,
+        temperature=temperature,
+        max_prompt_chars=max_prompt_chars,
+        max_output_chars=max_output_chars,
+        client=client,
+    )
 
 
 def build_local_responder(

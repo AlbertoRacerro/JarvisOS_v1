@@ -101,6 +101,159 @@ class RouterPolicyLocalResponderTests(unittest.TestCase):
                 with self.assertRaises(responder.LocalResponderPolicyError):
                     responder.build_local_responder(endpoint=endpoint, client=RecordingClient())
 
+    def test_a4_r1_001_non_localhost_endpoint_still_rejected_before_post(self):
+        for endpoint in (
+            "http://192.168.1.10:11434/api/generate",
+            "https://api.example.com/api/generate",
+            "http://evil.localhost.com:11434/api/generate",
+        ):
+            with self.subTest(endpoint=endpoint):
+                client = RecordingClient()
+                with self.assertRaises(responder.LocalResponderPolicyError):
+                    responder.call_local_ollama_generate_with_metadata(
+                        "prompt",
+                        model="gemma3:4b",
+                        endpoint=endpoint,
+                        timeout_s=3,
+                        temperature=0.0,
+                        max_prompt_chars=100,
+                        max_output_chars=100,
+                        client=client,
+                    )
+                self.assertEqual([], client.calls)
+
+    def test_a4_r1_002_credentials_query_fragment_rejected_before_post(self):
+        for endpoint in (
+            "http://user:pass@127.0.0.1:11434/api/generate",
+            "http://127.0.0.1:11434/api/generate?x=1",
+            "http://127.0.0.1:11434/api/generate#frag",
+        ):
+            with self.subTest(endpoint=endpoint):
+                client = RecordingClient()
+                with self.assertRaises(responder.LocalResponderPolicyError):
+                    responder.call_local_ollama_generate_with_metadata(
+                        "prompt",
+                        model="gemma3:4b",
+                        endpoint=endpoint,
+                        timeout_s=3,
+                        temperature=0.0,
+                        max_prompt_chars=100,
+                        max_output_chars=100,
+                        client=client,
+                    )
+                self.assertEqual([], client.calls)
+
+    def test_a4_r1_003_wrong_path_rejected_before_post(self):
+        client = RecordingClient()
+        with self.assertRaises(responder.LocalResponderPolicyError):
+            responder.call_local_ollama_generate_with_metadata(
+                "prompt",
+                model="gemma3:4b",
+                endpoint="http://127.0.0.1:11434/api/chat",
+                timeout_s=3,
+                temperature=0.0,
+                max_prompt_chars=100,
+                max_output_chars=100,
+                client=client,
+            )
+        self.assertEqual([], client.calls)
+
+    def test_a4_r1_004_prompt_too_long_rejected_before_post(self):
+        client = RecordingClient()
+        with self.assertRaises(responder.LocalResponderPolicyError):
+            responder.call_local_ollama_generate_with_metadata(
+                "too long",
+                model="gemma3:4b",
+                endpoint=responder.DEFAULT_ENDPOINT,
+                timeout_s=3,
+                temperature=0.0,
+                max_prompt_chars=3,
+                max_output_chars=100,
+                client=client,
+            )
+        self.assertEqual([], client.calls)
+
+    def test_a4_r1_005_existing_api_remains_stable(self):
+        client = RecordingClient()
+        local = responder.build_local_responder(client=client)
+        self.assertTrue(callable(local))
+        self.assertIsInstance(local("prompt"), str)
+        self.assertIsInstance(
+            responder.call_local_ollama_generate(
+                "prompt",
+                model="gemma3:4b",
+                endpoint=responder.DEFAULT_ENDPOINT,
+                timeout_s=3,
+                temperature=0.0,
+                max_prompt_chars=100,
+                max_output_chars=100,
+                client=RecordingClient(),
+            ),
+            str,
+        )
+
+    def test_a4_r1_006_metadata_path_uses_same_validation_and_request_path(self):
+        client = RecordingClient(response={"response": "metadata response"})
+        result = responder.call_local_ollama_generate_with_metadata(
+            "prompt",
+            model="gemma3:4b",
+            endpoint=responder.DEFAULT_ENDPOINT,
+            timeout_s=3,
+            temperature=0.0,
+            max_prompt_chars=100,
+            max_output_chars=100,
+            client=client,
+        )
+        self.assertEqual("metadata response", result["response"])
+        self.assertEqual(1, len(client.calls))
+        self.assertEqual("prompt", client.calls[0]["payload"]["prompt"])
+        self.assertEqual(False, client.calls[0]["payload"]["stream"])
+
+    def test_a4_r1_007_measured_truncation_metadata(self):
+        long_client = RecordingClient(response={"response": "abcdef"})
+        long_result = responder.call_local_ollama_generate_with_metadata(
+            "prompt",
+            model="gemma3:4b",
+            endpoint=responder.DEFAULT_ENDPOINT,
+            timeout_s=3,
+            temperature=0.0,
+            max_prompt_chars=100,
+            max_output_chars=3,
+            client=long_client,
+        )
+        self.assertEqual(
+            {
+                "response": "abc",
+                "response_truncated": True,
+                "response_char_count_returned": 3,
+                "response_char_limit": 3,
+                "response_limit_source": "local_responder_max_output_chars",
+            },
+            long_result,
+        )
+
+        short_client = RecordingClient(response={"response": "abc"})
+        short_result = responder.call_local_ollama_generate_with_metadata(
+            "prompt",
+            model="gemma3:4b",
+            endpoint=responder.DEFAULT_ENDPOINT,
+            timeout_s=3,
+            temperature=0.0,
+            max_prompt_chars=100,
+            max_output_chars=3,
+            client=short_client,
+        )
+        self.assertEqual(
+            {
+                "response": "abc",
+                "response_truncated": False,
+                "response_char_count_returned": 3,
+                "response_char_limit": 3,
+                "response_limit_source": "local_responder_max_output_chars",
+            },
+            short_result,
+        )
+
     def test_a4_004_deterministic_bounded_payload(self):
         client = RecordingClient()
         text = responder.call_local_ollama_generate(

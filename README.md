@@ -256,4 +256,11 @@ the local responder. This does not add frontend UI, persistent memory,
 retrieval, provider routing, tools/MCP/browser/terminal execution, production
 chat, or BlueRev runtime behavior.
 
+`1G-B2-F3-C2-R1` increases the dev local-chat prompt/output budgets through the
+A4 localhost-only responder seam and adds honest truncation metadata. The
+32000-char prompt budget is a conservative adapter limit, not the model token
+context window or long-term memory. `response_truncated=false` means
+JarvisOS/local responder did not slice the returned response; it does not
+guarantee the model answer is semantically complete.
+
 Do not start BlueRev modeling, Context Pack Broker runtime, local gatekeeper runtime, memory runtime, retrieval runtime, tool execution, or broad Gemma orchestration before the form/protocol/memory foundation and reliability gates are complete.
