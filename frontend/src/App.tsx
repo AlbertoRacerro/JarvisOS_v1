@@ -3,10 +3,11 @@ import { useState } from "react";
 import Layout from "./components/Layout";
 import AIDraft from "./pages/AIDraft";
 import Dashboard from "./pages/Dashboard";
+import DevLocalChat from "./pages/DevLocalChat";
 import DomainFoundation from "./pages/DomainFoundation";
 import SystemStatus from "./pages/SystemStatus";
 
-export type AppPage = "dashboard" | "foundation" | "ai" | "system";
+export type AppPage = "dashboard" | "foundation" | "ai" | "system" | "devlocalchat";
 
 function App() {
   const [page, setPage] = useState<AppPage>("dashboard");
@@ -17,6 +18,7 @@ function App() {
       {page === "foundation" && <DomainFoundation />}
       {page === "ai" && <AIDraft />}
       {page === "system" && <SystemStatus />}
+      {import.meta.env.DEV && page === "devlocalchat" && <DevLocalChat />}
     </Layout>
   );
 }

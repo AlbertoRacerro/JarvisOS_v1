@@ -45,6 +45,15 @@ function Layout({ activePage, children, onNavigate }: LayoutProps) {
           >
             AI Draft
           </button>
+          {import.meta.env.DEV && (
+            <button
+              className={activePage === "devlocalchat" ? "nav-button active nav-button--dev" : "nav-button nav-button--dev"}
+              type="button"
+              onClick={() => onNavigate("devlocalchat")}
+            >
+              Dev Local Chat
+            </button>
+          )}
         </nav>
       </aside>
       <main className="main-panel">{children}</main>

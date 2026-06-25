@@ -395,6 +395,7 @@ def run_dev_local_chat(
     context_filter["history_turns_omitted_for_prompt_budget"] = prompt_omitted
     context_filter["prompt_char_limit"] = LOCAL_CHAT_MAX_PROMPT_CHARS
     prompt = assemble_local_chat_prompt(clean_history=prompt_history, message=message)
+    context_filter["assembled_prompt_chars"] = len(prompt)
     responder = build_dev_local_responder()
     response = responder(prompt)
     result = {
