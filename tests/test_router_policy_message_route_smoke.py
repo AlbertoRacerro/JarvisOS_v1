@@ -256,6 +256,42 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
         input_obj["user_policy"]["external_routing_enabled"] = True
         return input_obj
 
+    def unknown_external_pressure_input(self, message):
+        input_obj = self.conservative_input(message)
+        input_obj["phase_a_signals"].update(
+            {
+                "contains_secret_or_credential": False,
+                "contains_raw_private_or_ip_sensitive_context": False,
+                "mentions_external_provider_or_upload_intent": False,
+                "clarification_required": False,
+                "hard_reason_codes": ["unknown_sensitivity", "manual_review_required"],
+                "sensitivity_bucket_proposal": "unknown",
+                "requires_manual_review": True,
+            }
+        )
+        input_obj["router_hint"].update(
+            {
+                "task_type": "review",
+                "complexity": "medium",
+                "domain": "general",
+                "needs_reasoning": False,
+                "needs_current_info": True,
+                "needs_file_context": False,
+                "needs_code_execution": False,
+                "needs_scientific_depth": False,
+            }
+        )
+        input_obj["action_hint"].update(
+            {
+                "requested_action_type": "answer",
+                "needs_provider_call": False,
+                "needs_terminal": False,
+                "needs_file_write": False,
+                "needs_memory_write": False,
+            }
+        )
+        return input_obj
+
     def test_a5_r3_001_bluerev_ip_floor_runs_after_assume_public_simple(self):
         message = "usa i parametri proprietari BlueRev per dimensionare una pompa"
         input_obj = self.safe_input(message)
@@ -461,6 +497,41 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
         responder.assert_not_called()
         self.assertFalse(result["executed"])
         self.assertEqual("external:scientific_medium", result["decision"]["proposed_external_target"])
+
+    def test_e2_001_rule8_external_pressure_respects_external_routing_flag_off(self):
+        message = "Look up the latest context before answering this ambiguous request."
+        for policy_value in ("missing", None, False):
+            with self.subTest(policy_value=policy_value):
+                built_input = self.unknown_external_pressure_input(message)
+                if policy_value == "missing":
+                    del built_input["user_policy"]["external_routing_enabled"]
+                else:
+                    built_input["user_policy"]["external_routing_enabled"] = policy_value
+
+                decision = decision_probe.decide_router_policy(built_input, now=NOW)
+
+                self.assertEqual("route_local", decision["route_action"])
+                self.assertEqual("LOCAL_FAST", decision["route_tier"])
+                self.assertIsNone(decision["proposed_external_target"])
+                self.assertFalse(decision["external_allowed"])
+                self.assertEqual("propose_only", decision["allowed_execution_mode"])
+                self.assertEqual(["default_local_fallback"], decision["reason_codes"])
+
+    def test_e2_002_rule8_external_pressure_preserved_when_external_routing_enabled(self):
+        message = "Look up the latest context before answering this ambiguous request."
+        built_input = self.unknown_external_pressure_input(message)
+        built_input["user_policy"]["external_routing_enabled"] = True
+
+        decision = decision_probe.decide_router_policy(built_input, now=NOW)
+
+        self.assertEqual("ask_user_confirm", decision["route_action"])
+        self.assertEqual("USER_CONFIRM", decision["route_tier"])
+        self.assertEqual("external:scientific_medium", decision["proposed_external_target"])
+        self.assertFalse(decision["external_allowed"])
+        self.assertEqual(
+            ["ambiguous_external_routing", "default_local_fallback"],
+            decision["reason_codes"],
+        )
 
     def test_a5_010_input_builder_failure_fails_closed(self):
         responder = Mock(return_value="should not run")

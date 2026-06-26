@@ -1,0 +1,28 @@
+{
+  "milestone": "E2-EXTERNAL-ROUTING-FLAG-GOVERNANCE",
+  "scope": "surgical_rule8_external_routing_flag_fix",
+  "already_existing_behavior": [
+    "rule_6_external_candidacy_already_required_external_routing_enabled_true",
+    "missing_none_false_already_blocked_rule_6_external_candidacy",
+    "dev_local_chat_request_has_no_client_user_policy_channel",
+    "a5_r3_and_e1_already_cover_sensitivity_bluerev_ip_and_egress_safety"
+  ],
+  "new_fix": [
+    "rule_8_now_checks_external_routing_enabled_before_external_proposal",
+    "flag_off_unknown_or_ambiguous_external_pressure_now_falls_back_local_no_external",
+    "flag_on_rule_8_external_pressure_behavior_preserved"
+  ],
+  "files_changed": [
+    "scripts/router_policy_decision_probe.py",
+    "tests/test_router_policy_message_route_smoke.py"
+  ],
+  "non_goals_respected": [
+    "no_e1_changes",
+    "no_sensitivity_redesign",
+    "no_external_execution",
+    "no_provider_calls",
+    "no_new_policy_engine",
+    "no_assume_public_simple_changes",
+    "no_local_history_filtering_changes"
+  ]
+}

@@ -114,6 +114,10 @@ def _qualifies_for_external_candidate(input_obj: dict[str, Any]) -> bool:
     )
 
 
+def _external_routing_enabled(input_obj: dict[str, Any]) -> bool:
+    return _user_policy(input_obj).get("external_routing_enabled") is True
+
+
 def _confirmation_payload(target: str) -> dict[str, Any]:
     return {
         "scope": "external_provider_call",
@@ -283,6 +287,24 @@ def _unknown_external_pressure(decision: dict[str, Any]) -> dict[str, Any]:
     return decision
 
 
+def _unknown_external_pressure_local_fallback(decision: dict[str, Any]) -> dict[str, Any]:
+    decision.update(
+        {
+            "route_action": "route_local",
+            "route_tier": "LOCAL_FAST",
+            "provider_candidate": LOCAL_PROVIDER,
+            "proposed_external_target": None,
+            "external_allowed": False,
+            "allowed_execution_mode": "propose_only",
+            "response_allowed_now": True,
+            "manual_review_required": True,
+            "reason_codes": ["default_local_fallback"],
+            "audit_notes": ["External routing is disabled, so ambiguous external pressure stays local."],
+        }
+    )
+    return decision
+
+
 def _external_candidate_proposal(input_obj: dict[str, Any], decision: dict[str, Any]) -> dict[str, Any]:
     tier = _candidate_tier(input_obj)
     if tier is None:
@@ -378,6 +400,8 @@ def decide_router_policy(input_obj: dict, now: str | None = None) -> dict:
 
     # 8. Unknown/not-positively-safe sensitivity blocks external escalation pressure.
     if sensitivity in UNSAFE_OR_UNKNOWN_SENSITIVITY and _has_external_pressure(input_obj):
+        if not _external_routing_enabled(input_obj):
+            return _unknown_external_pressure_local_fallback(decision)
         return _unknown_external_pressure(decision)
 
     # 6. Positively non-sensitive high-complexity external candidate proposal.
