@@ -1,0 +1,185 @@
+{
+  "milestone": "E4-PRE-ROUTER-EXTERNAL-PROPOSAL-INVARIANT",
+  "starting_head": "799e48aef0ced2d717bd761cda960492f047cd7e",
+  "tracked_worktree_clean_status": "clean",
+  "ignored_untracked_changed_files_zip_artifacts": [
+    "reports/E2-EXTERNAL-ROUTING-FLAG-GOVERNANCE/changed_files.zip",
+    "reports/E3-EXTERNAL-BUDGET-SESSION-GATE/changed_files.zip"
+  ],
+  "router_module_path": "scripts/router_policy_decision_probe.py",
+  "decision_representation_discovered": "dict",
+  "external_artifact_field_inventory": [
+    "proposed_external_target",
+    "external_allowed",
+    "external_network_allowed_now",
+    "provider_call_allowed_now",
+    "confirmation_required",
+    "confirmation_payload_required",
+    "confirmation_payload",
+    "confirmation_digest",
+    "confirmation_options",
+    "redaction_required",
+    "redaction_status"
+  ],
+  "always_present_external_artifact_fields": [
+    "proposed_external_target",
+    "external_allowed",
+    "external_network_allowed_now",
+    "provider_call_allowed_now",
+    "confirmation_required",
+    "confirmation_payload_required",
+    "confirmation_payload",
+    "confirmation_digest",
+    "confirmation_options",
+    "redaction_required",
+    "redaction_status"
+  ],
+  "optional_external_artifact_fields": [],
+  "valid_proposed_external_target_shape": "enum(external:cheap, external:scientific_medium, external:frontier, null)",
+  "valid_test_external_target_value": "external:scientific_medium",
+  "downstream_target_validation_present": true,
+  "target_validation_location_if_present": "schemas/router_policy_decision_v0_3_1_1.schema.json",
+  "producer_helpers_discovered": [
+    "_budget_or_policy_fallback",
+    "_external_candidate_proposal",
+    "_private_provider_boundary",
+    "_unknown_external_pressure"
+  ],
+  "producer_helpers_expected": [
+    "_budget_or_policy_fallback",
+    "_external_candidate_proposal",
+    "_private_provider_boundary",
+    "_unknown_external_pressure"
+  ],
+  "producer_classification": {
+    "_budget_or_policy_fallback": "scrub-after",
+    "_external_candidate_proposal": "suppress-before",
+    "_private_provider_boundary": "scrub-after",
+    "_unknown_external_pressure": "suppress-before"
+  },
+  "producer_classification_evidence": {
+    "_budget_or_policy_fallback": "Reached on high-complexity public/internal fallback; final output scrubbed by shared invariant helper when flag is not exactly True.",
+    "_external_candidate_proposal": "_qualifies_for_external_candidate requires external_routing_enabled is True, so the producer is not reached when the flag is not exactly True.",
+    "_private_provider_boundary": "Reached on raw-private provider-boundary input regardless of flag; final output scrubbed by shared invariant helper when flag is not exactly True.",
+    "_unknown_external_pressure": "Current rule-8 branch calls _external_disabled_local_fallback instead of the producer when external_routing_enabled is not exactly True."
+  },
+  "producer_patch_namespace": {
+    "_budget_or_policy_fallback": "router_policy_decision_probe._budget_or_policy_fallback",
+    "_external_candidate_proposal": "router_policy_decision_probe._external_candidate_proposal",
+    "_private_provider_boundary": "router_policy_decision_probe._private_provider_boundary",
+    "_unknown_external_pressure": "router_policy_decision_probe._unknown_external_pressure"
+  },
+  "producer_reachability_conditions": {
+    "_budget_or_policy_fallback": {
+      "representative_trigger_input": "public/internal high-complexity scientific input with no candidate tier available",
+      "expected_call_count_when_flag_not_true": ">0",
+      "expected_call_count_when_flag_true": ">0"
+    },
+    "_external_candidate_proposal": {
+      "representative_trigger_input": "public/internal high-complexity scientific-depth input with allowed provider/budget tiers",
+      "expected_call_count_when_flag_not_true": "0",
+      "expected_call_count_when_flag_true": ">0"
+    },
+    "_private_provider_boundary": {
+      "representative_trigger_input": "raw-private/IP-sensitive input plus provider/upload intent",
+      "expected_call_count_when_flag_not_true": ">0",
+      "expected_call_count_when_flag_true": ">0"
+    },
+    "_unknown_external_pressure": {
+      "representative_trigger_input": "unknown sensitivity plus external pressure via needs_current_info",
+      "expected_call_count_when_flag_not_true": "0",
+      "expected_call_count_when_flag_true": ">0"
+    }
+  },
+  "actual_call_count_by_flag_per_producer": {
+    "_budget_or_policy_fallback": {
+      "flag_not_true": 1,
+      "flag_true": 1
+    },
+    "_external_candidate_proposal": {
+      "flag_not_true": 0,
+      "flag_true": 1
+    },
+    "_private_provider_boundary": {
+      "flag_not_true": 1,
+      "flag_true": 1
+    },
+    "_unknown_external_pressure": {
+      "flag_not_true": 0,
+      "flag_true": 1
+    }
+  },
+  "ast_producer_discovery_result": "matched expected producer set",
+  "monkeypatch_enforcement_coverage_per_producer": {
+    "_budget_or_policy_fallback": "scrub-after covered",
+    "_external_candidate_proposal": "suppress-before covered",
+    "_private_provider_boundary": "scrub-after covered",
+    "_unknown_external_pressure": "suppress-before covered"
+  },
+  "flag_off_output_scrubbed_or_suppressed_per_producer": {
+    "_budget_or_policy_fallback": "scrubbed",
+    "_external_candidate_proposal": "suppressed-before",
+    "_private_provider_boundary": "scrubbed",
+    "_unknown_external_pressure": "suppressed-before"
+  },
+  "flag_true_positive_tested_per_producer": {
+    "_budget_or_policy_fallback": true,
+    "_external_candidate_proposal": true,
+    "_private_provider_boundary": true,
+    "_unknown_external_pressure": true
+  },
+  "flag_true_external_artifact_preserved_or_skip_reason_per_producer": {
+    "_budget_or_policy_fallback": "preserved",
+    "_external_candidate_proposal": "preserved",
+    "_private_provider_boundary": "preserved",
+    "_unknown_external_pressure": "preserved"
+  },
+  "finalizers_or_output_normalizers_discovered": [
+    "_enforce_external_proposal_flag_invariant"
+  ],
+  "positive_preserve_coverage_by_finalizer": {
+    "_enforce_external_proposal_flag_invariant": "covered"
+  },
+  "redaction_field_interpretation": "Redaction fields are broader than external proposals because _block_secret uses them for local blocked secret handling; general invariant assertions therefore focus on proposal/provider/network/confirmation artifacts, with a dedicated provider-boundary downgrade test asserting redaction clearing.",
+  "behavioral_matrix_cases": [
+    "unknown_external_pressure",
+    "budget_fallback",
+    "private_provider_boundary",
+    "external_candidate"
+  ],
+  "external_routing_enabled_non_identity_truthy_cases_checked": [
+    1,
+    "true",
+    "True",
+    [],
+    {}
+  ],
+  "branch_activation_limitations": "Flag-off outputs normalize to the same local/no-external shape, so producer-specific branch activation is proven primarily by monkeypatch call counts rather than final route markers alone.",
+  "unknown_producer_handling_result": "none_discovered",
+  "post_commit_diff_scoped_no_wiring_check": "to_be_verified_from_HEAD_after_commit; pre_commit_explicit_path_inspection_is_clean",
+  "confirmation_that_no_provider_e3_e4_wiring_was_added": true,
+  "production_patch_required": false,
+  "files_changed": [
+    "tests/test_router_policy_external_proposal_invariant.py",
+    "reports/E4-PRE-ROUTER-EXTERNAL-PROPOSAL-INVARIANT/summary.md",
+    "reports/E4-PRE-ROUTER-EXTERNAL-PROPOSAL-INVARIANT/summary.json"
+  ],
+  "tests_checks_run": [
+    "python -m pytest tests/test_router_policy_external_proposal_invariant.py -q -> 48 passed in 0.09s",
+    "python -m pytest tests/test_router_policy_message_route_smoke.py tests/test_router_policy_semantic_validator.py tests/test_router_policy_external_egress_gate.py tests/test_router_policy_external_budget_gate.py -q -> 236 passed in 0.26s",
+    "git diff --check -> passed",
+    "git status --short -> ?? reports/E2-EXTERNAL-ROUTING-FLAG-GOVERNANCE/changed_files.zip, ?? reports/E3-EXTERNAL-BUDGET-SESSION-GATE/changed_files.zip, ?? reports/E4-PRE-ROUTER-EXTERNAL-PROPOSAL-INVARIANT/, ?? tests/test_router_policy_external_proposal_invariant.py"
+  ],
+  "pre_commit_explicit_path_no_wiring_check": "No production call to evaluate_external_budget_gate, no provider client code, and no external execution wiring were added in the E4-PRE files.",
+  "known_limitations": [
+    "AST is used for producer discovery, not full dataflow proof.",
+    "E4-PRE protection is only as complete as producer discovery.",
+    "A future producer using a mutation or construction pattern not detected by AST or repo discovery may evade both the expected producer set and monkeypatch enforcement.",
+    "Behavioral matrix is example-based and may not exercise such a producer.",
+    "Monkeypatch enforcement depends on correct producer classification and representative trigger inputs.",
+    "A producer with incorrect or incomplete representative trigger input may appear unreachable even if it is reachable in production.",
+    "Positive preserve tests must use a valid proposed_external_target; otherwise downstream target validation can create false failures unrelated to over-scrubbing.",
+    "Expected producer set is a tripwire, not the main guarantee.",
+    "E4 still requires cumulative egress scope, digest and confirmation, provider policy, and E3 re-validation."
+  ]
+}
