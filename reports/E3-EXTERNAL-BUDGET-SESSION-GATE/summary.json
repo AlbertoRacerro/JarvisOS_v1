@@ -1,0 +1,47 @@
+{
+  "milestone": "E3-EXTERNAL-BUDGET-SESSION-GATE",
+  "scope": "pure_deterministic_provider_agnostic_budget_session_gate",
+  "status": "green",
+  "behavior": [
+    "adds_evaluate_external_budget_gate",
+    "strict_int_validation_rejects_bool",
+    "external_budget_enabled_requires_identity_true",
+    "request_text_bytes_is_server_derived_integer",
+    "estimated_input_tokens_optional_derived_from_bytes",
+    "bytes_per_token_default_3_if_missing",
+    "deny_not_clamp_requested_output_tokens",
+    "cumulative_session_token_budget",
+    "call_count_budget",
+    "ttl_uses_injected_now_epoch",
+    "return_all_deterministic_reason_codes_with_dependency_skip",
+    "returns_next_session_usage_but_does_not_persist"
+  ],
+  "non_goals": [
+    "no_provider_calls",
+    "no_external_execution",
+    "no_pricing_currency",
+    "no_provider_tokenizers",
+    "no_db_or_session_persistence",
+    "no_rendered_payload_digest",
+    "no_e4_work_session_logic"
+  ],
+  "known_limitations": [
+    "generic_token_estimate_is_conservative_not_provider_accurate",
+    "e3_does_not_perform_billing",
+    "e3_does_not_persist_session_usage",
+    "e3_overcounts_output_using_requested_max_output_tokens",
+    "e4_must_feed_server_derived_request_text_bytes",
+    "e4_must_persist_next_session_usage_after_successful_external_call"
+  ],
+  "checks": {
+    "pytest": "236 passed in 0.46s",
+    "git_diff_check": "passed",
+    "git_status_short_before_commit": [
+      "?? E3_APPLY_INSTRUCTIONS.txt",
+      "?? reports/E2-EXTERNAL-ROUTING-FLAG-GOVERNANCE/changed_files.zip",
+      "?? reports/E3-EXTERNAL-BUDGET-SESSION-GATE/",
+      "?? scripts/router_policy_external_budget_gate.py",
+      "?? tests/test_router_policy_external_budget_gate.py"
+    ]
+  ]
+}
