@@ -1,0 +1,260 @@
+{
+  "backend_comparison_results": [
+    {
+      "backend_timing": {
+        "current_gate_duration_ms": 7.506,
+        "history_filter_duration_ms": 0.004,
+        "local_responder_call_duration_ms": 35751.581,
+        "prompt_selection_and_assembly_duration_ms": 0.012,
+        "total_dev_local_chat_duration_ms": 35759.188
+      },
+      "decision_summary": {
+        "allowed_execution_mode": "answer_only",
+        "route_action": "answer_local",
+        "route_tier": "LOCAL_FAST"
+      },
+      "error_type": null,
+      "executed": true,
+      "http_status": 200,
+      "label": "problematic",
+      "local_responder_timing": {
+        "eval_count": 1879,
+        "eval_duration_ns": 34187184999,
+        "load_duration_ns": 1106524600,
+        "prompt_eval_count": 272,
+        "prompt_eval_duration_ns": 162647000,
+        "total_duration_ns": 35710735500
+      },
+      "reason": "local_answer",
+      "response_char_count_returned": 4505,
+      "response_truncated": false,
+      "trace_id": "c9bd6f32-83c6-4548-b4bc-ce66a498ce46",
+      "wall_clock_ms": 35967.443
+    },
+    {
+      "backend_timing": {
+        "current_gate_duration_ms": 0.645,
+        "history_filter_duration_ms": 0.003,
+        "local_responder_call_duration_ms": 4079.218,
+        "prompt_selection_and_assembly_duration_ms": 0.01,
+        "total_dev_local_chat_duration_ms": 4079.958
+      },
+      "decision_summary": {
+        "allowed_execution_mode": "answer_only",
+        "route_action": "answer_local",
+        "route_tier": "LOCAL_FAST"
+      },
+      "error_type": null,
+      "executed": true,
+      "http_status": 200,
+      "label": "short_control",
+      "local_responder_timing": {
+        "eval_count": 141,
+        "eval_duration_ns": 2412425000,
+        "load_duration_ns": 1200203900,
+        "prompt_eval_count": 250,
+        "prompt_eval_duration_ns": 159694000,
+        "total_duration_ns": 4061911700
+      },
+      "reason": "local_answer",
+      "response_char_count_returned": 63,
+      "response_truncated": false,
+      "trace_id": "aa85800a-b825-4bfc-b87a-338a812d21f7",
+      "wall_clock_ms": 4266.363
+    },
+    {
+      "backend_timing": {
+        "current_gate_duration_ms": 0.762,
+        "history_filter_duration_ms": 0.002,
+        "local_responder_call_duration_ms": 20415.914,
+        "prompt_selection_and_assembly_duration_ms": 0.007,
+        "total_dev_local_chat_duration_ms": 20416.743
+      },
+      "decision_summary": {
+        "allowed_execution_mode": "answer_only",
+        "route_action": "answer_local",
+        "route_tier": "LOCAL_FAST"
+      },
+      "error_type": null,
+      "executed": true,
+      "http_status": 200,
+      "label": "bluerev_ip_control",
+      "local_responder_timing": {
+        "eval_count": 1051,
+        "eval_duration_ns": 19156163000,
+        "load_duration_ns": 1059205600,
+        "prompt_eval_count": 273,
+        "prompt_eval_duration_ns": 170879000,
+        "total_duration_ns": 20399731400
+      },
+      "reason": "local_answer",
+      "response_char_count_returned": 1436,
+      "response_truncated": false,
+      "trace_id": "ed8df967-9281-4351-82e0-2c8af6cb86a9",
+      "wall_clock_ms": 20603.624
+    },
+    {
+      "backend_timing": {
+        "current_gate_duration_ms": 0.743,
+        "history_filter_duration_ms": 0.002,
+        "local_responder_call_duration_ms": 30149.828,
+        "prompt_selection_and_assembly_duration_ms": 0.007,
+        "total_dev_local_chat_duration_ms": 30150.636
+      },
+      "decision_summary": {
+        "allowed_execution_mode": "answer_only",
+        "route_action": "answer_local",
+        "route_tier": "LOCAL_FAST"
+      },
+      "error_type": null,
+      "executed": true,
+      "http_status": 200,
+      "label": "bluerev_generic_control",
+      "local_responder_timing": {
+        "eval_count": 1544,
+        "eval_duration_ns": 28390401000,
+        "load_duration_ns": 1186639700,
+        "prompt_eval_count": 268,
+        "prompt_eval_duration_ns": 184987000,
+        "total_duration_ns": 30127780200
+      },
+      "reason": "local_answer",
+      "response_char_count_returned": 3626,
+      "response_truncated": false,
+      "trace_id": "1d67aa15-3a75-40a1-a832-ced4db2cbe7e",
+      "wall_clock_ms": 30341.273
+    }
+  ],
+  "checks_run": [
+    {
+      "command": "git diff --check",
+      "result": "pass"
+    },
+    {
+      "command": "git status --short",
+      "result": "?? reports/router_policy/1G-B2-F3-LOCAL-RESPONDER-ROOT-CAUSE-RERUN/"
+    },
+    {
+      "command": "python -m json.tool summary.json and diagnostic_raw.json",
+      "result": "pass"
+    }
+  ],
+  "classification": "A. normal long useful generation",
+  "current_head": "9e04b41384aa452611d5b5331874ab384e18e9f7",
+  "files_changed": [
+    "reports/router_policy/1G-B2-F3-LOCAL-RESPONDER-ROOT-CAUSE-RERUN/run_diagnostic.py",
+    "reports/router_policy/1G-B2-F3-LOCAL-RESPONDER-ROOT-CAUSE-RERUN/diagnostic_raw.json",
+    "reports/router_policy/1G-B2-F3-LOCAL-RESPONDER-ROOT-CAUSE-RERUN/summary.json",
+    "reports/router_policy/1G-B2-F3-LOCAL-RESPONDER-ROOT-CAUSE-RERUN/summary.md"
+  ],
+  "final_git_status_before_commit": "?? reports/router_policy/1G-B2-F3-LOCAL-RESPONDER-ROOT-CAUSE-RERUN/",
+  "gemma4_12b_it_qat_available": true,
+  "gemma_direct_stream_metrics": {
+    "chunks_captured": 512,
+    "empty_or_whitespace_chunks": 28,
+    "final_metadata": {},
+    "output_characterization": "useful_visible_text",
+    "stopped_reason": "max_512_chunks",
+    "time_to_first_chunk_ms": 13846.147,
+    "time_to_first_visible_text_ms": 13846.147,
+    "total_visible_chars": 1537,
+    "visible_text_chars_after_512_chunks": 1537,
+    "visible_text_chars_after_64_chunks": 205,
+    "wall_clock_ms": 22999.433
+  },
+  "gemma_processor_class": "100% GPU",
+  "gemma_vs_qwen_verdict": "same placement=100% GPU; gemma first visible=13846.147 ms, qwen first visible=None ms; gemma visible chars after 64=205, qwen visible chars after 64=0",
+  "installed_models_relevant": [
+    "qwen3:14b",
+    "gemma4:12b-it-qat"
+  ],
+  "ollama_alive_before_diagnostics": true,
+  "ollama_ps_after_warmup": {
+    "command": "ollama ps",
+    "duration_ms": 89.499,
+    "label": "after_warmup",
+    "ok": true,
+    "parsed_rows": [
+      {
+        "CONTEXT": "4096",
+        "ID": "38044be4f923",
+        "MODEL": "gemma4:12b-it-qat",
+        "PROCESSOR": "100% GPU",
+        "SIZE": "7.7 GB",
+        "UNTIL": "29 minutes from now",
+        "raw": "gemma4:12b-it-qat    38044be4f923    7.7 GB    100% GPU     4096       29 minutes from now"
+      }
+    ],
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "NAME                 ID              SIZE      PROCESSOR    CONTEXT    UNTIL               \ngemma4:12b-it-qat    38044be4f923    7.7 GB    100% GPU     4096       29 minutes from now    \n",
+    "timestamp": "2026-06-26T06:26:16.360152+00:00"
+  },
+  "ollama_ps_before_warmup": {
+    "command": "ollama ps",
+    "duration_ms": 87.673,
+    "label": "before_warmup",
+    "ok": true,
+    "parsed_rows": [
+      {
+        "CONTEXT": "4096",
+        "ID": "38044be4f923",
+        "MODEL": "gemma4:12b-it-qat",
+        "PROCESSOR": "100% GPU",
+        "SIZE": "7.7 GB",
+        "UNTIL": "29 minutes from now",
+        "raw": "gemma4:12b-it-qat    38044be4f923    7.7 GB    100% GPU     4096       29 minutes from now"
+      }
+    ],
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "NAME                 ID              SIZE      PROCESSOR    CONTEXT    UNTIL               \ngemma4:12b-it-qat    38044be4f923    7.7 GB    100% GPU     4096       29 minutes from now    \n",
+    "timestamp": "2026-06-26T06:26:13.434145+00:00"
+  },
+  "ollama_ps_snapshot_summary": {
+    "backend_snapshots": "available in diagnostic_raw.json at backend_results[].ollama_ps_snapshots",
+    "gemma_direct_snapshots": "available in diagnostic_raw.json at direct_stream_gemma.ollama_ps_snapshots",
+    "gemma_processor_class": "100% GPU",
+    "qwen_direct_snapshots": "available in diagnostic_raw.json at direct_stream_qwen.ollama_ps_snapshots",
+    "qwen_processor_class": "100% GPU"
+  },
+  "ollama_startup_required": false,
+  "previous_post_reconnect_data_discarded": true,
+  "qwen3_14b_available": true,
+  "qwen_direct_stream_metrics": {
+    "chunks_captured": 512,
+    "empty_or_whitespace_chunks": 512,
+    "final_metadata": {},
+    "output_characterization": "no_visible_text",
+    "stopped_reason": "max_512_chunks",
+    "time_to_first_chunk_ms": 750.447,
+    "time_to_first_visible_text_ms": null,
+    "total_visible_chars": 0,
+    "visible_text_chars_after_512_chunks": 0,
+    "visible_text_chars_after_64_chunks": 0,
+    "wall_clock_ms": 11370.46
+  },
+  "qwen_processor_class": "100% GPU",
+  "recommended_next_action": [
+    "If behavior is acceptable, add failure-path timing instrumentation before any timeout/output-budget changes.",
+    "Do not set permanent NUM_PREDICT from one run."
+  ],
+  "script_starting_git_status": "?? reports/router_policy/1G-B2-F3-LOCAL-RESPONDER-ROOT-CAUSE-RERUN/",
+  "starting_git_status": "clean",
+  "task_starting_git_status": "clean",
+  "warmup": {
+    "duration_ms": 2743.955,
+    "ok": true,
+    "response_char_count": 0,
+    "status": 200,
+    "timing": {
+      "done_reason": "length",
+      "eval_count": 64,
+      "eval_duration": 1174372000,
+      "load_duration": 1164316500,
+      "prompt_eval_count": 18,
+      "prompt_eval_duration": 64007999,
+      "total_duration": 2736428400
+    }
+  }
+}
