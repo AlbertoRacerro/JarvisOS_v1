@@ -1,0 +1,128 @@
+{
+  "milestone": "E1-EXTERNAL-EGRESS-SAFETY-GATE",
+  "status": "GREEN",
+  "starting_head": "abb292c0e208b992ca01ce165745ab82aa5841b3",
+  "commit_message": "Add external egress safety gate",
+  "scope": {
+    "type": "deterministic_gate_only",
+    "external_execution_enabled": false,
+    "provider_calls_added": false,
+    "api_keys_added": false,
+    "budget_enforcement_added": false,
+    "retrieval_or_memory_added": false,
+    "devloop_or_agent_automation_added": false,
+    "router_policy_execution_changed": false
+  },
+  "files_added": [
+    "scripts/router_policy_external_egress_gate.py",
+    "tests/test_router_policy_external_egress_gate.py"
+  ],
+  "behavior": {
+    "gate_function": "evaluate_external_egress_gate(...)",
+    "standalone_gate": true,
+    "structured_output": true,
+    "explicit_opt_in_required_for_allow": true,
+    "opt_in_is_consent_not_safety_label": true,
+    "unknown_clean_with_opt_in_allows": true,
+    "unknown_clean_without_opt_in_denies": true,
+    "positive_danger_signals_deny_even_with_opt_in": true,
+    "assume_public_simple_used_as_allow_evidence": false,
+    "derivation_uses_assume_public_simple_false": true,
+    "conservative_overlay_used_as_deny_all_predicate": false,
+    "a5_r3_bluerev_ip_floor_consumed_as_deny_signal": true,
+    "single_source_component_contract": true,
+    "payload_component_mismatch_denies": true,
+    "history_contamination_denies": true,
+    "external_allowed_true_added": false,
+    "provider_execution_added": false
+  },
+  "positive_danger_signals": [
+    "contains_secret_or_credential_context",
+    "contains_raw_private_or_ip_sensitive_context",
+    "sensitivity_bucket_sensitive",
+    "sensitivity_bucket_secret",
+    "a5_r3_bluerev_ip_floor_sensitive",
+    "credential_or_token_or_secret_reason",
+    "memory_write_reason",
+    "document_write_reason",
+    "operational_write_reason",
+    "credential_save_reason",
+    "non_low_risk_hard_reason",
+    "derivation_failure",
+    "payload_component_mismatch"
+  ],
+  "tests": {
+    "covered_cases": [
+      "clean_unknown_current_message_with_opt_in_allows",
+      "clean_unknown_current_message_without_opt_in_denies",
+      "positive_danger_signal_with_opt_in_denies",
+      "assume_public_simple_not_allow_evidence",
+      "bare_bluerev_public_wording_with_opt_in_allows",
+      "proprietary_bluerev_ip_wording_denies",
+      "secret_plus_bluerev_denies_as_secret",
+      "history_contamination_denies",
+      "failed_derivation_denies",
+      "payload_component_mismatch_denies",
+      "checked_component_identity_and_digest_reporting"
+    ],
+    "commands": [
+      {
+        "command": "python -m unittest tests.test_router_policy_external_egress_gate",
+        "result": "passed",
+        "details": "12 tests"
+      },
+      {
+        "command": "python -m unittest tests.test_router_policy_message_route_smoke tests.test_router_policy_external_egress_gate",
+        "result": "passed",
+        "details": "105 tests"
+      },
+      {
+        "command": "python -m unittest tests.test_router_policy_semantic_validator",
+        "result": "passed",
+        "details": "40 tests"
+      },
+      {
+        "command": "python -m pytest tests/test_router_policy_external_egress_gate.py tests/test_router_policy_message_route_smoke.py tests/test_router_policy_semantic_validator.py -q",
+        "result": "passed",
+        "details": "145 tests"
+      },
+      {
+        "command": "marker check for E1 files",
+        "result": "passed",
+        "details": "expected marker hits; no external_allowed hits"
+      },
+      {
+        "command": "git diff --check",
+        "result": "passed",
+        "details": "LF-to-CRLF warnings only"
+      }
+    ]
+  },
+  "boundary_check": {
+    "backend_routes_added": false,
+    "frontend_changes_added": false,
+    "database_or_schema_changes_added": false,
+    "runtime_memory_or_retrieval_added": false,
+    "model_calls_added": false,
+    "external_api_calls_added": false,
+    "tool_execution_or_agent_worker_added": false,
+    "bluerev_modeling_behavior_added": false,
+    "vendored_external_code_added": false
+  },
+  "residual_risk": {
+    "summary": "E1 does not improve semantic detection coverage. If IP-sensitive content is not detected by deterministic scanners and the user explicitly opts in, future external execution could allow it.",
+    "accepted_for_v0": true,
+    "mitigations": [
+      "explicit user opt-in required",
+      "positive danger signals deny",
+      "external execution not implemented in E1",
+      "future E2/E3/E4 must add privacy default, budget enforcement, provider configuration, confirmation, and final execution gating",
+      "retrieval and memory are not injected into external payloads yet"
+    ]
+  },
+  "recommended_next_steps": [
+    "Commit E1 with scripts, tests, and reports only.",
+    "Do not enable external routing yet.",
+    "Proceed later with E2 privacy default fail-safe, then E3 budget enforcement, then E4 provider call v0."
+  ]
+}
