@@ -1,0 +1,223 @@
+{
+  "milestone": "1G-B2-F3-LOCAL-RESPONDER-TIMEOUT-DIAG",
+  "title": "Diagnose LocalResponderTransportError on long local generation",
+  "current_head": "bf1d31d0b27b96f560c4ec36692a2c10701a12c5",
+  "working_tree_clean_before_start": true,
+  "diagnostic_scope": {
+    "router_policy_changed": false,
+    "a5_r3_changed": false,
+    "phase_b_bridge_changed": false,
+    "runtime_config_changed": false,
+    "permanent_num_predict_set": false,
+    "permanent_timeout_changed": false,
+    "automatic_retry_added": false,
+    "live_ollama_dependent_tests_added": false
+  },
+  "inspection": {
+    "local_responder_transport_error": "scripts/router_policy_local_responder.py wraps urllib.error.URLError, TimeoutError, and OSError as LocalResponderTransportError; HTTPError is also wrapped as LocalResponderTransportError with the HTTP status.",
+    "timeout_default": "backend/app/modules/dev_message_route/smoke_adapter.py DEFAULT_TIMEOUT_S = 30.0; diagnostic run temporarily used JARVISOS_DEV_MESSAGE_ROUTE_TIMEOUT_S=120.",
+    "backend_timing_success": "backend_timing.local_responder_call_duration_ms is assigned after responder(prompt) returns successfully.",
+    "backend_timing_failure": "failed responder calls currently do not expose backend_timing.local_responder_call_duration_ms because the exception exits before timing assignment and the internal-error response path omits backend_timing.",
+    "local_responder_timing_success": "local_responder_timing is available only when Ollama returns a successful JSON response containing timing metadata.",
+    "local_responder_timing_failure": "local_responder_timing is unavailable on transport failure because no Ollama response body is returned to parse.",
+    "num_predict_env": "JARVISOS_DEV_MESSAGE_ROUTE_NUM_PREDICT is read by backend/app/modules/dev_message_route/smoke_adapter.py::_num_predict_from_env and passed to call_local_ollama_generate_with_metadata."
+  },
+  "live_diagnostic_environment": {
+    "model_used": "gemma4:12b-it-qat",
+    "reason_model_pinned": "shell had no JARVISOS_DEV_MESSAGE_ROUTE_MODEL set and repository DEFAULT_MODEL gemma3:4b was not installed in local Ollama; diagnostic pinned an installed model.",
+    "timeout_s": 120,
+    "keep_alive": "30m",
+    "baseline_num_predict": null,
+    "ollama_before": {
+      "ok": true,
+      "status": 200
+    },
+    "ollama_after": {
+      "ok": true,
+      "status": 200,
+      "process": {
+        "name": "ollama",
+        "id": 35320,
+        "alive_after_failure": true
+      }
+    }
+  },
+  "baseline_cases": [
+    {
+      "label": "failing_exact",
+      "prompt": "dimensioniamo concettualmente una pompa centrifuga per un fotobioreattore: prevalenza, portata, NPSH",
+      "http_status": 500,
+      "trace_id": "771eb576-edf1-4477-9913-fde5f151ce26",
+      "executed": false,
+      "reason": "internal_error",
+      "error_type": "LocalResponderTransportError",
+      "wall_clock_ms": 120065.158,
+      "backend_timing_local_responder_call_duration_ms": null,
+      "local_responder_timing": null,
+      "api_response_body": {
+        "trace_id": "771eb576-edf1-4477-9913-fde5f151ce26",
+        "audit_ref": null,
+        "executed": false,
+        "reason": "internal_error",
+        "assume_public_simple_used": true,
+        "use_phase_b_hints_used": true,
+        "phase_b_source_kind": "stub",
+        "phase_b_source_used": false,
+        "error_type": "LocalResponderTransportError"
+      }
+    },
+    {
+      "label": "comparison_ciao",
+      "prompt": "ciao",
+      "http_status": 200,
+      "trace_id": "57a83a58-2551-4dd3-bad3-41b670ed965d",
+      "executed": true,
+      "reason": "local_answer",
+      "error_type": null,
+      "decision_summary": {
+        "route_action": "answer_local",
+        "route_tier": "LOCAL_FAST",
+        "allowed_execution_mode": "answer_only"
+      },
+      "wall_clock_ms": 17748.816,
+      "backend_timing_local_responder_call_duration_ms": 17432.889,
+      "local_responder_timing": {
+        "total_duration_ns": 16275917300,
+        "load_duration_ns": 6959490600,
+        "prompt_eval_count": 250,
+        "prompt_eval_duration_ns": 513333999,
+        "eval_count": 141,
+        "eval_duration_ns": 8221591000
+      },
+      "response_char_count_returned": 63,
+      "response_truncated": false
+    },
+    {
+      "label": "comparison_bluerev",
+      "prompt": "dimensioniamo concettualmente una pompa centrifuga per BlueRev: prevalenza, portata, NPSH",
+      "http_status": 500,
+      "trace_id": "fe71ea26-04a5-4cf3-b60d-9b147236fb66",
+      "executed": false,
+      "reason": "internal_error",
+      "error_type": "LocalResponderTransportError",
+      "wall_clock_ms": 120503.277,
+      "backend_timing_local_responder_call_duration_ms": null,
+      "local_responder_timing": null
+    },
+    {
+      "label": "comparison_bluerev_ip",
+      "prompt": "usa i parametri proprietari BlueRev per dimensionare concettualmente una pompa centrifuga: prevalenza, portata, NPSH",
+      "http_status": 200,
+      "trace_id": "5cf933e8-4fb2-4518-937f-f2dc9c3d13d4",
+      "executed": true,
+      "reason": "local_answer",
+      "error_type": null,
+      "decision_summary": {
+        "route_action": "answer_local",
+        "route_tier": "LOCAL_FAST",
+        "allowed_execution_mode": "answer_only"
+      },
+      "wall_clock_ms": 83448.855,
+      "backend_timing_local_responder_call_duration_ms": 81482.794,
+      "local_responder_timing": {
+        "total_duration_ns": 81067855500,
+        "load_duration_ns": 5264549400,
+        "prompt_eval_count": 273,
+        "prompt_eval_duration_ns": 474389000,
+        "eval_count": 1051,
+        "eval_duration_ns": 74851102000
+      },
+      "response_char_count_returned": 1436,
+      "response_truncated": false
+    }
+  ],
+  "num_predict_experiment": [
+    {
+      "num_predict": 512,
+      "prompt": "dimensioniamo concettualmente una pompa centrifuga per un fotobioreattore: prevalenza, portata, NPSH",
+      "http_status": 200,
+      "trace_id": "f1607bb9-9b5a-4d00-b7bf-2fc9dc9cc94c",
+      "executed": true,
+      "reason": "local_answer",
+      "error_type": null,
+      "wall_clock_ms": 23080.335,
+      "backend_timing_local_responder_call_duration_ms": 23057.387,
+      "local_responder_timing": {
+        "total_duration_ns": 23049259600,
+        "load_duration_ns": 12627829200,
+        "prompt_eval_count": 272,
+        "prompt_eval_duration_ns": 232991000,
+        "eval_count": 512,
+        "eval_duration_ns": 10172298000
+      },
+      "response_char_count_returned": 0,
+      "response_truncated": false,
+      "diagnostic_note": "prevented timeout but returned empty response; not acceptable as a fix"
+    },
+    {
+      "num_predict": 1024,
+      "prompt": "dimensioniamo concettualmente una pompa centrifuga per un fotobioreattore: prevalenza, portata, NPSH",
+      "http_status": 200,
+      "trace_id": "7dd9b922-5f60-4180-93a6-0665c26cc9b8",
+      "executed": true,
+      "reason": "local_answer",
+      "error_type": null,
+      "wall_clock_ms": 19953.069,
+      "backend_timing_local_responder_call_duration_ms": 19946.335,
+      "local_responder_timing": {
+        "total_duration_ns": 19935351300,
+        "load_duration_ns": 1039788300,
+        "prompt_eval_count": 272,
+        "prompt_eval_duration_ns": 72585000,
+        "eval_count": 1024,
+        "eval_duration_ns": 18657692000
+      },
+      "response_char_count_returned": 1068,
+      "response_truncated": false,
+      "diagnostic_note": "prevented timeout and returned non-empty response in this single run"
+    }
+  ],
+  "classification": {
+    "primary": "A. timeout-long-generation",
+    "secondary": "D. backend instrumentation gap",
+    "evidence": [
+      "The exact failing prompt failed at 120065.158 ms with timeout_s=120 and LocalResponderTransportError.",
+      "The BlueRev comparison prompt failed at 120503.277 ms with the same error.",
+      "Ollama remained alive after failures, so evidence does not support crash/drop/OOM.",
+      "Successful long IP-marker comparison took 83448.855 ms, showing local answer path can run for long generations.",
+      "Failed responses omit backend_timing.local_responder_call_duration_ms and local_responder_timing."
+    ]
+  },
+  "recommended_next_action": [
+    "First add minimal failure-path instrumentation so LocalResponderTransportError responses include responder call duration and sanitized transport category without prompt leakage.",
+    "Then evaluate a non-permanent output-budget strategy; NUM_PREDICT=1024 avoided the timeout once with non-empty output, while NUM_PREDICT=512 avoided timeout but produced empty output.",
+    "Do not change router policy, A5-R3, model selection, permanent timeout, permanent NUM_PREDICT, or retry behavior until instrumentation confirms repeatability."
+  ],
+  "commands": [
+    {
+      "command": "python -m unittest tests.test_router_policy_local_responder",
+      "result": "pass: 23 tests"
+    },
+    {
+      "command": "git diff --check",
+      "result": "pass"
+    },
+    {
+      "command": "git status --short",
+      "result": "?? reports/router_policy/1G-B2-F3-LOCAL-RESPONDER-TIMEOUT-DIAG/"
+    },
+    {
+      "command": "ad-hoc TestClient live baseline diagnostic with JARVISOS_DEV_MESSAGE_ROUTE_TIMEOUT_S=120 and no NUM_PREDICT",
+      "result": "completed; two timeout failures near 120s, two successful comparisons"
+    },
+    {
+      "command": "ad-hoc TestClient live NUM_PREDICT diagnostic with values 512 and 1024",
+      "result": "case data captured; script final aggregate print failed with UnicodeEncodeError on Windows cp1252 after the per-case 1024 result was emitted"
+    }
+  ],
+  "files_changed": [
+    "reports/router_policy/1G-B2-F3-LOCAL-RESPONDER-TIMEOUT-DIAG/summary.json",
+    "reports/router_policy/1G-B2-F3-LOCAL-RESPONDER-TIMEOUT-DIAG/summary.md"
+  ],
+  "git_status_after_work": "?? reports/router_policy/1G-B2-F3-LOCAL-RESPONDER-TIMEOUT-DIAG/"
+}
