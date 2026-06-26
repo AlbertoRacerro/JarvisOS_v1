@@ -20,6 +20,7 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 from router_policy_local_responder import (  # noqa: E402
+    LocalResponderError,
     build_local_responder,
     call_local_ollama_generate_with_metadata,
 )
@@ -457,7 +458,12 @@ def run_dev_local_chat(
 
     responder = build_dev_local_responder()
     responder_start = time.perf_counter()
-    response = responder(prompt)
+    try:
+        response = responder(prompt)
+    except LocalResponderError as exc:
+        timing["local_responder_call_duration_ms"] = _duration_ms(responder_start, time.perf_counter())
+        body = internal_error_response(trace_id=trace_id, error_type=type(exc).__name__)
+        return finalize(500, body, timing)
     timing["local_responder_call_duration_ms"] = _duration_ms(responder_start, time.perf_counter())
     result = {
         "executed": True,

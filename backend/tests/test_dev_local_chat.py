@@ -1043,6 +1043,33 @@ def test_a4r2_backend_timing_is_additive_for_executed_local_chat(client: TestCli
         assert isinstance(value, float)
 
 
+def test_i1_local_responder_transport_error_preserves_failure_timing(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    from app.modules.dev_message_route import smoke_adapter
+    from router_policy_local_responder import LocalResponderTransportError
+
+    _enable_chat(monkeypatch)
+    failing_responder = Mock(side_effect=LocalResponderTransportError("timeout"))
+    monkeypatch.setattr(smoke_adapter, "build_dev_local_responder", Mock(return_value=failing_responder))
+
+    response = client.post(DEV_ENDPOINT, json={"message": "hello"})
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["executed"] is False
+    assert body["reason"] == "internal_error"
+    assert body["error_type"] == "LocalResponderTransportError"
+    timing = body["backend_timing"]
+    assert isinstance(timing["local_responder_call_duration_ms"], float)
+    assert timing["local_responder_call_duration_ms"] >= 0
+    assert isinstance(timing["total_dev_local_chat_duration_ms"], float)
+    assert timing["total_dev_local_chat_duration_ms"] >= 0
+    assert timing["total_dev_local_chat_duration_ms"] >= timing["local_responder_call_duration_ms"]
+    failing_responder.assert_called_once()
+
+
 def test_a4r2_backend_timing_for_early_return_omits_unexecuted_stages(client: TestClient, monkeypatch) -> None:
     from app.modules.dev_message_route import smoke_adapter
 
