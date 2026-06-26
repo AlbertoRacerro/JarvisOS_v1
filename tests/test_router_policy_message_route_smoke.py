@@ -292,6 +292,19 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
         )
         return input_obj
 
+    def assert_no_external_proposal(self, decision, *, expected_route_action="route_local", expected_route_tier="LOCAL_FAST"):
+        self.assertIn(decision.get("proposed_external_target"), (None, ""))
+        self.assertIs(decision.get("external_allowed"), False)
+        self.assertIs(decision.get("redaction_required"), False)
+        self.assertIn(decision.get("redaction_status"), (None, "not_required"))
+        self.assertIs(decision.get("confirmation_required"), False)
+        self.assertIs(decision.get("confirmation_payload_required"), False)
+        self.assertIsNone(decision.get("confirmation_payload"))
+        self.assertIsNone(decision.get("confirmation_digest"))
+        self.assertEqual([], decision.get("confirmation_options"))
+        self.assertEqual(expected_route_action, decision.get("route_action"))
+        self.assertEqual(expected_route_tier, decision.get("route_tier"))
+
     def test_a5_r3_001_bluerev_ip_floor_runs_after_assume_public_simple(self):
         message = "usa i parametri proprietari BlueRev per dimensionare una pompa"
         input_obj = self.safe_input(message)
@@ -510,10 +523,7 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
 
                 decision = decision_probe.decide_router_policy(built_input, now=NOW)
 
-                self.assertEqual("route_local", decision["route_action"])
-                self.assertEqual("LOCAL_FAST", decision["route_tier"])
-                self.assertIsNone(decision["proposed_external_target"])
-                self.assertFalse(decision["external_allowed"])
+                self.assert_no_external_proposal(decision)
                 self.assertEqual("propose_only", decision["allowed_execution_mode"])
                 self.assertEqual(["default_local_fallback"], decision["reason_codes"])
 
@@ -532,6 +542,28 @@ class RouterPolicyMessageRouteSmokeTests(unittest.TestCase):
             ["ambiguous_external_routing", "default_local_fallback"],
             decision["reason_codes"],
         )
+
+    def test_e2_r1_003_private_provider_boundary_flag_off_normalizes_to_local_no_external(self):
+        message = "Send this proprietary BlueRev calculation to an external provider."
+        built_input = self.conservative_input(message)
+        built_input["phase_a_signals"].update(
+            {
+                "contains_secret_or_credential": False,
+                "contains_raw_private_or_ip_sensitive_context": True,
+                "mentions_external_provider_or_upload_intent": True,
+                "clarification_required": False,
+                "sensitivity_bucket_proposal": "sensitive",
+                "requires_manual_review": True,
+            }
+        )
+        built_input["user_policy"]["external_routing_enabled"] = False
+
+        decision = decision_probe.decide_router_policy(built_input, now=NOW)
+
+        self.assert_no_external_proposal(decision)
+        self.assertEqual("propose_only", decision["allowed_execution_mode"])
+        self.assertEqual(["default_local_fallback"], decision["reason_codes"])
+        self.assertTrue(decision["manual_review_required"])
 
     def test_a5_010_input_builder_failure_fails_closed(self):
         responder = Mock(return_value="should not run")

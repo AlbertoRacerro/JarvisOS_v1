@@ -8,8 +8,11 @@
     "a5_r3_and_e1_already_cover_sensitivity_bluerev_ip_and_egress_safety"
   ],
   "new_fix": [
-    "rule_8_now_checks_external_routing_enabled_before_external_proposal",
-    "flag_off_unknown_or_ambiguous_external_pressure_now_falls_back_local_no_external",
+    "e2_initially_added_rule_8_specific_flag_gate",
+    "e2_r1_adds_final_proposed_external_target_chokepoint_as_authoritative_invariant",
+    "rule_8_gate_remains_as_defense_in_depth_historical_local_branch",
+    "flag_off_any_external_proposal_now_fully_normalizes_to_local_no_external",
+    "normalization_clears_redaction_and_confirmation_artifacts",
     "flag_on_rule_8_external_pressure_behavior_preserved"
   ],
   "files_changed": [

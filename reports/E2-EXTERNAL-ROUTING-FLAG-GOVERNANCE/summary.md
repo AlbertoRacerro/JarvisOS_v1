@@ -16,8 +16,11 @@
 
 ## New Fix
 
-- Rule 8 now checks the external-routing flag before proposing external review.
-- `unknown/ambiguous sensitivity + external pressure + flag missing/None/False` now falls back to coherent local/no-external behavior.
+- E2 initially added a rule-8-specific flag gate.
+- E2-R1 adds a final `proposed_external_target` chokepoint as the authoritative external-proposal invariant.
+- The rule-8 gate remains as defense-in-depth / historical local branch.
+- When `external_routing_enabled is not True`, any decision carrying `proposed_external_target` is fully normalized to local/no-external state.
+- Normalization clears external-adjacent redaction and confirmation fields instead of only clearing the target.
 - Rule 8 with `external_routing_enabled is True` preserves the existing external proposal behavior.
 
 ## Files

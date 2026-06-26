@@ -287,7 +287,7 @@ def _unknown_external_pressure(decision: dict[str, Any]) -> dict[str, Any]:
     return decision
 
 
-def _unknown_external_pressure_local_fallback(decision: dict[str, Any]) -> dict[str, Any]:
+def _external_disabled_local_fallback(decision: dict[str, Any]) -> dict[str, Any]:
     decision.update(
         {
             "route_action": "route_local",
@@ -295,14 +295,31 @@ def _unknown_external_pressure_local_fallback(decision: dict[str, Any]) -> dict[
             "provider_candidate": LOCAL_PROVIDER,
             "proposed_external_target": None,
             "external_allowed": False,
+            "external_network_allowed_now": False,
+            "provider_call_allowed_now": False,
             "allowed_execution_mode": "propose_only",
             "response_allowed_now": True,
-            "manual_review_required": True,
+            "confirmation_required": False,
+            "requires_new_decision_after_confirmation": False,
+            "redaction_required": False,
+            "redaction_status": "not_required",
+            "confirmation_payload_required": False,
+            "confirmation_payload": None,
+            "confirmation_digest": None,
+            "confirmation_options": [],
             "reason_codes": ["default_local_fallback"],
-            "audit_notes": ["External routing is disabled, so ambiguous external pressure stays local."],
+            "audit_notes": ["External routing is disabled, so the decision is normalized to local/no-external."],
         }
     )
     return decision
+
+
+def _enforce_external_proposal_flag_invariant(input_obj: dict[str, Any], decision: dict[str, Any]) -> dict[str, Any]:
+    if _external_routing_enabled(input_obj):
+        return decision
+    if decision.get("proposed_external_target") is None:
+        return decision
+    return _external_disabled_local_fallback(decision)
 
 
 def _external_candidate_proposal(input_obj: dict[str, Any], decision: dict[str, Any]) -> dict[str, Any]:
@@ -386,34 +403,43 @@ def decide_router_policy(input_obj: dict, now: str | None = None) -> dict:
 
     # 1. Secret/credential hard rule.
     if phase_a.get("contains_secret_or_credential") is True:
-        return _block_secret(decision)
+        decision = _block_secret(decision)
+        return _enforce_external_proposal_flag_invariant(input_obj, decision)
 
     # 2/3. Raw private/IP context, with provider/export intent as a stricter boundary.
     if phase_a.get("contains_raw_private_or_ip_sensitive_context") is True:
         if phase_a.get("mentions_external_provider_or_upload_intent") is True:
-            return _private_provider_boundary(decision)
-        return _private_local(decision)
+            decision = _private_provider_boundary(decision)
+            return _enforce_external_proposal_flag_invariant(input_obj, decision)
+        decision = _private_local(decision)
+        return _enforce_external_proposal_flag_invariant(input_obj, decision)
 
     # 4. Clarification / ambiguity before escalation.
     if phase_a.get("clarification_required") is True or phase_b.get("soft_reason_code") == "clarification_context":
-        return _clarification(decision)
+        decision = _clarification(decision)
+        return _enforce_external_proposal_flag_invariant(input_obj, decision)
 
     # 8. Unknown/not-positively-safe sensitivity blocks external escalation pressure.
     if sensitivity in UNSAFE_OR_UNKNOWN_SENSITIVITY and _has_external_pressure(input_obj):
         if not _external_routing_enabled(input_obj):
-            return _unknown_external_pressure_local_fallback(decision)
-        return _unknown_external_pressure(decision)
+            decision = _external_disabled_local_fallback(decision)
+            return _enforce_external_proposal_flag_invariant(input_obj, decision)
+        decision = _unknown_external_pressure(decision)
+        return _enforce_external_proposal_flag_invariant(input_obj, decision)
 
     # 6. Positively non-sensitive high-complexity external candidate proposal.
     if _qualifies_for_external_candidate(input_obj):
-        return _external_candidate_proposal(input_obj, decision)
+        decision = _external_candidate_proposal(input_obj, decision)
+        return _enforce_external_proposal_flag_invariant(input_obj, decision)
 
     # 5. Non-sensitive simple local chat.
     if hint.get("complexity") == "low" and hint.get("task_type") in SIMPLE_TASK_TYPES:
-        return _simple_local(decision)
+        decision = _simple_local(decision)
+        return _enforce_external_proposal_flag_invariant(input_obj, decision)
 
     # 9. Deterministic fail-safe fallback.
-    return _default_fallback(input_obj, decision)
+    decision = _default_fallback(input_obj, decision)
+    return _enforce_external_proposal_flag_invariant(input_obj, decision)
 
 
 def decision_to_json(decision: dict[str, Any]) -> str:
