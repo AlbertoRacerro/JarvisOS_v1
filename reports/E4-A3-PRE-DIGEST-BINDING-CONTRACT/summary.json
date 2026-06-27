@@ -1,0 +1,132 @@
+{
+  "verdict": "GREEN",
+  "milestone": "E4-A3-PRE-DIGEST-BINDING-CONTRACT",
+  "e4_a2_commit_hash": "691878209c792ee715d9893db10aac0734aa1dee",
+  "current_head": "691878209c792ee715d9893db10aac0734aa1dee",
+  "scope": "digest_binding_contract_report_only_by_default",
+  "changed_files": {
+    "reports": [
+      "reports/E4-A3-PRE-DIGEST-BINDING-CONTRACT/summary.md",
+      "reports/E4-A3-PRE-DIGEST-BINDING-CONTRACT/summary.json"
+    ],
+    "production": [],
+    "tests": [],
+    "schemas": [],
+    "docs": []
+  },
+  "digest_purpose_version_decision": {
+    "digest_purpose": "router_confirmation_intent",
+    "digest_version": "v1",
+    "decision": "explicit_before_runtime_binding"
+  },
+  "bound_payload": [
+    "proposed_external_target",
+    "provider_call_allowed_now",
+    "external_network_allowed_now",
+    "confirmation_required",
+    "confirmation_payload_required",
+    "confirmation_payload",
+    "confirmation_options"
+  ],
+  "excluded_fields": [
+    "confirmation_digest",
+    "digest",
+    "route_action",
+    "route_tier",
+    "reason_codes",
+    "audit_notes",
+    "requires_new_decision_after_confirmation"
+  ],
+  "actionability_authority": [
+    "provider_call_allowed_now",
+    "external_network_allowed_now",
+    "confirmation_required",
+    "confirmation_payload_required",
+    "confirmation_payload",
+    "confirmation_digest",
+    "confirmation_options"
+  ],
+  "non_authority_labels": [
+    "route_action",
+    "route_tier"
+  ],
+  "requires_new_decision_after_confirmation": {
+    "classification": "confirmation_lifecycle_field",
+    "digest_relevance": "controlled_separately_as_lifecycle_state",
+    "rationale": "PRE contract keeps lifecycle state outside digest-bound actionability and avoids blind preservation."
+  },
+  "invalidation_rules": [
+    "recompute if proposed_external_target changes",
+    "recompute if provider_call_allowed_now changes",
+    "recompute if external_network_allowed_now changes",
+    "recompute if confirmation_required changes",
+    "recompute if confirmation_payload_required changes",
+    "recompute if confirmation_payload changes",
+    "recompute if confirmation_options changes",
+    "clear if proposed_external_target becomes None or empty",
+    "clear if confirmation is no longer required",
+    "clear if finalizer or scrubber removes external companion artifacts",
+    "clear if decision normalizes to local/no-external fallback",
+    "invalidate and recompute if digest_purpose or digest_version changes"
+  ],
+  "writer_reader_boundary": {
+    "writer_boundary": [
+      "future external-confirmation finalizer/helper may compute digest when a decision is in a confirmation-bearing external-proposal state",
+      "future scrubber/fallback normalizer must clear digest when the decision is targetless or local/no-external"
+    ],
+    "reader_boundary": [
+      "future confirmation validator may compare stored digest against recomputed digest before accepting a confirmation payload"
+    ],
+    "non_reader_boundary": [
+      "router selection must not treat digest as permission",
+      "provider execution path must not treat digest as permission",
+      "network execution path must not treat digest as permission",
+      "E3 budget gate must not treat digest as permission"
+    ]
+  },
+  "checks_run": [
+    "git status --short before E4-A2 commit -> only helper/test/report scope",
+    "python -m pytest tests/test_router_policy_canonical_digest.py -q -> 11 passed in 0.06s",
+    "python -m pytest tests/test_router_policy_external_proposal_invariant.py tests/test_router_policy_external_egress_scope.py tests/test_router_policy_message_route_smoke.py tests/test_router_policy_semantic_validator.py tests/test_router_policy_external_egress_gate.py tests/test_router_policy_external_budget_gate.py -q -> 324 passed in 0.99s",
+    "git diff --check -> clean",
+    "git commit -m \"Add canonical confirmation digest helper\" -> 691878209c792ee715d9893db10aac0734aa1dee",
+    "python -m pytest tests/test_router_policy_canonical_digest.py -q",
+    "python -m pytest tests/test_router_policy_external_proposal_invariant.py tests/test_router_policy_external_egress_scope.py tests/test_router_policy_message_route_smoke.py tests/test_router_policy_semantic_validator.py tests/test_router_policy_external_egress_gate.py tests/test_router_policy_external_budget_gate.py -q",
+    "git diff --check",
+    "git status --short",
+    "rg -n \"evaluate_external_budget_gate\\(\" scripts backend --glob '!scripts/router_policy_external_budget_gate.py'",
+    "rg -n \"^import requests|^from requests|^import httpx|^from httpx|openai|anthropic|gemini\" scripts"
+  ],
+  "grep_matches_classified": [
+    {
+      "command": "rg -n \"evaluate_external_budget_gate\\(\" scripts backend --glob '!scripts/router_policy_external_budget_gate.py'",
+      "matches": [],
+      "classification": "no production E3 caller"
+    },
+    {
+      "command": "rg -n \"^import requests|^from requests|^import httpx|^from httpx|openai|anthropic|gemini\" scripts",
+      "matches": [
+        {
+          "path": "scripts/local_policy_gate_overlay_probe.py",
+          "classification": "existing pre-E4 reference",
+          "reason": "regex vocabulary only, not provider/network import or execution"
+        },
+        {
+          "path": "scripts/router_policy_message_route_smoke.py",
+          "classification": "existing pre-E4 reference",
+          "reason": "regex vocabulary only, not provider/network import or execution"
+        }
+      ]
+    }
+  ],
+  "provider_network_absence": "no provider execution added, no network execution added, no SDK/API imports added",
+  "e3_inertness": "no production caller for evaluate_external_budget_gate",
+  "schema_changes": "none",
+  "known_limitations": [
+    "report-only PRE contract; no runtime writer/reader integration",
+    "no digest purpose/version constants added to production code yet",
+    "no runtime validator/finalizer exists yet to enforce the contract",
+    "requires_new_decision_after_confirmation remains intentionally outside digest-bound authority"
+  ],
+  "next_recommended_slice": "E4-A3-CONFIRMATION-DIGEST-BINDING-INTEGRATION"
+}
