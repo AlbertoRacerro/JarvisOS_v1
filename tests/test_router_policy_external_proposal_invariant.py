@@ -32,6 +32,9 @@ SCRUB_AFTER_PRODUCERS = {"_budget_or_policy_fallback", "_private_provider_bounda
 SUPPRESS_BEFORE_PRODUCERS = {"_external_candidate_proposal", "_unknown_external_pressure"}
 NON_TRUE_FLAGS = ("missing", None, False, 1, "true", "True", [], {})
 DIRECT_FINALIZER_NON_TRUE_FLAGS = (False, None, "true", 1)
+INTEGRATION_NON_TRUE_FLAGS = (False, None, "true", 1)
+SENTINEL_FIELD = "max_tokens_allowed"
+SENTINEL_VALUE = 1337
 FORCED_EXTERNAL_ARTIFACT_BUNDLE_FIELDS = (
     "proposed_external_target",
     "external_allowed",
@@ -387,6 +390,10 @@ def assert_forced_bundle_present(value: dict, bundle: dict) -> None:
         assert value[field] == expected
 
 
+def assert_sentinel_present(value: dict) -> None:
+    assert value[SENTINEL_FIELD] == SENTINEL_VALUE
+
+
 def wrap_producer(monkeypatch: pytest.MonkeyPatch, helper_name: str):
     original = getattr(decision_probe, helper_name)
     calls = {"count": 0}
@@ -412,6 +419,45 @@ def wrap_forced_bundle_producer(monkeypatch: pytest.MonkeyPatch, helper_name: st
             "decision": copy.deepcopy(forced),
             "bundle": copy.deepcopy(bundle),
         }
+        return forced
+
+    monkeypatch.setattr(decision_probe, helper_name, wrapper)
+    return calls, forced_seen
+
+
+def wrap_forced_bundle_and_sentinel_producer(monkeypatch: pytest.MonkeyPatch, helper_name: str):
+    original = getattr(decision_probe, helper_name)
+    calls = {"count": 0}
+    forced_seen = {"value": None}
+
+    def wrapper(*args, **kwargs):
+        calls["count"] += 1
+        original_result = original(*args, **kwargs)
+        assert SENTINEL_FIELD in original_result
+        forced, bundle = overlay_forced_external_artifact_bundle(original_result)
+        forced[SENTINEL_FIELD] = SENTINEL_VALUE
+        forced_seen["value"] = {
+            "decision": copy.deepcopy(forced),
+            "bundle": copy.deepcopy(bundle),
+        }
+        return forced
+
+    monkeypatch.setattr(decision_probe, helper_name, wrapper)
+    return calls, forced_seen
+
+
+def wrap_sentinel_producer(monkeypatch: pytest.MonkeyPatch, helper_name: str):
+    original = getattr(decision_probe, helper_name)
+    calls = {"count": 0}
+    forced_seen = {"value": None}
+
+    def wrapper(*args, **kwargs):
+        calls["count"] += 1
+        original_result = original(*args, **kwargs)
+        assert SENTINEL_FIELD in original_result
+        forced = copy.deepcopy(original_result)
+        forced[SENTINEL_FIELD] = SENTINEL_VALUE
+        forced_seen["value"] = copy.deepcopy(forced)
         return forced
 
     monkeypatch.setattr(decision_probe, helper_name, wrapper)
@@ -572,34 +618,58 @@ def test_private_provider_boundary_flag_off_clears_external_redaction_and_confir
     assert decision["manual_review_required"] is True
 
 
-@pytest.mark.parametrize("flag_value", (False, None, "true", 1))
-def test_forced_budget_or_policy_fallback_bundle_scrubbed_when_external_flag_not_true(monkeypatch, flag_value):
-    calls, forced_seen = wrap_forced_bundle_producer(monkeypatch, "_budget_or_policy_fallback")
-    assert decision_probe.decide_router_policy.__globals__["_budget_or_policy_fallback"] is getattr(
-        decision_probe, "_budget_or_policy_fallback"
-    )
+def test_budget_or_policy_fallback_flag_off_sentinel_baseline_survives_public_output(monkeypatch):
+    calls, forced_seen = wrap_sentinel_producer(monkeypatch, "_budget_or_policy_fallback")
+    decision = decision_probe.decide_router_policy(budget_fallback_input(False), now=NOW)
+
+    assert calls["count"] > 0
+    assert forced_seen["value"] is not None
+    assert_sentinel_present(forced_seen["value"])
+    assert_sentinel_present(decision)
+    assert_schema_valid_decision(decision)
+
+
+def test_private_provider_boundary_flag_off_sentinel_baseline_survives_public_output(monkeypatch):
+    calls, forced_seen = wrap_sentinel_producer(monkeypatch, "_private_provider_boundary")
+    decision = decision_probe.decide_router_policy(private_provider_boundary_input(False), now=NOW)
+
+    assert calls["count"] > 0
+    assert forced_seen["value"] is not None
+    assert_sentinel_present(forced_seen["value"])
+    assert_sentinel_present(decision)
+    assert_schema_valid_decision(decision)
+
+
+@pytest.mark.parametrize("flag_value", INTEGRATION_NON_TRUE_FLAGS)
+def test_forced_budget_or_policy_fallback_bundle_scrubbed_when_external_flag_not_true_and_forced_return_consumed(
+    monkeypatch, flag_value
+):
+    calls, forced_seen = wrap_forced_bundle_and_sentinel_producer(monkeypatch, "_budget_or_policy_fallback")
 
     decision = decision_probe.decide_router_policy(budget_fallback_input(flag_value), now=NOW)
 
     assert calls["count"] > 0
     assert forced_seen["value"] is not None
     assert_forced_bundle_present(forced_seen["value"]["decision"], forced_seen["value"]["bundle"])
+    assert_sentinel_present(forced_seen["value"]["decision"])
+    assert_sentinel_present(decision)
     assert_no_external_proposal_artifacts(decision)
     assert_schema_valid_decision(decision)
 
 
-@pytest.mark.parametrize("flag_value", (False, None, "true", 1))
-def test_forced_private_provider_boundary_bundle_scrubbed_when_external_flag_not_true(monkeypatch, flag_value):
-    calls, forced_seen = wrap_forced_bundle_producer(monkeypatch, "_private_provider_boundary")
-    assert decision_probe.decide_router_policy.__globals__["_private_provider_boundary"] is getattr(
-        decision_probe, "_private_provider_boundary"
-    )
+@pytest.mark.parametrize("flag_value", INTEGRATION_NON_TRUE_FLAGS)
+def test_forced_private_provider_boundary_bundle_scrubbed_when_external_flag_not_true_and_forced_return_consumed(
+    monkeypatch, flag_value
+):
+    calls, forced_seen = wrap_forced_bundle_and_sentinel_producer(monkeypatch, "_private_provider_boundary")
 
     decision = decision_probe.decide_router_policy(private_provider_boundary_input(flag_value), now=NOW)
 
     assert calls["count"] > 0
     assert forced_seen["value"] is not None
     assert_forced_bundle_present(forced_seen["value"]["decision"], forced_seen["value"]["bundle"])
+    assert_sentinel_present(forced_seen["value"]["decision"])
+    assert_sentinel_present(decision)
     assert_no_external_proposal_artifacts(decision)
     assert decision["redaction_required"] is False
     assert decision["redaction_status"] == "not_required"

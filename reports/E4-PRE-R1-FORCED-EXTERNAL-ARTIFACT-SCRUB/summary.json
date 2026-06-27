@@ -167,15 +167,163 @@
     "method": "pre_commit_diff_scoped_inspection_of_R1_changed_files"
   },
   "tests_checks_run": [
-    "python -m pytest tests/test_router_policy_external_proposal_invariant.py -q -> 65 passed in 0.31s",
-    "python -m pytest tests/test_router_policy_message_route_smoke.py tests/test_router_policy_semantic_validator.py tests/test_router_policy_external_egress_gate.py tests/test_router_policy_external_budget_gate.py -q -> 236 passed in 0.79s",
-    "git diff --check -> passed, LF/CRLF warning only for tests/test_router_policy_external_proposal_invariant.py",
-    "git status --short -> M tests/test_router_policy_external_proposal_invariant.py; ?? reports/E2-EXTERNAL-ROUTING-FLAG-GOVERNANCE/changed_files.zip; ?? reports/E3-EXTERNAL-BUDGET-SESSION-GATE/changed_files.zip; ?? reports/E4-PRE-R1-FORCED-EXTERNAL-ARTIFACT-SCRUB/; ?? reports/E4-PRE-ROUTER-EXTERNAL-PROPOSAL-INVARIANT/changed_files.zip"
+    "python -m pytest tests/test_router_policy_external_proposal_invariant.py -q -> 67 passed in 0.37s",
+    "python -m pytest tests/test_router_policy_message_route_smoke.py tests/test_router_policy_semantic_validator.py tests/test_router_policy_external_egress_gate.py tests/test_router_policy_external_budget_gate.py -q -> 236 passed in 0.75s",
+    "git diff --check -> warnings only, LF/CRLF normalization notices for tests/test_router_policy_external_proposal_invariant.py, reports/E4-PRE-R1-FORCED-EXTERNAL-ARTIFACT-SCRUB/summary.md, and reports/E4-PRE-R1-FORCED-EXTERNAL-ARTIFACT-SCRUB/summary.json",
+    "git status --short -> M reports/E4-PRE-R1-FORCED-EXTERNAL-ARTIFACT-SCRUB/summary.json; M reports/E4-PRE-R1-FORCED-EXTERNAL-ARTIFACT-SCRUB/summary.md; M tests/test_router_policy_external_proposal_invariant.py; ?? reports/E2-EXTERNAL-ROUTING-FLAG-GOVERNANCE/changed_files.zip; ?? reports/E3-EXTERNAL-BUDGET-SESSION-GATE/changed_files.zip; ?? reports/E4-PRE-R1-FORCED-EXTERNAL-ARTIFACT-SCRUB/changed_files.zip; ?? reports/E4-PRE-ROUTER-EXTERNAL-PROPOSAL-INVARIANT/changed_files.zip"
   ],
   "known_limitations": [
     "R1 validates forced artifacts for current discovered producer paths, not undiscovered future producer construction patterns.",
     "R1 depends on representative trigger inputs reaching the intended producers.",
     "R1 does not implement E4.",
     "E4 still requires cumulative egress scope, digest/confirmation, provider policy, and E3 re-validation."
-  ]
+  ],
+  "r1_1": {
+    "status": "GREEN",
+    "starting_head": "872077e6077bc32c49b4c85756776d0faf2a8576",
+    "final_head": "recorded_in_post_commit_handoff",
+    "files_changed": [
+      "tests/test_router_policy_external_proposal_invariant.py",
+      "reports/E4-PRE-R1-FORCED-EXTERNAL-ARTIFACT-SCRUB/summary.md",
+      "reports/E4-PRE-R1-FORCED-EXTERNAL-ARTIFACT-SCRUB/summary.json"
+    ],
+    "production_patch_required": false,
+    "production_patch_reason": "none",
+    "scrub_after_producers_covered": {
+      "_budget_or_policy_fallback": {
+        "status": "covered",
+        "returned_object_consumption_path": "direct_public_output",
+        "enforced_by": [
+          "test_budget_or_policy_fallback_flag_off_sentinel_baseline_survives_public_output",
+          "test_forced_budget_or_policy_fallback_bundle_scrubbed_when_external_flag_not_true_and_forced_return_consumed"
+        ]
+      },
+      "_private_provider_boundary": {
+        "status": "covered",
+        "returned_object_consumption_path": "direct_public_output",
+        "enforced_by": [
+          "test_private_provider_boundary_flag_off_sentinel_baseline_survives_public_output",
+          "test_forced_private_provider_boundary_bundle_scrubbed_when_external_flag_not_true_and_forced_return_consumed"
+        ]
+      }
+    },
+    "not_exactly_true_cases_attempted": [
+      false,
+      null,
+      "true",
+      1
+    ],
+    "integration_outcome_classification_by_case": {
+      "_budget_or_policy_fallback": {
+        "False": "accepted_plus_reached",
+        "None": "accepted_plus_reached",
+        "\"true\"": "accepted_plus_reached",
+        "1": "accepted_plus_reached"
+      },
+      "_private_provider_boundary": {
+        "False": "accepted_plus_reached",
+        "None": "accepted_plus_reached",
+        "\"true\"": "accepted_plus_reached",
+        "1": "accepted_plus_reached"
+      }
+    },
+    "sentinel_field": "max_tokens_allowed",
+    "sentinel_value": 1337,
+    "sentinel_selection_reason": [
+      "Field exists in real producer outputs for both scrub-after paths.",
+      "Field is required by the public decision schema.",
+      "Field is not a safety-control field for external proposal gating.",
+      "_external_disabled_local_fallback does not overwrite this field.",
+      "Mutating the field inside the wrapper does not change producer-selection or finalizer-scrub behavior under test."
+    ],
+    "sentinel_baseline_tests": [
+      "test_budget_or_policy_fallback_flag_off_sentinel_baseline_survives_public_output",
+      "test_private_provider_boundary_flag_off_sentinel_baseline_survives_public_output"
+    ],
+    "sentinel_baseline_result": "preserved_in_final_public_output_for_both_scrub_after_producers",
+    "fallback_boundary_used": null,
+    "fallback_boundary_reason": "not_needed_public_output_sentinel_survived_normalization",
+    "forced_return_consumption_tests": [
+      "test_forced_budget_or_policy_fallback_bundle_scrubbed_when_external_flag_not_true_and_forced_return_consumed",
+      "test_forced_private_provider_boundary_bundle_scrubbed_when_external_flag_not_true_and_forced_return_consumed"
+    ],
+    "forced_return_consumption_enforced_by": [
+      "test_budget_or_policy_fallback_flag_off_sentinel_baseline_survives_public_output",
+      "test_private_provider_boundary_flag_off_sentinel_baseline_survives_public_output",
+      "test_forced_budget_or_policy_fallback_bundle_scrubbed_when_external_flag_not_true_and_forced_return_consumed",
+      "test_forced_private_provider_boundary_bundle_scrubbed_when_external_flag_not_true_and_forced_return_consumed"
+    ],
+    "full_bundle_scrub_enforced_by": [
+      "test_forced_bundle_finalizer_scrubs_not_exactly_true_flags",
+      "test_forced_budget_or_policy_fallback_bundle_scrubbed_when_external_flag_not_true_and_forced_return_consumed",
+      "test_forced_private_provider_boundary_bundle_scrubbed_when_external_flag_not_true_and_forced_return_consumed"
+    ],
+    "schema_validation_method": "local_validator_in_tests_test_router_policy_external_proposal_invariant_py",
+    "schema_validation_coverage": "complete_for_current_router_policy_decision_schema_constructs",
+    "schema_constructs_used": [
+      "type",
+      "const",
+      "enum",
+      "minLength",
+      "maxLength",
+      "pattern",
+      "minimum",
+      "minItems",
+      "uniqueItems",
+      "items",
+      "properties",
+      "required",
+      "additionalProperties"
+    ],
+    "schema_constructs_covered": [
+      "type",
+      "const",
+      "enum",
+      "minLength",
+      "maxLength",
+      "pattern",
+      "minimum",
+      "minItems",
+      "uniqueItems",
+      "items",
+      "properties",
+      "required",
+      "additionalProperties"
+    ],
+    "unsupported_schema_constructs": [],
+    "report_status_accuracy": {
+      "pre_commit_status": [
+        "M tests/test_router_policy_external_proposal_invariant.py",
+        "M reports/E4-PRE-R1-FORCED-EXTERNAL-ARTIFACT-SCRUB/summary.md",
+        "M reports/E4-PRE-R1-FORCED-EXTERNAL-ARTIFACT-SCRUB/summary.json",
+        "?? reports/E2-EXTERNAL-ROUTING-FLAG-GOVERNANCE/changed_files.zip",
+        "?? reports/E3-EXTERNAL-BUDGET-SESSION-GATE/changed_files.zip",
+        "?? reports/E4-PRE-R1-FORCED-EXTERNAL-ARTIFACT-SCRUB/changed_files.zip",
+        "?? reports/E4-PRE-ROUTER-EXTERNAL-PROPOSAL-INVARIANT/changed_files.zip"
+      ],
+      "final_post_commit_status": [
+        "clean_except_expected_untracked_changed_files_zip_artifacts"
+      ],
+      "status_drift_fixed": true
+    },
+    "no_provider_e3_e4_wiring_check": {
+      "status": "clean",
+      "method": [
+        "diff_scoped_inspection_of_r1_1_changed_files",
+        "grep_for_evaluate_external_budget_gate_provider_network_client_requests_httpx_urllib_confirmation_session_digest_and_external_execution_terms"
+      ],
+      "result": [
+        "no_production_evaluate_external_budget_gate_call_added",
+        "no_provider_or_network_client_code_added",
+        "no_E3_or_E4_runtime_wiring_added",
+        "no_external_execution_path_added"
+      ]
+    },
+    "known_limitations": [
+      "R1.1 proves forced return consumption for the current discovered scrub-after producer paths only.",
+      "R1.1 does not implement E4.",
+      "R1.1 does not activate E3.",
+      "E4 still requires cumulative egress scope, digest/confirmation binding, provider policy, and E3 re-validation."
+    ]
+  }
 }
