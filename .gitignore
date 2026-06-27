@@ -25,6 +25,7 @@ Desktop.ini
 
 # Local runtime data
 data/
+.var/
 *.db
 *.sqlite
 *.sqlite3

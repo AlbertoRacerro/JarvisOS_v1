@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,6 +29,10 @@ TIER_RANK = {
 EXTERNAL_TIERS = {"CHEAP_EXTERNAL", "SCIENTIFIC_MEDIUM", "FRONTIER"}
 LOCAL_PROVIDERS = {"local:qwen", "local:gemma", "none"}
 EXTERNAL_NETWORK_ACTIONS = {"browser_search", "tool_call", "mcp_call"}
+DEFAULT_CONSUMPTION_LEDGER_PATH = Path(".var/jarvisos/confirmation_consumption.jsonl")
+CONSUMPTION_LEDGER_SCHEMA_VERSION = "v1"
+MIN_CONSENT_ID_LENGTH = 12
+PLACEHOLDER_CONSENT_IDS = {"test", "demo", "consent", "123", "placeholder", "none", "null"}
 SECRET_ECHO_PATTERN = re.compile(
     r"(sk-[A-Za-z0-9_-]{8,}|api[_ -]?key\s*[:=]|password\s*[:=]|"
     r"token\s*[:=]|private key|BEGIN [A-Z ]*PRIVATE KEY)",
@@ -644,6 +649,305 @@ def evaluate_confirmed_execution_activation_boundary(
         "activation_safe": not violations,
         "violations": violations,
         "activation_scope": "confirmed_execution_boundary_only",
+    }
+
+
+def _invalid_consumption_result(
+    *,
+    consumption_key: str | None,
+    activation_safe: bool,
+    violations: list[dict],
+    economic_envelope_complete: bool = False,
+    economic_envelope_limitations: list[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "consumption_allowed": False,
+        "consumption_key": consumption_key,
+        "activation_safe": activation_safe,
+        "economic_envelope_complete": economic_envelope_complete,
+        "economic_envelope_limitations": list(economic_envelope_limitations or []),
+        "automatic_execution_eligible": False,
+        "violations": violations,
+        "consumption_scope": "local_alpha_allow_once",
+    }
+
+
+def _validate_consumption_consent_id(consent_id: Any) -> tuple[str | None, list[dict]]:
+    violations: list[dict] = []
+    if not isinstance(consent_id, str):
+        _add(
+            violations,
+            "CONSENT_ID_INVALID",
+            "allow_once consumption requires a string consent_context.consent_id.",
+            "consent_context.consent_id",
+        )
+        return None, violations
+
+    stripped = consent_id.strip()
+    if not stripped:
+        _add(
+            violations,
+            "CONSENT_ID_INVALID",
+            "allow_once consumption requires a non-empty consent_context.consent_id.",
+            "consent_context.consent_id",
+        )
+        return None, violations
+
+    if stripped.lower() in PLACEHOLDER_CONSENT_IDS:
+        _add(
+            violations,
+            "CONSENT_ID_INVALID",
+            "allow_once consumption rejects placeholder consent ids.",
+            "consent_context.consent_id",
+        )
+        return None, violations
+
+    if len(stripped) < MIN_CONSENT_ID_LENGTH:
+        _add(
+            violations,
+            "CONSENT_ID_INVALID",
+            "allow_once consumption requires a non-placeholder consent id with sufficient entropy.",
+            "consent_context.consent_id",
+        )
+        return None, violations
+
+    return stripped, violations
+
+
+def _economic_envelope_from_previous(previous_decision: dict[str, Any] | None) -> tuple[dict[str, Any], bool, list[str]]:
+    source = previous_decision or {}
+    fields = (
+        "route_tier",
+        "budget_class",
+        "provider_candidate",
+        "max_tokens_allowed",
+        "dry_run_required",
+        "allowed_execution_mode",
+    )
+    envelope = {field: source[field] for field in fields if field in source}
+    limitations: list[str] = []
+
+    for field in ("provider_candidate", "budget_class", "allowed_execution_mode"):
+        value = source.get(field)
+        if not isinstance(value, str) or not value.strip():
+            limitations.append(f"missing {field}")
+
+    if "dry_run_required" not in source:
+        limitations.append("missing dry_run_required")
+    elif not isinstance(source.get("dry_run_required"), bool):
+        limitations.append("invalid dry_run_required")
+
+    max_tokens = source.get("max_tokens_allowed")
+    if max_tokens is None:
+        limitations.append("missing max_tokens_allowed")
+    elif isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens <= 0:
+        limitations.append("invalid max_tokens_allowed")
+
+    return envelope, not limitations, limitations
+
+
+def _read_consumption_ledger(ledger_path: Path) -> tuple[dict[str, dict[str, Any]] | None, list[dict]]:
+    records: dict[str, dict[str, Any]] = {}
+    if not ledger_path.exists():
+        return records, []
+
+    try:
+        content = ledger_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return None, [
+            _violation(
+                "CONFIRMATION_CONSUMPTION_LEDGER_READ_FAILED",
+                f"Confirmation consumption ledger could not be read: {exc}",
+                "ledger_path",
+            )
+        ]
+
+    if content and not content.endswith("\n"):
+        return None, [
+            _violation(
+                "CONFIRMATION_CONSUMPTION_LEDGER_PARTIAL_LINE",
+                "Confirmation consumption ledger contains a partial final line.",
+                "ledger_path",
+            )
+        ]
+
+    for line_number, line in enumerate(content.splitlines(), start=1):
+        if not line.strip():
+            return None, [
+                _violation(
+                    "CONFIRMATION_CONSUMPTION_LEDGER_CORRUPT",
+                    "Confirmation consumption ledger contains an empty or corrupt line.",
+                    f"ledger_path:{line_number}",
+                )
+            ]
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            return None, [
+                _violation(
+                    "CONFIRMATION_CONSUMPTION_LEDGER_CORRUPT",
+                    "Confirmation consumption ledger contains invalid JSON.",
+                    f"ledger_path:{line_number}",
+                )
+            ]
+        if not isinstance(record, dict) or record.get("schema_version") != CONSUMPTION_LEDGER_SCHEMA_VERSION:
+            return None, [
+                _violation(
+                    "CONFIRMATION_CONSUMPTION_LEDGER_CORRUPT",
+                    "Confirmation consumption ledger record has an invalid schema version.",
+                    f"ledger_path:{line_number}",
+                )
+            ]
+        key = record.get("consumption_key")
+        if not isinstance(key, str) or not key:
+            return None, [
+                _violation(
+                    "CONFIRMATION_CONSUMPTION_LEDGER_CORRUPT",
+                    "Confirmation consumption ledger record is missing consumption_key.",
+                    f"ledger_path:{line_number}",
+                )
+            ]
+        if key in records:
+            return None, [
+                _violation(
+                    "CONFIRMATION_CONSUMPTION_LEDGER_DUPLICATE_KEY",
+                    "Confirmation consumption ledger contains duplicate consumption keys.",
+                    f"ledger_path:{line_number}",
+                )
+            ]
+        records[key] = record
+
+    return records, []
+
+
+def _append_consumption_record(ledger_path: Path, record: dict[str, Any]) -> list[dict]:
+    try:
+        ledger_path.parent.mkdir(parents=True, exist_ok=True)
+        with ledger_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+    except OSError as exc:
+        return [
+            _violation(
+                "CONFIRMATION_CONSUMPTION_LEDGER_WRITE_FAILED",
+                f"Confirmation consumption ledger could not be written: {exc}",
+                "ledger_path",
+            )
+        ]
+    return []
+
+
+def evaluate_confirmed_execution_consumption_boundary(
+    decision: dict[str, Any],
+    previous_decision: dict[str, Any] | None,
+    *,
+    now: str | None = None,
+    ledger_path: Path | str = DEFAULT_CONSUMPTION_LEDGER_PATH,
+) -> dict[str, Any]:
+    activation = evaluate_confirmed_execution_activation_boundary(
+        decision,
+        previous_decision,
+        now=now,
+    )
+    envelope, envelope_complete, envelope_limitations = _economic_envelope_from_previous(previous_decision)
+
+    if activation["activation_safe"] is not True:
+        return _invalid_consumption_result(
+            consumption_key=None,
+            activation_safe=False,
+            violations=list(activation["violations"]),
+            economic_envelope_complete=envelope_complete,
+            economic_envelope_limitations=envelope_limitations,
+        )
+
+    consent = decision.get("consent_context")
+    if not isinstance(consent, dict):
+        violations = [
+            _violation(
+                "CONSENT_CONTEXT_MISSING",
+                "allow_once consumption requires consent_context.",
+                "consent_context",
+            )
+        ]
+        return _invalid_consumption_result(
+            consumption_key=None,
+            activation_safe=True,
+            violations=violations,
+            economic_envelope_complete=envelope_complete,
+            economic_envelope_limitations=envelope_limitations,
+        )
+
+    consumption_key, consent_violations = _validate_consumption_consent_id(consent.get("consent_id"))
+    if consent_violations:
+        return _invalid_consumption_result(
+            consumption_key=consumption_key,
+            activation_safe=True,
+            violations=consent_violations,
+            economic_envelope_complete=envelope_complete,
+            economic_envelope_limitations=envelope_limitations,
+        )
+
+    ledger = Path(ledger_path)
+    records, ledger_violations = _read_consumption_ledger(ledger)
+    if ledger_violations or records is None:
+        return _invalid_consumption_result(
+            consumption_key=consumption_key,
+            activation_safe=True,
+            violations=ledger_violations,
+            economic_envelope_complete=envelope_complete,
+            economic_envelope_limitations=envelope_limitations,
+        )
+    if consumption_key in records:
+        violations = [
+            _violation(
+                "CONFIRMATION_ALREADY_CONSUMED",
+                "allow_once confirmation has already been consumed.",
+                "consent_context.consent_id",
+            )
+        ]
+        return _invalid_consumption_result(
+            consumption_key=consumption_key,
+            activation_safe=True,
+            violations=violations,
+            economic_envelope_complete=envelope_complete,
+            economic_envelope_limitations=envelope_limitations,
+        )
+
+    record = {
+        "schema_version": CONSUMPTION_LEDGER_SCHEMA_VERSION,
+        "consumption_key": consumption_key,
+        "consumed_at": now,
+        "previous_decision_id": None if previous_decision is None else previous_decision.get("decision_id"),
+        "confirmation_digest": None if previous_decision is None else previous_decision.get("confirmation_digest"),
+        "confirmed_at": consent.get("confirmed_at"),
+        "target": None if previous_decision is None else previous_decision.get("proposed_external_target"),
+        "input_digest": None if previous_decision is None else previous_decision.get("input_digest"),
+        "economic_envelope": envelope,
+        "economic_envelope_complete": envelope_complete,
+        "economic_envelope_limitations": list(envelope_limitations),
+        "automatic_execution_eligible": envelope_complete,
+    }
+
+    write_violations = _append_consumption_record(ledger, record)
+    if write_violations:
+        return _invalid_consumption_result(
+            consumption_key=consumption_key,
+            activation_safe=True,
+            violations=write_violations,
+            economic_envelope_complete=envelope_complete,
+            economic_envelope_limitations=envelope_limitations,
+        )
+
+    return {
+        "consumption_allowed": True,
+        "consumption_key": consumption_key,
+        "activation_safe": True,
+        "economic_envelope_complete": envelope_complete,
+        "economic_envelope_limitations": list(envelope_limitations),
+        "automatic_execution_eligible": envelope_complete,
+        "violations": [],
+        "consumption_scope": "local_alpha_allow_once",
     }
 
 

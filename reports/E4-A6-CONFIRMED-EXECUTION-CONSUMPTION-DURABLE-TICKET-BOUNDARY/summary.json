@@ -1,0 +1,158 @@
+{
+  "verdict": "GREEN",
+  "milestone": "E4-A6-CONFIRMED-EXECUTION-CONSUMPTION-DURABLE-TICKET-BOUNDARY",
+  "current_head": "2e5b0b667919fe0bc83c3f0fb55e1008ee74b7f2",
+  "changed_files": {
+    "production": [
+      "scripts/router_policy_semantic_validator.py"
+    ],
+    "tests": [
+      "tests/test_router_policy_confirmed_execution_consumption_boundary.py"
+    ],
+    "reports": [
+      "reports/E4-A6-CONFIRMED-EXECUTION-CONSUMPTION-DURABLE-TICKET-BOUNDARY/summary.md",
+      "reports/E4-A6-CONFIRMED-EXECUTION-CONSUMPTION-DURABLE-TICKET-BOUNDARY/summary.json"
+    ],
+    "gitignore": [
+      ".gitignore"
+    ],
+    "schemas": []
+  },
+  "integration_points": [
+    "scripts/router_policy_semantic_validator.py::evaluate_confirmed_execution_consumption_boundary",
+    "scripts/router_policy_semantic_validator.py::evaluate_confirmed_execution_activation_boundary",
+    "scripts/router_policy_semantic_validator.py::validate_confirmation_revalidation_boundary",
+    "scripts/router_policy_canonical_digest.py::validate_confirmation_digest_integrity"
+  ],
+  "consumption_boundary": {
+    "implemented": true,
+    "coverage_level": "helper-only",
+    "a5_reused": true,
+    "no_execution_added": true
+  },
+  "consent_id_validation": {
+    "requires_string": true,
+    "minimum_length": 12,
+    "placeholder_values_rejected": [
+      "test",
+      "demo",
+      "consent",
+      "123",
+      "placeholder",
+      "none",
+      "null"
+    ]
+  },
+  "ledger_behavior": {
+    "format": "append-only-jsonl",
+    "schema_version": "v1",
+    "one_complete_line_per_record": true,
+    "flush": true,
+    "fsync": "yes",
+    "corrupt_lines_fail_closed": true,
+    "partial_lines_fail_closed": true,
+    "duplicate_keys_fail_closed": true
+  },
+  "economic_envelope": {
+    "source": "previous_decision",
+    "fields": [
+      "route_tier",
+      "budget_class",
+      "provider_candidate",
+      "max_tokens_allowed",
+      "dry_run_required",
+      "allowed_execution_mode"
+    ],
+    "required_for_completeness": [
+      "provider_candidate",
+      "budget_class",
+      "max_tokens_allowed",
+      "dry_run_required",
+      "allowed_execution_mode"
+    ],
+    "economic_envelope_complete_computed": true,
+    "automatic_execution_eligible_computed": true,
+    "route_tier_audit_only": true,
+    "max_tokens_allowed_validation": [
+      "must be int",
+      "bool is rejected",
+      "must be > 0"
+    ]
+  },
+  "consumption_results": {
+    "valid_complete_envelope": {
+      "consumption_allowed": true,
+      "activation_safe": true,
+      "economic_envelope_complete": true,
+      "automatic_execution_eligible": true
+    },
+    "valid_incomplete_envelope": {
+      "consumption_allowed": true,
+      "activation_safe": true,
+      "economic_envelope_complete": false,
+      "automatic_execution_eligible": false
+    },
+    "replay": {
+      "consumption_allowed": false,
+      "activation_safe": true,
+      "automatic_execution_eligible": false,
+      "violation_code": "CONFIRMATION_ALREADY_CONSUMED"
+    }
+  },
+  "provider_network_absence": "No provider execution, network execution, SDK/API imports, provider registry, or provider smoke tests were added.",
+  "env_secrets_absence": "No .env reads, os.environ reads, API keys, secrets, prompts, raw user input, provider responses, or model outputs were added to A6 ledger behavior.",
+  "e3_inertness": "No production caller for evaluate_external_budget_gate was added.",
+  "schema_change_status": "none",
+  "db_server_workflow_absence": "No DB, migration, server, storage service, cloud persistence, ticket retrieval service, or workflow engine was added.",
+  "tests_added_or_updated": [
+    "tests/test_router_policy_confirmed_execution_consumption_boundary.py"
+  ],
+  "checks_run": [
+    "python -m pytest tests/test_router_policy_confirmed_execution_consumption_boundary.py -q -> 23 passed in 0.14s",
+    "python -m pytest tests/test_router_policy_confirmed_execution_activation_boundary.py -q -> 17 passed in 0.03s",
+    "python -m pytest tests/test_router_policy_confirmation_revalidation_boundary.py -q -> 15 passed in 0.03s",
+    "python -m pytest tests/test_router_policy_semantic_validator.py -q -> 40 passed in 0.06s",
+    "python -m pytest tests/test_router_policy_canonical_digest.py -q -> 14 passed in 0.04s",
+    "python -m pytest tests/test_router_policy_confirmation_digest_binding.py -q -> 5 passed in 0.04s",
+    "python -m pytest tests/test_router_policy_external_proposal_invariant.py tests/test_router_policy_external_egress_scope.py tests/test_router_policy_message_route_smoke.py tests/test_router_policy_semantic_validator.py tests/test_router_policy_external_egress_gate.py tests/test_router_policy_external_budget_gate.py -q -> 324 passed in 0.45s",
+    "python -m json.tool reports/E4-A6-CONFIRMED-EXECUTION-CONSUMPTION-DURABLE-TICKET-BOUNDARY/summary.json -> pass",
+    "git diff --check -> CRLF warnings only, no whitespace/content failure",
+    "rg -n \"evaluate_external_budget_gate\\(\" scripts backend --glob '!scripts/router_policy_external_budget_gate.py' -> no matches",
+    "rg -n \"^import requests|^from requests|^import httpx|^from httpx|openai|anthropic|gemini\" scripts -> existing pre-E4 regex/text references only",
+    "rg -n \"\\.env|os\\.environ|dotenv|API_KEY|SECRET|TOKEN\" scripts tests reports/E4-A6-CONFIRMED-EXECUTION-CONSUMPTION-DURABLE-TICKET-BOUNDARY -> report assertions plus existing probe/test/reference matches only",
+    "rg -n \"datetime\\.now|time\\.time|utcnow\\(\" scripts tests -> existing pre-E4 probe timestamp generation plus A4/A5/A6 negative test assertions only"
+  ],
+  "grep_matches_classified": [
+    {
+      "command": "rg -n \"evaluate_external_budget_gate\\(\" scripts backend --glob '!scripts/router_policy_external_budget_gate.py'",
+      "matches": [],
+      "classification": "no production caller"
+    },
+    {
+      "command": "rg -n \"^import requests|^from requests|^import httpx|^from httpx|openai|anthropic|gemini\" scripts",
+      "classification": "existing pre-E4 regex/text references only",
+      "paths": [
+        "scripts/local_policy_gate_overlay_probe.py",
+        "scripts/router_policy_message_route_smoke.py"
+      ]
+    },
+    {
+      "command": "rg -n \"\\.env|os\\.environ|dotenv|API_KEY|SECRET|TOKEN\" scripts tests reports/E4-A6-CONFIRMED-EXECUTION-CONSUMPTION-DURABLE-TICKET-BOUNDARY",
+      "classification": "report assertions plus existing probe/test/reference matches only"
+    },
+    {
+      "command": "rg -n \"datetime\\.now|time\\.time|utcnow\\(\" scripts tests",
+      "classification": "existing pre-E4 probe timestamp generation plus A4/A5/A6 negative test assertions only"
+    }
+  ],
+  "known_limitations": [
+    "A6 is local alpha only.",
+    "A6 uses a local JSONL ledger and is single-process alpha only.",
+    "No DB, server, cloud persistence, or transactional multi-process consumption was added.",
+    "Provider and budget ordering remain future A7/A9 work.",
+    "Retry, tool-call, history, and provider execution policy remain future A7/A9 work.",
+    "Token benchmark and prompt compression harness were not implemented."
+  ],
+  "next_recommended_slice": "E4-A7-PROVIDER-BUDGET-ORDERING-AND-EXECUTION-POLICY-PRE",
+  "final_git_status": " M .gitignore\n M scripts/router_policy_semantic_validator.py\n?? reports/E4-A6-CONFIRMED-EXECUTION-CONSUMPTION-DURABLE-TICKET-BOUNDARY/\n?? tests/test_router_policy_confirmed_execution_consumption_boundary.py"
+}
