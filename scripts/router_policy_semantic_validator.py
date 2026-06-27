@@ -348,6 +348,193 @@ def _check_confirmation_payload(decision: dict[str, Any], violations: list[dict]
                 )
 
 
+def validate_confirmation_revalidation_boundary(
+    decision: dict[str, Any],
+    previous_decision: dict[str, Any] | None,
+    *,
+    now: str | None = None,
+) -> list[dict]:
+    violations: list[dict] = []
+
+    if decision.get("lifecycle_stage") != "confirmed_execution":
+        return violations
+    now_dt = parse_datetime(now) if now is not None else None
+    if now_dt is None:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "confirmed_execution revalidation requires a caller-supplied parseable now timestamp.",
+            "now",
+        )
+
+    consent = decision.get("consent_context")
+    if not isinstance(consent, dict) or previous_decision is None:
+        _add(
+            violations,
+            "CONSENT_CONTEXT_MISSING",
+            "confirmed_execution requires consent context and previous decision.",
+            "consent_context",
+        )
+        return violations
+    if previous_decision.get("lifecycle_stage") != "awaiting_confirmation":
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "confirmed_execution requires a previous awaiting_confirmation decision.",
+            "previous_decision.lifecycle_stage",
+        )
+    if previous_decision.get("confirmation_required") is not True:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "Previous decision must require confirmation.",
+            "previous_decision.confirmation_required",
+        )
+    previous_digest = previous_decision.get("confirmation_digest")
+    if not isinstance(previous_digest, str) or not previous_digest:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "Previous decision must carry a confirmation_digest.",
+            "previous_decision.confirmation_digest",
+        )
+    if consent.get("confirmation_action") != "allow_once":
+        _add(
+            violations,
+            "CONSENT_CONTEXT_MISSING",
+            "confirmed_execution consent action must be allow_once.",
+            "consent_context.confirmation_action",
+        )
+    if parse_datetime(consent.get("confirmed_at")) is None:
+        _add(
+            violations,
+            "CONSENT_CONTEXT_MISSING",
+            "confirmed_execution requires a valid consent_context.confirmed_at timestamp.",
+            "consent_context.confirmed_at",
+        )
+    if consent.get("confirmed_previous_decision_id") != previous_decision.get("decision_id"):
+        _add(
+            violations,
+            "CONSENT_CONTEXT_MISSING",
+            "Consent must reference the exact previous confirmation decision.",
+            "consent_context.confirmed_previous_decision_id",
+        )
+    if consent.get("confirmed_confirmation_digest") != previous_digest:
+        _add(
+            violations,
+            "CONSENT_DIGEST_MISMATCH",
+            "Consent digest must match previous decision confirmation digest.",
+            "consent_context.confirmed_confirmation_digest",
+        )
+    previous_integrity = confirmation_digest_helper.validate_confirmation_digest_integrity(previous_decision)
+    if previous_integrity["valid"] is not True:
+        _add(
+            violations,
+            "CONSENT_DIGEST_MISMATCH",
+            "Previous confirmation digest must still match its bound confirmation intent envelope.",
+            "previous_decision.confirmation_digest",
+        )
+    previous_expires = parse_datetime(previous_decision.get("expires_at"))
+    if previous_expires is None or (now_dt is not None and now_dt > previous_expires):
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "Previous confirmation decision is missing or expired.",
+            "previous_decision.expires_at",
+        )
+    current_input_digest = decision.get("input_digest")
+    previous_input_digest = previous_decision.get("input_digest")
+    if not isinstance(current_input_digest, str) or not current_input_digest:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "confirmed_execution requires a non-empty current input_digest.",
+            "input_digest",
+        )
+    if not isinstance(previous_input_digest, str) or not previous_input_digest:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "Previous confirmation requires a non-empty input_digest.",
+            "previous_decision.input_digest",
+        )
+    if (
+        isinstance(current_input_digest, str)
+        and current_input_digest
+        and isinstance(previous_input_digest, str)
+        and previous_input_digest
+        and current_input_digest != previous_input_digest
+    ):
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "Confirmed execution input digest must match the previous confirmation; input drift is rejected at this boundary.",
+            "input_digest",
+        )
+    if decision.get("confirmation_required") is not False:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "confirmed_execution must not keep confirmation_required true.",
+            "confirmation_required",
+        )
+    if decision.get("confirmation_payload_required") is not False:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "confirmed_execution must not keep confirmation_payload_required true.",
+            "confirmation_payload_required",
+        )
+    if decision.get("confirmation_payload") is not None:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "confirmed_execution must not retain confirmation_payload.",
+            "confirmation_payload",
+        )
+    if decision.get("confirmation_digest") is not None:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "confirmed_execution must not retain confirmation_digest; continuity belongs in consent_context.confirmed_confirmation_digest.",
+            "confirmation_digest",
+        )
+    if decision.get("confirmation_options"):
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "confirmed_execution must not retain confirmation_options.",
+            "confirmation_options",
+        )
+    current_target = decision.get("proposed_external_target")
+    consent_target = None
+    if isinstance(consent, dict):
+        consent_target = consent.get("confirmed_external_target")
+    if not current_target and isinstance(consent_target, str) and consent_target.startswith("external:"):
+        current_target = consent_target
+    previous_target = previous_decision.get("proposed_external_target")
+    if not current_target:
+        provider_candidate = decision.get("provider_candidate")
+        if isinstance(provider_candidate, str) and provider_candidate.startswith("external:"):
+            current_target = provider_candidate
+    if previous_target and not current_target:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "Previous external target exists, so confirmed_execution must derive a current external target.",
+            "proposed_external_target",
+        )
+    if current_target and previous_target and current_target != previous_target:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "Confirmed execution target must match the previous confirmed external target.",
+            "proposed_external_target",
+        )
+
+    return violations
+
+
 def _check_expiry(
     decision: dict[str, Any],
     previous_decision: dict[str, Any] | None,
@@ -381,44 +568,13 @@ def _check_expiry(
                 "expires_at",
             )
     if stage == "confirmed_execution":
-        consent = decision.get("consent_context")
-        if not isinstance(consent, dict) or previous_decision is None:
-            _add(
-                violations,
-                "CONSENT_CONTEXT_MISSING",
-                "confirmed_execution requires consent context and previous decision.",
-                "consent_context",
+        violations.extend(
+            validate_confirmation_revalidation_boundary(
+                decision,
+                previous_decision,
+                now=now_dt.isoformat() if now_dt is not None else None,
             )
-            return
-        if consent.get("confirmation_action") != "allow_once":
-            _add(
-                violations,
-                "CONSENT_CONTEXT_MISSING",
-                "confirmed_execution consent action must be allow_once.",
-                "consent_context.confirmation_action",
-            )
-        if consent.get("confirmed_confirmation_digest") != previous_decision.get("confirmation_digest"):
-            _add(
-                violations,
-                "CONSENT_DIGEST_MISMATCH",
-                "Consent digest must match previous decision confirmation digest.",
-                "consent_context.confirmed_confirmation_digest",
-            )
-        previous_expires = parse_datetime(previous_decision.get("expires_at"))
-        if previous_expires is None or (now_dt is not None and now_dt > previous_expires):
-            _add(
-                violations,
-                "STALE_CONFIRMATION_DECISION",
-                "Previous confirmation decision is missing or expired.",
-                "previous_decision.expires_at",
-            )
-        if decision.get("input_digest") != previous_decision.get("input_digest") and decision.get("input_revalidated") is not True:
-            _add(
-                violations,
-                "STALE_CONFIRMATION_DECISION",
-                "Confirmed execution input digest must match the confirmed decision or be revalidated.",
-                "input_digest",
-            )
+        )
 
 
 def _check_redaction(input_obj: dict[str, Any], decision: dict[str, Any], violations: list[dict]) -> None:

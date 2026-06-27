@@ -1,0 +1,205 @@
+{
+  "verdict": "GREEN",
+  "milestone": "E4-A4-CONFIRMATION-DECISION-REVALIDATION-BOUNDARY",
+  "current_head": "e7c53e4ab2236362dfb0287fd6a539b1846143d9",
+  "changed_files": {
+    "production": [
+      "scripts/router_policy_semantic_validator.py"
+    ],
+    "tests": [
+      "tests/test_router_policy_confirmation_revalidation_boundary.py"
+    ],
+    "reports": [
+      "reports/E4-A4-CONFIRMATION-DECISION-REVALIDATION-BOUNDARY/summary.md",
+      "reports/E4-A4-CONFIRMATION-DECISION-REVALIDATION-BOUNDARY/summary.json"
+    ],
+    "schemas": []
+  },
+  "integration_points": [
+    "scripts/router_policy_semantic_validator.py::validate_confirmation_revalidation_boundary",
+    "scripts/router_policy_semantic_validator.py::_check_expiry",
+    "scripts/router_policy_canonical_digest.py::validate_confirmation_digest_integrity"
+  ],
+  "revalidation_boundary": {
+    "implemented": true,
+    "coverage_level": "mixed",
+    "no_public_confirmation_workflow_added": true
+  },
+  "a4_r1_fixes_applied": [
+    "missing or invalid now fails closed",
+    "previous external target plus missing or non-external current target fails closed",
+    "current confirmed_execution confirmation_digest non-null rejected"
+  ],
+  "previous_confirmation_requirements": [
+    "previous_decision required",
+    "previous_decision.lifecycle_stage must be awaiting_confirmation",
+    "previous_decision.confirmation_required must be true",
+    "previous_decision.confirmation_digest must be present and non-empty"
+  ],
+  "consent_context_requirements": [
+    "consent_context required",
+    "confirmed_previous_decision_id must match previous_decision.decision_id",
+    "confirmed_confirmation_digest must match previous_decision.confirmation_digest",
+    "confirmation_action must be allow_once",
+    "confirmed_at must be present and parseable"
+  ],
+  "digest_continuity_behavior": [
+    "consent_context.confirmed_confirmation_digest must equal previous_decision.confirmation_digest",
+    "boundary does not trust stored previous digest blindly"
+  ],
+  "previous_digest_integrity_recheck": {
+    "uses_a3_helper": true,
+    "rejects_tampered_previous_decision": true
+  },
+  "input_revalidation_behavior": [
+    "missing or invalid now fails closed for confirmed_execution revalidation",
+    "missing current input_digest fails closed",
+    "missing previous input_digest fails closed",
+    "input drift is rejected at A4 boundary",
+    "schema lacks input_revalidated so explicit revalidation state is not modeled in A4"
+  ],
+  "target_continuity_behavior": [
+    "current.proposed_external_target used when present",
+    "external current.provider_candidate used as fallback continuity carrier",
+    "previous_decision.proposed_external_target used as prior target reference",
+    "previous external target plus missing or non-external current target fails closed",
+    "target drift is rejected"
+  ],
+  "actionability_drift_behavior": [
+    "digest match does not grant provider_call_allowed_now",
+    "digest match does not grant external_network_allowed_now",
+    "confirmed_execution must not retain confirmation_required",
+    "confirmed_execution must not retain confirmation_payload_required",
+    "confirmed_execution must not retain confirmation_payload",
+    "confirmed_execution must not retain confirmation_digest",
+    "confirmed_execution must not retain confirmation_options"
+  ],
+  "expiry_behavior": [
+    "previous_decision.expires_at missing or invalid fails closed",
+    "expired previous confirmation rejected",
+    "caller-supplied now only"
+  ],
+  "purity_no_mutation_proof": [
+    "helper returns violations only",
+    "helper does not mutate current decision",
+    "helper does not mutate previous decision",
+    "helper does not set provider/network permissions",
+    "helper uses no wall-clock APIs"
+  ],
+  "route_action_route_tier_non_authority_proof": [
+    "route_action and route_tier changes do not rescue invalid revalidation state",
+    "input drift remains rejected when only labels change"
+  ],
+  "tests_added_or_updated": [
+    "tests/test_router_policy_confirmation_revalidation_boundary.py::test_valid_confirmed_execution_passes_revalidation_boundary",
+    "tests/test_router_policy_confirmation_revalidation_boundary.py::test_missing_now_fails_closed_for_confirmed_execution_revalidation",
+    "tests/test_router_policy_confirmation_revalidation_boundary.py::test_missing_previous_decision_rejected",
+    "tests/test_router_policy_confirmation_revalidation_boundary.py::test_consent_digest_mismatch_rejected",
+    "tests/test_router_policy_confirmation_revalidation_boundary.py::test_missing_confirmed_at_rejected",
+    "tests/test_router_policy_confirmation_revalidation_boundary.py::test_missing_or_expired_previous_confirmation_rejected",
+    "tests/test_router_policy_confirmation_revalidation_boundary.py::test_previous_digest_tampering_rejected_by_recomputed_a3_digest",
+    "tests/test_router_policy_confirmation_revalidation_boundary.py::test_missing_or_drifted_input_digest_fails_closed",
+    "tests/test_router_policy_confirmation_revalidation_boundary.py::test_missing_current_target_rejected_when_previous_target_exists",
+    "tests/test_router_policy_confirmation_revalidation_boundary.py::test_target_drift_rejected_where_representable",
+    "tests/test_router_policy_confirmation_revalidation_boundary.py::test_digest_match_does_not_mutate_or_grant_provider_network_permission",
+    "tests/test_router_policy_confirmation_revalidation_boundary.py::test_confirmed_execution_cannot_retain_live_confirmation_artifacts",
+    "tests/test_router_policy_confirmation_revalidation_boundary.py::test_confirmed_execution_cannot_retain_confirmation_digest",
+    "tests/test_router_policy_confirmation_revalidation_boundary.py::test_route_labels_remain_non_authority_for_revalidation",
+    "tests/test_router_policy_confirmation_revalidation_boundary.py::test_revalidation_helper_uses_caller_supplied_now_only"
+  ],
+  "checks_run": [
+    "python -m pytest tests/test_router_policy_canonical_digest.py -q -> 14 passed in 0.04s",
+    "python -m pytest tests/test_router_policy_confirmation_digest_binding.py -q -> 5 passed in 0.08s",
+    "python -m pytest tests/test_router_policy_confirmation_revalidation_boundary.py -q -> 15 passed",
+    "python -m pytest tests/test_router_policy_semantic_validator.py -q -> 40 passed in 0.09s",
+    "python -m pytest tests/test_router_policy_external_proposal_invariant.py tests/test_router_policy_external_egress_scope.py tests/test_router_policy_message_route_smoke.py tests/test_router_policy_semantic_validator.py tests/test_router_policy_external_egress_gate.py tests/test_router_policy_external_budget_gate.py -q -> 324 passed in 0.90s",
+    "git diff --check -> CRLF warning only, no whitespace/content failure",
+    "git status --short -> expected A4 files only",
+    "rg -n \"evaluate_external_budget_gate\\(\" scripts backend --glob '!scripts/router_policy_external_budget_gate.py' -> no matches",
+    "rg -n \"^import requests|^from requests|^import httpx|^from httpx|openai|anthropic|gemini\" scripts -> existing pre-E4 regex/text references only",
+    "rg -n \"\\.env|os\\.environ|dotenv|API_KEY|SECRET|TOKEN\" scripts tests reports/E4-A4-CONFIRMATION-DECISION-REVALIDATION-BOUNDARY -> existing probe/test/reference matches only"
+  ],
+  "grep_matches_classified": [
+    {
+      "command": "rg -n \"evaluate_external_budget_gate\\(\" scripts backend --glob '!scripts/router_policy_external_budget_gate.py'",
+      "matches": [],
+      "classification": "no production caller"
+    },
+    {
+      "command": "rg -n \"^import requests|^from requests|^import httpx|^from httpx|openai|anthropic|gemini\" scripts",
+      "matches": [
+        {
+          "path": "scripts/local_policy_gate_overlay_probe.py",
+          "classification": "existing pre-E4 reference",
+          "reason": "regex vocabulary only"
+        },
+        {
+          "path": "scripts/router_policy_message_route_smoke.py",
+          "classification": "existing pre-E4 reference",
+          "reason": "regex vocabulary only"
+        }
+      ]
+    },
+    {
+      "command": "rg -n \"\\.env|os\\.environ|dotenv|API_KEY|SECRET|TOKEN\" scripts tests reports/E4-A4-CONFIRMATION-DECISION-REVALIDATION-BOUNDARY",
+      "matches": [
+        {
+          "path": "scripts/local_model_structured_output_probe.py",
+          "classification": "existing pre-E4 reference",
+          "reason": "documentation/probe text about blocking secrets"
+        },
+        {
+          "path": "scripts/local_policy_gate_overlay_probe.py",
+          "classification": "existing pre-E4 reference",
+          "reason": "regex/policy pattern for secret detection"
+        },
+        {
+          "path": "scripts/router_policy_semantic_validator.py",
+          "classification": "existing production secret-pattern validation",
+          "reason": "policy validation pattern, not env/provider loading"
+        },
+        {
+          "path": "tests/test_router_policy_canonical_digest.py",
+          "classification": "test/reference",
+          "reason": "forbidden-string assertion"
+        }
+      ]
+    }
+  ],
+  "provider_network_absence": "no provider execution added, no network execution added, no SDK/API imports added",
+  "env_secrets_absence": "no .env reads added, no os.environ reads added, grep matches are existing test/probe/reference patterns only",
+  "e3_inertness": "no production caller for evaluate_external_budget_gate",
+  "schema_change_status": "none",
+  "known_limitations": [
+    "A4 validates provided previous_decision and consent_context state only",
+    "no persistence, retrieval, single-use confirmation ticket storage, or durable confirmation records",
+    "schema lacks input_revalidated, so A4 rejects input drift instead of modeling explicit revalidation state",
+    "no public confirmation acceptance or execution workflow was added"
+  ],
+  "next_recommended_slice": "E4-A5-CONFIRMED-EXECUTION-ACTIVATION-BOUNDARY",
+  "final_git_status": "expected A4 files only",
+  "missing_input_digest_behavior": [
+    "missing or invalid now rejected for confirmed_execution revalidation",
+    "missing current input_digest rejected",
+    "missing previous input_digest rejected",
+    "None == None never satisfies revalidation"
+  ],
+  "missing_expiry_behavior": [
+    "missing previous expires_at rejected",
+    "invalid previous expires_at rejected",
+    "absent expiry is never treated as non-expiring"
+  ],
+  "target_continuity_limitation": {
+    "reported": false,
+    "reason": "",
+    "verdict_if_uncovered": "YELLOW"
+  },
+  "provided_state_only_limitation": "A4 validates provided previous_decision/consent_context only; no persistence/retrieval/single-use ticket storage/durable confirmation records.",
+  "wall_clock_access": {
+    "uses_caller_supplied_now_only": true,
+    "forbidden_calls_checked": [
+      "datetime.now",
+      "time.time"
+    ]
+  }
+}
