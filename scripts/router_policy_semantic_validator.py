@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import router_policy_canonical_digest as confirmation_digest_helper
+
 
 TIER_RANK = {
     "LOCAL_ONLY": 0,
@@ -313,12 +315,12 @@ def _check_confirmation_payload(decision: dict[str, Any], violations: list[dict]
                 "requires_new_decision_after_confirmation",
             )
     if payload is not None:
-        expected = canonical_json_digest(payload)
-        if decision.get("confirmation_digest") != expected:
+        integrity = confirmation_digest_helper.validate_confirmation_digest_integrity(decision)
+        if integrity["valid"] is not True:
             _add(
                 violations,
                 "CONFIRMATION_DIGEST_INVALID",
-                "confirmation_digest must match canonical confirmation_payload digest.",
+                "confirmation_digest must match the canonical confirmation intent digest envelope.",
                 "confirmation_digest",
             )
         if payload.get("payload_preview_truncated") is True and payload.get("full_payload_available_for_review") is not True:

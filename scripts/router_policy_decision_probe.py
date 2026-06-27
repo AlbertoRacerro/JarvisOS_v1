@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import router_policy_canonical_digest as confirmation_digest_helper
 from router_policy_external_egress_scope import evaluate_external_egress_scope
 import router_policy_semantic_validator as validator
 
@@ -404,8 +405,8 @@ def _external_candidate_proposal(input_obj: dict[str, Any], decision: dict[str, 
         payload = _confirmation_payload(target or "external:scientific_medium")
         decision["confirmation_payload_required"] = True
         decision["confirmation_payload"] = payload
-        decision["confirmation_digest"] = _canonical_digest(payload)
         decision["confirmation_options"] = ["allow_once", "deny", "view_details"]
+        decision["confirmation_digest"] = confirmation_digest_helper.compute_confirmation_digest(decision)["digest"]
         decision["reason_codes"].append("confirmation_required")
     return decision
 

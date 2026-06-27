@@ -1,0 +1,127 @@
+{
+  "verdict": "GREEN",
+  "milestone": "E4-A3-CONFIRMATION-DIGEST-BINDING-INTEGRATION",
+  "current_head": "a2625cd887236b75134c3babf5f4ec50c4699ff5",
+  "changed_files": {
+    "production": [
+      "scripts/router_policy_canonical_digest.py",
+      "scripts/router_policy_decision_probe.py",
+      "scripts/router_policy_semantic_validator.py"
+    ],
+    "tests": [
+      "tests/test_router_policy_canonical_digest.py",
+      "tests/test_router_policy_confirmation_digest_binding.py",
+      "tests/test_router_policy_semantic_validator.py"
+    ],
+    "reports": [
+      "reports/E4-A3-CONFIRMATION-DIGEST-BINDING-INTEGRATION/summary.md",
+      "reports/E4-A3-CONFIRMATION-DIGEST-BINDING-INTEGRATION/summary.json"
+    ],
+    "schemas": []
+  },
+  "integration_points": {
+    "helper": [
+      "canonicalize_confirmation_digest_envelope",
+      "compute_confirmation_digest",
+      "validate_confirmation_digest_integrity"
+    ],
+    "public_router_path": [
+      "_external_candidate_proposal"
+    ],
+    "validator_path": [
+      "_check_confirmation_payload"
+    ],
+    "scrub_finalizer_paths": [
+      "_external_scope_denied_proposal_only",
+      "_external_disabled_local_fallback"
+    ]
+  },
+  "digest_purpose_version_handling": {
+    "digest_purpose": "router_confirmation_intent",
+    "digest_version": "v1",
+    "cryptographically_bound": true,
+    "envelope_shape": {
+      "digest_purpose": "router_confirmation_intent",
+      "digest_version": "v1",
+      "confirmation_intent": "<bound payload>"
+    }
+  },
+  "bound_payload": [
+    "proposed_external_target",
+    "provider_call_allowed_now",
+    "external_network_allowed_now",
+    "confirmation_required",
+    "confirmation_payload_required",
+    "confirmation_payload",
+    "confirmation_options"
+  ],
+  "excluded_fields": [
+    "confirmation_digest",
+    "digest",
+    "route_action",
+    "route_tier",
+    "reason_codes",
+    "audit_notes",
+    "requires_new_decision_after_confirmation"
+  ],
+  "digest_compute_behavior": [
+    "confirmation-bearing external proposal gets confirmation_digest",
+    "digest is computed from the bound envelope, not raw confirmation_payload alone",
+    "confirmation_options order remains digest-relevant",
+    "compute does not grant provider_call_allowed_now",
+    "compute does not grant external_network_allowed_now"
+  ],
+  "digest_clear_behavior": [
+    "digest clears when proposed_external_target becomes None",
+    "digest clears on local/no-external fallback",
+    "digest clears when existing scrub/finalizer companion-removal logic runs",
+    "no duplicate scrubber added"
+  ],
+  "digest_validation_behavior": [
+    "validation is pure integrity check only",
+    "validation does not mutate the decision",
+    "digest mismatch fails integrity validation",
+    "digest match validates payload integrity only",
+    "digest match does not grant provider execution",
+    "digest match does not grant network execution"
+  ],
+  "compute_coverage_level": "public-router path",
+  "clear_coverage_level": "finalizer-level",
+  "validate_coverage_level": "helper-only",
+  "requires_new_decision_after_confirmation_lifecycle_handling": {
+    "classification": "confirmation_lifecycle_field",
+    "handling": "lifecycle_only_not_digest_bound_actionability"
+  },
+  "route_action_route_tier_non_authority_proof": [
+    "route_action and route_tier remain excluded from digest-bound payload",
+    "changing only route_action/route_tier does not change digest"
+  ],
+  "tests_added": [
+    "tests/test_router_policy_confirmation_digest_binding.py::test_confirmation_bearing_public_router_proposal_gets_bound_digest",
+    "tests/test_router_policy_confirmation_digest_binding.py::test_digest_validation_mismatch_blocks_integrity_only_without_mutation",
+    "tests/test_router_policy_confirmation_digest_binding.py::test_targetless_finalizer_scrubs_digest_and_confirmation_artifacts",
+    "tests/test_router_policy_confirmation_digest_binding.py::test_local_fallback_clears_digest_without_public_confirmation_flow",
+    "tests/test_router_policy_confirmation_digest_binding.py::test_requires_new_decision_after_confirmation_is_lifecycle_only_in_bound_digest",
+    "tests/test_router_policy_canonical_digest.py::test_digest_purpose_and_version_are_cryptographically_bound",
+    "tests/test_router_policy_canonical_digest.py::test_validate_confirmation_digest_integrity_returns_status_only_and_does_not_mutate",
+    "tests/test_router_policy_canonical_digest.py::test_validate_confirmation_digest_integrity_rejects_mismatch_without_granting_permissions"
+  ],
+  "checks_run": [
+    "python -m pytest tests/test_router_policy_canonical_digest.py -q -> 14 passed in 0.06s",
+    "python -m pytest tests/test_router_policy_confirmation_digest_binding.py -q -> 5 passed in 0.12s",
+    "python -m pytest tests/test_router_policy_external_proposal_invariant.py tests/test_router_policy_external_egress_scope.py tests/test_router_policy_message_route_smoke.py tests/test_router_policy_semantic_validator.py tests/test_router_policy_external_egress_gate.py tests/test_router_policy_external_budget_gate.py -q -> 324 passed in 0.92s",
+    "git diff --check -> CRLF warnings only, no whitespace/content failure",
+    "git status --short -> expected A3 touched files plus report",
+    "rg -n \"evaluate_external_budget_gate\\(\" scripts backend --glob '!scripts/router_policy_external_budget_gate.py' -> no matches",
+    "rg -n \"^import requests|^from requests|^import httpx|^from httpx|openai|anthropic|gemini\" scripts -> existing pre-E4 regex/text references only"
+  ],
+  "provider_network_absence": "no provider execution added, no network execution added, no SDK/API imports added, no .env reads added",
+  "e3_inertness": "no production caller for evaluate_external_budget_gate",
+  "schema_change_status": "none",
+  "known_limitations": [
+    "no public confirmation acceptance workflow was added",
+    "validation is integrity-only and does not execute or authorize anything",
+    "digest compute coverage is limited to the existing confirmation-bearing external proposal path"
+  ],
+  "next_recommended_slice": "E4-A4-CONFIRMATION-DECISION-REVALIDATION-BOUNDARY"
+}

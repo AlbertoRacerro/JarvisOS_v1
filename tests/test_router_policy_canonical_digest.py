@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import sys
+import copy
 from pathlib import Path
 
 
@@ -248,3 +249,44 @@ def test_canonical_payload_contains_only_digest_relevant_fields():
         "confirmation_payload",
         "confirmation_options",
     )
+
+
+def test_digest_purpose_and_version_are_cryptographically_bound():
+    result = digest_helper.compute_confirmation_digest(base_intent())
+
+    assert result["canonical_envelope"]["digest_purpose"] == "router_confirmation_intent"
+    assert result["canonical_envelope"]["digest_version"] == "v1"
+
+    original_purpose = digest_helper.DIGEST_PURPOSE
+    try:
+        digest_helper.DIGEST_PURPOSE = "router_confirmation_intent_v2"
+        changed = digest_helper.compute_confirmation_digest(base_intent())
+    finally:
+        digest_helper.DIGEST_PURPOSE = original_purpose
+
+    assert result["digest"] != changed["digest"]
+
+
+def test_validate_confirmation_digest_integrity_returns_status_only_and_does_not_mutate():
+    decision = base_intent()
+    decision["confirmation_digest"] = digest_helper.compute_confirmation_digest(decision)["digest"]
+    before = copy.deepcopy(decision)
+
+    result = digest_helper.validate_confirmation_digest_integrity(decision)
+
+    assert result["valid"] is True
+    assert result["actual_digest"] == result["expected_digest"]
+    assert decision == before
+
+
+def test_validate_confirmation_digest_integrity_rejects_mismatch_without_granting_permissions():
+    decision = base_intent()
+    decision["confirmation_digest"] = "sha256:" + "9" * 64
+    decision["provider_call_allowed_now"] = False
+    decision["external_network_allowed_now"] = False
+    before = copy.deepcopy(decision)
+
+    result = digest_helper.validate_confirmation_digest_integrity(decision)
+
+    assert result["valid"] is False
+    assert decision == before

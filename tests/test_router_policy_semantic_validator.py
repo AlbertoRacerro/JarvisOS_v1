@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
+import router_policy_canonical_digest as digest_helper  # noqa: E402
 import router_policy_semantic_validator as validator  # noqa: E402
 
 
@@ -201,7 +202,6 @@ class RouterPolicySemanticValidatorTests(unittest.TestCase):
                 "requires_new_decision_after_confirmation": True,
                 "confirmation_payload_required": True,
                 "confirmation_payload": payload,
-                "confirmation_digest": validator.canonical_json_digest(payload),
                 "confirmation_options": ["allow_once", "deny", "view_details"],
                 "requested_action_type": "provider_call",
                 "side_effect_level": "high",
@@ -212,6 +212,7 @@ class RouterPolicySemanticValidatorTests(unittest.TestCase):
                 "audit_notes": ["Provider-boundary action awaits user confirmation for a concrete payload."],
             }
         )
+        decision["confirmation_digest"] = digest_helper.compute_confirmation_digest(decision)["digest"]
         return decision
 
     def blocked_decision(self):
