@@ -1,0 +1,131 @@
+{
+  "verdict": "GREEN",
+  "baseline_mode": "CLEAN_BASELINE",
+  "current_head_at_classification_commit_point": "31cec86c9007ba9f3f48b1dba5c52417d8464efc",
+  "stash_reference_for_docs_decisions_md": "stash@{0}: On audit/safe-fixes-2026-06-23: baseline-cleanup docs/DECISIONS.md",
+  "dirty_files_before_cleanup": [
+    "M docs/DECISIONS.md",
+    "M scripts/router_policy_decision_probe.py",
+    "M tests/test_router_policy_external_proposal_invariant.py",
+    "?? reports/E2-EXTERNAL-ROUTING-FLAG-GOVERNANCE/changed_files.zip",
+    "?? reports/E3-EXTERNAL-BUDGET-SESSION-GATE/changed_files.zip",
+    "?? reports/E4-A1-DETERMINISTIC-EGRESS-SCOPE/",
+    "?? reports/E4-PRE-R1-1-FORCED-RETURN-CONSUMPTION/",
+    "?? reports/E4-PRE-R1-FORCED-EXTERNAL-ARTIFACT-SCRUB/changed_files.zip",
+    "?? reports/E4-PRE-ROUTER-EXTERNAL-PROPOSAL-INVARIANT/changed_files.zip",
+    "?? scripts/router_policy_external_egress_scope.py",
+    "?? tests/test_router_policy_external_egress_scope.py"
+  ],
+  "dirty_file_classification_table": [
+    {
+      "path": "docs/DECISIONS.md",
+      "classification": "unrelated_dirty_file",
+      "cleanup_action": "stashed_separately_not_committed"
+    },
+    {
+      "path": "scripts/router_policy_decision_probe.py",
+      "classification": "E4_A1_R1_R2_milestone_file",
+      "cleanup_action": "committed_in_e4_a1_baseline_commit"
+    },
+    {
+      "path": "scripts/router_policy_external_egress_scope.py",
+      "classification": "E4_A1_R1_R2_milestone_file",
+      "cleanup_action": "committed_in_e4_a1_baseline_commit"
+    },
+    {
+      "path": "tests/test_router_policy_external_proposal_invariant.py",
+      "classification": "E4_A1_R1_R2_milestone_file",
+      "cleanup_action": "committed_in_e4_a1_baseline_commit"
+    },
+    {
+      "path": "tests/test_router_policy_external_egress_scope.py",
+      "classification": "E4_A1_R1_R2_milestone_file",
+      "cleanup_action": "committed_in_e4_a1_baseline_commit"
+    },
+    {
+      "path": "reports/E4-A1-DETERMINISTIC-EGRESS-SCOPE/summary.md",
+      "classification": "E4_A1_R1_R2_milestone_file",
+      "cleanup_action": "committed_in_e4_a1_baseline_commit"
+    },
+    {
+      "path": "reports/E4-A1-DETERMINISTIC-EGRESS-SCOPE/summary.json",
+      "classification": "E4_A1_R1_R2_milestone_file",
+      "cleanup_action": "committed_in_e4_a1_baseline_commit"
+    },
+    {
+      "path": "reports/E4-A1-DETERMINISTIC-EGRESS-SCOPE/changed_files.zip",
+      "classification": "generated_zip_report_artifact",
+      "cleanup_action": "removed_not_committed"
+    },
+    {
+      "path": "reports/E2-EXTERNAL-ROUTING-FLAG-GOVERNANCE/changed_files.zip",
+      "classification": "old_milestone_artifact",
+      "cleanup_action": "removed_not_regenerated"
+    },
+    {
+      "path": "reports/E3-EXTERNAL-BUDGET-SESSION-GATE/changed_files.zip",
+      "classification": "old_milestone_artifact",
+      "cleanup_action": "removed_not_regenerated"
+    },
+    {
+      "path": "reports/E4-PRE-R1-1-FORCED-RETURN-CONSUMPTION/changed_files.zip",
+      "classification": "old_milestone_artifact",
+      "cleanup_action": "removed_not_regenerated"
+    },
+    {
+      "path": "reports/E4-PRE-R1-FORCED-EXTERNAL-ARTIFACT-SCRUB/changed_files.zip",
+      "classification": "old_milestone_artifact",
+      "cleanup_action": "removed_not_regenerated"
+    },
+    {
+      "path": "reports/E4-PRE-ROUTER-EXTERNAL-PROPOSAL-INVARIANT/changed_files.zip",
+      "classification": "old_milestone_artifact",
+      "cleanup_action": "removed_not_regenerated"
+    }
+  ],
+  "files_belonging_to_e4_a1_r1_r2": [
+    "scripts/router_policy_decision_probe.py",
+    "scripts/router_policy_external_egress_scope.py",
+    "tests/test_router_policy_external_proposal_invariant.py",
+    "tests/test_router_policy_external_egress_scope.py",
+    "reports/E4-A1-DETERMINISTIC-EGRESS-SCOPE/summary.md",
+    "reports/E4-A1-DETERMINISTIC-EGRESS-SCOPE/summary.json"
+  ],
+  "unrelated_files_excluded": [
+    "docs/DECISIONS.md"
+  ],
+  "old_generated_artifacts_excluded": [
+    "reports/E2-EXTERNAL-ROUTING-FLAG-GOVERNANCE/changed_files.zip",
+    "reports/E3-EXTERNAL-BUDGET-SESSION-GATE/changed_files.zip",
+    "reports/E4-PRE-R1-1-FORCED-RETURN-CONSUMPTION/changed_files.zip",
+    "reports/E4-PRE-R1-FORCED-EXTERNAL-ARTIFACT-SCRUB/changed_files.zip",
+    "reports/E4-PRE-ROUTER-EXTERNAL-PROPOSAL-INVARIANT/changed_files.zip"
+  ],
+  "checks_run": [
+    "python -m pytest tests/test_router_policy_external_proposal_invariant.py tests/test_router_policy_external_egress_scope.py tests/test_router_policy_message_route_smoke.py tests/test_router_policy_semantic_validator.py tests/test_router_policy_external_egress_gate.py tests/test_router_policy_external_budget_gate.py -q -> 324 passed in 0.92s",
+    "git diff --check -> warnings only, LF/CRLF normalization notices on dirty files before cleanup",
+    "git status --short",
+    "git stash list",
+    "rg -n \"evaluate_external_budget_gate\\(\" scripts backend --glob '!scripts/router_policy_external_budget_gate.py' -> no matches",
+    "rg -n \"^import requests|^from requests|^import httpx|^from httpx|openai|anthropic|gemini\" scripts/router_policy_decision_probe.py scripts/router_policy_external_egress_scope.py -> no matches"
+  ],
+  "locked_suite_status": {
+    "status": "GREEN",
+    "result": "324 passed in 0.92s"
+  },
+  "e3_inertness_status": "evaluate_external_budget_gate has no production caller",
+  "provider_network_absence": "no provider/network SDK imports in router path",
+  "schema_change_status": "none",
+  "e4_a1_r1_r2_commit": {
+    "commit": "31cec86c9007ba9f3f48b1dba5c52417d8464efc",
+    "message": "Finalize deterministic egress scope hardening"
+  },
+  "dirty_files_after_cleanup_before_baseline_report_commit": [
+    "?? reports/E4-BASELINE-CLEANUP/"
+  ],
+  "target_final_git_status_after_baseline_report_commit": [
+    "clean worktree"
+  ],
+  "whether_e4_a2_may_start_from_this_state": true,
+  "condition": "after committing this baseline cleanup report"
+}
