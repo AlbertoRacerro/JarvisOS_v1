@@ -46,6 +46,16 @@ FORCED_EXTERNAL_ARTIFACT_BUNDLE_FIELDS = (
     "confirmation_digest",
     "confirmation_options",
 )
+TARGETLESS_COMPANION_FIELDS = (
+    "external_allowed",
+    "external_network_allowed_now",
+    "provider_call_allowed_now",
+    "confirmation_required",
+    "confirmation_payload_required",
+    "confirmation_payload",
+    "confirmation_digest",
+    "confirmation_options",
+)
 ORIGINAL_EXTERNAL_CANDIDATE_PROPOSAL = decision_probe._external_candidate_proposal
 
 
@@ -371,10 +381,33 @@ def local_complete_decision() -> dict:
     return decision
 
 
+def runtime_valid_confirmation_proposal_decision() -> dict:
+    input_obj = external_candidate_input(True)
+    input_obj["user_policy"]["external_requires_confirmation"] = True
+    decision = decision_probe._base_decision(input_obj, NOW)
+    decision = ORIGINAL_EXTERNAL_CANDIDATE_PROPOSAL(input_obj, decision)
+    decision = decision_probe._enforce_external_proposal_flag_invariant(input_obj, decision)
+    assert decision["proposed_external_target"] == VALID_EXTERNAL_TARGET
+    assert decision["confirmation_required"] is True
+    assert decision["confirmation_payload_required"] is True
+    assert decision["confirmation_payload"] is not None
+    assert decision["confirmation_digest"] is not None
+    assert decision["confirmation_options"] == ["allow_once", "deny", "view_details"]
+    assert_schema_valid_decision(decision)
+    return decision
+
+
 def build_forced_external_artifact_bundle() -> dict:
     runtime_decision = runtime_valid_external_proposal_decision()
     return {
         field: copy.deepcopy(runtime_decision[field]) for field in FORCED_EXTERNAL_ARTIFACT_BUNDLE_FIELDS
+    }
+
+
+def build_targetless_companion_bundle() -> dict:
+    runtime_decision = runtime_valid_confirmation_proposal_decision()
+    return {
+        field: copy.deepcopy(runtime_decision[field]) for field in TARGETLESS_COMPANION_FIELDS
     }
 
 
@@ -385,7 +418,21 @@ def overlay_forced_external_artifact_bundle(decision: dict) -> tuple[dict, dict]
     return forced, bundle
 
 
+def overlay_targetless_companion_bundle(decision: dict) -> tuple[dict, dict]:
+    forced = copy.deepcopy(decision)
+    bundle = build_targetless_companion_bundle()
+    forced["proposed_external_target"] = None
+    forced.update(copy.deepcopy(bundle))
+    return forced, bundle
+
+
 def assert_forced_bundle_present(value: dict, bundle: dict) -> None:
+    for field, expected in bundle.items():
+        assert value[field] == expected
+
+
+def assert_targetless_companion_bundle_present(value: dict, bundle: dict) -> None:
+    assert value["proposed_external_target"] is None
     for field, expected in bundle.items():
         assert value[field] == expected
 
@@ -435,6 +482,27 @@ def wrap_forced_bundle_and_sentinel_producer(monkeypatch: pytest.MonkeyPatch, he
         original_result = original(*args, **kwargs)
         assert SENTINEL_FIELD in original_result
         forced, bundle = overlay_forced_external_artifact_bundle(original_result)
+        forced[SENTINEL_FIELD] = SENTINEL_VALUE
+        forced_seen["value"] = {
+            "decision": copy.deepcopy(forced),
+            "bundle": copy.deepcopy(bundle),
+        }
+        return forced
+
+    monkeypatch.setattr(decision_probe, helper_name, wrapper)
+    return calls, forced_seen
+
+
+def wrap_targetless_companion_and_sentinel_producer(monkeypatch: pytest.MonkeyPatch, helper_name: str):
+    original = getattr(decision_probe, helper_name)
+    calls = {"count": 0}
+    forced_seen = {"value": None}
+
+    def wrapper(*args, **kwargs):
+        calls["count"] += 1
+        original_result = original(*args, **kwargs)
+        assert SENTINEL_FIELD in original_result
+        forced, bundle = overlay_targetless_companion_bundle(original_result)
         forced[SENTINEL_FIELD] = SENTINEL_VALUE
         forced_seen["value"] = {
             "decision": copy.deepcopy(forced),
@@ -509,6 +577,50 @@ def test_forced_bundle_finalizer_preserves_valid_target_when_flag_true():
 
     assert_forced_bundle_present(forced_before, bundle)
     assert result["proposed_external_target"] == VALID_EXTERNAL_TARGET
+    assert_schema_valid_decision(result)
+
+
+@pytest.mark.parametrize("flag_value", DIRECT_FINALIZER_NON_TRUE_FLAGS)
+def test_targetless_companion_finalizer_scrubs_not_exactly_true_flags(flag_value):
+    input_obj = set_external_flag(external_candidate_input(True), flag_value)
+    forced_decision, bundle = overlay_targetless_companion_bundle(local_complete_decision())
+    forced_before = copy.deepcopy(forced_decision)
+
+    result = decision_probe._enforce_external_proposal_flag_invariant(input_obj, forced_decision)
+
+    assert_targetless_companion_bundle_present(forced_before, bundle)
+    assert_no_external_proposal_artifacts(result)
+    assert_schema_valid_decision(result)
+
+
+def test_targetless_companion_finalizer_scrubs_even_when_flag_true():
+    input_obj = external_candidate_input(True)
+    forced_decision, bundle = overlay_targetless_companion_bundle(local_complete_decision())
+    forced_before = copy.deepcopy(forced_decision)
+
+    result = decision_probe._enforce_external_proposal_flag_invariant(input_obj, forced_decision)
+
+    assert_targetless_companion_bundle_present(forced_before, bundle)
+    assert_no_external_proposal_artifacts(result)
+    assert_schema_valid_decision(result)
+
+
+def test_clean_targetless_finalizer_no_op_preserves_local_internal_fields():
+    input_obj = private_provider_boundary_input(True)
+    input_obj["phase_a_signals"]["mentions_external_provider_or_upload_intent"] = False
+    decision = decision_probe._base_decision(input_obj, NOW)
+    decision = decision_probe._private_local(decision)
+
+    result = decision_probe._enforce_external_proposal_flag_invariant(input_obj, copy.deepcopy(decision))
+
+    assert result["proposed_external_target"] is None
+    assert_no_external_proposal_artifacts(result)
+    assert result["manual_review_required"] is True
+    assert result["route_action"] == "route_local"
+    assert result["route_tier"] == "LOCAL_ONLY"
+    assert result["reason_codes"] == ["local_only_sensitive_context"]
+    assert result["redaction_required"] is False
+    assert result["redaction_status"] == "not_required"
     assert_schema_valid_decision(result)
 
 
@@ -673,6 +785,23 @@ def test_forced_private_provider_boundary_bundle_scrubbed_when_external_flag_not
     assert_no_external_proposal_artifacts(decision)
     assert decision["redaction_required"] is False
     assert decision["redaction_status"] == "not_required"
+    assert_schema_valid_decision(decision)
+
+
+def test_targetless_companion_budget_fallback_public_output_scrubbed_when_external_flag_not_true_and_forced_return_consumed(
+    monkeypatch,
+):
+    calls, forced_seen = wrap_targetless_companion_and_sentinel_producer(monkeypatch, "_budget_or_policy_fallback")
+
+    decision = decision_probe.decide_router_policy(budget_fallback_input(False), now=NOW)
+
+    assert calls["count"] > 0
+    assert forced_seen["value"] is not None
+    assert_targetless_companion_bundle_present(forced_seen["value"]["decision"], forced_seen["value"]["bundle"])
+    assert_sentinel_present(forced_seen["value"]["decision"])
+    assert decision["proposed_external_target"] is None
+    assert_sentinel_present(decision)
+    assert_no_external_proposal_artifacts(decision)
     assert_schema_valid_decision(decision)
 
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from router_policy_external_egress_scope import evaluate_external_egress_scope
 import router_policy_semantic_validator as validator
 
 
@@ -87,6 +88,22 @@ def _external_target_for_tier(tier: str | None) -> str | None:
     if tier == "CHEAP_EXTERNAL":
         return "external:cheap"
     return None
+
+
+def _allowed_external_targets(input_obj: dict[str, Any]) -> tuple[str, ...]:
+    policy = _provider_policy(input_obj)
+    allowed = policy.get("allowed_provider_tiers") or []
+    blocked = set(policy.get("blocked_provider_tiers") or [])
+    targets = []
+    for tier in allowed:
+        if tier in blocked:
+            continue
+        if not _budget_allows(input_obj, tier):
+            continue
+        target = _external_target_for_tier(tier)
+        if target is not None:
+            targets.append(target)
+    return tuple(sorted(set(targets)))
 
 
 def _has_external_pressure(input_obj: dict[str, Any]) -> bool:
@@ -314,10 +331,50 @@ def _external_disabled_local_fallback(decision: dict[str, Any]) -> dict[str, Any
     return decision
 
 
+def _external_scope_denied_proposal_only(decision: dict[str, Any]) -> dict[str, Any]:
+    decision.update(
+        {
+            "external_allowed": False,
+            "external_network_allowed_now": False,
+            "provider_call_allowed_now": False,
+            "confirmation_required": False,
+            "requires_new_decision_after_confirmation": False,
+            "confirmation_payload_required": False,
+            "confirmation_payload": None,
+            "confirmation_digest": None,
+            "confirmation_options": [],
+        }
+    )
+    return decision
+
+
+def _has_live_external_companion_artifacts(decision: dict[str, Any]) -> bool:
+    return bool(
+        decision.get("external_allowed") is True
+        or decision.get("external_network_allowed_now") is True
+        or decision.get("provider_call_allowed_now") is True
+        or decision.get("confirmation_required") is True
+        or decision.get("confirmation_payload_required") is True
+        or decision.get("confirmation_payload") is not None
+        or decision.get("confirmation_digest") is not None
+        or decision.get("confirmation_options")
+    )
+
+
 def _enforce_external_proposal_flag_invariant(input_obj: dict[str, Any], decision: dict[str, Any]) -> dict[str, Any]:
     if _external_routing_enabled(input_obj):
+        target = decision.get("proposed_external_target")
+        if target is None:
+            if _has_live_external_companion_artifacts(decision):
+                return _external_scope_denied_proposal_only(decision)
+            return decision
+        egress_scope = evaluate_external_egress_scope(target, _allowed_external_targets(input_obj))
+        if egress_scope["allowed"] is not True:
+            return _external_scope_denied_proposal_only(decision)
         return decision
     if decision.get("proposed_external_target") is None:
+        if _has_live_external_companion_artifacts(decision):
+            return _external_scope_denied_proposal_only(decision)
         return decision
     return _external_disabled_local_fallback(decision)
 

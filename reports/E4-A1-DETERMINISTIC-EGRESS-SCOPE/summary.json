@@ -1,0 +1,469 @@
+{
+  "verdict": "GREEN",
+  "milestone": "E4-A1-DETERMINISTIC-EGRESS-SCOPE",
+  "scope": "deterministic_egress_scope_only",
+  "production_files_changed": [
+    "scripts/router_policy_external_egress_scope.py",
+    "scripts/router_policy_decision_probe.py"
+  ],
+  "test_files_changed": [
+    "tests/test_router_policy_external_egress_scope.py"
+  ],
+  "schema_files_changed": [],
+  "report_files_changed": [
+    "reports/E4-A1-DETERMINISTIC-EGRESS-SCOPE/summary.md",
+    "reports/E4-A1-DETERMINISTIC-EGRESS-SCOPE/summary.json"
+  ],
+  "phase_0_inspection": {
+    "router_decision_module": "scripts/router_policy_decision_probe.py",
+    "router_decision_function": "decide_router_policy",
+    "finalizer_output_normalizer": "_enforce_external_proposal_flag_invariant",
+    "router_decision_schema": "schemas/router_policy_decision_v0_3_1_1.schema.json",
+    "external_target_enum_values": [
+      "external:cheap",
+      "external:scientific_medium",
+      "external:frontier"
+    ],
+    "external_proposal_fields": [
+      "proposed_external_target",
+      "external_allowed",
+      "external_network_allowed_now",
+      "provider_call_allowed_now",
+      "confirmation_required",
+      "confirmation_payload_required",
+      "confirmation_payload",
+      "confirmation_digest",
+      "confirmation_options"
+    ],
+    "egress_scope_provider_fields": [
+      "provider_policy.allowed_provider_tiers",
+      "provider_policy.blocked_provider_tiers",
+      "budget_policy.max_tier"
+    ],
+    "existing_schema_validation_helper": "local_validator_pattern_reused_in_test_file",
+    "existing_tests_to_extend_not_replace": [
+      "tests/test_router_policy_external_proposal_invariant.py",
+      "tests/test_router_policy_message_route_smoke.py",
+      "tests/test_router_policy_semantic_validator.py",
+      "tests/test_router_policy_external_egress_gate.py",
+      "tests/test_router_policy_external_budget_gate.py"
+    ],
+    "schema_changes_avoidable": true,
+    "e3_remains_inert": true
+  },
+  "locked_invariant_tests_preserved": [
+    "tests/test_router_policy_external_proposal_invariant.py",
+    "tests/test_router_policy_message_route_smoke.py",
+    "tests/test_router_policy_semantic_validator.py",
+    "tests/test_router_policy_external_egress_gate.py",
+    "tests/test_router_policy_external_budget_gate.py"
+  ],
+  "e4_a1_state_table": {
+    "flag_not_exactly_true": {
+      "proposed_external_target": null,
+      "external_allowed": false,
+      "external_network_allowed_now": false,
+      "provider_call_allowed_now": false,
+      "confirmation_required": false,
+      "confirmation_payload_required": false,
+      "confirmation_payload": null,
+      "confirmation_digest": null,
+      "confirmation_options": [],
+      "behavior_class": "public_path",
+      "enforced_by": [
+        "test_e4_a1_public_flag_not_exactly_true_still_scrubs_all_external_artifacts",
+        "test_forced_bundle_finalizer_scrubs_not_exactly_true_flags",
+        "test_forced_budget_or_policy_fallback_bundle_scrubbed_when_external_flag_not_true_and_forced_return_consumed",
+        "test_forced_private_provider_boundary_bundle_scrubbed_when_external_flag_not_true_and_forced_return_consumed"
+      ]
+    },
+    "flag_true_egress_denied": {
+      "proposed_external_target": "visible_non_actionable_proposal",
+      "external_allowed": false,
+      "external_network_allowed_now": false,
+      "provider_call_allowed_now": false,
+      "confirmation_required": false,
+      "confirmation_payload_required": false,
+      "confirmation_payload": null,
+      "confirmation_digest": null,
+      "confirmation_options": [],
+      "behavior_class": "public_path",
+      "enforced_by": [
+        "test_e4_a1_public_flag_true_egress_denied_keeps_visible_proposal_but_clears_confirmation"
+      ]
+    },
+    "flag_true_egress_allowed_no_explicit_confirmation_mechanism": {
+      "proposed_external_target": "valid_target_visible",
+      "external_allowed": false,
+      "external_network_allowed_now": false,
+      "provider_call_allowed_now": false,
+      "confirmation_required": false,
+      "confirmation_payload_required": false,
+      "confirmation_payload": null,
+      "confirmation_digest": null,
+      "confirmation_options": [],
+      "behavior_class": "public_path",
+      "repo_compatible_narrower_variant_reason": "current semantic validator still binds external_allowed=true to executable external-candidate semantics",
+      "enforced_by": [
+        "test_e4_a1_public_flag_true_egress_allowed_remains_proposal_only_without_new_confirmation"
+      ]
+    }
+  },
+  "egress_scope_helper_behavior": {
+    "helper": "evaluate_external_egress_scope",
+    "helper_module": "scripts/router_policy_external_egress_scope.py",
+    "properties": [
+      "deterministic",
+      "side_effect_free",
+      "no_env_vars",
+      "no_remote_config",
+      "no_provider_registry",
+      "no_api_keys",
+      "no_network_resources",
+      "no_model_output_consumed_directly"
+    ],
+    "helper_only_enforced_by": [
+      "test_e4_a1_helper_none_target_denied",
+      "test_e4_a1_helper_invalid_target_denied",
+      "test_e4_a1_helper_valid_target_not_in_allowed_targets_denied",
+      "test_e4_a1_helper_valid_target_in_allowed_targets_allowed",
+      "test_e4_a1_helper_empty_allowed_targets_denied",
+      "test_e4_a1_helper_allowed_targets_order_does_not_change_result"
+    ]
+  },
+  "public_denied_target_behavior": {
+    "behavior": [
+      "denied_target_not_actionable",
+      "existing_visible_proposal_may_remain_visible",
+      "confirmation_metadata_cleared_on_deny"
+    ],
+    "behavior_class": "public_path",
+    "enforced_by": [
+      "test_e4_a1_public_flag_true_egress_denied_keeps_visible_proposal_but_clears_confirmation"
+    ]
+  },
+  "public_allowed_target_behavior": {
+    "behavior": [
+      "proposal_visibility_preserved",
+      "provider_call_allowed_now_remains_false",
+      "external_network_allowed_now_remains_false",
+      "no_new_confirmation_metadata_introduced_by_e4_a1"
+    ],
+    "behavior_class": "public_path",
+    "enforced_by": [
+      "test_e4_a1_public_flag_true_egress_allowed_remains_proposal_only_without_new_confirmation"
+    ]
+  },
+  "provider_execution_absence": {
+    "status": "not_added",
+    "enforced_by": [
+      "test_e4_a1_public_flag_not_exactly_true_still_scrubs_all_external_artifacts",
+      "test_e4_a1_public_flag_true_egress_denied_keeps_visible_proposal_but_clears_confirmation",
+      "test_e4_a1_public_flag_true_egress_allowed_remains_proposal_only_without_new_confirmation"
+    ]
+  },
+  "e3_inertness_status": {
+    "status": "inert",
+    "verified_by": [
+      "diff_scoped_grep_for_evaluate_external_budget_gate_production_usage",
+      "repo_grep_for_evaluate_external_budget_gate_production_usage"
+    ]
+  },
+  "schema_validation_method": {
+    "method": "local_validator_in_tests_test_router_policy_external_egress_scope_py",
+    "schema_constructs_used": [
+      "type",
+      "const",
+      "enum",
+      "minLength",
+      "maxLength",
+      "pattern",
+      "minimum",
+      "minItems",
+      "uniqueItems",
+      "items",
+      "properties",
+      "required",
+      "additionalProperties"
+    ],
+    "schema_constructs_covered": [
+      "type",
+      "const",
+      "enum",
+      "minLength",
+      "maxLength",
+      "pattern",
+      "minimum",
+      "minItems",
+      "uniqueItems",
+      "items",
+      "properties",
+      "required",
+      "additionalProperties"
+    ],
+    "unsupported_schema_constructs": [],
+    "coverage": "complete_for_current_router_decision_schema_constructs",
+    "enforced_by": [
+      "test_e4_a1_public_flag_not_exactly_true_still_scrubs_all_external_artifacts",
+      "test_e4_a1_public_flag_true_egress_denied_keeps_visible_proposal_but_clears_confirmation",
+      "test_e4_a1_public_flag_true_egress_allowed_remains_proposal_only_without_new_confirmation"
+    ]
+  },
+  "checks_run": [
+    "python -m pytest tests/test_router_policy_external_egress_scope.py -q",
+    "python -m pytest tests/test_router_policy_external_proposal_invariant.py tests/test_router_policy_message_route_smoke.py tests/test_router_policy_semantic_validator.py tests/test_router_policy_external_egress_gate.py tests/test_router_policy_external_budget_gate.py -q",
+    "git diff --check",
+    "git status --short"
+  ],
+  "test_names_added": [
+    "test_e4_a1_helper_none_target_denied",
+    "test_e4_a1_helper_invalid_target_denied",
+    "test_e4_a1_helper_valid_target_not_in_allowed_targets_denied",
+    "test_e4_a1_helper_valid_target_in_allowed_targets_allowed",
+    "test_e4_a1_helper_empty_allowed_targets_denied",
+    "test_e4_a1_helper_allowed_targets_order_does_not_change_result",
+    "test_e4_a1_public_flag_not_exactly_true_still_scrubs_all_external_artifacts",
+    "test_e4_a1_public_flag_true_egress_denied_keeps_visible_proposal_but_clears_confirmation",
+    "test_e4_a1_public_flag_true_egress_allowed_remains_proposal_only_without_new_confirmation"
+  ],
+  "known_limitations": [
+    "E4-A1 does not make any external target executable.",
+    "E4-A1 keeps current public router behavior proposal-only because external_allowed=true is still bound to executable-route semantics in the current validator.",
+    "E4-A1 does not implement digest binding.",
+    "E4-A1 does not implement confirmation payload binding validation.",
+    "E4-A1 does not activate E3 production budget/session enforcement.",
+    "E4-A1 does not add schema fields for explicit scope-allowed-but-not-executable state."
+  ],
+  "why_digest_confirmation_binding_out_of_scope": [
+    "reserved_for_later_slices",
+    "not_needed_to_prove_deterministic_target_scope_evaluation"
+  ],
+  "next_recommended_slice": "E4-A2-CANONICAL-DIGEST-HELPER"
+  ,
+  "e4_a1_r1": {
+    "verdict": "GREEN",
+    "changed_files": [
+      "scripts/router_policy_decision_probe.py",
+      "tests/test_router_policy_external_egress_scope.py",
+      "reports/E4-A1-DETERMINISTIC-EGRESS-SCOPE/summary.md",
+      "reports/E4-A1-DETERMINISTIC-EGRESS-SCOPE/summary.json"
+    ],
+    "production_patch": {
+      "status": "minimal",
+      "files": [
+        "scripts/router_policy_decision_probe.py"
+      ],
+      "details": [
+        "_allowed_external_targets now excludes tiers that fail _budget_allows(input_obj, tier).",
+        "No evaluate_external_budget_gate production call added.",
+        "No schema change."
+      ]
+    },
+    "tests_added": [
+      "test_e4_a1_public_flag_true_natural_egress_denied_by_provider_policy",
+      "test_e4_a1_public_flag_true_natural_egress_denied_by_budget_policy"
+    ],
+    "natural_provider_policy_deny_coverage": {
+      "status": "covered",
+      "allowed_targets_excludes_denied_target": true,
+      "real_helper_result_allowed": false,
+      "final_output_non_actionable": true,
+      "final_output_schema_valid": true,
+      "enforced_by": [
+        "test_e4_a1_public_flag_true_natural_egress_denied_by_provider_policy"
+      ]
+    },
+    "natural_budget_policy_deny_coverage": {
+      "status": "covered",
+      "allowed_targets_excludes_denied_target": true,
+      "real_helper_result_allowed": false,
+      "final_output_non_actionable": true,
+      "final_output_schema_valid": true,
+      "enforced_by": [
+        "test_e4_a1_public_flag_true_natural_egress_denied_by_budget_policy"
+      ]
+    },
+    "forced_helper_deny_secondary_coverage": {
+      "status": "retained_as_secondary_finalizer_reaction_coverage",
+      "enforced_by": [
+        "test_e4_a1_forced_helper_deny_keeps_visible_proposal_but_clears_confirmation"
+      ]
+    },
+    "budget_tier_semantics_parity": {
+      "status": "shared_semantics_reused",
+      "evidence": [
+        "_allowed_external_targets now reuses _budget_allows(input_obj, tier) directly.",
+        "No independent tier ordering was introduced."
+      ],
+      "enforced_by": [
+        "test_e4_a1_public_flag_true_natural_egress_denied_by_budget_policy"
+      ]
+    },
+    "e3_inertness_status": {
+      "status": "inert",
+      "verified_by": [
+        "no_production_evaluate_external_budget_gate_caller_repo_check"
+      ]
+    },
+    "provider_network_execution_absence": {
+      "status": "not_added",
+      "verified_by": [
+        "router_path_sdk_import_grep",
+        "test_e4_a1_public_flag_true_natural_egress_denied_by_provider_policy",
+        "test_e4_a1_public_flag_true_natural_egress_denied_by_budget_policy",
+        "test_e4_a1_public_flag_true_egress_allowed_remains_proposal_only_without_new_confirmation"
+      ]
+    },
+    "schema_change_status": {
+      "status": "none"
+    },
+    "targetless_companion_artifact_backlog_before_e4_a2": {
+      "status": "open_blocker",
+      "cases": [
+        "proposed_external_target = None",
+        "provider_call_allowed_now = True",
+        "external_network_allowed_now = True",
+        "confirmation_payload_required = True",
+        "confirmation_payload != None",
+        "confirmation_digest != None",
+        "confirmation_options non-empty"
+      ]
+    },
+    "route_action_ambiguity_note": {
+      "status": "noted",
+      "details": [
+        "Denied path may still emit route_action=ask_user_confirm and route_tier=USER_CONFIRM while all actionability flags remain false.",
+        "Downstream must not use route_action alone as actionability source of truth."
+      ]
+    },
+    "checks_run": [
+      "python -m pytest tests/test_router_policy_external_egress_scope.py -q -> 14 passed in 0.19s",
+      "python -m pytest tests/test_router_policy_external_proposal_invariant.py tests/test_router_policy_message_route_smoke.py tests/test_router_policy_semantic_validator.py tests/test_router_policy_external_egress_gate.py tests/test_router_policy_external_budget_gate.py -q -> 303 passed in 0.97s"
+    ]
+  },
+  "e4_a1_r2": {
+    "verdict": "GREEN",
+    "changed_files": [
+      "scripts/router_policy_decision_probe.py",
+      "tests/test_router_policy_external_proposal_invariant.py",
+      "reports/E4-A1-DETERMINISTIC-EGRESS-SCOPE/summary.md",
+      "reports/E4-A1-DETERMINISTIC-EGRESS-SCOPE/summary.json"
+    ],
+    "production_patch": {
+      "status": "minimal",
+      "files": [
+        "scripts/router_policy_decision_probe.py"
+      ],
+      "details": [
+        "Added _has_live_external_companion_artifacts(decision).",
+        "_enforce_external_proposal_flag_invariant now scrubs live targetless companion artifacts for both flag-not-exactly-True and flag-exactly-True paths."
+      ]
+    },
+    "production_patch_reason": "proposed_external_target=None previously bypassed scrub even when live external companion artifacts were present",
+    "schema_changes": [],
+    "tests_added": [
+      "test_targetless_companion_finalizer_scrubs_not_exactly_true_flags",
+      "test_targetless_companion_finalizer_scrubs_even_when_flag_true",
+      "test_clean_targetless_finalizer_no_op_preserves_local_internal_fields",
+      "test_targetless_companion_budget_fallback_public_output_scrubbed_when_external_flag_not_true_and_forced_return_consumed"
+    ],
+    "direct_finalizer_targetless_companion_scrub": {
+      "flag_not_exactly_true_cases": [
+        false,
+        null,
+        "true",
+        1
+      ],
+      "targetless_dirty_input_classification": {
+        "adversarial_pre_finalizer": true,
+        "final_input_schema_valid_required": false,
+        "final_output_schema_valid_required": true
+      },
+      "enforced_by": [
+        "test_targetless_companion_finalizer_scrubs_not_exactly_true_flags"
+      ]
+    },
+    "flag_true_targetless_behavior": {
+      "expected_behavior": [
+        "external_routing_enabled=True alone is not sufficient",
+        "valid target plus deterministic allowed scope required before external confirmation/provider artifacts may survive"
+      ],
+      "enforced_by": [
+        "test_targetless_companion_finalizer_scrubs_even_when_flag_true"
+      ]
+    },
+    "public_integration_targetless_companion_scrub": {
+      "status": "covered",
+      "boundary_tested": "_budget_or_policy_fallback",
+      "forced_return_consumption_proof": true,
+      "safe_sentinel_used": "max_tokens_allowed=1337",
+      "limitation_if_no_public_sentinel": null,
+      "enforced_by": [
+        "test_targetless_companion_budget_fallback_public_output_scrubbed_when_external_flag_not_true_and_forced_return_consumed"
+      ]
+    },
+    "clean_targetless_no_op_preserve": {
+      "status": "covered",
+      "preserved_local_internal_fields": [
+        "manual_review_required=True",
+        "route_action=route_local",
+        "route_tier=LOCAL_ONLY",
+        "reason_codes=[local_only_sensitive_context]",
+        "redaction_required=False",
+        "redaction_status=not_required"
+      ],
+      "no_external_artifact_introduced": true,
+      "schema_valid_final_output": true,
+      "enforced_by": [
+        "test_clean_targetless_finalizer_no_op_preserves_local_internal_fields"
+      ]
+    },
+    "redaction_local_field_classification": {
+      "redaction_required": {
+        "classification": "dual_use_local_safety",
+        "included_in_bundle": false,
+        "reason": "used by local secret/provider-boundary safety, not targetless external companion-only artifact"
+      },
+      "redaction_status": {
+        "classification": "dual_use_local_safety",
+        "included_in_bundle": false,
+        "reason": "used by local secret/provider-boundary safety, not targetless external companion-only artifact"
+      }
+    },
+    "e3_provider_schema": {
+      "e3_inertness_status": "evaluate_external_budget_gate still has no production caller",
+      "provider_network_absence": [
+        "no provider execution added",
+        "no network execution added",
+        "no provider/network SDK imports added in router path"
+      ],
+      "schema_change_status": "none",
+      "digest_helper_added": false,
+      "confirmation_binding_added": false
+    },
+    "route_action_ambiguity_note": {
+      "status": "retained",
+      "details": [
+        "route_action and route_tier alone remain non-authoritative for actionability"
+      ]
+    },
+    "checks_run": [
+      "python -m pytest tests/test_router_policy_external_proposal_invariant.py -q -> 74 passed in 0.15s",
+      "python -m pytest tests/test_router_policy_external_egress_scope.py -q -> 14 passed in 0.04s",
+      "python -m pytest tests/test_router_policy_external_proposal_invariant.py tests/test_router_policy_external_egress_scope.py tests/test_router_policy_message_route_smoke.py tests/test_router_policy_semantic_validator.py tests/test_router_policy_external_egress_gate.py tests/test_router_policy_external_budget_gate.py -q -> 324 passed in 0.30s",
+      "git diff --check -> warnings only, LF/CRLF normalization notices for touched files",
+      "git status --short -> dirty worktree remains, including pre-existing docs/DECISIONS.md"
+    ],
+    "known_limitations": [
+      "R2 does not implement digest helper.",
+      "R2 does not implement confirmation payload binding.",
+      "R2 does not activate E3.",
+      "R2 does not add provider execution.",
+      "Route action/tier alone remain non-authoritative for actionability."
+    ],
+    "next_step": {
+      "step": "E4-A2 - Canonical Digest Helper",
+      "precondition_satisfied": "targetless companion artifact scrub"
+    }
+  }
+}
