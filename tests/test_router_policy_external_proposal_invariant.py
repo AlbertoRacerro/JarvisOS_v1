@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import copy
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -30,10 +31,85 @@ EXPECTED_PRODUCERS = {
 SCRUB_AFTER_PRODUCERS = {"_budget_or_policy_fallback", "_private_provider_boundary"}
 SUPPRESS_BEFORE_PRODUCERS = {"_external_candidate_proposal", "_unknown_external_pressure"}
 NON_TRUE_FLAGS = ("missing", None, False, 1, "true", "True", [], {})
+DIRECT_FINALIZER_NON_TRUE_FLAGS = (False, None, "true", 1)
+FORCED_EXTERNAL_ARTIFACT_BUNDLE_FIELDS = (
+    "proposed_external_target",
+    "external_allowed",
+    "external_network_allowed_now",
+    "provider_call_allowed_now",
+    "confirmation_required",
+    "confirmation_payload_required",
+    "confirmation_payload",
+    "confirmation_digest",
+    "confirmation_options",
+)
+ORIGINAL_EXTERNAL_CANDIDATE_PROPOSAL = decision_probe._external_candidate_proposal
 
 
 def load_decision_schema() -> dict:
     return json.loads(DECISION_SCHEMA_PATH.read_text(encoding="utf-8"))
+
+
+def schema_errors(value, schema, path="$"):
+    errors = []
+    schema_type = schema.get("type")
+    allowed_types = schema_type if isinstance(schema_type, list) else [schema_type]
+    if "null" in allowed_types and value is None:
+        return errors
+
+    def type_matches(expected_type):
+        if expected_type == "object":
+            return isinstance(value, dict)
+        if expected_type == "array":
+            return isinstance(value, list)
+        if expected_type == "string":
+            return isinstance(value, str)
+        if expected_type == "integer":
+            return isinstance(value, int) and not isinstance(value, bool)
+        if expected_type == "boolean":
+            return isinstance(value, bool)
+        if expected_type is None:
+            return True
+        return False
+
+    if allowed_types and not any(type_matches(item) for item in allowed_types):
+        errors.append(f"{path}: invalid type")
+        return errors
+    if "const" in schema and value != schema["const"]:
+        errors.append(f"{path}: invalid const")
+    if "enum" in schema and value not in schema["enum"]:
+        errors.append(f"{path}: invalid enum")
+    if isinstance(value, str):
+        if "minLength" in schema and len(value) < schema["minLength"]:
+            errors.append(f"{path}: shorter than minLength")
+        if "maxLength" in schema and len(value) > schema["maxLength"]:
+            errors.append(f"{path}: longer than maxLength")
+        if "pattern" in schema and not re.match(schema["pattern"], value):
+            errors.append(f"{path}: pattern mismatch")
+    if isinstance(value, int) and "minimum" in schema and value < schema["minimum"]:
+        errors.append(f"{path}: below minimum")
+    if isinstance(value, list):
+        if "minItems" in schema and len(value) < schema["minItems"]:
+            errors.append(f"{path}: below minItems")
+        if schema.get("uniqueItems") and len(value) != len(set(json.dumps(item, sort_keys=True) for item in value)):
+            errors.append(f"{path}: duplicate array values")
+        item_schema = schema.get("items")
+        if isinstance(item_schema, dict):
+            for index, item in enumerate(value):
+                errors.extend(schema_errors(item, item_schema, f"{path}[{index}]"))
+    if isinstance(value, dict):
+        properties = schema.get("properties", {})
+        for field in schema.get("required", []):
+            if field not in value:
+                errors.append(f"{path}.{field}: missing required")
+        if schema.get("additionalProperties") is False:
+            for field in value:
+                if field not in properties:
+                    errors.append(f"{path}.{field}: additional property")
+        for field, item in value.items():
+            if field in properties:
+                errors.extend(schema_errors(item, properties[field], f"{path}.{field}"))
+    return errors
 
 
 def always_present_external_fields() -> set[str]:
@@ -272,6 +348,45 @@ def assert_no_external_proposal_artifacts(decision: dict) -> None:
     assert decision["confirmation_options"] == []
 
 
+def assert_schema_valid_decision(decision: dict) -> None:
+    assert schema_errors(decision, load_decision_schema()) == []
+
+
+def runtime_valid_external_proposal_decision() -> dict:
+    input_obj = external_candidate_input(True)
+    decision = decision_probe._base_decision(input_obj, NOW)
+    decision = ORIGINAL_EXTERNAL_CANDIDATE_PROPOSAL(input_obj, decision)
+    decision = decision_probe._enforce_external_proposal_flag_invariant(input_obj, decision)
+    assert decision["proposed_external_target"] == VALID_EXTERNAL_TARGET
+    assert_schema_valid_decision(decision)
+    return decision
+
+
+def local_complete_decision() -> dict:
+    decision = decision_probe.decide_router_policy(safe_input(), now=NOW)
+    assert_schema_valid_decision(decision)
+    return decision
+
+
+def build_forced_external_artifact_bundle() -> dict:
+    runtime_decision = runtime_valid_external_proposal_decision()
+    return {
+        field: copy.deepcopy(runtime_decision[field]) for field in FORCED_EXTERNAL_ARTIFACT_BUNDLE_FIELDS
+    }
+
+
+def overlay_forced_external_artifact_bundle(decision: dict) -> tuple[dict, dict]:
+    forced = copy.deepcopy(decision)
+    bundle = build_forced_external_artifact_bundle()
+    forced.update(copy.deepcopy(bundle))
+    return forced, bundle
+
+
+def assert_forced_bundle_present(value: dict, bundle: dict) -> None:
+    for field, expected in bundle.items():
+        assert value[field] == expected
+
+
 def wrap_producer(monkeypatch: pytest.MonkeyPatch, helper_name: str):
     original = getattr(decision_probe, helper_name)
     calls = {"count": 0}
@@ -282,6 +397,25 @@ def wrap_producer(monkeypatch: pytest.MonkeyPatch, helper_name: str):
 
     monkeypatch.setattr(decision_probe, helper_name, wrapper)
     return calls
+
+
+def wrap_forced_bundle_producer(monkeypatch: pytest.MonkeyPatch, helper_name: str):
+    original = getattr(decision_probe, helper_name)
+    calls = {"count": 0}
+    forced_seen = {"value": None}
+
+    def wrapper(*args, **kwargs):
+        calls["count"] += 1
+        original_result = original(*args, **kwargs)
+        forced, bundle = overlay_forced_external_artifact_bundle(original_result)
+        forced_seen["value"] = {
+            "decision": copy.deepcopy(forced),
+            "bundle": copy.deepcopy(bundle),
+        }
+        return forced
+
+    monkeypatch.setattr(decision_probe, helper_name, wrapper)
+    return calls, forced_seen
 
 
 class TestStructuralAstDiscovery:
@@ -305,6 +439,31 @@ class TestStructuralAstDiscovery:
             "redaction_required",
             "redaction_status",
         }
+
+
+@pytest.mark.parametrize("flag_value", DIRECT_FINALIZER_NON_TRUE_FLAGS)
+def test_forced_bundle_finalizer_scrubs_not_exactly_true_flags(flag_value):
+    input_obj = set_external_flag(external_candidate_input(True), flag_value)
+    forced_decision, bundle = overlay_forced_external_artifact_bundle(local_complete_decision())
+    forced_before = copy.deepcopy(forced_decision)
+
+    result = decision_probe._enforce_external_proposal_flag_invariant(input_obj, forced_decision)
+
+    assert_forced_bundle_present(forced_before, bundle)
+    assert_no_external_proposal_artifacts(result)
+    assert_schema_valid_decision(result)
+
+
+def test_forced_bundle_finalizer_preserves_valid_target_when_flag_true():
+    input_obj = external_candidate_input(True)
+    forced_decision, bundle = overlay_forced_external_artifact_bundle(local_complete_decision())
+    forced_before = copy.deepcopy(forced_decision)
+
+    result = decision_probe._enforce_external_proposal_flag_invariant(input_obj, forced_decision)
+
+    assert_forced_bundle_present(forced_before, bundle)
+    assert result["proposed_external_target"] == VALID_EXTERNAL_TARGET
+    assert_schema_valid_decision(result)
 
 
 @pytest.mark.parametrize(
@@ -412,3 +571,80 @@ def test_private_provider_boundary_flag_off_clears_external_redaction_and_confir
     assert decision["redaction_status"] == "not_required"
     assert decision["manual_review_required"] is True
 
+
+@pytest.mark.parametrize("flag_value", (False, None, "true", 1))
+def test_forced_budget_or_policy_fallback_bundle_scrubbed_when_external_flag_not_true(monkeypatch, flag_value):
+    calls, forced_seen = wrap_forced_bundle_producer(monkeypatch, "_budget_or_policy_fallback")
+    assert decision_probe.decide_router_policy.__globals__["_budget_or_policy_fallback"] is getattr(
+        decision_probe, "_budget_or_policy_fallback"
+    )
+
+    decision = decision_probe.decide_router_policy(budget_fallback_input(flag_value), now=NOW)
+
+    assert calls["count"] > 0
+    assert forced_seen["value"] is not None
+    assert_forced_bundle_present(forced_seen["value"]["decision"], forced_seen["value"]["bundle"])
+    assert_no_external_proposal_artifacts(decision)
+    assert_schema_valid_decision(decision)
+
+
+@pytest.mark.parametrize("flag_value", (False, None, "true", 1))
+def test_forced_private_provider_boundary_bundle_scrubbed_when_external_flag_not_true(monkeypatch, flag_value):
+    calls, forced_seen = wrap_forced_bundle_producer(monkeypatch, "_private_provider_boundary")
+    assert decision_probe.decide_router_policy.__globals__["_private_provider_boundary"] is getattr(
+        decision_probe, "_private_provider_boundary"
+    )
+
+    decision = decision_probe.decide_router_policy(private_provider_boundary_input(flag_value), now=NOW)
+
+    assert calls["count"] > 0
+    assert forced_seen["value"] is not None
+    assert_forced_bundle_present(forced_seen["value"]["decision"], forced_seen["value"]["bundle"])
+    assert_no_external_proposal_artifacts(decision)
+    assert decision["redaction_required"] is False
+    assert decision["redaction_status"] == "not_required"
+    assert_schema_valid_decision(decision)
+
+
+def test_forced_budget_or_policy_fallback_bundle_preserved_when_external_flag_true(monkeypatch):
+    calls, forced_seen = wrap_forced_bundle_producer(monkeypatch, "_budget_or_policy_fallback")
+    decision = decision_probe.decide_router_policy(budget_fallback_input(True), now=NOW)
+
+    assert calls["count"] > 0
+    assert forced_seen["value"] is not None
+    assert_forced_bundle_present(forced_seen["value"]["decision"], forced_seen["value"]["bundle"])
+    assert decision["proposed_external_target"] == VALID_EXTERNAL_TARGET
+    assert_schema_valid_decision(decision)
+
+
+def test_forced_private_provider_boundary_bundle_preserved_when_external_flag_true(monkeypatch):
+    calls, forced_seen = wrap_forced_bundle_producer(monkeypatch, "_private_provider_boundary")
+    decision = decision_probe.decide_router_policy(private_provider_boundary_input(True), now=NOW)
+
+    assert calls["count"] > 0
+    assert forced_seen["value"] is not None
+    assert_forced_bundle_present(forced_seen["value"]["decision"], forced_seen["value"]["bundle"])
+    assert decision["proposed_external_target"] == VALID_EXTERNAL_TARGET
+    assert_schema_valid_decision(decision)
+
+
+def test_forced_unknown_external_pressure_bundle_preserved_when_external_flag_true(monkeypatch):
+    calls, forced_seen = wrap_forced_bundle_producer(monkeypatch, "_unknown_external_pressure")
+    decision = decision_probe.decide_router_policy(unknown_external_pressure_input(True), now=NOW)
+
+    assert calls["count"] > 0
+    assert forced_seen["value"] is not None
+    assert_forced_bundle_present(forced_seen["value"]["decision"], forced_seen["value"]["bundle"])
+    assert decision["proposed_external_target"] == VALID_EXTERNAL_TARGET
+    assert_schema_valid_decision(decision)
+
+
+def test_forced_external_candidate_bundle_preserved_when_external_flag_true(monkeypatch):
+    calls, forced_seen = wrap_forced_bundle_producer(monkeypatch, "_external_candidate_proposal")
+    decision = decision_probe.decide_router_policy(external_candidate_input(True), now=NOW)
+
+    assert calls["count"] > 0
+    assert forced_seen["value"] is not None
+    assert_forced_bundle_present(forced_seen["value"]["decision"], forced_seen["value"]["bundle"])
+    assert decision["proposed_external_target"] == VALID_EXTERNAL_TARGET
+    assert_schema_valid_decision(decision)
