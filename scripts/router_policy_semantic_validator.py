@@ -535,6 +535,118 @@ def validate_confirmation_revalidation_boundary(
     return violations
 
 
+def evaluate_confirmed_execution_activation_boundary(
+    decision: dict[str, Any],
+    previous_decision: dict[str, Any] | None,
+    *,
+    now: str | None = None,
+) -> dict[str, Any]:
+    violations: list[dict] = []
+    if decision.get("lifecycle_stage") != "confirmed_execution":
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "Activation boundary requires lifecycle_stage confirmed_execution.",
+            "lifecycle_stage",
+        )
+        return {
+            "activation_safe": False,
+            "violations": violations,
+            "activation_scope": "confirmed_execution_boundary_only",
+        }
+
+    revalidation_violations = validate_confirmation_revalidation_boundary(
+        decision,
+        previous_decision,
+        now=now,
+    )
+    violations.extend(revalidation_violations)
+
+    now_dt = parse_datetime(now) if now is not None else None
+    consent = decision.get("consent_context")
+    previous_created = None if previous_decision is None else parse_datetime(previous_decision.get("created_at"))
+    previous_expires = None if previous_decision is None else parse_datetime(previous_decision.get("expires_at"))
+    confirmed_at = parse_datetime(consent.get("confirmed_at")) if isinstance(consent, dict) else None
+
+    if now_dt is None:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "Activation boundary requires a caller-supplied parseable now timestamp.",
+            "now",
+        )
+    if previous_created is None:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "Activation boundary requires a valid previous_decision.created_at timestamp.",
+            "previous_decision.created_at",
+        )
+    if previous_expires is None:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "Activation boundary requires a valid previous_decision.expires_at timestamp.",
+            "previous_decision.expires_at",
+        )
+    if confirmed_at is None:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "Activation boundary requires a valid consent_context.confirmed_at timestamp.",
+            "consent_context.confirmed_at",
+        )
+    if previous_created is not None and previous_expires is not None and previous_created >= previous_expires:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "Activation boundary requires previous_decision.created_at to be before previous_decision.expires_at.",
+            "previous_decision.expires_at",
+        )
+    if previous_created is not None and confirmed_at is not None and previous_created > confirmed_at:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "Activation boundary requires previous_decision.created_at <= consent_context.confirmed_at.",
+            "consent_context.confirmed_at",
+        )
+    if confirmed_at is not None and now_dt is not None and confirmed_at > now_dt:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "Activation boundary requires consent_context.confirmed_at <= now.",
+            "consent_context.confirmed_at",
+        )
+    if confirmed_at is not None and previous_expires is not None and confirmed_at > previous_expires:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "Activation boundary requires consent_context.confirmed_at <= previous_decision.expires_at.",
+            "consent_context.confirmed_at",
+        )
+
+    if decision.get("provider_call_allowed_now") is not False:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "Activation boundary is diagnostic only and must not carry provider_call_allowed_now true.",
+            "provider_call_allowed_now",
+        )
+    if decision.get("external_network_allowed_now") is not False:
+        _add(
+            violations,
+            "STALE_CONFIRMATION_DECISION",
+            "Activation boundary is diagnostic only and must not carry external_network_allowed_now true.",
+            "external_network_allowed_now",
+        )
+
+    return {
+        "activation_safe": not violations,
+        "violations": violations,
+        "activation_scope": "confirmed_execution_boundary_only",
+    }
+
+
 def _check_expiry(
     decision: dict[str, Any],
     previous_decision: dict[str, Any] | None,
@@ -568,13 +680,12 @@ def _check_expiry(
                 "expires_at",
             )
     if stage == "confirmed_execution":
-        violations.extend(
-            validate_confirmation_revalidation_boundary(
-                decision,
-                previous_decision,
-                now=now_dt.isoformat() if now_dt is not None else None,
-            )
+        activation = evaluate_confirmed_execution_activation_boundary(
+            decision,
+            previous_decision,
+            now=now_dt.isoformat() if now_dt is not None else None,
         )
+        violations.extend(activation["violations"])
 
 
 def _check_redaction(input_obj: dict[str, Any], decision: dict[str, Any], violations: list[dict]) -> None:

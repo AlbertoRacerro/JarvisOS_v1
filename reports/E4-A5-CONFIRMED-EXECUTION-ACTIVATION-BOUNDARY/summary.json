@@ -1,0 +1,211 @@
+{
+  "verdict": "GREEN",
+  "milestone": "E4-A5-CONFIRMED-EXECUTION-ACTIVATION-BOUNDARY",
+  "current_head": "de2840602dcfa36b880cd494e457440f6feeb1e5",
+  "changed_files": {
+    "production": [
+      "scripts/router_policy_semantic_validator.py"
+    ],
+    "tests": [
+      "tests/test_router_policy_confirmed_execution_activation_boundary.py"
+    ],
+    "reports": [
+      "reports/E4-A5-CONFIRMED-EXECUTION-ACTIVATION-BOUNDARY/summary.md",
+      "reports/E4-A5-CONFIRMED-EXECUTION-ACTIVATION-BOUNDARY/summary.json"
+    ],
+    "schemas": []
+  },
+  "integration_points": [
+    "scripts/router_policy_semantic_validator.py::evaluate_confirmed_execution_activation_boundary",
+    "scripts/router_policy_semantic_validator.py::_check_expiry",
+    "scripts/router_policy_semantic_validator.py::validate_confirmation_revalidation_boundary",
+    "scripts/router_policy_canonical_digest.py::validate_confirmation_digest_integrity"
+  ],
+  "activation_boundary": {
+    "implemented": true,
+    "coverage_level": "mixed",
+    "no_execution_added": true
+  },
+  "a4_revalidation_reuse": [
+    "A5 calls validate_confirmation_revalidation_boundary directly",
+    "A4 violations block activation-safe status"
+  ],
+  "activation_return_shape": {
+    "activation_safe": "bool",
+    "violations": "list[dict]",
+    "activation_scope": "confirmed_execution_boundary_only"
+  },
+  "confirmed_execution_requirements": [
+    "lifecycle_stage must be confirmed_execution",
+    "A4 revalidation must pass",
+    "consent_context required",
+    "confirmation_action must be allow_once",
+    "no live confirmation artifacts may remain on current confirmed_execution"
+  ],
+  "temporal_ordering_checks": [
+    "previous.created_at <= consent_context.confirmed_at <= now",
+    "consent_context.confirmed_at <= previous.expires_at",
+    "previous.created_at < previous.expires_at",
+    "missing or invalid now/created_at/expires_at/confirmed_at fails closed"
+  ],
+  "allow_once_behavior": [
+    "confirmation_action must be allow_once",
+    "other actions fail closed"
+  ],
+  "target_continuity_behavior": [
+    "preserves A4 target continuity",
+    "current target derived from proposed_external_target or external provider_candidate or consent_context.confirmed_external_target",
+    "missing or non-external current target fails closed",
+    "target drift fails closed"
+  ],
+  "live_confirmation_artifact_rejection": [
+    "confirmation_required true rejected",
+    "confirmation_payload_required true rejected",
+    "confirmation_payload non-null rejected",
+    "confirmation_digest non-null rejected",
+    "confirmation_options non-empty rejected"
+  ],
+  "route_action_route_tier_non_authority_proof": [
+    "route labels do not rescue invalid activation",
+    "activation authority comes from A4 revalidation plus consent, digest, input, target, and temporal continuity"
+  ],
+  "purity_no_mutation_proof": [
+    "helper returns status and violations only",
+    "no mutation of current decision",
+    "no mutation of previous decision",
+    "no provider_call_allowed_now grant",
+    "no external_network_allowed_now grant",
+    "no wall-clock fallback in helper"
+  ],
+  "tests_added_or_updated": [
+    "tests/test_router_policy_confirmed_execution_activation_boundary.py::test_valid_confirmed_execution_passes_activation_boundary_without_mutation",
+    "tests/test_router_policy_confirmed_execution_activation_boundary.py::test_non_confirmed_lifecycle_fails_closed",
+    "tests/test_router_policy_confirmed_execution_activation_boundary.py::test_a4_revalidation_violation_makes_activation_fail",
+    "tests/test_router_policy_confirmed_execution_activation_boundary.py::test_missing_now_fails_closed",
+    "tests/test_router_policy_confirmed_execution_activation_boundary.py::test_invalid_now_fails_closed",
+    "tests/test_router_policy_confirmed_execution_activation_boundary.py::test_confirmed_at_before_previous_created_at_fails",
+    "tests/test_router_policy_confirmed_execution_activation_boundary.py::test_confirmed_at_after_now_fails",
+    "tests/test_router_policy_confirmed_execution_activation_boundary.py::test_confirmed_at_after_previous_expires_at_fails",
+    "tests/test_router_policy_confirmed_execution_activation_boundary.py::test_previous_created_at_missing_or_invalid_fails",
+    "tests/test_router_policy_confirmed_execution_activation_boundary.py::test_previous_expires_at_missing_or_invalid_fails",
+    "tests/test_router_policy_confirmed_execution_activation_boundary.py::test_action_not_allow_once_fails",
+    "tests/test_router_policy_confirmed_execution_activation_boundary.py::test_target_drift_or_missing_current_target_fails",
+    "tests/test_router_policy_confirmed_execution_activation_boundary.py::test_current_live_confirmation_artifacts_fail_including_confirmation_digest",
+    "tests/test_router_policy_confirmed_execution_activation_boundary.py::test_activation_pass_does_not_grant_provider_call_allowed_now",
+    "tests/test_router_policy_confirmed_execution_activation_boundary.py::test_activation_pass_does_not_grant_external_network_allowed_now",
+    "tests/test_router_policy_confirmed_execution_activation_boundary.py::test_route_action_route_tier_relabeling_does_not_rescue_invalid_activation",
+    "tests/test_router_policy_confirmed_execution_activation_boundary.py::test_helper_uses_caller_supplied_now_only_and_contains_no_wall_clock_calls"
+  ],
+  "checks_run": [
+    "python -m pytest tests/test_router_policy_confirmed_execution_activation_boundary.py -q -> 17 passed in 0.02s",
+    "python -m pytest tests/test_router_policy_confirmation_revalidation_boundary.py -q -> 15 passed in 0.02s",
+    "python -m pytest tests/test_router_policy_semantic_validator.py -q -> 40 passed in 0.04s",
+    "python -m pytest tests/test_router_policy_canonical_digest.py -q -> 14 passed in 0.02s",
+    "python -m pytest tests/test_router_policy_confirmation_digest_binding.py -q -> 5 passed in 0.04s",
+    "python -m pytest tests/test_router_policy_external_proposal_invariant.py tests/test_router_policy_external_egress_scope.py tests/test_router_policy_message_route_smoke.py tests/test_router_policy_semantic_validator.py tests/test_router_policy_external_egress_gate.py tests/test_router_policy_external_budget_gate.py -q -> 324 passed in 0.34s",
+    "git diff --check -> CRLF warning only, no whitespace/content failure",
+    "git status --short -> expected A5 files only",
+    "rg -n \"evaluate_external_budget_gate\\(\" scripts backend --glob '!scripts/router_policy_external_budget_gate.py' -> no matches",
+    "rg -n \"^import requests|^from requests|^import httpx|^from httpx|openai|anthropic|gemini\" scripts -> existing pre-E4 regex/text references only",
+    "rg -n \"\\.env|os\\.environ|dotenv|API_KEY|SECRET|TOKEN\" scripts tests reports/E4-A5-CONFIRMED-EXECUTION-ACTIVATION-BOUNDARY -> existing probe/test/reference matches only",
+    "rg -n \"datetime\\.now|time\\.time|utcnow\\(\" scripts tests -> unrelated pre-existing runtime/probe matches outside A5 boundary plus A4/A5 negative test assertions"
+  ],
+  "grep_matches_classified": [
+    {
+      "command": "rg -n \"evaluate_external_budget_gate\\(\" scripts backend --glob '!scripts/router_policy_external_budget_gate.py'",
+      "matches": [],
+      "classification": "no production caller"
+    },
+    {
+      "command": "rg -n \"^import requests|^from requests|^import httpx|^from httpx|openai|anthropic|gemini\" scripts",
+      "matches": [
+        {
+          "path": "scripts/local_policy_gate_overlay_probe.py",
+          "classification": "existing pre-E4 reference",
+          "reason": "regex vocabulary only"
+        },
+        {
+          "path": "scripts/router_policy_message_route_smoke.py",
+          "classification": "existing pre-E4 reference",
+          "reason": "regex vocabulary only"
+        }
+      ]
+    },
+    {
+      "command": "rg -n \"\\.env|os\\.environ|dotenv|API_KEY|SECRET|TOKEN\" scripts tests reports/E4-A5-CONFIRMED-EXECUTION-ACTIVATION-BOUNDARY",
+      "matches": [
+        {
+          "path": "scripts/local_model_structured_output_probe.py",
+          "classification": "existing pre-E4 reference",
+          "reason": "documentation/probe text about blocking secrets"
+        },
+        {
+          "path": "scripts/local_policy_gate_overlay_probe.py",
+          "classification": "existing pre-E4 reference",
+          "reason": "regex/policy pattern for secret detection"
+        },
+        {
+          "path": "scripts/router_policy_semantic_validator.py",
+          "classification": "existing production secret-pattern validation",
+          "reason": "policy validation pattern, not env/provider loading"
+        },
+        {
+          "path": "tests/test_router_policy_canonical_digest.py",
+          "classification": "test/reference",
+          "reason": "forbidden-string assertion"
+        }
+      ]
+    },
+    {
+      "command": "rg -n \"datetime\\.now|time\\.time|utcnow\\(\" scripts tests",
+      "matches": [
+        {
+          "path": "scripts/local_model_form_fill_smoke.py",
+          "classification": "existing pre-E4 reference",
+          "reason": "unrelated runtime/probe timestamp generation"
+        },
+        {
+          "path": "scripts/local_policy_gate_overlay_probe.py",
+          "classification": "existing pre-E4 reference",
+          "reason": "unrelated runtime/probe timestamp generation"
+        },
+        {
+          "path": "scripts/local_phase_b_soft_review_probe.py",
+          "classification": "existing pre-E4 reference",
+          "reason": "unrelated runtime/probe timestamp generation"
+        },
+        {
+          "path": "scripts/local_phase_b_soft_review_model_probe.py",
+          "classification": "existing pre-E4 reference",
+          "reason": "unrelated runtime/probe timestamp generation"
+        },
+        {
+          "path": "scripts/local_model_structured_output_probe.py",
+          "classification": "existing pre-E4 reference",
+          "reason": "unrelated runtime/probe timestamp generation"
+        },
+        {
+          "path": "tests/test_router_policy_confirmed_execution_activation_boundary.py",
+          "classification": "test/reference",
+          "reason": "negative assertion proving no wall-clock fallback in A5 helper"
+        },
+        {
+          "path": "tests/test_router_policy_confirmation_revalidation_boundary.py",
+          "classification": "test/reference",
+          "reason": "negative assertion proving no wall-clock fallback in A4 helper"
+        }
+      ]
+    }
+  ],
+  "provider_network_absence": "no provider execution added, no network execution added, no SDK/API imports added",
+  "env_secrets_absence": "no .env reads added, no os.environ reads added in A5 boundary; grep matches are existing probes/tests/reference patterns only",
+  "e3_inertness": "no production caller for evaluate_external_budget_gate",
+  "schema_change_status": "none",
+  "known_limitations": [
+    "A5 validates provided state only; it does not persist or consume allow_once tickets",
+    "no persistence, retrieval, ticket storage, durable confirmation records, or single-use storage was implemented",
+    "A5 GREEN is diagnostic only and does not authorize provider execution, network execution, or E3 activation"
+  ],
+  "next_recommended_slice": "E4-A6-CONFIRMED-EXECUTION-CONSUMPTION-DURABLE-TICKET-BOUNDARY",
+  "final_git_status": "expected A5 files only"
+}
