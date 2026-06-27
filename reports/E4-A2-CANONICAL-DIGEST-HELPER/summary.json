@@ -1,0 +1,125 @@
+{
+  "verdict": "GREEN",
+  "milestone": "E4-A2-CANONICAL-DIGEST-HELPER",
+  "scope": "canonical_digest_helper_only",
+  "current_head": "162d182356a0440217aff0dfd794e442a078b287",
+  "docs_decisions_stash": {
+    "reference": "stash@{0}: On audit/safe-fixes-2026-06-23: baseline-cleanup docs/DECISIONS.md",
+    "hash": "7518aae68a76612c524b13f0f462c58268687cc6"
+  },
+  "changed_files": {
+    "production": [
+      "scripts/router_policy_canonical_digest.py"
+    ],
+    "tests": [
+      "tests/test_router_policy_canonical_digest.py"
+    ],
+    "reports": [
+      "reports/E4-A2-CANONICAL-DIGEST-HELPER/summary.md",
+      "reports/E4-A2-CANONICAL-DIGEST-HELPER/summary.json"
+    ],
+    "schemas": []
+  },
+  "helper": {
+    "file": "scripts/router_policy_canonical_digest.py",
+    "functions": [
+      "canonicalize_confirmation_intent",
+      "compute_confirmation_digest"
+    ],
+    "properties": [
+      "pure",
+      "deterministic",
+      "side_effect_free",
+      "standard_library_only",
+      "no_env",
+      "no_network",
+      "no_filesystem_writes",
+      "no_model_calls"
+    ],
+    "enforced_by": [
+      "test_helper_uses_no_runtime_entropy_or_external_state"
+    ]
+  },
+  "canonicalization_rules": {
+    "json_sort_keys": true,
+    "stable_separators": true,
+    "digest_excludes_itself": true,
+    "runtime_entropy_excluded": true,
+    "list_ordering_semantics": "preserve_order_as_semantically_meaningful",
+    "enforced_by": [
+      "test_same_canonical_safety_intent_gives_same_digest_despite_key_order",
+      "test_stable_nested_ordering_inside_digest_relevant_payload",
+      "test_digest_excludes_itself",
+      "test_helper_uses_no_runtime_entropy_or_external_state",
+      "test_confirmation_options_list_order_is_semantically_meaningful"
+    ]
+  },
+  "included_digest_fields": [
+    "proposed_external_target",
+    "provider_call_allowed_now",
+    "external_network_allowed_now",
+    "confirmation_required",
+    "confirmation_payload_required",
+    "confirmation_payload",
+    "confirmation_options"
+  ],
+  "excluded_digest_fields": [
+    "confirmation_digest",
+    "digest",
+    "route_action",
+    "route_tier",
+    "requires_new_decision_after_confirmation",
+    "reason_codes",
+    "audit_notes"
+  ],
+  "route_action_route_tier_classification": {
+    "route_action": "label_not_actionability_authority",
+    "route_tier": "label_not_actionability_authority",
+    "digest_relevance": "excluded_unless_explicitly_payload_display_field",
+    "enforced_by": [
+      "test_route_action_and_route_tier_are_not_actionability_authority_for_digest"
+    ]
+  },
+  "requires_new_decision_after_confirmation_classification": {
+    "classification": "confirmation_lifecycle_field",
+    "digest_relevance": "reserved_for_later_binding",
+    "rationale": "E4-A2 is helper-only and does not implement confirmation workflow or binding.",
+    "enforced_by": [
+      "test_requires_new_decision_after_confirmation_is_reserved_for_later_binding"
+    ]
+  },
+  "tests_added": [
+    "test_same_canonical_safety_intent_gives_same_digest_despite_key_order",
+    "test_different_safety_relevant_target_changes_digest",
+    "test_different_confirmation_payload_changes_digest",
+    "test_non_safety_explanatory_text_outside_confirmation_payload_does_not_change_digest",
+    "test_digest_excludes_itself",
+    "test_stable_nested_ordering_inside_digest_relevant_payload",
+    "test_confirmation_options_list_order_is_semantically_meaningful",
+    "test_helper_uses_no_runtime_entropy_or_external_state",
+    "test_route_action_and_route_tier_are_not_actionability_authority_for_digest",
+    "test_requires_new_decision_after_confirmation_is_reserved_for_later_binding",
+    "test_canonical_payload_contains_only_digest_relevant_fields"
+  ],
+  "checks_run": [
+    "git rev-parse stash@{0} -> 7518aae68a76612c524b13f0f462c58268687cc6",
+    "git status --short before work -> clean",
+    "git rev-parse HEAD -> 162d182356a0440217aff0dfd794e442a078b287",
+    "python -m pytest tests/test_router_policy_canonical_digest.py -q -> 11 passed in 0.08s",
+    "python -m pytest tests/test_router_policy_external_proposal_invariant.py tests/test_router_policy_external_egress_scope.py tests/test_router_policy_message_route_smoke.py tests/test_router_policy_semantic_validator.py tests/test_router_policy_external_egress_gate.py tests/test_router_policy_external_budget_gate.py -q -> 324 passed in 1.07s",
+    "git diff --check -> clean",
+    "git status --short -> untracked E4-A2 files only",
+    "rg -n \"evaluate_external_budget_gate\\(\" scripts backend --glob '!scripts/router_policy_external_budget_gate.py' -> no matches",
+    "rg -n \"^import requests|^from requests|^import httpx|^from httpx|openai|anthropic|gemini\" scripts/router_policy_decision_probe.py scripts/router_policy_external_egress_scope.py scripts/router_policy_canonical_digest.py -> no matches"
+  ],
+  "locked_suite_status": "GREEN",
+  "e3_inertness_status": "no production caller for evaluate_external_budget_gate",
+  "provider_network_absence": "no provider execution, no network execution, no SDK/API imports added",
+  "schema_change_status": "none",
+  "known_limitations": [
+    "helper-only milestone; no confirmation binding integration",
+    "helper excludes lifecycle labels and explanatory fields by design",
+    "helper preserves list order rather than imposing set semantics"
+  ],
+  "next_recommended_slice": "E4-A3-CONFIRMATION-PAYLOAD-BINDING-INTEGRATION"
+}
