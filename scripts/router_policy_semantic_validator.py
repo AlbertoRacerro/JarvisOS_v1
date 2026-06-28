@@ -1284,6 +1284,96 @@ def evaluate_economic_execution_policy_boundary(
     }
 
 
+def _check_authority_signal(
+    source: Any,
+    field_name: str,
+    required_code: str,
+    source_name: str,
+    violations: list[dict],
+) -> None:
+    field_path = f"{source_name}.{field_name}"
+    if not isinstance(source, dict):
+        _add(
+            violations,
+            "AUTHORITY_SIGNAL_MALFORMED",
+            f"{source_name} must be a dict carrying literal boolean authority signals.",
+            source_name,
+        )
+        return
+    if field_name not in source:
+        _add(
+            violations,
+            required_code,
+            f"{field_path} must be literal boolean true.",
+            field_path,
+        )
+        return
+    value = source.get(field_name)
+    if value is True:
+        return
+    if value is False:
+        _add(
+            violations,
+            required_code,
+            f"{field_path} must be literal boolean true.",
+            field_path,
+        )
+        return
+    _add(
+        violations,
+        "AUTHORITY_SIGNAL_MALFORMED",
+        f"{field_path} must be literal boolean true; truthy or malformed values fail closed.",
+        field_path,
+    )
+
+
+def evaluate_runtime_authority_chain_dry_run(
+    activation_result: Any,
+    consumption_result: Any,
+    economic_policy_result: Any,
+) -> dict[str, Any]:
+    """Evaluate future runtime authority signals without granting execution permission."""
+    violations: list[dict] = []
+
+    _check_authority_signal(
+        activation_result,
+        "activation_safe",
+        "ACTIVATION_SAFE_REQUIRED",
+        "activation_result",
+        violations,
+    )
+    _check_authority_signal(
+        consumption_result,
+        "consumption_allowed",
+        "CONSUMPTION_ALLOWED_REQUIRED",
+        "consumption_result",
+        violations,
+    )
+    _check_authority_signal(
+        consumption_result,
+        "automatic_execution_eligible",
+        "AUTOMATIC_EXECUTION_ELIGIBLE_REQUIRED",
+        "consumption_result",
+        violations,
+    )
+    _check_authority_signal(
+        economic_policy_result,
+        "execution_policy_allowed",
+        "EXECUTION_POLICY_ALLOWED_REQUIRED",
+        "economic_policy_result",
+        violations,
+    )
+
+    return {
+        "authority_chain_satisfied": not any(v["severity"] == "error" for v in violations),
+        "violations": violations,
+        "policy_scope": "no_provider_runtime_authority_chain_dry_run",
+        "provider_permission_granted": False,
+        "network_permission_granted": False,
+        "execution_permission_granted": False,
+    }
+
+
 def _check_expiry(
     decision: dict[str, Any],
     previous_decision: dict[str, Any] | None,

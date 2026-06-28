@@ -1,0 +1,133 @@
+{
+  "verdict": "GREEN",
+  "milestone": "E4-A7-PRE-3-NO-PROVIDER-RUNTIME-AUTHORITY-CHAIN-DRY-RUN",
+  "baseline": {
+    "expected_head": "573d12840231dfdedd57c02f06e523ffd052b017",
+    "head_before_patch": "573d12840231dfdedd57c02f06e523ffd052b017",
+    "status_before_patch": "clean"
+  },
+  "changed_files": {
+    "production": [
+      "scripts/router_policy_semantic_validator.py"
+    ],
+    "tests": [
+      "tests/test_router_policy_runtime_authority_chain_dry_run.py"
+    ],
+    "reports": [
+      "reports/E4-A7-PRE-3-NO-PROVIDER-RUNTIME-AUTHORITY-CHAIN-DRY-RUN/summary.md",
+      "reports/E4-A7-PRE-3-NO-PROVIDER-RUNTIME-AUTHORITY-CHAIN-DRY-RUN/summary.json"
+    ],
+    "schemas": []
+  },
+  "helper": {
+    "name": "evaluate_runtime_authority_chain_dry_run",
+    "coverage_level": "helper-only",
+    "test_local": true,
+    "policy_scope": "no_provider_runtime_authority_chain_dry_run",
+    "authority_boolean_name": "authority_chain_satisfied",
+    "authority_chain_satisfied_is_provider_permission": false,
+    "authority_chain_satisfied_is_network_permission": false,
+    "authority_chain_satisfied_is_execution_permission": false,
+    "provider_permission_granted": false,
+    "network_permission_granted": false,
+    "execution_permission_granted": false
+  },
+  "required_authority_signals": [
+    "activation_result.activation_safe is True",
+    "consumption_result.consumption_allowed is True",
+    "consumption_result.automatic_execution_eligible is True",
+    "economic_policy_result.execution_policy_allowed is True"
+  ],
+  "literal_boolean_true_only": true,
+  "fail_closed_cases": [
+    "missing field",
+    "false field",
+    "malformed field",
+    "ambiguous truthy field",
+    "None input",
+    "empty dict input",
+    "non-dict input"
+  ],
+  "violation_behavior": {
+    "mode": "collect_all",
+    "codes": [
+      "ACTIVATION_SAFE_REQUIRED",
+      "CONSUMPTION_ALLOWED_REQUIRED",
+      "AUTOMATIC_EXECUTION_ELIGIBLE_REQUIRED",
+      "EXECUTION_POLICY_ALLOWED_REQUIRED",
+      "AUTHORITY_SIGNAL_MALFORMED"
+    ]
+  },
+  "non_authority_fields_ignored": [
+    "provider_candidate",
+    "model_candidate",
+    "route_tier",
+    "benchmark_candidate",
+    "route_action",
+    "budget_class",
+    "max_tokens_allowed",
+    "policy_scope",
+    "docs/report labels"
+  ],
+  "mutation_behavior": {
+    "activation_result_mutated": false,
+    "consumption_result_mutated": false,
+    "economic_policy_result_mutated": false,
+    "passing_case_tested": true,
+    "failing_case_tested": true
+  },
+  "prohibitions": {
+    "provider_execution_added": false,
+    "network_execution_added": false,
+    "sdk_api_imports_added": false,
+    "env_reads_added": false,
+    "env_example_added": false,
+    "api_keys_added": false,
+    "provider_registry_runtime_added": false,
+    "execution_gateway_added": false,
+    "real_provider_names_added": false,
+    "live_provider_prices_added": false,
+    "e3_activated": false,
+    "a8_a9_started": false,
+    "schemas_modified": false,
+    "backend_runtime_wiring_modified": false,
+    "external_code_vendored": false
+  },
+  "checks_run": [
+    "git rev-parse HEAD -> 573d12840231dfdedd57c02f06e523ffd052b017",
+    "git status --short --untracked-files=all -> clean before patch",
+    "python -m pytest tests/test_router_policy_runtime_authority_chain_dry_run.py -q -> 12 passed in 0.04s",
+    "python -m pytest tests/test_router_policy_economic_execution_policy_boundary.py -q -> 25 passed in 0.05s",
+    "python -m pytest tests/test_router_policy_confirmed_execution_consumption_boundary.py -q -> 23 passed in 0.10s",
+    "python -m pytest tests/test_router_policy_confirmed_execution_activation_boundary.py -q -> 17 passed in 0.03s",
+    "python -m pytest tests/test_router_policy_confirmation_revalidation_boundary.py -q -> 15 passed in 0.03s",
+    "python -m pytest tests/test_router_policy_semantic_validator.py -q -> 40 passed in 0.05s",
+    "python -m pytest tests/test_router_policy_canonical_digest.py -q -> 14 passed in 0.03s",
+    "python -m pytest tests/test_router_policy_confirmation_digest_binding.py -q -> 5 passed in 0.05s",
+    "python -m pytest tests/test_router_policy_external_proposal_invariant.py tests/test_router_policy_external_egress_scope.py tests/test_router_policy_message_route_smoke.py tests/test_router_policy_semantic_validator.py tests/test_router_policy_external_egress_gate.py tests/test_router_policy_external_budget_gate.py -q -> 324 passed in 0.44s",
+    "python -m json.tool reports/E4-A7-PRE-3-NO-PROVIDER-RUNTIME-AUTHORITY-CHAIN-DRY-RUN/summary.json -> pass",
+    "git diff --check -> CRLF warning only, no whitespace/content failure",
+    "git diff --name-only -> scripts/router_policy_semantic_validator.py plus untracked files visible in git status",
+    "git diff --cached --name-only -> no staged files before commit",
+    "git status --short --untracked-files=all -> expected A7-PRE-3 dirty files only"
+  ],
+  "grep_matches_classified": [
+    {
+      "command": "rg -n \"^import requests|^from requests|^import httpx|^from httpx|urllib|aiohttp|openai|anthropic|gemini|mistral|cohere|groq|openrouter|together|fireworks|deepseek|qwen|kimi|minimax|perplexity|azure\" scripts tests reports/E4-A7-PRE-3-NO-PROVIDER-RUNTIME-AUTHORITY-CHAIN-DRY-RUN",
+      "classification": "existing historical local probe/test references plus A7-PRE-3 negative helper-source assertions only; no new provider/network runtime wiring"
+    },
+    {
+      "command": "rg -n -i \"\\.env|os\\.environ|dotenv|api[_-]?key|secret|access[_-]?token|bearer|authorization\" scripts tests reports/E4-A7-PRE-3-NO-PROVIDER-RUNTIME-AUTHORITY-CHAIN-DRY-RUN",
+      "classification": "report assertions and existing historical test/probe references only; no new env read, secret loading, or API key handling"
+    },
+    {
+      "command": "rg -n \"provider registry|execution gateway|network call|API key|runtime authority|provider permission|network permission|execution permission\" scripts tests reports/E4-A7-PRE-3-NO-PROVIDER-RUNTIME-AUTHORITY-CHAIN-DRY-RUN",
+      "classification": "A7-PRE-3 explanatory negative assertions plus existing semantic-validator permission checks; no execution gateway or provider permission grant"
+    }
+  ],
+  "generated_artifacts_excluded": [
+    "reports/E4-A7-PRE-3-NO-PROVIDER-RUNTIME-AUTHORITY-CHAIN-DRY-RUN/changed_files.zip"
+  ],
+  "final_git_status": "pre-commit status contained only expected A7-PRE-3 dirty files",
+  "commit_hash": "recorded in final handoff after commit"
+}
