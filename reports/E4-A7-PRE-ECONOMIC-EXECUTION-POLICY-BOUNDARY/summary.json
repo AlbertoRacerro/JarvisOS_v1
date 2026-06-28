@@ -1,0 +1,170 @@
+{
+  "verdict": "GREEN",
+  "milestone": "E4-A7-PRE-ECONOMIC-EXECUTION-POLICY-BOUNDARY",
+  "current_head": "4e6c41511f7543d412fd679919dbdef47ffb995e",
+  "changed_files": {
+    "production": [
+      "scripts/router_policy_semantic_validator.py"
+    ],
+    "tests": [
+      "tests/test_router_policy_economic_execution_policy_boundary.py"
+    ],
+    "reports": [
+      "reports/E4-A7-PRE-ECONOMIC-EXECUTION-POLICY-BOUNDARY/summary.md",
+      "reports/E4-A7-PRE-ECONOMIC-EXECUTION-POLICY-BOUNDARY/summary.json"
+    ],
+    "schemas": []
+  },
+  "integration_points": [
+    "scripts/router_policy_semantic_validator.py::evaluate_economic_execution_policy_boundary",
+    "scripts/router_policy_semantic_validator.py::evaluate_confirmed_execution_consumption_boundary",
+    "scripts/router_policy_semantic_validator.py::evaluate_confirmed_execution_activation_boundary"
+  ],
+  "economic_execution_policy_boundary": {
+    "implemented": true,
+    "coverage_level": "helper-only",
+    "no_execution_added": true,
+    "pure_status_only": true
+  },
+  "consumed_ticket_requirements": [
+    "schema_version must be v1",
+    "economic_envelope_complete must be true",
+    "automatic_execution_eligible must be true",
+    "economic_envelope.provider_candidate must be present and known",
+    "economic_envelope.budget_class must be present and known",
+    "economic_envelope.max_tokens_allowed must be a positive int",
+    "economic_envelope.dry_run_required must be a bool",
+    "economic_envelope.allowed_execution_mode must be present"
+  ],
+  "requested_execution_plan_requirements": [
+    "provider_candidate must be present and known",
+    "budget_class must be present and known",
+    "max_tokens_requested must be a positive int",
+    "execution_mode must be present",
+    "dry_run must be a bool",
+    "real automatic execution requires history off policy",
+    "real automatic execution requires explicit non-negative retry cap",
+    "real automatic execution requires explicit non-negative tool-call cap",
+    "real automatic execution requires fallback provider explicitly disabled"
+  ],
+  "provider_class_ordering": [
+    "local",
+    "external:cheap",
+    "external:scientific_medium",
+    "external:frontier"
+  ],
+  "budget_class_ordering": [
+    "local",
+    "cheap",
+    "medium",
+    "frontier"
+  ],
+  "token_cap_enforcement": [
+    "requested max_tokens_requested must be positive int",
+    "requested max_tokens_requested must be <= consumed max_tokens_allowed"
+  ],
+  "dry_run_enforcement": [
+    "execution_mode dry_run requires dry_run true",
+    "execution_mode dry_run with dry_run false fails closed",
+    "execution_mode execute_after_confirm with dry_run true is diagnostic dry-run only",
+    "diagnostic dry-run pass does not imply provider or network permission",
+    "execution_policy_allowed is not provider permission",
+    "consumed dry_run_required=true blocks requested dry_run=false",
+    "dry-run-only requests may pass if other policy checks stay within the consumed envelope"
+  ],
+  "allowed_execution_mode_enforcement": [
+    "execute_after_confirm is required for real automatic execution",
+    "dry_run may satisfy dry-run-only requests",
+    "answer_only, propose_only, dry_run, and blocked fail real automatic execution"
+  ],
+  "history_policy": [
+    "real automatic execution requires history_mode off or equivalent history_allowed false",
+    "missing or non-off history policy fails closed"
+  ],
+  "retry_policy": [
+    "real automatic execution requires explicit non-negative max_retries_allowed"
+  ],
+  "tool_call_policy": [
+    "real automatic execution requires explicit non-negative max_tool_calls_allowed"
+  ],
+  "fallback_provider_policy": [
+    "real automatic execution requires fallback_provider_allowed false",
+    "missing or true fallback provider policy fails closed"
+  ],
+  "route_tier_non_authority_proof": [
+    "route_tier is audit-only",
+    "route_tier cannot rescue missing or unknown provider, budget, or token authority"
+  ],
+  "purity_no_mutation_proof": [
+    "helper returns status and violations only",
+    "helper does not mutate consumed_ticket",
+    "helper does not mutate requested_execution_plan",
+    "helper does not grant provider_call_allowed_now",
+    "helper does not grant external_network_allowed_now",
+    "helper does not grant tool_execution_allowed_now",
+    "helper uses no wall-clock APIs"
+  ],
+  "provider_network_absence": "No provider execution, network execution, SDK/API imports, or provider registry were added.",
+  "env_secrets_absence": "No .env reads, os.environ reads, API keys, or real secret loading were added.",
+  "e3_inertness": "No production caller for evaluate_external_budget_gate was added.",
+  "schema_change_status": "none",
+  "db_server_workflow_absence": "No DB, server, workflow, router runtime automatic call path, or provider execution wiring was added.",
+  "authority_chain_expectation": [
+    "A5 activation_safe",
+    "A6 consumption_allowed",
+    "A6 automatic_execution_eligible",
+    "A7-PRE execution_policy_allowed"
+  ],
+  "tests_added_or_updated": [
+    "tests/test_router_policy_economic_execution_policy_boundary.py"
+  ],
+  "checks_run": [
+    "python -m pytest tests/test_router_policy_economic_execution_policy_boundary.py -q -> 25 passed in 0.13s",
+    "python -m pytest tests/test_router_policy_confirmed_execution_consumption_boundary.py -q -> 23 passed in 0.27s",
+    "python -m pytest tests/test_router_policy_confirmed_execution_activation_boundary.py -q -> 17 passed in 0.10s",
+    "python -m pytest tests/test_router_policy_confirmation_revalidation_boundary.py -q -> 15 passed in 0.08s",
+    "python -m pytest tests/test_router_policy_semantic_validator.py -q -> 40 passed in 0.12s",
+    "python -m pytest tests/test_router_policy_canonical_digest.py -q -> 14 passed in 0.07s",
+    "python -m pytest tests/test_router_policy_confirmation_digest_binding.py -q -> 5 passed in 0.13s",
+    "python -m pytest tests/test_router_policy_external_proposal_invariant.py tests/test_router_policy_external_egress_scope.py tests/test_router_policy_message_route_smoke.py tests/test_router_policy_semantic_validator.py tests/test_router_policy_external_egress_gate.py tests/test_router_policy_external_budget_gate.py -q -> 324 passed in 1.04s",
+    "python -m json.tool reports/E4-A7-PRE-ECONOMIC-EXECUTION-POLICY-BOUNDARY/summary.json -> pass",
+    "git diff --check -> CRLF warning only, no whitespace/content failure",
+    "rg -n \"evaluate_external_budget_gate\\(\" scripts backend --glob '!scripts/router_policy_external_budget_gate.py' -> no matches",
+    "rg -n \"^import requests|^from requests|^import httpx|^from httpx|openai|anthropic|gemini\" scripts -> existing pre-E4 regex/text references only",
+    "rg -n \"\\.env|os\\.environ|dotenv|API_KEY|SECRET|TOKEN\" scripts tests reports/E4-A7-PRE-ECONOMIC-EXECUTION-POLICY-BOUNDARY -> report assertions plus existing probe/test/reference matches only",
+    "rg -n \"datetime\\.now|time\\.time|utcnow\\(\" scripts tests -> existing pre-E4 probe timestamp generation plus A4/A5/A6/A7 negative test assertions only"
+  ],
+  "grep_matches_classified": [
+    {
+      "command": "rg -n \"evaluate_external_budget_gate\\(\" scripts backend --glob '!scripts/router_policy_external_budget_gate.py'",
+      "matches": [],
+      "classification": "no production caller"
+    },
+    {
+      "command": "rg -n \"^import requests|^from requests|^import httpx|^from httpx|openai|anthropic|gemini\" scripts",
+      "classification": "existing pre-E4 regex/text references only",
+      "paths": [
+        "scripts/local_policy_gate_overlay_probe.py",
+        "scripts/router_policy_message_route_smoke.py"
+      ]
+    },
+    {
+      "command": "rg -n \"\\.env|os\\.environ|dotenv|API_KEY|SECRET|TOKEN\" scripts tests reports/E4-A7-PRE-ECONOMIC-EXECUTION-POLICY-BOUNDARY",
+      "classification": "report assertions plus existing probe/test/reference matches only"
+    },
+    {
+      "command": "rg -n \"datetime\\.now|time\\.time|utcnow\\(\" scripts tests",
+      "classification": "existing pre-E4 probe timestamp generation plus A4/A5/A6/A7 negative test assertions only"
+    }
+  ],
+  "known_limitations": [
+    "A7-PRE does not call providers.",
+    "A7-PRE does not read real secrets.",
+    "A7-PRE does not implement provider registry.",
+    "A7-PRE does not implement token benchmark.",
+    "A7-PRE does not wire runtime automatic call path.",
+    "A7-PRE uses abstract provider and budget classes only."
+  ],
+  "next_recommended_slice": "E4-A8-RUNTIME-AUTHORITY-CHAIN-INTEGRATION",
+  "final_git_status": " M scripts/router_policy_semantic_validator.py\n?? reports/E4-A7-PRE-ECONOMIC-EXECUTION-POLICY-BOUNDARY/changed_files.zip\n?? reports/E4-A7-PRE-ECONOMIC-EXECUTION-POLICY-BOUNDARY/\n?? tests/test_router_policy_economic_execution_policy_boundary.py"
+}

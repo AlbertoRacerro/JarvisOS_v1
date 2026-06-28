@@ -33,6 +33,34 @@ DEFAULT_CONSUMPTION_LEDGER_PATH = Path(".var/jarvisos/confirmation_consumption.j
 CONSUMPTION_LEDGER_SCHEMA_VERSION = "v1"
 MIN_CONSENT_ID_LENGTH = 12
 PLACEHOLDER_CONSENT_IDS = {"test", "demo", "consent", "123", "placeholder", "none", "null"}
+PROVIDER_CLASS_RANK = {
+    "local": 0,
+    "external:cheap": 1,
+    "external:scientific_medium": 2,
+    "external:frontier": 3,
+}
+PROVIDER_CLASS_ALIASES = {
+    "local:qwen": "local",
+    "local:gemma": "local",
+    "external:cheap": "external:cheap",
+    "external:scientific_medium": "external:scientific_medium",
+    "external:frontier": "external:frontier",
+}
+BUDGET_CLASS_RANK = {
+    "local": 0,
+    "cheap": 1,
+    "medium": 2,
+    "frontier": 3,
+}
+BUDGET_CLASS_ALIASES = {
+    "local": "local",
+    "cheap": "cheap",
+    "low": "cheap",
+    "medium": "medium",
+    "high": "frontier",
+    "expensive": "frontier",
+    "frontier": "frontier",
+}
 SECRET_ECHO_PATTERN = re.compile(
     r"(sk-[A-Za-z0-9_-]{8,}|api[_ -]?key\s*[:=]|password\s*[:=]|"
     r"token\s*[:=]|private key|BEGIN [A-Z ]*PRIVATE KEY)",
@@ -948,6 +976,311 @@ def evaluate_confirmed_execution_consumption_boundary(
         "automatic_execution_eligible": envelope_complete,
         "violations": [],
         "consumption_scope": "local_alpha_allow_once",
+    }
+
+
+def _normalized_provider_class(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    return PROVIDER_CLASS_ALIASES.get(value.strip())
+
+
+def _normalized_budget_class(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    return BUDGET_CLASS_ALIASES.get(value.strip().lower())
+
+
+def evaluate_economic_execution_policy_boundary(
+    consumed_ticket: dict[str, Any],
+    requested_execution_plan: dict[str, Any],
+) -> dict[str, Any]:
+    violations: list[dict] = []
+
+    if not isinstance(consumed_ticket, dict):
+        _add(
+            violations,
+            "INVALID_CONSUMED_TICKET",
+            "Economic execution precheck requires a consumed ticket dict.",
+            "consumed_ticket",
+        )
+        return {
+            "execution_policy_allowed": False,
+            "violations": violations,
+            "policy_scope": "economic_execution_precheck_only",
+            "provider_class_ordering": "abstract_only",
+            "budget_class_ordering": "abstract_only",
+        }
+    if not isinstance(requested_execution_plan, dict):
+        _add(
+            violations,
+            "INVALID_REQUESTED_MAX_TOKENS",
+            "Economic execution precheck requires a requested execution plan dict.",
+            "requested_execution_plan",
+        )
+        return {
+            "execution_policy_allowed": False,
+            "violations": violations,
+            "policy_scope": "economic_execution_precheck_only",
+            "provider_class_ordering": "abstract_only",
+            "budget_class_ordering": "abstract_only",
+        }
+
+    if consumed_ticket.get("schema_version") != CONSUMPTION_LEDGER_SCHEMA_VERSION:
+        _add(
+            violations,
+            "INVALID_CONSUMED_TICKET",
+            "Consumed ticket must use schema_version v1.",
+            "consumed_ticket.schema_version",
+        )
+    if consumed_ticket.get("economic_envelope_complete") is not True:
+        _add(
+            violations,
+            "INVALID_CONSUMED_TICKET",
+            "Consumed ticket must carry a complete economic envelope.",
+            "consumed_ticket.economic_envelope_complete",
+        )
+    if consumed_ticket.get("automatic_execution_eligible") is not True:
+        _add(
+            violations,
+            "CONSUMED_TICKET_NOT_AUTOMATICALLY_EXECUTABLE",
+            "Consumed ticket is not marked automatically executable.",
+            "consumed_ticket.automatic_execution_eligible",
+        )
+
+    envelope = consumed_ticket.get("economic_envelope")
+    if not isinstance(envelope, dict):
+        _add(
+            violations,
+            "INVALID_CONSUMED_TICKET",
+            "Consumed ticket must include an economic_envelope object.",
+            "consumed_ticket.economic_envelope",
+        )
+        envelope = {}
+
+    consumed_provider = _normalized_provider_class(envelope.get("provider_candidate"))
+    if consumed_provider is None:
+        _add(
+            violations,
+            "UNKNOWN_PROVIDER_CLASS",
+            "Consumed ticket provider_candidate is missing or unknown.",
+            "consumed_ticket.economic_envelope.provider_candidate",
+        )
+    consumed_budget = _normalized_budget_class(envelope.get("budget_class"))
+    if consumed_budget is None:
+        _add(
+            violations,
+            "UNKNOWN_BUDGET_CLASS",
+            "Consumed ticket budget_class is missing or unknown.",
+            "consumed_ticket.economic_envelope.budget_class",
+        )
+
+    consumed_tokens = envelope.get("max_tokens_allowed")
+    if isinstance(consumed_tokens, bool) or not isinstance(consumed_tokens, int) or consumed_tokens <= 0:
+        _add(
+            violations,
+            "INVALID_CONSUMED_TICKET",
+            "Consumed ticket max_tokens_allowed must be a positive int.",
+            "consumed_ticket.economic_envelope.max_tokens_allowed",
+        )
+
+    consumed_dry_run_required = envelope.get("dry_run_required")
+    if not isinstance(consumed_dry_run_required, bool):
+        _add(
+            violations,
+            "INVALID_CONSUMED_TICKET",
+            "Consumed ticket dry_run_required must be a bool.",
+            "consumed_ticket.economic_envelope.dry_run_required",
+        )
+
+    consumed_mode = envelope.get("allowed_execution_mode")
+    if not isinstance(consumed_mode, str) or not consumed_mode.strip():
+        _add(
+            violations,
+            "INVALID_CONSUMED_TICKET",
+            "Consumed ticket allowed_execution_mode must be present.",
+            "consumed_ticket.economic_envelope.allowed_execution_mode",
+        )
+
+    requested_provider = _normalized_provider_class(requested_execution_plan.get("provider_candidate"))
+    if requested_provider is None:
+        _add(
+            violations,
+            "UNKNOWN_PROVIDER_CLASS",
+            "Requested plan provider_candidate is missing or unknown.",
+            "requested_execution_plan.provider_candidate",
+        )
+    requested_budget = _normalized_budget_class(requested_execution_plan.get("budget_class"))
+    if requested_budget is None:
+        _add(
+            violations,
+            "UNKNOWN_BUDGET_CLASS",
+            "Requested plan budget_class is missing or unknown.",
+            "requested_execution_plan.budget_class",
+        )
+
+    requested_tokens = requested_execution_plan.get("max_tokens_requested")
+    if isinstance(requested_tokens, bool) or not isinstance(requested_tokens, int) or requested_tokens <= 0:
+        _add(
+            violations,
+            "INVALID_REQUESTED_MAX_TOKENS",
+            "Requested max_tokens_requested must be a positive int.",
+            "requested_execution_plan.max_tokens_requested",
+        )
+
+    requested_mode = requested_execution_plan.get("execution_mode")
+    if not isinstance(requested_mode, str) or not requested_mode.strip():
+        _add(
+            violations,
+            "EXECUTION_MODE_NOT_ALLOWED",
+            "Requested execution_mode must be present.",
+            "requested_execution_plan.execution_mode",
+        )
+        requested_mode = None
+
+    requested_dry_run = requested_execution_plan.get("dry_run")
+    if not isinstance(requested_dry_run, bool):
+        _add(
+            violations,
+            "EXECUTION_MODE_NOT_ALLOWED",
+            "Requested dry_run flag must be a bool.",
+            "requested_execution_plan.dry_run",
+        )
+
+    if requested_mode == "dry_run" and requested_dry_run is not True:
+        _add(
+            violations,
+            "EXECUTION_MODE_DRY_RUN_FLAG_MISMATCH",
+            "execution_mode dry_run requires dry_run == true.",
+            "requested_execution_plan.dry_run",
+        )
+
+    if consumed_provider is not None and requested_provider is not None:
+        if PROVIDER_CLASS_RANK[requested_provider] > PROVIDER_CLASS_RANK[consumed_provider]:
+            _add(
+                violations,
+                "REQUESTED_PROVIDER_EXCEEDS_CONSUMED_ENVELOPE",
+                "Requested provider class exceeds the consumed envelope.",
+                "requested_execution_plan.provider_candidate",
+            )
+    if consumed_budget is not None and requested_budget is not None:
+        if BUDGET_CLASS_RANK[requested_budget] > BUDGET_CLASS_RANK[consumed_budget]:
+            _add(
+                violations,
+                "REQUESTED_BUDGET_EXCEEDS_CONSUMED_ENVELOPE",
+                "Requested budget class exceeds the consumed envelope.",
+                "requested_execution_plan.budget_class",
+            )
+    if isinstance(consumed_tokens, int) and not isinstance(consumed_tokens, bool) and consumed_tokens > 0:
+        if isinstance(requested_tokens, int) and not isinstance(requested_tokens, bool) and requested_tokens > consumed_tokens:
+            _add(
+                violations,
+                "REQUESTED_MAX_TOKENS_EXCEEDS_CONSUMED_ENVELOPE",
+                "Requested max tokens exceed the consumed envelope.",
+                "requested_execution_plan.max_tokens_requested",
+            )
+
+    is_dry_run_request = requested_mode == "dry_run" and requested_dry_run is True
+    is_diagnostic_dry_run_request = requested_mode == "execute_after_confirm" and requested_dry_run is True
+    is_real_automatic_request = requested_dry_run is False and requested_mode == "execute_after_confirm"
+
+    if consumed_dry_run_required is True and requested_dry_run is False:
+        _add(
+            violations,
+            "DRY_RUN_REQUIRED_BLOCKS_REAL_EXECUTION",
+            "Consumed envelope requires dry-run and blocks real execution.",
+            "requested_execution_plan.dry_run",
+        )
+
+    if is_real_automatic_request:
+        if consumed_mode != "execute_after_confirm":
+            _add(
+                violations,
+                "EXECUTION_MODE_NOT_ALLOWED",
+                "Consumed allowed_execution_mode does not allow real execution after confirmation.",
+                "consumed_ticket.economic_envelope.allowed_execution_mode",
+            )
+    elif is_dry_run_request or is_diagnostic_dry_run_request:
+        if consumed_mode not in {"execute_after_confirm", "dry_run"}:
+            _add(
+                violations,
+                "EXECUTION_MODE_NOT_ALLOWED",
+                "Consumed allowed_execution_mode does not allow requested dry-run execution.",
+                "consumed_ticket.economic_envelope.allowed_execution_mode",
+            )
+    else:
+        _add(
+            violations,
+            "EXECUTION_MODE_NOT_ALLOWED",
+            "Requested execution_mode must be a supported post-confirm mode.",
+            "requested_execution_plan.execution_mode",
+        )
+
+    if is_real_automatic_request:
+        history_mode = requested_execution_plan.get("history_mode")
+        history_allowed = requested_execution_plan.get("history_allowed")
+        if history_mode is None and history_allowed is None:
+            _add(
+                violations,
+                "POLICY_GAP_HISTORY_MODE",
+                "Real automatic execution requires explicit history mode policy.",
+                "requested_execution_plan.history_mode",
+            )
+        elif not (history_mode == "off" or history_allowed is False):
+            _add(
+                violations,
+                "POLICY_GAP_HISTORY_MODE",
+                "Real automatic execution requires history to be off by policy.",
+                "requested_execution_plan.history_mode",
+            )
+
+        retries = requested_execution_plan.get("max_retries_allowed")
+        if isinstance(retries, bool) or not isinstance(retries, int) or retries < 0:
+            _add(
+                violations,
+                "POLICY_GAP_MAX_RETRIES",
+                "Real automatic execution requires an explicit non-negative retry cap.",
+                "requested_execution_plan.max_retries_allowed",
+            )
+
+        tool_calls = requested_execution_plan.get("max_tool_calls_allowed")
+        if isinstance(tool_calls, bool) or not isinstance(tool_calls, int) or tool_calls < 0:
+            _add(
+                violations,
+                "POLICY_GAP_MAX_TOOL_CALLS",
+                "Real automatic execution requires an explicit non-negative tool-call cap.",
+                "requested_execution_plan.max_tool_calls_allowed",
+            )
+
+        fallback_allowed = requested_execution_plan.get("fallback_provider_allowed")
+        if fallback_allowed is not False:
+            _add(
+                violations,
+                "POLICY_GAP_FALLBACK_PROVIDER",
+                "Real automatic execution requires fallback provider to be explicitly disabled.",
+                "requested_execution_plan.fallback_provider_allowed",
+            )
+    elif envelope.get("route_tier") and (
+        consumed_provider is None
+        or consumed_budget is None
+        or isinstance(consumed_tokens, bool)
+        or not isinstance(consumed_tokens, int)
+        or consumed_tokens <= 0
+    ):
+        _add(
+            violations,
+            "ROUTE_TIER_NOT_AUTHORITY",
+            "route_tier is audit-only and cannot rescue missing provider, budget, or token authority.",
+            "consumed_ticket.economic_envelope.route_tier",
+            severity="warning",
+        )
+
+    return {
+        "execution_policy_allowed": not any(v["severity"] == "error" for v in violations),
+        "violations": violations,
+        "policy_scope": "economic_execution_precheck_only",
+        "provider_class_ordering": "abstract_only",
+        "budget_class_ordering": "abstract_only",
     }
 
 
