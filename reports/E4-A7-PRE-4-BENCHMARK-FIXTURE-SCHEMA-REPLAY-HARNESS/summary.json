@@ -1,0 +1,84 @@
+{
+  "milestone": "E4-A7-PRE-4-BENCHMARK-FIXTURE-SCHEMA-REPLAY-HARNESS-R2",
+  "verdict": "GREEN",
+  "coverage_level": "helper-only",
+  "offline_only": true,
+  "changed_files": {
+    "production": [
+      "scripts/router_policy_benchmark_replay.py"
+    ],
+    "tests": [
+      "tests/test_router_policy_benchmark_replay_harness.py"
+    ],
+    "fixtures": [
+      "tests/fixtures/routing_benchmarks/demo_replay_set.json"
+    ],
+    "docs": [
+      "docs/routing/BENCHMARK_FIXTURE_SCHEMA.md",
+      "docs/routing/BENCHMARK_REPLAY_HARNESS.md"
+    ],
+    "reports": [
+      "reports/E4-A7-PRE-4-BENCHMARK-FIXTURE-SCHEMA-REPLAY-HARNESS/summary.md",
+      "reports/E4-A7-PRE-4-BENCHMARK-FIXTURE-SCHEMA-REPLAY-HARNESS/summary.json"
+    ]
+  },
+  "prohibitions": {
+    "provider_execution_added": false,
+    "network_execution_added": false,
+    "sdk_api_imports_added": false,
+    "env_reads_added": false,
+    "provider_registry_added": false,
+    "execution_gateway_added": false,
+    "runtime_wiring_added": false,
+    "schema_changes_added": false
+  },
+  "r1_contracts": [
+    "candidate_count is explicit",
+    "fixture_set_digest excludes candidate/result/cost fields",
+    "replay_set_digest tracks full replay records excluding digest fields",
+    "single-candidate replay cannot produce selection-grade winner",
+    "exact ties fail closed with benchmark_winner null",
+    "mixed suite identity invalidates replay",
+    "concrete costs require audit reference and checked-at evidence"
+  ],
+  "r2_contracts": [
+    "same fixture_id across candidates requires identical comparable fixture projection",
+    "input_token_count is replay metadata and not fixture identity",
+    "fixture_definition_conflict blocks selection-grade benchmark_winner",
+    "winner_blocking_reasons reports all winner-blocking reasons",
+    "benchmark_winner_basis follows deterministic severity priority",
+    "R2 does not implement fallback recommendation policy",
+    "R2 adds no provider execution, network, SDK/API imports, env/secrets, provider registry, execution gateway, runtime schema changes, or backend wiring"
+  ],
+  "checks_run": [
+    "python -m pytest tests/test_router_policy_benchmark_replay_harness.py -q -> 67 passed in 0.19s",
+    "python -m pytest tests/test_router_policy_runtime_authority_chain_dry_run.py -q -> 12 passed in 0.06s",
+    "python -m pytest tests/test_router_policy_economic_execution_policy_boundary.py -q -> 25 passed in 0.09s",
+    "python -m pytest tests/test_router_policy_confirmed_execution_consumption_boundary.py -q -> 23 passed in 0.26s",
+    "python -m pytest tests/test_router_policy_confirmed_execution_activation_boundary.py -q -> 17 passed in 0.08s",
+    "python -m pytest tests/test_router_policy_confirmation_revalidation_boundary.py -q -> 15 passed in 0.08s",
+    "python -m pytest tests/test_router_policy_semantic_validator.py -q -> 40 passed in 0.13s",
+    "python -m pytest tests/test_router_policy_canonical_digest.py -q -> 14 passed in 0.07s",
+    "python -m pytest tests/test_router_policy_confirmation_digest_binding.py -q -> 5 passed in 0.14s",
+    "python -m pytest tests/test_router_policy_external_proposal_invariant.py tests/test_router_policy_external_egress_scope.py tests/test_router_policy_message_route_smoke.py tests/test_router_policy_semantic_validator.py tests/test_router_policy_external_egress_gate.py tests/test_router_policy_external_budget_gate.py -q -> 324 passed in 1.00s",
+    "python -m json.tool reports/E4-A7-PRE-4-BENCHMARK-FIXTURE-SCHEMA-REPLAY-HARNESS/summary.json -> pass",
+    "git diff --check -> clean",
+    "git diff --name-only -> empty because files are untracked",
+    "git diff --cached --name-only -> empty",
+    "git status --short --untracked-files=all -> expected seven A7-PRE-4 files only"
+  ],
+  "grep_matches_classified": [
+    {
+      "command": "provider/network/API grep",
+      "classification": "historical docs/tests/probes plus A7-PRE-4 negative source assertions only; no new runtime provider or network wiring"
+    },
+    {
+      "command": "env/secrets grep",
+      "classification": "historical docs/tests/probes plus A7-PRE-4 report denial text only; no new env or secret handling"
+    },
+    {
+      "command": "permission/runtime/routing_recommendation grep",
+      "classification": "A7-PRE-4 docs/report boundary text plus existing historical docs/tests; no routing_recommendation implementation"
+    }
+  ]
+}
