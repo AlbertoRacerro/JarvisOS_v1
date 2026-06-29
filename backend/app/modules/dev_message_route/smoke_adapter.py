@@ -16,21 +16,89 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 SCRIPTS_DIR = REPO_ROOT / "scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
 
-from router_policy_local_responder import (  # noqa: E402
-    LocalResponderError,
-    build_local_responder,
-    call_local_ollama_generate_with_metadata,
-)
-from router_policy_local_route_probe import is_safe_local_execution  # noqa: E402
-from router_policy_message_route_smoke import (  # noqa: E402
-    MAX_MESSAGE_CHARS,
-    _safe_cli_result,
-    build_router_policy_input_from_message_for_smoke,
-    run_message_route_smoke,
-)
+MAX_MESSAGE_CHARS = 12000  # must match scripts/router_policy_message_route_smoke.py
+_MAX_CLI_RESPONSE_CHARS = 1000  # must match scripts/router_policy_message_route_smoke.py
+
+_SCRIPT_ATTRS: frozenset[str] = frozenset({
+    "run_message_route_smoke",
+    "build_router_policy_input_from_message_for_smoke",
+    "build_local_responder",
+    "call_local_ollama_generate_with_metadata",
+    "LocalResponderError",
+    "is_safe_local_execution",
+})
+
+
+def _ensure_scripts_loaded() -> None:
+    g = globals()
+
+    def _needs(name: str) -> bool:
+        return name not in g or g[name] is None
+
+    need_rms = _needs("run_message_route_smoke")
+    need_brpi = _needs("build_router_policy_input_from_message_for_smoke")
+    need_blr = _needs("build_local_responder")
+    need_clom = _needs("call_local_ollama_generate_with_metadata")
+    need_le = _needs("LocalResponderError")
+    need_isle = _needs("is_safe_local_execution")
+
+    if not (need_rms or need_brpi or need_blr or need_clom or need_le or need_isle):
+        return
+
+    if str(SCRIPTS_DIR) not in sys.path:
+        sys.path.insert(0, str(SCRIPTS_DIR))
+
+    if need_rms or need_brpi:
+        import router_policy_message_route_smoke as _rms  # noqa: PLC0415
+        if need_rms:
+            g["run_message_route_smoke"] = _rms.run_message_route_smoke
+        if need_brpi:
+            g["build_router_policy_input_from_message_for_smoke"] = _rms.build_router_policy_input_from_message_for_smoke
+
+    if need_blr or need_clom or need_le:
+        import router_policy_local_responder as _lr  # noqa: PLC0415
+        if need_blr:
+            g["build_local_responder"] = _lr.build_local_responder
+        if need_clom:
+            g["call_local_ollama_generate_with_metadata"] = _lr.call_local_ollama_generate_with_metadata
+        if need_le:
+            g["LocalResponderError"] = _lr.LocalResponderError
+
+    if need_isle:
+        import router_policy_local_route_probe as _probe  # noqa: PLC0415
+        g["is_safe_local_execution"] = _probe.is_safe_local_execution
+
+
+def __getattr__(name: str) -> Any:
+    if name in _SCRIPT_ATTRS:
+        _ensure_scripts_loaded()
+        g = globals()
+        if name in g:
+            return g[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def _safe_cli_result(result: dict[str, Any]) -> dict[str, Any]:
+    safe = {
+        "executed": result.get("executed") is True,
+        "reason": result.get("reason"),
+        "input_source": result.get("input_source", "none"),
+        "assume_public_simple_used": result.get("assume_public_simple_used") is True,
+        "use_phase_b_hints_used": result.get("use_phase_b_hints_used") is True,
+        "phase_b_source_kind": result.get("phase_b_source_kind", "stub"),
+        "phase_b_source_used": result.get("phase_b_source_used") is True,
+    }
+    decision = result.get("decision")
+    if isinstance(decision, dict):
+        safe["decision_summary"] = {
+            "route_action": decision.get("route_action"),
+            "route_tier": decision.get("route_tier"),
+            "allowed_execution_mode": decision.get("allowed_execution_mode"),
+        }
+    if result.get("executed") is True and isinstance(result.get("response"), str):
+        safe["response"] = result["response"][:_MAX_CLI_RESPONSE_CHARS]
+    return safe
 
 
 DEV_GATE_ENV = "JARVISOS_ENABLE_DEV_MESSAGE_ROUTE_SMOKE"
@@ -177,6 +245,7 @@ def run_dev_message_route_smoke(
     run_local_responder: bool,
     trace_id: str,
 ) -> tuple[int, dict[str, Any]]:
+    _ensure_scripts_loaded()
     assume_public_simple = _truthy_env(ASSUME_PUBLIC_ENV)
 
     if not dev_message_route_enabled():
@@ -211,6 +280,7 @@ def run_dev_message_route_smoke(
 
 
 def build_dev_local_responder():
+    _ensure_scripts_loaded()
     model = os.getenv(MODEL_ENV, DEFAULT_MODEL)
     endpoint = os.getenv(ENDPOINT_ENV, DEFAULT_ENDPOINT)
     timeout_s = _timeout_from_env()
@@ -237,6 +307,7 @@ def build_dev_local_responder():
 
 
 def scan_history_turn_for_context(content: str) -> str | None:
+    _ensure_scripts_loaded()
     try:
         input_obj = build_router_policy_input_from_message_for_smoke(
             content,
@@ -340,6 +411,7 @@ def select_prompt_history_within_budget(clean_history: list[dict[str, str]], mes
 
 
 def authorize_current_message_for_local_chat(message: str) -> tuple[bool, dict[str, Any]]:
+    _ensure_scripts_loaded()
     current_gate = run_message_route_smoke(
         message,
         responder=None,
@@ -397,6 +469,7 @@ def run_dev_local_chat(
     run_local_responder: bool,
     trace_id: str,
 ) -> tuple[int, dict[str, Any]]:
+    _ensure_scripts_loaded()
     overall_start = time.perf_counter()
 
     def finalize(status_code: int, body: dict[str, Any], timing: dict[str, Any]) -> tuple[int, dict[str, Any]]:
