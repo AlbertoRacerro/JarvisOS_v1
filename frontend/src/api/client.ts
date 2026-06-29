@@ -329,6 +329,42 @@ export function createModelingDraft(payload: Record<string, unknown>): Promise<M
   return postJson<ModelingDraftResponse>("/ai/modeling/draft", payload);
 }
 
+export type AITaskRunRequest = {
+  prompt: string;
+  route_class?: string;
+  task_kind?: string;
+  max_tokens?: number;
+  context_blocks?: unknown[];
+};
+
+export type AIUsage = {
+  provider_id: string;
+  model_id: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens?: number | null;
+  usage_source: string;
+  provider_cost_estimate?: number | null;
+  currency?: string | null;
+};
+
+export type AITaskRunResponse = {
+  status: string;
+  ledger_id: string;
+  selected_route_class?: string | null;
+  decision_reason: string;
+  blocked_reason?: string | null;
+  response_text?: string | null;
+  provider_id?: string | null;
+  model_id?: string | null;
+  usage?: AIUsage | null;
+  error_type?: string | null;
+};
+
+export function runAITask(payload: AITaskRunRequest): Promise<AITaskRunResponse> {
+  return postJson<AITaskRunResponse>("/ai/tasks/run", payload as Record<string, unknown>);
+}
+
 export type SmokeTestTokenMetadata = {
   blocked_by_token_cap: boolean;
   estimated_input_tokens: number;

@@ -6,12 +6,14 @@ import {
   getAISettings,
   getAIStatus,
   getScalewaySecretStatus,
+  runAITask,
   runAISmokeConsole,
   runAISmokeTests,
   setScalewayApiKey,
   updateAISettings,
   type AISettings,
   type AIStatus,
+  type AITaskRunResponse,
   type ModelingDraftResponse,
   type ScalewaySecretStatus,
   type SmokeConsoleResponse,
@@ -28,6 +30,11 @@ function AIDraft() {
   const [smokeConsolePrompt, setSmokeConsolePrompt] = useState("ciao");
   const [smokeConsoleResult, setSmokeConsoleResult] = useState<SmokeConsoleResponse | null>(null);
   const [smokeConsoleRunning, setSmokeConsoleRunning] = useState(false);
+  const [taskPrompt, setTaskPrompt] = useState("");
+  const [taskRouteClass, setTaskRouteClass] = useState("local:fake");
+  const [taskMaxTokens, setTaskMaxTokens] = useState("64");
+  const [taskResult, setTaskResult] = useState<AITaskRunResponse | null>(null);
+  const [taskRunning, setTaskRunning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const refresh = () =>
@@ -121,6 +128,34 @@ function AIDraft() {
   const onSmokeConsoleClear = () => {
     setSmokeConsolePrompt("");
     setSmokeConsoleResult(null);
+  };
+
+  const onTaskSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const prompt = taskPrompt.trim();
+    const parsedMaxTokens = Number(taskMaxTokens);
+    const usesExternalRoute = taskRouteClass === "external:cheap";
+
+    if (!prompt || taskRunning) return;
+    if (usesExternalRoute && (!Number.isFinite(parsedMaxTokens) || parsedMaxTokens < 1)) {
+      setTaskResult(null);
+      setMessage("max_tokens must be at least 1 for external:cheap.");
+      return;
+    }
+
+    setMessage(null);
+    setTaskRunning(true);
+    setTaskResult(null);
+    runAITask({
+      prompt,
+      route_class: taskRouteClass,
+      task_kind: "general",
+      max_tokens: Number.isFinite(parsedMaxTokens) && parsedMaxTokens >= 1 ? parsedMaxTokens : undefined
+    })
+      .then(setTaskResult)
+      .then(() => refresh())
+      .catch((error: Error) => setMessage(error.message))
+      .finally(() => setTaskRunning(false));
   };
 
   const onDraftSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -500,6 +535,72 @@ function AIDraft() {
                   actual_input_tokens: smokeConsoleResult.actual_input_tokens,
                   actual_output_tokens: smokeConsoleResult.actual_output_tokens,
                   usage_source: smokeConsoleResult.usage_source
+                },
+                null,
+                2
+              )}
+            </pre>
+          </div>
+        )}
+      </section>
+
+      <section className="panel">
+        <h3>AI Task</h3>
+        <form className="smoke-console-form" onSubmit={onTaskSubmit}>
+          <label>
+            Prompt
+            <textarea
+              rows={3}
+              value={taskPrompt}
+              placeholder="Ask a short public/internal task"
+              onChange={(event) => setTaskPrompt(event.target.value)}
+            />
+          </label>
+          <label>
+            Route
+            <select value={taskRouteClass} onChange={(event) => setTaskRouteClass(event.target.value)}>
+              <option value="local:fake">local:fake</option>
+              <option value="external:cheap">external:cheap</option>
+            </select>
+          </label>
+          <label>
+            Max tokens
+            <input
+              type="number"
+              min="1"
+              value={taskMaxTokens}
+              required={taskRouteClass === "external:cheap"}
+              onChange={(event) => setTaskMaxTokens(event.target.value)}
+            />
+          </label>
+          <div className="button-row">
+            <button type="submit" disabled={taskRunning || taskPrompt.trim().length === 0}>
+              {taskRunning ? "Running" : "Run Task"}
+            </button>
+          </div>
+        </form>
+
+        {taskResult && (
+          <div className="smoke-console-result">
+            {taskResult.status === "success" && taskResult.response_text ? (
+              <div className="response-box">{taskResult.response_text}</div>
+            ) : (
+              <div className="error-banner">
+                {taskResult.blocked_reason ?? taskResult.error_type ?? taskResult.status}
+              </div>
+            )}
+            <pre className="metadata-block">
+              {JSON.stringify(
+                {
+                  ledger_id: taskResult.ledger_id,
+                  status: taskResult.status,
+                  selected_route_class: taskResult.selected_route_class,
+                  provider_id: taskResult.provider_id,
+                  model_id: taskResult.model_id,
+                  error_type: taskResult.error_type,
+                  blocked_reason: taskResult.blocked_reason,
+                  decision_reason: taskResult.decision_reason,
+                  usage: taskResult.usage
                 },
                 null,
                 2
