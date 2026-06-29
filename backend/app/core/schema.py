@@ -292,6 +292,12 @@ SCHEMA_MIGRATION_STATEMENTS = [
     "ALTER TABLE ai_settings ADD COLUMN scaleway_free_tier_reference_tokens INTEGER NOT NULL DEFAULT 1000000",
     "ALTER TABLE ai_settings ADD COLUMN scaleway_input_tokens_month_to_date INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE ai_settings ADD COLUMN scaleway_output_tokens_month_to_date INTEGER NOT NULL DEFAULT 0",
+    # Repair (Stage 3-fix): these two columns shipped in CREATE TABLE ai_settings
+    # but were omitted from the catch-up migrations above, so a legacy DB created
+    # before they existed could never gain them on upgrade. Definitions mirror the
+    # current CREATE exactly. Idempotent on fresh DBs via duplicate-column swallow.
+    "ALTER TABLE ai_settings ADD COLUMN scaleway_token_cap INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE ai_settings ADD COLUMN scaleway_tokens_month_to_date INTEGER NOT NULL DEFAULT 0",
 ]
 
 SCHEMA_INDEX_STATEMENTS = [

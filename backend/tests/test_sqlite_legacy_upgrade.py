@@ -140,14 +140,16 @@ def test_legacy_ai_settings_without_policy_mode_is_upgraded(monkeypatch, tmp_pat
 
 
 # ---------------------------------------------------------------------------
-# Stage 3-full — fresh-vs-legacy drift for the two columns that live in the
-# current CREATE TABLE ai_settings but in NO migration statement.
+# Stage 3-full exposed a fresh-vs-legacy drift: scaleway_token_cap and
+# scaleway_tokens_month_to_date shipped in CREATE TABLE ai_settings but in no
+# migration, so a legacy DB could never gain them and ensure_ai_settings() failed
+# on it. Stage 3-fix added the repair migrations; the tests below now protect the
+# REPAIRED behavior (legacy upgrade gains the columns, bootstrap succeeds).
 # ---------------------------------------------------------------------------
 
-# Legacy ai_settings that predates BOTH the policy_mode migration AND the two
-# "dead" columns scaleway_token_cap / scaleway_tokens_month_to_date. Because
-# those two columns are in the current CREATE but in no ALTER migration, a DB
-# created before they were added to CREATE can never receive them via upgrade.
+# Legacy ai_settings predating policy_mode AND the two scaleway token columns.
+# Built with explicit SQL (never from SCHEMA_STATEMENTS) so the migration path is
+# genuinely exercised.
 LEGACY_AI_SETTINGS_PRE_SCALEWAY_SQL = """
 CREATE TABLE ai_settings (
     id TEXT PRIMARY KEY,
@@ -164,7 +166,27 @@ CREATE TABLE ai_settings (
 )
 """
 
-DRIFT_COLUMNS = ("scaleway_token_cap", "scaleway_tokens_month_to_date")
+# Partially-upgraded legacy: already has scaleway_token_cap, still lacks
+# scaleway_tokens_month_to_date. Exercises duplicate-column swallow (present one)
+# plus repair migration (missing one) in the same upgrade.
+LEGACY_AI_SETTINGS_PARTIAL_SQL = """
+CREATE TABLE ai_settings (
+    id TEXT PRIMARY KEY,
+    monthly_api_budget_usd REAL NOT NULL DEFAULT 0,
+    api_spend_month_to_date_usd REAL NOT NULL DEFAULT 0,
+    paid_ai_enabled INTEGER NOT NULL DEFAULT 0,
+    default_ai_provider TEXT NOT NULL DEFAULT 'fake',
+    default_ai_model TEXT NOT NULL DEFAULT 'fake-modeling-draft-v1',
+    provider_mode TEXT NOT NULL DEFAULT 'fake',
+    use_fake_provider_when_budget_zero INTEGER NOT NULL DEFAULT 1,
+    scaleway_enabled INTEGER NOT NULL DEFAULT 0,
+    scaleway_token_cap INTEGER NOT NULL DEFAULT 0,
+    smoke_test_mode_enabled INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+)
+"""
+
+SCALEWAY_TOKEN_COLUMNS = ("scaleway_token_cap", "scaleway_tokens_month_to_date")
 
 
 def _build_legacy_pre_scaleway_db(connection: sqlite3.Connection) -> None:
@@ -176,9 +198,8 @@ def _build_legacy_pre_scaleway_db(connection: sqlite3.Connection) -> None:
     connection.commit()
 
 
-def test_fresh_db_ai_settings_has_scaleway_drift_columns(monkeypatch, tmp_path) -> None:
-    """A fresh DB built by the current CREATE has both columns — they ARE part of
-    the intended current schema."""
+def test_fresh_db_ai_settings_has_scaleway_token_columns(monkeypatch, tmp_path) -> None:
+    """A fresh DB built by the current CREATE has both columns."""
     _isolate_data_root(monkeypatch, tmp_path)
     from app.core.database import initialize_database, open_sqlite_connection
 
@@ -186,16 +207,15 @@ def test_fresh_db_ai_settings_has_scaleway_drift_columns(monkeypatch, tmp_path) 
     with open_sqlite_connection() as connection:
         columns = _column_names(connection, "ai_settings")
 
-    for column in DRIFT_COLUMNS:
+    for column in SCALEWAY_TOKEN_COLUMNS:
         assert column in columns
 
 
-def test_legacy_upgrade_still_lacks_scaleway_drift_columns(monkeypatch, tmp_path) -> None:
-    """CURRENT BEHAVIOR (drift, not desired): a legacy ai_settings that predates
-    these columns is upgraded by initialize_database() — policy_mode and the
-    migration-listed scaleway columns appear — but scaleway_token_cap and
-    scaleway_tokens_month_to_date are in NO migration, so they stay missing.
-    A future migration-repair slice is expected to change this characterization."""
+def test_legacy_upgrade_adds_scaleway_token_columns(monkeypatch, tmp_path) -> None:
+    """REPAIRED behavior (Stage 3-fix): a legacy ai_settings that predates the two
+    scaleway token columns gains them after initialize_database(), with the
+    migration default (0); the pre-existing row survives and re-init is idempotent.
+    Stage 3-full had characterized these columns as permanently missing."""
     _isolate_data_root(monkeypatch, tmp_path)
     from app.core.database import initialize_database, open_sqlite_connection
 
@@ -203,41 +223,42 @@ def test_legacy_upgrade_still_lacks_scaleway_drift_columns(monkeypatch, tmp_path
         _build_legacy_pre_scaleway_db(connection)
         before = _column_names(connection, "ai_settings")
     assert "policy_mode" not in before
-    for column in DRIFT_COLUMNS:
+    for column in SCALEWAY_TOKEN_COLUMNS:
         assert column not in before
 
     initialize_database()
 
     with open_sqlite_connection() as connection:
         after = _column_names(connection, "ai_settings")
-        rows = connection.execute(
-            "SELECT id, monthly_api_budget_usd FROM ai_settings WHERE id = ?",
+        row = connection.execute(
+            """
+            SELECT monthly_api_budget_usd, scaleway_token_cap, scaleway_tokens_month_to_date
+            FROM ai_settings WHERE id = ?
+            """,
             ("legacy-singleton",),
-        ).fetchall()
+        ).fetchone()
 
-    # The migration path DID add policy_mode and the migration-listed scaleway columns...
     assert "policy_mode" in after
-    assert "scaleway_input_tokens_month_to_date" in after
-    # ...but the two columns that no migration adds stay missing.
-    for column in DRIFT_COLUMNS:
-        assert column not in after
-    # The pre-existing row survived.
-    assert len(rows) == 1
-    assert rows[0]["monthly_api_budget_usd"] == 7.0
+    for column in SCALEWAY_TOKEN_COLUMNS:
+        assert column in after
+    # Pre-existing row survived; the repaired columns carry the migration default.
+    assert row is not None
+    assert row["monthly_api_budget_usd"] == 7.0
+    assert row["scaleway_token_cap"] == 0
+    assert row["scaleway_tokens_month_to_date"] == 0
 
-    # Second init does not retroactively add them either.
+    # Second init remains idempotent.
     initialize_database()
     with open_sqlite_connection() as connection:
-        assert _column_names(connection, "ai_settings").isdisjoint(DRIFT_COLUMNS)
+        after_second = _column_names(connection, "ai_settings")
+    for column in SCALEWAY_TOKEN_COLUMNS:
+        assert column in after_second
 
 
-def test_legacy_upgrade_breaks_ensure_ai_settings_current_behavior(monkeypatch, tmp_path) -> None:
-    """CURRENT BEHAVIOR / latent breakage: the drift is NOT benign. ensure_ai_settings()
-    runs an INSERT naming scaleway_token_cap / scaleway_tokens_month_to_date. SQLite
-    resolves column names at compile time, so on a legacy DB upgraded only through
-    initialize_database() (which never adds those columns) that INSERT fails even
-    with OR IGNORE — bootstrap of a legacy DB cannot complete. This locks the real
-    severity ahead of a repair slice; it does NOT fix it."""
+def test_ensure_ai_settings_succeeds_on_repaired_legacy_db(monkeypatch, tmp_path) -> None:
+    """REPAIRED behavior (Stage 3-fix): ensure_ai_settings() no longer raises on a
+    legacy-upgraded DB, and the ai_settings row is queryable afterward. Stage 3-full
+    had characterized this as raising OperationalError."""
     _isolate_data_root(monkeypatch, tmp_path)
     from app.core.database import initialize_database, open_sqlite_connection
     from app.modules.ai.settings import ensure_ai_settings
@@ -246,7 +267,49 @@ def test_legacy_upgrade_breaks_ensure_ai_settings_current_behavior(monkeypatch, 
         _build_legacy_pre_scaleway_db(connection)
     initialize_database()
 
-    with pytest.raises(sqlite3.OperationalError) as excinfo:
-        ensure_ai_settings()
-    message = str(excinfo.value).lower()
-    assert "scaleway_token_cap" in message or "no column" in message
+    settings = ensure_ai_settings()  # must not raise
+
+    assert settings is not None
+    with open_sqlite_connection() as connection:
+        columns = _column_names(connection, "ai_settings")
+        default_row = connection.execute(
+            "SELECT id FROM ai_settings WHERE id = 'default'"
+        ).fetchone()
+    for column in SCALEWAY_TOKEN_COLUMNS:
+        assert column in columns
+    assert default_row is not None
+
+
+def test_partial_legacy_upgrade_adds_only_missing_scaleway_column(monkeypatch, tmp_path) -> None:
+    """A partially-upgraded legacy DB that already has scaleway_token_cap but lacks
+    scaleway_tokens_month_to_date: initialize_database() adds only the missing one
+    (duplicate-column swallow handles the present one), the existing column's value
+    survives, and the row remains queryable."""
+    _isolate_data_root(monkeypatch, tmp_path)
+    from app.core.database import initialize_database, open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        connection.execute(LEGACY_AI_SETTINGS_PARTIAL_SQL)
+        connection.execute(
+            "INSERT INTO ai_settings (id, scaleway_token_cap, updated_at) VALUES (?, ?, ?)",
+            ("legacy-partial", 99, "2026-01-01T00:00:00+00:00"),
+        )
+        connection.commit()
+        before = _column_names(connection, "ai_settings")
+    assert "scaleway_token_cap" in before
+    assert "scaleway_tokens_month_to_date" not in before
+
+    initialize_database()
+
+    with open_sqlite_connection() as connection:
+        after = _column_names(connection, "ai_settings")
+        row = connection.execute(
+            "SELECT scaleway_token_cap, scaleway_tokens_month_to_date FROM ai_settings WHERE id = ?",
+            ("legacy-partial",),
+        ).fetchone()
+
+    for column in SCALEWAY_TOKEN_COLUMNS:
+        assert column in after
+    assert row is not None
+    assert row["scaleway_token_cap"] == 99  # pre-existing value survived
+    assert row["scaleway_tokens_month_to_date"] == 0  # added with migration default
