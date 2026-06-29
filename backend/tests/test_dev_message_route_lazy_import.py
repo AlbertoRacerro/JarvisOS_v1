@@ -108,3 +108,42 @@ def test_enabled_path_reaches_adapter_lazily(monkeypatch, tmp_path) -> None:
     assert body["executed"] is False
     assert body["reason"] == "not_safe_local_route"
     responder_builder.assert_not_called()
+
+
+def test_safe_cli_result_truncates_executed_response_to_1000_chars() -> None:
+    """Stage 1 residual guard: the response cap (_MAX_CLI_RESPONSE_CHARS = 1000)
+    was inlined into smoke_adapter when the script import was removed. This test
+    locks the backend's own truncation contract by behavior — it does NOT compare
+    against the experimental script constant and does NOT import router_policy_*.
+
+    The sys.modules delta proves the truncation helper itself triggers no script
+    load (order-independent: it only inspects what *this call* adds)."""
+    from app.modules.dev_message_route import smoke_adapter
+
+    long_response = "x" * 1200
+    before = set(sys.modules)
+    result = smoke_adapter._safe_cli_result(
+        {"executed": True, "reason": "local_answer", "response": long_response}
+    )
+    newly_loaded_scripts = {
+        name for name in (set(sys.modules) - before) if name.startswith("router_policy")
+    }
+
+    assert len(result["response"]) == 1000
+    assert result["response"] == long_response[:1000]
+    assert not newly_loaded_scripts, (
+        f"_safe_cli_result must not load scripts; it loaded {newly_loaded_scripts}"
+    )
+
+
+def test_safe_cli_result_does_not_fabricate_response_for_nonexecuted() -> None:
+    """A disabled / non-executed result carries no response field, so it never
+    reaches truncation. Documents why disabled_response is NOT the truncation site
+    (executed=False -> the [:1000] branch is skipped)."""
+    from app.modules.dev_message_route import smoke_adapter
+
+    result = smoke_adapter._safe_cli_result(
+        {"executed": False, "reason": "dev_message_route_smoke_disabled"}
+    )
+
+    assert "response" not in result
