@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
+from app.core.repository import row_to_model, rows_to_models
 from app.modules.events.service import utc_now
 from app.modules.files.models import ArtifactCreate, ArtifactRecord
 from app.modules.files.registry import ArtifactRegistry
@@ -37,7 +38,7 @@ def create_artifact_record(workspace_id: str, payload: ArtifactCreate) -> Artifa
         )
         connection.commit()
         row = connection.execute("SELECT * FROM artifacts WHERE id = ?", (record_id,)).fetchone()
-    return ArtifactRecord(**dict(row))
+    return row_to_model(row, ArtifactRecord)
 
 
 def list_artifact_records(workspace_id: str) -> list[ArtifactRecord]:
@@ -46,4 +47,4 @@ def list_artifact_records(workspace_id: str) -> list[ArtifactRecord]:
             "SELECT * FROM artifacts WHERE workspace_id = ? ORDER BY created_at DESC",
             (workspace_id,),
         ).fetchall()
-    return [ArtifactRecord(**dict(row)) for row in rows]
+    return rows_to_models(rows, ArtifactRecord)

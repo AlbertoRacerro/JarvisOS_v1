@@ -94,6 +94,20 @@ def test_schema_indexes_exist(client: TestClient) -> None:
     assert expected.issubset({row["name"] for row in rows})
 
 
+def test_repository_row_projection_helpers(client: TestClient) -> None:
+    from app.core.database import open_sqlite_connection
+    from app.core.repository import optional_row_to_model, rows_to_models
+    from app.modules.workspaces.models import WorkspaceRead
+
+    with open_sqlite_connection() as connection:
+        rows = connection.execute("SELECT * FROM workspaces ORDER BY created_at ASC").fetchall()
+        missing = connection.execute("SELECT * FROM workspaces WHERE id = ?", ("missing",)).fetchone()
+
+    workspaces = rows_to_models(rows, WorkspaceRead)
+    assert any(workspace.id == "bluerev" for workspace in workspaces)
+    assert optional_row_to_model(missing, WorkspaceRead) is None
+
+
 def test_redaction_helper_masks_obvious_secret_values() -> None:
     from app.modules.events.service import redact_event_payload
 

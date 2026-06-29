@@ -1,7 +1,7 @@
-import sqlite3
 from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
+from app.core.repository import optional_row_to_model, row_to_model, rows_to_models
 from app.modules.events.service import log_event, utc_now
 from app.modules.workspaces.models import WorkspaceCreate, WorkspaceRead
 
@@ -11,10 +11,6 @@ DEFAULT_BLUEREV_WORKSPACE = WorkspaceCreate(
     description="Default workspace for early BlueRev engineering model work.",
     status="active",
 )
-
-
-def _row_to_workspace(row: sqlite3.Row) -> WorkspaceRead:
-    return WorkspaceRead(**dict(row))
 
 
 def create_workspace(payload: WorkspaceCreate, *, actor: str = "local-user") -> WorkspaceRead:
@@ -48,25 +44,25 @@ def create_workspace(payload: WorkspaceCreate, *, actor: str = "local-user") -> 
         )
         connection.commit()
         row = connection.execute("SELECT * FROM workspaces WHERE id = ?", (workspace_id,)).fetchone()
-    return _row_to_workspace(row)
+    return row_to_model(row, WorkspaceRead)
 
 
 def list_workspaces() -> list[WorkspaceRead]:
     with open_sqlite_connection() as connection:
         rows = connection.execute("SELECT * FROM workspaces ORDER BY created_at ASC").fetchall()
-    return [_row_to_workspace(row) for row in rows]
+    return rows_to_models(rows, WorkspaceRead)
 
 
 def get_workspace(workspace_id: str) -> WorkspaceRead | None:
     with open_sqlite_connection() as connection:
         row = connection.execute("SELECT * FROM workspaces WHERE id = ?", (workspace_id,)).fetchone()
-    return _row_to_workspace(row) if row else None
+    return optional_row_to_model(row, WorkspaceRead)
 
 
 def get_workspace_by_slug(slug: str) -> WorkspaceRead | None:
     with open_sqlite_connection() as connection:
         row = connection.execute("SELECT * FROM workspaces WHERE slug = ?", (slug,)).fetchone()
-    return _row_to_workspace(row) if row else None
+    return optional_row_to_model(row, WorkspaceRead)
 
 
 def seed_default_workspace() -> WorkspaceRead:

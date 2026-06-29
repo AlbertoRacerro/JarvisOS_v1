@@ -2,6 +2,7 @@ import sqlite3
 from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
+from app.core.repository import optional_row_to_model, row_to_model, rows_to_models
 from app.modules.events.service import log_event, utc_now
 from app.modules.modeling.models import (
     AssumptionCreate,
@@ -87,7 +88,7 @@ def create_model_spec(workspace_id: str, payload: ModelSpecCreate) -> ModelSpecR
         )
         connection.commit()
         row = connection.execute("SELECT * FROM model_specs WHERE id = ?", (record_id,)).fetchone()
-    return ModelSpecRead(**dict(row))
+    return row_to_model(row, ModelSpecRead)
 
 
 def list_model_specs(workspace_id: str) -> list[ModelSpecRead]:
@@ -97,13 +98,13 @@ def list_model_specs(workspace_id: str) -> list[ModelSpecRead]:
             "SELECT * FROM model_specs WHERE workspace_id = ? ORDER BY created_at DESC",
             (workspace_id,),
         ).fetchall()
-    return [ModelSpecRead(**dict(row)) for row in rows]
+    return rows_to_models(rows, ModelSpecRead)
 
 
 def get_model_spec(model_spec_id: str) -> ModelSpecRead | None:
     with open_sqlite_connection() as connection:
         row = connection.execute("SELECT * FROM model_specs WHERE id = ?", (model_spec_id,)).fetchone()
-    return ModelSpecRead(**dict(row)) if row else None
+    return optional_row_to_model(row, ModelSpecRead)
 
 
 def create_assumption(workspace_id: str, payload: AssumptionCreate) -> AssumptionRead:
@@ -141,7 +142,7 @@ def create_assumption(workspace_id: str, payload: AssumptionCreate) -> Assumptio
         )
         connection.commit()
         row = connection.execute("SELECT * FROM assumptions WHERE id = ?", (record_id,)).fetchone()
-    return AssumptionRead(**dict(row))
+    return row_to_model(row, AssumptionRead)
 
 
 def list_assumptions(workspace_id: str) -> list[AssumptionRead]:
@@ -151,7 +152,7 @@ def list_assumptions(workspace_id: str) -> list[AssumptionRead]:
             "SELECT * FROM assumptions WHERE workspace_id = ? ORDER BY created_at DESC",
             (workspace_id,),
         ).fetchall()
-    return [AssumptionRead(**dict(row)) for row in rows]
+    return rows_to_models(rows, AssumptionRead)
 
 
 def create_parameter(workspace_id: str, payload: ParameterCreate) -> ParameterRead:
@@ -191,7 +192,7 @@ def create_parameter(workspace_id: str, payload: ParameterCreate) -> ParameterRe
         )
         connection.commit()
         row = connection.execute("SELECT * FROM parameters WHERE id = ?", (record_id,)).fetchone()
-    return ParameterRead(**dict(row))
+    return row_to_model(row, ParameterRead)
 
 
 def list_parameters(workspace_id: str) -> list[ParameterRead]:
@@ -201,7 +202,7 @@ def list_parameters(workspace_id: str) -> list[ParameterRead]:
             "SELECT * FROM parameters WHERE workspace_id = ? ORDER BY created_at DESC",
             (workspace_id,),
         ).fetchall()
-    return [ParameterRead(**dict(row)) for row in rows]
+    return rows_to_models(rows, ParameterRead)
 
 
 def create_simulation_run(workspace_id: str, payload: SimulationRunCreate) -> SimulationRunRead:
@@ -242,7 +243,7 @@ def create_simulation_run(workspace_id: str, payload: SimulationRunCreate) -> Si
         )
         connection.commit()
         row = connection.execute("SELECT * FROM simulation_runs WHERE id = ?", (record_id,)).fetchone()
-    return SimulationRunRead(**dict(row))
+    return row_to_model(row, SimulationRunRead)
 
 
 def list_simulation_runs(workspace_id: str) -> list[SimulationRunRead]:
@@ -252,7 +253,7 @@ def list_simulation_runs(workspace_id: str) -> list[SimulationRunRead]:
             "SELECT * FROM simulation_runs WHERE workspace_id = ? ORDER BY created_at DESC",
             (workspace_id,),
         ).fetchall()
-    return [SimulationRunRead(**dict(row)) for row in rows]
+    return rows_to_models(rows, SimulationRunRead)
 
 
 def create_decision(workspace_id: str, payload: DecisionCreate) -> DecisionRead:
@@ -290,7 +291,7 @@ def create_decision(workspace_id: str, payload: DecisionCreate) -> DecisionRead:
         )
         connection.commit()
         row = connection.execute("SELECT * FROM decisions WHERE id = ?", (record_id,)).fetchone()
-    return DecisionRead(**dict(row))
+    return row_to_model(row, DecisionRead)
 
 
 def list_decisions(workspace_id: str) -> list[DecisionRead]:
@@ -300,4 +301,4 @@ def list_decisions(workspace_id: str) -> list[DecisionRead]:
             "SELECT * FROM decisions WHERE workspace_id = ? ORDER BY created_at DESC",
             (workspace_id,),
         ).fetchall()
-    return [DecisionRead(**dict(row)) for row in rows]
+    return rows_to_models(rows, DecisionRead)
