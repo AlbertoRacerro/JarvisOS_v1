@@ -22,6 +22,13 @@ from app.modules.ai.token_guard import estimate_tokens
 
 SCALEWAY_PROVIDER_ID = "scaleway"
 SCALEWAY_ADAPTER_INTERFACE = "provider_neutral"
+# Work task types the adapter routes to the additive work-completion path.
+# Smoke task types keep their existing dedicated paths untouched.
+SCALEWAY_WORK_TASK_TYPES = {
+    AITaskType.synthesis,
+    AITaskType.code_review,
+    AITaskType.decision_support,
+}
 SAFE_SCALEWAY_METADATA_KEYS = {
     "implementation",
     "base_url_configured",
@@ -51,6 +58,8 @@ class ScalewayProviderAdapter:
             live_call = self.provider.create_live_console_completion
         elif request.task_type == AITaskType.smoke_test:
             live_call = self.provider.create_live_smoke_completion
+        elif request.task_type in SCALEWAY_WORK_TASK_TYPES:
+            live_call = self.provider.create_work_completion
         else:
             return self._error_response(
                 request,

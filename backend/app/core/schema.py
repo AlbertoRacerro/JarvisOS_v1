@@ -257,6 +257,27 @@ SCHEMA_STATEMENTS = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS ai_jobs (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        status TEXT NOT NULL,
+        task_kind TEXT NOT NULL,
+        requested_route_class TEXT,
+        selected_route_class TEXT,
+        provider_id TEXT,
+        model_id TEXT,
+        route_reason_json TEXT NOT NULL,
+        prompt_digest TEXT,
+        context_digest TEXT,
+        output_digest TEXT,
+        input_tokens INTEGER,
+        output_tokens INTEGER,
+        cost_estimate REAL,
+        latency_ms INTEGER,
+        error_type TEXT
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS ai_settings (
         id TEXT PRIMARY KEY,
         policy_mode TEXT NOT NULL DEFAULT 'FAST_DEV',

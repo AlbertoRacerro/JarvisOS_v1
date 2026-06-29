@@ -75,6 +75,14 @@ class ScalewayProvider:
             mode="live_smoke_console",
         )
 
+    def create_work_completion(self, *, prompt: str, estimated_output_tokens: int) -> ScalewayChatResult:
+        return self._create_chat_completion(
+            prompt=prompt,
+            estimated_output_tokens=estimated_output_tokens,
+            system_prompt="You are a precise engineering assistant. Answer the user's request concisely and usefully.",
+            mode="work",
+        )
+
     def _create_chat_completion(
         self,
         *,
