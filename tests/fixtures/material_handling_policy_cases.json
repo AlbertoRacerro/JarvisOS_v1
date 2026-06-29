@@ -1,0 +1,164 @@
+{
+  "_meta": {
+    "purpose": "Stage 5-PRE contract fixtures for material objects. NOT wired to runtime tests yet.",
+    "semantics": "Each case is a material object with its target sensitivity class and the per-action policy expected after Stage 5 consolidation. Documents the future boundary so ingestion/retrieval/tool/MCP layers cannot bypass it.",
+    "policy_values": ["allow", "deny", "redacted_only", "confirm_first", "inherit_max"]
+  },
+  "cases": [
+    {
+      "id": "chat_message_public",
+      "object_type": "chat_message",
+      "target_class": "S0_PUBLIC",
+      "storage_policy": "allow",
+      "retrieval_policy": "allow",
+      "egress_policy": "allow",
+      "tool_policy": "allow",
+      "provider_policy": "local_preferred",
+      "confirmation_required": false
+    },
+    {
+      "id": "history_turn_bypass",
+      "object_type": "history_turn",
+      "target_class": "S4_DANGEROUS_OR_POLICY_CRITICAL",
+      "storage_policy": "deny",
+      "retrieval_policy": "deny",
+      "egress_policy": "deny",
+      "tool_policy": "deny",
+      "provider_policy": "blocked_requires_user_review",
+      "confirmation_required": true,
+      "note": "CURRENT: history scan returns None (included). TARGET: excluded."
+    },
+    {
+      "id": "uploaded_file_mixed",
+      "object_type": "uploaded_file",
+      "target_class": "S2_PRIVATE_OR_PROJECT_IP",
+      "storage_policy": "allow",
+      "retrieval_policy": "confirm_first",
+      "egress_policy": "redacted_only",
+      "tool_policy": "redacted_only",
+      "provider_policy": "local_preferred",
+      "confirmation_required": true,
+      "note": "Mixed content uploaded doc; whole-file class = max of its parts until segmented."
+    },
+    {
+      "id": "repo_file_runner_script",
+      "object_type": "repo_file",
+      "target_class": "S1_INTERNAL_LOW_RISK",
+      "storage_policy": "allow",
+      "retrieval_policy": "allow",
+      "egress_policy": "redacted_only",
+      "tool_policy": "allow",
+      "provider_policy": "local_preferred",
+      "confirmation_required": false,
+      "note": "Runner executes only the hash-pinned reviewed script; blocklist is not a sandbox."
+    },
+    {
+      "id": "retrieved_note_inherited",
+      "object_type": "retrieved_note",
+      "target_class": "inherit_max",
+      "storage_policy": "inherit_max",
+      "retrieval_policy": "inherit_max",
+      "egress_policy": "inherit_max",
+      "tool_policy": "inherit_max",
+      "provider_policy": "inherit_max",
+      "confirmation_required": true,
+      "note": "FUTURE layer. Inherits the maximum sensitivity of its sources; cannot silently downgrade."
+    },
+    {
+      "id": "codebase_graph_node",
+      "object_type": "codebase_graph_node",
+      "target_class": "inherit_max",
+      "storage_policy": "inherit_max",
+      "retrieval_policy": "inherit_max",
+      "egress_policy": "redacted_only",
+      "tool_policy": "redacted_only",
+      "provider_policy": "local_preferred",
+      "confirmation_required": true,
+      "note": "FUTURE Graphify layer. A node mapping private code inherits that code's class."
+    },
+    {
+      "id": "tool_output_secret_looking",
+      "object_type": "tool_output",
+      "target_class": "S3_SECRET_OR_CREDENTIAL",
+      "storage_policy": "redacted_only",
+      "retrieval_policy": "deny",
+      "egress_policy": "deny",
+      "tool_policy": "deny",
+      "provider_policy": "blocked_requires_user_review",
+      "confirmation_required": true,
+      "note": "FUTURE. Tool/MCP output is untrusted until classified; secret-looking content fails closed."
+    },
+    {
+      "id": "mcp_resource_unclassified",
+      "object_type": "mcp_resource",
+      "target_class": "S2_PRIVATE_OR_PROJECT_IP",
+      "storage_policy": "confirm_first",
+      "retrieval_policy": "confirm_first",
+      "egress_policy": "deny",
+      "tool_policy": "confirm_first",
+      "provider_policy": "local_only",
+      "confirmation_required": true,
+      "note": "FUTURE. Unclassified MCP resource defaults to S2 (fail closed)."
+    },
+    {
+      "id": "secret_api_key",
+      "object_type": "secret_or_api_key",
+      "target_class": "S3_SECRET_OR_CREDENTIAL",
+      "storage_policy": "deny",
+      "retrieval_policy": "deny",
+      "egress_policy": "deny",
+      "tool_policy": "deny",
+      "provider_policy": "local_only",
+      "confirmation_required": true,
+      "note": "Runtime-only in secrets/storage.py today; never persisted in cleartext."
+    },
+    {
+      "id": "provider_response_echo",
+      "object_type": "provider_response",
+      "target_class": "inherit_max",
+      "storage_policy": "inherit_max",
+      "retrieval_policy": "inherit_max",
+      "egress_policy": "inherit_max",
+      "tool_policy": "inherit_max",
+      "provider_policy": "inherit_max",
+      "confirmation_required": true,
+      "note": "A response that echoes/infers sensitive input is classified before storage or re-use in history."
+    },
+    {
+      "id": "audit_report_event",
+      "object_type": "audit_report",
+      "target_class": "S1_INTERNAL_LOW_RISK",
+      "storage_policy": "allow",
+      "retrieval_policy": "allow",
+      "egress_policy": "redacted_only",
+      "tool_policy": "redacted_only",
+      "provider_policy": "local_preferred",
+      "confirmation_required": false,
+      "note": "events/service.py already redacts on write; sensitive keys masked."
+    },
+    {
+      "id": "generated_artifact",
+      "object_type": "generated_artifact",
+      "target_class": "S1_INTERNAL_LOW_RISK",
+      "storage_policy": "allow",
+      "retrieval_policy": "allow",
+      "egress_policy": "redacted_only",
+      "tool_policy": "allow",
+      "provider_policy": "local_preferred",
+      "confirmation_required": false,
+      "note": "files/service.py stores absolute stored_path today; future: data-root-relative key."
+    },
+    {
+      "id": "supabase_backend_record",
+      "object_type": "product_backend_record",
+      "target_class": "S0_PUBLIC",
+      "storage_policy": "allow",
+      "retrieval_policy": "allow",
+      "egress_policy": "allow",
+      "tool_policy": "deny",
+      "provider_policy": "local_only",
+      "confirmation_required": false,
+      "note": "FUTURE Supabase-like store: non-sensitive / default-redacted only, RLS mandatory; never core memory."
+    }
+  ]
+}
