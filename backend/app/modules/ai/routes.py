@@ -5,6 +5,8 @@ from app.modules.ai.models import (
     AISettingsRead,
     AISettingsUpdate,
     AIStatusRead,
+    AITaskRunRequest,
+    AITaskRunResponse,
     ModelingDraftRequest,
     ModelingDraftResponse,
     ProviderSmokeRequest,
@@ -41,6 +43,12 @@ def read_ai_status() -> AIStatusRead:
 def create_modeling_draft(payload: ModelingDraftRequest) -> ModelingDraftResponse:
     ensure_ai_settings()
     return AIGateway().create_modeling_draft(payload)
+
+
+@router.post("/tasks/run", response_model=AITaskRunResponse)
+def run_ai_task_endpoint(payload: AITaskRunRequest) -> AITaskRunResponse:
+    ensure_ai_settings()
+    return AIGateway().run_task(payload)
 
 
 @router.post("/smoke-tests/run", response_model=SmokeTestResponse)

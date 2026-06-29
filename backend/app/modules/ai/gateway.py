@@ -4,6 +4,8 @@ from app.core.database import open_sqlite_connection
 from app.modules.ai.budget import evaluate_ai_status
 from app.modules.ai.models import (
     AIMetadata,
+    AITaskRunRequest,
+    AITaskRunResponse,
     ModelingDraftRequest,
     ModelingDraftResponse,
     ProviderSmokeRequest,
@@ -52,6 +54,39 @@ class AIGateway:
         from app.modules.ai import supervisor_public_test
 
         return supervisor_public_test.run_supervisor_public_test(request)
+
+    def run_task(self, request: AITaskRunRequest) -> AITaskRunResponse:
+        from app.modules.ai.execution import run_ai_task
+
+        selected_route_class = request.route_class or "local:fake"
+        external_blocked_reason = None
+        if selected_route_class.startswith("external:"):
+            settings = get_ai_settings()
+            status = evaluate_ai_status(settings, "scaleway")
+            if not status.external_calls_allowed:
+                external_blocked_reason = status.blocking_reason or "external_calls_disabled"
+
+        outcome = run_ai_task(
+            user_prompt=request.prompt,
+            task_kind=request.task_kind,
+            route_class=selected_route_class,
+            context_blocks=request.context_blocks,
+            max_output_tokens=request.max_tokens,
+            external_blocked_reason=external_blocked_reason,
+        )
+        response = outcome.response
+        return AITaskRunResponse(
+            status=outcome.status,
+            ledger_id=outcome.ledger_id,
+            selected_route_class=outcome.selected_route_class,
+            decision_reason=outcome.decision.decision_reason,
+            blocked_reason=outcome.decision.blocked_reason,
+            response_text=response.text if response is not None else None,
+            provider_id=response.provider_id if response is not None else outcome.decision.provider_id,
+            model_id=response.model_id if response is not None else outcome.decision.model_id,
+            usage=response.usage if response is not None else None,
+            error_type=outcome.error_type,
+        )
 
     def create_modeling_draft(self, request: ModelingDraftRequest) -> ModelingDraftResponse:
         workspace = get_workspace(request.workspace_id)

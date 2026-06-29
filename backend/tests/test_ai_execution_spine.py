@@ -4,11 +4,7 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from app.modules.ai.contracts import (
-    AIProviderError,
-    AIProviderErrorCode,
     AIRequest,
     AIResponse,
     AIUsage,
@@ -134,6 +130,21 @@ def test_missing_provider_credentials_fails_closed_and_records(monkeypatch, tmp_
     assert len(rows) == 1
     assert rows[0]["status"] == "config_error"
     assert rows[0]["provider_id"] == "scaleway"
+    assert rows[0]["error_type"] == "config_error"
+
+
+def test_synthesis_task_kind_defaults_to_local_fake(monkeypatch, tmp_path) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    from app.modules.ai.execution import run_ai_task
+
+    outcome = run_ai_task(user_prompt="summarize safely", task_kind="synthesis")
+
+    assert outcome.status == "success"
+    assert outcome.selected_route_class == "local:fake"
+    rows = _all_ai_jobs()
+    assert len(rows) == 1
+    assert rows[0]["selected_route_class"] == "local:fake"
+    assert rows[0]["provider_id"] == "fake"
 
 
 def test_success_writes_exactly_one_row(monkeypatch, tmp_path) -> None:
@@ -176,6 +187,7 @@ def test_api_key_value_absent_from_ledger(monkeypatch, tmp_path) -> None:
     outcome = run_ai_task(
         user_prompt="route through cloud binding",
         route_class="external:cheap",
+        max_output_tokens=64,
         adapters={"scaleway": _stub_scaleway_adapter()},
     )
 

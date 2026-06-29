@@ -1,0 +1,273 @@
+from __future__ import annotations
+
+from collections.abc import Iterator
+
+import pytest
+from fastapi.testclient import TestClient
+
+
+@pytest.fixture
+def client(tmp_path, monkeypatch) -> Iterator[TestClient]:
+    monkeypatch.setenv("JARVISOS_DATA_ROOT", str(tmp_path / "JarvisOS"))
+    monkeypatch.delenv("SCALEWAY_API_KEY", raising=False)
+    monkeypatch.delenv("SCALEWAY_BASE_URL", raising=False)
+    monkeypatch.delenv("SCALEWAY_MODEL", raising=False)
+
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+
+    from app.core.bootstrap import initialize_storage
+    from app.main import create_app
+
+    initialize_storage(seed_default=True)
+
+    with TestClient(create_app()) as test_client:
+        yield test_client
+
+    get_settings.cache_clear()
+
+
+def _all_ai_jobs() -> list[dict[str, object]]:
+    from app.core.database import open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        rows = connection.execute("SELECT * FROM ai_jobs ORDER BY created_at ASC").fetchall()
+    return [dict(row) for row in rows]
+
+
+def test_task_endpoint_local_fake_uses_run_ai_task_and_writes_one_ai_job(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import app.modules.ai.execution as execution
+
+    real_run_ai_task = execution.run_ai_task
+    calls: list[dict[str, object]] = []
+
+    def spy_run_ai_task(**kwargs):
+        calls.append(kwargs)
+        return real_run_ai_task(**kwargs)
+
+    monkeypatch.setattr(execution, "run_ai_task", spy_run_ai_task)
+
+    response = client.post(
+        "/ai/tasks/run",
+        json={
+            "prompt": "POS-1B fake endpoint smoke",
+            "route_class": "local:fake",
+            "task_kind": "general",
+            "max_tokens": 64,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["ledger_id"]
+    assert body["selected_route_class"] == "local:fake"
+    assert body["response_text"].startswith("[fake:")
+    assert body["provider_id"] == "fake"
+    assert body["model_id"] == "fake-deterministic-v1"
+    assert body["usage"]["input_tokens"] > 0
+    assert body["usage"]["output_tokens"] > 0
+    assert len(calls) == 1
+    assert calls[0]["route_class"] == "local:fake"
+
+    rows = _all_ai_jobs()
+    assert len(rows) == 1
+    assert rows[0]["id"] == body["ledger_id"]
+    assert rows[0]["status"] == "success"
+    assert rows[0]["selected_route_class"] == "local:fake"
+
+
+def test_task_endpoint_defaults_to_safe_local_fake_route(client: TestClient) -> None:
+    response = client.post(
+        "/ai/tasks/run",
+        json={"prompt": "default route must stay local even for synthesis", "task_kind": "synthesis"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["selected_route_class"] == "local:fake"
+
+    rows = _all_ai_jobs()
+    assert len(rows) == 1
+    assert rows[0]["selected_route_class"] == "local:fake"
+
+
+def test_task_endpoint_unbound_route_fails_closed_and_writes_one_ai_job(client: TestClient) -> None:
+    response = client.post(
+        "/ai/tasks/run",
+        json={"prompt": "unbound route", "route_class": "external:not_bound", "max_tokens": 64},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "route_unavailable"
+    assert body["selected_route_class"] == "external:not_bound"
+    assert body["blocked_reason"] == "route_unavailable"
+    assert body["error_type"] == "route_unavailable"
+    assert body["response_text"] is None
+    assert body["provider_id"] is None
+    assert body["model_id"] is None
+
+    rows = _all_ai_jobs()
+    assert len(rows) == 1
+    assert rows[0]["id"] == body["ledger_id"]
+    assert rows[0]["status"] == "route_unavailable"
+
+
+def test_task_endpoint_malformed_route_fails_closed_and_writes_one_ai_job(client: TestClient) -> None:
+    response = client.post(
+        "/ai/tasks/run",
+        json={"prompt": "malformed route", "route_class": "external reasoning", "max_tokens": 64},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "validation_error"
+    assert body["selected_route_class"] == "external reasoning"
+    assert body["blocked_reason"] == "route_class_malformed"
+    assert body["error_type"] == "validation_error"
+    assert body["response_text"] is None
+
+    rows = _all_ai_jobs()
+    assert len(rows) == 1
+    assert rows[0]["id"] == body["ledger_id"]
+    assert rows[0]["status"] == "validation_error"
+
+
+def test_task_endpoint_external_route_requires_max_tokens_before_provider_call(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SCALEWAY_API_KEY", "test-only-key")
+    settings_response = client.put(
+        "/ai/settings",
+        json={
+            "provider_mode": "scaleway",
+            "default_ai_provider": "scaleway",
+            "paid_ai_enabled": True,
+            "monthly_api_budget_usd": 1,
+            "scaleway_enabled": True,
+            "scaleway_smoke_test_enabled": True,
+            "scaleway_live_smoke_test_enabled": True,
+            "use_fake_provider_when_budget_zero": False,
+        },
+    )
+    assert settings_response.status_code == 200
+
+    from app.modules.ai.contracts import AIRequest, AIResponse
+    from app.modules.ai.providers.scaleway_adapter import ScalewayProviderAdapter
+
+    def fail(self: ScalewayProviderAdapter, request: AIRequest) -> AIResponse:
+        raise AssertionError("external task endpoint must require max_tokens before provider call")
+
+    monkeypatch.setattr(ScalewayProviderAdapter, "complete", fail)
+
+    response = client.post(
+        "/ai/tasks/run",
+        json={"prompt": "external route without explicit max", "route_class": "external:cheap"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "config_error"
+    assert body["selected_route_class"] == "external:cheap"
+    assert body["provider_id"] == "scaleway"
+    assert body["model_id"] == "llama-3.1-8b-instruct"
+    assert body["blocked_reason"] == "config_error"
+    assert body["decision_reason"] == "max_output_tokens required for network route"
+    assert body["error_type"] == "config_error"
+    assert body["response_text"] is None
+
+    rows = _all_ai_jobs()
+    assert len(rows) == 1
+    assert rows[0]["id"] == body["ledger_id"]
+    assert rows[0]["status"] == "config_error"
+    assert rows[0]["provider_id"] == "scaleway"
+    assert rows[0]["error_type"] == "config_error"
+
+
+def test_task_endpoint_external_route_respects_ai_settings_gate_before_provider_call(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SCALEWAY_API_KEY", "test-only-key")
+
+    from app.modules.ai.contracts import AIRequest, AIResponse
+    from app.modules.ai.providers.scaleway_adapter import ScalewayProviderAdapter
+
+    def fail(self: ScalewayProviderAdapter, request: AIRequest) -> AIResponse:
+        raise AssertionError("external task endpoint must respect settings gate before provider call")
+
+    monkeypatch.setattr(ScalewayProviderAdapter, "complete", fail)
+
+    response = client.post(
+        "/ai/tasks/run",
+        json={"prompt": "settings disabled external route", "route_class": "external:cheap", "max_tokens": 64},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "config_error"
+    assert body["selected_route_class"] == "external:cheap"
+    assert body["provider_id"] == "scaleway"
+    assert body["model_id"] == "llama-3.1-8b-instruct"
+    assert body["blocked_reason"] == "config_error"
+    assert body["error_type"] == "config_error"
+    assert "external provider execution disabled by settings/gate" in body["decision_reason"]
+    assert "scaleway_disabled" in body["decision_reason"]
+    assert body["response_text"] is None
+
+    rows = _all_ai_jobs()
+    assert len(rows) == 1
+    assert rows[0]["id"] == body["ledger_id"]
+    assert rows[0]["status"] == "config_error"
+    assert rows[0]["provider_id"] == "scaleway"
+    assert rows[0]["error_type"] == "config_error"
+
+
+def test_task_endpoint_rejects_too_many_context_blocks(client: TestClient) -> None:
+    response = client.post(
+        "/ai/tasks/run",
+        json={
+            "prompt": "too many context blocks",
+            "route_class": "local:fake",
+            "context_blocks": [{"content": str(index)} for index in range(21)],
+        },
+    )
+
+    assert response.status_code == 422
+    assert _all_ai_jobs() == []
+
+
+def test_task_endpoint_rejects_oversized_context_blocks(client: TestClient) -> None:
+    response = client.post(
+        "/ai/tasks/run",
+        json={
+            "prompt": "too large context",
+            "route_class": "local:fake",
+            "context_blocks": [{"content": "x" * 32_001}],
+        },
+    )
+
+    assert response.status_code == 422
+    assert _all_ai_jobs() == []
+
+
+def test_task_endpoint_accepts_small_context_blocks_for_local_fake(client: TestClient) -> None:
+    response = client.post(
+        "/ai/tasks/run",
+        json={
+            "prompt": "small context",
+            "route_class": "local:fake",
+            "context_blocks": [{"source": "manual", "content": "small context"}],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    rows = _all_ai_jobs()
+    assert len(rows) == 1
+    assert rows[0]["context_digest"].startswith("sha256:")

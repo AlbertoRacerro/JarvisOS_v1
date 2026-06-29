@@ -55,17 +55,17 @@ class AiTaskOutcome:
     selected_route_class: str | None
     decision: RoutingDecision
     response: AIResponse | None = None
+    error_type: str | None = None
 
 
-# task_kind -> default route. "general" stays local:fake on purpose: a real cloud
-# call must be opted into explicitly (route_class or a cloud task_kind) so a runaway
-# loop cannot silently spend tokens.
+# task_kind -> default route. Cloud calls must be opted into explicitly through
+# route_class so task selection cannot silently spend tokens.
 TASK_KIND_DEFAULT_ROUTE: dict[str, str] = {
     "general": "local:fake",
     "test": "local:fake",
-    "synthesis": "external:cheap",
-    "code_review": "external:reasoning",
-    "architecture_review": "external:reasoning",
+    "synthesis": "local:fake",
+    "code_review": "local:fake",
+    "architecture_review": "local:fake",
 }
 
 _TASK_KIND_TO_AI_TASK_TYPE: dict[str, AITaskType] = {
@@ -220,6 +220,7 @@ def run_ai_task(
     max_output_tokens: int | None = None,
     adapters: dict[str, AIProviderAdapter] | None = None,
     bindings: dict[str, ProviderBinding] | None = None,
+    external_blocked_reason: str | None = None,
 ) -> AiTaskOutcome:
     started = time.perf_counter()
     adapters = adapters if adapters is not None else _default_adapters()
@@ -241,12 +242,36 @@ def run_ai_task(
             context_digest=context_digest,
             response=None,
             latency_ms=_elapsed_ms(started),
-            error_type=None,
+            error_type=status,
         )
-        return AiTaskOutcome(status, ledger_id, selected_route_class, decision)
+        return AiTaskOutcome(status, ledger_id, selected_route_class, decision, error_type=status)
 
     adapter = adapters.get(binding.provider_id)
-    effective_max = max_output_tokens or binding.max_output_tokens
+    effective_max = max_output_tokens if max_output_tokens is not None else None
+    if not binding.requires_network and effective_max is None:
+        effective_max = binding.max_output_tokens
+    if binding.requires_network and external_blocked_reason is not None:
+        config_decision = RoutingDecision(
+            provider_id=binding.provider_id,
+            model_id=binding.model_id,
+            blocked=True,
+            blocked_reason="config_error",
+            decision_reason=f"external provider execution disabled by settings/gate: {external_blocked_reason}",
+        )
+        ledger_id = _write_ai_job(
+            status="config_error",
+            task_kind=task_kind,
+            requested_route_class=requested_route_class,
+            selected_route_class=selected_route_class,
+            decision=config_decision,
+            prompt_digest=prompt_digest,
+            context_digest=context_digest,
+            response=None,
+            latency_ms=_elapsed_ms(started),
+            error_type="config_error",
+        )
+        return AiTaskOutcome("config_error", ledger_id, selected_route_class, config_decision, error_type="config_error")
+
     not_ready_scaleway = (
         binding.provider_id == SCALEWAY_PROVIDER_ID and binding.requires_network and not _scaleway_ready()
     )
@@ -268,9 +293,9 @@ def run_ai_task(
             context_digest=context_digest,
             response=None,
             latency_ms=_elapsed_ms(started),
-            error_type=None,
+            error_type="config_error",
         )
-        return AiTaskOutcome("config_error", ledger_id, selected_route_class, config_decision)
+        return AiTaskOutcome("config_error", ledger_id, selected_route_class, config_decision, error_type="config_error")
 
     request = AIRequest(
         task_type=_ai_task_type_for(task_kind),
@@ -297,7 +322,7 @@ def run_ai_task(
             latency_ms=_elapsed_ms(started),
             error_type=type(exc).__name__,
         )
-        return AiTaskOutcome("provider_error", ledger_id, selected_route_class, err_decision)
+        return AiTaskOutcome("provider_error", ledger_id, selected_route_class, err_decision, error_type=type(exc).__name__)
 
     if response.error is None and response.text is not None:
         status = "success"
@@ -317,4 +342,4 @@ def run_ai_task(
         latency_ms=_elapsed_ms(started),
         error_type=error_type,
     )
-    return AiTaskOutcome(status, ledger_id, selected_route_class, decision, response)
+    return AiTaskOutcome(status, ledger_id, selected_route_class, decision, response, error_type=error_type)

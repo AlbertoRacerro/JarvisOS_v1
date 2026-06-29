@@ -1,6 +1,7 @@
+import json
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.ai.contracts import AIPolicyMode, AITaskType, AIUsage
 
@@ -114,6 +115,40 @@ class AIMetadata(BaseModel):
 class ModelingDraftResponse(BaseModel):
     draft: ModelingDraft | None
     ai_metadata: AIMetadata
+
+
+class AITaskRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    prompt: str = Field(min_length=1)
+    route_class: str | None = None
+    task_kind: str = "general"
+    max_tokens: int | None = Field(default=None, ge=1)
+    context_blocks: list[dict[str, Any]] | None = None
+
+    @model_validator(mode="after")
+    def validate_context_blocks_bounds(self) -> "AITaskRunRequest":
+        if self.context_blocks is None:
+            return self
+        if len(self.context_blocks) > 20:
+            raise ValueError("context_blocks must contain at most 20 items.")
+        serialized = json.dumps(self.context_blocks, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        if len(serialized) > 32_000:
+            raise ValueError("context_blocks serialized size must be at most 32000 characters.")
+        return self
+
+
+class AITaskRunResponse(BaseModel):
+    status: str
+    ledger_id: str
+    selected_route_class: str | None
+    decision_reason: str
+    blocked_reason: str | None = None
+    response_text: str | None = None
+    provider_id: str | None = None
+    model_id: str | None = None
+    usage: AIUsage | None = None
+    error_type: str | None = None
 
 
 class SmokeTestRequest(BaseModel):

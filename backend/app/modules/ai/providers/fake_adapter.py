@@ -14,7 +14,6 @@ from app.modules.ai.contracts import (
     AIProviderHealth,
     AIRequest,
     AIResponse,
-    AITaskType,
     AIUsage,
     AIUsageSource,
     ModelRegistryEntry,
