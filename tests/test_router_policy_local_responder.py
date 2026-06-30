@@ -112,7 +112,7 @@ class RouterPolicyLocalResponderTests(unittest.TestCase):
                 with self.assertRaises(responder.LocalResponderPolicyError):
                     responder.call_local_ollama_generate_with_metadata(
                         "prompt",
-                        model="gemma3:4b",
+                        model="qwen3:8b",
                         endpoint=endpoint,
                         timeout_s=3,
                         temperature=0.0,
@@ -133,7 +133,7 @@ class RouterPolicyLocalResponderTests(unittest.TestCase):
                 with self.assertRaises(responder.LocalResponderPolicyError):
                     responder.call_local_ollama_generate_with_metadata(
                         "prompt",
-                        model="gemma3:4b",
+                        model="qwen3:8b",
                         endpoint=endpoint,
                         timeout_s=3,
                         temperature=0.0,
@@ -148,7 +148,7 @@ class RouterPolicyLocalResponderTests(unittest.TestCase):
         with self.assertRaises(responder.LocalResponderPolicyError):
             responder.call_local_ollama_generate_with_metadata(
                 "prompt",
-                model="gemma3:4b",
+                model="qwen3:8b",
                 endpoint="http://127.0.0.1:11434/api/chat",
                 timeout_s=3,
                 temperature=0.0,
@@ -163,7 +163,7 @@ class RouterPolicyLocalResponderTests(unittest.TestCase):
         with self.assertRaises(responder.LocalResponderPolicyError):
             responder.call_local_ollama_generate_with_metadata(
                 "too long",
-                model="gemma3:4b",
+                model="qwen3:8b",
                 endpoint=responder.DEFAULT_ENDPOINT,
                 timeout_s=3,
                 temperature=0.0,
@@ -181,7 +181,7 @@ class RouterPolicyLocalResponderTests(unittest.TestCase):
         self.assertIsInstance(
             responder.call_local_ollama_generate(
                 "prompt",
-                model="gemma3:4b",
+                model="qwen3:8b",
                 endpoint=responder.DEFAULT_ENDPOINT,
                 timeout_s=3,
                 temperature=0.0,
@@ -196,7 +196,7 @@ class RouterPolicyLocalResponderTests(unittest.TestCase):
         client = RecordingClient(response={"response": "metadata response"})
         result = responder.call_local_ollama_generate_with_metadata(
             "prompt",
-            model="gemma3:4b",
+            model="qwen3:8b",
             endpoint=responder.DEFAULT_ENDPOINT,
             timeout_s=3,
             temperature=0.0,
@@ -213,7 +213,7 @@ class RouterPolicyLocalResponderTests(unittest.TestCase):
         long_client = RecordingClient(response={"response": "abcdef"})
         long_result = responder.call_local_ollama_generate_with_metadata(
             "prompt",
-            model="gemma3:4b",
+            model="qwen3:8b",
             endpoint=responder.DEFAULT_ENDPOINT,
             timeout_s=3,
             temperature=0.0,
@@ -235,7 +235,7 @@ class RouterPolicyLocalResponderTests(unittest.TestCase):
         short_client = RecordingClient(response={"response": "abc"})
         short_result = responder.call_local_ollama_generate_with_metadata(
             "prompt",
-            model="gemma3:4b",
+            model="qwen3:8b",
             endpoint=responder.DEFAULT_ENDPOINT,
             timeout_s=3,
             temperature=0.0,
@@ -258,7 +258,7 @@ class RouterPolicyLocalResponderTests(unittest.TestCase):
         client = RecordingClient(response={"response": "ok"})
         result = responder.call_local_ollama_generate_with_metadata(
             "prompt",
-            model="gemma3:4b",
+            model="qwen3:8b",
             endpoint=responder.DEFAULT_ENDPOINT,
             timeout_s=3,
             temperature=0.0,
@@ -282,7 +282,7 @@ class RouterPolicyLocalResponderTests(unittest.TestCase):
         )
         result = responder.call_local_ollama_generate_with_metadata(
             "prompt",
-            model="gemma3:4b",
+            model="qwen3:8b",
             endpoint=responder.DEFAULT_ENDPOINT,
             timeout_s=3,
             temperature=0.0,
@@ -316,7 +316,7 @@ class RouterPolicyLocalResponderTests(unittest.TestCase):
         )
         result = responder.call_local_ollama_generate_with_metadata(
             "prompt",
-            model="gemma3:4b",
+            model="qwen3:8b",
             endpoint=responder.DEFAULT_ENDPOINT,
             timeout_s=3,
             temperature=0.0,
@@ -340,7 +340,7 @@ class RouterPolicyLocalResponderTests(unittest.TestCase):
         client = RecordingClient()
         text = responder.call_local_ollama_generate(
             "exact prompt",
-            model="gemma3:4b",
+            model="qwen3:8b",
             endpoint=responder.DEFAULT_ENDPOINT,
             timeout_s=3,
             temperature=0.0,
@@ -350,7 +350,7 @@ class RouterPolicyLocalResponderTests(unittest.TestCase):
         )
         self.assertEqual("mock local response", text)
         payload = client.calls[0]["payload"]
-        self.assertEqual("gemma3:4b", payload["model"])
+        self.assertEqual("qwen3:8b", payload["model"])
         self.assertEqual("exact prompt", payload["prompt"])
         self.assertFalse(payload["stream"])
         self.assertEqual({"temperature": 0}, payload["options"])
@@ -365,7 +365,7 @@ class RouterPolicyLocalResponderTests(unittest.TestCase):
         with self.assertRaises(responder.LocalResponderPolicyError):
             responder.call_local_ollama_generate(
                 "too long",
-                model="gemma3:4b",
+                model="qwen3:8b",
                 endpoint=responder.DEFAULT_ENDPOINT,
                 timeout_s=3,
                 temperature=0.0,
@@ -379,7 +379,7 @@ class RouterPolicyLocalResponderTests(unittest.TestCase):
         client = RecordingClient(response={"response": "abcdef"})
         text = responder.call_local_ollama_generate(
             "prompt",
-            model="gemma3:4b",
+            model="qwen3:8b",
             endpoint=responder.DEFAULT_ENDPOINT,
             timeout_s=3,
             temperature=0.0,
@@ -396,7 +396,7 @@ class RouterPolicyLocalResponderTests(unittest.TestCase):
                 with self.assertRaises(responder.LocalResponderResponseError):
                     responder.call_local_ollama_generate(
                         "prompt",
-                        model="gemma3:4b",
+                        model="qwen3:8b",
                         endpoint=responder.DEFAULT_ENDPOINT,
                         timeout_s=3,
                         temperature=0.0,
@@ -410,7 +410,7 @@ class RouterPolicyLocalResponderTests(unittest.TestCase):
         with self.assertRaises(responder.LocalResponderTransportError):
             responder.call_local_ollama_generate(
                 "prompt",
-                model="gemma3:4b",
+                model="qwen3:8b",
                 endpoint=responder.DEFAULT_ENDPOINT,
                 timeout_s=3,
                 temperature=0.0,
@@ -532,7 +532,7 @@ class RouterPolicyLocalResponderTests(unittest.TestCase):
             with self.subTest(invalid=invalid):
                 client = invalid.get("client", RecordingClient())
                 kwargs = {
-                    "model": invalid.get("model", "gemma3:4b"),
+                    "model": invalid.get("model", "qwen3:8b"),
                     "endpoint": invalid.get("endpoint", responder.DEFAULT_ENDPOINT),
                     "timeout_s": invalid.get("timeout_s", 3),
                     "temperature": invalid.get("temperature", 0.0),

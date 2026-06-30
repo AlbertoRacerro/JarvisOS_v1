@@ -109,6 +109,7 @@ def _clear_local_route_env(monkeypatch) -> None:
         "AI_ROUTE_LOCAL_GENERAL_MODEL",
         "AI_ROUTE_LOCAL_CODER_MODEL",
         "AI_ROUTE_LOCAL_CODER_HEAVY_MODEL",
+        "JARVISOS_DEV_MESSAGE_ROUTE_MODEL",
     ):
         monkeypatch.delenv(env_name, raising=False)
 
@@ -276,6 +277,38 @@ def test_default_bindings_and_adapters_include_local_gemma(monkeypatch) -> None:
     assert "local:gemma" in bindings
     assert bindings["local:gemma"].provider_id == "local_ollama"
     assert "local_ollama" in adapters
+
+
+def test_local_ollama_adapter_default_model_is_qwen3(monkeypatch) -> None:
+    _clear_local_route_env(monkeypatch)
+    from app.modules.ai.contracts import AITaskType
+    from app.modules.ai.providers.local_ollama_adapter import LocalOllamaAdapter
+
+    captured: dict[str, object] = {}
+
+    def _fake_responder(prompt: str, **kwargs):
+        captured.update(kwargs)
+        return {
+            "response": "ok",
+            "response_truncated": False,
+            "response_char_count_returned": 2,
+            "response_char_limit": kwargs["max_output_chars"],
+            "response_limit_source": "test",
+        }
+
+    adapter = LocalOllamaAdapter()
+    monkeypatch.setattr(adapter, "_load_responder", lambda: _fake_responder)
+
+    listed = adapter.list_models()
+    response = adapter.complete(AIRequest(task_type=AITaskType.synthesis, prompt="hello"))
+
+    assert adapter.health().value == "healthy"
+    assert len(listed) == 1
+    assert listed[0].model_id == "qwen3:8b"
+    assert listed[0].provider_model_name == "qwen3:8b"
+    assert listed[0].display_name == "Local Ollama qwen3:8b"
+    assert captured["model"] == "qwen3:8b"
+    assert response.model_id == "qwen3:8b"
 
 
 def test_local_ollama_route_bindings_have_expected_defaults(monkeypatch) -> None:

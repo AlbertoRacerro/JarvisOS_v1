@@ -15,7 +15,7 @@ from collections.abc import Callable
 from typing import Any
 
 
-DEFAULT_MODEL = "gemma3:4b"
+DEFAULT_MODEL = "qwen3:8b"
 DEFAULT_ENDPOINT = "http://127.0.0.1:11434/api/generate"
 LOCALHOST_HOSTS = {"127.0.0.1", "localhost", "::1"}
 TIMING_KEYS = (

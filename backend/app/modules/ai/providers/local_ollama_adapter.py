@@ -16,7 +16,7 @@ from app.modules.ai.contracts import (
 from app.modules.local_ai.runtime.ollama import resolve_ollama_runtime_urls
 
 LOCAL_OLLAMA_PROVIDER_ID = "local_ollama"
-_DEFAULT_MODEL = "gemma3:4b"
+_DEFAULT_MODEL = "qwen3:8b"
 _DEFAULT_TIMEOUT_S = 30.0
 _DEFAULT_KEEP_ALIVE = "30m"
 _MODEL_ENV = "JARVISOS_DEV_MESSAGE_ROUTE_MODEL"

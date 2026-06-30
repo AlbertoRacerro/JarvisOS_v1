@@ -1250,7 +1250,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Disable Phase B RouterHint bridge for baseline/debug smoke comparisons.",
     )
     parser.add_argument("--run-local", action="store_true")
-    parser.add_argument("--model", default="gemma3:4b")
+    parser.add_argument("--model", default="qwen3:8b")
     parser.add_argument("--endpoint", default="http://127.0.0.1:11434/api/generate")
     parser.add_argument("--timeout-s", type=float, default=30.0)
     parser.add_argument(

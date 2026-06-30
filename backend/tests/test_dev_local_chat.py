@@ -816,7 +816,7 @@ def test_a4r2_generic_adapter_does_not_send_keep_alive_or_num_predict_by_default
 
     result = local_responder.call_local_ollama_generate_with_metadata(
         "hello",
-        model="gemma3:4b",
+        model="qwen3:8b",
         endpoint="http://127.0.0.1:11434/api/generate",
         timeout_s=30.0,
         temperature=0.0,
@@ -852,7 +852,7 @@ def test_a4r2_generic_adapter_sends_keep_alive_and_positive_num_predict_when_pro
 
     response_text = local_responder.call_local_ollama_generate(
         "hello",
-        model="gemma3:4b",
+        model="qwen3:8b",
         endpoint="http://127.0.0.1:11434/api/generate",
         timeout_s=30.0,
         temperature=0.0,
@@ -864,7 +864,7 @@ def test_a4r2_generic_adapter_sends_keep_alive_and_positive_num_predict_when_pro
     )
     metadata = local_responder.call_local_ollama_generate_with_metadata(
         "hello again",
-        model="gemma3:4b",
+        model="qwen3:8b",
         endpoint="http://127.0.0.1:11434/api/generate",
         timeout_s=30.0,
         temperature=0.0,
@@ -903,7 +903,7 @@ def test_a4r2_generic_adapter_ignores_invalid_num_predict(invalid_value: object)
 
     local_responder.call_local_ollama_generate_with_metadata(
         "hello",
-        model="gemma3:4b",
+        model="qwen3:8b",
         endpoint="http://127.0.0.1:11434/api/generate",
         timeout_s=30.0,
         temperature=0.0,
@@ -927,12 +927,14 @@ def test_a4r2_dev_local_responder_defaults_keep_alive_to_30m(monkeypatch) -> Non
         captured.update(kwargs)
         return {"response": "ok"}
 
+    monkeypatch.delenv("JARVISOS_DEV_MESSAGE_ROUTE_MODEL", raising=False)
     monkeypatch.delenv("JARVISOS_DEV_MESSAGE_ROUTE_KEEP_ALIVE", raising=False)
     monkeypatch.delenv("JARVISOS_DEV_MESSAGE_ROUTE_NUM_PREDICT", raising=False)
     monkeypatch.setattr(smoke_adapter, "call_local_ollama_generate_with_metadata", fake_generate)
 
     responder = smoke_adapter.build_dev_local_responder()
     assert responder("hello") == "ok"
+    assert captured["model"] == "qwen3:8b"
     assert captured["keep_alive"] == "30m"
     assert captured["num_predict"] is None
 

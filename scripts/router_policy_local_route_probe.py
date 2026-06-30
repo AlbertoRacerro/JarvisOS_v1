@@ -127,7 +127,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="RouterPolicy A3 local-route smoke probe.")
     parser.add_argument("--fixture", required=True, help="Path to a normalized RouterPolicy input fixture.")
     parser.add_argument("--run-local", action="store_true", help="Explicitly enable localhost-only local responder.")
-    parser.add_argument("--model", default="gemma3:4b", help="Ollama model name already pulled locally.")
+    parser.add_argument("--model", default="qwen3:8b", help="Ollama model name already pulled locally.")
     parser.add_argument("--endpoint", default="http://127.0.0.1:11434/api/generate")
     parser.add_argument("--timeout-s", type=float, default=30.0)
     parser.add_argument("--now", default=None)
