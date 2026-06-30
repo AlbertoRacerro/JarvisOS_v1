@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 
 import {
   createModelingDraft,
@@ -20,6 +20,39 @@ import {
   type SmokeTestResponse
 } from "../api/client";
 
+const AI_ROUTE_OPTIONS = [
+  {
+    value: "local:fake",
+    label: "Fake / deterministic test",
+    help: "No real model. No cost. Useful to test the pipeline."
+  },
+  {
+    value: "local:gemma",
+    label: "Local model via Ollama",
+    help: "Uses the configured local Ollama model through the AI spine. Actual model is shown after execution as model_id."
+  },
+  {
+    value: "external:cheap",
+    label: "Scaleway cheap cloud",
+    help: "Cloud route. Uses provider/token guardrails."
+  }
+] as const;
+
+function routeHelp(routeClass: string): string {
+  return AI_ROUTE_OPTIONS.find((option) => option.value === routeClass)?.help ?? "Route configured by backend.";
+}
+
+function shortDigest(digest?: string | null): string {
+  if (!digest) return "-";
+  return digest.startsWith("sha256:") ? digest.slice("sha256:".length, "sha256:".length + 12) : digest.slice(0, 12);
+}
+
+function formatUsage(result: AITaskRunResponse | null): string {
+  if (!result?.usage) return "-";
+  const usage = result.usage;
+  return `${usage.input_tokens} in / ${usage.output_tokens} out / ${usage.total_tokens ?? usage.input_tokens + usage.output_tokens} total / ${usage.usage_source}`;
+}
+
 function AIDraft() {
   const [settings, setSettings] = useState<AISettings | null>(null);
   const [status, setStatus] = useState<AIStatus | null>(null);
@@ -36,6 +69,7 @@ function AIDraft() {
   const [taskIncludeContext, setTaskIncludeContext] = useState(false);
   const [taskResult, setTaskResult] = useState<AITaskRunResponse | null>(null);
   const [taskRunning, setTaskRunning] = useState(false);
+  const [taskWorkspaceId, setTaskWorkspaceId] = useState("bluerev");
   const [message, setMessage] = useState<string | null>(null);
 
   const refresh = () =>
@@ -152,7 +186,8 @@ function AIDraft() {
       route_class: taskRouteClass,
       task_kind: "general",
       max_tokens: Number.isFinite(parsedMaxTokens) && parsedMaxTokens >= 1 ? parsedMaxTokens : undefined,
-      include_project_context: taskIncludeContext ? true : undefined
+      include_project_context: taskIncludeContext ? true : undefined,
+      workspace_id: taskIncludeContext ? taskWorkspaceId : undefined
     })
       .then(setTaskResult)
       .then(() => refresh())
@@ -165,7 +200,7 @@ function AIDraft() {
     const form = new FormData(event.currentTarget);
     setDraft(null);
     createModelingDraft({
-      workspace_id: String(form.get("workspace_id") ?? "bluerev"),
+      workspace_id: String(form.get("workspace_id") ?? taskWorkspaceId),
       informal_model_idea: String(form.get("informal_model_idea") ?? ""),
       model_context: String(form.get("model_context") ?? ""),
       quality_level: String(form.get("quality_level") ?? "draft"),
@@ -191,386 +226,47 @@ function AIDraft() {
         : tokenThresholdPercent >= 50
           ? "warning"
           : "ok";
-  const taskContextDigest = taskResult?.context_digest ?? null;
-  const taskContextDigestShort =
-    taskContextDigest === null
-      ? "-"
-      : taskContextDigest.startsWith("sha256:")
-        ? taskContextDigest.slice("sha256:".length, "sha256:".length + 12)
-        : taskContextDigest.slice(0, 12);
-  const taskContextSourcesCount = taskResult?.context_sources_count ?? 0;
+  const taskFailureText = taskResult?.blocked_reason ?? taskResult?.error_type ?? taskResult?.status ?? "AI task did not succeed.";
 
   return (
-    <section className="page">
+    <section className="page ai-workspace-page">
       <div className="page-header">
         <p className="eyebrow">AI Co-Engineering</p>
-        <h2>Modeling Draft</h2>
+        <h2>AI Execution Workspace</h2>
       </div>
 
       {message && <div className="error-banner">{message}</div>}
 
-      <section className="panel">
-        <h3>AI Cost Guard</h3>
-        <dl className="details">
+      <section className="panel ai-console-panel">
+        <div className="ai-draft-section-heading">
           <div>
-            <dt>Provider mode</dt>
-            <dd>{status?.active_provider_mode ?? "checking"}</dd>
+            <p className="eyebrow">AI Console</p>
+            <h3>Run through the AI spine</h3>
           </div>
-          <div>
-            <dt>Policy mode</dt>
-            <dd>{status?.policy_mode ?? "FAST_DEV"}</dd>
-          </div>
-          <div>
-            <dt>Provider id</dt>
-            <dd>{status?.provider_id ?? "checking"}</dd>
-          </div>
-          <div>
-            <dt>Budget status</dt>
-            <dd>{status?.budget_status ?? "checking"}</dd>
-          </div>
-          <div>
-            <dt>Credential status</dt>
-            <dd>{status?.credential_status ?? "checking"}</dd>
-          </div>
-          <div>
-            <dt>Monthly budget</dt>
-            <dd>${status?.monthly_api_budget_usd ?? 0}</dd>
-          </div>
-          <div>
-            <dt>Spend this month</dt>
-            <dd>${status?.spend_month_to_date_usd ?? 0}</dd>
-          </div>
-          <div>
-            <dt>External calls</dt>
-            <dd>{status ? String(status.external_calls_allowed) : "checking"}</dd>
-          </div>
-          <div>
-            <dt>Scaleway key</dt>
-            <dd>{status ? String(status.scaleway_api_key_configured) : "checking"}</dd>
-          </div>
-          <div>
-            <dt>Scaleway implementation</dt>
-            <dd>{status?.scaleway_provider_implementation ?? "stub_no_external_calls"}</dd>
-          </div>
-          <div>
-            <dt>Scaleway enabled</dt>
-            <dd>{status ? String(status.scaleway_enabled) : "checking"}</dd>
-          </div>
-          <div>
-            <dt>Smoke test mode</dt>
-            <dd>{status ? String(status.scaleway_smoke_test_enabled) : "checking"}</dd>
-          </div>
-          <div>
-            <dt>Live smoke mode</dt>
-            <dd>{status ? String(status.scaleway_live_smoke_test_enabled) : "checking"}</dd>
-          </div>
-          <div>
-            <dt>Token cap</dt>
-            <dd>{status?.scaleway_monthly_token_cap ?? 500000}</dd>
-          </div>
-          <div>
-            <dt>Hard stop cap</dt>
-            <dd>{status?.scaleway_hard_stop_token_cap ?? 800000}</dd>
-          </div>
-          <div>
-            <dt>Free-tier reference</dt>
-            <dd>{status?.scaleway_free_tier_reference_tokens ?? 1000000}</dd>
-          </div>
-          <div>
-            <dt>Input tokens MTD</dt>
-            <dd>{status?.scaleway_input_tokens_month_to_date ?? 0}</dd>
-          </div>
-          <div>
-            <dt>Output tokens MTD</dt>
-            <dd>{status?.scaleway_output_tokens_month_to_date ?? 0}</dd>
-          </div>
-          <div>
-            <dt>Total tokens MTD</dt>
-            <dd>{status?.usage_total_tokens ?? 0}</dd>
-          </div>
-          <div>
-            <dt>Blocking reason</dt>
-            <dd>{status?.blocking_reason ?? "none"}</dd>
-          </div>
-        </dl>
-      </section>
-
-      <section className="panel">
-        <h3>Scaleway API Key</h3>
+          <span className="ai-draft-route-pill">{taskRouteClass}</span>
+        </div>
         <p className="panel-subtitle">
-          Paste the key only here. JarvisOS never shows it again, never stores it in AI settings, and this runtime-memory key is forgotten when the backend restarts.
+          Route and project context are controlled by the fields below, not by instructions typed into the prompt.
         </p>
-        <div className="warning-banner">
-          Do not paste API keys into chat, logs, docs, smoke prompts, or model fields. Live Scaleway calls may spend tokens and still require all AI Cost Guard settings.
-        </div>
-        <dl className="details">
-          <div>
-            <dt>Key present</dt>
-            <dd>{scalewaySecretStatus ? String(scalewaySecretStatus.key_present) : "checking"}</dd>
-          </div>
-          <div>
-            <dt>Source</dt>
-            <dd>{scalewaySecretStatus?.source ?? "checking"}</dd>
-          </div>
-          <div>
-            <dt>Preview</dt>
-            <dd>{scalewaySecretStatus?.masked_preview ?? "none"}</dd>
-          </div>
-          <div>
-            <dt>Storage</dt>
-            <dd>{scalewaySecretStatus?.storage_mode ?? "runtime_memory"}</dd>
-          </div>
-          <div>
-            <dt>Updated</dt>
-            <dd>{scalewaySecretStatus?.last_updated_at ?? "not stored by app"}</dd>
-          </div>
-        </dl>
-        <form className="secret-key-form" onSubmit={onScalewayKeySave}>
-          <label>
-            Scaleway API key
-            <input name="api_key" type="password" autoComplete="off" placeholder="Paste key for this backend session" required />
-          </label>
-          <div className="button-row">
-            <button type="submit">Save Key</button>
-            <button className="secondary-button" type="button" onClick={onScalewayKeyDelete}>
-              Delete Saved Key
-            </button>
-            <button className="secondary-button" type="button" onClick={onScalewayKeyRefresh}>
-              Refresh Status
-            </button>
-          </div>
-        </form>
-      </section>
 
-      <section className="panel">
-        <h3>AI Settings</h3>
-        <div className="warning-banner">
-          Scaleway live mode is only for fixed synthetic smoke tests and the AI Smoke Console. It is disabled by default and requires paid AI, Scaleway mode, live smoke mode, an API key, privacy approval, and token-cap approval.
-        </div>
-        <form className="settings-form" onSubmit={onSettingsSubmit}>
-          <label>
-            Monthly budget USD
-            <input name="monthly_api_budget_usd" type="number" min="0" step="1" defaultValue={settings?.monthly_api_budget_usd ?? 0} />
-          </label>
-          <label>
-            Provider mode
-            <select name="provider_mode" defaultValue={settings?.provider_mode ?? "fake"}>
-              <option value="fake">fake</option>
-              <option value="scaleway">scaleway</option>
-            </select>
-          </label>
-          <label>
-            Scaleway monthly token cap
-            <input name="scaleway_monthly_token_cap" type="number" min="0" defaultValue={settings?.scaleway_monthly_token_cap ?? 500000} />
-          </label>
-          <label>
-            Scaleway hard stop cap
-            <input name="scaleway_hard_stop_token_cap" type="number" min="0" defaultValue={settings?.scaleway_hard_stop_token_cap ?? 800000} />
-          </label>
-          <label className="checkbox-line">
-            <input name="paid_ai_enabled" type="checkbox" defaultChecked={settings?.paid_ai_enabled ?? false} />
-            Enable paid AI
-          </label>
-          <label className="checkbox-line">
-            <input name="scaleway_enabled" type="checkbox" defaultChecked={settings?.scaleway_enabled ?? false} />
-            Enable Scaleway mode
-          </label>
-          <label className="checkbox-line">
-            <input name="scaleway_smoke_test_enabled" type="checkbox" defaultChecked={settings?.scaleway_smoke_test_enabled ?? false} />
-            Enable Scaleway smoke tests
-          </label>
-          <label className="checkbox-line">
-            <input name="scaleway_live_smoke_test_enabled" type="checkbox" defaultChecked={settings?.scaleway_live_smoke_test_enabled ?? false} />
-            Enable live Scaleway smoke call
-          </label>
-          <label className="checkbox-line">
-            <input name="use_fake_provider_when_budget_zero" type="checkbox" defaultChecked={settings?.use_fake_provider_when_budget_zero ?? true} />
-            Use fake provider when budget blocks real mode
-          </label>
-          <button type="submit">Update Settings</button>
-        </form>
-      </section>
-
-      <section className="panel">
-        <h3>Synthetic Smoke Tests</h3>
-        <div className="warning-banner">
-          Synthetic mode never calls Scaleway. Live mode calls Scaleway only when paid AI, Scaleway mode, live smoke mode, API key, privacy policy, and token cap all pass.
-        </div>
-        <div className="button-row">
-          <button className="secondary-button" type="button" onClick={() => onSmokeTestRun("synthetic")} disabled={smokeRunning}>
-            {smokeRunning ? "Running Smoke Tests" : "Run Synthetic Smoke Tests"}
-          </button>
-          <button className="secondary-button" type="button" onClick={() => onSmokeTestRun("live")} disabled={smokeRunning}>
-            Run Live Scaleway Smoke Test
-          </button>
-        </div>
-        {smokeResults && (
-          <div className="table-wrap">
-            <table className="smoke-table">
-              <thead>
-                <tr>
-                  <th>Case</th>
-                  <th>Expected</th>
-                  <th>Local</th>
-                  <th>Provider</th>
-                  <th>Attempted</th>
-                  <th>Succeeded</th>
-                  <th>Pass</th>
-                  <th>Block</th>
-                  <th>Tokens</th>
-                </tr>
-              </thead>
-              <tbody>
-                {smokeResults.results.map((result) => (
-                  <tr key={result.case_id}>
-                    <td>{result.case_id}</td>
-                    <td>{result.expected_class}</td>
-                    <td>{result.local_privacy_class}</td>
-                    <td>{result.provider_reported_class ?? result.fake_classification ?? "none"}</td>
-                    <td>{String(result.external_call_attempted)}</td>
-                    <td>{String(result.external_call_succeeded)}</td>
-                    <td>{String(result.passed)}</td>
-                    <td>{result.blocking_reason ?? "none"}</td>
-                    <td>
-                      {result.token_metadata.estimated_input_tokens} in / {result.token_metadata.estimated_output_tokens} out / {result.token_metadata.usage_source}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <pre className="metadata-block">
-              {JSON.stringify(
-                {
-                  provider_mode: smokeResults.provider_mode,
-                  smoke_mode: smokeResults.smoke_mode,
-                  external_call_attempted: smokeResults.external_call_attempted,
-                  external_call_succeeded: smokeResults.external_call_succeeded
-                },
-                null,
-                2
-              )}
-            </pre>
-          </div>
-        )}
-      </section>
-
-      <section className="panel">
-        <h3>AI Smoke Console</h3>
-        <p className="panel-subtitle">
-          For short public/internal provider checks in FAST_DEV. Do not paste API keys, Authorization headers, .env content, private keys, proprietary IP, or private strategy.
-        </p>
-        <div className="warning-banner">
-          This is not general chat. Live calls may spend tokens, all calls go through policy/token/budget gates, and no conversation history is stored.
-        </div>
-        <form className="smoke-console-form" onSubmit={onSmokeConsoleSubmit}>
-          <label>
-            Short harmless prompt
-            <textarea
-              maxLength={500}
-              rows={3}
-              value={smokeConsolePrompt}
-              placeholder="summarize this public batch-growth equation in one sentence"
-              onChange={(event) => setSmokeConsolePrompt(event.target.value)}
-            />
-          </label>
-          <div className="button-row">
-            <button type="submit" disabled={smokeConsoleRunning || smokeConsolePrompt.trim().length === 0}>
-              {smokeConsoleRunning ? "Sending" : "Send"}
-            </button>
-            <button className="secondary-button" type="button" onClick={onSmokeConsoleClear}>
-              Clear
-            </button>
-          </div>
-          <div className="character-count">{smokeConsolePrompt.length}/500 characters - max output 80 tokens</div>
-        </form>
-
-        <div className={`token-meter token-meter-${tokenMeterState}`}>
-          <div className="token-meter-header">
-            <strong>Smoke token counter</strong>
-            <span>{tokenThresholdPercent.toFixed(2)}%</span>
-          </div>
-          <div className="token-meter-track" aria-label="Smoke token threshold usage">
-            <div className="token-meter-fill" style={{ width: `${Math.min(tokenThresholdPercent, 100)}%` }} />
-          </div>
-          <dl className="details token-details">
-            <div>
-              <dt>Input tokens this month</dt>
-              <dd>{currentInputTokens}</dd>
-            </div>
-            <div>
-              <dt>Output tokens this month</dt>
-              <dd>{currentOutputTokens}</dd>
-            </div>
-            <div>
-              <dt>Total tokens this month</dt>
-              <dd>{currentTotalTokens}</dd>
-            </div>
-            <div>
-              <dt>Smoke threshold</dt>
-              <dd>{tokenThreshold}</dd>
-            </div>
-            <div>
-              <dt>Remaining to threshold</dt>
-              <dd>{remainingTokens}</dd>
-            </div>
-            <div>
-              <dt>Configured Scaleway cap</dt>
-              <dd>{configuredMonthlyCap}</dd>
-            </div>
-          </dl>
-          {tokenMeterState === "warning" && <div className="warning-banner token-banner">Smoke usage is over 50% of the display threshold.</div>}
-          {tokenMeterState === "danger" && <div className="warning-banner token-banner">Smoke usage is over 80% of the display threshold.</div>}
-          {tokenMeterState === "blocked" && <div className="error-banner token-banner">Smoke usage is at or above the 500,000 token display threshold.</div>}
-        </div>
-
-        {smokeConsoleResult && (
-          <div className="smoke-console-result">
-            {smokeConsoleResult.response_text ? (
-              <div className="response-box">{smokeConsoleResult.response_text}</div>
-            ) : (
-              <div className="error-banner">{smokeConsoleResult.blocked_reason ?? "Smoke console request blocked."}</div>
-            )}
-            <pre className="metadata-block">
-              {JSON.stringify(
-                {
-                  provider: smokeConsoleResult.provider,
-                  model: smokeConsoleResult.model,
-                  mode: smokeConsoleResult.mode,
-                  privacy_class: smokeConsoleResult.privacy_class,
-                  blocked_reason: smokeConsoleResult.blocked_reason,
-                  external_call_attempted: smokeConsoleResult.external_call_attempted,
-                  external_call_succeeded: smokeConsoleResult.external_call_succeeded,
-                  estimated_input_tokens: smokeConsoleResult.estimated_input_tokens,
-                  estimated_output_tokens: smokeConsoleResult.estimated_output_tokens,
-                  actual_input_tokens: smokeConsoleResult.actual_input_tokens,
-                  actual_output_tokens: smokeConsoleResult.actual_output_tokens,
-                  usage_source: smokeConsoleResult.usage_source
-                },
-                null,
-                2
-              )}
-            </pre>
-          </div>
-        )}
-      </section>
-
-      <section className="panel">
-        <h3>AI Task</h3>
-        <form className="smoke-console-form" onSubmit={onTaskSubmit}>
-          <label>
+        <form className="ai-task-form" onSubmit={onTaskSubmit}>
+          <label className="ai-task-full-span">
             Prompt
             <textarea
-              rows={3}
+              rows={5}
               value={taskPrompt}
-              placeholder="Ask a short public/internal task"
+              placeholder="Ask one short public/internal task"
               onChange={(event) => setTaskPrompt(event.target.value)}
             />
           </label>
           <label>
             Route
             <select value={taskRouteClass} onChange={(event) => setTaskRouteClass(event.target.value)}>
-              <option value="local:fake">local:fake</option>
-              <option value="external:cheap">external:cheap</option>
+              {AI_ROUTE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </label>
           <label>
@@ -583,97 +279,465 @@ function AIDraft() {
               onChange={(event) => setTaskMaxTokens(event.target.value)}
             />
           </label>
-          <label className="checkbox-line">
+          <label className="checkbox-line task-context-toggle">
             <input
               type="checkbox"
               checked={taskIncludeContext}
               onChange={(event) => setTaskIncludeContext(event.target.checked)}
             />
-            Include project context (workspace: bluerev)
+            Include project context from {taskWorkspaceId || "selected workspace"}
           </label>
-          <div className="button-row">
+          <p className="ai-task-route-help ai-task-full-span">{routeHelp(taskRouteClass)}</p>
+          <div className="button-row ai-task-full-span">
             <button type="submit" disabled={taskRunning || taskPrompt.trim().length === 0}>
-              {taskRunning ? "Running" : "Run Task"}
+              {taskRunning ? "Running Task" : "Run AI Task"}
             </button>
           </div>
         </form>
 
         {taskResult && (
-          <div className="smoke-console-result">
+          <div className="task-result">
             {taskResult.status === "success" && taskResult.response_text ? (
-              <div className="response-box">{taskResult.response_text}</div>
+              <div className="response-box task-response">{taskResult.response_text}</div>
             ) : (
-              <div className="error-banner">
-                {taskResult.blocked_reason ?? taskResult.error_type ?? taskResult.status}
-              </div>
+              <div className="error-banner">{taskFailureText}</div>
             )}
-            <div className="chat-meta-note">
-              Project context: {taskResult.include_project_context ? "on" : "off"} - workspace:{" "}
-              {taskResult.workspace_id ?? "-"} - sources: {taskContextSourcesCount} - digest:{" "}
-              {taskContextDigestShort}
-            </div>
-            <pre className="metadata-block">
-              {JSON.stringify(
-                {
-                  ledger_id: taskResult.ledger_id,
-                  status: taskResult.status,
-                  selected_route_class: taskResult.selected_route_class,
-                  provider_id: taskResult.provider_id,
-                  model_id: taskResult.model_id,
-                  error_type: taskResult.error_type,
-                  blocked_reason: taskResult.blocked_reason,
-                  decision_reason: taskResult.decision_reason,
-                  include_project_context: taskResult.include_project_context,
-                  workspace_id: taskResult.workspace_id,
-                  context_digest: taskResult.context_digest,
-                  context_sources_count: taskResult.context_sources_count,
-                  usage: taskResult.usage
-                },
-                null,
-                2
-              )}
-            </pre>
+            <dl className="details ai-task-result-details">
+              <div>
+                <dt>Status</dt>
+                <dd>{taskResult.status}</dd>
+              </div>
+              <div>
+                <dt>Route</dt>
+                <dd>{taskResult.selected_route_class ?? "-"}</dd>
+              </div>
+              <div>
+                <dt>Provider</dt>
+                <dd>{taskResult.provider_id ?? "-"}</dd>
+              </div>
+              <div>
+                <dt>Model</dt>
+                <dd>{taskResult.model_id ?? "-"}</dd>
+              </div>
+              <div>
+                <dt>Ledger</dt>
+                <dd>{taskResult.ledger_id}</dd>
+              </div>
+              <div>
+                <dt>Usage</dt>
+                <dd>{formatUsage(taskResult)}</dd>
+              </div>
+              <div>
+                <dt>Context</dt>
+                <dd>{taskResult.include_project_context ? "on" : "off"}</dd>
+              </div>
+              <div>
+                <dt>Workspace</dt>
+                <dd>{taskResult.workspace_id ?? "-"}</dd>
+              </div>
+              <div>
+                <dt>Context sources</dt>
+                <dd>{taskResult.context_sources_count ?? 0}</dd>
+              </div>
+              <div>
+                <dt>Context digest</dt>
+                <dd>{shortDigest(taskResult.context_digest)}</dd>
+              </div>
+            </dl>
+            <details className="ai-draft-advanced-metadata">
+              <summary>Advanced metadata</summary>
+              <pre className="metadata-block">{JSON.stringify(taskResult, null, 2)}</pre>
+            </details>
           </div>
         )}
       </section>
 
-      <section className="panel">
-        <h3>Draft Request</h3>
-        <form className="draft-form" onSubmit={onDraftSubmit}>
-          <input name="workspace_id" defaultValue="bluerev" placeholder="Workspace ID" required />
-          <select name="provider_mode" defaultValue={settings?.provider_mode ?? "fake"}>
-            <option value="fake">fake</option>
-            <option value="scaleway">scaleway</option>
-          </select>
-          <input name="quality_level" defaultValue="draft" placeholder="Quality level" />
-          <textarea name="informal_model_idea" placeholder="Informal engineering model idea" rows={4} required />
-          <textarea name="model_context" placeholder="Optional model context" rows={3} />
-          <button type="submit">Create Structured Draft</button>
-        </form>
+      <section className="panel ai-context-source-panel">
+        <div className="ai-draft-section-heading">
+          <div>
+            <p className="eyebrow">Context Source</p>
+            <h3>Project knowledge source</h3>
+          </div>
+          <span className="ai-draft-route-pill">{taskWorkspaceId || "no workspace"}</span>
+        </div>
+        <p className="panel-subtitle">
+          Project knowledge is managed in Domain Foundation. When project context is enabled, records from this workspace are injected into PROJECT_CONTEXT.
+        </p>
+        <label className="ai-context-workspace">
+          Workspace ID for AI task context
+          <input value={taskWorkspaceId} onChange={(event) => setTaskWorkspaceId(event.target.value)} />
+        </label>
       </section>
 
-      {draft && (
-        <section className="panel">
-          <h3>Structured Draft</h3>
-          {draft.draft ? (
-            <div className="draft-result">
-              <h4>{draft.draft.model_title_suggestion}</h4>
-              <p>{draft.draft.engineering_question}</p>
-              <p>{draft.draft.model_scope}</p>
-              <DraftList title="Assumptions" items={draft.draft.proposed_assumptions} />
-              <DraftList title="Parameters" items={draft.draft.proposed_parameters} />
-              <DraftList title="Inputs" items={draft.draft.expected_inputs} />
-              <DraftList title="Outputs" items={draft.draft.expected_outputs} />
-              <DraftList title="Missing Information" items={draft.draft.missing_information} />
-              <DraftList title="Weaknesses" items={draft.draft.model_weaknesses} />
-              <p>{draft.draft.suggested_next_step}</p>
+      <details className="panel diagnostics-panel">
+        <summary>
+          <span>
+            <span className="eyebrow">Diagnostics / Developer</span>
+            <strong>Smoke, settings, credentials, legacy draft</strong>
+          </span>
+        </summary>
+
+        <section className="diagnostics-grid">
+          <DiagnosticCard title="AI Cost Guard">
+            <dl className="details">
+              <div>
+                <dt>Provider mode</dt>
+                <dd>{status?.active_provider_mode ?? "checking"}</dd>
+              </div>
+              <div>
+                <dt>Policy mode</dt>
+                <dd>{status?.policy_mode ?? "FAST_DEV"}</dd>
+              </div>
+              <div>
+                <dt>Provider id</dt>
+                <dd>{status?.provider_id ?? "checking"}</dd>
+              </div>
+              <div>
+                <dt>Budget status</dt>
+                <dd>{status?.budget_status ?? "checking"}</dd>
+              </div>
+              <div>
+                <dt>Credential status</dt>
+                <dd>{status?.credential_status ?? "checking"}</dd>
+              </div>
+              <div>
+                <dt>Monthly budget</dt>
+                <dd>${status?.monthly_api_budget_usd ?? 0}</dd>
+              </div>
+              <div>
+                <dt>Spend this month</dt>
+                <dd>${status?.spend_month_to_date_usd ?? 0}</dd>
+              </div>
+              <div>
+                <dt>External calls</dt>
+                <dd>{status ? String(status.external_calls_allowed) : "checking"}</dd>
+              </div>
+              <div>
+                <dt>Scaleway key</dt>
+                <dd>{status ? String(status.scaleway_api_key_configured) : "checking"}</dd>
+              </div>
+              <div>
+                <dt>Scaleway implementation</dt>
+                <dd>{status?.scaleway_provider_implementation ?? "stub_no_external_calls"}</dd>
+              </div>
+              <div>
+                <dt>Input tokens MTD</dt>
+                <dd>{status?.scaleway_input_tokens_month_to_date ?? 0}</dd>
+              </div>
+              <div>
+                <dt>Output tokens MTD</dt>
+                <dd>{status?.scaleway_output_tokens_month_to_date ?? 0}</dd>
+              </div>
+              <div>
+                <dt>Total tokens MTD</dt>
+                <dd>{status?.usage_total_tokens ?? 0}</dd>
+              </div>
+              <div>
+                <dt>Blocking reason</dt>
+                <dd>{status?.blocking_reason ?? "none"}</dd>
+              </div>
+            </dl>
+          </DiagnosticCard>
+
+          <DiagnosticCard title="Scaleway API Key">
+            <p className="panel-subtitle">
+              Paste the key only here. JarvisOS never shows it again, never stores it in AI settings, and this runtime-memory key is forgotten when the backend restarts.
+            </p>
+            <div className="warning-banner">
+              Do not paste API keys into chat, logs, docs, smoke prompts, or model fields.
             </div>
-          ) : (
-            <div className="error-banner">{draft.ai_metadata.blocked_reason ?? "AI request blocked."}</div>
-          )}
-          <pre className="metadata-block">{JSON.stringify(draft.ai_metadata, null, 2)}</pre>
+            <dl className="details">
+              <div>
+                <dt>Key present</dt>
+                <dd>{scalewaySecretStatus ? String(scalewaySecretStatus.key_present) : "checking"}</dd>
+              </div>
+              <div>
+                <dt>Source</dt>
+                <dd>{scalewaySecretStatus?.source ?? "checking"}</dd>
+              </div>
+              <div>
+                <dt>Preview</dt>
+                <dd>{scalewaySecretStatus?.masked_preview ?? "none"}</dd>
+              </div>
+              <div>
+                <dt>Storage</dt>
+                <dd>{scalewaySecretStatus?.storage_mode ?? "runtime_memory"}</dd>
+              </div>
+            </dl>
+            <form className="secret-key-form" onSubmit={onScalewayKeySave}>
+              <label>
+                Scaleway API key
+                <input name="api_key" type="password" autoComplete="off" placeholder="Paste key for this backend session" required />
+              </label>
+              <div className="button-row">
+                <button type="submit">Save Key</button>
+                <button className="secondary-button" type="button" onClick={onScalewayKeyDelete}>
+                  Delete Saved Key
+                </button>
+                <button className="secondary-button" type="button" onClick={onScalewayKeyRefresh}>
+                  Refresh Status
+                </button>
+              </div>
+            </form>
+          </DiagnosticCard>
+
+          <DiagnosticCard title="AI Settings">
+            <div className="warning-banner">
+              Scaleway live mode is disabled by default and requires all guardrails to pass.
+            </div>
+            <form className="settings-form" onSubmit={onSettingsSubmit}>
+              <label>
+                Monthly budget USD
+                <input name="monthly_api_budget_usd" type="number" min="0" step="1" defaultValue={settings?.monthly_api_budget_usd ?? 0} />
+              </label>
+              <label>
+                Provider mode
+                <select name="provider_mode" defaultValue={settings?.provider_mode ?? "fake"}>
+                  <option value="fake">fake</option>
+                  <option value="scaleway">scaleway</option>
+                </select>
+              </label>
+              <label>
+                Scaleway monthly token cap
+                <input name="scaleway_monthly_token_cap" type="number" min="0" defaultValue={settings?.scaleway_monthly_token_cap ?? 500000} />
+              </label>
+              <label>
+                Scaleway hard stop cap
+                <input name="scaleway_hard_stop_token_cap" type="number" min="0" defaultValue={settings?.scaleway_hard_stop_token_cap ?? 800000} />
+              </label>
+              <label className="checkbox-line">
+                <input name="paid_ai_enabled" type="checkbox" defaultChecked={settings?.paid_ai_enabled ?? false} />
+                Enable paid AI
+              </label>
+              <label className="checkbox-line">
+                <input name="scaleway_enabled" type="checkbox" defaultChecked={settings?.scaleway_enabled ?? false} />
+                Enable Scaleway mode
+              </label>
+              <label className="checkbox-line">
+                <input name="scaleway_smoke_test_enabled" type="checkbox" defaultChecked={settings?.scaleway_smoke_test_enabled ?? false} />
+                Enable Scaleway smoke tests
+              </label>
+              <label className="checkbox-line">
+                <input name="scaleway_live_smoke_test_enabled" type="checkbox" defaultChecked={settings?.scaleway_live_smoke_test_enabled ?? false} />
+                Enable live Scaleway smoke call
+              </label>
+              <label className="checkbox-line">
+                <input name="use_fake_provider_when_budget_zero" type="checkbox" defaultChecked={settings?.use_fake_provider_when_budget_zero ?? true} />
+                Use fake provider when budget blocks real mode
+              </label>
+              <button type="submit">Update Settings</button>
+            </form>
+          </DiagnosticCard>
+
+          <DiagnosticCard title="Synthetic Smoke Tests">
+            <div className="warning-banner">
+              Synthetic mode never calls Scaleway. Live mode calls Scaleway only when paid AI, Scaleway mode, live smoke mode, API key, privacy policy, and token cap all pass.
+            </div>
+            <div className="button-row">
+              <button className="secondary-button" type="button" onClick={() => onSmokeTestRun("synthetic")} disabled={smokeRunning}>
+                {smokeRunning ? "Running Smoke Tests" : "Run Synthetic Smoke Tests"}
+              </button>
+              <button className="secondary-button" type="button" onClick={() => onSmokeTestRun("live")} disabled={smokeRunning}>
+                Run Live Scaleway Smoke Test
+              </button>
+            </div>
+            {smokeResults && (
+              <div className="table-wrap">
+                <table className="smoke-table">
+                  <thead>
+                    <tr>
+                      <th>Case</th>
+                      <th>Expected</th>
+                      <th>Local</th>
+                      <th>Provider</th>
+                      <th>Attempted</th>
+                      <th>Succeeded</th>
+                      <th>Pass</th>
+                      <th>Block</th>
+                      <th>Tokens</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {smokeResults.results.map((result) => (
+                      <tr key={result.case_id}>
+                        <td>{result.case_id}</td>
+                        <td>{result.expected_class}</td>
+                        <td>{result.local_privacy_class}</td>
+                        <td>{result.provider_reported_class ?? result.fake_classification ?? "none"}</td>
+                        <td>{String(result.external_call_attempted)}</td>
+                        <td>{String(result.external_call_succeeded)}</td>
+                        <td>{String(result.passed)}</td>
+                        <td>{result.blocking_reason ?? "none"}</td>
+                        <td>
+                          {result.token_metadata.estimated_input_tokens} in / {result.token_metadata.estimated_output_tokens} out / {result.token_metadata.usage_source}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <details className="ai-draft-advanced-metadata">
+                  <summary>Advanced metadata</summary>
+                  <pre className="metadata-block">
+                    {JSON.stringify(
+                      {
+                        provider_mode: smokeResults.provider_mode,
+                        smoke_mode: smokeResults.smoke_mode,
+                        external_call_attempted: smokeResults.external_call_attempted,
+                        external_call_succeeded: smokeResults.external_call_succeeded
+                      },
+                      null,
+                      2
+                    )}
+                  </pre>
+                </details>
+              </div>
+            )}
+          </DiagnosticCard>
+
+          <DiagnosticCard title="AI Smoke Console">
+            <p className="panel-subtitle">
+              For short public/internal provider checks in FAST_DEV. Do not paste API keys, Authorization headers, .env content, private keys, proprietary IP, or private strategy.
+            </p>
+            <form className="smoke-console-form" onSubmit={onSmokeConsoleSubmit}>
+              <label>
+                Short harmless prompt
+                <textarea
+                  maxLength={500}
+                  rows={3}
+                  value={smokeConsolePrompt}
+                  placeholder="summarize this public batch-growth equation in one sentence"
+                  onChange={(event) => setSmokeConsolePrompt(event.target.value)}
+                />
+              </label>
+              <div className="button-row">
+                <button type="submit" disabled={smokeConsoleRunning || smokeConsolePrompt.trim().length === 0}>
+                  {smokeConsoleRunning ? "Sending" : "Send"}
+                </button>
+                <button className="secondary-button" type="button" onClick={onSmokeConsoleClear}>
+                  Clear
+                </button>
+              </div>
+              <div className="character-count">{smokeConsolePrompt.length}/500 characters - max output 80 tokens</div>
+            </form>
+
+            <div className={`token-meter token-meter-${tokenMeterState}`}>
+              <div className="token-meter-header">
+                <strong>Smoke token counter</strong>
+                <span>{tokenThresholdPercent.toFixed(2)}%</span>
+              </div>
+              <div className="token-meter-track" aria-label="Smoke token threshold usage">
+                <div className="token-meter-fill" style={{ width: `${Math.min(tokenThresholdPercent, 100)}%` }} />
+              </div>
+              <dl className="details token-details">
+                <div>
+                  <dt>Input tokens this month</dt>
+                  <dd>{currentInputTokens}</dd>
+                </div>
+                <div>
+                  <dt>Output tokens this month</dt>
+                  <dd>{currentOutputTokens}</dd>
+                </div>
+                <div>
+                  <dt>Total tokens this month</dt>
+                  <dd>{currentTotalTokens}</dd>
+                </div>
+                <div>
+                  <dt>Smoke threshold</dt>
+                  <dd>{tokenThreshold}</dd>
+                </div>
+                <div>
+                  <dt>Remaining to threshold</dt>
+                  <dd>{remainingTokens}</dd>
+                </div>
+                <div>
+                  <dt>Configured Scaleway cap</dt>
+                  <dd>{configuredMonthlyCap}</dd>
+                </div>
+              </dl>
+            </div>
+
+            {smokeConsoleResult && (
+              <div className="smoke-console-result">
+                {smokeConsoleResult.response_text ? (
+                  <div className="response-box">{smokeConsoleResult.response_text}</div>
+                ) : (
+                  <div className="error-banner">{smokeConsoleResult.blocked_reason ?? "Smoke console request blocked."}</div>
+                )}
+                <details className="ai-draft-advanced-metadata">
+                  <summary>Advanced metadata</summary>
+                  <pre className="metadata-block">
+                    {JSON.stringify(
+                      {
+                        provider: smokeConsoleResult.provider,
+                        model: smokeConsoleResult.model,
+                        mode: smokeConsoleResult.mode,
+                        privacy_class: smokeConsoleResult.privacy_class,
+                        blocked_reason: smokeConsoleResult.blocked_reason,
+                        external_call_attempted: smokeConsoleResult.external_call_attempted,
+                        external_call_succeeded: smokeConsoleResult.external_call_succeeded,
+                        estimated_input_tokens: smokeConsoleResult.estimated_input_tokens,
+                        estimated_output_tokens: smokeConsoleResult.estimated_output_tokens,
+                        actual_input_tokens: smokeConsoleResult.actual_input_tokens,
+                        actual_output_tokens: smokeConsoleResult.actual_output_tokens,
+                        usage_source: smokeConsoleResult.usage_source
+                      },
+                      null,
+                      2
+                    )}
+                  </pre>
+                </details>
+              </div>
+            )}
+          </DiagnosticCard>
+
+          <DiagnosticCard title="Legacy Modeling Draft">
+            <form className="draft-form" onSubmit={onDraftSubmit}>
+              <input name="workspace_id" defaultValue={taskWorkspaceId} placeholder="Workspace ID" required />
+              <select name="provider_mode" defaultValue={settings?.provider_mode ?? "fake"}>
+                <option value="fake">fake</option>
+                <option value="scaleway">scaleway</option>
+              </select>
+              <input name="quality_level" defaultValue="draft" placeholder="Quality level" />
+              <textarea name="informal_model_idea" placeholder="Informal engineering model idea" rows={4} required />
+              <textarea name="model_context" placeholder="Optional model context" rows={3} />
+              <button type="submit">Create Structured Draft</button>
+            </form>
+            {draft && (
+              <div className="draft-result diagnostics-draft-result">
+                {draft.draft ? (
+                  <>
+                    <h4>{draft.draft.model_title_suggestion}</h4>
+                    <p>{draft.draft.engineering_question}</p>
+                    <p>{draft.draft.model_scope}</p>
+                    <DraftList title="Assumptions" items={draft.draft.proposed_assumptions} />
+                    <DraftList title="Parameters" items={draft.draft.proposed_parameters} />
+                    <DraftList title="Inputs" items={draft.draft.expected_inputs} />
+                    <DraftList title="Outputs" items={draft.draft.expected_outputs} />
+                    <DraftList title="Missing Information" items={draft.draft.missing_information} />
+                    <DraftList title="Weaknesses" items={draft.draft.model_weaknesses} />
+                    <p>{draft.draft.suggested_next_step}</p>
+                  </>
+                ) : (
+                  <div className="error-banner">{draft.ai_metadata.blocked_reason ?? "AI request blocked."}</div>
+                )}
+                <details className="ai-draft-advanced-metadata">
+                  <summary>Advanced metadata</summary>
+                  <pre className="metadata-block">{JSON.stringify(draft.ai_metadata, null, 2)}</pre>
+                </details>
+              </div>
+            )}
+          </DiagnosticCard>
         </section>
-      )}
+      </details>
+    </section>
+  );
+}
+
+function DiagnosticCard({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="diagnostics-card">
+      <h4>{title}</h4>
+      {children}
     </section>
   );
 }

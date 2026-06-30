@@ -559,6 +559,196 @@ button {
   font-size: 12px;
 }
 
+.ai-workspace-page {
+  max-width: 1180px;
+}
+
+.ai-draft-section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+
+.ai-draft-section-heading h3 {
+  margin: 4px 0 0;
+}
+
+.ai-draft-route-pill {
+  padding: 5px 9px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #374151;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.ai-console-panel {
+  border-color: #93c5fd;
+}
+
+.ai-task-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(180px, 0.6fr) minmax(180px, 0.6fr);
+  gap: 12px;
+}
+
+.ai-task-form label {
+  display: grid;
+  gap: 6px;
+  color: #52616b;
+  font-size: 13px;
+}
+
+.ai-task-form textarea,
+.ai-task-form select,
+.ai-task-form input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1f2933;
+  font: inherit;
+}
+
+.ai-task-form textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.ai-task-form button {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid #1d4ed8;
+  border-radius: 6px;
+  background: #1d4ed8;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+}
+
+.ai-task-form button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.ai-task-full-span {
+  grid-column: 1 / -1;
+}
+
+.task-context-toggle {
+  align-self: end;
+  min-height: 38px;
+}
+
+.ai-task-route-help {
+  margin: 0;
+  color: #52616b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.task-result {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.task-response {
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.ai-task-result-details {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ai-draft-advanced-metadata {
+  margin-top: 4px;
+}
+
+.ai-draft-advanced-metadata summary {
+  color: #52616b;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ai-context-source-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.ai-context-workspace {
+  display: grid;
+  gap: 6px;
+  color: #52616b;
+  font-size: 13px;
+}
+
+.ai-context-workspace input {
+  width: 100%;
+  max-width: 360px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1f2933;
+  font: inherit;
+}
+
+.diagnostics-card h4 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.diagnostics-panel {
+  background: #f8fafc;
+}
+
+.diagnostics-panel > summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+
+.diagnostics-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.diagnostics-panel > summary strong {
+  display: block;
+  margin-top: 4px;
+}
+
+.diagnostics-grid {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.diagnostics-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #d8dee9;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.diagnostics-draft-result {
+  margin-top: 16px;
+}
+
 .nav-button--dev {
   border-color: rgba(250, 204, 21, 0.4);
   color: #fef08a;
@@ -788,7 +978,9 @@ button {
     .foundation-toolbar,
     .settings-form,
     .draft-form,
-    .secret-key-form {
+    .secret-key-form,
+    .ai-task-form,
+    .ai-task-result-details {
     grid-template-columns: 1fr;
   }
 
