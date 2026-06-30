@@ -89,14 +89,55 @@ _TASK_KIND_TO_AI_TASK_TYPE: dict[str, AITaskType] = {
 }
 
 
+def _local_model(default: str, *env_names: str) -> str:
+    for env_name in env_names:
+        configured = os.getenv(env_name)
+        if configured:
+            return configured
+    return default
+
+
 def _default_bindings() -> dict[str, ProviderBinding]:
     """Bindings are config-driven (env), not scattered runtime constants."""
+    local_general_model = _local_model("gemma4:12b-it-qat", "AI_ROUTE_LOCAL_GENERAL_MODEL", "AI_ROUTE_LOCAL_MODEL")
     return {
         "local:fake": ProviderBinding(
             "local:fake", FAKE_PROVIDER_ID, os.getenv("AI_ROUTE_FAKE_MODEL", "fake-deterministic-v1"), False, 256
         ),
+        "local:fast": ProviderBinding(
+            "local:fast",
+            LOCAL_OLLAMA_PROVIDER_ID,
+            _local_model("qwen3:8b", "AI_ROUTE_LOCAL_FAST_MODEL"),
+            False,
+            512,
+        ),
+        "local:general": ProviderBinding(
+            "local:general",
+            LOCAL_OLLAMA_PROVIDER_ID,
+            local_general_model,
+            False,
+            512,
+        ),
         "local:gemma": ProviderBinding(
-            "local:gemma", LOCAL_OLLAMA_PROVIDER_ID, os.getenv("AI_ROUTE_LOCAL_MODEL", "gemma3:4b"), False, 512
+            "local:gemma",
+            LOCAL_OLLAMA_PROVIDER_ID,
+            local_general_model,
+            False,
+            512,
+        ),
+        "local:coder": ProviderBinding(
+            "local:coder",
+            LOCAL_OLLAMA_PROVIDER_ID,
+            _local_model("deepseek-coder-v2:16b", "AI_ROUTE_LOCAL_CODER_MODEL"),
+            False,
+            512,
+        ),
+        "local:coder_heavy": ProviderBinding(
+            "local:coder_heavy",
+            LOCAL_OLLAMA_PROVIDER_ID,
+            _local_model("qwen3-coder:30b", "AI_ROUTE_LOCAL_CODER_HEAVY_MODEL"),
+            False,
+            512,
         ),
         "external:cheap": ProviderBinding(
             "external:cheap",
