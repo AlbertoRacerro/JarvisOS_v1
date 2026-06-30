@@ -3,6 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.modules.ai.context_builder import DEFAULT_CONTEXT_BUDGET_CHARS, MAX_CONTEXT_BLOCKS
 from app.modules.ai.contracts import AIPolicyMode, AITaskType, AIUsage
 
 
@@ -130,11 +131,13 @@ class AITaskRunRequest(BaseModel):
     def validate_context_blocks_bounds(self) -> "AITaskRunRequest":
         if self.context_blocks is None:
             return self
-        if len(self.context_blocks) > 20:
-            raise ValueError("context_blocks must contain at most 20 items.")
+        if len(self.context_blocks) > MAX_CONTEXT_BLOCKS:
+            raise ValueError(f"context_blocks must contain at most {MAX_CONTEXT_BLOCKS} items.")
         serialized = json.dumps(self.context_blocks, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-        if len(serialized) > 32_000:
-            raise ValueError("context_blocks serialized size must be at most 32000 characters.")
+        if len(serialized) > DEFAULT_CONTEXT_BUDGET_CHARS:
+            raise ValueError(
+                f"context_blocks serialized size must be at most {DEFAULT_CONTEXT_BUDGET_CHARS} characters."
+            )
         return self
 
 

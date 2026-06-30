@@ -269,6 +269,7 @@ SCHEMA_STATEMENTS = [
         route_reason_json TEXT NOT NULL,
         prompt_digest TEXT,
         context_digest TEXT,
+        context_sources_json TEXT,
         output_digest TEXT,
         input_tokens INTEGER,
         output_tokens INTEGER,
@@ -319,6 +320,9 @@ SCHEMA_MIGRATION_STATEMENTS = [
     # current CREATE exactly. Idempotent on fresh DBs via duplicate-column swallow.
     "ALTER TABLE ai_settings ADD COLUMN scaleway_token_cap INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE ai_settings ADD COLUMN scaleway_tokens_month_to_date INTEGER NOT NULL DEFAULT 0",
+    # POS-2: source manifest for context blocks. Legacy DBs created at POS-1 have
+    # ai_jobs without this column; this upgrades them in place.
+    "ALTER TABLE ai_jobs ADD COLUMN context_sources_json TEXT",
 ]
 
 SCHEMA_INDEX_STATEMENTS = [

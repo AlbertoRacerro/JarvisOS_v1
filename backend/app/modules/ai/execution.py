@@ -13,7 +13,6 @@ never prompt/output content or any secret.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -22,6 +21,14 @@ from dataclasses import dataclass
 from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
+from app.modules.ai.context_builder import (
+    DEFAULT_CONTEXT_BUDGET_CHARS,
+    ContextBlockError,
+    assemble_prompt,
+    canonical_digest,
+    canonicalize_blocks,
+    context_sources_manifest,
+)
 from app.modules.ai.contracts import (
     AIProviderAdapter,
     AIRequest,
@@ -103,11 +110,6 @@ def _default_adapters() -> dict[str, AIProviderAdapter]:
     return {FAKE_PROVIDER_ID: FakeProviderAdapter(), SCALEWAY_PROVIDER_ID: ScalewayProviderAdapter()}
 
 
-def canonical_digest(value: object) -> str:
-    canonical = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
 def resolve_binding(
     route_class: str, bindings: dict[str, ProviderBinding] | None = None
 ) -> tuple[ProviderBinding | None, RoutingDecision]:
@@ -154,6 +156,7 @@ def _write_ai_job(
     decision: RoutingDecision,
     prompt_digest: str | None,
     context_digest: str | None,
+    context_sources: list[dict] | None,
     response: AIResponse | None,
     latency_ms: int,
     error_type: str | None,
@@ -170,14 +173,16 @@ def _write_ai_job(
     route_reason_json = json.dumps(
         {"decision_reason": decision.decision_reason, "blocked_reason": decision.blocked_reason}
     )
+    context_sources_json = json.dumps(context_sources) if context_sources else None
     with open_sqlite_connection() as connection:
         connection.execute(
             """
             INSERT INTO ai_jobs (
                 id, created_at, status, task_kind, requested_route_class, selected_route_class,
                 provider_id, model_id, route_reason_json, prompt_digest, context_digest,
-                output_digest, input_tokens, output_tokens, cost_estimate, latency_ms, error_type
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                context_sources_json, output_digest, input_tokens, output_tokens, cost_estimate,
+                latency_ms, error_type
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 job_id,
@@ -191,6 +196,7 @@ def _write_ai_job(
                 route_reason_json,
                 prompt_digest,
                 context_digest,
+                context_sources_json,
                 output_digest,
                 input_tokens,
                 output_tokens,
@@ -227,7 +233,54 @@ def run_ai_task(
     requested_route_class = route_class
     selected_route_class = route_class or TASK_KIND_DEFAULT_ROUTE.get(task_kind, "local:fake")
     prompt_digest = canonical_digest({"prompt": user_prompt})
-    context_digest = canonical_digest(context_blocks) if context_blocks else None
+
+    # Normalize + budget context in the spine (not only the HTTP layer) so direct
+    # and script callers cannot bypass it. Fail closed before any provider call.
+    try:
+        blocks = canonicalize_blocks(context_blocks)
+    except ContextBlockError as exc:
+        bad = RoutingDecision(blocked=True, blocked_reason="context_malformed", decision_reason=str(exc))
+        ledger_id = _write_ai_job(
+            status="validation_error",
+            task_kind=task_kind,
+            requested_route_class=requested_route_class,
+            selected_route_class=selected_route_class,
+            decision=bad,
+            prompt_digest=prompt_digest,
+            context_digest=None,
+            context_sources=None,
+            response=None,
+            latency_ms=_elapsed_ms(started),
+            error_type="context_malformed",
+        )
+        return AiTaskOutcome("validation_error", ledger_id, selected_route_class, bad, error_type="context_malformed")
+
+    serialized_context_len = (
+        len(json.dumps(blocks, sort_keys=True, separators=(",", ":"), ensure_ascii=False)) if blocks else 0
+    )
+    if serialized_context_len > DEFAULT_CONTEXT_BUDGET_CHARS:
+        bad = RoutingDecision(
+            blocked=True,
+            blocked_reason="context_budget_exceeded",
+            decision_reason=f"context {serialized_context_len} chars exceeds budget {DEFAULT_CONTEXT_BUDGET_CHARS}",
+        )
+        ledger_id = _write_ai_job(
+            status="validation_error",
+            task_kind=task_kind,
+            requested_route_class=requested_route_class,
+            selected_route_class=selected_route_class,
+            decision=bad,
+            prompt_digest=prompt_digest,
+            context_digest=None,
+            context_sources=None,
+            response=None,
+            latency_ms=_elapsed_ms(started),
+            error_type="context_budget_exceeded",
+        )
+        return AiTaskOutcome("validation_error", ledger_id, selected_route_class, bad, error_type="context_budget_exceeded")
+
+    context_digest = canonical_digest(blocks) if blocks else None
+    context_sources = context_sources_manifest(blocks) if blocks else None
 
     binding, decision = resolve_binding(selected_route_class, bindings)
     if binding is None:
@@ -240,6 +293,7 @@ def run_ai_task(
             decision=decision,
             prompt_digest=prompt_digest,
             context_digest=context_digest,
+            context_sources=context_sources,
             response=None,
             latency_ms=_elapsed_ms(started),
             error_type=status,
@@ -266,6 +320,7 @@ def run_ai_task(
             decision=config_decision,
             prompt_digest=prompt_digest,
             context_digest=context_digest,
+            context_sources=context_sources,
             response=None,
             latency_ms=_elapsed_ms(started),
             error_type="config_error",
@@ -291,6 +346,7 @@ def run_ai_task(
             decision=config_decision,
             prompt_digest=prompt_digest,
             context_digest=context_digest,
+            context_sources=context_sources,
             response=None,
             latency_ms=_elapsed_ms(started),
             error_type="config_error",
@@ -299,7 +355,7 @@ def run_ai_task(
 
     request = AIRequest(
         task_type=_ai_task_type_for(task_kind),
-        prompt=user_prompt,
+        prompt=assemble_prompt(blocks, user_prompt),
         model_preference=binding.model_id,
         max_output_tokens=effective_max,
         metadata={"context_digest": context_digest, "selected_route_class": selected_route_class},
@@ -318,6 +374,7 @@ def run_ai_task(
             decision=err_decision,
             prompt_digest=prompt_digest,
             context_digest=context_digest,
+            context_sources=context_sources,
             response=None,
             latency_ms=_elapsed_ms(started),
             error_type=type(exc).__name__,
@@ -338,6 +395,7 @@ def run_ai_task(
         decision=decision,
         prompt_digest=prompt_digest,
         context_digest=context_digest,
+        context_sources=context_sources,
         response=response,
         latency_ms=_elapsed_ms(started),
         error_type=error_type,
