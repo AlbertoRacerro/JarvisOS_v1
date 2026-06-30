@@ -227,12 +227,34 @@ def run_ai_task(
     adapters: dict[str, AIProviderAdapter] | None = None,
     bindings: dict[str, ProviderBinding] | None = None,
     external_blocked_reason: str | None = None,
+    context_build_error: str | None = None,
 ) -> AiTaskOutcome:
     started = time.perf_counter()
     adapters = adapters if adapters is not None else _default_adapters()
     requested_route_class = route_class
     selected_route_class = route_class or TASK_KIND_DEFAULT_ROUTE.get(task_kind, "local:fake")
     prompt_digest = canonical_digest({"prompt": user_prompt})
+
+    # Context assembly upstream (e.g. workspace builder) failed: fail closed before
+    # any provider call and record it. No partial/uncontexted call is made.
+    if context_build_error is not None:
+        bad = RoutingDecision(
+            blocked=True, blocked_reason="context_build_error", decision_reason=context_build_error
+        )
+        ledger_id = _write_ai_job(
+            status="config_error",
+            task_kind=task_kind,
+            requested_route_class=requested_route_class,
+            selected_route_class=selected_route_class,
+            decision=bad,
+            prompt_digest=prompt_digest,
+            context_digest=None,
+            context_sources=None,
+            response=None,
+            latency_ms=_elapsed_ms(started),
+            error_type="context_build_error",
+        )
+        return AiTaskOutcome("config_error", ledger_id, selected_route_class, bad, error_type="context_build_error")
 
     # Normalize + budget context in the spine (not only the HTTP layer) so direct
     # and script callers cannot bypass it. Fail closed before any provider call.

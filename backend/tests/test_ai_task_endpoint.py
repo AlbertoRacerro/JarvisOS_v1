@@ -271,3 +271,72 @@ def test_task_endpoint_accepts_small_context_blocks_for_local_fake(client: TestC
     rows = _all_ai_jobs()
     assert len(rows) == 1
     assert rows[0]["context_digest"].startswith("sha256:")
+
+
+def test_task_endpoint_without_project_context_records_no_sources(client: TestClient) -> None:
+    response = client.post(
+        "/ai/tasks/run",
+        json={"prompt": "no project context", "route_class": "local:fake"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    rows = _all_ai_jobs()
+    assert len(rows) == 1
+    assert rows[0]["context_sources_json"] is None
+
+
+def test_task_endpoint_include_project_context_injects_workspace_context(client: TestClient) -> None:
+    import json
+
+    from app.modules.modeling.models import DecisionCreate, ParameterCreate
+    from app.modules.modeling.service import create_decision, create_parameter
+
+    create_decision("bluerev", DecisionCreate(title="Provider", decision_text="Scaleway EU first", status="accepted"))
+    create_parameter(
+        "bluerev",
+        ParameterCreate(name="tube_diameter", value="0.05", unit="m", source_ref="spec-1", status="approved"),
+    )
+
+    response = client.post(
+        "/ai/tasks/run",
+        json={
+            "prompt": "what do you know about the project?",
+            "route_class": "local:fake",
+            "include_project_context": True,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+
+    rows = _all_ai_jobs()
+    assert len(rows) == 1
+    assert rows[0]["context_digest"] is not None
+    sources = json.loads(rows[0]["context_sources_json"])
+    assert any(source["type"] == "decision" for source in sources)
+    assert any(source["type"] == "parameter" for source in sources)
+
+
+def test_task_endpoint_invalid_workspace_fails_closed_before_provider(client: TestClient) -> None:
+    response = client.post(
+        "/ai/tasks/run",
+        json={
+            "prompt": "context from a missing workspace",
+            "route_class": "local:fake",
+            "include_project_context": True,
+            "workspace_id": "does-not-exist",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "config_error"
+    assert body["error_type"] == "context_build_error"
+    assert body["response_text"] is None
+
+    rows = _all_ai_jobs()
+    assert len(rows) == 1
+    assert rows[0]["status"] == "config_error"
+    assert rows[0]["error_type"] == "context_build_error"

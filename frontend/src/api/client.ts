@@ -335,6 +335,8 @@ export type AITaskRunRequest = {
   task_kind?: string;
   max_tokens?: number;
   context_blocks?: unknown[];
+  include_project_context?: boolean;
+  workspace_id?: string;
 };
 
 export type AIUsage = {

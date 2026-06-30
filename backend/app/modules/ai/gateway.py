@@ -56,6 +56,12 @@ class AIGateway:
         return supervisor_public_test.run_supervisor_public_test(request)
 
     def run_task(self, request: AITaskRunRequest) -> AITaskRunResponse:
+        import json as _json
+
+        from app.modules.ai.context_builder import (
+            DEFAULT_CONTEXT_BUDGET_CHARS,
+            build_workspace_context_bundle,
+        )
         from app.modules.ai.execution import run_ai_task
 
         selected_route_class = request.route_class or "local:fake"
@@ -66,13 +72,36 @@ class AIGateway:
             if not status.external_calls_allowed:
                 external_blocked_reason = status.blocking_reason or "external_calls_disabled"
 
+        manual_blocks = list(request.context_blocks or [])
+        context_blocks: list[dict] = manual_blocks
+        context_build_error = None
+        if request.include_project_context:
+            workspace_id = request.workspace_id or "bluerev"
+            manual_len = (
+                len(_json.dumps(manual_blocks, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
+                if manual_blocks
+                else 0
+            )
+            # Budget-aware: build workspace context only within the budget left after
+            # the manual blocks, so opt-in context degrades (drops blocks) instead of
+            # making a previously-working task fail closed on the spine budget.
+            remaining = max(0, DEFAULT_CONTEXT_BUDGET_CHARS - manual_len)
+            try:
+                bundle = build_workspace_context_bundle(workspace_id, budget_chars=remaining)
+            except Exception as exc:  # workspace missing / build failure: fail closed
+                context_build_error = f"workspace_context_build_failed: {type(exc).__name__}"
+            else:
+                # manual/explicit context first, workspace context after.
+                context_blocks = manual_blocks + bundle.blocks
+
         outcome = run_ai_task(
             user_prompt=request.prompt,
             task_kind=request.task_kind,
             route_class=selected_route_class,
-            context_blocks=request.context_blocks,
+            context_blocks=context_blocks,
             max_output_tokens=request.max_tokens,
             external_blocked_reason=external_blocked_reason,
+            context_build_error=context_build_error,
         )
         response = outcome.response
         return AITaskRunResponse(

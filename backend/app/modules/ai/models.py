@@ -126,6 +126,8 @@ class AITaskRunRequest(BaseModel):
     task_kind: str = "general"
     max_tokens: int | None = Field(default=None, ge=1)
     context_blocks: list[dict[str, Any]] | None = None
+    include_project_context: bool = False
+    workspace_id: str | None = None
 
     @model_validator(mode="after")
     def validate_context_blocks_bounds(self) -> "AITaskRunRequest":

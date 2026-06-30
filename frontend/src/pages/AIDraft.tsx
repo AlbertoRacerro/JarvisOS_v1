@@ -33,6 +33,7 @@ function AIDraft() {
   const [taskPrompt, setTaskPrompt] = useState("");
   const [taskRouteClass, setTaskRouteClass] = useState("local:fake");
   const [taskMaxTokens, setTaskMaxTokens] = useState("64");
+  const [taskIncludeContext, setTaskIncludeContext] = useState(false);
   const [taskResult, setTaskResult] = useState<AITaskRunResponse | null>(null);
   const [taskRunning, setTaskRunning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -150,7 +151,8 @@ function AIDraft() {
       prompt,
       route_class: taskRouteClass,
       task_kind: "general",
-      max_tokens: Number.isFinite(parsedMaxTokens) && parsedMaxTokens >= 1 ? parsedMaxTokens : undefined
+      max_tokens: Number.isFinite(parsedMaxTokens) && parsedMaxTokens >= 1 ? parsedMaxTokens : undefined,
+      include_project_context: taskIncludeContext ? true : undefined
     })
       .then(setTaskResult)
       .then(() => refresh())
@@ -572,6 +574,14 @@ function AIDraft() {
               required={taskRouteClass === "external:cheap"}
               onChange={(event) => setTaskMaxTokens(event.target.value)}
             />
+          </label>
+          <label className="checkbox-line">
+            <input
+              type="checkbox"
+              checked={taskIncludeContext}
+              onChange={(event) => setTaskIncludeContext(event.target.checked)}
+            />
+            Include project context (workspace: bluerev)
           </label>
           <div className="button-row">
             <button type="submit" disabled={taskRunning || taskPrompt.trim().length === 0}>
