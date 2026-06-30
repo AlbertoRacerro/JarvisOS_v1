@@ -13,14 +13,13 @@ from app.modules.ai.contracts import (
     AIUsageSource,
     ModelRegistryEntry,
 )
+from app.modules.local_ai.runtime.ollama import resolve_ollama_runtime_urls
 
 LOCAL_OLLAMA_PROVIDER_ID = "local_ollama"
 _DEFAULT_MODEL = "gemma3:4b"
-_DEFAULT_ENDPOINT = "http://127.0.0.1:11434/api/generate"
 _DEFAULT_TIMEOUT_S = 30.0
 _DEFAULT_KEEP_ALIVE = "30m"
 _MODEL_ENV = "JARVISOS_DEV_MESSAGE_ROUTE_MODEL"
-_ENDPOINT_ENV = "JARVISOS_DEV_MESSAGE_ROUTE_ENDPOINT"
 _TIMEOUT_ENV = "JARVISOS_DEV_MESSAGE_ROUTE_TIMEOUT_S"
 _KEEP_ALIVE_ENV = "JARVISOS_DEV_MESSAGE_ROUTE_KEEP_ALIVE"
 _NUM_PREDICT_ENV = "JARVISOS_DEV_MESSAGE_ROUTE_NUM_PREDICT"
@@ -44,7 +43,7 @@ def _configured_model_name() -> str:
 
 
 def _resolved_endpoint() -> str:
-    return os.getenv(_ENDPOINT_ENV, _DEFAULT_ENDPOINT)
+    return resolve_ollama_runtime_urls().generate_endpoint
 
 
 def _resolved_timeout_s() -> float:
