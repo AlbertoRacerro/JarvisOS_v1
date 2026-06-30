@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sys
 
-import pytest
 from fastapi.testclient import TestClient
 
 _SCRIPT_MODULE_NAMES = (
@@ -52,8 +51,8 @@ def test_disabled_route_returns_404_with_expected_body(monkeypatch, tmp_path) ->
     """Disabled-mode HTTP behavior is preserved after the lazy-import refactor."""
     monkeypatch.delenv("JARVISOS_ENABLE_DEV_MESSAGE_ROUTE_SMOKE", raising=False)
 
-    from app.core.config import get_settings
     from app.core.bootstrap import initialize_storage
+    from app.core.config import get_settings
     from app.main import create_app
 
     get_settings.cache_clear()
@@ -79,8 +78,9 @@ def test_disabled_route_returns_404_with_expected_body(monkeypatch, tmp_path) ->
 
 def test_enabled_path_reaches_adapter_lazily(monkeypatch, tmp_path) -> None:
     """Enabled dev-smoke path works after lazy load: adapter is reachable, scripts load."""
-    from app.modules.dev_message_route import smoke_adapter
     from unittest.mock import Mock
+
+    from app.modules.dev_message_route import smoke_adapter
 
     monkeypatch.setenv("JARVISOS_ENABLE_DEV_MESSAGE_ROUTE_SMOKE", "1")
     monkeypatch.setenv("JARVISOS_DEV_MESSAGE_ROUTE_ASSUME_PUBLIC_SIMPLE", "0")
@@ -88,8 +88,8 @@ def test_enabled_path_reaches_adapter_lazily(monkeypatch, tmp_path) -> None:
     responder_builder = Mock(side_effect=AssertionError("responder must not be built"))
     monkeypatch.setattr(smoke_adapter, "build_local_responder", responder_builder)
 
-    from app.core.config import get_settings
     from app.core.bootstrap import initialize_storage
+    from app.core.config import get_settings
     from app.main import create_app
 
     get_settings.cache_clear()

@@ -8,6 +8,7 @@ from app.modules.ai.contracts import (
     AIRequest,
     AIResponse,
     AIUsage,
+    AIUsageSource,
 )
 
 
@@ -223,3 +224,98 @@ def test_prompt_and_context_digests_are_stable(monkeypatch, tmp_path) -> None:
     assert rows[0]["prompt_digest"] == rows[1]["prompt_digest"]
     assert rows[0]["context_digest"] == rows[1]["context_digest"]
     assert rows[0]["context_digest"] is not None
+
+
+def test_default_bindings_and_adapters_include_local_gemma() -> None:
+    from app.modules.ai.execution import _default_adapters, _default_bindings
+
+    bindings = _default_bindings()
+    adapters = _default_adapters()
+
+    assert "local:gemma" in bindings
+    assert bindings["local:gemma"].provider_id == "local_ollama"
+    assert "local_ollama" in adapters
+
+
+def test_local_gemma_route_executes_and_writes_ai_job(monkeypatch, tmp_path) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    from app.modules.ai.execution import run_ai_task
+    from app.modules.ai.providers.local_ollama_adapter import LocalOllamaAdapter
+
+    captured: dict[str, object] = {}
+
+    def _fake_responder(prompt: str, **kwargs):
+        captured["max_output_chars"] = kwargs["max_output_chars"]
+        return {
+            "response": f"[gemma] {prompt[:40]}",
+            "response_truncated": False,
+            "response_char_count_returned": 17,
+            "response_char_limit": kwargs["max_output_chars"],
+            "response_limit_source": "test",
+            "local_responder_timing": {"total_duration_ms": 12},
+        }
+
+    monkeypatch.setattr(LocalOllamaAdapter, "_load_responder", lambda self: _fake_responder)
+
+    outcome = run_ai_task(user_prompt="explain a pump", route_class="local:gemma")
+
+    assert outcome.status == "success"
+    assert outcome.selected_route_class == "local:gemma"
+    assert outcome.response is not None
+    assert outcome.response.provider_id == "local_ollama"
+    assert outcome.response.text == "[gemma] explain a pump"
+    assert outcome.response.usage.usage_source == AIUsageSource.estimated
+    assert "response" not in outcome.response.raw_provider_metadata
+    assert captured["max_output_chars"] == 2048
+    rows = _all_ai_jobs()
+    assert len(rows) == 1
+    assert rows[0]["status"] == "success"
+    assert rows[0]["provider_id"] == "local_ollama"
+    assert rows[0]["selected_route_class"] == "local:gemma"
+
+
+def test_local_gemma_provider_error_records_one_row(monkeypatch, tmp_path) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    from app.modules.ai.execution import run_ai_task
+    from app.modules.ai.providers.local_ollama_adapter import LocalOllamaAdapter
+
+    def _boom(prompt: str, **kwargs):
+        raise RuntimeError("local responder failed")
+
+    monkeypatch.setattr(LocalOllamaAdapter, "_load_responder", lambda self: _boom)
+
+    outcome = run_ai_task(user_prompt="will fail", route_class="local:gemma")
+
+    assert outcome.status == "provider_error"
+    assert outcome.error_type == "RuntimeError"
+    rows = _all_ai_jobs()
+    assert len(rows) == 1
+    assert rows[0]["status"] == "provider_error"
+    assert rows[0]["provider_id"] == "local_ollama"
+    assert rows[0]["selected_route_class"] == "local:gemma"
+    assert rows[0]["error_type"] == "RuntimeError"
+
+
+def test_local_gemma_caps_max_output_chars(monkeypatch, tmp_path) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    from app.modules.ai.execution import run_ai_task
+    from app.modules.ai.providers.local_ollama_adapter import LocalOllamaAdapter
+
+    captured: dict[str, object] = {}
+
+    def _fake_responder(prompt: str, **kwargs):
+        captured["max_output_chars"] = kwargs["max_output_chars"]
+        return {
+            "response": "ok",
+            "response_truncated": False,
+            "response_char_count_returned": 2,
+            "response_char_limit": kwargs["max_output_chars"],
+            "response_limit_source": "test",
+        }
+
+    monkeypatch.setattr(LocalOllamaAdapter, "_load_responder", lambda self: _fake_responder)
+
+    outcome = run_ai_task(user_prompt="cap test", route_class="local:gemma", max_output_tokens=99999)
+
+    assert outcome.status == "success"
+    assert captured["max_output_chars"] == 16000

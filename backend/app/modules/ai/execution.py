@@ -37,6 +37,10 @@ from app.modules.ai.contracts import (
     RoutingDecision,
 )
 from app.modules.ai.providers.fake_adapter import FAKE_PROVIDER_ID, FakeProviderAdapter
+from app.modules.ai.providers.local_ollama_adapter import (
+    LOCAL_OLLAMA_PROVIDER_ID,
+    LocalOllamaAdapter,
+)
 from app.modules.ai.providers.scaleway_adapter import (
     SCALEWAY_PROVIDER_ID,
     ScalewayProviderAdapter,
@@ -91,6 +95,9 @@ def _default_bindings() -> dict[str, ProviderBinding]:
         "local:fake": ProviderBinding(
             "local:fake", FAKE_PROVIDER_ID, os.getenv("AI_ROUTE_FAKE_MODEL", "fake-deterministic-v1"), False, 256
         ),
+        "local:gemma": ProviderBinding(
+            "local:gemma", LOCAL_OLLAMA_PROVIDER_ID, os.getenv("AI_ROUTE_LOCAL_MODEL", "gemma3:4b"), False, 512
+        ),
         "external:cheap": ProviderBinding(
             "external:cheap",
             SCALEWAY_PROVIDER_ID,
@@ -109,7 +116,11 @@ def _default_bindings() -> dict[str, ProviderBinding]:
 
 
 def _default_adapters() -> dict[str, AIProviderAdapter]:
-    return {FAKE_PROVIDER_ID: FakeProviderAdapter(), SCALEWAY_PROVIDER_ID: ScalewayProviderAdapter()}
+    return {
+        FAKE_PROVIDER_ID: FakeProviderAdapter(),
+        LOCAL_OLLAMA_PROVIDER_ID: LocalOllamaAdapter(),
+        SCALEWAY_PROVIDER_ID: ScalewayProviderAdapter(),
+    }
 
 
 def resolve_binding(
