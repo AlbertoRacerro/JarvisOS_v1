@@ -66,6 +66,7 @@ class AIGateway:
 
         selected_route_class = request.route_class or "local:fake"
         external_blocked_reason = None
+        requested_workspace_id = (request.workspace_id or "bluerev") if request.include_project_context else None
         if selected_route_class.startswith("external:"):
             settings = get_ai_settings()
             status = evaluate_ai_status(settings, "scaleway")
@@ -76,7 +77,6 @@ class AIGateway:
         context_blocks: list[dict] = manual_blocks
         context_build_error = None
         if request.include_project_context:
-            workspace_id = request.workspace_id or "bluerev"
             manual_len = (
                 len(_json.dumps(manual_blocks, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
                 if manual_blocks
@@ -87,7 +87,7 @@ class AIGateway:
             # making a previously-working task fail closed on the spine budget.
             remaining = max(0, DEFAULT_CONTEXT_BUDGET_CHARS - manual_len)
             try:
-                bundle = build_workspace_context_bundle(workspace_id, budget_chars=remaining)
+                bundle = build_workspace_context_bundle(requested_workspace_id or "bluerev", budget_chars=remaining)
             except Exception as exc:  # workspace missing / build failure: fail closed
                 context_build_error = f"workspace_context_build_failed: {type(exc).__name__}"
             else:
@@ -115,6 +115,10 @@ class AIGateway:
             model_id=response.model_id if response is not None else outcome.decision.model_id,
             usage=response.usage if response is not None else None,
             error_type=outcome.error_type,
+            include_project_context=request.include_project_context,
+            workspace_id=requested_workspace_id,
+            context_digest=outcome.context_digest,
+            context_sources_count=outcome.context_sources_count,
         )
 
     def create_modeling_draft(self, request: ModelingDraftRequest) -> ModelingDraftResponse:

@@ -154,6 +154,10 @@ class AITaskRunResponse(BaseModel):
     model_id: str | None = None
     usage: AIUsage | None = None
     error_type: str | None = None
+    include_project_context: bool = False
+    workspace_id: str | None = None
+    context_digest: str | None = None
+    context_sources_count: int = 0
 
 
 class SmokeTestRequest(BaseModel):

@@ -361,6 +361,10 @@ export type AITaskRunResponse = {
   model_id?: string | null;
   usage?: AIUsage | null;
   error_type?: string | null;
+  include_project_context?: boolean;
+  workspace_id?: string | null;
+  context_digest?: string | null;
+  context_sources_count?: number;
 };
 
 export function runAITask(payload: AITaskRunRequest): Promise<AITaskRunResponse> {

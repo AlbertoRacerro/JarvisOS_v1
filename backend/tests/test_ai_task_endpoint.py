@@ -63,6 +63,10 @@ def test_task_endpoint_local_fake_uses_run_ai_task_and_writes_one_ai_job(
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "success"
+    assert body["include_project_context"] is False
+    assert body["workspace_id"] is None
+    assert body["context_digest"] is None
+    assert body["context_sources_count"] == 0
     assert body["ledger_id"]
     assert body["selected_route_class"] == "local:fake"
     assert body["response_text"].startswith("[fake:")
@@ -89,6 +93,10 @@ def test_task_endpoint_defaults_to_safe_local_fake_route(client: TestClient) -> 
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "success"
+    assert body["include_project_context"] is False
+    assert body["workspace_id"] is None
+    assert body["context_digest"] is None
+    assert body["context_sources_count"] == 0
     assert body["selected_route_class"] == "local:fake"
 
     rows = _all_ai_jobs()
@@ -268,6 +276,10 @@ def test_task_endpoint_accepts_small_context_blocks_for_local_fake(client: TestC
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "success"
+    assert body["include_project_context"] is False
+    assert body["workspace_id"] is None
+    assert body["context_digest"] is not None
+    assert body["context_sources_count"] >= 1
     rows = _all_ai_jobs()
     assert len(rows) == 1
     assert rows[0]["context_digest"].startswith("sha256:")
@@ -280,7 +292,12 @@ def test_task_endpoint_without_project_context_records_no_sources(client: TestCl
     )
 
     assert response.status_code == 200
-    assert response.json()["status"] == "success"
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["include_project_context"] is False
+    assert body["workspace_id"] is None
+    assert body["context_digest"] is None
+    assert body["context_sources_count"] == 0
     rows = _all_ai_jobs()
     assert len(rows) == 1
     assert rows[0]["context_sources_json"] is None
@@ -310,6 +327,10 @@ def test_task_endpoint_include_project_context_injects_workspace_context(client:
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "success"
+    assert body["include_project_context"] is True
+    assert body["workspace_id"] == "bluerev"
+    assert body["context_digest"] is not None
+    assert body["context_sources_count"] >= 2
 
     rows = _all_ai_jobs()
     assert len(rows) == 1
@@ -334,6 +355,10 @@ def test_task_endpoint_invalid_workspace_fails_closed_before_provider(client: Te
     body = response.json()
     assert body["status"] == "config_error"
     assert body["error_type"] == "context_build_error"
+    assert body["include_project_context"] is True
+    assert body["workspace_id"] == "does-not-exist"
+    assert body["context_digest"] is None
+    assert body["context_sources_count"] == 0
     assert body["response_text"] is None
 
     rows = _all_ai_jobs()

@@ -191,6 +191,14 @@ function AIDraft() {
         : tokenThresholdPercent >= 50
           ? "warning"
           : "ok";
+  const taskContextDigest = taskResult?.context_digest ?? null;
+  const taskContextDigestShort =
+    taskContextDigest === null
+      ? "-"
+      : taskContextDigest.startsWith("sha256:")
+        ? taskContextDigest.slice("sha256:".length, "sha256:".length + 12)
+        : taskContextDigest.slice(0, 12);
+  const taskContextSourcesCount = taskResult?.context_sources_count ?? 0;
 
   return (
     <section className="page">
@@ -599,6 +607,11 @@ function AIDraft() {
                 {taskResult.blocked_reason ?? taskResult.error_type ?? taskResult.status}
               </div>
             )}
+            <div className="chat-meta-note">
+              Project context: {taskResult.include_project_context ? "on" : "off"} - workspace:{" "}
+              {taskResult.workspace_id ?? "-"} - sources: {taskContextSourcesCount} - digest:{" "}
+              {taskContextDigestShort}
+            </div>
             <pre className="metadata-block">
               {JSON.stringify(
                 {
@@ -610,6 +623,10 @@ function AIDraft() {
                   error_type: taskResult.error_type,
                   blocked_reason: taskResult.blocked_reason,
                   decision_reason: taskResult.decision_reason,
+                  include_project_context: taskResult.include_project_context,
+                  workspace_id: taskResult.workspace_id,
+                  context_digest: taskResult.context_digest,
+                  context_sources_count: taskResult.context_sources_count,
                   usage: taskResult.usage
                 },
                 null,

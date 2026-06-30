@@ -63,6 +63,8 @@ class AiTaskOutcome:
     decision: RoutingDecision
     response: AIResponse | None = None
     error_type: str | None = None
+    context_digest: str | None = None
+    context_sources_count: int = 0
 
 
 # task_kind -> default route. Cloud calls must be opted into explicitly through
@@ -299,10 +301,13 @@ def run_ai_task(
             latency_ms=_elapsed_ms(started),
             error_type="context_budget_exceeded",
         )
-        return AiTaskOutcome("validation_error", ledger_id, selected_route_class, bad, error_type="context_budget_exceeded")
+        return AiTaskOutcome(
+            "validation_error", ledger_id, selected_route_class, bad, error_type="context_budget_exceeded"
+        )
 
     context_digest = canonical_digest(blocks) if blocks else None
     context_sources = context_sources_manifest(blocks) if blocks else None
+    context_sources_count = len(context_sources) if context_sources else 0
 
     binding, decision = resolve_binding(selected_route_class, bindings)
     if binding is None:
@@ -320,7 +325,15 @@ def run_ai_task(
             latency_ms=_elapsed_ms(started),
             error_type=status,
         )
-        return AiTaskOutcome(status, ledger_id, selected_route_class, decision, error_type=status)
+        return AiTaskOutcome(
+            status,
+            ledger_id,
+            selected_route_class,
+            decision,
+            error_type=status,
+            context_digest=context_digest,
+            context_sources_count=context_sources_count,
+        )
 
     adapter = adapters.get(binding.provider_id)
     effective_max = max_output_tokens if max_output_tokens is not None else None
@@ -347,7 +360,15 @@ def run_ai_task(
             latency_ms=_elapsed_ms(started),
             error_type="config_error",
         )
-        return AiTaskOutcome("config_error", ledger_id, selected_route_class, config_decision, error_type="config_error")
+        return AiTaskOutcome(
+            "config_error",
+            ledger_id,
+            selected_route_class,
+            config_decision,
+            error_type="config_error",
+            context_digest=context_digest,
+            context_sources_count=context_sources_count,
+        )
 
     not_ready_scaleway = (
         binding.provider_id == SCALEWAY_PROVIDER_ID and binding.requires_network and not _scaleway_ready()
@@ -373,7 +394,15 @@ def run_ai_task(
             latency_ms=_elapsed_ms(started),
             error_type="config_error",
         )
-        return AiTaskOutcome("config_error", ledger_id, selected_route_class, config_decision, error_type="config_error")
+        return AiTaskOutcome(
+            "config_error",
+            ledger_id,
+            selected_route_class,
+            config_decision,
+            error_type="config_error",
+            context_digest=context_digest,
+            context_sources_count=context_sources_count,
+        )
 
     request = AIRequest(
         task_type=_ai_task_type_for(task_kind),
@@ -401,7 +430,15 @@ def run_ai_task(
             latency_ms=_elapsed_ms(started),
             error_type=type(exc).__name__,
         )
-        return AiTaskOutcome("provider_error", ledger_id, selected_route_class, err_decision, error_type=type(exc).__name__)
+        return AiTaskOutcome(
+            "provider_error",
+            ledger_id,
+            selected_route_class,
+            err_decision,
+            error_type=type(exc).__name__,
+            context_digest=context_digest,
+            context_sources_count=context_sources_count,
+        )
 
     if response.error is None and response.text is not None:
         status = "success"
@@ -422,4 +459,13 @@ def run_ai_task(
         latency_ms=_elapsed_ms(started),
         error_type=error_type,
     )
-    return AiTaskOutcome(status, ledger_id, selected_route_class, decision, response, error_type=error_type)
+    return AiTaskOutcome(
+        status,
+        ledger_id,
+        selected_route_class,
+        decision,
+        response,
+        error_type=error_type,
+        context_digest=context_digest,
+        context_sources_count=context_sources_count,
+    )
