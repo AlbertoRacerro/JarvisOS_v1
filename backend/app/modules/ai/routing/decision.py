@@ -460,6 +460,25 @@ def _has_live_external_companion_artifacts(decision: dict[str, Any]) -> bool:
     )
 
 
+def _is_private_provider_boundary(decision: dict[str, Any]) -> bool:
+    reason_codes = decision.get("reason_codes")
+    return isinstance(reason_codes, list) and "provider_boundary" in reason_codes
+
+
+def _has_hard_private_provider_boundary(input_obj: dict[str, Any]) -> bool:
+    hard_reason_codes = _phase_a(input_obj).get("hard_reason_codes") or []
+    return bool({"local_only_sensitive_context", "provider_or_upload_intent"} & set(hard_reason_codes))
+
+
+def _preserves_private_provider_boundary_review(input_obj: dict[str, Any], decision: dict[str, Any]) -> bool:
+    action = input_obj.get("action_hint") or {}
+    return (
+        _is_private_provider_boundary(decision)
+        and action.get("needs_provider_call") is not True
+        and not _has_hard_private_provider_boundary(input_obj)
+    )
+
+
 def _enforce_external_proposal_flag_invariant(input_obj: dict[str, Any], decision: dict[str, Any]) -> dict[str, Any]:
     if _external_routing_enabled(input_obj):
         target = decision.get("proposed_external_target")
@@ -474,6 +493,8 @@ def _enforce_external_proposal_flag_invariant(input_obj: dict[str, Any], decisio
     if decision.get("proposed_external_target") is None:
         if _has_live_external_companion_artifacts(decision):
             return _external_scope_denied_proposal_only(decision)
+        return decision
+    if _preserves_private_provider_boundary_review(input_obj, decision):
         return decision
     return _external_disabled_local_fallback(decision)
 

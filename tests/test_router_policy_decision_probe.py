@@ -251,7 +251,8 @@ class RouterPolicyDecisionProbeTests(unittest.TestCase):
         input_obj = self.make_high_complexity_public()
         input_obj["user_policy"]["external_routing_enabled"] = False
         decision = self.decide(input_obj)
-        self.assertEqual("USER_CONFIRM", decision["route_tier"])
+        self.assertEqual("LOCAL_FAST", decision["route_tier"])
+        self.assertEqual("route_local", decision["route_action"])
         self.assertFalse(decision["external_allowed"])
         self.assertFalse(str(decision["provider_candidate"]).startswith("external:"))
 
