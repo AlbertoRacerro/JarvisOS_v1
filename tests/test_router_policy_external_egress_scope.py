@@ -10,7 +10,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "backend"))
 
+from app.modules.ai.routing import decision as canonical  # noqa: E402
 import router_policy_decision_probe as decision_probe  # noqa: E402
 import router_policy_message_route_smoke as smoke  # noqa: E402
 from router_policy_external_egress_scope import evaluate_external_egress_scope  # noqa: E402
@@ -236,7 +238,7 @@ def test_e4_a1_forced_helper_deny_keeps_visible_proposal_but_clears_confirmation
             "reason_codes": ["target_not_in_allowed_targets"],
         }
 
-    monkeypatch.setattr(decision_probe, "evaluate_external_egress_scope", deny_scope)
+    monkeypatch.setattr(canonical, "evaluate_external_egress_scope", deny_scope)
 
     decision = decision_probe.decide_router_policy(
         external_candidate_input(True, requires_confirmation=True),
@@ -254,14 +256,14 @@ def test_e4_a1_forced_helper_deny_keeps_visible_proposal_but_clears_confirmation
 
 def test_e4_a1_public_flag_true_natural_egress_denied_by_provider_policy(monkeypatch):
     calls = []
-    original = decision_probe.evaluate_external_egress_scope
+    original = canonical.evaluate_external_egress_scope
 
     def spy(proposed_external_target, allowed_targets):
         result = original(proposed_external_target, allowed_targets)
         calls.append((proposed_external_target, tuple(allowed_targets), dict(result)))
         return result
 
-    monkeypatch.setattr(decision_probe, "evaluate_external_egress_scope", spy)
+    monkeypatch.setattr(canonical, "evaluate_external_egress_scope", spy)
 
     decision = decision_probe.decide_router_policy(
         provider_policy_denied_input(),
@@ -283,14 +285,14 @@ def test_e4_a1_public_flag_true_natural_egress_denied_by_provider_policy(monkeyp
 
 def test_e4_a1_public_flag_true_natural_egress_denied_by_budget_policy(monkeypatch):
     calls = []
-    original = decision_probe.evaluate_external_egress_scope
+    original = canonical.evaluate_external_egress_scope
 
     def spy(proposed_external_target, allowed_targets):
         result = original(proposed_external_target, allowed_targets)
         calls.append((proposed_external_target, tuple(allowed_targets), dict(result)))
         return result
 
-    monkeypatch.setattr(decision_probe, "evaluate_external_egress_scope", spy)
+    monkeypatch.setattr(canonical, "evaluate_external_egress_scope", spy)
 
     decision = decision_probe.decide_router_policy(
         budget_policy_denied_input(),
@@ -312,14 +314,14 @@ def test_e4_a1_public_flag_true_natural_egress_denied_by_budget_policy(monkeypat
 
 def test_e4_a1_public_flag_true_egress_allowed_remains_proposal_only_without_new_confirmation(monkeypatch):
     calls = {"count": 0, "args": None}
-    original = decision_probe.evaluate_external_egress_scope
+    original = canonical.evaluate_external_egress_scope
 
     def allow_scope(proposed_external_target, allowed_targets):
         calls["count"] += 1
         calls["args"] = (proposed_external_target, tuple(allowed_targets))
         return original(proposed_external_target, allowed_targets)
 
-    monkeypatch.setattr(decision_probe, "evaluate_external_egress_scope", allow_scope)
+    monkeypatch.setattr(canonical, "evaluate_external_egress_scope", allow_scope)
 
     decision = decision_probe.decide_router_policy(
         external_candidate_input(True, requires_confirmation=False),

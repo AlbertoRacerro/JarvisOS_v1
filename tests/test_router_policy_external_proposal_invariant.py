@@ -12,13 +12,15 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "backend"))
 
+from app.modules.ai.routing import decision as canonical  # noqa: E402
 import router_policy_decision_probe as decision_probe  # noqa: E402
 import router_policy_message_route_smoke as smoke  # noqa: E402
 
 
 NOW = "2026-06-27T10:00:00+00:00"
-ROUTER_MODULE_PATH = ROOT / "scripts" / "router_policy_decision_probe.py"
+ROUTER_MODULE_PATH = ROOT / "backend" / "app" / "modules" / "ai" / "routing" / "decision.py"
 DECISION_SCHEMA_PATH = ROOT / "schemas" / "router_policy_decision_v0_3_1_1.schema.json"
 VALID_EXTERNAL_TARGET = "external:scientific_medium"
 VALID_TARGETS = {"external:cheap", "external:scientific_medium", "external:frontier", None}
@@ -28,6 +30,7 @@ EXPECTED_PRODUCERS = {
     "_private_provider_boundary",
     "_unknown_external_pressure",
 }
+NON_PRODUCER_HELPERS = {"evaluate_external_egress_scope"}
 SCRUB_AFTER_PRODUCERS = {"_budget_or_policy_fallback", "_private_provider_boundary"}
 SUPPRESS_BEFORE_PRODUCERS = {"_external_candidate_proposal", "_unknown_external_pressure"}
 NON_TRUE_FLAGS = ("missing", None, False, 1, "true", "True", [], {})
@@ -165,7 +168,7 @@ def discover_external_target_producers() -> set[str]:
             self.current_function = previous
 
         def _mark(self) -> None:
-            if self.current_function is not None:
+            if self.current_function is not None and self.current_function not in NON_PRODUCER_HELPERS:
                 producers.add(self.current_function)
 
         def visit_Call(self, node: ast.Call) -> None:
@@ -442,19 +445,19 @@ def assert_sentinel_present(value: dict) -> None:
 
 
 def wrap_producer(monkeypatch: pytest.MonkeyPatch, helper_name: str):
-    original = getattr(decision_probe, helper_name)
+    original = getattr(canonical, helper_name)
     calls = {"count": 0}
 
     def wrapper(*args, **kwargs):
         calls["count"] += 1
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(decision_probe, helper_name, wrapper)
+    monkeypatch.setattr(canonical, helper_name, wrapper)
     return calls
 
 
 def wrap_forced_bundle_producer(monkeypatch: pytest.MonkeyPatch, helper_name: str):
-    original = getattr(decision_probe, helper_name)
+    original = getattr(canonical, helper_name)
     calls = {"count": 0}
     forced_seen = {"value": None}
 
@@ -468,12 +471,12 @@ def wrap_forced_bundle_producer(monkeypatch: pytest.MonkeyPatch, helper_name: st
         }
         return forced
 
-    monkeypatch.setattr(decision_probe, helper_name, wrapper)
+    monkeypatch.setattr(canonical, helper_name, wrapper)
     return calls, forced_seen
 
 
 def wrap_forced_bundle_and_sentinel_producer(monkeypatch: pytest.MonkeyPatch, helper_name: str):
-    original = getattr(decision_probe, helper_name)
+    original = getattr(canonical, helper_name)
     calls = {"count": 0}
     forced_seen = {"value": None}
 
@@ -489,12 +492,12 @@ def wrap_forced_bundle_and_sentinel_producer(monkeypatch: pytest.MonkeyPatch, he
         }
         return forced
 
-    monkeypatch.setattr(decision_probe, helper_name, wrapper)
+    monkeypatch.setattr(canonical, helper_name, wrapper)
     return calls, forced_seen
 
 
 def wrap_targetless_companion_and_sentinel_producer(monkeypatch: pytest.MonkeyPatch, helper_name: str):
-    original = getattr(decision_probe, helper_name)
+    original = getattr(canonical, helper_name)
     calls = {"count": 0}
     forced_seen = {"value": None}
 
@@ -510,12 +513,12 @@ def wrap_targetless_companion_and_sentinel_producer(monkeypatch: pytest.MonkeyPa
         }
         return forced
 
-    monkeypatch.setattr(decision_probe, helper_name, wrapper)
+    monkeypatch.setattr(canonical, helper_name, wrapper)
     return calls, forced_seen
 
 
 def wrap_sentinel_producer(monkeypatch: pytest.MonkeyPatch, helper_name: str):
-    original = getattr(decision_probe, helper_name)
+    original = getattr(canonical, helper_name)
     calls = {"count": 0}
     forced_seen = {"value": None}
 
@@ -528,7 +531,7 @@ def wrap_sentinel_producer(monkeypatch: pytest.MonkeyPatch, helper_name: str):
         forced_seen["value"] = copy.deepcopy(forced)
         return forced
 
-    monkeypatch.setattr(decision_probe, helper_name, wrapper)
+    monkeypatch.setattr(canonical, helper_name, wrapper)
     return calls, forced_seen
 
 
