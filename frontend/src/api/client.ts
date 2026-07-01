@@ -361,6 +361,8 @@ export type AITaskRunResponse = {
   model_id?: string | null;
   usage?: AIUsage | null;
   error_type?: string | null;
+  error_message?: string | null;
+  confirmation_payload?: unknown | null;
   include_project_context?: boolean;
   workspace_id?: string | null;
   context_digest?: string | null;

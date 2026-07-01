@@ -22,14 +22,39 @@ import {
 
 const AI_ROUTE_OPTIONS = [
   {
+    value: "auto",
+    label: "Auto",
+    help: "Auto uses local-only routing for now. External providers require manual route selection."
+  },
+  {
     value: "local:fake",
     label: "Fake / deterministic test",
     help: "No real model. No cost. Useful to test the pipeline."
   },
   {
+    value: "local:fast",
+    label: "Local fast",
+    help: "Manual local route for fast general tasks. Actual model is shown after execution as model_id."
+  },
+  {
+    value: "local:general",
+    label: "Local general",
+    help: "Manual local route for general synthesis tasks. Actual model is shown after execution as model_id."
+  },
+  {
     value: "local:gemma",
     label: "Local model via Ollama",
     help: "Uses the configured local Ollama model through the AI spine. Actual model is shown after execution as model_id."
+  },
+  {
+    value: "local:coder",
+    label: "Local coder",
+    help: "Manual local route for code-oriented work. Actual model is shown after execution as model_id."
+  },
+  {
+    value: "local:coder_heavy",
+    label: "Local coder heavy",
+    help: "Manual local route for heavier architecture/code review. Actual model is shown after execution as model_id."
   },
   {
     value: "external:cheap",
@@ -38,8 +63,30 @@ const AI_ROUTE_OPTIONS = [
   }
 ] as const;
 
+const AI_TASK_KIND_OPTIONS = [
+  { value: "general", label: "General" },
+  { value: "test", label: "Test" },
+  { value: "synthesis", label: "Synthesis" },
+  { value: "decision_support", label: "Decision support" },
+  { value: "code_review", label: "Code review" },
+  { value: "architecture_review", label: "Architecture review" }
+] as const;
+
 function routeHelp(routeClass: string): string {
   return AI_ROUTE_OPTIONS.find((option) => option.value === routeClass)?.help ?? "Route configured by backend.";
+}
+
+function isNonSuccessStatus(status: string): boolean {
+  return [
+    "needs_confirmation",
+    "needs_clarification",
+    "blocked",
+    "provider_error",
+    "route_unavailable",
+    "proposed_external",
+    "config_error",
+    "validation_error"
+  ].includes(status);
 }
 
 function shortDigest(digest?: string | null): string {
@@ -65,6 +112,7 @@ function AIDraft() {
   const [smokeConsoleRunning, setSmokeConsoleRunning] = useState(false);
   const [taskPrompt, setTaskPrompt] = useState("");
   const [taskRouteClass, setTaskRouteClass] = useState("local:fake");
+  const [taskKind, setTaskKind] = useState("general");
   const [taskMaxTokens, setTaskMaxTokens] = useState("64");
   const [taskIncludeContext, setTaskIncludeContext] = useState(false);
   const [taskResult, setTaskResult] = useState<AITaskRunResponse | null>(null);
@@ -184,7 +232,7 @@ function AIDraft() {
     runAITask({
       prompt,
       route_class: taskRouteClass,
-      task_kind: "general",
+      task_kind: taskKind,
       max_tokens: Number.isFinite(parsedMaxTokens) && parsedMaxTokens >= 1 ? parsedMaxTokens : undefined,
       include_project_context: taskIncludeContext ? true : undefined,
       workspace_id: taskIncludeContext ? taskWorkspaceId : undefined
@@ -227,6 +275,7 @@ function AIDraft() {
           ? "warning"
           : "ok";
   const taskFailureText = taskResult?.blocked_reason ?? taskResult?.error_type ?? taskResult?.status ?? "AI task did not succeed.";
+  const taskErrorText = taskResult?.error_message ?? taskResult?.blocked_reason ?? taskResult?.error_type ?? taskResult?.decision_reason;
 
   return (
     <section className="page ai-workspace-page">
@@ -270,6 +319,16 @@ function AIDraft() {
             </select>
           </label>
           <label>
+            Task kind
+            <select value={taskKind} onChange={(event) => setTaskKind(event.target.value)}>
+              {AI_TASK_KIND_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
             Max tokens
             <input
               type="number"
@@ -299,6 +358,12 @@ function AIDraft() {
           <div className="task-result">
             {taskResult.status === "success" && taskResult.response_text ? (
               <div className="response-box task-response">{taskResult.response_text}</div>
+            ) : isNonSuccessStatus(taskResult.status) ? (
+              <div className="error-banner">
+                <strong>{taskResult.status}</strong>
+                <br />
+                {taskErrorText}
+              </div>
             ) : (
               <div className="error-banner">{taskFailureText}</div>
             )}
@@ -308,8 +373,16 @@ function AIDraft() {
                 <dd>{taskResult.status}</dd>
               </div>
               <div>
-                <dt>Route</dt>
+                <dt>Requested route</dt>
+                <dd>{taskRouteClass}</dd>
+              </div>
+              <div>
+                <dt>Selected route</dt>
                 <dd>{taskResult.selected_route_class ?? "-"}</dd>
+              </div>
+              <div>
+                <dt>Task kind</dt>
+                <dd>{taskKind}</dd>
               </div>
               <div>
                 <dt>Provider</dt>
@@ -328,6 +401,14 @@ function AIDraft() {
                 <dd>{formatUsage(taskResult)}</dd>
               </div>
               <div>
+                <dt>Error</dt>
+                <dd>{taskResult.error_type ?? taskResult.error_message ?? "-"}</dd>
+              </div>
+              <div>
+                <dt>Decision</dt>
+                <dd>{taskResult.decision_reason}</dd>
+              </div>
+              <div>
                 <dt>Context</dt>
                 <dd>{taskResult.include_project_context ? "on" : "off"}</dd>
               </div>
@@ -344,6 +425,12 @@ function AIDraft() {
                 <dd>{shortDigest(taskResult.context_digest)}</dd>
               </div>
             </dl>
+            {taskResult.confirmation_payload ? (
+              <details className="ai-draft-advanced-metadata">
+                <summary>Confirmation payload</summary>
+                <pre className="metadata-block">{JSON.stringify(taskResult.confirmation_payload, null, 2)}</pre>
+              </details>
+            ) : null}
             <details className="ai-draft-advanced-metadata">
               <summary>Advanced metadata</summary>
               <pre className="metadata-block">{JSON.stringify(taskResult, null, 2)}</pre>
