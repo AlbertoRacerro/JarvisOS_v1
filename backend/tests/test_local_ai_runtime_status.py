@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import httpx
+import pytest
 
 from app.modules.ai.contracts import AIRequest, AITaskType
 from app.modules.ai.providers.local_ollama_adapter import LocalOllamaAdapter
-from app.modules.local_ai.runtime.ollama import resolve_ollama_runtime_urls
+from app.modules.local_ai.runtime.ollama import OllamaRuntimeEndpointError, resolve_ollama_runtime_urls
 from app.modules.local_ai.runtime.status import (
     LOCAL_RUNTIME_STATUS_TIMEOUT_S,
     get_local_ai_runtime_status,
@@ -40,6 +44,15 @@ def _clear_env(monkeypatch) -> None:
         "JARVISOS_DEV_MESSAGE_ROUTE_ENDPOINT",
     ):
         monkeypatch.delenv(env_name, raising=False)
+
+
+def _load_script_local_responder():
+    scripts_dir = Path(__file__).resolve().parents[2] / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    import router_policy_local_responder as responder
+
+    return responder
 
 
 def test_runtime_status_reachable_with_all_models_present(monkeypatch) -> None:
@@ -233,9 +246,93 @@ def test_runtime_status_parses_loaded_model_spill_fields(monkeypatch) -> None:
     ]
 
 
-def test_runtime_status_rejects_non_local_endpoint_without_http(monkeypatch) -> None:
+@pytest.mark.parametrize(
+    ("raw_endpoint", "base_url", "generate_endpoint"),
+    [
+        ("http://127.0.0.1:11434", "http://127.0.0.1:11434", "http://127.0.0.1:11434/api/generate"),
+        ("http://127.0.0.1:11434/", "http://127.0.0.1:11434", "http://127.0.0.1:11434/api/generate"),
+        ("http://localhost:11434/api/generate", "http://localhost:11434", "http://localhost:11434/api/generate"),
+        ("http://[::1]:11434/api/generate", "http://[::1]:11434", "http://[::1]:11434/api/generate"),
+    ],
+)
+def test_runtime_resolver_accepts_supported_local_endpoint_forms(
+    raw_endpoint: str, base_url: str, generate_endpoint: str
+) -> None:
+    urls = resolve_ollama_runtime_urls(raw_endpoint)
+
+    assert urls.base_url == base_url
+    assert urls.generate_endpoint == generate_endpoint
+
+
+@pytest.mark.parametrize(
+    "raw_endpoint",
+    [
+        "",
+        "not a url",
+        "https://127.0.0.1:11434/api/generate",
+        "http://example.com:11434/api/generate",
+        "http://192.168.1.2:11434/api/generate",
+        "http://user:pass@127.0.0.1:11434/api/generate",
+        "http://127.0.0.1:11434/api/generate?x=1",
+        "http://127.0.0.1:11434/api/generate#frag",
+        "http://127.0.0.1:11434/api/tags",
+        "http://127.0.0.1:11434/api/ps",
+        "http://127.0.0.1:11434/foo",
+        "http://127.0.0.1:11434/api/generate/",
+    ],
+)
+def test_runtime_resolver_rejects_invalid_endpoint_forms(raw_endpoint: str) -> None:
+    with pytest.raises(OllamaRuntimeEndpointError):
+        resolve_ollama_runtime_urls(raw_endpoint)
+
+
+@pytest.mark.parametrize(
+    "generate_endpoint",
+    [
+        "http://127.0.0.1:11434/api/generate",
+        "http://localhost:11434/api/generate",
+        "http://[::1]:11434/api/generate",
+    ],
+)
+def test_runtime_resolver_matches_script_validator_for_accepted_generate_endpoints(generate_endpoint: str) -> None:
+    responder = _load_script_local_responder()
+
+    responder._validate_endpoint(generate_endpoint)
+    urls = resolve_ollama_runtime_urls(generate_endpoint)
+
+    assert urls.generate_endpoint == generate_endpoint
+
+
+@pytest.mark.parametrize(
+    "generate_endpoint",
+    [
+        "https://127.0.0.1:11434/api/generate",
+        "http://example.com:11434/api/generate",
+        "http://192.168.1.2:11434/api/generate",
+        "http://user:pass@127.0.0.1:11434/api/generate",
+        "http://127.0.0.1:11434/api/generate?x=1",
+        "http://127.0.0.1:11434/api/generate#frag",
+    ],
+)
+def test_runtime_resolver_matches_script_validator_for_rejected_generate_endpoints(generate_endpoint: str) -> None:
+    responder = _load_script_local_responder()
+
+    with pytest.raises(responder.LocalResponderPolicyError):
+        responder._validate_endpoint(generate_endpoint)
+    with pytest.raises(OllamaRuntimeEndpointError):
+        resolve_ollama_runtime_urls(generate_endpoint)
+
+
+@pytest.mark.parametrize(
+    "raw_endpoint",
+    [
+        "http://example.com:11434/api/generate",
+        "http://127.0.0.1:11434/api/tags",
+    ],
+)
+def test_runtime_status_rejects_invalid_endpoints_before_http(monkeypatch, raw_endpoint: str) -> None:
     _clear_env(monkeypatch)
-    monkeypatch.setenv("JARVISOS_DEV_MESSAGE_ROUTE_ENDPOINT", "http://example.com:11434/api/generate")
+    monkeypatch.setenv("JARVISOS_DEV_MESSAGE_ROUTE_ENDPOINT", raw_endpoint)
     client = _FakeClient({})
 
     status = get_local_ai_runtime_status(client=client)
@@ -244,6 +341,7 @@ def test_runtime_status_rejects_non_local_endpoint_without_http(monkeypatch) -> 
     assert status["error_type"] == "invalid_endpoint"
     assert status["installed_models"] == []
     assert status["loaded_models"] == []
+    assert status["endpoint"] == raw_endpoint
     assert set(status["missing_models"]) == {
         "local:fast",
         "local:general",

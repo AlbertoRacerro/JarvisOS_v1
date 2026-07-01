@@ -1,21 +1,23 @@
 from __future__ import annotations
 
 from typing import Any
-from urllib.parse import urlparse
 
 import httpx
 
 from app.modules.ai.execution import _default_bindings
 from app.modules.ai.providers.local_ollama_adapter import LOCAL_OLLAMA_PROVIDER_ID
-from app.modules.local_ai.runtime.ollama import resolve_ollama_runtime_urls
+from app.modules.local_ai.runtime.ollama import (
+    OllamaRuntimeEndpointError,
+    configured_ollama_endpoint_raw,
+    resolve_ollama_runtime_urls,
+)
 
 LOCAL_RUNTIME_STATUS_TIMEOUT_S = 1.5
-_ALLOWED_LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
 def get_local_ai_runtime_status(*, client: Any | None = None) -> dict[str, Any]:
-    urls = resolve_ollama_runtime_urls()
     configured_route_models = _configured_local_route_models()
+    configured_endpoint = configured_ollama_endpoint_raw()
     status = {
         "ollama_reachable": False,
         "ollama_version": None,
@@ -23,18 +25,20 @@ def get_local_ai_runtime_status(*, client: Any | None = None) -> dict[str, Any]:
         "loaded_models": [],
         "configured_route_models": configured_route_models,
         "missing_models": dict(configured_route_models),
-        "endpoint": urls.base_url,
+        "endpoint": configured_endpoint,
         "error_type": None,
         "error_message": None,
         "tags_error_type": None,
         "ps_error_type": None,
     }
 
-    invalid_reason = _validate_local_base_url(urls.base_url)
-    if invalid_reason is not None:
+    try:
+        urls = resolve_ollama_runtime_urls(configured_endpoint)
+    except OllamaRuntimeEndpointError as exc:
         status["error_type"] = "invalid_endpoint"
-        status["error_message"] = invalid_reason
+        status["error_message"] = str(exc)
         return status
+    status["endpoint"] = urls.base_url
 
     client_obj = client or httpx.Client()
     should_close = client is None
@@ -87,19 +91,6 @@ def _configured_local_route_models() -> dict[str, str]:
         if binding.provider_id == LOCAL_OLLAMA_PROVIDER_ID:
             configured[route_class] = binding.model_id
     return configured
-
-
-def _validate_local_base_url(base_url: str) -> str | None:
-    parsed = urlparse(base_url)
-    if parsed.scheme != "http":
-        return "endpoint must use http"
-    if parsed.username or parsed.password:
-        return "endpoint must not include credentials"
-    if parsed.hostname not in _ALLOWED_LOCAL_HOSTS:
-        return "endpoint host must be localhost-only"
-    if parsed.query or parsed.fragment:
-        return "endpoint must not include query or fragment"
-    return None
 
 
 def _api_url(base_url: str, path: str) -> str:
