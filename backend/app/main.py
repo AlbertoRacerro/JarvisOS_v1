@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.dev_message_route import router as dev_message_route_router
 from app.api.health import router as health_router
@@ -54,6 +56,14 @@ def create_app() -> FastAPI:
     app.include_router(workspaces_router)
     app.include_router(modeling_router)
     app.include_router(runner_router)
+
+    # Serve the built frontend (single-process desktop launch) when present.
+    # Conditional so tests/dev without a build are unaffected; API routers are
+    # registered above and take precedence over this catch-all static mount.
+    frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+    if frontend_dist.is_dir():
+        app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+
     return app
 
 
