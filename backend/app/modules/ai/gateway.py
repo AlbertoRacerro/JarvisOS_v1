@@ -67,6 +67,12 @@ class AIGateway:
         selected_route_class = request.route_class or "local:fake"
         external_blocked_reason = None
         requested_workspace_id = (request.workspace_id or "bluerev") if request.include_project_context else None
+
+        if selected_route_class == "auto":
+            from app.modules.ai.routing.bridge import run_auto_task
+
+            return run_auto_task(request)
+
         if selected_route_class.startswith("external:"):
             settings = get_ai_settings()
             status = evaluate_ai_status(settings, "scaleway")
@@ -93,16 +99,6 @@ class AIGateway:
             else:
                 # manual/explicit context first, workspace context after.
                 context_blocks = manual_blocks + bundle.blocks
-
-        if selected_route_class == "auto":
-            from app.modules.ai.routing.bridge import run_auto_task
-
-            return run_auto_task(
-                request,
-                context_blocks=context_blocks,
-                context_build_error=context_build_error,
-                requested_workspace_id=requested_workspace_id,
-            )
 
         outcome = run_ai_task(
             user_prompt=request.prompt,

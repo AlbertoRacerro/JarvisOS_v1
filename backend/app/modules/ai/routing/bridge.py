@@ -3,53 +3,109 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
-from app.modules.ai.context_builder import canonical_digest, context_sources_manifest
+from app.modules.ai.context_builder import (
+    DEFAULT_CONTEXT_BUDGET_CHARS,
+    canonical_digest,
+    context_sources_manifest,
+)
 from app.modules.ai.execution import AiTaskOutcome
 from app.modules.ai.models import AITaskRunRequest, AITaskRunResponse
+from app.modules.ai.routing.capability_route_matrix import (
+    CAPABILITY_CODING,
+    CAPABILITY_DEEP_REASONING,
+    CAPABILITY_GENERAL_REASONING,
+    CAPABILITY_HEAVY_CODING,
+    CAPABILITY_SIMPLE,
+    CONTEXT_LEVEL_DEEP,
+    CONTEXT_LEVEL_LIGHT,
+    CONTEXT_LEVEL_NONE,
+    CONTEXT_LEVEL_STANDARD,
+    context_budget_chars_for_route_level,
+    local_route_for_capability,
+    route_supported_context_level,
+)
 from app.modules.ai.routing.decision import decide_router_policy
 from app.modules.ai.routing.safe_local import is_safe_local_execution
 from app.modules.events.service import utc_now
+from app.modules.local_ai.classification.adapter import ClassificationAdapterConfig, LocalGemmaClassificationAdapter
+from app.modules.local_ai.classification.contracts import (
+    LOW_CONFIDENCE_THRESHOLD,
+    AllowedNextStep,
+    ClassificationFailureCode,
+    ClassificationInput,
+    ClassificationResultSource,
+    ClassificationServiceResult,
+    ClassificationSource,
+    ComplexityHint,
+    ProjectArea,
+    SensitivityHint,
+    TaskType,
+    make_advisory_hints,
+    make_output,
+)
+from app.modules.local_ai.classification.service import classify_text
 
 AUTO_ROUTE_CLASS = "auto"
-AUTO_LOCAL_DEFAULT_ROUTE_CLASS = "local:fast"
-AUTO_LOCAL_ROUTE_BY_TASK_KIND = {
-    "general": "local:fast",
-    "test": "local:fast",
-    "synthesis": "local:general",
-    "decision_support": "local:general",
-    "code_review": "local:coder",
-    "architecture_review": "local:coder_heavy",
-}
+AUTO_CLASSIFICATION_MODEL = "qwen3:8b"
+
+CONTROL_NEEDS_CLARIFICATION = "needs_clarification"
+CONTROL_BLOCKED = "blocked"
+CONTROL_PROPOSED_EXTERNAL = "proposed_external"
+
+SOURCE_SELECTION_BUDGET_ONLY = "budget_only"
+SOURCE_SELECTION_NOT_REQUESTED = "not_requested"
 
 RunAiTaskFunc = Callable[..., AiTaskOutcome]
+ClassifyFunc = Callable[..., ClassificationServiceResult]
 
 
-def build_auto_router_input(request: AITaskRunRequest) -> dict:
+@dataclass(frozen=True)
+class AutoDecisionBundle:
+    router_input: dict
+    decision: dict
+    classification_result: ClassificationServiceResult
+    capability: str
+    local_route_class: str
+    context_decision: dict[str, object]
+    control_status: str | None = None
+    confirmation_payload: dict[str, object] | None = None
+
+
+def build_auto_router_input(
+    request: AITaskRunRequest,
+    classification_result: ClassificationServiceResult | None = None,
+) -> dict:
+    classification = classification_result.classification if classification_result is not None else None
+    sensitivity_hint = _router_sensitivity_hint(request, classification)
+    sensitivity = _router_sensitivity(sensitivity_hint)
     return {
         "message_text": request.prompt,
         "phase_a_signals": {
-            "contains_secret_or_credential": False,
-            "contains_raw_private_or_ip_sensitive_context": False,
+            "contains_secret_or_credential": sensitivity_hint == SensitivityHint.secret,
+            "contains_raw_private_or_ip_sensitive_context": sensitivity == "sensitive",
             "mentions_external_provider_or_upload_intent": False,
             "external_provider_allowed": False,
             "clarification_required": False,
             "hard_reason_codes": ["low_risk"],
-            "sensitivity_bucket_proposal": "internal" if request.include_project_context else "unknown",
+            "sensitivity_bucket_proposal": sensitivity,
             "requires_manual_review": False,
             "source_policy_for_future_retrieval": "not_applicable",
             "allowed_future_retrieval_behavior": "none",
         },
         "phase_b_soft_proposal": {
-            "project_bucket": "general",
+            "project_bucket": _project_bucket(classification.project_area if classification is not None else ProjectArea.unknown),
             "primary_domain": "general",
             "domain_tags": ["answer"],
             "soft_reason_code": "contextual_summary",
             "suggested_followup_question": "",
         },
         "router_hint": {
+            # RouterPolicy is the local execution permission gate here. Semantic
+            # task/capability is carried separately in Auto metadata and matrix.
             "task_type": "answer",
             "complexity": "low",
             "domain": "general",
@@ -95,9 +151,163 @@ def build_auto_router_input(request: AITaskRunRequest) -> dict:
     }
 
 
-def build_auto_decision(request: AITaskRunRequest, *, now: str | None = None) -> tuple[dict, dict]:
-    router_input = build_auto_router_input(request)
-    return router_input, decide_router_policy(router_input, now=now)
+def build_auto_decision(
+    request: AITaskRunRequest,
+    *,
+    now: str | None = None,
+    classifier_func: ClassifyFunc | None = None,
+) -> tuple[dict, dict]:
+    bundle = build_auto_decision_bundle(request, now=now, classifier_func=classifier_func)
+    return bundle.router_input, bundle.decision
+
+
+def build_auto_decision_bundle(
+    request: AITaskRunRequest,
+    *,
+    now: str | None = None,
+    classifier_func: ClassifyFunc | None = None,
+) -> AutoDecisionBundle:
+    classification_result = classify_auto_request(request, classifier_func=classifier_func)
+    classification = classification_result.classification
+    capability = capability_from_classification(classification)
+    local_route_class = local_route_for_capability(capability)
+    control_status = control_status_from_classification(classification)
+    confirmation_payload = _confirmation_payload(classification_result, capability) if control_status == CONTROL_PROPOSED_EXTERNAL else None
+    router_input = build_auto_router_input(request, classification_result)
+    if control_status is not None:
+        decision = _control_decision(control_status, classification_result, capability)
+    else:
+        decision = decide_router_policy(router_input, now=now)
+    context_decision = context_decision_from_classification(
+        request,
+        classification_result,
+        local_route_class=local_route_class,
+        capability=capability,
+    )
+    return AutoDecisionBundle(
+        router_input=router_input,
+        decision=decision,
+        classification_result=classification_result,
+        capability=capability,
+        local_route_class=local_route_class,
+        context_decision=context_decision,
+        control_status=control_status,
+        confirmation_payload=confirmation_payload,
+    )
+
+
+def classify_auto_request(
+    request: AITaskRunRequest,
+    *,
+    classifier_func: ClassifyFunc | None = None,
+) -> ClassificationServiceResult:
+    classifier = classifier_func or classify_text
+    try:
+        classification_input = ClassificationInput(
+            text=request.prompt,
+            source=ClassificationSource.user_prompt,
+            metadata={"route_class": AUTO_ROUTE_CLASS, "task_kind": request.task_kind},
+        )
+        adapter = LocalGemmaClassificationAdapter(ClassificationAdapterConfig(model_name=AUTO_CLASSIFICATION_MODEL))
+        return classifier(classification_input, adapter=adapter)
+    except Exception:
+        return _fallback_classification()
+
+
+def capability_from_classification(classification) -> str:
+    if classification.task_type in {TaskType.code_change, TaskType.bug_report}:
+        return CAPABILITY_HEAVY_CODING if classification.complexity_hint == ComplexityHint.high else CAPABILITY_CODING
+    if classification.task_type in {TaskType.engineering_question, TaskType.project_planning}:
+        return CAPABILITY_GENERAL_REASONING
+    if classification.task_type in {TaskType.documentation, TaskType.local_note, TaskType.personal_question, TaskType.unknown}:
+        return CAPABILITY_SIMPLE
+    return CAPABILITY_SIMPLE
+
+
+def control_status_from_classification(classification) -> str | None:
+    if classification.task_type == TaskType.external_api_request:
+        return CONTROL_PROPOSED_EXTERNAL
+    if classification.task_type == TaskType.ambiguous:
+        return CONTROL_NEEDS_CLARIFICATION
+    if classification.task_type in {TaskType.unsafe_tool_request, TaskType.overbroad_orchestration_request}:
+        return CONTROL_BLOCKED
+    if classification.allowed_next_step == AllowedNextStep.ask_clarification:
+        return CONTROL_NEEDS_CLARIFICATION
+    if classification.allowed_next_step == AllowedNextStep.human_review and classification.task_type in {
+        TaskType.unsafe_tool_request,
+        TaskType.overbroad_orchestration_request,
+    }:
+        return CONTROL_BLOCKED
+    return None
+
+
+def context_decision_from_classification(
+    request: AITaskRunRequest,
+    classification_result: ClassificationServiceResult,
+    *,
+    local_route_class: str | None = None,
+    capability: str | None = None,
+) -> dict[str, object]:
+    classification = classification_result.classification
+    route_class = local_route_class or local_route_for_capability(capability or CAPABILITY_SIMPLE)
+    fallback_or_low_confidence = (
+        classification_result.source == ClassificationResultSource.fallback
+        or classification.confidence < LOW_CONFIDENCE_THRESHOLD
+    )
+    manual_context_chars = _serialized_context_chars(request.context_blocks or [])
+    requested_level = _classifier_requested_context_level(classification, fallback_or_low_confidence)
+    effective_requested_level = CONTEXT_LEVEL_NONE
+    if not request.include_project_context:
+        reason = "user_context_permission_off"
+    elif not classification.needs_context:
+        reason = "classifier_did_not_request_project_context"
+    elif fallback_or_low_confidence:
+        effective_requested_level = CONTEXT_LEVEL_LIGHT
+        reason = "classification_fallback_uses_conservative_context"
+    elif classification.project_area == ProjectArea.bluerev:
+        effective_requested_level = requested_level
+        reason = f"classifier_requested_bluerev_{requested_level}_context"
+    else:
+        reason = "classifier_context_not_workspace_relevant"
+
+    context_level, budget_reason = route_supported_context_level(route_class, effective_requested_level)
+    context_budget_chars = context_budget_chars_for_route_level(
+        route_class,
+        context_level,
+        max_budget_chars=DEFAULT_CONTEXT_BUDGET_CHARS,
+    )
+    workspace_budget_chars = max(0, context_budget_chars - manual_context_chars)
+    final_include_project_context = context_level != CONTEXT_LEVEL_NONE and workspace_budget_chars > 0
+    if context_level != CONTEXT_LEVEL_NONE and workspace_budget_chars == 0:
+        reason = "manual_context_exhausted_workspace_budget"
+        budget_reason = "workspace_context_budget_exhausted_by_manual_context"
+    source_selection_status = (
+        SOURCE_SELECTION_BUDGET_ONLY if final_include_project_context else SOURCE_SELECTION_NOT_REQUESTED
+    )
+    return {
+        "context_permission": request.include_project_context,
+        "context_level": context_level,
+        "requested_context_level": requested_level,
+        "effective_requested_context_level": effective_requested_level,
+        "context_budget_chars": context_budget_chars,
+        "workspace_context_budget_chars": workspace_budget_chars if final_include_project_context else 0,
+        "manual_context_chars": manual_context_chars,
+        "context_budget_reason": budget_reason,
+        "context_used": False,
+        "source_selection_status": source_selection_status,
+        "classifier_needs_context": classification.needs_context,
+        "project_area": classification.project_area.value,
+        "user_context_permission": request.include_project_context,
+        "final_include_project_context": final_include_project_context,
+        "context_decision_reason": reason,
+        "classification_source": classification_result.source.value,
+        "classification_confidence": classification.confidence,
+        "selected_local_route_class": route_class,
+        "capability": capability or CAPABILITY_SIMPLE,
+        "manual_context_blocks_count": len(request.context_blocks or []),
+        "workspace_context_blocks_count": 0,
+        "source_selection_note": "budget_only_no_retrieval_intelligence",
+    }
 
 
 def resolve_bridge_outcome_from_decision(
@@ -108,6 +318,10 @@ def resolve_bridge_outcome_from_decision(
     context_blocks: list[dict] | None = None,
     context_build_error: str | None = None,
     requested_workspace_id: str | None = None,
+    selected_auto_route_class: str | None = None,
+    auto_metadata: dict[str, object] | None = None,
+    control_status: str | None = None,
+    confirmation_payload: dict[str, object] | None = None,
 ) -> AITaskRunResponse:
     from app.modules.ai import execution
 
@@ -116,7 +330,7 @@ def resolve_bridge_outcome_from_decision(
         outcome = runner(
             user_prompt=request.prompt,
             task_kind=request.task_kind,
-            route_class=auto_local_route_class_for_task(request.task_kind),
+            route_class=selected_auto_route_class or local_route_for_capability(CAPABILITY_SIMPLE),
             context_blocks=context_blocks,
             max_output_tokens=request.max_tokens,
             context_build_error=context_build_error,
@@ -125,10 +339,11 @@ def resolve_bridge_outcome_from_decision(
             request=request,
             outcome=outcome,
             requested_workspace_id=requested_workspace_id,
+            auto_metadata=auto_metadata,
         )
 
     started = time.perf_counter()
-    status = _control_status(decision)
+    status = control_status or _control_status(decision)
     ledger_id = _write_auto_control_job(
         status=status,
         task_kind=request.task_kind,
@@ -136,6 +351,7 @@ def resolve_bridge_outcome_from_decision(
         decision=decision,
         context_blocks=context_blocks,
         latency_ms=int((time.perf_counter() - started) * 1000),
+        auto_metadata=auto_metadata,
     )
     return AITaskRunResponse(
         status=status,
@@ -148,48 +364,168 @@ def resolve_bridge_outcome_from_decision(
         model_id=None,
         usage=None,
         error_type=status,
-        include_project_context=request.include_project_context,
+        include_project_context=bool(auto_metadata.get("context_decision", {}).get("final_include_project_context")) if auto_metadata else request.include_project_context,
         workspace_id=requested_workspace_id,
         context_digest=canonical_digest(context_blocks) if context_blocks else None,
         context_sources_count=len(context_sources_manifest(context_blocks)) if context_blocks else 0,
+        auto_metadata=auto_metadata,
+        confirmation_payload=confirmation_payload,
     )
 
 
 def run_auto_task(
     request: AITaskRunRequest,
     *,
-    context_blocks: list[dict] | None = None,
-    context_build_error: str | None = None,
-    requested_workspace_id: str | None = None,
+    run_ai_task_func: RunAiTaskFunc | None = None,
+    classifier_func: ClassifyFunc | None = None,
 ) -> AITaskRunResponse:
-    _router_input, decision = build_auto_decision(request)
+    bundle = build_auto_decision_bundle(request, classifier_func=classifier_func)
+    manual_blocks = list(request.context_blocks or [])
+    context_blocks = manual_blocks
+    context_build_error = None
+    executable_local = bundle.control_status is None and _is_executable_auto_local(bundle.decision)
+    requested_workspace_id = (
+        request.workspace_id or "bluerev"
+        if executable_local and bundle.context_decision["final_include_project_context"]
+        else None
+    )
+    if not executable_local and bundle.context_decision["final_include_project_context"]:
+        bundle.context_decision["final_include_project_context"] = False
+        bundle.context_decision["workspace_context_budget_chars"] = 0
+        bundle.context_decision["source_selection_status"] = SOURCE_SELECTION_NOT_REQUESTED
+        bundle.context_decision["workspace_context_skipped_reason"] = "auto_execution_not_local_safe"
+    if executable_local and bundle.context_decision["final_include_project_context"]:
+        context_blocks, context_build_error = _build_auto_context(
+            manual_blocks,
+            requested_workspace_id,
+            budget_chars=int(bundle.context_decision["workspace_context_budget_chars"]),
+        )
+    workspace_context_blocks_count = max(0, len(context_blocks) - len(manual_blocks))
+    bundle.context_decision["manual_context_blocks_count"] = len(manual_blocks)
+    bundle.context_decision["workspace_context_blocks_count"] = workspace_context_blocks_count
+    bundle.context_decision["context_used"] = workspace_context_blocks_count > 0
+    if context_build_error is not None:
+        bundle.context_decision["context_build_error"] = context_build_error
+    auto_metadata = auto_metadata_from_bundle(bundle)
     return resolve_bridge_outcome_from_decision(
         request=request,
-        decision=decision,
+        decision=bundle.decision,
+        run_ai_task_func=run_ai_task_func,
         context_blocks=context_blocks,
         context_build_error=context_build_error,
         requested_workspace_id=requested_workspace_id,
+        selected_auto_route_class=bundle.local_route_class,
+        auto_metadata=auto_metadata,
+        control_status=bundle.control_status,
+        confirmation_payload=bundle.confirmation_payload,
     )
+
+
+def auto_metadata_from_bundle(bundle: AutoDecisionBundle) -> dict[str, object]:
+    classification = bundle.classification_result.classification
+    diagnostics = bundle.classification_result.diagnostics
+    return {
+        "classification": {
+            "task_type": classification.task_type.value,
+            "project_area": classification.project_area.value,
+            "complexity_hint": classification.complexity_hint.value,
+            "needs_context": classification.needs_context,
+            "sensitivity_hint": classification.sensitivity_hint.value,
+            "allowed_next_step": classification.allowed_next_step.value,
+            "confidence": classification.confidence,
+            "source": bundle.classification_result.source.value,
+            "model_name": diagnostics.model_name if diagnostics is not None else AUTO_CLASSIFICATION_MODEL,
+            "fallback_reasons": [reason.value for reason in bundle.classification_result.fallback_reasons],
+            "deterministic_reasons": bundle.classification_result.deterministic_reasons,
+        },
+        "capability": {
+            "row": bundle.capability,
+            "local_route_class": bundle.local_route_class,
+            "note": "would_benefit_from_external" if bundle.capability == CAPABILITY_DEEP_REASONING else None,
+        },
+        "context_decision": bundle.context_decision,
+        "control_status": bundle.control_status,
+    }
+
+
+def _build_auto_context(
+    manual_blocks: list[dict],
+    requested_workspace_id: str | None,
+    *,
+    budget_chars: int,
+) -> tuple[list[dict], str | None]:
+    from app.modules.ai.context_builder import build_workspace_context_bundle
+
+    if budget_chars <= 0:
+        return manual_blocks, "workspace_context_budget_exhausted"
+    try:
+        bundle = build_workspace_context_bundle(requested_workspace_id or "bluerev", budget_chars=budget_chars)
+    except Exception as exc:
+        return manual_blocks, f"workspace_context_build_failed: {type(exc).__name__}"
+    return manual_blocks + bundle.blocks, None
+
+
+def _requested_context_level(classification) -> str:
+    if _classification_requests_deep_context(classification):
+        return CONTEXT_LEVEL_DEEP
+    if classification.task_type == TaskType.project_planning:
+        return CONTEXT_LEVEL_STANDARD
+    if classification.task_type == TaskType.engineering_question:
+        if classification.complexity_hint in {ComplexityHint.medium, ComplexityHint.high}:
+            return CONTEXT_LEVEL_STANDARD
+        return CONTEXT_LEVEL_LIGHT
+    if classification.task_type in {TaskType.code_change, TaskType.bug_report}:
+        return CONTEXT_LEVEL_STANDARD
+    if classification.complexity_hint in {ComplexityHint.medium, ComplexityHint.high}:
+        return CONTEXT_LEVEL_STANDARD
+    return CONTEXT_LEVEL_LIGHT
+
+
+def _classifier_requested_context_level(
+    classification,
+    fallback_or_low_confidence: bool,
+) -> str:
+    if not classification.needs_context:
+        return CONTEXT_LEVEL_NONE
+    if fallback_or_low_confidence:
+        return CONTEXT_LEVEL_LIGHT
+    if classification.project_area != ProjectArea.bluerev:
+        return CONTEXT_LEVEL_NONE
+    return _requested_context_level(classification)
+
+
+def _classification_requests_deep_context(classification) -> bool:
+    if classification.confidence < LOW_CONFIDENCE_THRESHOLD:
+        return False
+    if not classification.needs_context or classification.project_area != ProjectArea.bluerev:
+        return False
+    return (
+        classification.task_type == TaskType.project_planning
+        and classification.complexity_hint == ComplexityHint.high
+        and classification.allowed_next_step == AllowedNextStep.request_bounded_context
+    )
+
+
+def _serialized_context_chars(context_blocks: list[dict]) -> int:
+    if not context_blocks:
+        return 0
+    return len(json.dumps(context_blocks, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
 
 
 def _is_executable_auto_local(decision: dict) -> bool:
     return decision.get("proposed_external_target") is None and is_safe_local_execution(decision)
 
 
-def auto_local_route_class_for_task(task_kind: str) -> str:
-    return AUTO_LOCAL_ROUTE_BY_TASK_KIND.get(task_kind, AUTO_LOCAL_DEFAULT_ROUTE_CLASS)
-
-
 def _control_status(decision: dict) -> str:
     if decision.get("proposed_external_target") is not None:
-        return "proposed_external"
+        return CONTROL_PROPOSED_EXTERNAL
     route_action = decision.get("route_action")
     if route_action == "ask_user_confirm":
         return "needs_confirmation"
     if route_action == "ask_clarification":
-        return "needs_clarification"
+        return CONTROL_NEEDS_CLARIFICATION
     if route_action == "blocked":
-        return "blocked"
+        return CONTROL_BLOCKED
     return "propose_only"
 
 
@@ -203,7 +539,7 @@ def _decision_reason(decision: dict) -> str:
 
 
 def _blocked_reason(decision: dict, status: str) -> str:
-    if status == "proposed_external":
+    if status == CONTROL_PROPOSED_EXTERNAL:
         return "auto_external_proposal_refused"
     route_action = decision.get("route_action")
     if isinstance(route_action, str) and route_action:
@@ -216,6 +552,7 @@ def _response_from_outcome(
     request: AITaskRunRequest,
     outcome: AiTaskOutcome,
     requested_workspace_id: str | None,
+    auto_metadata: dict[str, object] | None,
 ) -> AITaskRunResponse:
     response = outcome.response
     return AITaskRunResponse(
@@ -229,10 +566,11 @@ def _response_from_outcome(
         model_id=response.model_id if response is not None else outcome.decision.model_id,
         usage=response.usage if response is not None else None,
         error_type=outcome.error_type,
-        include_project_context=request.include_project_context,
+        include_project_context=bool(auto_metadata.get("context_decision", {}).get("final_include_project_context")) if auto_metadata else request.include_project_context,
         workspace_id=requested_workspace_id,
         context_digest=outcome.context_digest,
         context_sources_count=outcome.context_sources_count,
+        auto_metadata=auto_metadata,
     )
 
 
@@ -244,6 +582,7 @@ def _write_auto_control_job(
     decision: dict,
     context_blocks: list[dict] | None,
     latency_ms: int,
+    auto_metadata: dict[str, object] | None,
 ) -> str:
     job_id = str(uuid4())
     context_digest = canonical_digest(context_blocks) if context_blocks else None
@@ -264,6 +603,7 @@ def _write_auto_control_job(
             },
             "reason_codes": decision.get("reason_codes"),
             "blocked_reason": _blocked_reason(decision, status),
+            "auto_metadata": auto_metadata,
         },
         sort_keys=True,
     )
@@ -300,3 +640,97 @@ def _write_auto_control_job(
         )
         connection.commit()
     return job_id
+
+
+def _fallback_classification() -> ClassificationServiceResult:
+    output = make_output(
+        task_type=TaskType.unknown,
+        project_area=ProjectArea.unknown,
+        complexity_hint=ComplexityHint.unknown,
+        needs_context=False,
+        sensitivity_hint=SensitivityHint.unknown,
+        allowed_next_step=AllowedNextStep.answer_locally,
+        confidence=0,
+        refusal_or_uncertainty_reason="Classification failed; using conservative local fallback.",
+    )
+    return ClassificationServiceResult(
+        classification=output,
+        advisory_hints=make_advisory_hints(output),
+        source=ClassificationResultSource.fallback,
+        model_output_accepted=False,
+        fallback_reasons=[ClassificationFailureCode.unknown],
+    )
+
+
+def _control_decision(
+    status: str,
+    classification_result: ClassificationServiceResult,
+    capability: str,
+) -> dict:
+    classification = classification_result.classification
+    route_action = {
+        CONTROL_NEEDS_CLARIFICATION: "ask_clarification",
+        CONTROL_BLOCKED: "blocked",
+        CONTROL_PROPOSED_EXTERNAL: "ask_user_confirm",
+    }[status]
+    return {
+        "route_action": route_action,
+        "route_tier": "USER_CONFIRM" if status != CONTROL_BLOCKED else "BLOCKED",
+        "provider_candidate": "none",
+        "proposed_external_target": "external:scientific_medium" if status == CONTROL_PROPOSED_EXTERNAL else None,
+        "response_allowed_now": status != CONTROL_BLOCKED,
+        "external_allowed": False,
+        "provider_call_allowed_now": False,
+        "external_network_allowed_now": False,
+        "tool_execution_allowed_now": False,
+        "state_change_allowed_now": False,
+        "allowed_execution_mode": "blocked" if status == CONTROL_BLOCKED else "propose_only",
+        "modifies_state": False,
+        "side_effect_level": "none",
+        "environment_type": "chat",
+        "reason_codes": [
+            f"auto_{status}",
+            f"classification_task:{classification.task_type.value}",
+            f"capability:{capability}",
+        ],
+    }
+
+
+def _confirmation_payload(
+    classification_result: ClassificationServiceResult,
+    capability: str,
+) -> dict[str, object]:
+    classification = classification_result.classification
+    return {
+        "scope": "external_provider_request_detected",
+        "target": "external:scientific_medium",
+        "classification_task_type": classification.task_type.value,
+        "capability": capability,
+        "message": "Auto detected an external provider/API request. Auto is local-only in this slice.",
+    }
+
+
+def _project_bucket(project_area: ProjectArea) -> str:
+    return project_area.value
+
+
+def _router_sensitivity(sensitivity: SensitivityHint) -> str:
+    if sensitivity == SensitivityHint.public:
+        return "public"
+    if sensitivity == SensitivityHint.internal:
+        return "internal"
+    if sensitivity in {SensitivityHint.confidential, SensitivityHint.sensitive_ip, SensitivityHint.secret}:
+        return "sensitive"
+    return "unknown"
+
+
+def _router_sensitivity_hint(request: AITaskRunRequest, classification) -> SensitivityHint:
+    if classification is not None and classification.sensitivity_hint in {
+        SensitivityHint.confidential,
+        SensitivityHint.sensitive_ip,
+        SensitivityHint.secret,
+    }:
+        return classification.sensitivity_hint
+    if request.include_project_context:
+        return SensitivityHint.internal
+    return SensitivityHint.unknown

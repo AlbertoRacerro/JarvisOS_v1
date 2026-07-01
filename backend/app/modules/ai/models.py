@@ -158,6 +158,8 @@ class AITaskRunResponse(BaseModel):
     workspace_id: str | None = None
     context_digest: str | None = None
     context_sources_count: int = 0
+    auto_metadata: dict[str, Any] | None = None
+    confirmation_payload: dict[str, Any] | None = None
 
 
 class SmokeTestRequest(BaseModel):
