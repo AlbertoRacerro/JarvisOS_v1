@@ -535,6 +535,206 @@ def test_auto_context_deep_downgrades_when_selected_route_cannot_handle_deep() -
     assert decision["context_budget_chars"] == 6000
 
 
+@pytest.mark.parametrize(
+    ("sensitivity_hint", "decision", "expected_executed", "expected_status"),
+    [
+        (
+            SensitivityHint.public,
+            _safe_decision(route_action="answer_local", route_tier="LOCAL_FAST", allowed_execution_mode="answer_only"),
+            True,
+            "success",
+        ),
+        (
+            SensitivityHint.internal,
+            _safe_decision(route_action="answer_local", route_tier="LOCAL_FAST", allowed_execution_mode="answer_only"),
+            True,
+            "success",
+        ),
+        (
+            SensitivityHint.unknown,
+            _safe_decision(route_action="answer_local", route_tier="LOCAL_FAST", allowed_execution_mode="answer_only"),
+            True,
+            "success",
+        ),
+        (
+            SensitivityHint.confidential,
+            _safe_decision(route_action="route_local", route_tier="LOCAL_ONLY", allowed_execution_mode="propose_only"),
+            True,
+            "success",
+        ),
+        (
+            SensitivityHint.sensitive_ip,
+            _safe_decision(route_action="route_local", route_tier="LOCAL_ONLY", allowed_execution_mode="propose_only"),
+            True,
+            "success",
+        ),
+        (
+            SensitivityHint.secret,
+            _safe_decision(
+                route_action="blocked",
+                route_tier="BLOCKED",
+                response_allowed_now=False,
+                allowed_execution_mode="blocked",
+            ),
+            False,
+            CONTROL_BLOCKED,
+        ),
+    ],
+)
+def test_auto_executes_safe_local_sensitivity_spectrum(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    sensitivity_hint: SensitivityHint,
+    decision: dict,
+    expected_executed: bool,
+    expected_status: str,
+) -> None:
+    import app.modules.ai.routing.bridge as bridge
+
+    calls: list[dict[str, object]] = []
+
+    def fake_classifier(request, *, adapter=None):
+        return _classification_result(
+            task_type=TaskType.engineering_question,
+            project_area=ProjectArea.bluerev,
+            complexity_hint=ComplexityHint.medium,
+            needs_context=False,
+            sensitivity_hint=sensitivity_hint,
+        )
+
+    def fake_router_policy(*args, **kwargs):
+        return decision
+
+    def fake_run_ai_task(**kwargs):
+        calls.append(kwargs)
+        return _fake_success_outcome(str(kwargs["route_class"]))
+
+    monkeypatch.setattr(bridge, "decide_router_policy", fake_router_policy)
+
+    response = run_auto_task(
+        AITaskRunRequest(prompt=f"sensitivity {sensitivity_hint.value}", route_class="auto", max_tokens=64),
+        run_ai_task_func=fake_run_ai_task,
+        classifier_func=fake_classifier,
+    )
+
+    assert response.status == expected_status
+    assert bool(calls) is expected_executed
+    if expected_executed:
+        assert len(calls) == 1
+        assert response.selected_route_class == "local:general"
+        assert response.provider_id == "fake-runner"
+        assert response.model_id == "fake-runner-model"
+        assert calls[0]["route_class"] == "local:general"
+        assert response.confirmation_payload is None
+    else:
+        assert response.selected_route_class == "auto"
+        assert response.provider_id is None
+        assert response.response_text is None
+
+
+@pytest.mark.parametrize(
+    ("task_type", "expected_status"),
+    [
+        (TaskType.external_api_request, CONTROL_PROPOSED_EXTERNAL),
+        (TaskType.ambiguous, CONTROL_NEEDS_CLARIFICATION),
+    ],
+)
+def test_auto_non_executing_classification_controls_cover_external_and_ambiguous(
+    client: TestClient,
+    task_type: TaskType,
+    expected_status: str,
+) -> None:
+    calls = {"run_ai_task": 0}
+
+    def fake_classifier(request, *, adapter=None):
+        return _classification_result(task_type=task_type)
+
+    def fail_run_ai_task(**kwargs):
+        calls["run_ai_task"] += 1
+        raise AssertionError("control states must not execute")
+
+    response = run_auto_task(
+        AITaskRunRequest(prompt=f"control {task_type.value}", route_class="auto", max_tokens=64),
+        run_ai_task_func=fail_run_ai_task,
+        classifier_func=fake_classifier,
+    )
+
+    assert response.status == expected_status
+    assert response.provider_id is None
+    assert response.response_text is None
+    assert calls["run_ai_task"] == 0
+
+
+@pytest.mark.parametrize(
+    "unsafe_override",
+    [
+        {"proposed_external_target": "external:scientific_medium"},
+        {"provider_call_allowed_now": True},
+        {"external_network_allowed_now": True},
+        {"tool_execution_allowed_now": True},
+        {"state_change_allowed_now": True},
+    ],
+)
+def test_auto_local_only_gate_rejects_adversarial_local_decisions(
+    client: TestClient,
+    unsafe_override: dict[str, object],
+) -> None:
+    decision = _safe_decision(
+        route_action="route_local",
+        route_tier="LOCAL_ONLY",
+        allowed_execution_mode="propose_only",
+        **unsafe_override,
+    )
+    calls = {"run_ai_task": 0}
+
+    def fail_run_ai_task(**kwargs):
+        calls["run_ai_task"] += 1
+        raise AssertionError("unsafe Auto local decision must not execute")
+
+    response = resolve_bridge_outcome_from_decision(
+        request=AITaskRunRequest(prompt="adversarial local", route_class="auto", max_tokens=64),
+        decision=decision,
+        run_ai_task_func=fail_run_ai_task,
+    )
+
+    assert response.status != "success"
+    assert response.provider_id is None
+    assert response.response_text is None
+    assert calls["run_ai_task"] == 0
+
+
+def test_auto_metadata_marks_capability_exceeds_local_for_deep_reasoning(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.modules.ai.routing.bridge as bridge
+    from app.modules.ai.routing.capability_route_matrix import CAPABILITY_DEEP_REASONING
+
+    def fake_classifier(request, *, adapter=None):
+        return _classification_result(
+            task_type=TaskType.project_planning,
+            project_area=ProjectArea.bluerev,
+            complexity_hint=ComplexityHint.high,
+            needs_context=False,
+        )
+
+    def fake_run_ai_task(**kwargs):
+        return _fake_success_outcome(str(kwargs["route_class"]))
+
+    monkeypatch.setattr(bridge, "capability_from_classification", lambda classification: CAPABILITY_DEEP_REASONING)
+
+    response = run_auto_task(
+        AITaskRunRequest(prompt="deep local best effort", route_class="auto", max_tokens=64),
+        run_ai_task_func=fake_run_ai_task,
+        classifier_func=fake_classifier,
+    )
+
+    assert response.status == "success"
+    assert response.auto_metadata["capability_exceeds_local"] is True
+    assert response.auto_metadata["capability"]["row"] == CAPABILITY_DEEP_REASONING
+    assert response.auto_metadata["capability"]["capability_exceeds_local"] is True
+
+
 def test_auto_does_not_build_workspace_context_when_user_permission_is_off(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

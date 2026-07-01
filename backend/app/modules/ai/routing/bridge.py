@@ -29,7 +29,6 @@ from app.modules.ai.routing.capability_route_matrix import (
     route_supported_context_level,
 )
 from app.modules.ai.routing.decision import decide_router_policy
-from app.modules.ai.routing.safe_local import is_safe_local_execution
 from app.modules.events.service import utc_now
 from app.modules.local_ai.classification.adapter import ClassificationAdapterConfig, LocalGemmaClassificationAdapter
 from app.modules.local_ai.classification.contracts import (
@@ -424,7 +423,9 @@ def run_auto_task(
 def auto_metadata_from_bundle(bundle: AutoDecisionBundle) -> dict[str, object]:
     classification = bundle.classification_result.classification
     diagnostics = bundle.classification_result.diagnostics
+    capability_exceeds_local = bundle.capability == CAPABILITY_DEEP_REASONING
     return {
+        "capability_exceeds_local": capability_exceeds_local,
         "classification": {
             "task_type": classification.task_type.value,
             "project_area": classification.project_area.value,
@@ -441,6 +442,7 @@ def auto_metadata_from_bundle(bundle: AutoDecisionBundle) -> dict[str, object]:
         "capability": {
             "row": bundle.capability,
             "local_route_class": bundle.local_route_class,
+            "capability_exceeds_local": capability_exceeds_local,
             "note": "would_benefit_from_external" if bundle.capability == CAPABILITY_DEEP_REASONING else None,
         },
         "context_decision": bundle.context_decision,
@@ -513,7 +515,34 @@ def _serialized_context_chars(context_blocks: list[dict]) -> int:
 
 
 def _is_executable_auto_local(decision: dict) -> bool:
-    return decision.get("proposed_external_target") is None and is_safe_local_execution(decision)
+    return _is_auto_local_safe(decision)
+
+
+def _is_auto_local_safe(decision: dict) -> bool:
+    """Return true for Auto decisions that are safe to answer with a local model.
+
+    Auto is a local-only slice. A propose_only decision with no external target
+    and no side effects is treated as a safe local answer, not as an external
+    proposal to execute.
+    """
+
+    return all(
+        (
+            decision.get("route_action") in {"answer_local", "route_local"},
+            decision.get("route_tier") in {"LOCAL_FAST", "LOCAL_ONLY"},
+            decision.get("proposed_external_target") is None,
+            decision.get("response_allowed_now") is True,
+            decision.get("external_allowed") is False,
+            decision.get("provider_call_allowed_now") is False,
+            decision.get("external_network_allowed_now") is False,
+            decision.get("tool_execution_allowed_now") is False,
+            decision.get("state_change_allowed_now") is False,
+            decision.get("modifies_state") is False,
+            decision.get("side_effect_level") == "none",
+            decision.get("environment_type") == "chat",
+            decision.get("allowed_execution_mode") in {"answer_only", "propose_only"},
+        )
+    )
 
 
 def _control_status(decision: dict) -> str:
