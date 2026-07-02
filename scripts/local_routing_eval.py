@@ -17,6 +17,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fixture", type=Path, default=None)
     args = parser.parse_args(argv)
 
+    from app.core.database import initialize_database
     from app.modules.ai.models import AITaskRunRequest
     from app.modules.ai.routing.bridge import build_auto_decision_bundle
     from app.modules.local_ai_eval.routing_eval import (
@@ -26,6 +27,10 @@ def main(argv: list[str] | None = None) -> int:
         load_routing_eval_cases,
         render_routing_eval_markdown,
     )
+
+    # The decision bundle requests project context (include_project_context=True),
+    # which reads workspace records; ensure the DB exists like the smoke script does.
+    initialize_database()
 
     cases = load_routing_eval_cases(args.fixture) if args.fixture else load_routing_eval_cases()
     predictions: list[RoutingEvalPrediction] = []
