@@ -12,6 +12,7 @@ from app.modules.ai.context_builder import (
     canonical_digest,
     context_sources_manifest,
 )
+from app.modules.ai.costs import build_escalation_proposal
 from app.modules.ai.execution import AiTaskOutcome
 from app.modules.ai.models import AITaskRunRequest, AITaskRunResponse
 from app.modules.ai.routing.capability_route_matrix import (
@@ -224,6 +225,8 @@ def capability_from_classification(classification) -> str:
 
 
 def control_status_from_classification(classification) -> str | None:
+    if classification.sensitivity_hint == SensitivityHint.secret:
+        return CONTROL_BLOCKED
     if classification.task_type == TaskType.external_api_request:
         return CONTROL_PROPOSED_EXTERNAL
     if classification.task_type == TaskType.ambiguous:
@@ -352,6 +355,16 @@ def resolve_bridge_outcome_from_decision(
         latency_ms=int((time.perf_counter() - started) * 1000),
         auto_metadata=auto_metadata,
     )
+    escalation_proposal = None
+    if status == CONTROL_PROPOSED_EXTERNAL and auto_metadata and auto_metadata.get("capability_exceeds_local") is True:
+        sensitivity_hint = str(auto_metadata.get("classification", {}).get("sensitivity_hint", "unknown"))
+        escalation_proposal = build_escalation_proposal(
+            prompt=request.prompt,
+            proposal_ledger_id=ledger_id,
+            max_output_tokens=request.max_tokens,
+            sensitivity_hint=sensitivity_hint,
+        )
+        _attach_escalation_proposal_to_job(ledger_id, escalation_proposal)
     return AITaskRunResponse(
         status=status,
         ledger_id=ledger_id,
@@ -369,6 +382,7 @@ def resolve_bridge_outcome_from_decision(
         context_sources_count=len(context_sources_manifest(context_blocks)) if context_blocks else 0,
         auto_metadata=auto_metadata,
         confirmation_payload=confirmation_payload,
+        escalation_proposal=escalation_proposal,
     )
 
 
@@ -405,17 +419,24 @@ def run_auto_task(
     bundle.context_decision["context_used"] = workspace_context_blocks_count > 0
     if context_build_error is not None:
         bundle.context_decision["context_build_error"] = context_build_error
+    control_status = bundle.control_status
+    decision = bundle.decision
+    if control_status is None and bundle.capability == CAPABILITY_DEEP_REASONING:
+        control_status = CONTROL_PROPOSED_EXTERNAL
+        decision = _control_decision(control_status, bundle.classification_result, bundle.capability)
     auto_metadata = auto_metadata_from_bundle(bundle)
+    if control_status == CONTROL_PROPOSED_EXTERNAL:
+        auto_metadata["control_status"] = CONTROL_PROPOSED_EXTERNAL
     return resolve_bridge_outcome_from_decision(
         request=request,
-        decision=bundle.decision,
+        decision=decision,
         run_ai_task_func=run_ai_task_func,
         context_blocks=context_blocks,
         context_build_error=context_build_error,
         requested_workspace_id=requested_workspace_id,
         selected_auto_route_class=bundle.local_route_class,
         auto_metadata=auto_metadata,
-        control_status=bundle.control_status,
+        control_status=control_status,
         confirmation_payload=bundle.confirmation_payload,
     )
 
@@ -763,3 +784,25 @@ def _router_sensitivity_hint(request: AITaskRunRequest, classification) -> Sensi
     if request.include_project_context:
         return SensitivityHint.internal
     return SensitivityHint.unknown
+
+
+def _attach_escalation_proposal_to_job(job_id: str, escalation_proposal: dict[str, object]) -> None:
+    with open_sqlite_connection() as connection:
+        row = connection.execute("SELECT route_reason_json FROM ai_jobs WHERE id = ?", (job_id,)).fetchone()
+        if row is None:
+            return
+        route_reason = json.loads(row["route_reason_json"])
+        route_reason["escalation_proposal"] = escalation_proposal
+        connection.execute(
+            "UPDATE ai_jobs SET route_reason_json = ?, provider_id = ?, model_id = ?, cost_estimate = ? WHERE id = ?",
+            (
+                json.dumps(route_reason, sort_keys=True),
+                escalation_proposal.get("provider_id"),
+                escalation_proposal.get("model_id"),
+                escalation_proposal.get("estimated_cost", {}).get("estimated_cost_usd")
+                if isinstance(escalation_proposal.get("estimated_cost"), dict)
+                else None,
+                job_id,
+            ),
+        )
+        connection.commit()

@@ -1,6 +1,6 @@
 # 003 — ESCALATE-CONFIRM-0: external escalation proposal + user-confirmed execution
 
-Status: ready
+Status: implemented (pending review)
 Depends on: none (002 recommended first, for measured evidence of local ceiling)
 
 ## Goal
@@ -113,3 +113,11 @@ Out of scope (binding non-goals):
 Test gate green (see `AGENTS.md`), acceptance criteria met, spec status updated,
 summary written. This slice may land as two commits (backend, then frontend card)
 on the same branch.
+
+
+## Implementation notes
+
+- Phase A verification: `external:reasoning` is present in the execution spine binding table and can be exercised end-to-end through the existing explicit external route path when the Scaleway route gates are enabled; the confirm endpoint reuses that path. In this container, live provider execution was not attempted. Tests verify the route through the spine with a mocked Scaleway adapter/fake response and verify fail-closed behavior for disabled paid AI and zero budget.
+- Escalation proposals use the interim redaction policy: outbound text is exactly the raw prompt, `context_excluded` is `true`, and manual/project context is not sent on confirm.
+- Proposal/execution linking is recorded in `ai_jobs.route_reason_json`: proposal rows include `escalation_proposal`, and confirmed execution rows include `escalation_proposal_ledger_id`.
+- Frontend visual verification was limited to `npm run build` in this non-interactive container.

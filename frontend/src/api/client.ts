@@ -350,6 +350,23 @@ export type AIUsage = {
   currency?: string | null;
 };
 
+export type EscalationProposal = {
+  proposal_ledger_id?: string | null;
+  proposed_route_class: string;
+  provider_id?: string | null;
+  model_id?: string | null;
+  estimated_cost?: {
+    estimated_cost_usd?: number;
+    currency?: string;
+    input_tokens?: number;
+    max_output_tokens?: number;
+    label?: string;
+  };
+  outbound_text: string;
+  context_excluded: boolean;
+  sensitivity_warning?: string | null;
+};
+
 export type AITaskRunResponse = {
   status: string;
   ledger_id: string;
@@ -363,6 +380,7 @@ export type AITaskRunResponse = {
   error_type?: string | null;
   error_message?: string | null;
   confirmation_payload?: unknown | null;
+  escalation_proposal?: EscalationProposal | null;
   include_project_context?: boolean;
   workspace_id?: string | null;
   context_digest?: string | null;
@@ -371,6 +389,17 @@ export type AITaskRunResponse = {
 
 export function runAITask(payload: AITaskRunRequest): Promise<AITaskRunResponse> {
   return postJson<AITaskRunResponse>("/ai/tasks/run", payload as Record<string, unknown>);
+}
+
+export type EscalationConfirmResponse = {
+  status: string;
+  proposal_ledger_id: string;
+  execution_ledger_id: string;
+  task_response: AITaskRunResponse;
+};
+
+export function confirmAITaskEscalation(proposal: EscalationProposal, taskKind = "general"): Promise<EscalationConfirmResponse> {
+  return postJson<EscalationConfirmResponse>("/ai/tasks/escalations/confirm", { proposal, task_kind: taskKind });
 }
 
 export type SmokeTestTokenMetadata = {

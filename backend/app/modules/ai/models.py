@@ -143,6 +143,13 @@ class AITaskRunRequest(BaseModel):
         return self
 
 
+class EscalationConfirmRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    proposal: dict[str, Any]
+    task_kind: str = "general"
+
+
 class AITaskRunResponse(BaseModel):
     status: str
     ledger_id: str
@@ -160,6 +167,14 @@ class AITaskRunResponse(BaseModel):
     context_sources_count: int = 0
     auto_metadata: dict[str, Any] | None = None
     confirmation_payload: dict[str, Any] | None = None
+    escalation_proposal: dict[str, Any] | None = None
+
+
+class EscalationConfirmResponse(BaseModel):
+    status: str
+    proposal_ledger_id: str
+    execution_ledger_id: str
+    task_response: AITaskRunResponse
 
 
 class SmokeTestRequest(BaseModel):

@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.modules.ai.escalations import confirm_escalation
 from app.modules.ai.gateway import AIGateway
 from app.modules.ai.models import (
     AISettingsRead,
@@ -7,6 +8,8 @@ from app.modules.ai.models import (
     AIStatusRead,
     AITaskRunRequest,
     AITaskRunResponse,
+    EscalationConfirmRequest,
+    EscalationConfirmResponse,
     ModelingDraftRequest,
     ModelingDraftResponse,
     ProviderSmokeRequest,
@@ -49,6 +52,12 @@ def create_modeling_draft(payload: ModelingDraftRequest) -> ModelingDraftRespons
 def run_ai_task_endpoint(payload: AITaskRunRequest) -> AITaskRunResponse:
     ensure_ai_settings()
     return AIGateway().run_task(payload)
+
+
+@router.post("/tasks/escalations/confirm", response_model=EscalationConfirmResponse)
+def confirm_ai_task_escalation(payload: EscalationConfirmRequest) -> EscalationConfirmResponse:
+    ensure_ai_settings()
+    return confirm_escalation(payload)
 
 
 @router.post("/smoke-tests/run", response_model=SmokeTestResponse)
