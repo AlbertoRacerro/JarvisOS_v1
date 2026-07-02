@@ -67,4 +67,8 @@ jobs:
               summarize what remains open.
             - If verdict is APPROVE: state clearly "LGTM — ready for human
               merge" so the maintainer can merge with one click.
-          claude_args: "--max-turns 40"
+          # bypassPermissions: the runner is ephemeral and headless — no human can
+          # approve tool prompts, so gh/read calls to fetch the diff must be
+          # auto-approved. The prompt forbids push/merge, so the blast radius is
+          # read + comment only. --model pins Opus per maintainer preference.
+          claude_args: "--max-turns 40 --model claude-opus-4-8 --permission-mode bypassPermissions"
