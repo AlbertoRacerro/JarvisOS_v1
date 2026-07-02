@@ -13,6 +13,9 @@ from app.modules.modeling.models import (
     ModelSpecRead,
     ParameterCreate,
     ParameterRead,
+    RequirementCreate,
+    RequirementRead,
+    RequirementUpdate,
     SimulationRunCreate,
     SimulationRunRead,
 )
@@ -149,7 +152,22 @@ def list_assumptions(workspace_id: str) -> list[AssumptionRead]:
     with open_sqlite_connection() as connection:
         _require_workspace(connection, workspace_id)
         rows = connection.execute(
-            "SELECT * FROM assumptions WHERE workspace_id = ? ORDER BY created_at DESC",
+            """
+            SELECT
+                id, workspace_id, statement, scope,
+                CASE
+                    WHEN confidence IN ('low', 'medium', 'high') THEN confidence
+                    ELSE NULL
+                END AS confidence,
+                CASE
+                    WHEN status IN ('proposed', 'accepted', 'rejected', 'superseded') THEN status
+                    ELSE 'proposed'
+                END AS status,
+                source_ref, created_at, updated_at, notes
+            FROM assumptions
+            WHERE workspace_id = ?
+            ORDER BY created_at DESC
+            """,
             (workspace_id,),
         ).fetchall()
     return rows_to_models(rows, AssumptionRead)
@@ -163,9 +181,9 @@ def create_parameter(workspace_id: str, payload: ParameterCreate) -> ParameterRe
         connection.execute(
             """
             INSERT INTO parameters (
-                id, workspace_id, name, symbol, value, unit, source_ref,
-                confidence, status, created_at, updated_at, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                id, workspace_id, name, symbol, value, unit, value_status, value_min,
+                value_max, source_ref, confidence, status, created_at, updated_at, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record_id,
@@ -174,6 +192,9 @@ def create_parameter(workspace_id: str, payload: ParameterCreate) -> ParameterRe
                 payload.symbol,
                 payload.value,
                 payload.unit,
+                payload.value_status,
+                payload.value_min,
+                payload.value_max,
                 payload.source_ref,
                 payload.confidence,
                 payload.status,
@@ -199,10 +220,92 @@ def list_parameters(workspace_id: str) -> list[ParameterRead]:
     with open_sqlite_connection() as connection:
         _require_workspace(connection, workspace_id)
         rows = connection.execute(
-            "SELECT * FROM parameters WHERE workspace_id = ? ORDER BY created_at DESC",
+            """
+            SELECT
+                id, workspace_id, name, symbol, value,
+                COALESCE(unit, 'unspecified') AS unit,
+                COALESCE(value_status, 'candidate') AS value_status,
+                value_min, value_max, source_ref, confidence, status,
+                created_at, updated_at, notes
+            FROM parameters
+            WHERE workspace_id = ?
+            ORDER BY created_at DESC
+            """,
             (workspace_id,),
         ).fetchall()
     return rows_to_models(rows, ParameterRead)
+
+
+def create_requirement(workspace_id: str, payload: RequirementCreate) -> RequirementRead:
+    now = utc_now()
+    record_id = str(uuid4())
+    with open_sqlite_connection() as connection:
+        _require_workspace(connection, workspace_id)
+        connection.execute(
+            """
+            INSERT INTO requirements (
+                id, workspace_id, statement, rationale, status, notes,
+                schema_version, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                record_id,
+                workspace_id,
+                payload.statement,
+                payload.rationale,
+                payload.status,
+                payload.notes,
+                1,
+                now,
+                now,
+            ),
+        )
+        _log_creation(
+            connection,
+            event_type="RequirementCreated",
+            target_type="Requirement",
+            target_id=record_id,
+            workspace_id=workspace_id,
+            payload={"statement": payload.statement[:160], "status": payload.status},
+        )
+        connection.commit()
+        row = connection.execute("SELECT * FROM requirements WHERE id = ?", (record_id,)).fetchone()
+    return row_to_model(row, RequirementRead)
+
+
+def get_requirement(requirement_id: str) -> RequirementRead | None:
+    with open_sqlite_connection() as connection:
+        row = connection.execute("SELECT * FROM requirements WHERE id = ?", (requirement_id,)).fetchone()
+    return optional_row_to_model(row, RequirementRead)
+
+
+def list_requirements(workspace_id: str) -> list[RequirementRead]:
+    with open_sqlite_connection() as connection:
+        _require_workspace(connection, workspace_id)
+        rows = connection.execute(
+            "SELECT * FROM requirements WHERE workspace_id = ? ORDER BY created_at DESC",
+            (workspace_id,),
+        ).fetchall()
+    return rows_to_models(rows, RequirementRead)
+
+
+def update_requirement(requirement_id: str, payload: RequirementUpdate) -> RequirementRead | None:
+    updates = payload.model_dump(exclude_unset=True)
+    if not updates:
+        return get_requirement(requirement_id)
+
+    now = utc_now()
+    assignments = [f"{field} = ?" for field in updates]
+    values = list(updates.values())
+    values.extend([now, requirement_id])
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            f"UPDATE requirements SET {', '.join(assignments)}, updated_at = ? WHERE id = ?",
+            values,
+        )
+        connection.commit()
+        row = connection.execute("SELECT * FROM requirements WHERE id = ?", (requirement_id,)).fetchone()
+    return optional_row_to_model(row, RequirementRead)
 
 
 def create_simulation_run(workspace_id: str, payload: SimulationRunCreate) -> SimulationRunRead:

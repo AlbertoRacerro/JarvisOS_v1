@@ -1,6 +1,6 @@
 # 001 — Parameter/Assumption schema freeze + Requirement record
 
-Status: ready
+Status: implemented (pending review)
 Depends on: none
 
 ## Goal
@@ -115,3 +115,10 @@ pattern, e.g. assumptions):
 
 Test gate green (see `AGENTS.md`), acceptance criteria met, spec status updated,
 summary written.
+
+## Implementation notes
+
+- Implemented parameter schema-freeze fields in SQLite, Pydantic API models, service inserts, and list responses. Legacy/minimal parameter rows are covered with safe defaults (`unit="unspecified"`, `value_status="candidate"`).
+- Updated assumptions to use the spec-defined text enums for `status` and `confidence`; the previous implementation had `status="draft"` and numeric confidence.
+- Added minimal requirements CRUD endpoints next to the existing modeling domain records: create, get, list by workspace, and patch for status/field updates.
+- Bumped the current schema migration marker to `0004_engineering_record_schema_freeze`; fresh initialization and upgrade-style additive statements both create the new shape without destructive migration.

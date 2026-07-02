@@ -2,8 +2,10 @@ SCHEMA_BASELINE_MIGRATION_ID = "0001_foundation_baseline"
 SCHEMA_BASELINE_MIGRATION_NAME = "Foundation schema through Python Runner V0"
 SCHEMA_DATA_INFRASTRUCTURE_MIGRATION_ID = "0002_data_infrastructure_hardening"
 SCHEMA_DATA_INFRASTRUCTURE_MIGRATION_NAME = "0E-B schema tracking, indexes, and artifact readback"
-CURRENT_SCHEMA_MIGRATION_ID = "0003_ai_policy_mode_foundation"
-CURRENT_SCHEMA_MIGRATION_NAME = "0E-D3 pragmatic AI policy mode foundation"
+SCHEMA_AI_POLICY_MIGRATION_ID = "0003_ai_policy_mode_foundation"
+SCHEMA_AI_POLICY_MIGRATION_NAME = "0E-D3 pragmatic AI policy mode foundation"
+CURRENT_SCHEMA_MIGRATION_ID = "0004_engineering_record_schema_freeze"
+CURRENT_SCHEMA_MIGRATION_NAME = "Parameter, assumption, and requirement schema freeze"
 
 SCHEMA_MIGRATION_RECORDS = [
     {
@@ -14,6 +16,11 @@ SCHEMA_MIGRATION_RECORDS = [
     {
         "migration_id": SCHEMA_DATA_INFRASTRUCTURE_MIGRATION_ID,
         "name": SCHEMA_DATA_INFRASTRUCTURE_MIGRATION_NAME,
+        "checksum": None,
+    },
+    {
+        "migration_id": SCHEMA_AI_POLICY_MIGRATION_ID,
+        "name": SCHEMA_AI_POLICY_MIGRATION_NAME,
         "checksum": None,
     },
     {
@@ -128,12 +135,27 @@ SCHEMA_STATEMENTS = [
         workspace_id TEXT NOT NULL,
         statement TEXT NOT NULL,
         scope TEXT,
-        confidence REAL,
-        status TEXT NOT NULL DEFAULT 'draft',
+        confidence TEXT,
+        status TEXT NOT NULL DEFAULT 'proposed',
         source_ref TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         notes TEXT,
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id)
+    )
+    """,
+
+    """
+    CREATE TABLE IF NOT EXISTS requirements (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        statement TEXT NOT NULL,
+        rationale TEXT,
+        status TEXT NOT NULL DEFAULT 'draft',
+        notes TEXT,
+        schema_version INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
         FOREIGN KEY (workspace_id) REFERENCES workspaces(id)
     )
     """,
@@ -144,7 +166,10 @@ SCHEMA_STATEMENTS = [
         name TEXT NOT NULL,
         symbol TEXT,
         value TEXT,
-        unit TEXT,
+        unit TEXT NOT NULL DEFAULT 'unspecified',
+        value_status TEXT NOT NULL DEFAULT 'candidate',
+        value_min REAL,
+        value_max REAL,
         source_ref TEXT,
         confidence REAL,
         status TEXT NOT NULL DEFAULT 'draft',
@@ -323,6 +348,13 @@ SCHEMA_MIGRATION_STATEMENTS = [
     # POS-2: source manifest for context blocks. Legacy DBs created at POS-1 have
     # ai_jobs without this column; this upgrades them in place.
     "ALTER TABLE ai_jobs ADD COLUMN context_sources_json TEXT",
+    "ALTER TABLE parameters ADD COLUMN unit TEXT NOT NULL DEFAULT 'unspecified'",
+    "ALTER TABLE parameters ADD COLUMN value_status TEXT NOT NULL DEFAULT 'candidate'",
+    "ALTER TABLE parameters ADD COLUMN value_min REAL",
+    "ALTER TABLE parameters ADD COLUMN value_max REAL",
+    "ALTER TABLE parameters ADD COLUMN source_ref TEXT",
+    "ALTER TABLE assumptions ADD COLUMN status TEXT NOT NULL DEFAULT 'proposed'",
+    "ALTER TABLE assumptions ADD COLUMN confidence TEXT",
 ]
 
 SCHEMA_INDEX_STATEMENTS = [
