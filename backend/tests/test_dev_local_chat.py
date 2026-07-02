@@ -1,10 +1,9 @@
 from collections.abc import Iterator
-from uuid import UUID
 from unittest.mock import Mock
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
-
 
 DEV_ENDPOINT = "/api/dev/local-chat"
 
@@ -578,7 +577,6 @@ def test_a5r2_history_filter_detects_italian_write_intents(monkeypatch) -> None:
 
 def test_c2_011_fixed_trace_id_across_paths(client: TestClient, monkeypatch) -> None:
     import app.api.dev_message_route as route
-    from app.modules.dev_message_route import smoke_adapter
 
     fixed = UUID("00000000-0000-0000-0000-000000000456")
     monkeypatch.setattr(route, "uuid4", Mock(return_value=fixed))
@@ -800,9 +798,9 @@ def test_c2_r2_005_local_chat_uses_imported_safe_local_predicate(client: TestCli
 
 
 def test_a4r2_generic_adapter_does_not_send_keep_alive_or_num_predict_by_default() -> None:
-    from app.modules.dev_message_route import smoke_adapter
-
     import router_policy_local_responder as local_responder
+
+    from app.modules.dev_message_route import smoke_adapter
 
     seen: dict[str, object] = {}
 
@@ -1049,8 +1047,9 @@ def test_i1_local_responder_transport_error_preserves_failure_timing(
     client: TestClient,
     monkeypatch,
 ) -> None:
-    from app.modules.dev_message_route import smoke_adapter
     from router_policy_local_responder import LocalResponderTransportError
+
+    from app.modules.dev_message_route import smoke_adapter
 
     _enable_chat(monkeypatch)
     failing_responder = Mock(side_effect=LocalResponderTransportError("timeout"))

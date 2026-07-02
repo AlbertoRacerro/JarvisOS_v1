@@ -23,6 +23,12 @@ ignore = [
     "E501",  # line length is handled by the formatter, not enforced as an error
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# smoke_adapter loads script helpers dynamically into globals() via
+# _ensure_scripts_loaded() (see test_dev_message_route_lazy_import.py), which
+# ruff cannot see, so undefined-name checks are false positives here.
+"app/modules/dev_message_route/smoke_adapter.py" = ["F821"]
+
 [tool.mypy]
 python_version = "3.11"
 # Start lenient: surface obvious type bugs in the runtime backend without
