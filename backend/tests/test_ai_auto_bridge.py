@@ -993,10 +993,17 @@ def test_auto_escalation_excludes_context_and_records_proposal(client: TestClien
     assert response.escalation_proposal["outbound_text"] == "raw prompt only"
     assert response.escalation_proposal["context_excluded"] is True
     assert response.escalation_proposal["sensitivity_warning"] is not None
+    # Response payload keeps the full outbound text for the UI confirmation card.
+    assert response.escalation_proposal["outbound_text"] == "raw prompt only"
     rows = _all_ai_jobs()
     assert len(rows) == 1
     route_reason = json.loads(rows[0]["route_reason_json"])
-    assert route_reason["escalation_proposal"]["outbound_text"] == "raw prompt only"
+    # Ledger must NOT persist the raw prompt (spine contract: digests only) — the
+    # escalation path is exactly the sensitive case (confidential/IP prompts).
+    ledger_proposal = route_reason["escalation_proposal"]
+    assert "outbound_text" not in ledger_proposal
+    assert ledger_proposal["outbound_text_digest"]
+    assert ledger_proposal["outbound_text_digest"] != "raw prompt only"
     # Non-executing proposal row must not be stamped as a real external call:
     # provider/model/cost columns stay unset; the estimate lives only in the JSON.
     assert rows[0]["provider_id"] is None

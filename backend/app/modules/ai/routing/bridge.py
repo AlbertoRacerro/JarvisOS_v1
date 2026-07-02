@@ -792,11 +792,17 @@ def _attach_escalation_proposal_to_job(job_id: str, escalation_proposal: dict[st
         if row is None:
             return
         route_reason = json.loads(row["route_reason_json"])
-        route_reason["escalation_proposal"] = escalation_proposal
-        # This is a non-executing proposal row: leave provider_id/model_id/cost_estimate
-        # unset so a future SUM(cost_estimate) audit never mistakes an estimate for real
-        # spend, and the row is not misread as a completed external call. The proposed
-        # target and estimate remain fully recorded inside route_reason.escalation_proposal.
+        # The spine contract is "the ledger stores only digests + metadata, never
+        # prompt/output content" (see execution.py). Escalation is exactly the
+        # sensitive path, so persist a redacted proposal: replace the raw prompt with
+        # a digest. The full outbound_text stays only in the response payload for the
+        # UI card. Provider/model/cost columns are also left unset so a non-executing
+        # proposal row is never misread as a real external call or summed as spend.
+        ledger_proposal = dict(escalation_proposal)
+        raw_outbound = ledger_proposal.pop("outbound_text", None)
+        if raw_outbound is not None:
+            ledger_proposal["outbound_text_digest"] = canonical_digest({"prompt": raw_outbound})
+        route_reason["escalation_proposal"] = ledger_proposal
         connection.execute(
             "UPDATE ai_jobs SET route_reason_json = ? WHERE id = ?",
             (json.dumps(route_reason, sort_keys=True), job_id),

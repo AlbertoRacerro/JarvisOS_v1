@@ -149,3 +149,23 @@ on the same branch.
 - **Credentials-absent fail-closed (MINOR, fixed).** Added
   `test_confirm_escalation_credentials_absent_fails_closed` to cover the third case
   of acceptance criterion 5.
+
+## Review notes (2026-07-02, spec-003 round 2)
+
+- **Raw prompt in ledger (MAJOR, fixed).** `_attach_escalation_proposal_to_job`
+  persisted `outbound_text` (the raw prompt) into `ai_jobs.route_reason_json`,
+  violating the spine contract ("the ledger stores only digests + metadata, never
+  prompt/output content"). Since escalation is exactly the sensitive path
+  (confidential/IP prompts that exceed local), this leaked full prompt text into
+  SQLite even without confirmation. Fixed: the ledger copy now stores
+  `outbound_text_digest` (via `canonical_digest`), and the full `outbound_text`
+  remains only in the response payload for the UI card. Test asserts the raw text
+  is absent from the ledger.
+- **Confirm trusts client-posted proposal (MINOR, deferred with note).** The confirm
+  endpoint takes `outbound_text`/`proposed_route_class`/`proposal_ledger_id` from the
+  request without loading and matching the stored proposal row, so the
+  proposal↔execution audit link can be forged. Scoped to audit-link integrity
+  (redaction is at parity with the existing explicit external route, and this is a
+  single-user local app where the client is the user's own UI). Fixing it properly
+  requires server-side proposal storage + lookup on confirm — a design addition
+  beyond this slice. Deferred; revisit alongside a persisted-proposal store.
