@@ -29,6 +29,9 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           use_sticky_comment: true
+          # TEMPORARY (debug): the SDK run dies in ~3s with output hidden;
+          # surface the real error, then remove this line.
+          show_full_output: true
           prompt: |
             You are the review authority assistant for JarvisOS. This review is
             ADVISORY: merge authority is CI plus the human maintainer. Never
