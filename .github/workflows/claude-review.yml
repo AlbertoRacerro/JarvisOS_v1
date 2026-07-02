@@ -1,0 +1,67 @@
+name: Claude Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Skip drafts; review everything else, including Codex-authored PRs.
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          use_sticky_comment: true
+          prompt: |
+            You are the review authority assistant for JarvisOS. This review is
+            ADVISORY: merge authority is CI plus the human maintainer. Never
+            attempt to merge, approve-and-merge, or push commits.
+
+            Steps:
+            1. Read AGENTS.md (hard invariants 1-8, conventions, non-goals).
+            2. Identify the spec referenced by this PR (title/body/branch name,
+               docs/specs/NNN-*.md) and read it. If no spec is referenced and the
+               change is not pure docs/infra, flag that as a major finding.
+            3. Review the full diff of this PR strictly for:
+               a. Hard-invariant violations (AGENTS.md 1-8) -> CRITICAL.
+               b. Spec conformance: acceptance criteria met, scope respected,
+                  binding non-goals untouched, files outside "likely touched"
+                  justified in the PR body.
+               c. Real correctness bugs with a concrete failure scenario.
+               d. Tests: required tests present, offline-only (no live
+                  providers/Ollama/network), assertions meaningful.
+            4. Do NOT report style nits unless they violate AGENTS.md
+               conventions. Be strict on substance, silent on taste.
+
+            Output:
+            - Inline review comments on the exact lines for each finding, each
+              labeled CRITICAL / MAJOR / MINOR with a one-line failure scenario.
+            - One summary comment (sticky) with: verdict (APPROVE or
+              REQUEST_CHANGES), the findings list, and what you verified.
+            - If verdict is REQUEST_CHANGES: end the summary with a single line:
+              "@codex please fix the review findings above on this branch, then
+              wait for re-review."
+            - Round limit: count your own previous summary comments on this PR.
+              If this is already the 3rd review round, do NOT mention @codex.
+              Write "ROUND LIMIT REACHED — maintainer decision needed" and
+              summarize what remains open.
+            - If verdict is APPROVE: state clearly "LGTM — ready for human
+              merge" so the maintainer can merge with one click.
+          claude_args: "--max-turns 40"
