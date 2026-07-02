@@ -87,6 +87,7 @@ def is_database_initialized() -> bool:
         "model_specs",
         "assumptions",
         "parameters",
+        "requirements",
         "simulation_runs",
         "runner_jobs",
         "run_logs",

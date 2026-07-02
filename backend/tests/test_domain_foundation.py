@@ -111,7 +111,7 @@ def test_create_and_list_model_specs(client: TestClient) -> None:
 def test_create_and_list_assumptions(client: TestClient) -> None:
     response = client.post(
         "/workspaces/bluerev/assumptions",
-        json={"statement": "Water density is approximately 1025 kg/m3.", "confidence": 0.7},
+        json={"statement": "Water density is approximately 1025 kg/m3.", "confidence": "medium"},
     )
 
     assert response.status_code == 201
@@ -173,3 +173,127 @@ def test_create_and_list_decisions(client: TestClient) -> None:
     assert any(item["id"] == created["id"] for item in list_response.json())
     assert _event_count("DecisionCreated") == 1
     assert _latest_event_payload("DecisionCreated")["title"] == "Use SQLite for early local persistence"
+
+
+def test_parameter_validation_requires_schema_freeze_fields(client: TestClient) -> None:
+    missing_unit = client.post(
+        "/workspaces/bluerev/parameters",
+        json={"name": "Seawater density", "symbol": "rho", "value": "1025"},
+    )
+    assert missing_unit.status_code == 422
+    assert "unit" in missing_unit.text
+
+    bad_status = client.post(
+        "/workspaces/bluerev/parameters",
+        json={
+            "name": "Seawater density",
+            "value": "1025",
+            "unit": "kg/m3",
+            "value_status": "guessed",
+        },
+    )
+    assert bad_status.status_code == 422
+    assert "value_status" in bad_status.text
+
+    bad_bounds = client.post(
+        "/workspaces/bluerev/parameters",
+        json={"name": "Seawater density", "unit": "kg/m3", "value_min": 1030, "value_max": 1020},
+    )
+    assert bad_bounds.status_code == 422
+    assert "value_min must be less than or equal to value_max" in bad_bounds.text
+
+
+def test_create_parameter_with_all_schema_freeze_fields(client: TestClient) -> None:
+    response = client.post(
+        "/workspaces/bluerev/parameters",
+        json={
+            "name": "Seawater density",
+            "symbol": "rho",
+            "value": "1025",
+            "unit": "kg/m3",
+            "value_status": "measured",
+            "value_min": 1020,
+            "value_max": 1030,
+            "source_ref": "user estimate",
+        },
+    )
+
+    assert response.status_code == 201
+    created = response.json()
+    assert created["unit"] == "kg/m3"
+    assert created["value_status"] == "measured"
+    assert created["value_min"] == 1020
+    assert created["value_max"] == 1030
+    assert created["source_ref"] == "user estimate"
+
+
+def test_minimal_parameter_rows_list_with_defaults(client: TestClient) -> None:
+    from app.core.database import open_sqlite_connection
+    from app.modules.events.service import utc_now
+
+    now = utc_now()
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO parameters (id, workspace_id, name, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("legacy-param", "bluerev", "Legacy parameter", now, now),
+        )
+        connection.commit()
+
+    response = client.get("/workspaces/bluerev/parameters")
+
+    assert response.status_code == 200
+    legacy = next(item for item in response.json() if item["id"] == "legacy-param")
+    assert legacy["unit"] == "unspecified"
+    assert legacy["value_status"] == "candidate"
+
+
+def test_create_assumption_status_and_confidence(client: TestClient) -> None:
+    response = client.post(
+        "/workspaces/bluerev/assumptions",
+        json={"statement": "Use calm sea during initial tests.", "status": "accepted", "confidence": "high"},
+    )
+
+    assert response.status_code == 201
+    created = response.json()
+    assert created["status"] == "accepted"
+    assert created["confidence"] == "high"
+
+    bad_status = client.post(
+        "/workspaces/bluerev/assumptions",
+        json={"statement": "Invalid assumption.", "status": "draft"},
+    )
+    assert bad_status.status_code == 422
+
+    bad_confidence = client.post(
+        "/workspaces/bluerev/assumptions",
+        json={"statement": "Invalid confidence.", "confidence": "certain"},
+    )
+    assert bad_confidence.status_code == 422
+
+
+def test_requirement_crud(client: TestClient) -> None:
+    create_response = client.post(
+        "/workspaces/bluerev/requirements",
+        json={"statement": "The buoy shall remain afloat.", "rationale": "Safety-critical behavior."},
+    )
+
+    assert create_response.status_code == 201
+    created = create_response.json()
+    assert created["status"] == "draft"
+    assert created["schema_version"] == 1
+
+    get_response = client.get(f"/requirements/{created['id']}")
+    assert get_response.status_code == 200
+    assert get_response.json()["id"] == created["id"]
+
+    list_response = client.get("/workspaces/bluerev/requirements")
+    assert list_response.status_code == 200
+    assert any(item["id"] == created["id"] for item in list_response.json())
+
+    update_response = client.patch(f"/requirements/{created['id']}", json={"status": "active"})
+    assert update_response.status_code == 200
+    assert update_response.json()["status"] == "active"
+    assert _event_count("RequirementCreated") == 1

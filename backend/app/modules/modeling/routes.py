@@ -11,6 +11,9 @@ from app.modules.modeling.models import (
     ModelSpecRead,
     ParameterCreate,
     ParameterRead,
+    RequirementCreate,
+    RequirementRead,
+    RequirementUpdate,
     SimulationRunCreate,
     SimulationRunRead,
 )
@@ -19,13 +22,17 @@ from app.modules.modeling.service import (
     create_decision,
     create_model_spec,
     create_parameter,
+    create_requirement,
     create_simulation_run,
     get_model_spec,
+    get_requirement,
     list_assumptions,
     list_decisions,
     list_model_specs,
     list_parameters,
+    list_requirements,
     list_simulation_runs,
+    update_requirement,
 )
 
 router = APIRouter(tags=["modeling"])
@@ -93,6 +100,38 @@ def list_parameters_endpoint(workspace_id: str) -> list[ParameterRead]:
         return list_parameters(workspace_id)
     except ValueError as exc:
         raise _domain_error(exc) from exc
+
+
+@router.post("/workspaces/{workspace_id}/requirements", response_model=RequirementRead, status_code=201)
+def create_requirement_endpoint(workspace_id: str, payload: RequirementCreate) -> RequirementRead:
+    try:
+        return create_requirement(workspace_id, payload)
+    except (ValueError, sqlite3.IntegrityError) as exc:
+        raise _domain_error(exc) from exc
+
+
+@router.get("/workspaces/{workspace_id}/requirements", response_model=list[RequirementRead])
+def list_requirements_endpoint(workspace_id: str) -> list[RequirementRead]:
+    try:
+        return list_requirements(workspace_id)
+    except ValueError as exc:
+        raise _domain_error(exc) from exc
+
+
+@router.get("/requirements/{requirement_id}", response_model=RequirementRead)
+def get_requirement_endpoint(requirement_id: str) -> RequirementRead:
+    requirement = get_requirement(requirement_id)
+    if requirement is None:
+        raise HTTPException(status_code=404, detail="Requirement not found.")
+    return requirement
+
+
+@router.patch("/requirements/{requirement_id}", response_model=RequirementRead)
+def update_requirement_endpoint(requirement_id: str, payload: RequirementUpdate) -> RequirementRead:
+    requirement = update_requirement(requirement_id, payload)
+    if requirement is None:
+        raise HTTPException(status_code=404, detail="Requirement not found.")
+    return requirement
 
 
 @router.post("/workspaces/{workspace_id}/simulation-runs", response_model=SimulationRunRead, status_code=201)

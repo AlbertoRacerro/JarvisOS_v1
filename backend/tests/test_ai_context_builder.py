@@ -170,12 +170,12 @@ def test_workspace_builder_is_deterministic_and_marks_incomplete_params(monkeypa
     from app.modules.modeling.service import create_assumption, create_decision, create_parameter
 
     create_decision("bluerev", DecisionCreate(title="Provider", decision_text="Scaleway EU first", status="accepted"))
-    create_assumption("bluerev", AssumptionCreate(statement="laminar flow", status="draft"))
+    create_assumption("bluerev", AssumptionCreate(statement="laminar flow", status="proposed"))
     create_parameter(
         "bluerev",
         ParameterCreate(name="tube_diameter", value="0.05", unit="m", source_ref="spec-1", status="approved"),
     )
-    create_parameter("bluerev", ParameterCreate(name="rough_guess", value="10"))  # no unit/source
+    create_parameter("bluerev", ParameterCreate(name="rough_guess", value="10", unit="dimensionless"))  # no source
 
     first = build_workspace_context_bundle("bluerev")
     second = build_workspace_context_bundle("bluerev")
