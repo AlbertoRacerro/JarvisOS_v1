@@ -9,9 +9,11 @@ JarvisOS is a local-first system for building engineering model capital. The bac
 Corrected local intelligence principle:
 
 ```text
-Gemma = local semantic brain inside bounded forms and protocols
+Local models = route matrix (qwen3:8b fast, gemma4:12b general, deepseek-coder
+               16b coder, qwen3-coder 30b heavy); Gemma 12B additionally serves
+               as the advisory Auto classifier
 JarvisOS = deterministic structure, schemas, permissions, persistence, execution, audit
-External APIs = specialist reasoning providers
+External APIs = specialist reasoning providers (explicit routes only)
 Workbench = design interface
 Foundry = model-capital system
 Debate Mode = advanced critical reasoning layer
@@ -123,14 +125,20 @@ Defaults are safe:
 
 Provider calls require explicit settings, credential presence, budget approval, token/cost guard approval, local policy approval, and event/audit recording.
 
-Current live-provider paths are narrow smoke/diagnostic paths only:
+The current AI execution paths are:
 
-- Scaleway fixed synthetic smoke tests.
-- Scaleway AI Smoke Console.
-- DeepSeek provider-smoke path.
-- Backend-only Supervisor public-test slice.
+- The AI execution spine: `run_ai_task` + `/ai/tasks/run`, with `ai_jobs`
+  ledger rows for every call, explicit local route bindings (fake, fast,
+  general, coder, coder_heavy), and explicit-only external bindings
+  (`external:cheap`, `external:reasoning` via Scaleway).
+- The Auto bridge: local-only, classifier-advisory, RouterPolicy-gated
+  (see README "Auto route" and `app/modules/ai/routing/`).
+- Narrow smoke/diagnostic paths: Scaleway smoke tests and console, DeepSeek
+  provider smoke, backend-only Supervisor public-test slice, dev-only
+  message-route smoke and local-chat endpoints.
 
-These are not chat, routing, BlueRev modeling, memory runtime, RAG, file ingestion, or autonomous agents.
+These do not include external Auto execution, memory runtime, semantic
+retrieval, RAG, file ingestion, tool execution from AI, or autonomous agents.
 
 ## Local Policy And Gate Ordering
 
@@ -434,62 +442,22 @@ docs/PROGRESSIVE_RETRIEVAL_CONTRACT_DESIGN.md
 
 ## Current Roadmap
 
-```text
-0F-F  AI/local_ai module boundary audit
+The live roadmap is `docs/specs/README.md`. Work items are individual specs
+under `docs/specs/`, executed one per branch/PR.
 
-1A    Classification-only Gemma 12B utility
-1B    Thinking/token budget control
-1B-R-LIVE  Manual Gemma 12B classification probe
-1C         Classification live probe analysis and roadmap rebase
-1C-Y       Fast staged memory intake design
-1C-Z-T     Cavemem/Caveman reference implementation audit
-1D-A       Local-model-facing showcase files design
-1D-B       Micro-context design
-1D-C       MemoryStore facade design
-1D-D       Internal compression policy tests
-1D-E       SQLite/FTS schema design
-1D-F       Progressive retrieval contract design
-1D-G       Holdout intake generalization set
-1E         Form protocol catalog design
-1F         Structural validator + retry loop design
-1G         Gemma form-fill smoke test harness
-1H         Showcase files generator design
-1I         Context access from showcase files
-1J         Provider/tool intent form design
+Current strategic sequence (from the 2026-07 strategy review, see
+`docs/strategy/`):
 
-2A         Source-grounded review protocol
-2B         Optional 31B/API sampling review
-2C         Memory promotion policy
-2D         Memory index generation
-2E         Context package assembly
+1. Parameter/assumption schema freeze + Requirement record (spec 001).
+2. Local route smoke matrix + routing eval set (spec 002).
+3. External escalation proposal + user-confirmed execution (spec 003).
+4. Workspace ergonomics and real pilot data entry.
+5. Deterministic source selection, then FTS retrieval (eval set first).
+6. Tool contract + read-only tools; first read-only critic agent role.
 
-3A         External prompt package format
-3B         Redaction/sensitivity policy
-3C         Provider abstraction hardening
-3D         DeepSeek
-3E         Grok
-3F         Gemini
-3G         GPT-5.5
-3H         Provider selection policy
-
-4A    Modeling Workbench architecture
-4B    Structured model design input
-4C    Assumption/equation editor
-4D    Evidence/literature panel
-4E    AI review panel
-4F    Simulation runner integration
-4G    Run comparison view
-
-5A    BlueRev Foundry ModelSpec
-5B    SimulationRun tracking
-5C    Artifact tracking
-5D    Parameter/assumption library
-5E    Validation and decision loop
-
-6A    R&D Debate Mode design
-6B    Multi-agent review prototype
-6C    BlueRev advanced design debates
-```
+The earlier phase-numbered roadmap (`1A–6C`) and milestone names (`0E-*`,
+`1G-*`, `POS-*`, `BRIDGE-*`) are superseded; they remain in historical
+milestone docs as evidence only.
 
 ## Canonical References
 
