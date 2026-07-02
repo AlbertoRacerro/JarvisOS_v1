@@ -471,3 +471,28 @@ def test_confirm_escalation_budget_zero_fails_closed(client: TestClient, monkeyp
     body = response.json()
     assert body["status"] == "config_error"
     assert "monthly_budget_zero" in body["task_response"]["decision_reason"]
+
+
+def test_confirm_escalation_credentials_absent_fails_closed(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Acceptance criterion 5, third fail-closed case: paid AI on and budget available,
+    # but no Scaleway credential present -> confirm must not execute.
+    monkeypatch.delenv("SCALEWAY_API_KEY", raising=False)
+    client.put(
+        "/ai/settings",
+        json={
+            "provider_mode": "scaleway",
+            "default_ai_provider": "scaleway",
+            "paid_ai_enabled": True,
+            "monthly_api_budget_usd": 1,
+            "scaleway_enabled": True,
+            "scaleway_smoke_test_enabled": True,
+            "scaleway_live_smoke_test_enabled": True,
+            "use_fake_provider_when_budget_zero": False,
+        },
+    )
+    response = client.post("/ai/tasks/escalations/confirm", json={"proposal": _proposal()})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "config_error"
+    assert "scaleway_api_key_missing" in body["task_response"]["decision_reason"]

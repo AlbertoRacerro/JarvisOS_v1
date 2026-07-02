@@ -793,16 +793,12 @@ def _attach_escalation_proposal_to_job(job_id: str, escalation_proposal: dict[st
             return
         route_reason = json.loads(row["route_reason_json"])
         route_reason["escalation_proposal"] = escalation_proposal
+        # This is a non-executing proposal row: leave provider_id/model_id/cost_estimate
+        # unset so a future SUM(cost_estimate) audit never mistakes an estimate for real
+        # spend, and the row is not misread as a completed external call. The proposed
+        # target and estimate remain fully recorded inside route_reason.escalation_proposal.
         connection.execute(
-            "UPDATE ai_jobs SET route_reason_json = ?, provider_id = ?, model_id = ?, cost_estimate = ? WHERE id = ?",
-            (
-                json.dumps(route_reason, sort_keys=True),
-                escalation_proposal.get("provider_id"),
-                escalation_proposal.get("model_id"),
-                escalation_proposal.get("estimated_cost", {}).get("estimated_cost_usd")
-                if isinstance(escalation_proposal.get("estimated_cost"), dict)
-                else None,
-                job_id,
-            ),
+            "UPDATE ai_jobs SET route_reason_json = ? WHERE id = ?",
+            (json.dumps(route_reason, sort_keys=True), job_id),
         )
         connection.commit()

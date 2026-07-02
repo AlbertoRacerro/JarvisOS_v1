@@ -997,6 +997,11 @@ def test_auto_escalation_excludes_context_and_records_proposal(client: TestClien
     assert len(rows) == 1
     route_reason = json.loads(rows[0]["route_reason_json"])
     assert route_reason["escalation_proposal"]["outbound_text"] == "raw prompt only"
+    # Non-executing proposal row must not be stamped as a real external call:
+    # provider/model/cost columns stay unset; the estimate lives only in the JSON.
+    assert rows[0]["provider_id"] is None
+    assert rows[0]["model_id"] is None
+    assert rows[0]["cost_estimate"] is None
 
 
 def test_auto_secret_deep_reasoning_produces_no_escalation(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

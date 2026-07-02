@@ -121,3 +121,31 @@ on the same branch.
 - Escalation proposals use the interim redaction policy: outbound text is exactly the raw prompt, `context_excluded` is `true`, and manual/project context is not sent on confirm.
 - Proposal/execution linking is recorded in `ai_jobs.route_reason_json`: proposal rows include `escalation_proposal`, and confirmed execution rows include `escalation_proposal_ledger_id`.
 - Frontend visual verification was limited to `npm run build` in this non-interactive container.
+
+## Review notes (2026-07-02, spec-003 round 1)
+
+- **Trigger is intentionally dormant (MAJOR from review).** `capability_from_classification`
+  never returns `CAPABILITY_DEEP_REASONING` today, so `capability_exceeds_local` is
+  always false in production and the escalation branch is exercised only by tests
+  (via monkeypatch). This is **by design and correct for the current sequencing**:
+  detecting when local capability is genuinely exceeded requires the measured
+  local-ceiling data from spec 002 (smoke matrix + routing eval). Wiring a real
+  trigger now would hard-code an unmeasured threshold — the opposite of the
+  determinism/blast-radius principle (measure quality signals, don't guess). This
+  slice therefore lands as **complete-and-verified plumbing** (proposal → confirm,
+  egress = prompt only, secret blocked, fail-closed all tested) that activates when
+  a later slice, informed by 002, teaches the capability classifier to emit
+  `deep_reasoning`. Acceptance criterion 2 is demonstrated via the bridge tests
+  until that wiring exists.
+- **Secret audit-reason fidelity (MINOR, accepted).** The `secret → CONTROL_BLOCKED`
+  short-circuit returns before `decide_router_policy`, so the ledger reason for secret
+  prompts is the generic control-block code rather than `_block_secret`'s specific
+  code. Execution behavior is unchanged (deterministic policy already blocked these);
+  only audit granularity is reduced. Accepted for now.
+- **Non-executing proposal row (MINOR, fixed).** `_attach_escalation_proposal_to_job`
+  no longer stamps `provider_id`/`model_id`/`cost_estimate` on the proposal's `ai_jobs`
+  row; the estimate stays in `route_reason.escalation_proposal`, so a future
+  `SUM(cost_estimate)` audit cannot misread an estimate as real spend.
+- **Credentials-absent fail-closed (MINOR, fixed).** Added
+  `test_confirm_escalation_credentials_absent_fails_closed` to cover the third case
+  of acceptance criterion 5.
