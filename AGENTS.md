@@ -1,8 +1,11 @@
 # AGENTS.md — Instructions for AI coding agents working on JarvisOS
 
-JarvisOS is a local-first, single-user AI engineering workspace. Backend (FastAPI +
-SQLite) owns state, policy, execution, and audit. Frontend (React/Vite) is an
-operator interface. AI models propose; JarvisOS validates, gates, records, and audits.
+JarvisOS is a single-user AI engineering workspace, local-first in state and
+policy: backend (FastAPI + SQLite) owns state, policy, execution, and audit.
+Frontend (React/Vite) is an operator interface. AI models propose; JarvisOS
+validates, gates, records, and audits. Model routing is cost-aware and
+predominantly external (see "Model economy" below); "local-first" describes
+where authority and data live, not which models do the work.
 
 ## Hard invariants — never violate, never "temporarily" bypass
 
@@ -24,6 +27,22 @@ operator interface. AI models propose; JarvisOS validates, gates, records, and a
 
 If a spec appears to require violating one of these, stop and report instead of
 implementing.
+
+## Model economy (intended routing hierarchy)
+
+The target steady state, once redaction and confirm flows exist (see ADR-057 in
+`docs/DECISIONS.md`):
+
+- **Cheap external models** (e.g. GLM, Kimi, DeepSeek class) are the workhorse
+  for the majority of compute.
+- **Frontier models** (Opus / GPT frontier class) are for review, strategic
+  documents, and hard tasks.
+- **Local models** are the fallback for the rare cases where redaction is
+  impossible or ambiguous (fail-closed) — this path must stay rare, not the norm.
+
+Do not read "local-first" as "prefer local models". The hard invariants above
+still apply unchanged: external execution is gated by explicit user confirmation
+and deterministic policy, regardless of how common it is.
 
 ## How work is assigned: spec-driven slices
 
@@ -106,6 +125,12 @@ Automated review output (Codex code review, or any model-generated review) is
 1. Deterministic gates: CI green (pytest + ruff), invariants in this file intact.
 2. Human maintainer decision, informed by Claude review of the diff against the
    spec.
+
+Review is tiered by cost (see ADR-057): a cheap external model reviews every
+push and drives the fix iteration loop with the implementing agent; the frontier
+(Claude) review runs once, on the stabilized diff, before merge. The cheap
+tier's "no further changes" verdict is a *trigger* for the frontier review,
+never an approval — it carries no merge authority.
 
 Never merge your own PR. Never enable auto-merge. Open the PR against `master`
 and stop; fill in the PR template completely.

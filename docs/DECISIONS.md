@@ -479,3 +479,25 @@ Structured-output experiments must precede runtime/default queue decisions.
 This milestone adds no runtime memory, retrieval runtime, Context Pack Broker
 runtime, provider calls, tool execution, backend route, frontend UI, model call,
 database migration, vendored structured-output library, or BlueRev modeling.
+
+## ADR-057: Model economy — cheap external is the workhorse, local is the privacy fallback
+
+Status: Accepted
+
+"Local-first" in JarvisOS describes where authority and data live (state,
+policy, execution records, audit — all local), not which models perform the
+work. The intended routing hierarchy at steady state is:
+
+1. Cheap external models (GLM / Kimi / DeepSeek class) carry the majority of
+   compute.
+2. Frontier models (Opus / GPT frontier class) handle review, strategic
+   documents, and hard tasks.
+3. Local models serve only the rare cases where redaction of outbound content
+   is impossible or ambiguous; such cases fail closed to local, and the system
+   should be designed so this path stays rare.
+
+Any earlier phrasing implying "external APIs are only for review" or "local
+models do most of the work" is superseded by this record. This ADR does not
+change execution invariants: external calls remain gated by explicit user
+confirmation and deterministic policy (`route_class="auto"` still never
+executes external providers), and safe defaults remain safe.
