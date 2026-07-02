@@ -1,6 +1,6 @@
 # 002 — Local route smoke matrix + routing eval set
 
-Status: ready
+Status: implemented (pending review)
 Depends on: none
 
 ## Goal
@@ -88,3 +88,10 @@ Out of scope (binding non-goals):
 Test gate green (see `AGENTS.md`), acceptance criteria met, spec status updated,
 summary written. The maintainer runs both scripts manually once and commits the
 first real report.
+
+## Implementation notes
+
+- Added manual local route smoke and Auto routing eval scripts. Both write JSON and Markdown reports under `reports/` when run manually.
+- Added a synthetic 30-case routing eval fixture covering all capability rows and context levels.
+- Added offline unit tests for fixture coverage, routing agreement computation, and report formatting.
+- Did not commit first real reports; per spec, the maintainer will run the live scripts and commit real reports after review.
