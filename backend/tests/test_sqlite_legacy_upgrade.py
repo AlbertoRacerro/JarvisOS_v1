@@ -18,8 +18,6 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-import pytest
-
 # Legacy ai_settings = the current CREATE TABLE ai_settings, verbatim, MINUS the
 # policy_mode column. Built with explicit SQL on purpose: it must NOT be derived
 # from SCHEMA_STATEMENTS, so the test genuinely exercises the 0003 migration that
@@ -313,3 +311,154 @@ def test_partial_legacy_upgrade_adds_only_missing_scaleway_column(monkeypatch, t
     assert row is not None
     assert row["scaleway_token_cap"] == 99  # pre-existing value survived
     assert row["scaleway_tokens_month_to_date"] == 0  # added with migration default
+
+
+# ---------------------------------------------------------------------------
+# 0004 engineering record schema freeze (spec 001): legacy parameters and
+# assumptions predate unit/value_status/value_min/value_max and the text enums.
+# The fixtures below are the 0003-era shapes, built with explicit SQL (never
+# from SCHEMA_STATEMENTS) so the 0004 additive upgrade is genuinely exercised.
+# ---------------------------------------------------------------------------
+
+LEGACY_WORKSPACES_SQL = """
+CREATE TABLE workspaces (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    slug TEXT NOT NULL UNIQUE,
+    description TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+)
+"""
+
+# 0003-era parameters: nullable unit, REAL confidence, no value_status/min/max.
+LEGACY_PARAMETERS_SQL = """
+CREATE TABLE parameters (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    symbol TEXT,
+    value TEXT,
+    unit TEXT,
+    source_ref TEXT,
+    confidence REAL,
+    status TEXT NOT NULL DEFAULT 'draft',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    notes TEXT,
+    FOREIGN KEY (workspace_id) REFERENCES workspaces(id)
+)
+"""
+
+# 0003-era assumptions: REAL confidence, status default 'draft'.
+LEGACY_ASSUMPTIONS_SQL = """
+CREATE TABLE assumptions (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    statement TEXT NOT NULL,
+    scope TEXT,
+    confidence REAL,
+    status TEXT NOT NULL DEFAULT 'draft',
+    source_ref TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    notes TEXT,
+    FOREIGN KEY (workspace_id) REFERENCES workspaces(id)
+)
+"""
+
+PARAMETER_FREEZE_COLUMNS = ("value_status", "value_min", "value_max")
+
+
+def _build_legacy_engineering_db(connection: sqlite3.Connection) -> None:
+    connection.execute(LEGACY_WORKSPACES_SQL)
+    connection.execute(LEGACY_PARAMETERS_SQL)
+    connection.execute(LEGACY_ASSUMPTIONS_SQL)
+    now = "2026-01-01T00:00:00+00:00"
+    connection.execute(
+        "INSERT INTO workspaces (id, name, slug, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+        ("legacy-ws", "Legacy workspace", "legacy-ws", now, now),
+    )
+    # Sentinel rows with legacy-only shapes: NULL unit, numeric confidence,
+    # pre-enum status values.
+    connection.execute(
+        """
+        INSERT INTO parameters (id, workspace_id, name, value, unit, confidence, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("legacy-param", "legacy-ws", "Seawater density", "1025", None, 0.7, "draft", now, now),
+    )
+    connection.execute(
+        """
+        INSERT INTO assumptions (id, workspace_id, statement, confidence, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("legacy-assumption", "legacy-ws", "Calm sea during tests.", 0.7, "draft", now, now),
+    )
+    connection.commit()
+
+
+def test_legacy_engineering_records_upgrade_without_data_loss(monkeypatch, tmp_path) -> None:
+    """0004 schema freeze on a 0003-era DB: parameters gain the new columns with
+    migration defaults, existing row data survives verbatim in the raw table, and
+    the list services normalize legacy values (unit -> 'unspecified',
+    value_status -> 'candidate', numeric assumption confidence -> None,
+    pre-enum status -> 'proposed') without touching stored data."""
+    _isolate_data_root(monkeypatch, tmp_path)
+    from app.core.database import initialize_database, open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        _build_legacy_engineering_db(connection)
+        before = _column_names(connection, "parameters")
+    for column in PARAMETER_FREEZE_COLUMNS:
+        assert column not in before
+
+    # Run the real upgrade path.
+    initialize_database()
+
+    with open_sqlite_connection() as connection:
+        after = _column_names(connection, "parameters")
+        raw_param = connection.execute(
+            "SELECT name, value, unit, confidence, status, value_status FROM parameters WHERE id = ?",
+            ("legacy-param",),
+        ).fetchone()
+        raw_assumption = connection.execute(
+            "SELECT statement, confidence, status FROM assumptions WHERE id = ?",
+            ("legacy-assumption",),
+        ).fetchone()
+
+    for column in PARAMETER_FREEZE_COLUMNS:
+        assert column in after
+    # Raw legacy data survived verbatim; new column carries the migration default.
+    assert raw_param is not None
+    assert raw_param["name"] == "Seawater density"
+    assert raw_param["value"] == "1025"
+    assert raw_param["unit"] is None  # duplicate-column ALTER swallowed, no rewrite
+    assert raw_param["confidence"] == 0.7
+    assert raw_param["status"] == "draft"
+    assert raw_param["value_status"] == "candidate"
+    assert raw_assumption is not None
+    assert raw_assumption["statement"] == "Calm sea during tests."
+    assert raw_assumption["confidence"] == 0.7  # numeric legacy value kept in storage
+    assert raw_assumption["status"] == "draft"
+
+    # List services normalize legacy values for API consumers.
+    from app.modules.modeling.service import list_assumptions, list_parameters
+
+    parameters = list_parameters("legacy-ws")
+    legacy_param = next(item for item in parameters if item.id == "legacy-param")
+    assert legacy_param.unit == "unspecified"
+    assert legacy_param.value_status == "candidate"
+
+    assumptions = list_assumptions("legacy-ws")
+    legacy_assumption = next(item for item in assumptions if item.id == "legacy-assumption")
+    assert legacy_assumption.confidence is None  # numeric value masked, not coerced
+    assert legacy_assumption.status == "proposed"
+
+    # Second initialize_database() after upgrade remains idempotent.
+    initialize_database()
+    with open_sqlite_connection() as connection:
+        assert PARAMETER_FREEZE_COLUMNS[0] in _column_names(connection, "parameters")
+        count = connection.execute("SELECT COUNT(*) AS c FROM parameters").fetchone()["c"]
+    assert count == 1
