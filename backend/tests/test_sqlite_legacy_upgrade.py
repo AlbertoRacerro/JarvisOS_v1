@@ -18,8 +18,6 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-import pytest
-
 # Legacy ai_settings = the current CREATE TABLE ai_settings, verbatim, MINUS the
 # policy_mode column. Built with explicit SQL on purpose: it must NOT be derived
 # from SCHEMA_STATEMENTS, so the test genuinely exercises the 0003 migration that

@@ -29,7 +29,6 @@ from app.modules.ai.privacy import PrivacyPolicyEngine
 from app.modules.events.service import redact_event_payload
 from app.modules.runner.safety import RunnerSafetyError, preflight_script_policy
 
-
 # ---------------------------------------------------------------------------
 # Small pure helpers — no network, no providers, no real data root.
 # ---------------------------------------------------------------------------

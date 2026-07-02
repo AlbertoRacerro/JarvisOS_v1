@@ -54,19 +54,38 @@ implementing.
 | `docs/specs/` | work-item specs for agents |
 | `reports/` | generated evaluation/smoke reports |
 
+## Environments
+
+This repo is developed in two environments. Detect which one you are in and use
+the matching commands.
+
+| | Local (maintainer) | Cloud container / CI (Codex cloud, GitHub Actions) |
+| --- | --- | --- |
+| OS | Windows 11, PowerShell | Linux |
+| Python env | `backend/.venv` | system Python 3.11+, `pip install -r backend/requirements.txt -r backend/requirements-dev.txt` |
+| Data root | `C:\JarvisOS` | none — tests isolate it automatically |
+
+Cross-platform rules:
+- Tests already isolate the data root via the `JARVISOS_DATA_ROOT` env var and
+  `tmp_path` (see `backend/tests/conftest.py`). Never write a test that depends on
+  `C:\JarvisOS`, drive letters, backslash paths, or a running Ollama/provider.
+- Use `pathlib` for any new path handling; never hardcode OS-specific separators.
+- Do not modify launcher scripts (`*.cmd`, `scripts/*.ps1`) from a Linux
+  environment — you cannot test them there.
+
 ## Test gate (must pass before you consider work done)
 
-From repo root, PowerShell:
+From `backend/`, any OS (use `.\.venv\Scripts\python` instead of `python` on
+local Windows):
 
-```powershell
-cd backend
-.\.venv\Scripts\python -m pytest -q
-.\.venv\Scripts\python -m ruff check app tests
+```bash
+python -m pytest -q
+python -m ruff check app tests
 ```
 
 If frontend files changed:
 
-```powershell
+```bash
 cd frontend
 npm run build
 ```
@@ -78,6 +97,18 @@ Notes:
   touched and note this in your summary.
 - Tests must run offline. Never add a test that requires a live provider, network, or
   a running Ollama instance; use the fake provider and fixtures.
+
+## Review authority
+
+Automated review output (Codex code review, or any model-generated review) is
+**advisory**. It never authorizes a merge by itself. Merge authority is, in order:
+
+1. Deterministic gates: CI green (pytest + ruff), invariants in this file intact.
+2. Human maintainer decision, informed by Claude review of the diff against the
+   spec.
+
+Never merge your own PR. Never enable auto-merge. Open the PR against `master`
+and stop; fill in the PR template completely.
 
 ## Definition of done
 

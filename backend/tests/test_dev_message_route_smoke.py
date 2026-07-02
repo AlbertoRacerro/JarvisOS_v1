@@ -1,10 +1,9 @@
 from collections.abc import Iterator
-from uuid import UUID
 from unittest.mock import Mock
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
-
 
 DEV_ENDPOINT = "/api/dev/message-route-smoke"
 BLOCKED_MESSAGES = (

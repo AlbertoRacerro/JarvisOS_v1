@@ -16,7 +16,6 @@ from app.modules.dev_message_route.smoke_adapter import (
     validation_error_response,
 )
 
-
 router = APIRouter(prefix="/api/dev", tags=["dev"])
 
 
