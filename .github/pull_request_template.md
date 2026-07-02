@@ -1,0 +1,33 @@
+# PR checklist
+
+**Spec:** docs/specs/NNN — <title>
+
+## What changed
+
+- <summary of the change, per file group>
+
+## Files outside spec scope
+
+<"None", or list each out-of-scope file with a one-line justification>
+
+## Test evidence
+
+- [ ] `python -m pytest -q` green (paste tail of output below)
+- [ ] `python -m ruff check app tests` clean
+- [ ] Frontend build green (only if frontend touched)
+
+```text
+<paste test output tail here>
+```
+
+## Invariants (AGENTS.md)
+
+- [ ] No Auto-external execution paths added or weakened
+- [ ] All AI calls still go through the spine + `ai_jobs` ledger
+- [ ] Safe defaults unchanged (fake provider, paid AI off, budget zero)
+- [ ] No secrets in code, tests, fixtures, or logs
+- [ ] Data-root paths via `app/core/paths.py`; no hardcoded absolute paths
+
+## Residual risk / notes
+
+<anything the reviewer should look at closely; deviations from spec; discoveries>
