@@ -201,3 +201,23 @@ decision:
 
 Maintainer to do before first run: create the `DEEPSEEK_API_KEY` repo secret and
 the `frontier-review` label (any color). First real PR is the live smoke test.
+
+Hardening pass (2026-07-03, frontier review of this slice) — behavior deltas:
+
+- Verdict parsing tolerates markdown decoration/preamble; a missing verdict line
+  is treated as NEEDS_CHANGES and noted in the comment.
+- GitHub API writes and comment listing are status-checked (fail loud instead of
+  silently green); provider fail-open still posts the comment but exits non-zero
+  so the failure is visible in the checks list.
+- The `frontier-review` label is removed at the start of every run (before any
+  step can fail), and only added back on an untruncated, within-limit
+  NO_FURTHER_CHANGES. Truncated-diff reviews never auto-apply the label.
+- Past the round limit the review still runs (cheap) and posts findings for the
+  maintainer, without @codex mentions and without the label — previously the
+  limit banner overwrote the last findings.
+- One retry on transient provider errors (as this spec allowed); spec-number
+  resolution is word-bounded and prefers explicit `spec-NNN` references; the
+  prompt pack now includes the AGENTS.md Repo map / Conventions / What NOT to do
+  sections it already told the model to enforce.
+- `--self-test` flag (offline, pure helpers) added and run as a workflow step.
+- Diff cap is env-tunable via `CHEAP_REVIEW_DIFF_CAP` (default unchanged, 60k).
