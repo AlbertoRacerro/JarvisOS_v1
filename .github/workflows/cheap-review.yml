@@ -1,0 +1,47 @@
+name: Cheap Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+
+concurrency:
+  group: cheap-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Skip drafts; review everything else, including Codex-authored PRs.
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Self-test review helpers (offline)
+        run: python scripts/cheap_review.py --self-test
+
+      - name: Run cheap-tier review
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Provider config. Defaults target the DeepSeek direct API; override
+          # these three to switch provider without changing the script.
+          CHEAP_REVIEW_PROVIDER: deepseek
+          CHEAP_REVIEW_BASE_URL: https://api.deepseek.com
+          CHEAP_REVIEW_MODEL: deepseek-chat
+          CHEAP_REVIEW_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          FRONTIER_LABEL: frontier-review
+          ROUND_LIMIT: "3"
+          # Reviews of diffs larger than this are partial and never auto-apply
+          # the frontier label. Raise after confirming the model's context size.
+          CHEAP_REVIEW_DIFF_CAP: "60000"
+        run: python scripts/cheap_review.py
