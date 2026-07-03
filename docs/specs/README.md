@@ -32,3 +32,5 @@ Review (human + Claude code review) happens on the diff before merge. A spec is
 | 002 | Local route smoke matrix + routing eval set | ready |
 | 003 | ESCALATE-CONFIRM-0: external escalation proposal + confirm | ready |
 | 004 | Tiered PR review: cheap-tier (GLM/DeepSeek) loop + A/B, frontier pre-merge only | ready |
+| 005 | BLUECAD CAD adapter MVP (GeometrySpec v0, build123d, Tier 0–1 validation) | ready |
+| 010 | BLUECAD AI loop v0 (L1 generate → build → validate → repair) | ready (after 005) |
