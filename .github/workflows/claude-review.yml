@@ -2,7 +2,7 @@ name: Claude Review
 
 on:
   pull_request:
-    types: [opened, synchronize, ready_for_review]
+    types: [labeled]
 
 concurrency:
   group: claude-review-${{ github.event.pull_request.number }}
@@ -10,8 +10,10 @@ concurrency:
 
 jobs:
   review:
-    # Skip drafts; review everything else, including Codex-authored PRs.
-    if: ${{ !github.event.pull_request.draft }}
+    # Frontier review is the pre-merge gate: it runs only when the
+    # `frontier-review` label is applied (by the cheap tier once it is satisfied,
+    # or manually by the maintainer). It no longer runs on every push. Skip drafts.
+    if: ${{ github.event.label.name == 'frontier-review' && !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

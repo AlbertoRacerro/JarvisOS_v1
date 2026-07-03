@@ -1,6 +1,6 @@
 # 004 — Tiered PR review: cheap-tier iteration loop, frontier review only pre-merge
 
-Status: ready
+Status: implemented (pending review)
 Depends on: none (pure CI/workflow infra; no backend or frontend code)
 
 ## Goal
@@ -175,3 +175,29 @@ candidates share one OpenAI-compatible base URL and (optionally) one key:
 
 Confirm current model IDs and base URLs from the chosen provider's docs at
 implementation time; do not hardcode them from this note.
+
+## Implementation notes
+
+Implemented directly by the maintainer with Fable (not via a Codex slice), since
+it is CI infra the maintainer operates. Deviations from the spec, by maintainer
+decision:
+
+- **Single provider, not A/B.** The maintainer chose the **DeepSeek V4 direct
+  API** (`https://api.deepseek.com`, model `deepseek-chat`) as the sole cheap
+  tier, for cost — the EU-gateway and GLM/DeepSeek A/B were dropped. The script
+  (`scripts/cheap_review.py`) stays provider-agnostic: `CHEAP_REVIEW_PROVIDER`,
+  `CHEAP_REVIEW_BASE_URL`, `CHEAP_REVIEW_MODEL`, `CHEAP_REVIEW_API_KEY`. Adding
+  GLM later = a second workflow env block or matrix entry, no code change. The
+  A/B acceptance criterion (7) is therefore deferred, not met.
+- Label re-trigger handled by remove-then-add on every run, so each approved push
+  re-fires the frontier review's `labeled` event.
+- Files: `scripts/cheap_review.py` (stdlib only), `.github/workflows/cheap-review.yml`
+  (new), `.github/workflows/claude-review.yml` (trigger -> `labeled`, gated on the
+  `frontier-review` label).
+- Verification: `ast.parse` + ruff clean on the script; both workflow YAMLs parse.
+  No pytest added — the script's GitHub/DeepSeek calls need live tokens; the pure
+  helpers (spec resolution, invariant extraction, round parsing) are simple enough
+  that a live first-PR smoke is the intended check.
+
+Maintainer to do before first run: create the `DEEPSEEK_API_KEY` repo secret and
+the `frontier-review` label (any color). First real PR is the live smoke test.
