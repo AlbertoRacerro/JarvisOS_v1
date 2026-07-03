@@ -88,6 +88,28 @@ calm, engineering-grade):
 | 024 | **FEM verification battery** (after 009): cantilever tip deflection, thick-wall cylinder hoop stress (Lamé), simply-supported beam frequency — each vs analytic solution with stated mesh and tolerance, run under the real-solver marker and reported in `reports/`. | This is what makes results *credible engineering*, not numbers from a black box — the professional-grade differentiator for BlueRev use. Verification ladder ≈ solver acceptance test, re-run on every solver/mesh version bump. |
 | 025 | **Semantic routing eval** (post-alpha): label BLUECAD ledger outcomes (cheap-tier sufficient vs escalated) as ground truth; measure local classifier accuracy per task class; promote to default-pick only above threshold, keep escalation-on-failure as the behavioral safety net. | Uses data the alpha generates for free; upgrades routing from static table to measured policy without touching safety invariants. |
 
+## How backlog items become implementable (binding process note)
+
+A backlog row is NOT launchable. The precision ladder is:
+**backlog row → kernel (binding decisions) → full spec (template +
+acceptance criteria + tests) → implementation**. Codex implements only from
+full specs; launching Codex from a backlog row will produce guessed
+architecture and is prohibited.
+
+Who writes the spec when an item's turn comes:
+
+- **Frontier-written or frontier-kerneled first** (judgment-heavy; a wrong
+  spec here is expensive): 022 (property-test invariants and generation
+  strategies), 023 (adversarial corpus design), 024 (FEM tolerances, mesh
+  and benchmark selection — engineering judgment), 025 (promotion-threshold
+  policy), 026 (BoardSession — needs a design session, kernel does not
+  exist yet), 011 (panel semantics).
+- **Codex-draftable from existing kernels/patterns, frontier/human review of
+  the draft** (the 015/016 flow, which worked): 017, 019 (kernels frozen in
+  `JARVISOS_PLATFORM_GAPS_PLAN.md`), 018, 021, 013, 027 (extends the 009
+  pattern), 028, 020/020b/020c (UI — drafts must follow the Horizon 5
+  principles and every UI PR ships screenshots for visual review).
+
 ## Standing maintenance
 
 - Data-root backup with rotation (part of 021).
