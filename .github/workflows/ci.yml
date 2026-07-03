@@ -26,6 +26,32 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
+
+      - name: BLUECAD license-boundary import gate
+        run: |
+          python - <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          pattern = re.compile(r"^\s*(?:import\s+(?:gmsh|FreeCAD|calculix)\b|from\s+(?:gmsh|FreeCAD|calculix)\b)")
+          paths = list(Path("backend/app").rglob("*.py"))
+          src_root = Path("frontend/src")
+          if src_root.exists():
+              paths.extend(path for path in src_root.rglob("*") if path.suffix in {".ts", ".tsx"})
+
+          violations = []
+          for path in paths:
+              for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+                  if pattern.search(line):
+                      violations.append(f"{path}:{lineno}: {line.strip()}")
+
+          if violations:
+              print("Forbidden in-process GPL tool imports found:")
+              print("\n".join(violations))
+              sys.exit(1)
+          PY
+
       - name: Ruff
         working-directory: backend
         run: python -m ruff check app tests

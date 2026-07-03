@@ -1,6 +1,6 @@
 # 007 — BLUECAD tool registry, health checks, CI license-boundary gate
 
-Status: ready (independent — can run in parallel with 005)
+Status: implemented (pending review)
 Depends on: none
 
 ## Goal
@@ -104,3 +104,10 @@ Verify against actual code before starting; report conflicts instead of guessing
 
 Test gate green (see `AGENTS.md`), acceptance criteria met, spec status
 updated, summary written.
+
+
+## Implementation notes
+
+- Created the BLUECAD registry package because spec 005 had not created `backend/app/modules/bluecad/` in this branch yet.
+- The checked-in `configs/bluecad_tools.yaml` is JSON-formatted YAML so the backend can validate it without adding a YAML parser dependency. Tests use temporary fixture registries and fake executables.
+- Shipped tool entries are disabled by default, including `build123d`, so `registry check` remains deterministic in environments where optional CAD dependencies are not installed.

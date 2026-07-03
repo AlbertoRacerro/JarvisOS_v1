@@ -1,0 +1,42 @@
+{
+  "registry_version": "bluecad_tool_registry_v0_1",
+  "tools": [
+    {
+      "id": "build123d",
+      "kind": "cad_kernel",
+      "integration_mode": "in_process",
+      "version_pin": "0.9.1",
+      "license": {"spdx": "Apache-2.0", "boundary": "A", "verified_date": "2026-07-03"},
+      "enabled": false,
+      "entrypoint": "build123d",
+      "capabilities": ["brep", "sweep", "boolean", "fillet", "step_export", "stl_export"],
+      "health_check": "python -c 'import build123d'"
+    },
+    {
+      "id": "gmsh",
+      "kind": "mesher",
+      "integration_mode": "subprocess",
+      "version_pin": "4.13.1",
+      "license": {"spdx": "GPL-2.0-or-later", "boundary": "C", "verified_date": "2026-07-03"},
+      "enabled": false,
+      "entrypoint": null,
+      "binary_sha256": null,
+      "provenance_url": null,
+      "capabilities": ["step_import", "tet_mesh", "physical_groups", "inp_export"],
+      "health_check": null
+    },
+    {
+      "id": "calculix",
+      "kind": "fem_solver",
+      "integration_mode": "subprocess",
+      "version_pin": "2.22",
+      "license": {"spdx": "GPL-2.0", "boundary": "C", "verified_date": "2026-07-03"},
+      "enabled": false,
+      "entrypoint": null,
+      "binary_sha256": null,
+      "provenance_url": null,
+      "capabilities": ["static", "modal", "thermal"],
+      "health_check": null
+    }
+  ]
+}
