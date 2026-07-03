@@ -28,7 +28,7 @@ def validate_artifacts(spec_payload: dict[str, Any], out_dir: str | Path, error:
     _tier0_artifacts(out_path, checks, skip=error is not None)
     if error is None and manifest is not None:
         _tier1_declared(spec, manifest, checks)
-        _tier1_connections(spec, checks)
+        _tier1_connections(spec, manifest, checks)
     verdict = _verdict(checks, errors)
     return {
         "report_version": REPORT_VERSION,
@@ -93,7 +93,7 @@ def _tier1_declared(spec: dict[str, Any], manifest: dict[str, Any], checks: list
         )
 
 
-def _tier1_connections(spec: dict[str, Any], checks: list[dict[str, Any]]) -> None:
+def _tier1_connections(spec: dict[str, Any], manifest: dict[str, Any], checks: list[dict[str, Any]]) -> None:
     checks.append(
         {
             "id": "T1_ASSEMBLY_CONNECTEDNESS",
@@ -103,8 +103,11 @@ def _tier1_connections(spec: dict[str, Any], checks: list[dict[str, Any]]) -> No
         }
     )
     checks.append({"id": "T1_PORT_CONFORMITY", "tier": 1, "status": "pass", "detail": {"connection_count": len(spec.get("connections", []))}})
-    checks.append({"id": "T1_BREP_VALID", "tier": 1, "status": "pass", "detail": {"source": "build123d export completed"}})
-    checks.append({"id": "T1_WATERTIGHT", "tier": 1, "status": "pass", "detail": {"source": "build123d export completed"}})
+    kernel_checks = manifest.get("assembly", {}).get("kernel_checks", {})
+    brep_failures = [part_id for part_id, check in kernel_checks.items() if not check.get("brep_valid")]
+    manifold_failures = [part_id for part_id, check in kernel_checks.items() if not check.get("manifold")]
+    checks.append({"id": "T1_BREP_VALID", "tier": 1, "status": "pass" if not brep_failures else "fail", "detail": {"failures": brep_failures, "parts": kernel_checks}})
+    checks.append({"id": "T1_WATERTIGHT", "tier": 1, "status": "pass" if not manifold_failures else "fail", "detail": {"failures": manifold_failures, "parts": kernel_checks}})
 
 
 def _verdict(checks: list[dict[str, Any]], errors: list[dict[str, Any]]) -> str:

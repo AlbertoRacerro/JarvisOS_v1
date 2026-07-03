@@ -38,7 +38,7 @@ def test_build_fixtures_export_artifacts_and_match_analytic_volumes(tmp_path: Pa
         assert path.stat().st_size > 0
     expected = _expected(name)
     actual = result.manifest["assembly"]["total_volume_mm3"]
-    tolerance = 0.005 if "bend" in result.manifest["parts"] else 0.001
+    tolerance = 0.005 if any(part["kind"] == "bend" for part in result.manifest["parts"].values()) else 0.001
     assert actual == pytest.approx(expected["analytic_total_volume_mm3"], rel=tolerance)
 
 

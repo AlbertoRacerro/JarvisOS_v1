@@ -69,6 +69,7 @@ def _manifest(spec: dict[str, Any], parts: dict[str, BuiltPart], out_dir: Path, 
                 "min": [round(value, 9) for value in total_bbox[0]],
                 "max": [round(value, 9) for value in total_bbox[1]],
             },
+            "kernel_checks": _kernel_checks(parts),
         },
         "artifacts": {},
     }
@@ -83,6 +84,16 @@ def _total_bbox(parts: dict[str, BuiltPart]) -> tuple[tuple[float, float, float]
     mins = [min(part.bbox_mm[0][axis] for part in parts.values()) for axis in range(3)]
     maxs = [max(part.bbox_mm[1][axis] for part in parts.values()) for axis in range(3)]
     return (tuple(mins), tuple(maxs))
+
+
+def _kernel_checks(parts: dict[str, BuiltPart]) -> dict[str, Any]:
+    return {
+        part_id: {
+            "brep_valid": bool(getattr(part.shape, "is_valid", False)),
+            "manifold": bool(getattr(part.shape, "is_manifold", False)),
+        }
+        for part_id, part in sorted(parts.items())
+    }
 
 
 def _tool_versions() -> dict[str, str | None]:

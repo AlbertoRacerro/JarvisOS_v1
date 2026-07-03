@@ -34,8 +34,19 @@ def _tube_shape(outer_d: float, inner_d: float, length: float) -> Any:
         import build123d as bd
     except ImportError as exc:  # pragma: no cover - exercised only where dependency absent
         raise BluecadError("KERNEL_ERROR", {"message": "build123d is not installed"}) from exc
-    outer = bd.Cylinder(radius=outer_d / 2.0, height=length)
-    inner = bd.Cylinder(radius=inner_d / 2.0, height=length)
+    outer = bd.extrude(bd.Plane.YZ * bd.Circle(radius=outer_d / 2.0), amount=length)
+    inner = bd.extrude(bd.Plane.YZ * bd.Circle(radius=inner_d / 2.0), amount=length)
+    return outer - inner
+
+
+def _bend_shape(outer_d: float, inner_d: float, bend_radius: float, angle_rad: float) -> Any:
+    try:
+        import build123d as bd
+    except ImportError as exc:  # pragma: no cover - exercised only where dependency absent
+        raise BluecadError("KERNEL_ERROR", {"message": "build123d is not installed"}) from exc
+    path = bd.JernArc(start=(0.0, 0.0), tangent=(1.0, 0.0), radius=bend_radius, arc_size=math.degrees(angle_rad))
+    outer = bd.sweep(bd.Plane.YZ * bd.Circle(radius=outer_d / 2.0), path=path)
+    inner = bd.sweep(bd.Plane.YZ * bd.Circle(radius=inner_d / 2.0), path=path)
     return outer - inner
 
 
@@ -68,10 +79,7 @@ def _build_bend(part: dict[str, Any]) -> BuiltPart:
     angle = float(p["angle"])
     volume = _annulus_area(outer_d, wall_t) * bend_radius * angle
     radius = outer_d / 2.0
-    # A neutral placeholder solid with matching volume is exported; manifest
-    # geometry uses deterministic analytic bend values.
-    length = max(volume / _annulus_area(outer_d, wall_t), 1.0)
-    shape = _tube_shape(outer_d, outer_d - 2.0 * wall_t, length)
+    shape = _bend_shape(outer_d, outer_d - 2.0 * wall_t, bend_radius, angle)
     end_x = bend_radius * math.sin(angle)
     end_y = bend_radius * (1.0 - math.cos(angle))
     end_dir = (math.cos(angle), math.sin(angle), 0.0)
