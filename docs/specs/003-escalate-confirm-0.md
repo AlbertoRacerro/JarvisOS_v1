@@ -1,6 +1,6 @@
 # 003 — ESCALATE-CONFIRM-0: external escalation proposal + user-confirmed execution
 
-Status: ready
+Status: implemented (pending review)
 Depends on: none (002 recommended first, for measured evidence of local ceiling)
 
 ## Goal
@@ -113,3 +113,59 @@ Out of scope (binding non-goals):
 Test gate green (see `AGENTS.md`), acceptance criteria met, spec status updated,
 summary written. This slice may land as two commits (backend, then frontend card)
 on the same branch.
+
+
+## Implementation notes
+
+- Phase A verification: `external:reasoning` is present in the execution spine binding table and can be exercised end-to-end through the existing explicit external route path when the Scaleway route gates are enabled; the confirm endpoint reuses that path. In this container, live provider execution was not attempted. Tests verify the route through the spine with a mocked Scaleway adapter/fake response and verify fail-closed behavior for disabled paid AI and zero budget.
+- Escalation proposals use the interim redaction policy: outbound text is exactly the raw prompt, `context_excluded` is `true`, and manual/project context is not sent on confirm.
+- Proposal/execution linking is recorded in `ai_jobs.route_reason_json`: proposal rows include `escalation_proposal`, and confirmed execution rows include `escalation_proposal_ledger_id`.
+- Frontend visual verification was limited to `npm run build` in this non-interactive container.
+
+## Review notes (2026-07-02, spec-003 round 1)
+
+- **Trigger is intentionally dormant (MAJOR from review).** `capability_from_classification`
+  never returns `CAPABILITY_DEEP_REASONING` today, so `capability_exceeds_local` is
+  always false in production and the escalation branch is exercised only by tests
+  (via monkeypatch). This is **by design and correct for the current sequencing**:
+  detecting when local capability is genuinely exceeded requires the measured
+  local-ceiling data from spec 002 (smoke matrix + routing eval). Wiring a real
+  trigger now would hard-code an unmeasured threshold — the opposite of the
+  determinism/blast-radius principle (measure quality signals, don't guess). This
+  slice therefore lands as **complete-and-verified plumbing** (proposal → confirm,
+  egress = prompt only, secret blocked, fail-closed all tested) that activates when
+  a later slice, informed by 002, teaches the capability classifier to emit
+  `deep_reasoning`. Acceptance criterion 2 is demonstrated via the bridge tests
+  until that wiring exists.
+- **Secret audit-reason fidelity (MINOR, accepted).** The `secret → CONTROL_BLOCKED`
+  short-circuit returns before `decide_router_policy`, so the ledger reason for secret
+  prompts is the generic control-block code rather than `_block_secret`'s specific
+  code. Execution behavior is unchanged (deterministic policy already blocked these);
+  only audit granularity is reduced. Accepted for now.
+- **Non-executing proposal row (MINOR, fixed).** `_attach_escalation_proposal_to_job`
+  no longer stamps `provider_id`/`model_id`/`cost_estimate` on the proposal's `ai_jobs`
+  row; the estimate stays in `route_reason.escalation_proposal`, so a future
+  `SUM(cost_estimate)` audit cannot misread an estimate as real spend.
+- **Credentials-absent fail-closed (MINOR, fixed).** Added
+  `test_confirm_escalation_credentials_absent_fails_closed` to cover the third case
+  of acceptance criterion 5.
+
+## Review notes (2026-07-02, spec-003 round 2)
+
+- **Raw prompt in ledger (MAJOR, fixed).** `_attach_escalation_proposal_to_job`
+  persisted `outbound_text` (the raw prompt) into `ai_jobs.route_reason_json`,
+  violating the spine contract ("the ledger stores only digests + metadata, never
+  prompt/output content"). Since escalation is exactly the sensitive path
+  (confidential/IP prompts that exceed local), this leaked full prompt text into
+  SQLite even without confirmation. Fixed: the ledger copy now stores
+  `outbound_text_digest` (via `canonical_digest`), and the full `outbound_text`
+  remains only in the response payload for the UI card. Test asserts the raw text
+  is absent from the ledger.
+- **Confirm trusts client-posted proposal (MINOR, deferred with note).** The confirm
+  endpoint takes `outbound_text`/`proposed_route_class`/`proposal_ledger_id` from the
+  request without loading and matching the stored proposal row, so the
+  proposal↔execution audit link can be forged. Scoped to audit-link integrity
+  (redaction is at parity with the existing explicit external route, and this is a
+  single-user local app where the client is the user's own UI). Fixing it properly
+  requires server-side proposal storage + lookup on confirm — a design addition
+  beyond this slice. Deferred; revisit alongside a persisted-proposal store.

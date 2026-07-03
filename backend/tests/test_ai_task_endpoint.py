@@ -365,3 +365,134 @@ def test_task_endpoint_invalid_workspace_fails_closed_before_provider(client: Te
     assert len(rows) == 1
     assert rows[0]["status"] == "config_error"
     assert rows[0]["error_type"] == "context_build_error"
+
+
+def _proposal() -> dict[str, object]:
+    return {
+        "proposal_ledger_id": "proposal-1",
+        "proposed_route_class": "external:reasoning",
+        "provider_id": "scaleway",
+        "model_id": "qwen3-235b-a22b-instruct-2507",
+        "estimated_cost": {"max_output_tokens": 64, "estimated_cost_usd": 0.0001, "currency": "USD"},
+        "outbound_text": "confirm raw prompt",
+        "context_excluded": True,
+    }
+
+
+def test_confirm_escalation_happy_path_uses_external_spine(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SCALEWAY_API_KEY", "test-only-key")
+    client.put(
+        "/ai/settings",
+        json={
+            "provider_mode": "scaleway",
+            "default_ai_provider": "scaleway",
+            "paid_ai_enabled": True,
+            "monthly_api_budget_usd": 1,
+            "scaleway_enabled": True,
+            "scaleway_smoke_test_enabled": True,
+            "scaleway_live_smoke_test_enabled": True,
+            "use_fake_provider_when_budget_zero": False,
+        },
+    )
+    from app.modules.ai.contracts import AIRequest
+    from app.modules.ai.providers.fake_adapter import FakeProviderAdapter
+    from app.modules.ai.providers.scaleway_adapter import ScalewayProviderAdapter
+
+    seen: list[str | None] = []
+
+    def fake_complete(self: ScalewayProviderAdapter, request: AIRequest):
+        seen.append(request.prompt)
+        return FakeProviderAdapter().complete(request)
+
+    monkeypatch.setattr(ScalewayProviderAdapter, "complete", fake_complete)
+    monkeypatch.setattr("app.modules.ai.execution._scaleway_ready", lambda: True)
+
+    response = client.post("/ai/tasks/escalations/confirm", json={"proposal": _proposal(), "task_kind": "general"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["proposal_ledger_id"] == "proposal-1"
+    assert body["task_response"]["selected_route_class"] == "external:reasoning"
+    assert seen == ["confirm raw prompt"]
+    rows = _all_ai_jobs()
+    assert len(rows) == 1
+    assert rows[0]["status"] == "success"
+    assert rows[0]["context_digest"] is None
+
+
+def test_confirm_escalation_paid_ai_disabled_fails_closed(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SCALEWAY_API_KEY", "test-only-key")
+    from app.modules.ai.providers.scaleway_adapter import ScalewayProviderAdapter
+
+    def fail(self, request):
+        raise AssertionError("provider must not be called")
+
+    monkeypatch.setattr(ScalewayProviderAdapter, "complete", fail)
+    client.put(
+        "/ai/settings",
+        json={
+            "provider_mode": "scaleway",
+            "default_ai_provider": "scaleway",
+            "paid_ai_enabled": False,
+            "monthly_api_budget_usd": 1,
+            "scaleway_enabled": True,
+            "scaleway_smoke_test_enabled": True,
+            "scaleway_live_smoke_test_enabled": True,
+            "use_fake_provider_when_budget_zero": False,
+        },
+    )
+    response = client.post("/ai/tasks/escalations/confirm", json={"proposal": _proposal()})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "config_error"
+    assert "paid_ai_disabled" in body["task_response"]["decision_reason"]
+
+
+def test_confirm_escalation_budget_zero_fails_closed(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SCALEWAY_API_KEY", "test-only-key")
+    client.put(
+        "/ai/settings",
+        json={
+            "provider_mode": "scaleway",
+            "default_ai_provider": "scaleway",
+            "paid_ai_enabled": True,
+            "monthly_api_budget_usd": 0,
+            "scaleway_enabled": True,
+            "scaleway_smoke_test_enabled": True,
+            "scaleway_live_smoke_test_enabled": True,
+            "use_fake_provider_when_budget_zero": False,
+        },
+    )
+    response = client.post("/ai/tasks/escalations/confirm", json={"proposal": _proposal()})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "config_error"
+    assert "monthly_budget_zero" in body["task_response"]["decision_reason"]
+
+
+def test_confirm_escalation_credentials_absent_fails_closed(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Acceptance criterion 5, third fail-closed case: paid AI on and budget available,
+    # but no Scaleway credential present -> confirm must not execute.
+    monkeypatch.delenv("SCALEWAY_API_KEY", raising=False)
+    client.put(
+        "/ai/settings",
+        json={
+            "provider_mode": "scaleway",
+            "default_ai_provider": "scaleway",
+            "paid_ai_enabled": True,
+            "monthly_api_budget_usd": 1,
+            "scaleway_enabled": True,
+            "scaleway_smoke_test_enabled": True,
+            "scaleway_live_smoke_test_enabled": True,
+            "use_fake_provider_when_budget_zero": False,
+        },
+    )
+    response = client.post("/ai/tasks/escalations/confirm", json={"proposal": _proposal()})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "config_error"
+    assert "scaleway_api_key_missing" in body["task_response"]["decision_reason"]

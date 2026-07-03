@@ -729,7 +729,12 @@ def test_auto_metadata_marks_capability_exceeds_local_for_deep_reasoning(
         classifier_func=fake_classifier,
     )
 
-    assert response.status == "success"
+    assert response.status == CONTROL_PROPOSED_EXTERNAL
+    assert response.response_text is None
+    assert response.escalation_proposal is not None
+    assert response.escalation_proposal["proposed_route_class"] == "external:reasoning"
+    assert response.escalation_proposal["outbound_text"] == "deep local best effort"
+    assert response.escalation_proposal["context_excluded"] is True
     assert response.auto_metadata["capability_exceeds_local"] is True
     assert response.auto_metadata["capability"]["row"] == CAPABILITY_DEEP_REASONING
     assert response.auto_metadata["capability"]["capability_exceeds_local"] is True
@@ -955,3 +960,74 @@ def test_auto_external_api_request_returns_confirmation_payload(client: TestClie
     assert response.confirmation_payload is not None
     assert response.confirmation_payload["scope"] == "external_provider_request_detected"
     assert response.confirmation_payload["target"] == "external:scientific_medium"
+
+
+def test_auto_escalation_excludes_context_and_records_proposal(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    import app.modules.ai.routing.bridge as bridge
+    from app.modules.ai.routing.capability_route_matrix import CAPABILITY_DEEP_REASONING
+
+    def fake_classifier(request, *, adapter=None):
+        return _classification_result(
+            task_type=TaskType.project_planning,
+            project_area=ProjectArea.bluerev,
+            complexity_hint=ComplexityHint.high,
+            needs_context=True,
+            sensitivity_hint=SensitivityHint.confidential,
+        )
+
+    monkeypatch.setattr(bridge, "capability_from_classification", lambda classification: CAPABILITY_DEEP_REASONING)
+    response = run_auto_task(
+        AITaskRunRequest(
+            prompt="raw prompt only",
+            route_class="auto",
+            max_tokens=64,
+            include_project_context=True,
+            context_blocks=[{"source": "manual", "content": "do not send"}],
+        ),
+        run_ai_task_func=lambda **kwargs: pytest.fail("proposal must not execute"),
+        classifier_func=fake_classifier,
+    )
+
+    assert response.status == CONTROL_PROPOSED_EXTERNAL
+    assert response.escalation_proposal is not None
+    assert response.escalation_proposal["outbound_text"] == "raw prompt only"
+    assert response.escalation_proposal["context_excluded"] is True
+    assert response.escalation_proposal["sensitivity_warning"] is not None
+    # Response payload keeps the full outbound text for the UI confirmation card.
+    assert response.escalation_proposal["outbound_text"] == "raw prompt only"
+    rows = _all_ai_jobs()
+    assert len(rows) == 1
+    route_reason = json.loads(rows[0]["route_reason_json"])
+    # Ledger must NOT persist the raw prompt (spine contract: digests only) — the
+    # escalation path is exactly the sensitive case (confidential/IP prompts).
+    ledger_proposal = route_reason["escalation_proposal"]
+    assert "outbound_text" not in ledger_proposal
+    assert ledger_proposal["outbound_text_digest"]
+    assert ledger_proposal["outbound_text_digest"] != "raw prompt only"
+    # Non-executing proposal row must not be stamped as a real external call:
+    # provider/model/cost columns stay unset; the estimate lives only in the JSON.
+    assert rows[0]["provider_id"] is None
+    assert rows[0]["model_id"] is None
+    assert rows[0]["cost_estimate"] is None
+
+
+def test_auto_secret_deep_reasoning_produces_no_escalation(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    import app.modules.ai.routing.bridge as bridge
+    from app.modules.ai.routing.capability_route_matrix import CAPABILITY_DEEP_REASONING
+
+    def fake_classifier(request, *, adapter=None):
+        return _classification_result(
+            task_type=TaskType.project_planning,
+            complexity_hint=ComplexityHint.high,
+            sensitivity_hint=SensitivityHint.secret,
+        )
+
+    monkeypatch.setattr(bridge, "capability_from_classification", lambda classification: CAPABILITY_DEEP_REASONING)
+    response = run_auto_task(
+        AITaskRunRequest(prompt="secret token", route_class="auto", max_tokens=64),
+        run_ai_task_func=lambda **kwargs: pytest.fail("secret control state must not execute"),
+        classifier_func=fake_classifier,
+    )
+
+    assert response.status == CONTROL_BLOCKED
+    assert response.escalation_proposal is None

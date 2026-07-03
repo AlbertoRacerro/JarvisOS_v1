@@ -1,6 +1,7 @@
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 
 import {
+  confirmAITaskEscalation,
   createModelingDraft,
   deleteScalewayApiKey,
   getAISettings,
@@ -117,6 +118,7 @@ function AIDraft() {
   const [taskIncludeContext, setTaskIncludeContext] = useState(false);
   const [taskResult, setTaskResult] = useState<AITaskRunResponse | null>(null);
   const [taskRunning, setTaskRunning] = useState(false);
+  const [escalationRunning, setEscalationRunning] = useState(false);
   const [taskWorkspaceId, setTaskWorkspaceId] = useState("bluerev");
   const [message, setMessage] = useState<string | null>(null);
 
@@ -241,6 +243,17 @@ function AIDraft() {
       .then(() => refresh())
       .catch((error: Error) => setMessage(error.message))
       .finally(() => setTaskRunning(false));
+  };
+
+  const onEscalationConfirm = () => {
+    if (!taskResult?.escalation_proposal || escalationRunning) return;
+    setMessage(null);
+    setEscalationRunning(true);
+    confirmAITaskEscalation(taskResult.escalation_proposal, taskKind)
+      .then((result) => setTaskResult(result.task_response))
+      .then(() => refresh())
+      .catch((error: Error) => setMessage(error.message))
+      .finally(() => setEscalationRunning(false));
   };
 
   const onDraftSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -425,6 +438,39 @@ function AIDraft() {
                 <dd>{shortDigest(taskResult.context_digest)}</dd>
               </div>
             </dl>
+            {taskResult.escalation_proposal ? (
+              <div className="task-result escalation-card">
+                <h4>External escalation available</h4>
+                <p>Auto did not call an external provider. Confirm once to send only the prompt text below.</p>
+                {taskResult.escalation_proposal.sensitivity_warning ? (
+                  <div className="error-banner">{taskResult.escalation_proposal.sensitivity_warning}</div>
+                ) : null}
+                <dl className="details ai-task-result-details">
+                  <div>
+                    <dt>Route</dt>
+                    <dd>{taskResult.escalation_proposal.proposed_route_class}</dd>
+                  </div>
+                  <div>
+                    <dt>Model</dt>
+                    <dd>{taskResult.escalation_proposal.model_id ?? "-"}</dd>
+                  </div>
+                  <div>
+                    <dt>Estimated cost</dt>
+                    <dd>
+                      {taskResult.escalation_proposal.estimated_cost?.estimated_cost_usd ?? "-"} {taskResult.escalation_proposal.estimated_cost?.currency ?? "USD"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Context excluded</dt>
+                    <dd>{taskResult.escalation_proposal.context_excluded ? "yes" : "no"}</dd>
+                  </div>
+                </dl>
+                <pre className="metadata-block">{taskResult.escalation_proposal.outbound_text.slice(0, 1000)}</pre>
+                <button type="button" onClick={onEscalationConfirm} disabled={escalationRunning}>
+                  {escalationRunning ? "Confirming" : "Confirm external execution"}
+                </button>
+              </div>
+            ) : null}
             {taskResult.confirmation_payload ? (
               <details className="ai-draft-advanced-metadata">
                 <summary>Confirmation payload</summary>
