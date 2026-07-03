@@ -102,6 +102,14 @@ Review the PR diff strictly for substance, not style:
 - Spec conformance: acceptance criteria met, scope respected, binding non-goals
   untouched, out-of-scope files justified -> MAJOR.
 - Real correctness bugs, each with a concrete failure scenario.
+- Fabricated results (AGENTS.md invariant 9) -> CRITICAL. Hunt specifically for:
+  hard-coded or unconditional pass/success/verdict values; placeholder outputs
+  standing in for real computation (comments like "placeholder", "neutral",
+  "for now", "simplified"); tests that assert constants the implementation
+  itself fabricates; checks whose detail says work happened that the code does
+  not perform.
+- Any change to a reviewer-owned conformance test file
+  (backend/tests/**/test_*_conformance.py) -> CRITICAL, regardless of content.
 - Required tests present, offline-only (no live providers/Ollama/network),
   assertions meaningful.
 Do NOT report style nits unless they violate a convention in the AGENTS.md
