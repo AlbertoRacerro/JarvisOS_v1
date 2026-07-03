@@ -28,6 +28,31 @@ platform specs run behind it.
 | 015 | PROVIDER-GW-1: provider gateway v1 | nothing in alpha; enables multi-provider + future frontier |
 | 016 | RUNNER-EXT-1: scoped runner extension for BLUECAD L2 | spec 012 only |
 | 017 | AGENT-CORE-1: Core Team personas as config + panel plumbing | spec 011 only |
+| 019 | FRONTIER-1: Anthropic adapter + `external:frontier` route class + Fable approval gate | nothing; enables frontier routing |
+
+## Kernel — FRONTIER-1 (spec 019, binding decisions; user-confirmed 2026-07-03)
+
+Provider/model targets (maintainer decision): frontier tier = **Opus 4.8
+(default), GPT 5.5 (alternate), Fable 5 (approval-only)** on top of the
+workhorse tier (Kimi K2.7 / DeepSeek V4 / GLM 5.2 via 015).
+
+1. **`AnthropicAdapter`**: new adapter class implementing the existing
+   `AIProviderAdapter.complete(AIRequest) -> AIResponse` contract over the
+   Anthropic Messages API envelope. Non-streaming. Same secrets-ref pattern
+   as 015 (`anthropic_api_key`). GPT needs no new adapter — OpenAI is
+   natively OpenAI-compatible and its (disabled) entry ships with 015.
+2. **`external:frontier` route class as data** in the 015 registry: default
+   model = Opus 4.8; fallback chain `[opus-4.8, gpt-5.5]` on provider
+   errors/timeouts only.
+3. **Fable 5 is approval-only, never a default and never a fallback
+   target**: its registry entry carries `requires_user_confirmation: true`;
+   selection goes through the existing confirm-to-escalate flow (spec 003
+   pattern — non-executing proposal until the user confirms `allow_once`).
+   Any non-confirmed request routed at frontier tier executes on Opus 4.8.
+   Rationale: cost + the Fable review-safety routing practice (scope-limited,
+   neutral payloads for Fable tasks).
+4. Budget/sensitivity gates unchanged and authoritative (015 per-provider
+   caps apply; frontier entries ship disabled until keys + paid-AI gates).
 
 ## Kernel — PROVIDER-GW-1 (spec 015, binding decisions)
 
@@ -41,8 +66,9 @@ platform specs run behind it.
    per-provider monthly token/cost caps.
 3. **OpenAI-compatible envelope** internally; one generic
    `OpenAICompatAdapter(base_url, key_ref)` covers Scaleway, DeepSeek direct,
-   GLM direct, Kimi direct. Anthropic adapter is a later, separate class —
-   do not pretend it exists.
+   GLM direct, Kimi direct, **and OpenAI itself (GPT frontier class — natively
+   OpenAI-compatible, wired in 015 as a disabled entry)**. Anthropic adapter
+   is a later, separate class (spec 019) — do not pretend it exists.
 4. **Route classes become data**: `external:cheap` / `external:reasoning`
    mappings move from the hardcoded binding table into the registry config.
    Existing behavior must be reproducible byte-for-byte by the default config
