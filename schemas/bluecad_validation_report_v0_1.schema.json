@@ -5,7 +5,7 @@
   "properties": {
     "report_version": { "const": "bluecad_validation_report_v0_1" },
     "spec_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
-    "manifest_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "manifest_sha256": { "anyOf": [{ "type": "string", "pattern": "^[0-9a-f]{64}$" }, { "type": "null" }] },
     "verdict": { "enum": ["pass", "fail", "error"] },
     "checks": {
       "type": "array",
