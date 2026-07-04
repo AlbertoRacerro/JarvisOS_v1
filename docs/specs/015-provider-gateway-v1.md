@@ -1,6 +1,6 @@
 # 015 — PROVIDER-GW-1: provider gateway v1
 
-Status: draft
+Status: ready
 Depends on: none
 
 ## Goal
@@ -227,5 +227,6 @@ Scaleway and DeepSeek each have provider-specific implementations today.
 ## Definition of done
 
 Test gate green (see `AGENTS.md`), acceptance criteria met, spec status updated,
-summary written. Implementation must not proceed from this draft until the
-questions above are answered or explicitly accepted as deferred by the maintainer.
+summary written. The questions above are known implementation-review
+clarifications; if they still affect implementation, stop and ask the maintainer
+instead of choosing behavior not specified by this spec.
