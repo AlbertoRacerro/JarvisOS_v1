@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jarvisos.local/schemas/bluecad_analysis_spec_v0_1.schema.json",
+  "title": "BLUECAD AnalysisSpec v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "analysis_id", "analysis_type", "geometry", "material", "bcs", "loads", "mesh", "pass_criteria"],
+  "properties": {
+    "schema_version": {"const": "bluecad_analysis_spec_v0_1"},
+    "analysis_id": {"type": "string", "minLength": 1},
+    "analysis_type": {"enum": ["static", "modal", "thermal", "cfd_external_flow", "cfd_internal_flow"]},
+    "geometry": {
+      "type": "object", "additionalProperties": false, "required": ["step_path", "manifest_path"],
+      "properties": {"step_path": {"type": "string", "minLength": 1}, "manifest_path": {"type": "string", "minLength": 1}}
+    },
+    "material": {
+      "type": "object", "additionalProperties": false, "required": ["name", "E", "nu", "rho", "yield_strength"],
+      "properties": {"name": {"type": "string"}, "E": {"type": "number", "exclusiveMinimum": 0}, "nu": {"type": "number"}, "rho": {"type": "number", "exclusiveMinimum": 0}, "yield_strength": {"type": "number", "exclusiveMinimum": 0}}
+    },
+    "bcs": {"type": "array", "items": {"$ref": "#/$defs/port_condition"}},
+    "loads": {"type": "array", "items": {"$ref": "#/$defs/port_condition"}},
+    "mesh": {
+      "type": "object", "additionalProperties": false, "required": ["target_size"],
+      "properties": {"target_size": {"type": "number", "exclusiveMinimum": 0}, "refinements": {"type": "object", "additionalProperties": {"type": "number", "exclusiveMinimum": 0}}}
+    },
+    "pass_criteria": {"type": "object"}
+  },
+  "$defs": {
+    "port_condition": {
+      "type": "object", "additionalProperties": true, "required": ["port_label"],
+      "properties": {"port_label": {"type": "string", "minLength": 1}}
+    }
+  }
+}

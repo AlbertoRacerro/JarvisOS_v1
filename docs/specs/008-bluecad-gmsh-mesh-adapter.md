@@ -1,6 +1,6 @@
 # 008 — BLUECAD Gmsh mesh adapter (subprocess, physical groups, quality gate)
 
-Status: ready (after 005 and 007 are merged)
+Status: implemented (pending review)
 Depends on: 005, 007
 
 ## Goal
@@ -107,3 +107,10 @@ Verify against actual code before starting; report conflicts instead of guessing
 Test gate green (see `AGENTS.md`), acceptance criteria met, spec status
 updated, summary written. A3 row in `BLUECAD_CORE_DESIGN.md` §11 updated by
 the maintainer after the marker test passes locally.
+
+
+## Implementation notes
+
+Status updated after implementing the subprocess-only Gmsh mesh adapter. The adapter generates `.geo` physical groups from manifest port frames with `Surface In BoundingBox`, invokes `gmsh` only via the BLUECAD tool registry, records mesh artifacts, parses CalculiX `.inp` counts, and applies the one-shot deterministic retry on `MESH_FAIL`.
+
+Deviations from spec: none. The real-Gmsh A3 test is present behind the `bluecad_gmsh` marker and skips unless a maintainer supplies an enabled real Gmsh registry entry outside the shipped config.
