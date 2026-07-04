@@ -204,7 +204,12 @@ Scaleway and DeepSeek each have provider-specific implementations today.
 - Auto invariant regression test: an Auto decision with external intent remains
   non-executing and no external adapter is invoked.
 
-## Questions
+## Questions / stop conditions
+
+These are the only intentionally unresolved points. They do **not** make this
+spec a draft: implementation can start, but an agent must stop and ask the
+maintainer before choosing behavior for any item below that becomes necessary to
+complete the slice.
 
 - The kernel requires `api_key_ref` to point to the secrets module, but the current
   secrets module exposes Scaleway-specific helpers. Should this slice add generic
@@ -227,6 +232,6 @@ Scaleway and DeepSeek each have provider-specific implementations today.
 ## Definition of done
 
 Test gate green (see `AGENTS.md`), acceptance criteria met, spec status updated,
-summary written. The questions above are known implementation-review
-clarifications; if they still affect implementation, stop and ask the maintainer
-instead of choosing behavior not specified by this spec.
+summary written. If a question/stop-condition above affects implementation, the
+agent must stop and ask the maintainer instead of choosing behavior not specified
+by this spec.
