@@ -178,3 +178,12 @@ Stage 1 implemented for draft review:
 - The create endpoint currently performs the required fail-closed external-call gate and parks candidates as `budget_blocked` under safe defaults without recording provider calls. If external calls are enabled before Stage 2 review approval, it parks as `policy_blocked` instead of spending.
 
 Deviations from full spec: Stage 2 items are intentionally not implemented yet per the requested two-stage workflow: provider orchestration, build/validate/repair attempts, artifact persistence, valid promotion path, and full acceptance test suite remain pending review approval.
+
+Stage 2 implemented after review approval:
+- Added synchronous generate/repair orchestration through `run_ai_task` with explicit `external:cheap` / `external:reasoning` route classes only.
+- Added strict single-JSON-object extraction and GeometrySpec canonical/schema validation; malformed outputs are recorded as attempts without build execution.
+- Added deterministic build/validate execution through the spec-005 adapter, workspace artifact registration for spec/report/manifest/GLB outputs, and attempt/candidate artifact linking.
+- Added bounded tier-ladder retry, repair prompts containing only the failing spec plus validation report, budget-blocked fail-closed behavior with zero provider calls, and terminal parking for exhausted/malformed paths.
+- Completed human-triggered promotion route coverage; `loop.py` does not import or call `create_decision`.
+
+Deviations from full spec after Stage 2: no frontend work, no L2/script loop, no review panel, no mesh/FEM, and no background queue, matching non-goals. Kernel-dependent loop tests are skipped when `build123d` cannot be imported in the container because `libGL.so.1` is unavailable; non-kernel safety/API/malformed tests still run offline.

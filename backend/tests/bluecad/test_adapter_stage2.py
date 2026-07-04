@@ -10,6 +10,8 @@ import pytest
 
 from app.modules.bluecad.service import build_geometry_spec, build_geometry_spec_file
 
+pytest.importorskip("build123d", reason="CAD kernel not importable", exc_type=ImportError)
+
 pytestmark = [
     pytest.mark.bluecad_kernel,
     pytest.mark.skipif(importlib.util.find_spec("build123d") is None, reason="build123d is not installed"),
