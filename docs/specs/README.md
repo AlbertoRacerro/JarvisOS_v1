@@ -36,6 +36,7 @@ Review (human + Claude code review) happens on the diff before merge. A spec is
 | 005b | BLUECAD remaining part-kind builders (parametric stubs) | ready (after 005) |
 | 006 | BLUECAD workbench: 3D viewer + validation report + attempt history | ready (after 005, 010) |
 | 006b | BLUECAD parametric variants (sliders → deterministic rebuild) | ready (after 006) |
+| 006c | BLUECAD workbench UX pass (archive, malformed detail, promote, retry) | ready (after 006) |
 | 007 | BLUECAD tool registry, health checks, CI license-boundary gate | ready (independent) |
 | 008 | BLUECAD Gmsh mesh adapter (subprocess, physical groups, quality gate) | ready (after 005, 007) |
 | 009 | BLUECAD CalculiX FEM adapter (static v0) + ResultSummary + Tier 3 | ready (after 008) |
