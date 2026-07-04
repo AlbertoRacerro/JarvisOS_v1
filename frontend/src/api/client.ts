@@ -517,8 +517,8 @@ export type BluecadValidationCheck = {
   tier?: string | number;
   status?: string;
   verdict?: string;
-  detail?: string;
-  message?: string;
+  detail?: unknown;
+  message?: unknown;
   hint?: string | null;
 };
 
@@ -528,6 +528,14 @@ export function listBluecadCandidates(workspaceId: string): Promise<BluecadCandi
 
 export function createBluecadCandidate(workspaceId: string, briefText: string): Promise<BluecadCandidate> {
   return postJson<BluecadCandidate>(`/workspaces/${workspaceId}/bluecad/candidates`, { brief_text: briefText });
+}
+
+export function archiveBluecadCandidate(workspaceId: string, candidateId: string): Promise<BluecadCandidate> {
+  return postJson<BluecadCandidate>(`/workspaces/${workspaceId}/bluecad/candidates/${candidateId}/archive`);
+}
+
+export function promoteBluecadCandidate(workspaceId: string, candidateId: string): Promise<BluecadCandidate> {
+  return postJson<BluecadCandidate>(`/workspaces/${workspaceId}/bluecad/candidates/${candidateId}/promote`);
 }
 
 export function bluecadArtifactContentUrl(workspaceId: string, artifactId: string): string {

@@ -1,6 +1,6 @@
 # 006c — BLUECAD workbench UX pass (archive, malformed detail, promote, retry)
 
-Status: ready (after 006 is merged — it is)
+Status: implemented (pending review)
 Depends on: 006
 
 ## Goal
@@ -112,3 +112,9 @@ Verify against actual code before starting; report conflicts instead of guessing
 
 `npm run build` green, backend test gate still green, acceptance criteria met
 with screenshots in the PR, spec status updated, summary written.
+
+
+## Implementation notes
+
+- Added frontend-only archive, show-archived, promote, retry/duplicate-brief, malformed attempt detail, and readable validation detail behavior.
+- Deviations from spec: none in implementation scope. Screenshot capture could not be completed in this container because frontend dependencies were not installable from npm (403 fetching `@types/three`), so the build also could not complete here.
