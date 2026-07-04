@@ -1,6 +1,6 @@
 # 005b — BLUECAD remaining part-kind builders (parametric stubs)
 
-Status: ready (after 005 is merged)
+Status: implemented (pending review)
 Depends on: 005
 
 ## Goal
@@ -99,3 +99,10 @@ Verify against actual code before starting; report conflicts instead of guessing
 
 Test gate green (see `AGENTS.md`), acceptance criteria met, spec status
 updated, summary written.
+
+
+## Implementation notes
+
+- Added the four frozen 005b part kinds to GeometrySpec v0.1, the Python spec validator, deterministic builders, manifest port interfaces, and port-conformity checks.
+- Added `full_reactor_v0` as the new golden layout fixture and covered new stub validation, port-count bounds, and mixed tube/pad mismatch behavior in tests.
+- Deviations from spec: none intended. Kernel-marked tests were skipped in this container because `build123d` is not installed; the offline full backend pytest and ruff gates otherwise pass.

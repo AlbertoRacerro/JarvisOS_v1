@@ -110,14 +110,36 @@ def _port(parts: dict[str, BuiltPart], part_id: str, port_name: str) -> PortFram
 
 
 def _assert_ports_conform(left: PortFrame, right: PortFrame, connection: dict[str, str]) -> None:
-    if not _rel_close(left.outer_d, right.outer_d) or not _rel_close(left.wall_t, right.wall_t):
+    if left.interface != right.interface:
         raise BluecadError(
             "PORT_MISMATCH",
             {
                 "connection": connection,
-                "from": {"outer_d": left.outer_d, "wall_t": left.wall_t},
-                "to": {"outer_d": right.outer_d, "wall_t": right.wall_t},
-                "message": "connected ports must have matching outer_d and wall_t",
+                "from": {"interface": left.interface},
+                "to": {"interface": right.interface},
+                "message": "connected ports must use matching interfaces",
+            },
+        )
+    if left.interface == "tube":
+        if not _rel_close(float(left.outer_d), float(right.outer_d)) or not _rel_close(float(left.wall_t), float(right.wall_t)):
+            raise BluecadError(
+                "PORT_MISMATCH",
+                {
+                    "connection": connection,
+                    "from": {"interface": left.interface, "outer_d": left.outer_d, "wall_t": left.wall_t},
+                    "to": {"interface": right.interface, "outer_d": right.outer_d, "wall_t": right.wall_t},
+                    "message": "connected tube ports must have matching outer_d and wall_t",
+                },
+            )
+        return
+    if not _rel_close(float(left.pad_d), float(right.pad_d)):
+        raise BluecadError(
+            "PORT_MISMATCH",
+            {
+                "connection": connection,
+                "from": {"interface": left.interface, "pad_d": left.pad_d},
+                "to": {"interface": right.interface, "pad_d": right.pad_d},
+                "message": "connected pad ports must have matching pad_d",
             },
         )
 
