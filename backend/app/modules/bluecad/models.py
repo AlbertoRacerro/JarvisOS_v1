@@ -27,8 +27,10 @@ class BluecadError(RuntimeError):
 class PortFrame:
     origin: tuple[float, float, float]
     direction: tuple[float, float, float]
-    outer_d: float
-    wall_t: float
+    outer_d: float | None = None
+    wall_t: float | None = None
+    interface: Literal["tube", "pad"] = "tube"
+    pad_d: float | None = None
 
     def transformed(self, rotation_z_rad: float, translation: tuple[float, float, float]) -> PortFrame:
         return PortFrame(
@@ -36,15 +38,22 @@ class PortFrame:
             direction=_rotate_vector(self.direction, rotation_z_rad),
             outer_d=self.outer_d,
             wall_t=self.wall_t,
+            interface=self.interface,
+            pad_d=self.pad_d,
         )
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "origin": [round(value, 9) for value in self.origin],
             "direction": [round(value, 9) for value in self.direction],
-            "outer_d": round(self.outer_d, 9),
-            "wall_t": round(self.wall_t, 9),
+            "interface": self.interface,
         }
+        if self.interface == "tube":
+            payload["outer_d"] = round(float(self.outer_d), 9)
+            payload["wall_t"] = round(float(self.wall_t), 9)
+        else:
+            payload["pad_d"] = round(float(self.pad_d), 9)
+        return payload
 
 
 @dataclass(frozen=True)

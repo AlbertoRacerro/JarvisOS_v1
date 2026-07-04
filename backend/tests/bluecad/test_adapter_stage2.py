@@ -81,7 +81,7 @@ def test_port_mismatch_is_structured_build_error(tmp_path: Path) -> None:
 def test_unknown_part_kind_rejected_before_kernel_call(tmp_path: Path) -> None:
     spec_path = tmp_path / "bad.json"
     spec = _fixture("minimal_single_tube")
-    spec["parts"][0]["kind"] = "float"
+    spec["parts"][0]["kind"] = "unsupported_kind"
     spec_path.write_text(json.dumps(spec), encoding="utf-8")
 
     result = build_geometry_spec_file(spec_path, tmp_path / "out")
@@ -105,7 +105,7 @@ def test_cli_exit_codes(tmp_path: Path) -> None:
     assert proc.returncode == 1
 
     bad_spec = _fixture("minimal_single_tube")
-    bad_spec["parts"][0]["kind"] = "float"
+    bad_spec["parts"][0]["kind"] = "unsupported_kind"
     bad_path = tmp_path / "bad.json"
     bad_path.write_text(json.dumps(bad_spec), encoding="utf-8")
     proc = subprocess.run([sys.executable, "-m", "app.modules.bluecad", "build", str(bad_path), "--out", str(tmp_path / "bad")], cwd=Path(__file__).parents[2], text=True, capture_output=True, check=False)

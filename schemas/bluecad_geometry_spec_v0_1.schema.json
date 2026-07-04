@@ -3,72 +3,142 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
-    "spec_version": { "const": "bluecad_geometry_spec_v0_1" },
-    "spec_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
-    "name": { "type": "string", "minLength": 1 },
+    "spec_version": {
+      "const": "bluecad_geometry_spec_v0_1"
+    },
+    "spec_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
     "parts": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/part" }
+      "items": {
+        "$ref": "#/$defs/part"
+      }
     },
     "connections": {
       "type": "array",
-      "items": { "$ref": "#/$defs/connection" },
+      "items": {
+        "$ref": "#/$defs/connection"
+      },
       "default": []
     },
-    "declared": { "$ref": "#/$defs/declared" }
+    "declared": {
+      "$ref": "#/$defs/declared"
+    }
   },
-  "required": ["spec_version", "parts"],
+  "required": [
+    "spec_version",
+    "parts"
+  ],
   "type": "object",
   "$defs": {
-    "finiteNumber": { "type": "number" },
-    "positiveNumber": { "type": "number", "exclusiveMinimum": 0 },
-    "nonNegativeNumber": { "type": "number", "minimum": 0 },
+    "finiteNumber": {
+      "type": "number"
+    },
+    "positiveNumber": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "nonNegativeNumber": {
+      "type": "number",
+      "minimum": 0
+    },
     "vector3": {
       "type": "array",
       "minItems": 3,
       "maxItems": 3,
-      "items": { "$ref": "#/$defs/finiteNumber" }
+      "items": {
+        "$ref": "#/$defs/finiteNumber"
+      }
     },
     "frame": {
       "additionalProperties": false,
       "properties": {
-        "origin": { "$ref": "#/$defs/vector3" },
-        "direction": { "$ref": "#/$defs/vector3" }
+        "origin": {
+          "$ref": "#/$defs/vector3"
+        },
+        "direction": {
+          "$ref": "#/$defs/vector3"
+        }
       },
-      "required": ["origin", "direction"],
+      "required": [
+        "origin",
+        "direction"
+      ],
       "type": "object"
     },
     "tubeRunParams": {
       "additionalProperties": false,
       "properties": {
-        "outer_d": { "$ref": "#/$defs/positiveNumber" },
-        "wall_t": { "$ref": "#/$defs/positiveNumber" },
-        "length": { "$ref": "#/$defs/positiveNumber" }
+        "outer_d": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "wall_t": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "length": {
+          "$ref": "#/$defs/positiveNumber"
+        }
       },
-      "required": ["outer_d", "wall_t", "length"],
+      "required": [
+        "outer_d",
+        "wall_t",
+        "length"
+      ],
       "type": "object"
     },
     "bendParams": {
       "additionalProperties": false,
       "properties": {
-        "outer_d": { "$ref": "#/$defs/positiveNumber" },
-        "wall_t": { "$ref": "#/$defs/positiveNumber" },
-        "bend_radius": { "$ref": "#/$defs/positiveNumber" },
-        "angle": { "$ref": "#/$defs/positiveNumber" }
+        "outer_d": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "wall_t": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "bend_radius": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "angle": {
+          "$ref": "#/$defs/positiveNumber"
+        }
       },
-      "required": ["outer_d", "wall_t", "bend_radius", "angle"],
+      "required": [
+        "outer_d",
+        "wall_t",
+        "bend_radius",
+        "angle"
+      ],
       "type": "object"
     },
     "jointParams": {
       "additionalProperties": false,
       "properties": {
-        "joint_type": { "const": "socket" },
-        "outer_d": { "$ref": "#/$defs/positiveNumber" },
-        "wall_t": { "$ref": "#/$defs/positiveNumber" },
-        "socket_len": { "$ref": "#/$defs/positiveNumber" }
+        "joint_type": {
+          "const": "socket"
+        },
+        "outer_d": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "wall_t": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "socket_len": {
+          "$ref": "#/$defs/positiveNumber"
+        }
       },
-      "required": ["joint_type", "outer_d", "wall_t", "socket_len"],
+      "required": [
+        "joint_type",
+        "outer_d",
+        "wall_t",
+        "socket_len"
+      ],
       "type": "object"
     },
     "part": {
@@ -76,32 +146,163 @@
       "oneOf": [
         {
           "properties": {
-            "part_id": { "type": "string", "minLength": 1 },
-            "kind": { "const": "tube_run" },
-            "params": { "$ref": "#/$defs/tubeRunParams" },
-            "frame": { "$ref": "#/$defs/frame" }
+            "part_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "const": "tube_run"
+            },
+            "params": {
+              "$ref": "#/$defs/tubeRunParams"
+            },
+            "frame": {
+              "$ref": "#/$defs/frame"
+            }
           },
-          "required": ["part_id", "kind", "params"],
+          "required": [
+            "part_id",
+            "kind",
+            "params"
+          ],
           "type": "object"
         },
         {
           "properties": {
-            "part_id": { "type": "string", "minLength": 1 },
-            "kind": { "const": "bend" },
-            "params": { "$ref": "#/$defs/bendParams" },
-            "frame": { "$ref": "#/$defs/frame" }
+            "part_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "const": "bend"
+            },
+            "params": {
+              "$ref": "#/$defs/bendParams"
+            },
+            "frame": {
+              "$ref": "#/$defs/frame"
+            }
           },
-          "required": ["part_id", "kind", "params"],
+          "required": [
+            "part_id",
+            "kind",
+            "params"
+          ],
           "type": "object"
         },
         {
           "properties": {
-            "part_id": { "type": "string", "minLength": 1 },
-            "kind": { "const": "joint" },
-            "params": { "$ref": "#/$defs/jointParams" },
-            "frame": { "$ref": "#/$defs/frame" }
+            "part_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "const": "joint"
+            },
+            "params": {
+              "$ref": "#/$defs/jointParams"
+            },
+            "frame": {
+              "$ref": "#/$defs/frame"
+            }
           },
-          "required": ["part_id", "kind", "params"],
+          "required": [
+            "part_id",
+            "kind",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "part_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "const": "manifold"
+            },
+            "params": {
+              "$ref": "#/$defs/manifoldParams"
+            },
+            "frame": {
+              "$ref": "#/$defs/frame"
+            }
+          },
+          "required": [
+            "part_id",
+            "kind",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "part_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "const": "float"
+            },
+            "params": {
+              "$ref": "#/$defs/floatParams"
+            },
+            "frame": {
+              "$ref": "#/$defs/frame"
+            }
+          },
+          "required": [
+            "part_id",
+            "kind",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "part_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "const": "anchor_mount"
+            },
+            "params": {
+              "$ref": "#/$defs/anchorMountParams"
+            },
+            "frame": {
+              "$ref": "#/$defs/frame"
+            }
+          },
+          "required": [
+            "part_id",
+            "kind",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "part_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "const": "harvest_module"
+            },
+            "params": {
+              "$ref": "#/$defs/harvestModuleParams"
+            },
+            "frame": {
+              "$ref": "#/$defs/frame"
+            }
+          },
+          "required": [
+            "part_id",
+            "kind",
+            "params"
+          ],
           "type": "object"
         }
       ]
@@ -109,10 +310,19 @@
     "connection": {
       "additionalProperties": false,
       "properties": {
-        "from": { "type": "string", "pattern": "^[^.]+\\.[^.]+$" },
-        "to": { "type": "string", "pattern": "^[^.]+\\.[^.]+$" }
+        "from": {
+          "type": "string",
+          "pattern": "^[^.]+\\.[^.]+$"
+        },
+        "to": {
+          "type": "string",
+          "pattern": "^[^.]+\\.[^.]+$"
+        }
       },
-      "required": ["from", "to"],
+      "required": [
+        "from",
+        "to"
+      ],
       "type": "object"
     },
     "declared": {
@@ -121,24 +331,156 @@
         "total_volume_mm3": {
           "additionalProperties": false,
           "properties": {
-            "value": { "$ref": "#/$defs/positiveNumber" },
-            "rel_tol": { "$ref": "#/$defs/nonNegativeNumber" }
+            "value": {
+              "$ref": "#/$defs/positiveNumber"
+            },
+            "rel_tol": {
+              "$ref": "#/$defs/nonNegativeNumber"
+            }
           },
-          "required": ["value", "rel_tol"],
+          "required": [
+            "value",
+            "rel_tol"
+          ],
           "type": "object"
         },
         "bbox_mm": {
           "additionalProperties": false,
           "properties": {
-            "min": { "$ref": "#/$defs/vector3" },
-            "max": { "$ref": "#/$defs/vector3" },
-            "abs_tol": { "$ref": "#/$defs/nonNegativeNumber" }
+            "min": {
+              "$ref": "#/$defs/vector3"
+            },
+            "max": {
+              "$ref": "#/$defs/vector3"
+            },
+            "abs_tol": {
+              "$ref": "#/$defs/nonNegativeNumber"
+            }
           },
-          "required": ["min", "max", "abs_tol"],
+          "required": [
+            "min",
+            "max",
+            "abs_tol"
+          ],
           "type": "object"
         },
-        "min_wall_t": { "$ref": "#/$defs/positiveNumber" }
+        "min_wall_t": {
+          "$ref": "#/$defs/positiveNumber"
+        }
       },
+      "type": "object"
+    },
+    "positiveInteger1To12": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 12
+    },
+    "manifoldParams": {
+      "additionalProperties": false,
+      "properties": {
+        "outer_d_main": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "wall_t": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "length": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "n_out": {
+          "$ref": "#/$defs/positiveInteger1To12"
+        },
+        "out_d": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "out_wall_t": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "spacing": {
+          "$ref": "#/$defs/positiveNumber"
+        }
+      },
+      "required": [
+        "outer_d_main",
+        "wall_t",
+        "length",
+        "n_out",
+        "out_d",
+        "out_wall_t",
+        "spacing"
+      ],
+      "type": "object"
+    },
+    "floatParams": {
+      "additionalProperties": false,
+      "properties": {
+        "outer_d": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "length": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "n_mounts": {
+          "$ref": "#/$defs/positiveInteger1To12"
+        },
+        "pad_d": {
+          "$ref": "#/$defs/positiveNumber"
+        }
+      },
+      "required": [
+        "outer_d",
+        "length",
+        "n_mounts",
+        "pad_d"
+      ],
+      "type": "object"
+    },
+    "anchorMountParams": {
+      "additionalProperties": false,
+      "properties": {
+        "base_w": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "base_l": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "base_t": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "eye_d": {
+          "$ref": "#/$defs/positiveNumber"
+        }
+      },
+      "required": [
+        "base_w",
+        "base_l",
+        "base_t",
+        "eye_d"
+      ],
+      "type": "object"
+    },
+    "harvestModuleParams": {
+      "additionalProperties": false,
+      "properties": {
+        "outer_d": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "height": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "wall_t": {
+          "$ref": "#/$defs/positiveNumber"
+        },
+        "port_d": {
+          "$ref": "#/$defs/positiveNumber"
+        }
+      },
+      "required": [
+        "outer_d",
+        "height",
+        "wall_t",
+        "port_d"
+      ],
       "type": "object"
     }
   }

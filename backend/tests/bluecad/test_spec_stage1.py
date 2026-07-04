@@ -71,7 +71,7 @@ def test_canonicalization_is_stable_across_key_order_permutations() -> None:
 @pytest.mark.parametrize(
     ("mutation", "path"),
     [
-        (lambda spec: spec["parts"][0].__setitem__("kind", "manifold"), "$.parts[0].kind"),
+        (lambda spec: spec["parts"][0].__setitem__("kind", "unsupported_kind"), "$.parts[0].kind"),
         (lambda spec: spec["parts"][0]["params"].__setitem__("outer_d", float("nan")), "$.parts[0].params.outer_d"),
         (lambda spec: spec["parts"][0]["params"].__setitem__("wall_t", 999.0), "$.parts[0].params.wall_t"),
     ],

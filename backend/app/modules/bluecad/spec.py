@@ -13,7 +13,7 @@ from typing import Any
 
 GEOMETRY_SPEC_VERSION = "bluecad_geometry_spec_v0_1"
 SPEC_ID_PREFIX = "sha256:"
-SUPPORTED_PART_KINDS = frozenset({"tube_run", "bend", "joint"})
+SUPPORTED_PART_KINDS = frozenset({"tube_run", "bend", "joint", "manifold", "float", "anchor_mount", "harvest_module"})
 _ALLOWED_TOP_LEVEL_KEYS = frozenset({"spec_version", "spec_id", "name", "parts", "connections", "declared"})
 _ALLOWED_PART_KEYS = frozenset({"part_id", "kind", "params", "frame"})
 _ALLOWED_FRAME_KEYS = frozenset({"origin", "direction"})
@@ -24,6 +24,10 @@ _ALLOWED_BBOX_KEYS = frozenset({"min", "max", "abs_tol"})
 _ALLOWED_TUBE_PARAMS = frozenset({"outer_d", "wall_t", "length"})
 _ALLOWED_BEND_PARAMS = frozenset({"outer_d", "wall_t", "bend_radius", "angle"})
 _ALLOWED_JOINT_PARAMS = frozenset({"joint_type", "outer_d", "wall_t", "socket_len"})
+_ALLOWED_MANIFOLD_PARAMS = frozenset({"outer_d_main", "wall_t", "length", "n_out", "out_d", "out_wall_t", "spacing"})
+_ALLOWED_FLOAT_PARAMS = frozenset({"outer_d", "length", "n_mounts", "pad_d"})
+_ALLOWED_ANCHOR_MOUNT_PARAMS = frozenset({"base_w", "base_l", "base_t", "eye_d"})
+_ALLOWED_HARVEST_MODULE_PARAMS = frozenset({"outer_d", "height", "wall_t", "port_d"})
 
 
 @dataclass(frozen=True)
@@ -141,6 +145,21 @@ def _validate_part(part: Any, index: int, seen_part_ids: set[str]) -> None:
         if params.get("joint_type") != "socket":
             _invalid(f"{path}.params.joint_type", "only socket joints are supported in v0.")
         _validate_wall(params, path)
+    elif kind == "manifold":
+        _validate_positive_params(params, _ALLOWED_MANIFOLD_PARAMS, path, required=_ALLOWED_MANIFOLD_PARAMS)
+        _validate_wall({"outer_d": params["outer_d_main"], "wall_t": params["wall_t"]}, path)
+        _validate_wall({"outer_d": params["out_d"], "wall_t": params["out_wall_t"]}, path)
+        _validate_int_bounds(params["n_out"], f"{path}.params.n_out", minimum=1, maximum=12)
+    elif kind == "float":
+        _validate_positive_params(params, _ALLOWED_FLOAT_PARAMS, path, required=_ALLOWED_FLOAT_PARAMS)
+        _validate_int_bounds(params["n_mounts"], f"{path}.params.n_mounts", minimum=1, maximum=12)
+    elif kind == "anchor_mount":
+        _validate_positive_params(params, _ALLOWED_ANCHOR_MOUNT_PARAMS, path, required=_ALLOWED_ANCHOR_MOUNT_PARAMS)
+    elif kind == "harvest_module":
+        _validate_positive_params(params, _ALLOWED_HARVEST_MODULE_PARAMS, path, required=_ALLOWED_HARVEST_MODULE_PARAMS)
+        _validate_wall(params, path)
+        if params["port_d"] >= params["outer_d"]:
+            _invalid(f"{path}.params.port_d", "port_d must be less than outer_d.")
 
     if "frame" in part:
         _validate_frame(part["frame"], f"{path}.frame")
@@ -210,6 +229,13 @@ def _validate_positive_params(params: Mapping[str, Any], allowed: frozenset[str]
 def _validate_wall(params: Mapping[str, Any], path: str) -> None:
     if params["wall_t"] * 2 >= params["outer_d"]:
         _invalid(f"{path}.params.wall_t", "wall_t must be less than half of outer_d.")
+
+
+def _validate_int_bounds(value: Any, path: str, *, minimum: int, maximum: int) -> None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        _invalid(path, "value must be an integer.")
+    if value < minimum or value > maximum:
+        _invalid(path, f"value must be between {minimum} and {maximum}.")
 
 
 def _validate_frame(frame: Any, path: str) -> None:
