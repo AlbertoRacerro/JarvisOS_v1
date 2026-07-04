@@ -1137,3 +1137,61 @@ button {
     grid-template-columns: 1fr;
   }
 }
+
+.bluecad-toolbar-actions,
+.bluecad-section-heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.bluecad-archive-toggle {
+  min-height: 38px;
+}
+
+.bluecad-section-heading {
+  margin-bottom: 16px;
+}
+
+.bluecad-section-heading h3 {
+  margin: 0;
+}
+
+.bluecad-section-heading button:not(.secondary-button) {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid #1d4ed8;
+  border-radius: 6px;
+  background: #1d4ed8;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.bluecad-section-heading button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.bluecad-promoted {
+  align-self: center;
+  color: #166534;
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.bluecad-detail-json {
+  max-width: 360px;
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+}
+
+.bluecad-table details summary {
+  cursor: pointer;
+  color: #1d4ed8;
+  font-weight: 700;
+}
