@@ -199,6 +199,17 @@ function BlueCAD() {
   );
 }
 
+function formatCell(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
 function ReportTable({ checks }: { checks: BluecadValidationCheck[] }) {
   return (
     <div className="table-wrap">
@@ -208,9 +219,9 @@ function ReportTable({ checks }: { checks: BluecadValidationCheck[] }) {
           {checks.map((check, index) => (
             <tr key={`${check.id ?? check.check_id ?? "check"}-${index}`}>
               <td>{check.id ?? check.check_id ?? `check-${index + 1}`}</td>
-              <td>{check.tier ?? "—"}</td>
+              <td>{formatCell(check.tier) || "—"}</td>
               <td>{check.status ?? check.verdict ?? "—"}</td>
-              <td>{check.detail ?? check.message ?? "—"}</td>
+              <td>{formatCell(check.detail ?? check.message) || "—"}</td>
               <td>{check.hint ?? "—"}</td>
             </tr>
           ))}
