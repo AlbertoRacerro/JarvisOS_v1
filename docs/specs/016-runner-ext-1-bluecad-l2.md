@@ -1,6 +1,6 @@
 # 016 — RUNNER-EXT-1: scoped runner extension for BLUECAD L2
 
-Status: draft
+Status: ready
 Depends on: 005 (BLUECAD CAD adapter MVP), 010 (BLUECAD AI loop v0). Blocks: 012 (BLUECAD L2 script execution).
 
 ## Goal
@@ -228,8 +228,7 @@ Verify against actual code before starting; report conflicts instead of guessing
 
 ## Definition of done
 
-Spec-only slice: this file is drafted, no implementation code is changed, no
-spec status is advanced beyond `draft`, and open questions are listed instead
-of decided. For the future implementation slice, the test gate is green (see
-`AGENTS.md`), acceptance criteria are met, spec status is updated, and summary
-is written.
+Test gate green (see `AGENTS.md`), acceptance criteria met, spec status
+updated, summary written. Open questions above must be resolved by the
+maintainer before implementation if they prove blocking; implementers should
+report conflicts instead of guessing.
