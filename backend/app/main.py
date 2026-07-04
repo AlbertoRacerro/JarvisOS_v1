@@ -11,6 +11,7 @@ from app.api.system import router as system_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.modules.ai.routes import router as ai_router
+from app.modules.bluecad.routes import router as bluecad_router
 from app.modules.local_ai.runtime.lifecycle import create_local_ai_runtime_lifecycle_from_env
 from app.modules.modeling.routes import router as modeling_router
 from app.modules.runner.routes import router as runner_router
@@ -52,6 +53,7 @@ def create_app() -> FastAPI:
     app.include_router(system_router)
     app.include_router(dev_message_route_router)
     app.include_router(ai_router)
+    app.include_router(bluecad_router)
     app.include_router(secrets_router)
     app.include_router(workspaces_router)
     app.include_router(modeling_router)

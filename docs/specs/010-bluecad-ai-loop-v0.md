@@ -1,6 +1,6 @@
 # 010 — BLUECAD AI loop v0 (L1 generate → build → validate → repair)
 
-Status: ready (blocked until 005 is merged — see Depends on)
+Status: implemented (pending review) (stage 1 draft)
 Depends on: 005 (CAD adapter MVP). Reads: `docs/strategy/BLUECAD_CORE_DESIGN.md`
 (§7 loop, §8 routing — binding), `docs/strategy/BLUECAD_SEAM_MAP.md` (facts),
 `docs/strategy/JARVISOS_PLATFORM_GAPS_PLAN.md` (ledger triage).
@@ -169,3 +169,12 @@ Verify against actual code before starting; report conflicts instead of guessing
 
 Test gate green (see `AGENTS.md`), acceptance criteria met, spec status
 updated, summary written.
+
+## Implementation notes
+
+Stage 1 implemented for draft review:
+- Added the additive `bluecad_candidates` and `bluecad_attempts` tables plus indexes.
+- Added workspace-scoped candidate API routes, prompt template helpers, ledger helpers, and an offline scripted fake adapter harness.
+- The create endpoint currently performs the required fail-closed external-call gate and parks candidates as `budget_blocked` under safe defaults without recording provider calls. If external calls are enabled before Stage 2 review approval, it parks as `policy_blocked` instead of spending.
+
+Deviations from full spec: Stage 2 items are intentionally not implemented yet per the requested two-stage workflow: provider orchestration, build/validate/repair attempts, artifact persistence, valid promotion path, and full acceptance test suite remain pending review approval.
