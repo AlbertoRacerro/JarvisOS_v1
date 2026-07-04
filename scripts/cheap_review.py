@@ -138,8 +138,15 @@ Use NO_FURTHER_CHANGES only when there are zero CRITICAL and zero MAJOR findings
 """
 
 
+def completion_url(base_url: str) -> str:
+    normalized = base_url.rstrip("/")
+    if normalized.endswith("/chat/completions"):
+        return normalized
+    return f"{normalized}/chat/completions"
+
+
 def call_model(base_url: str, model: str, api_key: str, prompt: str) -> str:
-    url = base_url.rstrip("/") + "/chat/completions"
+    url = completion_url(base_url)
     body = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
@@ -247,6 +254,11 @@ def self_test(repo_root: Path) -> None:
     assert parse_verdict("Here is my review.\nVERDICT: NEEDS_CHANGES") == "NEEDS_CHANGES"
     assert parse_verdict("no verdict anywhere") is None
     assert parse_verdict("") is None
+    assert completion_url("https://api.example.com/v1") == "https://api.example.com/v1/chat/completions"
+    assert (
+        completion_url("https://api.z.ai/api/paas/v4/chat/completions")
+        == "https://api.z.ai/api/paas/v4/chat/completions"
+    )
     name, text = resolve_spec(repo_root, "spec/004-tiered-pr-review", "")
     assert name.startswith("004-") and text
     name, _ = resolve_spec(repo_root, "docs/cleanup-2026-06", "")
@@ -318,11 +330,16 @@ def main() -> None:
         review = call_model_with_retry(base_url, model, api_key, prompt)
     except (OSError, KeyError, IndexError, TypeError, ValueError) as exc:
         detail = f"HTTP {exc.code}" if isinstance(exc, urllib.error.HTTPError) else type(exc).__name__
+        next_step = (
+            "Apply the `frontier-review` label manually to proceed."
+            if manage_label
+            else "Re-run the `frontier-review-fallback` label after fixing the provider configuration."
+        )
         body = (
             f"{marker}\n<!-- round={prior_rounds} -->\n"
             f"### {review_title} ({provider}) — PROVIDER ERROR\n\n"
             f"The {provider} API call failed ({detail}). Review was not produced. "
-            "Apply the `frontier-review` label manually to proceed."
+            f"{next_step}"
         )
         upsert_comment(repo, pr, gh_token, comment_id, body)
         # Fail-open for the PR (advisory; merge is not blocked), but fail the
@@ -335,11 +352,17 @@ def main() -> None:
     if verdict is None:
         notes.append("_No parseable VERDICT line in the model output; treated as NEEDS_CHANGES._")
     if truncated:
-        notes.append(
-            "_Diff exceeded the size cap and was truncated: this review is partial and "
-            "will not auto-apply the frontier label. Apply `frontier-review` manually "
-            "once satisfied._"
-        )
+        if manage_label:
+            notes.append(
+                "_Diff exceeded the size cap and was truncated: this review is partial and "
+                "will not auto-apply the frontier label. Apply `frontier-review` manually "
+                "once satisfied._"
+            )
+        else:
+            notes.append(
+                "_Diff exceeded the size cap and was truncated: this terminal fallback "
+                "review is partial._"
+            )
 
     if limit_reached:
         header = f"round {this_round} (limit {round_limit} reached)"
