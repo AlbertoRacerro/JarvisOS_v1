@@ -72,11 +72,31 @@ calm, engineering-grade):
 5. Every UI slice ships with screenshots in the PR for review (frontier or
    human) — visual review is part of the gate.
 
-| # | Item | State |
+**UI product direction (frozen 2026-07-04, from the maintainer's external
+UI review, triaged):** one home Workspace replaces the page-first UI —
+BLUECAD workbench + CAD viewer as the main surface, AI execution as a
+persistent right-side chat, compact mission/status strip; Dashboard demoted
+to a secondary System Overview; Dev Local Chat absorbed into the AI surface
+as a local/debug mode, not a nav item; Domain Foundation rebuilt as a
+searchable/editable record navigator. The long-term green-shell render is
+the aspirational reference, not a spec. Triage notes: the external review
+assumed settings/secrets are missing — **false**: `GET/PUT /ai/settings`,
+the `secrets` module (routes/service/storage), and escalation-confirm exist
+on the backend; R1 is a frontend surface over existing endpoints plus a
+secrets-hygiene pass, not new architecture. Multi-agent chat ships UI-first
+with personas clearly labeled as advisory single-calls until 017/011 land —
+never fake a swarm.
+
+| # | Item (R-milestone) | State |
 | --- | --- | --- |
-| 020 | Design system v0: tokens, layout shell, status components; restyle of existing pages kept minimal | idea; first UI slice after 006 |
-| 020b | Workbench UX pass 2: variant comparison (side-by-side viewer), design-history tree from candidate parent links | idea (data model already supports it) |
-| 020c | Report → 3D linking: clicking a failed check highlights the affected part in the viewer (part_ids are in `detail`) | idea; genuinely differentiating, cheap with GLB node names |
+| 029 | **R1 — Settings & secrets page**: provider mode, budget, token caps, API-key entry via the existing secrets endpoints; keys never in localStorage/frontend state/logs/plain repo files | idea; Codex-draftable (backend surface exists) |
+| 020 | **R2 — Workspace home layout**: single home (workbench + right AI chat + status strip), Dashboard→System Overview, Dev Local Chat absorbed as mode; design tokens v0 | idea; needs frontier kernel for layout contract, then Codex |
+| 030 | **R3 — Domain Foundation navigator**: search, type filter, edit/delete, detail view over modeling records (endpoints partly exist; add missing update/delete additively) | idea; Codex-draftable |
+| — | **R4 — Pipeline visibility**: largely shipped by 006+010 (attempt history, parked reasons); remainder = live-smoke polish items only | mostly done |
+| 031 | **R5 — Multi-agent chat UI**: persona-labeled chat over the existing single-call spine (Core Team roster as config), honest "advisory" badges; no orchestration | idea; after 020 |
+| 017+011+026 | **R6 — Real multi-agent orchestration** | already in backlog (kernels frozen) |
+| 020b | Workbench UX pass 2: variant comparison, design-history tree from candidate parent links | idea (data model ready) |
+| 020c | Report → 3D linking: failed check highlights the affected part in the viewer | idea; cheap with GLB node names |
 
 ## Quality program (the "out-of-the-box" tier)
 
