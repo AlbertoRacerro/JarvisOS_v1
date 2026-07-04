@@ -35,6 +35,18 @@ In scope:
   - timeout;
   - per-provider monthly token/cost caps;
   - ordered fallback chains per route class.
+- Add generic secret-reference resolution in the existing secrets module for
+  config values such as `env:SCALEWAY_API_KEY`, `env:DEEPSEEK_API_KEY`,
+  `env:GLM_API_KEY`, and `env:KIMI_API_KEY`; do not add a new persistent secret
+  store in this slice.
+- Treat provider-specific caps as registry-config policy for this slice and
+  evaluate them against existing global/spend settings plus any existing
+  provider-specific usage fields where available; do not add database schema or
+  settings fields solely for GLM/Kimi/DeepSeek cap persistence in v1.
+- Keep existing Scaleway and DeepSeek adapter classes/import paths as
+  compatibility wrappers where needed; shared OpenAI-compatible HTTP envelope
+  logic may move into the generic adapter, but existing smoke-path behavior and
+  tests must remain stable.
 - Keep `run_ai_task(adapters=..., bindings=...)` injection and
   `AIProviderAdapter.complete(AIRequest) -> AIResponse` as the only execution
   spine for provider calls.
@@ -70,8 +82,9 @@ Out of scope (binding non-goals):
 - No changes that make `route_class="auto"` execute an external provider.
 - No redaction engine and no relaxation of sensitivity policy. S3/S4 or pending
   redaction must never reach an external adapter.
-- No new secret persistence format beyond references resolved through the existing
-  secrets module unless a question below is answered by the maintainer first.
+- No durable secret persistence redesign. This slice may add generic secret-reference
+  resolution in the existing secrets module, but secret values still come only from
+  environment variables or existing runtime secret storage patterns.
 
 ## Files likely touched
 
@@ -138,6 +151,11 @@ Scaleway and DeepSeek each have provider-specific implementations today.
   failures. They are never attempted for malformed route classes, unavailable
   routes, context failures, policy blocks, budget blocks, credential blocks,
   sensitivity/redaction blocks, or user-confirmation/control states.
+- **Fallback audit rows:** every provider attempt in a fallback chain is an AI
+  call and therefore writes its own `ai_jobs` row. Use safe metadata in
+  `route_reason_json` (for example chain id, attempt index, route class,
+  provider id/model id, and prior retryable error code) to relate attempts; do
+  not add prompt/output content or secret values to the ledger.
 - **Budget gates stay authoritative:** extend `evaluate_ai_status` or its helper
   path for per-provider caps; do not move budget decisions into adapters as the
   sole enforcement point.
@@ -170,16 +188,21 @@ Scaleway and DeepSeek each have provider-specific implementations today.
 6. A generic OpenAI-compatible adapter can execute a mocked Scaleway/DeepSeek/GLM/Kimi
    style chat-completions response through the existing `AIRequest`/`AIResponse`
    contract without leaking secrets into metadata, logs, responses, or ledger rows.
-7. Per-provider budget/token/cost caps block before any external adapter call and
-   write the expected failed `ai_jobs` row.
+7. Per-provider budget/token/cost caps from the registry block before any external
+   adapter call and write the expected failed `ai_jobs` row; this v1 does not
+   require new database/settings fields for non-Scaleway provider cap persistence.
 8. Fallback chains attempt the next configured provider only after a retryable
-   provider error/timeout, record the final outcome through the spine, and do not
+   provider error/timeout, write one `ai_jobs` row per attempted provider with
+   safe chain metadata in `route_reason_json`, record the final outcome through
+   the spine, and do not
    run on policy, budget, credential, malformed-route, context, sensitivity, or
    confirmation/control blocks.
 9. `route_class="auto"` behavior is unchanged: external intent returns a
    non-executing proposal/control state and never invokes an external adapter.
 10. Existing provider smoke/adapter tests continue to pass offline with fake or
-    mocked providers.
+    mocked providers, and existing Scaleway/DeepSeek adapter class/import paths
+    remain usable as compatibility wrappers if their HTTP envelope logic is shared
+    with the generic adapter.
 
 ## Required tests
 
@@ -196,42 +219,22 @@ Scaleway and DeepSeek each have provider-specific implementations today.
 - OpenAI-compatible adapter tests using mocked HTTP/client behavior: success,
   HTTP error, timeout, malformed response, usage parsing, and safe metadata with no
   secret values.
-- Budget-gate tests: per-provider monthly token/cost caps block before adapter
-  invocation; paid-AI-disabled and zero-budget behavior remains unchanged.
+- Budget-gate tests: registry per-provider monthly token/cost caps block before
+  adapter invocation without new DB/settings fields for non-Scaleway providers;
+  paid-AI-disabled and zero-budget behavior remains unchanged.
 - Fallback-chain tests: retryable provider error advances to the next configured
-  provider; non-retryable provider error and all pre-provider blocks do not
+  provider and writes one `ai_jobs` row per attempted provider with safe chain
+  metadata; non-retryable provider error and all pre-provider blocks do not
   fallback.
 - Auto invariant regression test: an Auto decision with external intent remains
   non-executing and no external adapter is invoked.
-
-## Questions / stop conditions
-
-These are the only intentionally unresolved points. They do **not** make this
-spec a draft: implementation can start, but an agent must stop and ask the
-maintainer before choosing behavior for any item below that becomes necessary to
-complete the slice.
-
-- The kernel requires `api_key_ref` to point to the secrets module, but the current
-  secrets module exposes Scaleway-specific helpers. Should this slice add generic
-  secret-ref resolution, or should the default config initially be limited to refs
-  that map onto existing Scaleway/DeepSeek env/runtime helpers?
-- The kernel requires per-provider monthly token/cost caps, while current persisted
-  settings are Scaleway-specific plus global budget fields. Should provider-specific
-  cap usage be read only from the YAML/defaults for this slice, or does the
-  maintainer want additive settings/schema fields now?
-- The kernel says default config must reproduce current behavior byte-for-byte. For
-  fallback attempts, should multiple failed provider attempts produce one `ai_jobs`
-  row for the final route outcome, one row per attempted provider, or one row with
-  structured attempt metadata? Current `run_ai_task` writes one row per call.
-- Should the generic OpenAI-compatible adapter replace the existing Scaleway and
-  DeepSeek adapters immediately, or should those adapters remain as compatibility
-  wrappers around the generic adapter for this slice?
-- Which exact secret refs should be reserved in the default config for GLM and Kimi
-  direct providers if no current secret-storage helpers exist for them?
+- Secret-reference tests: `env:SCALEWAY_API_KEY`, `env:DEEPSEEK_API_KEY`,
+  `env:GLM_API_KEY`, and `env:KIMI_API_KEY` resolve through the secrets module
+  without storing secret values in YAML, logs, responses, metadata, or ledger rows.
+- Compatibility tests: existing Scaleway/DeepSeek adapter class/import paths still
+  work offline after any shared OpenAI-compatible logic is introduced.
 
 ## Definition of done
 
 Test gate green (see `AGENTS.md`), acceptance criteria met, spec status updated,
-summary written. If a question/stop-condition above affects implementation, the
-agent must stop and ask the maintainer instead of choosing behavior not specified
-by this spec.
+summary written.
