@@ -15,6 +15,7 @@ from app.modules.bluecad.registry import (
     load_registry,
     resolve_tool,
     run_tool,
+    validate_license_boundaries,
 )
 
 CI_FORBIDDEN_IMPORT_RE = re.compile(
@@ -136,8 +137,9 @@ def test_boundary_consistency_negative_and_shipped_yaml() -> None:
     bad = _subprocess_tool(Path(sys.executable), integration_mode="in_process")
     bad["license"] = {"spdx": "GPL-2.0", "boundary": "C", "verified_date": "2026-07-03"}
 
-    assert bad["license"]["boundary"] in {"C", "D"}
-    assert bad["integration_mode"] == "in_process"
+    with pytest.raises(ToolRegistryError) as exc_info:
+        validate_license_boundaries({"registry_version": "bluecad_tool_registry_v0_1", "tools": [bad]})
+    assert exc_info.value.code == "LICENSE_BOUNDARY_VIOLATION"
 
     shipped = load_registry(Path(__file__).resolve().parents[3] / "configs" / "bluecad_tools.yaml")
     for tool in shipped["tools"]:

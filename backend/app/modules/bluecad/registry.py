@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import os
 import shlex
 import subprocess
@@ -12,6 +11,8 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 REGISTRY_VERSION = "bluecad_tool_registry_v0_1"
 _REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -70,11 +71,11 @@ Registry = dict[str, Any]
 
 def _load_raw_registry(path: Path) -> Any:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return yaml.safe_load(path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
         raise ToolRegistryError("REGISTRY_NOT_FOUND", f"Registry not found: {path}") from exc
-    except json.JSONDecodeError as exc:
-        raise ToolRegistryError("REGISTRY_INVALID", f"Registry is not valid JSON/YAML: {exc}") from exc
+    except yaml.YAMLError as exc:
+        raise ToolRegistryError("REGISTRY_INVALID", f"Registry is not valid YAML: {exc}") from exc
 
 
 def _validate_registry(raw: Any) -> Registry:
@@ -166,7 +167,20 @@ def _validate_hash_field(value: Any, tool_id: str) -> None:
 def load_registry(path: str | Path | None = None) -> Registry:
     """Load and validate a BLUECAD tool registry."""
     registry_path = Path(path) if path is not None else DEFAULT_REGISTRY_PATH
-    return _validate_registry(_load_raw_registry(registry_path))
+    registry = _validate_registry(_load_raw_registry(registry_path))
+    validate_license_boundaries(registry)
+    return registry
+
+
+def validate_license_boundaries(registry: Registry) -> None:
+    """Reject in-process integrations for boundary C/D tools."""
+    for tool in registry["tools"]:
+        if tool["license"]["boundary"] in {"C", "D"} and tool["integration_mode"] == "in_process":
+            raise ToolRegistryError(
+                "LICENSE_BOUNDARY_VIOLATION",
+                "Boundary C/D tools must not use in-process integration",
+                {"tool_id": tool["id"]},
+            )
 
 
 def _find_tool(registry: Registry, tool_id: str) -> ToolEntry | None:
@@ -229,6 +243,47 @@ def run_tool(tool_id: str, args: list[str], cwd: str | Path, timeout: float, reg
     return ToolRunResult(returncode=completed.returncode, stdout=completed.stdout, stderr=completed.stderr)
 
 
+def _health_check_args(tool: ToolEntry) -> list[str]:
+    health_check = tool.get("health_check")
+    if not health_check:
+        return []
+    command = shlex.split(health_check)
+    if not command:
+        return []
+    entrypoint = str(tool["entrypoint"])
+    first = command[0]
+    if first == entrypoint or Path(first).name == Path(entrypoint).name:
+        return command[1:]
+    raise ToolRegistryError(
+        "HEALTH_CHECK_ENTRYPOINT_MISMATCH",
+        "Subprocess health_check must start with the registered entrypoint",
+        {"tool_id": tool["id"]},
+    )
+
+
+def _run_in_process_health_check(command: str) -> ToolRunResult:
+    completed = subprocess.run(  # noqa: S603 - admin-authored in-process health check, shell disabled.
+        shlex.split(command),
+        env=_MINIMAL_ENV,
+        shell=False,
+        text=True,
+        capture_output=True,
+        timeout=10,
+        check=False,
+    )
+    return ToolRunResult(returncode=completed.returncode, stdout=completed.stdout, stderr=completed.stderr)
+
+
+def _run_health_check(tool: ToolEntry, registry_path: str | Path | None) -> ToolRunResult | None:
+    health_check = tool.get("health_check")
+    if not health_check:
+        return None
+    if tool["integration_mode"] in _HASH_MODES:
+        cwd = DEFAULT_REGISTRY_PATH.parent if registry_path is None else Path(registry_path).parent
+        return run_tool(tool["id"], _health_check_args(tool), cwd, 10, registry_path)
+    return _run_in_process_health_check(health_check)
+
+
 def check_registry(registry_path: str | Path | None = None) -> tuple[int, str]:
     registry = load_registry(registry_path)
     rows = ["tool\tenabled\thash\thealth"]
@@ -241,21 +296,13 @@ def check_registry(registry_path: str | Path | None = None) -> tuple[int, str]:
                 resolved = resolve_tool(tool["id"], registry_path)
                 if resolved["integration_mode"] in _HASH_MODES:
                     hash_status = "ok"
-                if resolved.get("health_check"):
-                    completed = subprocess.run(  # noqa: S603 - admin-authored registry health check, shell disabled.
-                        shlex.split(resolved["health_check"]),
-                        env=_MINIMAL_ENV,
-                        shell=False,
-                        text=True,
-                        capture_output=True,
-                        timeout=10,
-                        check=False,
-                    )
-                    health_status = "ok" if completed.returncode == 0 else f"failed({completed.returncode})"
-                    if completed.returncode != 0:
-                        exit_code = 1
-                else:
+                health_result = _run_health_check(resolved, registry_path)
+                if health_result is None:
                     health_status = "not-configured"
+                else:
+                    health_status = "ok" if health_result.returncode == 0 else f"failed({health_result.returncode})"
+                    if health_result.returncode != 0:
+                        exit_code = 1
             except (ToolRegistryError, subprocess.TimeoutExpired, OSError) as exc:
                 exit_code = 1
                 if isinstance(exc, ToolRegistryError) and exc.code in {"TOOL_HASH_MISMATCH", "TOOL_BINARY_MISSING"}:

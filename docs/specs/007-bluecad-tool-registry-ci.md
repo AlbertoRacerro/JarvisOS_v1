@@ -109,5 +109,5 @@ updated, summary written.
 ## Implementation notes
 
 - Created the BLUECAD registry package because spec 005 had not created `backend/app/modules/bluecad/` in this branch yet.
-- The checked-in `configs/bluecad_tools.yaml` is JSON-formatted YAML so the backend can validate it without adding a YAML parser dependency. Tests use temporary fixture registries and fake executables.
+- The checked-in `configs/bluecad_tools.yaml` is ordinary YAML parsed with PyYAML and validated by the registry loader. Tests use temporary fixture registries and fake executables.
 - Shipped tool entries are disabled by default, including `build123d`, so `registry check` remains deterministic in environments where optional CAD dependencies are not installed.
