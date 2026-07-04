@@ -3,7 +3,7 @@ tools:
   - id: build123d
     kind: cad_kernel
     integration_mode: in_process
-    version_pin: "0.9.1"
+    version_pin: "0.11.1"
     license:
       spdx: Apache-2.0
       boundary: A
