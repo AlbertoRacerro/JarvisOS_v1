@@ -80,10 +80,12 @@ Verify against actual code before starting; report conflicts instead of guessing
 
 ## Design constraints
 
-- **Honest isolation statement**: current runner isolation is not OS-level
-  sandboxing; it is scoped scripts, input validation, textual+AST checks, and a
-  cleared environment. It must not be described as network-secure. Stronger
-  isolation (job objects/containers) is a future, separate decision.
+- Honest isolation statement (verbatim):
+
+  > current runner isolation is not OS-level sandboxing; it is scoped scripts,
+  > input validation, textual+AST checks, and a cleared environment. It must
+  > not be described as network-secure. Stronger isolation
+  > (job objects/containers) is a future, separate decision.
 - `batch_growth_v0` is the regression anchor. Its behavior must remain
   byte-identical from the perspective of API responses, DB rows, copied script
   bytes, SHA-256 values, input validation failures, successful result payloads,
@@ -202,6 +204,9 @@ Verify against actual code before starting; report conflicts instead of guessing
   timestamps only.
 
 ## Open questions
+
+These are maintainer-resolution questions, not implementation discretion points.
+If any question below blocks implementation, stop and report instead of guessing.
 
 - What is the exact request model shape for caller-supplied script text:
   optional `script_text` on `ModelImplementationCreate`, a nested
