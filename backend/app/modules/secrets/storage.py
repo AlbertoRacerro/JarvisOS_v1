@@ -57,5 +57,18 @@ def delete_runtime_scaleway_api_key() -> EffectiveSecret:
     return get_effective_scaleway_api_key()
 
 
+def resolve_secret_ref(secret_ref: str | None) -> EffectiveSecret:
+    """Resolve a non-persistent secret reference such as env:SCALEWAY_API_KEY."""
+    if not secret_ref:
+        return EffectiveSecret(value=None, source=NONE_SOURCE, last_updated_at=None)
+    if not secret_ref.startswith("env:"):
+        raise ValueError("Only env: secret references are supported.")
+    env_name = secret_ref.removeprefix("env:")
+    if env_name == SCALEWAY_API_KEY_ENV_VAR:
+        return get_effective_scaleway_api_key()
+    value = os.getenv(env_name)
+    return EffectiveSecret(value=value if value else None, source=ENV_SOURCE if value else NONE_SOURCE, last_updated_at=None)
+
+
 def _storage_namespace() -> str:
     return str(build_paths().data_root.resolve())

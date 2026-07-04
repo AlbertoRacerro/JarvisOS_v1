@@ -483,3 +483,44 @@ def test_local_gemma_caps_max_output_chars(monkeypatch, tmp_path) -> None:
 
     assert outcome.status == "success"
     assert captured["max_output_chars"] == 16000
+
+
+def test_provider_registry_migration_parity_for_representative_routes(monkeypatch, tmp_path) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    monkeypatch.delenv("SCALEWAY_API_KEY", raising=False)
+    monkeypatch.delenv("AI_ROUTE_CHEAP_MODEL", raising=False)
+    monkeypatch.delenv("AI_ROUTE_REASONING_MODEL", raising=False)
+    monkeypatch.delenv("SCALEWAY_MODEL", raising=False)
+    from app.modules.ai.execution import resolve_binding, run_ai_task
+
+    none_outcome = run_ai_task(user_prompt="default", route_class=None)
+    fake_outcome = run_ai_task(user_prompt="fake", route_class="local:fake")
+    cheap_binding, cheap_decision = resolve_binding("external:cheap")
+    reasoning_binding, reasoning_decision = resolve_binding("external:reasoning")
+    cheap_outcome = run_ai_task(user_prompt="cheap", route_class="external:cheap")
+    reasoning_outcome = run_ai_task(user_prompt="reason", route_class="external:reasoning")
+
+    assert none_outcome.selected_route_class == "local:fake"
+    assert none_outcome.status == "success"
+    assert none_outcome.response.provider_id == "fake"
+    assert fake_outcome.selected_route_class == "local:fake"
+    assert fake_outcome.status == "success"
+    assert fake_outcome.response.model_id == "fake-deterministic-v1"
+    assert cheap_binding.provider_id == "scaleway"
+    assert cheap_binding.model_id == "llama-3.1-8b-instruct"
+    assert cheap_binding.max_output_tokens == 512
+    assert cheap_decision.provider_id == "scaleway"
+    assert reasoning_binding.provider_id == "scaleway"
+    assert reasoning_binding.model_id == "qwen3-235b-a22b-instruct-2507"
+    assert reasoning_binding.max_output_tokens == 1024
+    assert reasoning_decision.model_id == "qwen3-235b-a22b-instruct-2507"
+    assert cheap_outcome.status == "config_error"
+    assert reasoning_outcome.status == "config_error"
+    rows = _all_ai_jobs()
+    assert [row["selected_route_class"] for row in rows] == [
+        "local:fake",
+        "local:fake",
+        "external:cheap",
+        "external:reasoning",
+    ]
+    assert [row["provider_id"] for row in rows] == ["fake", "fake", "scaleway", "scaleway"]
