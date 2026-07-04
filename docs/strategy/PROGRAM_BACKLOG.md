@@ -10,7 +10,8 @@ comes up; this table is the queue.
 Sources of binding decisions: `BLUECAD_CORE_DESIGN.md` (contracts, roadmap
 005–014, 018), `JARVISOS_PLATFORM_GAPS_PLAN.md` (kernels 015–017, 019),
 `JARVISOS_CORE_TEAM_V1.md` (roster), `BLUECAD_TOOLING_AND_LICENSING.md`
-(license invariants).
+(license invariants), `BLUECAD_CONVERSATIONAL_DESIGN_LAYER.md` (north star:
+conversational intent phase + self-extending vocabulary; slices 030–033).
 
 ## Horizon 1 — Alpha-1 (pipeline proof)
 
