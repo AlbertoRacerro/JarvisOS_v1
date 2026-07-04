@@ -1,6 +1,6 @@
 # 005 — BLUECAD CAD adapter MVP (GeometrySpec v0, build123d, Tier 0–1 validation)
 
-Status: ready
+Status: implemented (pending review)
 Depends on: none (first BLUECAD slice)
 
 ## Goal
@@ -154,3 +154,10 @@ Verify against actual code before starting; report conflicts instead of guessing
 
 Test gate green (see `AGENTS.md`), acceptance criteria met, spec status
 updated, summary written.
+
+## Implementation notes
+
+- Implemented in two stages per PR review workflow. Stage 1 added the GeometrySpec and validation-report schemas, spec loading/validation/canonicalization, and golden analytic fixtures.
+- Stage 2 added the BLUECAD adapter modules for primitive builders, port-conformity assembly checks, artifact export, Tier 0/Tier 1 validation reports, worker-subprocess build orchestration, and CLI entry point.
+- Added the pre-authorized runtime dependency `build123d==0.11.1`; kernel-dependent tests are marked `bluecad_kernel` and skip where build123d is unavailable.
+- No BlueRev formulas, AI/LLM calls, frontend changes, Gmsh/CalculiX integrations, sandboxed runner changes, or direct provider calls were added.

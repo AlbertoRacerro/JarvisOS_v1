@@ -24,6 +24,12 @@ where authority and data live, not which models do the work.
    and the data root are separate; never write runtime data into the repo.
 8. **AI/agent outputs are proposals.** Nothing model-generated becomes a canonical
    record without explicit user or deterministic-policy promotion.
+9. **No fabricated results.** Never stub, hard-code, or fake an output — a
+   validator verdict, exported geometry, a metric, a test's expected value — to
+   satisfy an acceptance criterion or turn CI green. If you cannot implement
+   something, stop and report it. An undisclosed placeholder or simplification
+   that makes checks pass is treated as a violation of this file, not as
+   progress.
 
 If a spec appears to require violating one of these, stop and report instead of
 implementing.
@@ -134,6 +140,13 @@ never an approval — it carries no merge authority.
 
 Never merge your own PR. Never enable auto-merge. Open the PR against `master`
 and stop; fill in the PR template completely.
+
+**Reviewer-owned conformance tests:** files matching
+`backend/tests/**/test_*_conformance.py` are written by the reviewing tier,
+never by the implementer. They measure produced artifacts (exported files,
+report verdicts, hashes) instead of trusting implementation self-reports.
+Implementation PRs must not add, modify, or delete these files; if one blocks
+you and you believe it is wrong, stop and report — do not edit it.
 
 ## Definition of done
 
