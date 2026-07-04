@@ -1,4 +1,4 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 export type HealthResponse = {
   status: string;
@@ -471,4 +471,73 @@ export type SmokeConsoleResponse = {
 
 export function runAISmokeConsole(payload: Record<string, unknown>): Promise<SmokeConsoleResponse> {
   return postJson<SmokeConsoleResponse>("/ai/smoke-console/run", payload);
+}
+
+
+export type BluecadAttempt = {
+  id: string;
+  candidate_id: string;
+  attempt_no: number;
+  route_class: string;
+  proposal_ai_job_id?: string | null;
+  proposal_outcome: string;
+  build_outcome?: string | null;
+  validation_verdict?: string | null;
+  spec_artifact_id?: string | null;
+  report_artifact_id?: string | null;
+  manifest_artifact_id?: string | null;
+  started_at: string;
+  finished_at?: string | null;
+  error_detail_json?: string | null;
+};
+
+export type BluecadCandidate = {
+  id: string;
+  workspace_id: string;
+  brief_text: string;
+  brief_digest: string;
+  status: string;
+  parked_reason?: string | null;
+  spec_artifact_id?: string | null;
+  glb_artifact_id?: string | null;
+  report_artifact_id?: string | null;
+  promoted_decision_id?: string | null;
+  origin: string;
+  parent_candidate_id?: string | null;
+  loop_config_json: string;
+  created_at: string;
+  updated_at: string;
+  notes?: string | null;
+  attempts: BluecadAttempt[];
+};
+
+export type BluecadValidationCheck = {
+  id?: string;
+  check_id?: string;
+  tier?: string | number;
+  status?: string;
+  verdict?: string;
+  detail?: string;
+  message?: string;
+  hint?: string | null;
+};
+
+export function listBluecadCandidates(workspaceId: string): Promise<BluecadCandidate[]> {
+  return getJson<BluecadCandidate[]>(`/workspaces/${workspaceId}/bluecad/candidates`);
+}
+
+export function createBluecadCandidate(workspaceId: string, briefText: string): Promise<BluecadCandidate> {
+  return postJson<BluecadCandidate>(`/workspaces/${workspaceId}/bluecad/candidates`, { brief_text: briefText });
+}
+
+export function bluecadArtifactContentUrl(workspaceId: string, artifactId: string): string {
+  return `${API_BASE_URL}/workspaces/${workspaceId}/bluecad/artifacts/${artifactId}/content`;
+}
+
+export async function getBluecadArtifactJson<T>(workspaceId: string, artifactId: string): Promise<T> {
+  const response = await fetch(bluecadArtifactContentUrl(workspaceId, artifactId));
+  if (!response.ok) {
+    throw new Error(`Request failed with ${response.status}`);
+  }
+  return response.json() as Promise<T>;
 }

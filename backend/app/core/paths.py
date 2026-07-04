@@ -47,3 +47,8 @@ def ensure_data_directories(paths: JarvisPaths | None = None) -> JarvisPaths:
     ]:
         directory.mkdir(parents=True, exist_ok=True)
     return resolved
+
+
+def resolve_paths(settings: Settings | None = None) -> JarvisPaths:
+    """Compatibility alias for callers that need the resolved data-root paths."""
+    return build_paths(settings)
