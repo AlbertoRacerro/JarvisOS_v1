@@ -1,6 +1,6 @@
 # 006 — BLUECAD workbench: 3D viewer + validation report + attempt history
 
-Status: ready (after 005 and 010 are merged)
+Status: implemented (pending review)
 Depends on: 005, 010
 
 ## Goal
@@ -95,3 +95,10 @@ Verify against actual code before starting; report conflicts instead of guessing
 
 Test gate green (see `AGENTS.md`), acceptance criteria met, spec status
 updated, summary written.
+
+## Implementation notes
+
+- Implemented the scoped BLUECAD artifact content endpoint with 404-only denial for unknown, non-BLUECAD, missing, and outside-data-root artifacts.
+- Added the BLUECAD workbench page with workspace candidate list, manual refresh, minimal new-candidate form, GLB viewer, validation checks table, and attempt history table.
+- Added exact-pinned `three` and `@types/three` dependency declarations for the viewer. Package installation/build could not be completed in this container because outbound npm registry access returned HTTP 403 through the configured proxy.
+- Deviations from spec: none intended.

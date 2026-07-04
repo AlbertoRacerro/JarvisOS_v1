@@ -39,6 +39,13 @@ function Layout({ activePage, children, onNavigate }: LayoutProps) {
             Domain Foundation
           </button>
           <button
+            className={activePage === "bluecad" ? "nav-button active" : "nav-button"}
+            type="button"
+            onClick={() => onNavigate("bluecad")}
+          >
+            BLUECAD
+          </button>
+          <button
             className={activePage === "ai" ? "nav-button active" : "nav-button"}
             type="button"
             onClick={() => onNavigate("ai")}
