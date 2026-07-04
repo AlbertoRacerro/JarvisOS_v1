@@ -273,6 +273,12 @@ def main() -> None:
     label = env("FRONTIER_LABEL", "frontier-review")
     round_limit = int(env("ROUND_LIMIT", "3"))
     diff_cap = int(env("CHEAP_REVIEW_DIFF_CAP", "60000"))
+    # Frontier-fallback runs (e.g. GLM via z.ai when the Claude review cannot
+    # run) reuse this script as a terminal reviewer: they only post an advisory
+    # comment and must NOT touch the frontier-review label. Defaults preserve
+    # the cheap-tier behavior.
+    manage_label = env("REVIEW_MANAGE_LABEL", "true").lower() != "false"
+    review_title = env("REVIEW_TITLE", "Cheap-tier review")
 
     event = json.loads(Path(env("GITHUB_EVENT_PATH", required=True)).read_text())
     pr = event["pull_request"]["number"]
@@ -281,7 +287,8 @@ def main() -> None:
 
     # Remove any stale approval label first, before anything can fail: a new push
     # must never leave a previous NO_FURTHER_CHANGES label on a changed diff.
-    remove_label(repo, pr, gh_token, label)
+    if manage_label:
+        remove_label(repo, pr, gh_token, label)
 
     marker = COMMENT_MARKER.format(provider=provider)
     comment_id, prior_rounds = find_sticky(repo, pr, gh_token, marker)
@@ -313,7 +320,7 @@ def main() -> None:
         detail = f"HTTP {exc.code}" if isinstance(exc, urllib.error.HTTPError) else type(exc).__name__
         body = (
             f"{marker}\n<!-- round={prior_rounds} -->\n"
-            f"### Cheap-tier review ({provider}) — PROVIDER ERROR\n\n"
+            f"### {review_title} ({provider}) — PROVIDER ERROR\n\n"
             f"The {provider} API call failed ({detail}). Review was not produced. "
             "Apply the `frontier-review` label manually to proceed."
         )
@@ -347,6 +354,12 @@ def main() -> None:
             "\n\n@codex please fix the review findings above on this branch, then wait "
             "for re-review."
         )
+    elif not manage_label:
+        header = f"round {this_round}/{round_limit}"
+        footer = (
+            "\n\n_Frontier-fallback tier is satisfied. This is advisory, not an "
+            "approval; the maintainer merges._"
+        )
     else:
         header = f"round {this_round}/{round_limit}"
         footer = (
@@ -357,11 +370,11 @@ def main() -> None:
     note = ("\n\n" + "\n".join(notes)) if notes else ""
     body = (
         f"{marker}\n<!-- round={this_round} -->\n"
-        f"### Cheap-tier review ({provider}) — {header}\n\n"
+        f"### {review_title} ({provider}) — {header}\n\n"
         f"{review}{note}{footer}"
     )
     upsert_comment(repo, pr, gh_token, comment_id, body)
-    if approved and not truncated and not limit_reached:
+    if manage_label and approved and not truncated and not limit_reached:
         add_label(repo, pr, gh_token, label)
 
 
