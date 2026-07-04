@@ -12,14 +12,15 @@ from __future__ import annotations
 import json
 from typing import Any
 
-PROMPT_VERSION = "bluecad_ai_loop_v1"
+PROMPT_VERSION = "bluecad_ai_loop_v2"
 
 SYSTEM_TEMPLATE = """You output exactly one BLUECAD GeometrySpec v0 JSON object and nothing else.
 No prose, no explanation. A single JSON object, optionally wrapped in one ```json fenced block.
 
 UNITS: millimetres and radians. "OD 10 cm" means outer_d 100. "length 3 m" means length 3000.
 
-STRUCTURE (all field names are exact; no extra fields are allowed anywhere):
+STRUCTURE (all field names are exact; NO extra fields are allowed anywhere -- adding any
+field not listed here makes the output invalid):
 {
   "spec_version": "bluecad_geometry_spec_v0_1",   // exactly this string, required
   "name": "<short name>",                          // optional
@@ -28,15 +29,37 @@ STRUCTURE (all field names are exact; no extra fields are allowed anywhere):
   "declared": { ... }                              // OPTIONAL -- omit unless you are confident
 }
 
-PART KINDS (each part: {"part_id": "<unique id>", "kind": "...", "params": {...}, "frame": {...}}):
-- tube_run  params: {"outer_d": >0, "wall_t": >0 (< outer_d/2), "length": >0}
-- bend      params: {"outer_d": >0, "wall_t": >0 (< outer_d/2), "bend_radius": >0, "angle": >0 radians}
-- joint     params: {"joint_type": "socket", "outer_d": >0, "wall_t": >0, "socket_len": >0}
+PART KINDS (each part: {"part_id": "<unique id>", "kind": "...", "params": {...}, "frame": {...}}).
+Use ONLY these kinds and ONLY the params listed for each; no other kinds or params exist:
+- tube_run       params: {"outer_d": >0, "wall_t": >0 (< outer_d/2), "length": >0}
+                 ports: port_a, port_b
+- bend           params: {"outer_d": >0, "wall_t": >0 (< outer_d/2), "bend_radius": >0, "angle": >0 rad}
+                 ports: port_a, port_b
+- joint          params: {"joint_type": "socket", "outer_d": >0, "wall_t": >0, "socket_len": >0}
+                 ports: port_a, port_b
+- manifold       params: {"outer_d_main": >0, "wall_t": >0, "length": >0, "n_out": 1..12 int,
+                 "out_d": >0, "out_wall_t": >0, "spacing": >0}   ports: in_a, in_b, out_1..out_n
+- float          params: {"outer_d": >0, "length": >0, "n_mounts": 1..12 int, "pad_d": >0}
+                 ports: mount_1..mount_n
+- anchor_mount   params: {"base_w": >0, "base_l": >0, "base_t": >0, "eye_d": >0}   port: mount_a
+- harvest_module params: {"outer_d": >0, "height": >0, "wall_t": >0, "port_d": >0}
+                 ports: in_a, out_a, drain_a
 "frame" is optional: {"origin": [x,y,z], "direction": [x,y,z]} (a non-zero direction). Omit for defaults.
 
-PORTS & CONNECTIONS: every part exposes ports named "port_a" and "port_b".
-A connection joins two ports: {"from": "<part_id>.port_b", "to": "<other_id>.port_a"}.
-Connected tube ports must have matching outer_d and wall_t. Do NOT specify transforms -- placement is computed.
+PORTS & CONNECTIONS: a connection joins two ports:
+{"from": "<part_id>.<port>", "to": "<other_id>.<port>"}.
+Two connected TUBE ports (port_a/port_b/in_*/out_*) must have matching outer_d and wall_t.
+PAD ports (mount_*) connect only to other pad ports with matching pad_d.
+Do NOT specify transforms -- placement is computed from the connections.
+
+DEGRADE GRACEFULLY -- this is critical:
+- The brief may ask for things this vocabulary cannot express: materials, colours,
+  "transparent", surface finish, motion, "slides along", kinematics, sensors, labels.
+  IGNORE every non-geometric attribute. Model only the static shape with the kinds above.
+- If a requested feature has no matching kind, approximate it with the closest available
+  kind, or omit that part. NEVER invent a new kind or a new param name to fit the words --
+  an invented field is rejected and your whole output fails.
+- When unsure, produce the simplest valid geometry that captures the load-bearing intent.
 
 DECLARED (optional): {"total_volume_mm3": {"value": <num>, "rel_tol": <num> 0..1},
 "bbox_mm": {"min": [x,y,z], "max": [x,y,z], "abs_tol": <num>}, "min_wall_t": <num>}.
