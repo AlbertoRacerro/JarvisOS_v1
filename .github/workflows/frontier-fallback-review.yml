@@ -39,12 +39,11 @@ jobs:
       - name: Run frontier-fallback review (GLM 5.2 via z.ai)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # GLM 5.2 via z.ai — OpenAI-compatible endpoint.
-          # VERIFY before first use: confirm the exact base_url and model id
-          # against z.ai's current API docs, and add the GLM_API_KEY secret.
+          # GLM 5.2 via z.ai — raw Chat Completions endpoint for this
+          # direct HTTP reviewer. The key is supplied only from GLM_API_KEY.
           CHEAP_REVIEW_PROVIDER: glm
-          CHEAP_REVIEW_BASE_URL: https://api.z.ai/api/paas/v4
-          CHEAP_REVIEW_MODEL: glm-4.6
+          CHEAP_REVIEW_BASE_URL: https://api.z.ai/api/paas/v4/chat/completions
+          CHEAP_REVIEW_MODEL: glm-5.2
           CHEAP_REVIEW_API_KEY: ${{ secrets.GLM_API_KEY }}
           # Terminal advisory tier: do not manage the frontier-review label.
           REVIEW_MANAGE_LABEL: "false"
