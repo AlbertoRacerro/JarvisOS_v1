@@ -1,0 +1,54 @@
+name: Frontier Fallback Review
+
+# Manual fallback for the frontier review when the Claude review cannot run
+# (e.g. weekly Claude credits exhausted). Apply the `frontier-review-fallback`
+# label to a PR to run a substantive review via GLM 5.2 (z.ai) using the same
+# generic OpenAI-compatible reviewer as the cheap tier. This tier is TERMINAL
+# and ADVISORY: it does not touch the `frontier-review` label and never merges.
+# Merge authority remains CI plus the human maintainer (AGENTS.md).
+
+on:
+  pull_request:
+    types: [labeled]
+
+concurrency:
+  group: frontier-fallback-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: ${{ github.event.label.name == 'frontier-review-fallback' && !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Self-test review helpers (offline)
+        run: python scripts/cheap_review.py --self-test
+
+      - name: Run frontier-fallback review (GLM 5.2 via z.ai)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GLM 5.2 via z.ai — OpenAI-compatible endpoint.
+          # VERIFY before first use: confirm the exact base_url and model id
+          # against z.ai's current API docs, and add the GLM_API_KEY secret.
+          CHEAP_REVIEW_PROVIDER: glm
+          CHEAP_REVIEW_BASE_URL: https://api.z.ai/api/paas/v4
+          CHEAP_REVIEW_MODEL: glm-4.6
+          CHEAP_REVIEW_API_KEY: ${{ secrets.GLM_API_KEY }}
+          # Terminal advisory tier: do not manage the frontier-review label.
+          REVIEW_MANAGE_LABEL: "false"
+          REVIEW_TITLE: "Frontier-fallback review"
+          ROUND_LIMIT: "3"
+          CHEAP_REVIEW_DIFF_CAP: "60000"
+        run: python scripts/cheap_review.py

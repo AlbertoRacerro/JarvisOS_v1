@@ -33,5 +33,12 @@ Review (human + Claude code review) happens on the diff before merge. A spec is
 | 003 | ESCALATE-CONFIRM-0: external escalation proposal + confirm | ready |
 | 004 | Tiered PR review: cheap-tier (GLM/DeepSeek) loop + A/B, frontier pre-merge only | ready |
 | 005 | BLUECAD CAD adapter MVP (GeometrySpec v0, build123d, Tier 0–1 validation) | ready |
+| 005b | BLUECAD remaining part-kind builders (parametric stubs) | ready (after 005) |
+| 006 | BLUECAD workbench: 3D viewer + validation report + attempt history | ready (after 005, 010) |
+| 006b | BLUECAD parametric variants (sliders → deterministic rebuild) | ready (after 006) |
+| 007 | BLUECAD tool registry, health checks, CI license-boundary gate | ready (independent) |
+| 008 | BLUECAD Gmsh mesh adapter (subprocess, physical groups, quality gate) | ready (after 005, 007) |
+| 009 | BLUECAD CalculiX FEM adapter (static v0) + ResultSummary + Tier 3 | ready (after 008) |
 | 010 | BLUECAD AI loop v0 (L1 generate → build → validate → repair) | ready (after 005) |
 | 015 | PROVIDER-GW-1: provider gateway v1 | ready |
+| 016 | RUNNER-EXT-1: scoped runner extension for BLUECAD L2 | ready |

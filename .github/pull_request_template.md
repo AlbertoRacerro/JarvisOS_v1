@@ -10,6 +10,11 @@
 
 <"None", or list each out-of-scope file with a one-line justification>
 
+## Deviations from spec
+
+<"None", or list EVERY simplification, placeholder, partial implementation, or
+unmet acceptance criterion — undisclosed deviations violate AGENTS.md invariant 9>
+
 ## Test evidence
 
 - [ ] `python -m pytest -q` green (paste tail of output below)
