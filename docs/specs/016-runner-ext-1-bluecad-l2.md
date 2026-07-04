@@ -34,9 +34,8 @@ In scope:
   artifact, and link it from the model version as the existing runner does.
 - Preserve `batch_growth_v0` registration semantics exactly: it still rejects
   arbitrary script text and still copies/uses the bundled batch-growth script.
-- For `bluecad_l2_v0` job creation and execution, validate `input.json` as:
-  - a GeometrySpec v0 payload accepted by the spec-005 schema/module; and
-  - declared ports required by the L2 contract.
+- For `bluecad_l2_v0` job creation and execution, validate `input.json` as a
+  GeometrySpec v0 payload accepted by the spec-005 schema/module.
 - For `bluecad_l2_v0` successful output, require the spec-005 artifact set:
   `model.step`, `model.stl`, `model.glb`, `manifest.json`, plus `result.json`.
   `result.json` must declare these artifacts so existing run-artifact
@@ -133,8 +132,7 @@ Verify against actual code before starting; report conflicts instead of guessing
     data root.
 - Input contract for `bluecad_l2_v0` successful job creation:
   - input set is accepted by GeometrySpec v0 validation from spec 005;
-  - declared ports are present in the shape expected by the L2 runner contract;
-  - invalid GeometrySpec/port payloads fail before a runner job is queued.
+  - invalid GeometrySpec payloads fail before a runner job is queued.
 - `SANDBOX_VIOLATION` must be distinguishable from normal script runtime
   failure, validation failure, timeout, and artifact validation failure in
   runner responses/logs so spec 012 can park candidates without retrying.
@@ -152,11 +150,10 @@ Verify against actual code before starting; report conflicts instead of guessing
    rejects caller script text exactly as before; a golden regression test proves
    the copied bytes, SHA-256, returned fields, and relevant DB rows match the
    pre-change baseline.
-3. Creating a `bluecad_l2_v0` runner job with a valid GeometrySpec v0 + declared
-   ports queues a job and writes `input.json` in the existing run-root layout.
-4. Creating a `bluecad_l2_v0` runner job with invalid GeometrySpec data or
-   missing/invalid declared ports fails before queueing a job and does not write
-   run artifacts.
+3. Creating a `bluecad_l2_v0` runner job with a valid GeometrySpec v0 queues a
+   job and writes `input.json` in the existing run-root layout.
+4. Creating a `bluecad_l2_v0` runner job with invalid GeometrySpec data fails
+   before queueing a job and does not write run artifacts.
 5. Running a safe `bluecad_l2_v0` script that imports only allowlisted modules
    and writes `model.step`, `model.stl`, `model.glb`, `manifest.json`, and
    `result.json` completes successfully and persists run artifacts with the
@@ -183,8 +180,8 @@ Verify against actual code before starting; report conflicts instead of guessing
   - `bluecad_l2_v0` stores caller script text as a hashed artifact;
   - `batch_growth_v0` golden registration behavior remains byte-identical.
 - Runner job creation tests:
-  - valid GeometrySpec v0 + declared ports queues successfully;
-  - invalid GeometrySpec and missing ports fail before queueing.
+  - valid GeometrySpec v0 queues successfully;
+  - invalid GeometrySpec fails before queueing.
 - Runner execution tests:
   - safe allowlisted L2 script succeeds and registers STEP/STL/GLB/manifest
     artifacts via `result.json`;
@@ -203,37 +200,7 @@ Verify against actual code before starting; report conflicts instead of guessing
   payloads and relevant persisted values, excluding nondeterministic ids and
   timestamps only.
 
-## Open questions
-
-These are maintainer-resolution questions, not implementation discretion points.
-If any question below blocks implementation, stop and report instead of guessing.
-
-- What is the exact request model shape for caller-supplied script text:
-  optional `script_text` on `ModelImplementationCreate`, a nested
-  implementation payload, or a separate endpoint? The implementation spec must
-  follow existing API style rather than decide this ad hoc.
-- What exact shape represents "declared ports" in `input.json` for L2: a
-  top-level sibling beside the GeometrySpec, a field inside GeometrySpec v0, or
-  a wrapper object containing both? This spec requires declared ports but does
-  not choose the schema.
-- Should required CAD artifact filenames be strictly `model.step`, `model.stl`,
-  `model.glb`, and `manifest.json`, or should roles in `result.json` be the
-  canonical contract if spec 005 emits different names?
-- Should `pathlib` remain allowed for read-only path object construction in L2
-  scripts, or should all file paths be passed as plain CLI arguments and kept
-  out of the allowlist? The allowlist above includes `pathlib`; revisit before
-  implementation if that is considered too broad.
-- Which runner response field should carry `SANDBOX_VIOLATION` so spec 012 can
-  reliably park candidates: existing `error_type`, structured log entry,
-  `result.json` substitute, or a new additive field?
-- Does the current environment used by CI include `build123d` from spec 005 for
-  runner tests, or should L2 execution tests use a minimal script that writes
-  fixture CAD files without importing build123d while policy tests cover the
-  import allowlist?
-
 ## Definition of done
 
 Test gate green (see `AGENTS.md`), acceptance criteria met, spec status
-updated, summary written. Open questions above must be resolved by the
-maintainer before implementation if they prove blocking; implementers should
-report conflicts instead of guessing.
+updated, summary written.
