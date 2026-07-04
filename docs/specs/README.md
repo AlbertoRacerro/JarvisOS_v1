@@ -40,4 +40,5 @@ Review (human + Claude code review) happens on the diff before merge. A spec is
 | 008 | BLUECAD Gmsh mesh adapter (subprocess, physical groups, quality gate) | ready (after 005, 007) |
 | 009 | BLUECAD CalculiX FEM adapter (static v0) + ResultSummary + Tier 3 | ready (after 008) |
 | 010 | BLUECAD AI loop v0 (L1 generate → build → validate → repair) | ready (after 005) |
+| 015 | PROVIDER-GW-1: provider gateway v1 | ready |
 | 016 | RUNNER-EXT-1: scoped runner extension for BLUECAD L2 | ready |
