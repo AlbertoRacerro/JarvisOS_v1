@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from pydantic import BaseModel, Field
+
 ErrorCode = Literal["SPEC_INVALID", "PORT_MISMATCH", "KERNEL_ERROR", "EXPORT_ERROR", "TIMEOUT"]
 Verdict = Literal["pass", "fail", "error"]
 
@@ -128,3 +130,60 @@ def _transform_bbox(bbox: tuple[tuple[float, float, float], tuple[float, float, 
     ]
     transformed = [_transform_point(corner, rotation_z_rad, translation) for corner in corners]
     return (tuple(min(point[axis] for point in transformed) for axis in range(3)), tuple(max(point[axis] for point in transformed) for axis in range(3)))
+
+# Spec 010 AI loop ledger/API models.
+
+CandidateStatus = Literal["generating", "validating", "valid", "parked", "archived"]
+ParkedReason = Literal["attempts_exhausted", "budget_blocked", "policy_blocked", "malformed_repeated", "user_cancelled"]
+CandidateOrigin = Literal["ai", "parametric_variant"]
+ProposalOutcome = Literal["ok", "malformed", "provider_error", "blocked"]
+ValidationVerdict = Literal["pass", "fail"]
+
+
+class BluecadLoopConfig(BaseModel):
+    max_attempts_per_tier: int = Field(default=3, ge=1, le=10)
+    tier_ladder: list[str] = Field(default_factory=lambda: ["external:cheap", "external:reasoning"])
+    max_output_tokens: int = Field(default=4000, ge=128, le=32000)
+    per_call_timeout_s: float = Field(default=20.0, gt=0, le=120)
+
+
+class BluecadCandidateCreate(BaseModel):
+    brief_text: str = Field(min_length=1)
+    loop_config: BluecadLoopConfig | None = None
+
+
+class BluecadAttemptRead(BaseModel):
+    id: str
+    candidate_id: str
+    attempt_no: int
+    route_class: str
+    proposal_ai_job_id: str | None = None
+    proposal_outcome: ProposalOutcome
+    build_outcome: str | None = None
+    validation_verdict: ValidationVerdict | None = None
+    spec_artifact_id: str | None = None
+    report_artifact_id: str | None = None
+    manifest_artifact_id: str | None = None
+    started_at: str
+    finished_at: str | None = None
+    error_detail_json: str | None = None
+
+
+class BluecadCandidateRead(BaseModel):
+    id: str
+    workspace_id: str
+    brief_text: str
+    brief_digest: str
+    status: CandidateStatus
+    parked_reason: ParkedReason | None = None
+    spec_artifact_id: str | None = None
+    glb_artifact_id: str | None = None
+    report_artifact_id: str | None = None
+    promoted_decision_id: str | None = None
+    origin: CandidateOrigin
+    parent_candidate_id: str | None = None
+    loop_config_json: str
+    created_at: str
+    updated_at: str
+    notes: str | None = None
+    attempts: list[BluecadAttemptRead] = Field(default_factory=list)

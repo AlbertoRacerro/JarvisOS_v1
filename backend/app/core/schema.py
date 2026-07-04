@@ -303,6 +303,57 @@ SCHEMA_STATEMENTS = [
         error_type TEXT
     )
     """,
+
+    """
+    CREATE TABLE IF NOT EXISTS bluecad_candidates (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        brief_text TEXT NOT NULL,
+        brief_digest TEXT NOT NULL,
+        status TEXT NOT NULL,
+        parked_reason TEXT,
+        spec_artifact_id TEXT,
+        glb_artifact_id TEXT,
+        report_artifact_id TEXT,
+        promoted_decision_id TEXT,
+        origin TEXT NOT NULL DEFAULT 'ai',
+        parent_candidate_id TEXT,
+        loop_config_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        notes TEXT,
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id),
+        FOREIGN KEY (spec_artifact_id) REFERENCES artifacts(id),
+        FOREIGN KEY (glb_artifact_id) REFERENCES artifacts(id),
+        FOREIGN KEY (report_artifact_id) REFERENCES artifacts(id),
+        FOREIGN KEY (promoted_decision_id) REFERENCES decisions(id),
+        FOREIGN KEY (parent_candidate_id) REFERENCES bluecad_candidates(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS bluecad_attempts (
+        id TEXT PRIMARY KEY,
+        candidate_id TEXT NOT NULL,
+        attempt_no INTEGER NOT NULL,
+        route_class TEXT NOT NULL,
+        proposal_ai_job_id TEXT,
+        proposal_outcome TEXT NOT NULL,
+        build_outcome TEXT,
+        validation_verdict TEXT,
+        spec_artifact_id TEXT,
+        report_artifact_id TEXT,
+        manifest_artifact_id TEXT,
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        error_detail_json TEXT,
+        FOREIGN KEY (candidate_id) REFERENCES bluecad_candidates(id),
+        FOREIGN KEY (proposal_ai_job_id) REFERENCES ai_jobs(id),
+        FOREIGN KEY (spec_artifact_id) REFERENCES artifacts(id),
+        FOREIGN KEY (report_artifact_id) REFERENCES artifacts(id),
+        FOREIGN KEY (manifest_artifact_id) REFERENCES artifacts(id),
+        UNIQUE(candidate_id, attempt_no)
+    )
+    """,
     """
     CREATE TABLE IF NOT EXISTS ai_settings (
         id TEXT PRIMARY KEY,
@@ -365,4 +416,6 @@ SCHEMA_INDEX_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_simulation_runs_workspace_status ON simulation_runs(workspace_id, status)",
     "CREATE INDEX IF NOT EXISTS idx_runner_jobs_workspace_status ON runner_jobs(workspace_id, status)",
     "CREATE INDEX IF NOT EXISTS idx_model_versions_workspace_model_spec ON model_versions(workspace_id, model_spec_id)",
+    "CREATE INDEX IF NOT EXISTS idx_bluecad_candidates_workspace_created ON bluecad_candidates(workspace_id, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_bluecad_attempts_candidate_attempt ON bluecad_attempts(candidate_id, attempt_no)",
 ]
