@@ -11,7 +11,10 @@ Sources of binding decisions: `BLUECAD_CORE_DESIGN.md` (contracts, roadmap
 005–014, 018), `JARVISOS_PLATFORM_GAPS_PLAN.md` (kernels 015–017, 019),
 `JARVISOS_CORE_TEAM_V1.md` (roster), `BLUECAD_TOOLING_AND_LICENSING.md`
 (license invariants), `BLUECAD_CONVERSATIONAL_DESIGN_LAYER.md` (north star:
-conversational intent phase + self-extending vocabulary; slices 030–033).
+conversational intent phase + self-extending vocabulary; slices 030–033),
+`JARVISOS_KNOWLEDGE_GRAPH_NORTHSTAR.md` (PKG-1: persistent knowledge graph —
+deferred, trigger-gated; domain/world-model track first, code-graph track
+only once an internal code-navigating agent exists).
 
 ## Horizon 1 — Alpha-1 (pipeline proof)
 
