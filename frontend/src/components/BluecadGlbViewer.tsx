@@ -15,12 +15,20 @@ function BluecadGlbViewer({ artifactUrl }: BluecadGlbViewerProps) {
     const mount = mountRef.current;
     if (!mount) return undefined;
 
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+    } catch (error) {
+      console.error(error);
+      setMessage("Unable to start the 3D viewer in this browser.");
+      return undefined;
+    }
+
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0xf8fafc);
     const camera = new THREE.PerspectiveCamera(45, mount.clientWidth / Math.max(mount.clientHeight, 1), 0.1, 10000);
     camera.position.set(160, 120, 160);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(mount.clientWidth, mount.clientHeight);
     mount.appendChild(renderer.domElement);
@@ -81,7 +89,9 @@ function BluecadGlbViewer({ artifactUrl }: BluecadGlbViewerProps) {
       window.removeEventListener("resize", resize);
       controls.dispose();
       renderer.dispose();
-      mount.removeChild(renderer.domElement);
+      if (renderer.domElement.parentNode === mount) {
+        mount.removeChild(renderer.domElement);
+      }
     };
   }, [artifactUrl]);
 

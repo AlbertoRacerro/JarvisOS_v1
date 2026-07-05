@@ -48,6 +48,7 @@ jobs:
           # Terminal advisory tier: do not manage the frontier-review label.
           REVIEW_MANAGE_LABEL: "false"
           REVIEW_TITLE: "Frontier-fallback review"
+          REVIEW_ROLE: "frontier-fallback"
           ROUND_LIMIT: "3"
           CHEAP_REVIEW_DIFF_CAP: "60000"
         run: python scripts/cheap_review.py

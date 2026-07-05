@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import Layout from "./components/Layout";
+import PageErrorBoundary from "./components/PageErrorBoundary";
 import AIDraft from "./pages/AIDraft";
 import BlueCAD from "./pages/BlueCAD";
 import Dashboard from "./pages/Dashboard";
@@ -15,12 +16,14 @@ function App() {
 
   return (
     <Layout activePage={page} onNavigate={setPage}>
-      {page === "dashboard" && <Dashboard />}
-      {page === "foundation" && <DomainFoundation />}
-      {page === "bluecad" && <BlueCAD />}
-      {page === "ai" && <AIDraft />}
-      {page === "system" && <SystemStatus />}
-      {import.meta.env.DEV && page === "devlocalchat" && <DevLocalChat />}
+      <PageErrorBoundary key={page}>
+        {page === "dashboard" && <Dashboard />}
+        {page === "foundation" && <DomainFoundation />}
+        {page === "bluecad" && <BlueCAD />}
+        {page === "ai" && <AIDraft />}
+        {page === "system" && <SystemStatus />}
+        {import.meta.env.DEV && page === "devlocalchat" && <DevLocalChat />}
+      </PageErrorBoundary>
     </Layout>
   );
 }
