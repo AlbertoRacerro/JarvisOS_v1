@@ -39,6 +39,7 @@ _HASH_MODES = {"subprocess", "container"}
 _MINIMAL_ENV = {
     "PATH": os.environ.get("PATH", ""),
     "PYTHONIOENCODING": "utf-8",
+    "OMP_NUM_THREADS": "1",
 }
 
 

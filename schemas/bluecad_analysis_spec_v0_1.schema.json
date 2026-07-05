@@ -4,31 +4,207 @@
   "title": "BLUECAD AnalysisSpec v0.1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "analysis_id", "analysis_type", "geometry", "material", "bcs", "loads", "mesh", "pass_criteria"],
+  "required": [
+    "schema_version",
+    "analysis_id",
+    "analysis_type",
+    "geometry",
+    "material",
+    "bcs",
+    "loads",
+    "mesh",
+    "pass_criteria"
+  ],
   "properties": {
-    "schema_version": {"const": "bluecad_analysis_spec_v0_1"},
-    "analysis_id": {"type": "string", "minLength": 1},
-    "analysis_type": {"enum": ["static", "modal", "thermal", "cfd_external_flow", "cfd_internal_flow"]},
+    "schema_version": {
+      "const": "bluecad_analysis_spec_v0_1"
+    },
+    "analysis_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "analysis_type": {
+      "enum": [
+        "static"
+      ]
+    },
     "geometry": {
-      "type": "object", "additionalProperties": false, "required": ["step_path", "manifest_path"],
-      "properties": {"step_path": {"type": "string", "minLength": 1}, "manifest_path": {"type": "string", "minLength": 1}}
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "step_path",
+        "manifest_path"
+      ],
+      "properties": {
+        "step_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "manifest_path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     },
     "material": {
-      "type": "object", "additionalProperties": false, "required": ["name", "E", "nu", "rho", "yield_strength"],
-      "properties": {"name": {"type": "string"}, "E": {"type": "number", "exclusiveMinimum": 0}, "nu": {"type": "number"}, "rho": {"type": "number", "exclusiveMinimum": 0}, "yield_strength": {"type": "number", "exclusiveMinimum": 0}}
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "E",
+        "nu",
+        "rho",
+        "yield_strength"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "E": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "nu": {
+          "type": "number"
+        },
+        "rho": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "yield_strength": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "description": "Static v0 material. Units are BLUECAD mm/kg/s with force in N and stress in MPa; no adapter unit conversion is performed."
     },
-    "bcs": {"type": "array", "items": {"$ref": "#/$defs/port_condition"}},
-    "loads": {"type": "array", "items": {"$ref": "#/$defs/port_condition"}},
+    "bcs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "port_label",
+          "kind"
+        ],
+        "properties": {
+          "port_label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "const": "fixed"
+          }
+        }
+      }
+    },
+    "loads": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "port_label",
+          "type"
+        ],
+        "properties": {
+          "port_label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": {
+            "enum": [
+              "pressure",
+              "force_total"
+            ]
+          },
+          "force": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "number"
+            }
+          },
+          "vector_n": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "number"
+            }
+          },
+          "pressure": {
+            "type": "number"
+          }
+        }
+      }
+    },
     "mesh": {
-      "type": "object", "additionalProperties": false, "required": ["target_size"],
-      "properties": {"target_size": {"type": "number", "exclusiveMinimum": 0}, "refinements": {"type": "object", "additionalProperties": {"type": "number", "exclusiveMinimum": 0}}}
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_size"
+      ],
+      "properties": {
+        "target_size": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "refinements": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        },
+        "quality": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "min_element_quality": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        }
+      }
     },
-    "pass_criteria": {"type": "object"}
-  },
-  "$defs": {
-    "port_condition": {
-      "type": "object", "additionalProperties": true, "required": ["port_label"],
-      "properties": {"port_label": {"type": "string", "minLength": 1}}
+    "pass_criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "metric",
+          "op",
+          "value"
+        ],
+        "properties": {
+          "metric": {
+            "enum": [
+              "max_displacement",
+              "max_von_mises"
+            ]
+          },
+          "op": {
+            "enum": [
+              "<=",
+              "<",
+              ">=",
+              ">",
+              "=="
+            ]
+          },
+          "value": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "timeout_s": {
+      "type": "number",
+      "exclusiveMinimum": 0
     }
   }
 }

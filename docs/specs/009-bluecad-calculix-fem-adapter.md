@@ -1,6 +1,6 @@
 # 009 — BLUECAD CalculiX FEM adapter (static v0) + ResultSummary + Tier 3
 
-Status: ready (after 008 is merged; needs a registered ccx binary to run live)
+Status: implemented (pending review)
 Depends on: 008
 
 ## Goal
@@ -104,3 +104,9 @@ Verify against actual code before starting; report conflicts instead of guessing
 Test gate green (see `AGENTS.md`), acceptance criteria met, spec status
 updated, summary written. A4 row in `BLUECAD_CORE_DESIGN.md` §11 updated by
 the maintainer once a provenance-recorded binary passes the marker suite.
+## Implementation notes
+
+- Implemented `.inp` assembly using `*INCLUDE` to reference the 008 `mesh.inp` artifact directly rather than concatenating mesh text.
+- Implemented v0 static `force_total` as uniformly divided `*CLOAD` entries over nodes found in the target `LOAD_<label>` mesh set.
+- Offline tests use a synthetic fake `ccx` fixture and minimal hand-written `.frd`/`.dat` records; the live `bluecad_ccx` test remains marker-gated and skipped unless a maintainer registers a real binary.
+- Deviations from spec: none.
