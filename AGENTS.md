@@ -132,11 +132,15 @@ Automated review output (Codex code review, or any model-generated review) is
 2. Human maintainer decision, informed by Claude review of the diff against the
    spec.
 
-Review is tiered by cost (see ADR-057): a cheap external model reviews every
-push and drives the fix iteration loop with the implementing agent; the frontier
-(Claude) review runs once, on the stabilized diff, before merge. The cheap
-tier's "no further changes" verdict is a *trigger* for the frontier review,
-never an approval — it carries no merge authority.
+Review is tiered by cost (see ADR-057, spec 017): a cheap external model
+(DeepSeek) reviews every push and drives the fix iteration loop with the
+implementing agent; when it is satisfied it triggers the senior review (GLM),
+the default last automated gate, which either continues the fix loop, marks
+the PR ready for human merge, or — rarely, when it does not trust its own
+judgment — escalates to the expert (Claude) review. Findings about strategy,
+architecture, licensing, or spec defects are routed to the maintainer (`ARCH:`
+prefix), never to the implementing agent. No tier's verdict carries merge
+authority; every label is a *trigger* for the next tier, never an approval.
 
 Never merge your own PR. Never enable auto-merge. Open the PR against `master`
 and stop; fill in the PR template completely.

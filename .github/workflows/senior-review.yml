@@ -1,0 +1,67 @@
+name: Senior Review
+
+# Senior tier (GLM 5.2 via z.ai): the default automated pre-merge review.
+# Triggered when the cheap tier applies the `frontier-review` label (or the
+# maintainer applies it manually). Outcomes:
+#   - NEEDS_CHANGES  -> @codex fix loop continues
+#   - NO_FURTHER_CHANGES -> applies `ready-for-merge` for the maintainer
+#   - ESCALATE (rare) -> applies `expert-review`, which triggers the Claude
+#     expert review workflow
+# ADVISORY only: never merges. Merge authority is CI plus the human maintainer
+# (AGENTS.md "Review authority").
+
+on:
+  pull_request:
+    types: [labeled]
+
+concurrency:
+  group: senior-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: ${{ github.event.label.name == 'frontier-review' && !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    # GLM 5.2 can take several minutes on a large pack: 2 attempts x 480s
+    # HTTP timeout (REVIEW_HTTP_TIMEOUT) must fit inside the job timeout.
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Self-test review helpers (offline)
+        run: python scripts/cheap_review.py --self-test
+
+      - name: Run senior review (GLM 5.2 via z.ai)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PAT for label writes: labels added with the default GITHUB_TOKEN do
+          # not trigger other workflows, so the escalation to the expert tier
+          # needs this. Falls back to GITHUB_TOKEN with a visible note.
+          LABEL_TOKEN: ${{ secrets.REVIEW_BOT_TOKEN }}
+          CHEAP_REVIEW_PROVIDER: glm
+          CHEAP_REVIEW_BASE_URL: https://api.z.ai/api/paas/v4/chat/completions
+          CHEAP_REVIEW_MODEL: glm-5.2
+          CHEAP_REVIEW_API_KEY: ${{ secrets.GLM_API_KEY }}
+          REVIEW_TIER: senior
+          REVIEW_TITLE: "Senior review"
+          FRONTIER_LABEL: frontier-review
+          EXPERT_LABEL: expert-review
+          READY_LABEL: ready-for-merge
+          ROUND_LIMIT: "3"
+          CHEAP_REVIEW_DIFF_CAP: "60000"
+          REVIEW_HTTP_TIMEOUT: "480"
+          # GLM 5.2 thinks for minutes on a full pack; non-streaming requests
+          # time out waiting for the complete body. Streaming keeps the
+          # connection alive (timeout applies per chunk, not per response).
+          REVIEW_STREAM: "true"
+        run: python scripts/cheap_review.py
