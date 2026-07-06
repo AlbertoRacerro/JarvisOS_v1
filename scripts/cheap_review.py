@@ -68,13 +68,14 @@ def read_agents_sections(repo_root: Path, wanted: tuple[str, ...]) -> str:
     return "\n".join(out).strip()
 
 
-def resolve_spec(repo_root: Path, branch: str, title: str) -> tuple[str, str]:
+def resolve_spec(repo_root: Path, branch: str, title: str, body: str = "") -> tuple[str, str]:
     """Return (spec_name, spec_text) or ('', '') if none is referenced."""
     # Prefer an explicit spec reference; the bare 3-digit fallback is word-bounded
     # so runs inside longer numbers (issue ids, years) never resolve to a spec.
     m = (
         re.search(r"spec[/ _-]?(\d{3})\b", branch, re.I)
         or re.search(r"spec[/ _-]?(\d{3})\b", title, re.I)
+        or re.search(r"spec[/ _-]?(\d{3})\b", body, re.I)
         or re.search(r"\b(\d{3})\b", branch)
     )
     if not m:
@@ -86,14 +87,27 @@ def resolve_spec(repo_root: Path, branch: str, title: str) -> tuple[str, str]:
     return matches[0].name, matches[0].read_text(encoding="utf-8")
 
 
-def build_prompt(diff: str, spec_name: str, spec_text: str, agents_excerpts: str) -> str:
+def review_role_intro(review_role: str) -> str:
+    if review_role == "frontier-fallback":
+        return (
+            "You are the frontier-review fallback reviewer for JarvisOS. Claude/Opus "
+            "is unavailable, so approximate the final pre-merge review as closely as "
+            "possible from the provided pack. Be stricter than the cheap tier: focus "
+            "on root-cause adequacy, hidden integration bugs, spec edge cases, and "
+            "whether the diff actually solves the user-reported failure rather than "
+            "masking a symptom."
+        )
+    return "You are the cheap-tier code reviewer for JarvisOS."
+
+
+def build_prompt(diff: str, spec_name: str, spec_text: str, agents_excerpts: str, review_role: str) -> str:
     spec_block = (
         f"Referenced spec `{spec_name}`:\n\n{spec_text}"
         if spec_name
-        else "No spec file was resolved from the branch/title. If this PR is not "
-        "pure docs/infra, that itself is a MAJOR finding."
+        else "No spec file was resolved from the branch/title/body. If this PR "
+        "is not pure docs/infra, that itself is a MAJOR finding."
     )
-    return f"""You are the cheap-tier code reviewer for JarvisOS. Your review is
+    return f"""{review_role_intro(review_role)} Your review is
 ADVISORY ONLY: you have no merge, approve, or dismiss authority. Never claim you
 do. Merge authority is CI plus the human maintainer.
 
@@ -102,6 +116,9 @@ Review the PR diff strictly for substance, not style:
 - Spec conformance: acceptance criteria met, scope respected, binding non-goals
   untouched, out-of-scope files justified -> MAJOR.
 - Real correctness bugs, each with a concrete failure scenario.
+- For bugfix PRs, verify root-cause adequacy. If the patch only hides a crash,
+  catches an exception, or shows a friendlier error without making the intended
+  flow work, report a MAJOR finding.
 - Fabricated results (AGENTS.md invariant 9) -> CRITICAL. Hunt specifically for:
   hard-coded or unconditional pass/success/verdict values; placeholder outputs
   standing in for real computation (comments like "placeholder", "neutral",
@@ -261,8 +278,12 @@ def self_test(repo_root: Path) -> None:
     )
     name, text = resolve_spec(repo_root, "spec/004-tiered-pr-review", "")
     assert name.startswith("004-") and text
+    name, text = resolve_spec(repo_root, "fix/review", "", "Implements spec 004 fallback hardening.")
+    assert name.startswith("004-") and text
     name, _ = resolve_spec(repo_root, "docs/cleanup-2026-06", "")
     assert name == ""  # digits inside longer numbers must not resolve to a spec
+    assert "frontier-review fallback reviewer" in review_role_intro("frontier-fallback")
+    assert "cheap-tier code reviewer" in review_role_intro("cheap")
     excerpts = read_agents_sections(repo_root, AGENTS_SECTIONS)
     assert "## Hard invariants" in excerpts
     assert "## Conventions" in excerpts
@@ -291,11 +312,13 @@ def main() -> None:
     # the cheap-tier behavior.
     manage_label = env("REVIEW_MANAGE_LABEL", "true").lower() != "false"
     review_title = env("REVIEW_TITLE", "Cheap-tier review")
+    review_role = env("REVIEW_ROLE", "cheap")
 
     event = json.loads(Path(env("GITHUB_EVENT_PATH", required=True)).read_text())
     pr = event["pull_request"]["number"]
     branch = event["pull_request"]["head"]["ref"]
     title = event["pull_request"].get("title", "")
+    body_text = event["pull_request"].get("body") or ""
 
     # Remove any stale approval label first, before anything can fail: a new push
     # must never leave a previous NO_FURTHER_CHANGES label on a changed diff.
@@ -322,9 +345,9 @@ def main() -> None:
         cut = diff.rfind("\ndiff --git", 0, diff_cap)
         diff = diff[: cut if cut > 0 else diff_cap] + "\n... [diff truncated]"
 
-    spec_name, spec_text = resolve_spec(repo_root, branch, title)
+    spec_name, spec_text = resolve_spec(repo_root, branch, title, body_text)
     excerpts = read_agents_sections(repo_root, AGENTS_SECTIONS)
-    prompt = build_prompt(diff, spec_name, spec_text, excerpts)
+    prompt = build_prompt(diff, spec_name, spec_text, excerpts, review_role)
 
     try:
         review = call_model_with_retry(base_url, model, api_key, prompt)
@@ -366,9 +389,10 @@ def main() -> None:
 
     if limit_reached:
         header = f"round {this_round} (limit {round_limit} reached)"
+        tier_name = "fallback review" if not manage_label else "cheap tier"
         footer = (
             "\n\n**ROUND LIMIT REACHED — maintainer decision needed.** No further "
-            "@codex iterations from the cheap tier; the findings above are for the "
+            f"@codex iterations from the {tier_name}; the findings above are for the "
             "maintainer."
         )
     elif not approved:
