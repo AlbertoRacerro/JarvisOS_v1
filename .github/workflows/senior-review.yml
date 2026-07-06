@@ -22,7 +22,9 @@ jobs:
   review:
     if: ${{ github.event.label.name == 'frontier-review' && !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # GLM 5.2 can take several minutes on a large pack: 2 attempts x 480s
+    # HTTP timeout (REVIEW_HTTP_TIMEOUT) must fit inside the job timeout.
+    timeout-minutes: 20
     permissions:
       contents: read
       pull-requests: write
@@ -57,4 +59,5 @@ jobs:
           READY_LABEL: ready-for-merge
           ROUND_LIMIT: "3"
           CHEAP_REVIEW_DIFF_CAP: "60000"
+          REVIEW_HTTP_TIMEOUT: "480"
         run: python scripts/cheap_review.py

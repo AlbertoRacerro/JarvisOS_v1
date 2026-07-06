@@ -186,7 +186,7 @@ def completion_url(base_url: str) -> str:
     return f"{normalized}/chat/completions"
 
 
-def call_model(base_url: str, model: str, api_key: str, prompt: str) -> str:
+def call_model(base_url: str, model: str, api_key: str, prompt: str, timeout: float = 180) -> str:
     url = completion_url(base_url)
     body = {
         "model": model,
@@ -197,7 +197,7 @@ def call_model(base_url: str, model: str, api_key: str, prompt: str) -> str:
     req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST")
     req.add_header("Authorization", f"Bearer {api_key}")
     req.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(req, timeout=180) as resp:
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
         payload = json.loads(resp.read().decode())
     content = payload["choices"][0]["message"]["content"]
     if not content:
@@ -205,13 +205,13 @@ def call_model(base_url: str, model: str, api_key: str, prompt: str) -> str:
     return content.strip()
 
 
-def call_model_with_retry(base_url: str, model: str, api_key: str, prompt: str) -> str:
+def call_model_with_retry(base_url: str, model: str, api_key: str, prompt: str, timeout: float = 180) -> str:
     # At most one retry on transient transport errors (spec 004).
     try:
-        return call_model(base_url, model, api_key, prompt)
+        return call_model(base_url, model, api_key, prompt, timeout=timeout)
     except OSError:
         time.sleep(10)
-        return call_model(base_url, model, api_key, prompt)
+        return call_model(base_url, model, api_key, prompt, timeout=timeout)
 
 
 def parse_verdict(review: str) -> str | None:
@@ -355,6 +355,9 @@ def main() -> None:
     ready_label = env("READY_LABEL", "ready-for-merge")
     round_limit = int(env("ROUND_LIMIT", "3"))
     diff_cap = int(env("CHEAP_REVIEW_DIFF_CAP", "60000"))
+    # Slower reasoning models (GLM 5.2 on large packs) need more than the
+    # 180s default before the retry kicks in; per-tier via workflow env.
+    http_timeout = float(env("REVIEW_HTTP_TIMEOUT", "180"))
     # Labels added with the default GITHUB_TOKEN do not fire `labeled` events in
     # other workflows (Actions anti-recursion guard), so the cheap->senior and
     # senior->expert triggers need a PAT. Fall back to GITHUB_TOKEN with a
@@ -402,7 +405,7 @@ def main() -> None:
     prompt = build_prompt(diff, spec_name, spec_text, excerpts, tier)
 
     try:
-        review = call_model_with_retry(base_url, model, api_key, prompt)
+        review = call_model_with_retry(base_url, model, api_key, prompt, timeout=http_timeout)
     except (OSError, KeyError, IndexError, TypeError, ValueError) as exc:
         detail = f"HTTP {exc.code}" if isinstance(exc, urllib.error.HTTPError) else type(exc).__name__
         next_step = (
