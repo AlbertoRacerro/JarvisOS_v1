@@ -4,7 +4,7 @@ import json
 
 from app.core.database import open_sqlite_connection
 from app.modules.ai.budget import evaluate_ai_status
-from app.modules.ai.execution import run_ai_task
+from app.modules.ai.execution import resolve_binding, run_ai_task
 from app.modules.ai.models import AITaskRunResponse, EscalationConfirmRequest, EscalationConfirmResponse
 from app.modules.ai.settings import get_ai_settings
 
@@ -20,7 +20,9 @@ def confirm_escalation(request: EscalationConfirmRequest) -> EscalationConfirmRe
         max_tokens = int(estimated["max_output_tokens"])
 
     settings = get_ai_settings()
-    status = evaluate_ai_status(settings, "scaleway")
+    binding, _decision = resolve_binding(route_class)
+    provider_mode = binding.provider_id if binding is not None else route_class
+    status = evaluate_ai_status(settings, provider_mode)
     external_blocked_reason = None if status.external_calls_allowed else status.blocking_reason or "external_calls_disabled"
     outcome = run_ai_task(
         user_prompt=outbound_text,

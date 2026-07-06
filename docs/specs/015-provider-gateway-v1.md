@@ -1,6 +1,6 @@
 # 015 — PROVIDER-GW-1: provider gateway v1
 
-Status: ready
+Status: implemented (stage 1; completed by 018)
 Depends on: none
 
 ## Goal
@@ -238,3 +238,8 @@ Scaleway and DeepSeek each have provider-specific implementations today.
 
 Test gate green (see `AGENTS.md`), acceptance criteria met, spec status updated,
 summary written.
+
+
+## Implementation notes
+
+Stage 1 implemented for draft review: added the default provider registry config, schema-validated registry loader, secret-reference resolution for `env:` references, generic non-streaming OpenAI-compatible adapter, and migration-parity tests proving the default registry reproduces the current safe default Scaleway route bindings. Stage 2 items intentionally deferred per workflow: data-driven non-Scaleway external bindings, disabled DeepSeek/GLM/Kimi registry entries, provider-aware budget caps in the BLUECAD loop, and fallback execution chains.

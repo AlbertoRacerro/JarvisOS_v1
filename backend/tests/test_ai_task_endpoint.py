@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 @pytest.fixture
 def client(tmp_path, monkeypatch) -> Iterator[TestClient]:
     monkeypatch.setenv("JARVISOS_DATA_ROOT", str(tmp_path / "JarvisOS"))
-    monkeypatch.delenv("SCALEWAY_API_KEY", raising=False)
+    monkeypatch.delenv("GLM_API_KEY", raising=False)
     monkeypatch.delenv("SCALEWAY_BASE_URL", raising=False)
     monkeypatch.delenv("SCALEWAY_MODEL", raising=False)
 
@@ -149,7 +149,7 @@ def test_task_endpoint_malformed_route_fails_closed_and_writes_one_ai_job(client
 def test_task_endpoint_external_route_requires_max_tokens_before_provider_call(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("SCALEWAY_API_KEY", "test-only-key")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-only-key")
     settings_response = client.put(
         "/ai/settings",
         json={
@@ -166,12 +166,12 @@ def test_task_endpoint_external_route_requires_max_tokens_before_provider_call(
     assert settings_response.status_code == 200
 
     from app.modules.ai.contracts import AIRequest, AIResponse
-    from app.modules.ai.providers.scaleway_adapter import ScalewayProviderAdapter
+    from app.modules.ai.providers.openai_compat_adapter import OpenAICompatAdapter
 
-    def fail(self: ScalewayProviderAdapter, request: AIRequest) -> AIResponse:
+    def fail(self: OpenAICompatAdapter, request: AIRequest) -> AIResponse:
         raise AssertionError("external task endpoint must require max_tokens before provider call")
 
-    monkeypatch.setattr(ScalewayProviderAdapter, "complete", fail)
+    monkeypatch.setattr(OpenAICompatAdapter, "complete", fail)
 
     response = client.post(
         "/ai/tasks/run",
@@ -182,8 +182,8 @@ def test_task_endpoint_external_route_requires_max_tokens_before_provider_call(
     body = response.json()
     assert body["status"] == "config_error"
     assert body["selected_route_class"] == "external:cheap"
-    assert body["provider_id"] == "scaleway"
-    assert body["model_id"] == "llama-3.1-8b-instruct"
+    assert body["provider_id"] == "deepseek"
+    assert body["model_id"] == "deepseek-v4-pro"
     assert body["blocked_reason"] == "config_error"
     assert body["decision_reason"] == "max_output_tokens required for network route"
     assert body["error_type"] == "config_error"
@@ -193,22 +193,22 @@ def test_task_endpoint_external_route_requires_max_tokens_before_provider_call(
     assert len(rows) == 1
     assert rows[0]["id"] == body["ledger_id"]
     assert rows[0]["status"] == "config_error"
-    assert rows[0]["provider_id"] == "scaleway"
+    assert rows[0]["provider_id"] == "deepseek"
     assert rows[0]["error_type"] == "config_error"
 
 
 def test_task_endpoint_external_route_respects_ai_settings_gate_before_provider_call(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("SCALEWAY_API_KEY", "test-only-key")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-only-key")
 
     from app.modules.ai.contracts import AIRequest, AIResponse
-    from app.modules.ai.providers.scaleway_adapter import ScalewayProviderAdapter
+    from app.modules.ai.providers.openai_compat_adapter import OpenAICompatAdapter
 
-    def fail(self: ScalewayProviderAdapter, request: AIRequest) -> AIResponse:
+    def fail(self: OpenAICompatAdapter, request: AIRequest) -> AIResponse:
         raise AssertionError("external task endpoint must respect settings gate before provider call")
 
-    monkeypatch.setattr(ScalewayProviderAdapter, "complete", fail)
+    monkeypatch.setattr(OpenAICompatAdapter, "complete", fail)
 
     response = client.post(
         "/ai/tasks/run",
@@ -219,19 +219,19 @@ def test_task_endpoint_external_route_respects_ai_settings_gate_before_provider_
     body = response.json()
     assert body["status"] == "config_error"
     assert body["selected_route_class"] == "external:cheap"
-    assert body["provider_id"] == "scaleway"
-    assert body["model_id"] == "llama-3.1-8b-instruct"
+    assert body["provider_id"] == "deepseek"
+    assert body["model_id"] == "deepseek-v4-pro"
     assert body["blocked_reason"] == "config_error"
     assert body["error_type"] == "config_error"
     assert "external provider execution disabled by settings/gate" in body["decision_reason"]
-    assert "scaleway_disabled" in body["decision_reason"]
+    assert "paid_ai_disabled" in body["decision_reason"]
     assert body["response_text"] is None
 
     rows = _all_ai_jobs()
     assert len(rows) == 1
     assert rows[0]["id"] == body["ledger_id"]
     assert rows[0]["status"] == "config_error"
-    assert rows[0]["provider_id"] == "scaleway"
+    assert rows[0]["provider_id"] == "deepseek"
     assert rows[0]["error_type"] == "config_error"
 
 
@@ -380,7 +380,7 @@ def _proposal() -> dict[str, object]:
 
 
 def test_confirm_escalation_happy_path_uses_external_spine(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SCALEWAY_API_KEY", "test-only-key")
+    monkeypatch.setenv("GLM_API_KEY", "test-only-key")
     client.put(
         "/ai/settings",
         json={
@@ -396,17 +396,16 @@ def test_confirm_escalation_happy_path_uses_external_spine(client: TestClient, m
     )
     from app.modules.ai.contracts import AIRequest
     from app.modules.ai.providers.fake_adapter import FakeProviderAdapter
-    from app.modules.ai.providers.scaleway_adapter import ScalewayProviderAdapter
+    from app.modules.ai.providers.openai_compat_adapter import OpenAICompatAdapter
 
     seen: list[str | None] = []
 
-    def fake_complete(self: ScalewayProviderAdapter, request: AIRequest):
+    def fake_complete(self: OpenAICompatAdapter, request: AIRequest):
         seen.append(request.prompt)
         return FakeProviderAdapter().complete(request)
 
-    monkeypatch.setattr(ScalewayProviderAdapter, "complete", fake_complete)
-    monkeypatch.setattr("app.modules.ai.execution._scaleway_ready", lambda: True)
-
+    monkeypatch.setattr(OpenAICompatAdapter, "complete", fake_complete)
+    
     response = client.post("/ai/tasks/escalations/confirm", json={"proposal": _proposal(), "task_kind": "general"})
 
     assert response.status_code == 200
@@ -422,13 +421,13 @@ def test_confirm_escalation_happy_path_uses_external_spine(client: TestClient, m
 
 
 def test_confirm_escalation_paid_ai_disabled_fails_closed(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SCALEWAY_API_KEY", "test-only-key")
-    from app.modules.ai.providers.scaleway_adapter import ScalewayProviderAdapter
+    monkeypatch.setenv("GLM_API_KEY", "test-only-key")
+    from app.modules.ai.providers.openai_compat_adapter import OpenAICompatAdapter
 
     def fail(self, request):
         raise AssertionError("provider must not be called")
 
-    monkeypatch.setattr(ScalewayProviderAdapter, "complete", fail)
+    monkeypatch.setattr(OpenAICompatAdapter, "complete", fail)
     client.put(
         "/ai/settings",
         json={
@@ -495,4 +494,4 @@ def test_confirm_escalation_credentials_absent_fails_closed(client: TestClient, 
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "config_error"
-    assert "scaleway_api_key_missing" in body["task_response"]["decision_reason"]
+    assert "glm_api_key_missing" in body["task_response"]["decision_reason"]
