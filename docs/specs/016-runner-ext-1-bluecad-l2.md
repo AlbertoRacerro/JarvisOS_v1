@@ -1,6 +1,6 @@
 # 016 — RUNNER-EXT-1: scoped runner extension for BLUECAD L2
 
-Status: ready
+Status: implemented (pending review)
 Depends on: 005 (BLUECAD CAD adapter MVP), 010 (BLUECAD AI loop v0). Blocks: 012 (BLUECAD L2 script execution).
 
 ## Goal
@@ -204,3 +204,17 @@ Verify against actual code before starting; report conflicts instead of guessing
 
 Test gate green (see `AGENTS.md`), acceptance criteria met, spec status
 updated, summary written.
+
+## Implementation notes
+
+- Status updated after implementing `bluecad_l2_v0` registration, job creation, execution output validation, script hashing/tamper checks, and AST import allowlist policy on the scoped runner path.
+- Added additive `implementation_kind` fields on `model_versions` and `runner_jobs` so the existing `batch_growth_v0` path can dispatch without changing its externally observable behavior.
+- Reused `backend/app/modules/bluecad/spec.py` GeometrySpec v0 validation for `bluecad_l2_v0` input validation; invalid specs fail before runner jobs are queued.
+- Honest isolation statement (verbatim):
+
+  > current runner isolation is not OS-level sandboxing; it is scoped scripts,
+  > input validation, textual+AST checks, and a cleared environment. It must
+  > not be described as network-secure. Stronger isolation
+  > (job objects/containers) is a future, separate decision.
+
+- No OS-level sandboxing, provider path, frontend, tools/agents, or `batch_growth_v0` output-schema changes were implemented.

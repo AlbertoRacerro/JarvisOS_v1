@@ -20,6 +20,7 @@ from app.modules.runner.models import (
     SimulationRunDetail,
 )
 from app.modules.runner.safety import (
+    BLUECAD_L2_REQUIRED_ARTIFACTS,
     DEFAULT_TIMEOUT_SECONDS,
     MAX_ARTIFACT_BYTES,
     MAX_OUTPUT_JSON_BYTES,
@@ -33,17 +34,30 @@ from app.modules.runner.safety import (
     safe_artifact_path,
     sha256_file,
     validate_batch_growth_input,
+    validate_bluecad_l2_input,
     validate_run_paths,
     validate_script_path,
 )
 
 RUNNER_TYPE = "python_local"
 IMPLEMENTATION_KIND = "batch_growth_v0"
+BLUECAD_L2_IMPLEMENTATION_KIND = "bluecad_l2_v0"
+SUPPORTED_IMPLEMENTATION_KINDS = frozenset({IMPLEMENTATION_KIND, BLUECAD_L2_IMPLEMENTATION_KIND})
 
 
 def create_model_implementation(workspace_id: str, payload: ModelImplementationCreate) -> ModelImplementationRead:
-    if payload.implementation_kind != IMPLEMENTATION_KIND:
-        raise RunnerSafetyError("runner_implementation_kind_unsupported", "Only batch_growth_v0 is supported in V0.")
+    if payload.implementation_kind not in SUPPORTED_IMPLEMENTATION_KINDS:
+        raise RunnerSafetyError(
+            "runner_implementation_kind_unsupported",
+            "Only batch_growth_v0 and bluecad_l2_v0 are supported.",
+        )
+    if payload.implementation_kind == IMPLEMENTATION_KIND and payload.script_text is not None:
+        raise RunnerSafetyError(
+            "runner_script_text_unsupported",
+            "batch_growth_v0 does not accept caller-supplied script text.",
+        )
+    if payload.implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND and not payload.script_text:
+        raise RunnerSafetyError("runner_script_text_required", "bluecad_l2_v0 requires script_text.")
 
     now = utc_now()
     model_version_id = str(uuid4())
@@ -59,8 +73,16 @@ def create_model_implementation(workspace_id: str, payload: ModelImplementationC
 
     target_dir = model_implementation_root(workspace_id) / model_version_id
     target_dir.mkdir(parents=True, exist_ok=False)
-    target_script = target_dir / "batch_growth.py"
-    shutil.copy2(_example_script_path(), target_script)
+    if payload.implementation_kind == IMPLEMENTATION_KIND:
+        target_script = target_dir / "batch_growth.py"
+        shutil.copy2(_example_script_path(), target_script)
+        artifact_notes = "Reviewed deterministic batch growth V0 script."
+        changelog = "Initial reviewed deterministic batch growth implementation."
+    else:
+        target_script = target_dir / "bluecad_l2.py"
+        target_script.write_text(payload.script_text or "", encoding="utf-8")
+        artifact_notes = "Caller-supplied BLUECAD L2 V0 script."
+        changelog = "Initial BLUECAD L2 V0 script implementation."
     script_sha = sha256_file(target_script)
 
     with open_sqlite_connection() as connection:
@@ -82,15 +104,15 @@ def create_model_implementation(workspace_id: str, payload: ModelImplementationC
                 f"model_spec:{payload.model_spec_id}",
                 "registered",
                 now,
-                "Reviewed deterministic batch growth V0 script.",
+                artifact_notes,
             ),
         )
         connection.execute(
             """
             INSERT INTO model_versions (
                 id, workspace_id, model_spec_id, version_label,
-                implementation_artifact_id, status, changelog, created_at, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                implementation_artifact_id, implementation_kind, status, changelog, created_at, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 model_version_id,
@@ -98,8 +120,9 @@ def create_model_implementation(workspace_id: str, payload: ModelImplementationC
                 payload.model_spec_id,
                 payload.version_label,
                 artifact_id,
+                payload.implementation_kind,
                 "ready",
-                "Initial reviewed deterministic batch growth implementation.",
+                changelog,
                 now,
                 payload.notes,
             ),
@@ -154,7 +177,6 @@ def get_model_implementation(workspace_id: str, model_version_id: str) -> ModelI
 
 
 def create_runner_job(workspace_id: str, payload: RunnerJobCreate) -> RunnerJobCreateResponse:
-    input_payload, parameter_payload = validate_batch_growth_input(payload.input_set)
     now = utc_now()
     simulation_run_id = str(uuid4())
     runner_job_id = str(uuid4())
@@ -166,6 +188,14 @@ def create_runner_job(workspace_id: str, payload: RunnerJobCreate) -> RunnerJobC
         script_sha = sha256_file(script_path)
         if script_sha != model_version["script_sha256"]:
             raise RunnerSafetyError("runner_script_hash_mismatch", "Script hash does not match registered artifact.")
+        implementation_kind = model_version["implementation_kind"]
+        if implementation_kind == IMPLEMENTATION_KIND:
+            input_payload, parameter_payload = validate_batch_growth_input(payload.input_set)
+        elif implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND:
+            preflight_script_policy(script_path, ast_import_allowlist=True)
+            input_payload, parameter_payload = validate_bluecad_l2_input(payload.input_set)
+        else:
+            raise RunnerSafetyError("runner_implementation_kind_unsupported", "Unsupported implementation kind.")
 
         job_run_root = run_root(workspace_id, simulation_run_id)
         connection.execute(
@@ -195,11 +225,11 @@ def create_runner_job(workspace_id: str, payload: RunnerJobCreate) -> RunnerJobC
             """
             INSERT INTO runner_jobs (
                 id, workspace_id, simulation_run_id, runner_type, status,
-                script_path, script_sha256, command_json, environment_json,
+                script_path, script_sha256, implementation_kind, command_json, environment_json,
                 working_dir, input_file, output_dir, timeout_seconds,
                 max_stdout_bytes, max_stderr_bytes, max_output_json_bytes,
                 max_artifact_bytes, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 runner_job_id,
@@ -209,6 +239,7 @@ def create_runner_job(workspace_id: str, payload: RunnerJobCreate) -> RunnerJobC
                 "queued",
                 str(script_path),
                 script_sha,
+                implementation_kind,
                 None,
                 None,
                 str(job_run_root),
@@ -263,7 +294,8 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
             raise RunnerSafetyError("runner_job_not_queued", "Only queued jobs can be run in V0.")
 
     script_path = validate_script_path(workspace_id, job["script_path"])
-    preflight_script_policy(script_path)
+    implementation_kind = job["implementation_kind"]
+    preflight_script_policy(script_path, ast_import_allowlist=implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND)
     script_sha = sha256_file(script_path)
     if script_sha != job["script_sha256"]:
         raise RunnerSafetyError("runner_script_hash_mismatch", "Script hash does not match runner job metadata.")
@@ -327,6 +359,8 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
             raise RunnerSafetyError(
                 "runner_result_invalid_json", "Artifacts declaration must be a list."
             )
+        if implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND:
+            _validate_bluecad_l2_output(output_dir, declared_artifacts)
         artifact_ids = _register_declared_artifacts(
             workspace_id,
             simulation_run_id,
@@ -649,6 +683,32 @@ def _register_declared_artifacts(
             artifact_ids.append(artifact_id)
         connection.commit()
     return artifact_ids
+
+
+def _validate_bluecad_l2_output(output_dir: Path, artifacts: list[object]) -> None:
+    roles: dict[str, str] = {}
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            raise RunnerSafetyError("runner_result_invalid_json", "Artifact declarations must be objects.")
+        role = str(artifact.get("role") or "")
+        path_value = str(artifact.get("path") or "")
+        if role in BLUECAD_L2_REQUIRED_ARTIFACTS:
+            roles[role] = path_value
+
+    missing_roles = sorted(set(BLUECAD_L2_REQUIRED_ARTIFACTS) - set(roles))
+    if missing_roles:
+        raise RunnerSafetyError(
+            "runner_bluecad_output_invalid",
+            f"Missing required BLUECAD artifact roles: {', '.join(missing_roles)}.",
+        )
+    for role, required_filename in BLUECAD_L2_REQUIRED_ARTIFACTS.items():
+        relative_path = roles[role]
+        if Path(relative_path).name != required_filename:
+            raise RunnerSafetyError(
+                "runner_bluecad_output_invalid",
+                f"{role} must declare required filename {required_filename}.",
+            )
+        safe_artifact_path(output_dir, relative_path)
 
 
 def _load_runner_job(connection, runner_job_id: str):

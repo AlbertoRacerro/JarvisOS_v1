@@ -598,3 +598,70 @@ def test_runner_job_atomic_claim_runs_only_once(client: TestClient) -> None:
 
     assert first is True
     assert second is False
+
+
+def test_batch_growth_registration_golden_behavior_rejects_script_text(client: TestClient) -> None:
+    model_spec_id = _create_model_spec(client)
+    response = client.post(
+        "/workspaces/bluerev/model-implementations",
+        json={
+            "model_spec_id": model_spec_id,
+            "version_label": "batch-growth-v0",
+            "implementation_kind": "batch_growth_v0",
+            "script_text": "print('must not be accepted')",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == {
+        "code": "runner_script_text_unsupported",
+        "message": "batch_growth_v0 does not accept caller-supplied script text.",
+    }
+
+
+def test_batch_growth_registration_golden_script_bytes_and_response_shape(client: TestClient) -> None:
+    implementation = _create_implementation(client)
+    script_path = Path(str(implementation["script_path"]))
+    expected_keys = {
+        "id",
+        "workspace_id",
+        "model_spec_id",
+        "version_label",
+        "implementation_artifact_id",
+        "status",
+        "script_sha256",
+        "script_path",
+        "created_at",
+        "notes",
+    }
+
+    assert set(implementation) == expected_keys
+    assert script_path.name == "batch_growth.py"
+    assert script_path.read_bytes() == (Path(__file__).parents[1] / "app/modules/runner/examples/batch_growth.py").read_bytes()
+    assert implementation["script_sha256"] == "2081c2e072400101476b9b5a612e14660cc9b54874ebb57e68d8b856af71f97c"
+
+    from app.core.database import open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        model_version = connection.execute(
+            "SELECT implementation_kind, status, changelog FROM model_versions WHERE id = ?",
+            (implementation["id"],),
+        ).fetchone()
+        artifact = connection.execute(
+            "SELECT filename, artifact_type, mime_type, sha256, status, notes FROM artifacts WHERE id = ?",
+            (implementation["implementation_artifact_id"],),
+        ).fetchone()
+
+    assert dict(model_version) == {
+        "implementation_kind": "batch_growth_v0",
+        "status": "ready",
+        "changelog": "Initial reviewed deterministic batch growth implementation.",
+    }
+    assert dict(artifact) == {
+        "filename": "batch_growth.py",
+        "artifact_type": "python_script",
+        "mime_type": "text/x-python",
+        "sha256": implementation["script_sha256"],
+        "status": "registered",
+        "notes": "Reviewed deterministic batch growth V0 script.",
+    }
