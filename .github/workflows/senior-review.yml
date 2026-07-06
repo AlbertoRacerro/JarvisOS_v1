@@ -60,4 +60,8 @@ jobs:
           ROUND_LIMIT: "3"
           CHEAP_REVIEW_DIFF_CAP: "60000"
           REVIEW_HTTP_TIMEOUT: "480"
+          # GLM 5.2 thinks for minutes on a full pack; non-streaming requests
+          # time out waiting for the complete body. Streaming keeps the
+          # connection alive (timeout applies per chunk, not per response).
+          REVIEW_STREAM: "true"
         run: python scripts/cheap_review.py

@@ -186,32 +186,59 @@ def completion_url(base_url: str) -> str:
     return f"{normalized}/chat/completions"
 
 
-def call_model(base_url: str, model: str, api_key: str, prompt: str, timeout: float = 180) -> str:
+def content_from_sse_lines(lines) -> str:
+    """Accumulate delta content from OpenAI-compatible SSE stream lines."""
+    parts: list[str] = []
+    for line in lines:
+        line = line.strip()
+        if not line.startswith("data:"):
+            continue
+        data = line[len("data:"):].strip()
+        if data == "[DONE]":
+            break
+        chunk = json.loads(data)
+        choices = chunk.get("choices") or []
+        if not choices:
+            continue  # e.g. trailing usage-only chunk
+        delta = choices[0].get("delta") or {}
+        piece = delta.get("content")
+        if piece:
+            parts.append(piece)
+    return "".join(parts)
+
+
+def call_model(base_url: str, model: str, api_key: str, prompt: str, timeout: float = 180, stream: bool = False) -> str:
     url = completion_url(base_url)
     body = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.0,
-        "stream": False,
+        "stream": stream,
     }
     req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST")
     req.add_header("Authorization", f"Bearer {api_key}")
     req.add_header("Content-Type", "application/json")
+    # With stream=True the timeout applies per socket read, not to the whole
+    # response: slow reasoning models (GLM 5.2 on a full pack) keep the
+    # connection alive by sending chunks while they generate.
     with urllib.request.urlopen(req, timeout=timeout) as resp:
-        payload = json.loads(resp.read().decode())
-    content = payload["choices"][0]["message"]["content"]
+        if stream:
+            content = content_from_sse_lines(line.decode("utf-8", "replace") for line in resp)
+        else:
+            payload = json.loads(resp.read().decode())
+            content = payload["choices"][0]["message"]["content"]
     if not content:
         raise ValueError("empty completion content")
     return content.strip()
 
 
-def call_model_with_retry(base_url: str, model: str, api_key: str, prompt: str, timeout: float = 180) -> str:
+def call_model_with_retry(base_url: str, model: str, api_key: str, prompt: str, timeout: float = 180, stream: bool = False) -> str:
     # At most one retry on transient transport errors (spec 004).
     try:
-        return call_model(base_url, model, api_key, prompt, timeout=timeout)
+        return call_model(base_url, model, api_key, prompt, timeout=timeout, stream=stream)
     except OSError:
         time.sleep(10)
-        return call_model(base_url, model, api_key, prompt, timeout=timeout)
+        return call_model(base_url, model, api_key, prompt, timeout=timeout, stream=stream)
 
 
 def parse_verdict(review: str) -> str | None:
@@ -324,6 +351,17 @@ def self_test(repo_root: Path) -> None:
     assert parse_escalation("**ESCALATE:** security-sensitive design") == "security-sensitive design"
     assert parse_escalation("VERDICT: NO_FURTHER_CHANGES\nNo blocking findings.") is None
     assert parse_escalation("ESCALATE:") == "no reason given"
+    sse = [
+        'data: {"choices":[{"delta":{"content":"VERDICT: "}}]}',
+        "",
+        ': keep-alive comment',
+        'data: {"choices":[{"delta":{"content":"NO_FURTHER_CHANGES"}}]}',
+        'data: {"choices":[],"usage":{"total_tokens":9}}',
+        "data: [DONE]",
+        'data: {"choices":[{"delta":{"content":"ignored after DONE"}}]}',
+    ]
+    assert content_from_sse_lines(sse) == "VERDICT: NO_FURTHER_CHANGES"
+    assert content_from_sse_lines([]) == ""
     assert "ESCALATE" in build_prompt("d", "", "", "x", "senior")
     assert "ESCALATE" not in build_prompt("d", "", "", "x", "cheap")
     assert "ARCH:" in build_prompt("d", "", "", "x", "cheap")
@@ -358,6 +396,7 @@ def main() -> None:
     # Slower reasoning models (GLM 5.2 on large packs) need more than the
     # 180s default before the retry kicks in; per-tier via workflow env.
     http_timeout = float(env("REVIEW_HTTP_TIMEOUT", "180"))
+    use_stream = env("REVIEW_STREAM", "false").lower() == "true"
     # Labels added with the default GITHUB_TOKEN do not fire `labeled` events in
     # other workflows (Actions anti-recursion guard), so the cheap->senior and
     # senior->expert triggers need a PAT. Fall back to GITHUB_TOKEN with a
@@ -405,7 +444,7 @@ def main() -> None:
     prompt = build_prompt(diff, spec_name, spec_text, excerpts, tier)
 
     try:
-        review = call_model_with_retry(base_url, model, api_key, prompt, timeout=http_timeout)
+        review = call_model_with_retry(base_url, model, api_key, prompt, timeout=http_timeout, stream=use_stream)
     except (OSError, KeyError, IndexError, TypeError, ValueError) as exc:
         detail = f"HTTP {exc.code}" if isinstance(exc, urllib.error.HTTPError) else type(exc).__name__
         next_step = (
