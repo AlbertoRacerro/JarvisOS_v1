@@ -10,10 +10,11 @@ concurrency:
 
 jobs:
   review:
-    # Frontier review is the pre-merge gate: it runs only when the
-    # `frontier-review` label is applied (by the cheap tier once it is satisfied,
-    # or manually by the maintainer). It no longer runs on every push. Skip drafts.
-    if: ${{ github.event.label.name == 'frontier-review' && !github.event.pull_request.draft }}
+    # Expert review (rare): runs only when the `expert-review` label is applied —
+    # by the senior (GLM) tier's explicit escalation, or manually by the
+    # maintainer. The default pre-merge review is the senior tier; this one
+    # exists for the cases GLM does not trust itself to judge. Skip drafts.
+    if: ${{ github.event.label.name == 'expert-review' && !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -35,16 +36,22 @@ jobs:
           # surface the real error, then remove this line.
           show_full_output: true
           prompt: |
-            You are the review authority assistant for JarvisOS. This review is
-            ADVISORY: merge authority is CI plus the human maintainer. Never
-            attempt to merge, approve-and-merge, or push commits.
+            You are the EXPERT review tier for JarvisOS — the scarce, expensive
+            reviewer summoned only when the senior (GLM) tier escalated because
+            it did not trust its own judgment, or the maintainer asked
+            explicitly. This review is ADVISORY: merge authority is CI plus the
+            human maintainer. Never attempt to merge, approve-and-merge, or
+            push commits.
 
             Steps:
-            1. Read AGENTS.md (hard invariants 1-8, conventions, non-goals).
-            2. Identify the spec referenced by this PR (title/body/branch name,
+            1. Read the senior-tier and cheap-tier review comments on this PR.
+               If the senior tier escalated with an `ESCALATE:` reason, treat
+               that question as your primary focus — answer it explicitly.
+            2. Read AGENTS.md (hard invariants 1-8, conventions, non-goals).
+            3. Identify the spec referenced by this PR (title/body/branch name,
                docs/specs/NNN-*.md) and read it. If no spec is referenced and the
                change is not pure docs/infra, flag that as a major finding.
-            3. Review the full diff of this PR strictly for:
+            4. Review the full diff of this PR strictly for:
                a. Hard-invariant violations (AGENTS.md 1-8) -> CRITICAL.
                b. Spec conformance: acceptance criteria met, scope respected,
                   binding non-goals untouched, files outside "likely touched"
@@ -52,14 +59,19 @@ jobs:
                c. Real correctness bugs with a concrete failure scenario.
                d. Tests: required tests present, offline-only (no live
                   providers/Ollama/network), assertions meaningful.
-            4. Do NOT report style nits unless they violate AGENTS.md
+            5. Do NOT report style nits unless they violate AGENTS.md
                conventions. Be strict on substance, silent on taste.
+            6. Findings about strategy, architecture direction, licensing,
+               provider/cost choices, or defects in the spec itself are for the
+               human maintainer: label them ARCH, do not count them toward the
+               verdict, and do not address them to @codex.
 
             Output:
             - Inline review comments on the exact lines for each finding, each
               labeled CRITICAL / MAJOR / MINOR with a one-line failure scenario.
             - One summary comment (sticky) with: verdict (APPROVE or
-              REQUEST_CHANGES), the findings list, and what you verified.
+              REQUEST_CHANGES), an explicit answer to the escalation question if
+              there was one, the findings list, and what you verified.
             - If verdict is REQUEST_CHANGES: end the summary with a single line:
               "@codex please fix the review findings above on this branch, then
               wait for re-review."
@@ -68,7 +80,9 @@ jobs:
               Write "ROUND LIMIT REACHED — maintainer decision needed" and
               summarize what remains open.
             - If verdict is APPROVE: state clearly "LGTM — ready for human
-              merge" so the maintainer can merge with one click.
+              merge", and add the ready-for-merge label by running:
+              `gh pr edit <PR_NUMBER> --add-label ready-for-merge`. If that
+              command fails, just state the LGTM — the maintainer reads it.
           # bypassPermissions: the runner is ephemeral and headless — no human can
           # approve tool prompts, so gh/read calls to fetch the diff must be
           # auto-approved. The prompt forbids push/merge, so the blast radius is

@@ -33,6 +33,11 @@ jobs:
       - name: Run cheap-tier review
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PAT for label writes: labels added with the default GITHUB_TOKEN do
+          # not trigger other workflows, so the `frontier-review` label would
+          # never start the senior (GLM) review without this. Falls back to
+          # GITHUB_TOKEN with a visible note in the review comment.
+          LABEL_TOKEN: ${{ secrets.REVIEW_BOT_TOKEN }}
           # Provider config. Defaults target the DeepSeek direct API; override
           # these three to switch provider without changing the script.
           CHEAP_REVIEW_PROVIDER: deepseek
@@ -41,7 +46,10 @@ jobs:
           # reviewer. If this id 404s, revert to deepseek-chat.
           CHEAP_REVIEW_MODEL: deepseek-v4-pro
           CHEAP_REVIEW_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          REVIEW_TIER: cheap
           FRONTIER_LABEL: frontier-review
+          EXPERT_LABEL: expert-review
+          READY_LABEL: ready-for-merge
           ROUND_LIMIT: "3"
           # Reviews of diffs larger than this are partial and never auto-apply
           # the frontier label. Raise after confirming the model's context size.
