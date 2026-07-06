@@ -25,6 +25,10 @@ only once an internal code-navigating agent exists).
 - 037: chat entry point → workbench (renumbered from 018 — that number was
   taken by the merged provider-gateway-v2 spec,
   `docs/specs/018-provider-gateway-v2.md`). 038–039 are free.
+- 038: SIM-WIRE (mesh+FEM into the loop); 039: free.
+- 047–055: beta program block (BLUEREV-PROCESS-0/1/2, FLOWSHEET-1/RECALC/
+  CAD-LINK, DECISION-PACKET, PROPOSAL-REVIEW UI, PROJECT-VIEW) — see
+  `JARVISOS_BETA_PROGRAM.md`, which also fixes the SC-1..SC-4 seam contracts.
 - 040–046: memory/swarm spine block (MemoryStore, decision capture, context
   packs, calc runner, evidence bridge, orchestration, alternative loop) —
   drafts started 2026-07-06.
