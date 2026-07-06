@@ -263,6 +263,19 @@ def parse_escalation(review: str) -> str | None:
     return None
 
 
+def pr_head_sha(repo: str, pr: int, token: str) -> str:
+    """Current head SHA of the PR, or '' if the lookup fails (guard fails open)."""
+    status, text = gh_request(
+        "GET",
+        f"{GITHUB_API}/repos/{repo}/pulls/{pr}",
+        token,
+        accept="application/vnd.github+json",
+    )
+    if status != 200:
+        return ""
+    return json.loads(text).get("head", {}).get("sha", "") or ""
+
+
 def find_sticky(repo: str, pr: int, token: str, marker: str) -> tuple[int | None, int]:
     """Return (comment_id or None, prior_round_count)."""
     status, text = gh_request(
@@ -469,18 +482,38 @@ def main() -> None:
     escalation = parse_escalation(review) if senior else None
     tier_name = "senior tier" if senior else "cheap tier"
 
-    # Decide the label outcome first so the notes can reflect it.
+    # Decide the label outcome first so the notes can reflect it; the actual
+    # label writes happen only AFTER the review comment is posted, so a label
+    # API failure can never lose the generated review.
     trigger_label: str | None = None  # label whose add must fire another workflow
+    mark_ready = False  # informational label, no trigger
     if not limit_reached:
         if escalation:
             trigger_label = expert_label
         elif approved and not truncated:
             if senior:
-                add_label(repo, pr, gh_token, ready_label)  # informational, no trigger
+                mark_ready = True
             else:
                 trigger_label = frontier_label
 
+    # Staleness guard: if a newer push landed while this review was running,
+    # its verdict belongs to a superseded diff — never assert it via labels.
+    stale_head = False
+    if trigger_label or mark_ready:
+        event_sha = event["pull_request"]["head"].get("sha", "")
+        current_sha = pr_head_sha(repo, pr, gh_token)
+        stale_head = bool(event_sha) and bool(current_sha) and current_sha != event_sha
+        if stale_head:
+            trigger_label = None
+            mark_ready = False
+
     notes: list[str] = []
+    if stale_head:
+        notes.append(
+            "_A newer push landed while this review was running: this verdict "
+            "belongs to a superseded diff, so no labels were applied. The next "
+            "review round covers the new diff._"
+        )
     if verdict is None:
         notes.append("_No parseable VERDICT line in the model output; treated as NEEDS_CHANGES._")
     if truncated:
@@ -536,6 +569,8 @@ def main() -> None:
         f"{review}{note}{footer}"
     )
     upsert_comment(repo, pr, gh_token, comment_id, body)
+    if mark_ready:
+        add_label(repo, pr, gh_token, ready_label)
     if trigger_label:
         add_label(repo, pr, label_token, trigger_label)
 
