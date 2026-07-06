@@ -75,9 +75,10 @@ class _CaptureAdapter:
         raise NotImplementedError
 
 
-def _stub_scaleway_adapter(captured_text: str = "stub cloud answer"):
+def _stub_scaleway_adapter(captured_text: str = "stub cloud answer", provider_id: str = "deepseek"):
     class _StubScaleway:
-        provider_id = "scaleway"
+        def __init__(self) -> None:
+            self.provider_id = provider_id
 
         def health(self):  # pragma: no cover - not used
             ...
@@ -87,12 +88,12 @@ def _stub_scaleway_adapter(captured_text: str = "stub cloud answer"):
 
         def complete(self, request: AIRequest) -> AIResponse:
             return AIResponse(
-                provider_id="scaleway",
+                provider_id=self.provider_id,
                 model_id=request.model_preference or "stub-model",
                 request_id=request.request_id,
                 text=captured_text,
                 content=captured_text,
-                usage=AIUsage(provider_id="scaleway", model_id="stub-model", input_tokens=3, output_tokens=4),
+                usage=AIUsage(provider_id=self.provider_id, model_id="stub-model", input_tokens=3, output_tokens=4),
                 safety_status="allowed",
             )
 
@@ -161,8 +162,7 @@ def test_unbound_route_fails_closed_and_records(monkeypatch, tmp_path) -> None:
 
 def test_missing_provider_credentials_fails_closed_and_records(monkeypatch, tmp_path) -> None:
     _isolate_and_init(monkeypatch, tmp_path)
-    monkeypatch.delenv("SCALEWAY_API_KEY", raising=False)
-    monkeypatch.setattr("app.modules.ai.execution._scaleway_ready", lambda: False)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     from app.modules.ai.execution import run_ai_task
 
     outcome = run_ai_task(user_prompt="real work", route_class="external:cheap")
@@ -171,7 +171,7 @@ def test_missing_provider_credentials_fails_closed_and_records(monkeypatch, tmp_
     rows = _all_ai_jobs()
     assert len(rows) == 1
     assert rows[0]["status"] == "config_error"
-    assert rows[0]["provider_id"] == "scaleway"
+    assert rows[0]["provider_id"] == "deepseek"
     assert rows[0]["error_type"] == "config_error"
 
 
@@ -220,17 +220,21 @@ def test_provider_error_records_one_row(monkeypatch, tmp_path) -> None:
 
 def test_api_key_value_absent_from_ledger(monkeypatch, tmp_path) -> None:
     _isolate_and_init(monkeypatch, tmp_path)
-    secret = "sk-scaleway-supersecret-998877"
-    monkeypatch.setenv("SCALEWAY_API_KEY", secret)
+    secret = "sk-deepseek-supersecret-998877"
+    monkeypatch.setenv("DEEPSEEK_API_KEY", secret)
+    from app.modules.ai.models import AISettingsUpdate
+    from app.modules.ai.settings import update_ai_settings
+
+    update_ai_settings(AISettingsUpdate(paid_ai_enabled=True, monthly_api_budget_usd=10))
     from app.modules.ai.execution import run_ai_task
 
-    # Stub Scaleway adapter so no real network; key is set in env but must never
+    # Stub external adapter so no real network; key is set in env but must never
     # land in the ledger.
     outcome = run_ai_task(
         user_prompt="route through cloud binding",
         route_class="external:cheap",
         max_output_tokens=64,
-        adapters={"scaleway": _stub_scaleway_adapter()},
+        adapters={"deepseek": _stub_scaleway_adapter()},
     )
 
     assert outcome.status == "success"
@@ -485,12 +489,12 @@ def test_local_gemma_caps_max_output_chars(monkeypatch, tmp_path) -> None:
     assert captured["max_output_chars"] == 16000
 
 
-def test_provider_registry_migration_parity_for_representative_routes(monkeypatch, tmp_path) -> None:
+def test_provider_registry_default_bindings_for_representative_routes(monkeypatch, tmp_path) -> None:
     _isolate_and_init(monkeypatch, tmp_path)
-    monkeypatch.delenv("SCALEWAY_API_KEY", raising=False)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("GLM_API_KEY", raising=False)
     monkeypatch.delenv("AI_ROUTE_CHEAP_MODEL", raising=False)
     monkeypatch.delenv("AI_ROUTE_REASONING_MODEL", raising=False)
-    monkeypatch.delenv("SCALEWAY_MODEL", raising=False)
     from app.modules.ai.execution import resolve_binding, run_ai_task
 
     none_outcome = run_ai_task(user_prompt="default", route_class=None)
@@ -506,14 +510,14 @@ def test_provider_registry_migration_parity_for_representative_routes(monkeypatc
     assert fake_outcome.selected_route_class == "local:fake"
     assert fake_outcome.status == "success"
     assert fake_outcome.response.model_id == "fake-deterministic-v1"
-    assert cheap_binding.provider_id == "scaleway"
-    assert cheap_binding.model_id == "llama-3.1-8b-instruct"
+    assert cheap_binding.provider_id == "deepseek"
+    assert cheap_binding.model_id == "deepseek-v4-pro"
     assert cheap_binding.max_output_tokens == 512
-    assert cheap_decision.provider_id == "scaleway"
-    assert reasoning_binding.provider_id == "scaleway"
-    assert reasoning_binding.model_id == "qwen3-235b-a22b-instruct-2507"
+    assert cheap_decision.provider_id == "deepseek"
+    assert reasoning_binding.provider_id == "glm"
+    assert reasoning_binding.model_id == "glm-5.2"
     assert reasoning_binding.max_output_tokens == 1024
-    assert reasoning_decision.model_id == "qwen3-235b-a22b-instruct-2507"
+    assert reasoning_decision.model_id == "glm-5.2"
     assert cheap_outcome.status == "config_error"
     assert reasoning_outcome.status == "config_error"
     rows = _all_ai_jobs()
@@ -523,4 +527,198 @@ def test_provider_registry_migration_parity_for_representative_routes(monkeypatc
         "external:cheap",
         "external:reasoning",
     ]
-    assert [row["provider_id"] for row in rows] == ["fake", "fake", "scaleway", "scaleway"]
+    assert [row["provider_id"] for row in rows] == ["fake", "fake", "deepseek", "glm"]
+
+
+def _configure_external_allowed(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "deepseek-test-key")
+    monkeypatch.setenv("GLM_API_KEY", "glm-test-key")
+    from app.modules.ai.models import AISettingsUpdate
+    from app.modules.ai.settings import update_ai_settings
+
+    update_ai_settings(AISettingsUpdate(paid_ai_enabled=True, monthly_api_budget_usd=100))
+
+
+class _ErrorAdapter:
+    def __init__(self, provider_id: str, code, *, retryable: bool) -> None:
+        self.provider_id = provider_id
+        self.code = code
+        self.retryable = retryable
+        self.requests: list[AIRequest] = []
+
+    def health(self):  # pragma: no cover - not used
+        ...
+
+    def list_models(self):  # pragma: no cover - not used
+        return []
+
+    def complete(self, request: AIRequest) -> AIResponse:
+        from app.modules.ai.contracts import AIProviderError
+
+        self.requests.append(request)
+        return AIResponse(
+            provider_id=self.provider_id,
+            model_id=request.model_preference or "missing-model",
+            request_id=request.request_id,
+            usage=AIUsage(provider_id=self.provider_id, model_id=request.model_preference or "missing-model"),
+            safety_status="blocked",
+            blocked_reason="provider_failed",
+            error=AIProviderError(code=self.code, message="provider failed", retryable=self.retryable),
+        )
+
+    def stream(self, request: AIRequest):  # pragma: no cover - not used
+        raise NotImplementedError
+
+
+class _SuccessAdapter:
+    def __init__(self, provider_id: str, text: str = "ok") -> None:
+        self.provider_id = provider_id
+        self.text = text
+        self.requests: list[AIRequest] = []
+
+    def health(self):  # pragma: no cover - not used
+        ...
+
+    def list_models(self):  # pragma: no cover - not used
+        return []
+
+    def complete(self, request: AIRequest) -> AIResponse:
+        self.requests.append(request)
+        return AIResponse(
+            provider_id=self.provider_id,
+            model_id=request.model_preference or "missing-model",
+            request_id=request.request_id,
+            text=self.text,
+            content=self.text,
+            usage=AIUsage(provider_id=self.provider_id, model_id=request.model_preference or "missing-model", input_tokens=5, output_tokens=7),
+            safety_status="allowed",
+        )
+
+    def stream(self, request: AIRequest):  # pragma: no cover - not used
+        raise NotImplementedError
+
+
+def test_provider_token_cap_blocks_before_adapter_call(monkeypatch, tmp_path) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    _configure_external_allowed(monkeypatch)
+    from app.core.database import open_sqlite_connection
+    from app.modules.ai.execution import run_ai_task
+    from app.modules.events.service import utc_now
+
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO ai_jobs (
+                id, created_at, status, task_kind, requested_route_class, selected_route_class,
+                provider_id, model_id, route_reason_json, input_tokens, output_tokens, latency_ms
+            ) VALUES (?, ?, 'success', 'test', 'external:cheap', 'external:cheap', ?, ?, '{}', ?, ?, 1)
+            """,
+            ("usage-row", utc_now(), "deepseek", "deepseek-v4-pro", 600000, 400000),
+        )
+        connection.commit()
+
+    fail_adapter = _SuccessAdapter("deepseek")
+    outcome = run_ai_task(
+        user_prompt="blocked by cap",
+        route_class="external:cheap",
+        max_output_tokens=64,
+        adapters={"deepseek": fail_adapter, "glm": _SuccessAdapter("glm")},
+    )
+
+    assert outcome.status == "config_error"
+    assert fail_adapter.requests == []
+    rows = _all_ai_jobs()
+    assert len(rows) == 2
+    assert rows[-1]["provider_id"] == "deepseek"
+    assert "deepseek_monthly_token_cap_exhausted" in json.loads(rows[-1]["route_reason_json"])["decision_reason"]
+
+
+def test_provider_zero_caps_are_unlimited(monkeypatch, tmp_path) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    _configure_external_allowed(monkeypatch)
+    from app.modules.ai import budget
+    from app.modules.ai.provider_registry import ProviderConfig
+
+    monkeypatch.setattr(
+        budget,
+        "_registry_provider",
+        lambda provider_id: ProviderConfig(provider_id, "openai_compatible", True, True, "https://example.test", "env:DEEPSEEK_API_KEY", 20, 0, 0),
+    )
+    gate = budget.evaluate_provider_budget_gate(__import__("app.modules.ai.settings", fromlist=["get_ai_settings"]).get_ai_settings(), "deepseek")
+
+    assert gate.allowed is True
+
+
+def test_fallback_chain_retryable_error_advances_and_writes_attempt_rows(monkeypatch, tmp_path) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    _configure_external_allowed(monkeypatch)
+    from app.modules.ai.contracts import AIProviderErrorCode
+    from app.modules.ai.execution import run_ai_task
+
+    first = _ErrorAdapter("deepseek", AIProviderErrorCode.provider_timeout, retryable=True)
+    second = _SuccessAdapter("glm", text="fallback ok")
+    outcome = run_ai_task(
+        user_prompt="try fallback",
+        route_class="external:cheap",
+        max_output_tokens=64,
+        adapters={"deepseek": first, "glm": second},
+    )
+
+    assert outcome.status == "success"
+    assert outcome.response.provider_id == "glm"
+    assert len(first.requests) == 1
+    assert len(second.requests) == 1
+    rows = _all_ai_jobs()
+    assert [row["provider_id"] for row in rows] == ["deepseek", "glm"]
+    first_meta = json.loads(rows[0]["route_reason_json"])
+    second_meta = json.loads(rows[1]["route_reason_json"])
+    assert first_meta["fallback_attempt_index"] == 0
+    assert second_meta["fallback_attempt_index"] == 1
+    assert second_meta["prior_retryable_error_code"] == "provider_timeout"
+
+
+def test_fallback_chain_non_retryable_error_does_not_advance(monkeypatch, tmp_path) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    _configure_external_allowed(monkeypatch)
+    from app.modules.ai.contracts import AIProviderErrorCode
+    from app.modules.ai.execution import run_ai_task
+
+    first = _ErrorAdapter("deepseek", AIProviderErrorCode.provider_bad_request, retryable=False)
+    second = _SuccessAdapter("glm")
+    outcome = run_ai_task(
+        user_prompt="do not fallback",
+        route_class="external:cheap",
+        max_output_tokens=64,
+        adapters={"deepseek": first, "glm": second},
+    )
+
+    assert outcome.status == "provider_error"
+    assert len(first.requests) == 1
+    assert second.requests == []
+    assert len(_all_ai_jobs()) == 1
+
+
+def test_credential_block_does_not_fallback(monkeypatch, tmp_path) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.setenv("GLM_API_KEY", "glm-test-key")
+    from app.modules.ai.models import AISettingsUpdate
+    from app.modules.ai.settings import update_ai_settings
+
+    update_ai_settings(AISettingsUpdate(paid_ai_enabled=True, monthly_api_budget_usd=100))
+    second = _SuccessAdapter("glm")
+    from app.modules.ai.execution import run_ai_task
+
+    outcome = run_ai_task(
+        user_prompt="credential blocked",
+        route_class="external:cheap",
+        max_output_tokens=64,
+        adapters={"deepseek": _SuccessAdapter("deepseek"), "glm": second},
+    )
+
+    assert outcome.status == "config_error"
+    assert second.requests == []
+    rows = _all_ai_jobs()
+    assert len(rows) == 1
+    assert rows[0]["provider_id"] == "deepseek"
+    assert "deepseek_api_key_missing" in json.loads(rows[0]["route_reason_json"])["decision_reason"]

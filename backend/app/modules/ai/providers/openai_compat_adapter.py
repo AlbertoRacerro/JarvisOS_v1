@@ -92,13 +92,20 @@ class OpenAICompatAdapter:
         raise NotImplementedError("OpenAI-compatible streaming is not implemented.")
 
     def _post(self, *, payload: dict[str, Any], api_key: str) -> httpx.Response:
-        client = self._client or httpx.Client()
-        return client.post(
-            _chat_completions_url(self.base_url),
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json=payload,
-            timeout=self.timeout_seconds,
-        )
+        if self._client is not None:
+            return self._client.post(
+                _chat_completions_url(self.base_url),
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json=payload,
+                timeout=self.timeout_seconds,
+            )
+        with httpx.Client() as client:
+            return client.post(
+                _chat_completions_url(self.base_url),
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json=payload,
+                timeout=self.timeout_seconds,
+            )
 
     def _response_from_data(
         self,

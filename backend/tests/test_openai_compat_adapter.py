@@ -101,3 +101,24 @@ def test_openai_compat_adapter_malformed_response_is_provider_response_invalid(m
     response = adapter.complete(AIRequest(task_type=AITaskType.synthesis, prompt="hi"))
 
     assert response.error.code == AIProviderErrorCode.provider_response_invalid
+
+
+def test_openai_compat_adapter_timeout_is_retryable(monkeypatch):
+    monkeypatch.setenv("GLM_API_KEY", "secret-value")
+
+    def handler(url, headers, payload, timeout):
+        request = httpx.Request("POST", url)
+        raise httpx.TimeoutException("timed out", request=request)
+
+    adapter = OpenAICompatAdapter(
+        provider_id="glm",
+        model_id="glm-5.2",
+        base_url="https://example.test/v1",
+        api_key_ref="env:GLM_API_KEY",
+        client=_Client(handler),
+    )
+
+    response = adapter.complete(AIRequest(task_type=AITaskType.synthesis, prompt="hi"))
+
+    assert response.error.code == AIProviderErrorCode.provider_timeout
+    assert response.error.retryable is True

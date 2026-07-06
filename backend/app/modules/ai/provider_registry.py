@@ -39,11 +39,17 @@ class ModelConfig:
 
 
 @dataclass(frozen=True)
+class FallbackEntry:
+    provider_id: str
+    model_id: str
+
+
+@dataclass(frozen=True)
 class ProviderRegistry:
     providers: dict[str, ProviderConfig]
     models: dict[tuple[str, str], ModelConfig]
     bindings: dict[str, ProviderBinding]
-    fallback_chains: dict[str, tuple[str, ...]]
+    fallback_chains: dict[str, tuple[FallbackEntry, ...]]
 
 
 def default_registry_path() -> Path:
@@ -102,6 +108,8 @@ def parse_provider_registry(raw: dict[str, Any]) -> ProviderRegistry:
             if not isinstance(routes, list) or not routes:
                 raise ValueError(f"model {provider_id}/{model_id} requires route_classes")
             route_tuple = tuple(str(route) for route in routes)
+            if len(set(route_tuple)) != len(route_tuple):
+                raise ValueError(f"model {provider_id}/{model_id} has duplicate route_classes")
             for route in route_tuple:
                 _validate_route_class(route)
                 if route in bindings:
@@ -117,8 +125,9 @@ def parse_provider_registry(raw: dict[str, Any]) -> ProviderRegistry:
                 max_output_tokens=max_tokens,
             )
             models[(provider_id, str(model_id))] = model
-            for route in route_tuple:
-                bindings[route] = ProviderBinding(route, provider_id, str(model_id), provider.requires_network, max_tokens)
+            if provider.enabled:
+                for route in route_tuple:
+                    bindings[route] = ProviderBinding(route, provider_id, str(model_id), provider.requires_network, max_tokens)
 
     fallback_chains = _parse_fallback_chains(raw.get("fallback_chains", {}), bindings)
     return ProviderRegistry(providers=providers, models=models, bindings=bindings, fallback_chains=fallback_chains)
@@ -137,7 +146,7 @@ def _bindings_with_env_overrides(bindings: dict[str, ProviderBinding]) -> dict[s
         "local:gemma": ("AI_ROUTE_LOCAL_GENERAL_MODEL", "AI_ROUTE_LOCAL_MODEL"),
         "local:coder": ("AI_ROUTE_LOCAL_CODER_MODEL",),
         "local:coder_heavy": ("AI_ROUTE_LOCAL_CODER_HEAVY_MODEL",),
-        "external:cheap": ("AI_ROUTE_CHEAP_MODEL", "SCALEWAY_MODEL"),
+        "external:cheap": ("AI_ROUTE_CHEAP_MODEL",),
         "external:reasoning": ("AI_ROUTE_REASONING_MODEL",),
     }
     for route, names in overrides.items():
@@ -152,26 +161,42 @@ def _bindings_with_env_overrides(bindings: dict[str, ProviderBinding]) -> dict[s
     return result
 
 
-def _parse_fallback_chains(raw: Any, bindings: dict[str, ProviderBinding]) -> dict[str, tuple[str, ...]]:
+def _parse_fallback_chains(raw: Any, bindings: dict[str, ProviderBinding]) -> dict[str, tuple[FallbackEntry, ...]]:
     if raw is None:
         return {}
     if not isinstance(raw, dict):
         raise ValueError("fallback_chains must be a mapping")
-    chains: dict[str, tuple[str, ...]] = {}
+    chains: dict[str, tuple[FallbackEntry, ...]] = {}
+    enabled_models = {(binding.provider_id, binding.model_id) for binding in bindings.values()}
     for route, chain_raw in raw.items():
         route = str(route)
         _validate_route_class(route)
-        if route not in bindings:
+        primary = bindings.get(route)
+        if primary is None:
             raise ValueError(f"fallback chain route {route} is not bound")
         if not isinstance(chain_raw, list) or not chain_raw:
             raise ValueError(f"fallback chain {route} must be a non-empty list")
-        chain = tuple(str(item) for item in chain_raw)
+        chain = tuple(_parse_fallback_entry(str(item), route) for item in chain_raw)
+        first = chain[0]
+        if (first.provider_id, first.model_id) != (primary.provider_id, primary.model_id):
+            raise ValueError(f"fallback chain {route} first entry must match primary binding")
         for item in chain:
-            _validate_route_class(item)
-            if item not in bindings:
-                raise ValueError(f"fallback chain {route} references unknown route {item}")
+            if (item.provider_id, item.model_id) not in enabled_models:
+                raise ValueError(
+                    f"fallback chain {route} references unknown or disabled model "
+                    f"{item.provider_id}/{item.model_id}"
+                )
         chains[route] = chain
     return chains
+
+
+def _parse_fallback_entry(value: str, route: str) -> FallbackEntry:
+    parts = value.split("/", 1)
+    if len(parts) != 2 or not parts[0] or not parts[1]:
+        raise ValueError(f"fallback chain {route} entry must be provider_id/model_id")
+    provider_id, model_id = parts
+    _validate_provider_id(provider_id)
+    return FallbackEntry(provider_id=provider_id, model_id=model_id)
 
 
 def _required_str(raw: dict[str, Any], key: str, owner: str) -> str:

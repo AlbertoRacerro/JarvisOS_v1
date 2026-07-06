@@ -42,10 +42,8 @@ from app.modules.ai.providers.local_ollama_adapter import (
     LOCAL_OLLAMA_PROVIDER_ID,
     LocalOllamaAdapter,
 )
-from app.modules.ai.providers.scaleway_adapter import (
-    SCALEWAY_PROVIDER_ID,
-    ScalewayProviderAdapter,
-)
+from app.modules.ai.providers.openai_compat_adapter import OpenAICompatAdapter
+from app.modules.ai.providers.scaleway_adapter import SCALEWAY_PROVIDER_ID, ScalewayProviderAdapter
 from app.modules.events.service import utc_now
 
 ROUTE_CLASS_RE = re.compile(r"^[a-z][a-z0-9_]*:[a-z][a-z0-9_]*$")
@@ -96,11 +94,30 @@ def _default_bindings() -> dict[str, ProviderBinding]:
     return registry_bindings()
 
 def _default_adapters() -> dict[str, AIProviderAdapter]:
-    return {
+    adapters: dict[str, AIProviderAdapter] = {
         FAKE_PROVIDER_ID: FakeProviderAdapter(),
         LOCAL_OLLAMA_PROVIDER_ID: LocalOllamaAdapter(),
         SCALEWAY_PROVIDER_ID: ScalewayProviderAdapter(),
     }
+    from app.modules.ai.provider_registry import load_default_provider_registry
+
+    registry = load_default_provider_registry()
+    for provider in registry.providers.values():
+        if provider.enabled and provider.kind == "openai_compatible" and provider.base_url and provider.api_key_ref:
+            primary_model = next(
+                (model for model in registry.models.values() if model.provider_id == provider.provider_id),
+                None,
+            )
+            if primary_model is None:
+                continue
+            adapters[provider.provider_id] = OpenAICompatAdapter(
+                provider_id=provider.provider_id,
+                model_id=primary_model.model_id,
+                base_url=provider.base_url,
+                api_key_ref=provider.api_key_ref,
+                timeout_seconds=provider.timeout_seconds,
+            )
+    return adapters
 
 
 def resolve_binding(
@@ -153,6 +170,7 @@ def _write_ai_job(
     response: AIResponse | None,
     latency_ms: int,
     error_type: str | None,
+    route_metadata: dict[str, object] | None = None,
 ) -> str:
     job_id = str(uuid4())
     provider_id = response.provider_id if response is not None else decision.provider_id
@@ -163,9 +181,10 @@ def _write_ai_job(
     input_tokens = response.usage.input_tokens if response is not None else None
     output_tokens = response.usage.output_tokens if response is not None else None
     cost_estimate = response.usage.provider_cost_estimate if response is not None else None
-    route_reason_json = json.dumps(
-        {"decision_reason": decision.decision_reason, "blocked_reason": decision.blocked_reason}
-    )
+    route_reason = {"decision_reason": decision.decision_reason, "blocked_reason": decision.blocked_reason}
+    if route_metadata:
+        route_reason.update(route_metadata)
+    route_reason_json = json.dumps(route_reason, sort_keys=True)
     context_sources_json = json.dumps(context_sources) if context_sources else None
     with open_sqlite_connection() as connection:
         connection.execute(
@@ -208,6 +227,68 @@ def _config_reason(adapter: AIProviderAdapter | None, binding: ProviderBinding, 
     if binding.requires_network and effective_max is None:
         return "max_output_tokens required for network route"
     return f"provider {binding.provider_id} not configured (missing credentials)"
+
+
+def _registry_fallback_bindings(route_class: str, primary: ProviderBinding) -> list[ProviderBinding]:
+    from app.modules.ai.provider_registry import load_default_provider_registry
+
+    registry = load_default_provider_registry()
+    chain = registry.fallback_chains.get(route_class)
+    if not chain:
+        return [primary]
+    bindings = [primary]
+    for entry in chain[1:]:
+        model = registry.models[(entry.provider_id, entry.model_id)]
+        provider = registry.providers[entry.provider_id]
+        bindings.append(
+            ProviderBinding(
+                route_class=route_class,
+                provider_id=entry.provider_id,
+                model_id=entry.model_id,
+                requires_network=provider.requires_network,
+                max_output_tokens=model.max_output_tokens,
+            )
+        )
+    return bindings
+
+
+def _provider_gate_blocking_reason(binding: ProviderBinding) -> str | None:
+    if not binding.requires_network:
+        return None
+    from app.modules.ai.budget import evaluate_provider_budget_gate
+    from app.modules.ai.settings import get_ai_settings
+
+    return evaluate_provider_budget_gate(get_ai_settings(), binding.provider_id).blocking_reason
+
+
+def _chain_metadata(
+    *,
+    route_class: str,
+    attempt_index: int,
+    binding: ProviderBinding,
+    prior_retryable_error_code: str | None = None,
+) -> dict[str, object]:
+    metadata: dict[str, object] = {
+        "fallback_chain_route": route_class,
+        "fallback_attempt_index": attempt_index,
+        "fallback_provider_id": binding.provider_id,
+        "fallback_model_id": binding.model_id,
+    }
+    if prior_retryable_error_code:
+        metadata["prior_retryable_error_code"] = prior_retryable_error_code
+    return metadata
+
+
+def _response_status(response: AIResponse) -> tuple[str, str | None]:
+    if response.error is None and response.text is not None:
+        return "success", None
+    return "provider_error", response.error.code.value if response.error is not None else "empty_response"
+
+
+def _retryable_error_code(response: AIResponse | None) -> str | None:
+    if response is not None and response.error is not None and response.error.retryable:
+        return response.error.code.value
+    return None
 
 
 def run_ai_task(
@@ -326,10 +407,40 @@ def run_ai_task(
             context_sources_count=context_sources_count,
         )
 
-    adapter = adapters.get(binding.provider_id)
     effective_max = max_output_tokens if max_output_tokens is not None else None
     if not binding.requires_network and effective_max is None:
         effective_max = binding.max_output_tokens
+    if binding.requires_network and effective_max is None:
+        config_decision = RoutingDecision(
+            provider_id=binding.provider_id,
+            model_id=binding.model_id,
+            blocked=True,
+            blocked_reason="config_error",
+            decision_reason="max_output_tokens required for network route",
+        )
+        ledger_id = _write_ai_job(
+            status="config_error",
+            task_kind=task_kind,
+            requested_route_class=requested_route_class,
+            selected_route_class=selected_route_class,
+            decision=config_decision,
+            prompt_digest=prompt_digest,
+            context_digest=context_digest,
+            context_sources=context_sources,
+            response=None,
+            latency_ms=_elapsed_ms(started),
+            error_type="config_error",
+        )
+        return AiTaskOutcome(
+            "config_error",
+            ledger_id,
+            selected_route_class,
+            config_decision,
+            error_type="config_error",
+            context_digest=context_digest,
+            context_sources_count=context_sources_count,
+        )
+
     if binding.requires_network and external_blocked_reason is not None:
         config_decision = RoutingDecision(
             provider_id=binding.provider_id,
@@ -361,102 +472,167 @@ def run_ai_task(
             context_sources_count=context_sources_count,
         )
 
-    not_ready_scaleway = (
-        binding.provider_id == SCALEWAY_PROVIDER_ID and binding.requires_network and not _scaleway_ready()
-    )
-    if adapter is None or (binding.requires_network and effective_max is None) or not_ready_scaleway:
-        config_decision = RoutingDecision(
-            provider_id=binding.provider_id,
-            model_id=binding.model_id,
-            blocked=True,
-            blocked_reason="config_error",
-            decision_reason=_config_reason(adapter, binding, effective_max),
+    chain_bindings = [binding] if bindings is not None else _registry_fallback_bindings(selected_route_class, binding)
+    prior_retryable_error_code: str | None = None
+    last_outcome: AiTaskOutcome | None = None
+    for attempt_index, attempt_binding in enumerate(chain_bindings):
+        adapter = adapters.get(attempt_binding.provider_id)
+        attempt_max = max_output_tokens if max_output_tokens is not None else attempt_binding.max_output_tokens
+        gate_reason = _provider_gate_blocking_reason(attempt_binding)
+        if gate_reason is not None:
+            config_decision = RoutingDecision(
+                provider_id=attempt_binding.provider_id,
+                model_id=attempt_binding.model_id,
+                blocked=True,
+                blocked_reason="config_error",
+                decision_reason=f"external provider execution disabled by settings/gate: {gate_reason}",
+            )
+            ledger_id = _write_ai_job(
+                status="config_error",
+                task_kind=task_kind,
+                requested_route_class=requested_route_class,
+                selected_route_class=selected_route_class,
+                decision=config_decision,
+                prompt_digest=prompt_digest,
+                context_digest=context_digest,
+                context_sources=context_sources,
+                response=None,
+                latency_ms=_elapsed_ms(started),
+                error_type="config_error",
+                route_metadata=_chain_metadata(
+                    route_class=selected_route_class,
+                    attempt_index=attempt_index,
+                    binding=attempt_binding,
+                    prior_retryable_error_code=prior_retryable_error_code,
+                ),
+            )
+            return AiTaskOutcome(
+                "config_error",
+                ledger_id,
+                selected_route_class,
+                config_decision,
+                error_type="config_error",
+                context_digest=context_digest,
+                context_sources_count=context_sources_count,
+            )
+
+        if adapter is None:
+            config_decision = RoutingDecision(
+                provider_id=attempt_binding.provider_id,
+                model_id=attempt_binding.model_id,
+                blocked=True,
+                blocked_reason="config_error",
+                decision_reason=_config_reason(adapter, attempt_binding, attempt_max),
+            )
+            ledger_id = _write_ai_job(
+                status="config_error",
+                task_kind=task_kind,
+                requested_route_class=requested_route_class,
+                selected_route_class=selected_route_class,
+                decision=config_decision,
+                prompt_digest=prompt_digest,
+                context_digest=context_digest,
+                context_sources=context_sources,
+                response=None,
+                latency_ms=_elapsed_ms(started),
+                error_type="config_error",
+                route_metadata=_chain_metadata(
+                    route_class=selected_route_class,
+                    attempt_index=attempt_index,
+                    binding=attempt_binding,
+                    prior_retryable_error_code=prior_retryable_error_code,
+                ),
+            )
+            return AiTaskOutcome(
+                "config_error",
+                ledger_id,
+                selected_route_class,
+                config_decision,
+                error_type="config_error",
+                context_digest=context_digest,
+                context_sources_count=context_sources_count,
+            )
+
+        attempt_decision = RoutingDecision(
+            provider_id=attempt_binding.provider_id,
+            model_id=attempt_binding.model_id,
+            decision_reason=f"bound:{selected_route_class}",
         )
+        request = AIRequest(
+            task_type=_ai_task_type_for(task_kind),
+            prompt=assemble_prompt(blocks, user_prompt),
+            model_preference=attempt_binding.model_id,
+            max_output_tokens=attempt_max,
+            metadata={"context_digest": context_digest, "selected_route_class": selected_route_class},
+        )
+        try:
+            response = adapter.complete(request)
+        except Exception as exc:
+            ledger_id = _write_ai_job(
+                status="provider_error",
+                task_kind=task_kind,
+                requested_route_class=requested_route_class,
+                selected_route_class=selected_route_class,
+                decision=attempt_decision,
+                prompt_digest=prompt_digest,
+                context_digest=context_digest,
+                context_sources=context_sources,
+                response=None,
+                latency_ms=_elapsed_ms(started),
+                error_type=type(exc).__name__,
+                route_metadata=_chain_metadata(
+                    route_class=selected_route_class,
+                    attempt_index=attempt_index,
+                    binding=attempt_binding,
+                    prior_retryable_error_code=prior_retryable_error_code,
+                ),
+            )
+            return AiTaskOutcome(
+                "provider_error",
+                ledger_id,
+                selected_route_class,
+                attempt_decision,
+                error_type=type(exc).__name__,
+                context_digest=context_digest,
+                context_sources_count=context_sources_count,
+            )
+
+        status, error_type = _response_status(response)
         ledger_id = _write_ai_job(
-            status="config_error",
+            status=status,
             task_kind=task_kind,
             requested_route_class=requested_route_class,
             selected_route_class=selected_route_class,
-            decision=config_decision,
+            decision=attempt_decision,
             prompt_digest=prompt_digest,
             context_digest=context_digest,
             context_sources=context_sources,
-            response=None,
+            response=response,
             latency_ms=_elapsed_ms(started),
-            error_type="config_error",
+            error_type=error_type,
+            route_metadata=_chain_metadata(
+                route_class=selected_route_class,
+                attempt_index=attempt_index,
+                binding=attempt_binding,
+                prior_retryable_error_code=prior_retryable_error_code,
+            ),
         )
-        return AiTaskOutcome(
-            "config_error",
+        last_outcome = AiTaskOutcome(
+            status,
             ledger_id,
             selected_route_class,
-            config_decision,
-            error_type="config_error",
+            attempt_decision,
+            response,
+            error_type=error_type,
             context_digest=context_digest,
             context_sources_count=context_sources_count,
         )
+        retryable_error_code = _retryable_error_code(response)
+        if status == "provider_error" and retryable_error_code and attempt_index + 1 < len(chain_bindings):
+            prior_retryable_error_code = retryable_error_code
+            continue
+        return last_outcome
 
-    request = AIRequest(
-        task_type=_ai_task_type_for(task_kind),
-        prompt=assemble_prompt(blocks, user_prompt),
-        model_preference=binding.model_id,
-        max_output_tokens=effective_max,
-        metadata={"context_digest": context_digest, "selected_route_class": selected_route_class},
-    )
-    try:
-        response = adapter.complete(request)
-    except Exception as exc:  # adapter/provider raised before/within the call
-        err_decision = RoutingDecision(
-            provider_id=binding.provider_id, model_id=binding.model_id, decision_reason=f"bound:{selected_route_class}"
-        )
-        ledger_id = _write_ai_job(
-            status="provider_error",
-            task_kind=task_kind,
-            requested_route_class=requested_route_class,
-            selected_route_class=selected_route_class,
-            decision=err_decision,
-            prompt_digest=prompt_digest,
-            context_digest=context_digest,
-            context_sources=context_sources,
-            response=None,
-            latency_ms=_elapsed_ms(started),
-            error_type=type(exc).__name__,
-        )
-        return AiTaskOutcome(
-            "provider_error",
-            ledger_id,
-            selected_route_class,
-            err_decision,
-            error_type=type(exc).__name__,
-            context_digest=context_digest,
-            context_sources_count=context_sources_count,
-        )
-
-    if response.error is None and response.text is not None:
-        status = "success"
-        error_type = None
-    else:
-        status = "provider_error"
-        error_type = response.error.code.value if response.error is not None else "empty_response"
-    ledger_id = _write_ai_job(
-        status=status,
-        task_kind=task_kind,
-        requested_route_class=requested_route_class,
-        selected_route_class=selected_route_class,
-        decision=decision,
-        prompt_digest=prompt_digest,
-        context_digest=context_digest,
-        context_sources=context_sources,
-        response=response,
-        latency_ms=_elapsed_ms(started),
-        error_type=error_type,
-    )
-    return AiTaskOutcome(
-        status,
-        ledger_id,
-        selected_route_class,
-        decision,
-        response,
-        error_type=error_type,
-        context_digest=context_digest,
-        context_sources_count=context_sources_count,
-    )
+    if last_outcome is not None:
+        return last_outcome
+    raise RuntimeError("provider execution reached unreachable empty chain")

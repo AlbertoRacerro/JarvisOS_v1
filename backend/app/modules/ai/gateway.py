@@ -2,6 +2,7 @@ import time
 
 from app.core.database import open_sqlite_connection
 from app.modules.ai.budget import evaluate_ai_status
+from app.modules.ai.execution import resolve_binding
 from app.modules.ai.models import (
     AIMetadata,
     AITaskRunRequest,
@@ -75,7 +76,9 @@ class AIGateway:
 
         if selected_route_class.startswith("external:"):
             settings = get_ai_settings()
-            status = evaluate_ai_status(settings, "scaleway")
+            binding, _decision = resolve_binding(selected_route_class)
+            provider_mode = binding.provider_id if binding is not None else selected_route_class
+            status = evaluate_ai_status(settings, provider_mode)
             if not status.external_calls_allowed:
                 external_blocked_reason = status.blocking_reason or "external_calls_disabled"
 

@@ -8,7 +8,7 @@ from typing import Any
 
 from app.modules.ai.budget import evaluate_ai_status
 from app.modules.ai.contracts import AIProviderAdapter
-from app.modules.ai.execution import ProviderBinding, run_ai_task
+from app.modules.ai.execution import ProviderBinding, resolve_binding, run_ai_task
 from app.modules.ai.settings import get_ai_settings
 from app.modules.bluecad.ledger import (
     candidate_work_dir,
@@ -236,8 +236,10 @@ def _build_error_code(errors: list[dict[str, Any]]) -> str:
     return str(code or "error")
 
 
-def _external_blocked_reason() -> str | None:
-    status = evaluate_ai_status(get_ai_settings(), "scaleway")
+def _external_blocked_reason(route_class: str = "external:cheap") -> str | None:
+    binding, _decision = resolve_binding(route_class)
+    provider_mode = binding.provider_id if binding is not None else route_class
+    status = evaluate_ai_status(get_ai_settings(), provider_mode)
     if status.external_calls_allowed:
         return None
     return status.blocking_reason or "external_calls_blocked"

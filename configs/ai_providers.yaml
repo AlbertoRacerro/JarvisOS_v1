@@ -40,30 +40,49 @@ providers:
         provider_model_name: qwen3-coder:30b
         route_classes: [local:coder_heavy]
         max_output_tokens: 512
-  scaleway:
+  deepseek:
     kind: openai_compatible
     enabled: true
     requires_network: true
-    base_url: https://api.scaleway.ai/v1
-    api_key_ref: env:SCALEWAY_API_KEY
+    base_url: https://api.deepseek.com
+    api_key_ref: env:DEEPSEEK_API_KEY
     timeout_seconds: 20
-    monthly_token_cap: 500000
-    monthly_cost_cap_usd: 0
+    monthly_token_cap: 1000000
+    monthly_cost_cap_usd: 25
     models:
-      llama-3.1-8b-instruct:
-        provider_model_name: llama-3.1-8b-instruct
+      deepseek-v4-pro:
+        provider_model_name: deepseek-v4-pro
         route_classes: [external:cheap]
         max_output_tokens: 512
-      qwen3-235b-a22b-instruct-2507:
-        provider_model_name: qwen3-235b-a22b-instruct-2507
+  glm:
+    kind: openai_compatible
+    enabled: true
+    requires_network: true
+    base_url: https://api.z.ai/api/paas/v4
+    api_key_ref: env:GLM_API_KEY
+    timeout_seconds: 20
+    monthly_token_cap: 500000
+    monthly_cost_cap_usd: 50
+    models:
+      glm-5.2:
+        provider_model_name: glm-5.2
         route_classes: [external:reasoning]
         max_output_tokens: 1024
+  kimi:
+    kind: openai_compatible
+    enabled: false
+    requires_network: true
+    base_url: https://api.moonshot.ai/v1
+    api_key_ref: env:KIMI_API_KEY
+    timeout_seconds: 20
+    monthly_token_cap: 250000
+    monthly_cost_cap_usd: 25
+    models:
+      kimi-placeholder:
+        # confirm model id and enable when a key exists
+        provider_model_name: kimi-placeholder
+        route_classes: [external:kimi]
+        max_output_tokens: 1024
 fallback_chains:
-  local:fake: [local:fake]
-  local:fast: [local:fast]
-  local:general: [local:general]
-  local:gemma: [local:gemma]
-  local:coder: [local:coder]
-  local:coder_heavy: [local:coder_heavy]
-  external:cheap: [external:cheap]
-  external:reasoning: [external:reasoning]
+  external:cheap: [deepseek/deepseek-v4-pro, glm/glm-5.2]
+  external:reasoning: [glm/glm-5.2, deepseek/deepseek-v4-pro]

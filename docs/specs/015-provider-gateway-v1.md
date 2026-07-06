@@ -1,6 +1,6 @@
 # 015 — PROVIDER-GW-1: provider gateway v1
 
-Status: implemented (pending review)
+Status: implemented (stage 1; completed by 018)
 Depends on: none
 
 ## Goal
