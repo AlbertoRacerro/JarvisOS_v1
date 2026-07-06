@@ -8,13 +8,26 @@ frontier review or drafted by Codex against a kernel) only when their slot
 comes up; this table is the queue.
 
 Sources of binding decisions: `BLUECAD_CORE_DESIGN.md` (contracts, roadmap
-005–014, 018), `JARVISOS_PLATFORM_GAPS_PLAN.md` (kernels 015–017, 019),
+005–014, 037), `JARVISOS_PLATFORM_GAPS_PLAN.md` (kernels 015–016, 019, 034),
 `JARVISOS_CORE_TEAM_V1.md` (roster), `BLUECAD_TOOLING_AND_LICENSING.md`
 (license invariants), `BLUECAD_CONVERSATIONAL_DESIGN_LAYER.md` (north star:
 conversational intent phase + self-extending vocabulary; slices 030–033),
 `JARVISOS_KNOWLEDGE_GRAPH_NORTHSTAR.md` (PKG-1: persistent knowledge graph —
 deferred, trigger-gated; domain/world-model track first, code-graph track
 only once an internal code-navigating agent exists).
+
+## Reserved numbering (fixed 2026-07-06, resolves collisions)
+
+- 030–033: conversational design layer slices (`BLUECAD_CONVERSATIONAL_DESIGN_LAYER.md`).
+- 034: AGENT-CORE-1 (renumbered from 017 — that number was taken by the merged
+  review-chain spec `docs/specs/017-two-tier-autonomous-review.md`).
+- 035: Domain Foundation navigator (ex 030); 036: multi-agent chat UI (ex 031).
+- 037: chat entry point → workbench (renumbered from 018 — that number was
+  taken by the merged provider-gateway-v2 spec,
+  `docs/specs/018-provider-gateway-v2.md`). 038–039 are free.
+- 040–046: memory/swarm spine block (MemoryStore, decision capture, context
+  packs, calc runner, evidence bridge, orchestration, alternative loop) —
+  drafts started 2026-07-06.
 
 ## Horizon 1 — Alpha-1 (pipeline proof)
 
@@ -31,7 +44,7 @@ only once an internal code-navigating agent exists).
 | --- | --- | --- |
 | 005b | Remaining part-kind stubs (full-reactor layouts) | spec ready (after 005) |
 | 006b | Parametric variants (sliders, deterministic rebuild) | spec ready (after 006) |
-| 018 | Chat entry point → workbench | roadmap row; spec to draft (small) |
+| 037 | Chat entry point → workbench (renumbered from 018 — that number is now taken by the merged provider-gateway-v2 spec) | roadmap row; spec to draft (small) |
 | 021 | Alpha-gate demo as executable CI test + data-root backup job | idea; kernel below |
 
 ## Horizon 3 — Engineering depth
@@ -40,7 +53,7 @@ only once an internal code-navigating agent exists).
 | --- | --- | --- |
 | 008 | Gmsh mesh adapter | spec ready (after 005+007) |
 | 009 | CalculiX FEM adapter (static) + Tier 3 | spec ready (after 008) |
-| 011 | Review panel (Core Team personas critique artifacts) | roadmap row; needs 017 + spec |
+| 011 | Review panel (Core Team personas critique artifacts) | roadmap row; needs 034 + spec |
 | 013 | Tier 2 domain-validator plugin interface | roadmap row; spec to draft |
 | 024 | FEM verification battery (analytic benchmark ladder) | idea; kernel below |
 | 027 | Modal + thermal analysis types | idea (extends 009; schema already reserves them) |
@@ -54,7 +67,7 @@ only once an internal code-navigating agent exists).
 | 015 | Provider gateway v1 (5 providers, route classes as data) | draft reviewed (PR #13), finalize → ready |
 | 016 | Runner extension for L2 (AST allowlist) | draft reviewed (PR #14), finalize → ready |
 | 019 | FRONTIER-1: Anthropic adapter, `external:frontier`, Fable approval gate | kernel frozen (platform plan); spec to draft |
-| 017 | AGENT-CORE-1: personas as config | kernel frozen; spec to draft |
+| 034 | AGENT-CORE-1: personas as config (renumbered from 017; that number is taken by the merged review-chain spec) | kernel frozen; spec to draft |
 | 026 | BoardSession (multi-persona stateful sessions) | explicitly deferred post-alpha |
 | 025 | Semantic routing eval: promote local classifier to default-pick per task class | assessment done (memory + below); post-alpha, needs BLUECAD ledger data |
 | 028 | Migration discipline doc + versioned additive migrations policy | idea (one page, Codex-draftable) |
@@ -64,7 +77,7 @@ only once an internal code-navigating agent exists).
 Principles (binding for all frontend slices; "beautiful" here = legible,
 calm, engineering-grade):
 
-1. **Workbench-first**: one BLUECAD surface; chat is an on-ramp (018), never
+1. **Workbench-first**: one BLUECAD surface; chat is an on-ramp (037), never
    a second UI for the same state.
 2. **Verdict before geometry**: pass/fail + parked reason always visible at
    a glance; 3D view is the centerpiece but never hides the report.
@@ -88,17 +101,17 @@ assumed settings/secrets are missing — **false**: `GET/PUT /ai/settings`,
 the `secrets` module (routes/service/storage), and escalation-confirm exist
 on the backend; R1 is a frontend surface over existing endpoints plus a
 secrets-hygiene pass, not new architecture. Multi-agent chat ships UI-first
-with personas clearly labeled as advisory single-calls until 017/011 land —
+with personas clearly labeled as advisory single-calls until 034/011 land —
 never fake a swarm.
 
 | # | Item (R-milestone) | State |
 | --- | --- | --- |
 | 029 | **R1 — Settings & secrets page**: provider mode, budget, token caps, API-key entry via the existing secrets endpoints; keys never in localStorage/frontend state/logs/plain repo files | idea; Codex-draftable (backend surface exists) |
 | 020 | **R2 — Workspace home layout**: single home (workbench + right AI chat + status strip), Dashboard→System Overview, Dev Local Chat absorbed as mode; design tokens v0 | idea; needs frontier kernel for layout contract, then Codex |
-| 030 | **R3 — Domain Foundation navigator**: search, type filter, edit/delete, detail view over modeling records (endpoints partly exist; add missing update/delete additively) | idea; Codex-draftable |
+| 035 | **R3 — Domain Foundation navigator**: search, type filter, edit/delete, detail view over modeling records (endpoints partly exist; add missing update/delete additively) | idea; Codex-draftable |
 | — | **R4 — Pipeline visibility**: largely shipped by 006+010 (attempt history, parked reasons); remainder = live-smoke polish items only | mostly done |
-| 031 | **R5 — Multi-agent chat UI**: persona-labeled chat over the existing single-call spine (Core Team roster as config), honest "advisory" badges; no orchestration | idea; after 020 |
-| 017+011+026 | **R6 — Real multi-agent orchestration** | already in backlog (kernels frozen) |
+| 036 | **R5 — Multi-agent chat UI**: persona-labeled chat over the existing single-call spine (Core Team roster as config), honest "advisory" badges; no orchestration | idea; after 020 |
+| 034+011+026 | **R6 — Real multi-agent orchestration** | already in backlog (kernels frozen) |
 | 020b | Workbench UX pass 2: variant comparison, design-history tree from candidate parent links | idea (data model ready) |
 | 020c | Report → 3D linking: failed check highlights the affected part in the viewer | idea; cheap with GLB node names |
 
@@ -129,8 +142,8 @@ Who writes the spec when an item's turn comes:
   policy), 026 (BoardSession — needs a design session, kernel does not
   exist yet), 011 (panel semantics).
 - **Codex-draftable from existing kernels/patterns, frontier/human review of
-  the draft** (the 015/016 flow, which worked): 017, 019 (kernels frozen in
-  `JARVISOS_PLATFORM_GAPS_PLAN.md`), 018, 021, 013, 027 (extends the 009
+  the draft** (the 015/016 flow, which worked): 034, 019 (kernels frozen in
+  `JARVISOS_PLATFORM_GAPS_PLAN.md`), 037, 021, 013, 027 (extends the 009
   pattern), 028, 020/020b/020c (UI — drafts must follow the Horizon 5
   principles and every UI PR ships screenshots for visual review).
 

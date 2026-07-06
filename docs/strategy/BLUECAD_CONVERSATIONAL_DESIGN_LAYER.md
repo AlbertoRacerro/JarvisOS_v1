@@ -2,7 +2,9 @@
 
 Status: north-star design (v0.1, 2026-07-04, Fable 5)
 Relates to: `BLUECAD_CORE_DESIGN.md` (the loop, validators), specs 010 (loop),
-011 (review panel), 012 (L2 scripts), 016 (runner extension), 018 (chat entry),
+011 (review panel), 012 (L2 scripts), 016 (runner extension), 037 (chat entry;
+renumbered from 018 — that number is now taken by the merged
+provider-gateway-v2 spec),
 `JARVISOS_CORE_TEAM_V1.md` (personas). This doc unifies them into one product
 arc. It is a direction, not a slice; slices are listed at the end.
 
@@ -110,7 +112,7 @@ The AI drove the extension; determinism and a human kept it safe.
 - **The loop (010)** is Phase 2, unchanged.
 - **L2 scripts (012) + runner-ext (016)** are L-eph — the ephemeral
   self-extension mechanism, already specced.
-- **Chat entry (018)** grows from "chat creates a candidate" into the Phase-1
+- **Chat entry (037)** grows from "chat creates a candidate" into the Phase-1
   conversation surface.
 - **Review panel (011) + Core Team** become the design voices in the chat and
   the code reviewers for L-prop proposals.
@@ -125,7 +127,7 @@ The AI drove the extension; determinism and a human kept it safe.
 
 1. **030 — Conversation v0**: a chat tied to a project/workspace that turns a
    multi-turn conversation into a drafted GeometrySpec the user approves before
-   the loop runs (single model; builds on 018). No vocabulary changes.
+   the loop runs (single model; builds on 037). No vocabulary changes.
 2. **031 — Vocabulary-aware chat**: the chat is given the live part-kind
    catalog + limits, and explicitly reports expressible / approximate /
    impossible for each request.

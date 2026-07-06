@@ -27,8 +27,11 @@ platform specs run behind it.
 | 010 | BLUECAD AI loop v0 (includes candidate/attempt ledger) | alpha |
 | 015 | PROVIDER-GW-1: provider gateway v1 | nothing in alpha; enables multi-provider + future frontier |
 | 016 | RUNNER-EXT-1: scoped runner extension for BLUECAD L2 | spec 012 only |
-| 017 | AGENT-CORE-1: Core Team personas as config + panel plumbing | spec 011 only |
+| 034 | AGENT-CORE-1: Core Team personas as config + panel plumbing | spec 011 only |
 | 019 | FRONTIER-1: Anthropic adapter + `external:frontier` route class + Fable approval gate | nothing; enables frontier routing |
+
+Erratum (2026-07-06): AGENT-CORE-1 is spec 034, not 017 — number 017 was taken
+by the autonomous review chain (`docs/specs/017-two-tier-autonomous-review.md`).
 
 ## Kernel — FRONTIER-1 (spec 019, binding decisions; user-confirmed 2026-07-03)
 
@@ -102,7 +105,7 @@ workhorse tier (Kimi K2.7 / DeepSeek V4 / GLM 5.2 via 015).
    parks the owning candidate (BLUECAD invariant).
 6. Existing `batch_growth_v0` path byte-identical behavior (regression tests).
 
-## Kernel — AGENT-CORE-1 (spec 017, binding decisions)
+## Kernel — AGENT-CORE-1 (spec 034, binding decisions)
 
 1. Personas are **config, not code**: `configs/agents.yaml` — name, mission,
    system prompt ref, allowed task kinds, default route class, permission
