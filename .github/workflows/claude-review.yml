@@ -44,9 +44,11 @@ jobs:
             push commits.
 
             Steps:
-            1. Read the senior-tier and cheap-tier review comments on this PR.
-               If the senior tier escalated with an `ESCALATE:` reason, treat
-               that question as your primary focus — answer it explicitly.
+            1. Fetch the senior-tier and cheap-tier review comments on this PR
+               yourself, with `gh pr view <PR_NUMBER> --comments` (you have gh
+               access; the comments are not inlined in this prompt). If the
+               senior tier escalated with an `ESCALATE:` reason, treat that
+               question as your primary focus — answer it explicitly.
             2. Read AGENTS.md (hard invariants 1-8, conventions, non-goals).
             3. Identify the spec referenced by this PR (title/body/branch name,
                docs/specs/NNN-*.md) and read it. If no spec is referenced and the

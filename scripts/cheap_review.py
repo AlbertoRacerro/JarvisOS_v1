@@ -79,9 +79,9 @@ def resolve_spec(repo_root: Path, branch: str, title: str, body: str = "") -> tu
     # Prefer an explicit spec reference; the bare 3-digit fallback is word-bounded
     # so runs inside longer numbers (issue ids, years) never resolve to a spec.
     m = (
-        re.search(r"spec[/ _-]?(\d{3})\b", branch, re.I)
-        or re.search(r"spec[/ _-]?(\d{3})\b", title, re.I)
-        or re.search(r"spec[/ _-]?(\d{3})\b", body, re.I)
+        re.search(r"specs?[/ _-]?(\d{3})\b", branch, re.I)
+        or re.search(r"specs?[/ _-]?(\d{3})\b", title, re.I)
+        or re.search(r"specs?[/ _-]?(\d{3})\b", body, re.I)
         or re.search(r"\b(\d{3})\b", branch)
     )
     if not m:
@@ -314,6 +314,8 @@ def self_test(repo_root: Path) -> None:
     assert name.startswith("004-") and text
     name, text = resolve_spec(repo_root, "fix/review", "", "Implements spec 004 fallback hardening.")
     assert name.startswith("004-") and text
+    name, text = resolve_spec(repo_root, "codex/some-feature", "", "See the spec file `docs/specs/004-tiered-pr-review.md`.")
+    assert name.startswith("004-") and text  # the `specs/NNN` path form must resolve too
     name, _ = resolve_spec(repo_root, "docs/cleanup-2026-06", "")
     assert name == ""  # digits inside longer numbers must not resolve to a spec
     assert "senior reviewer" in tier_intro("senior")
