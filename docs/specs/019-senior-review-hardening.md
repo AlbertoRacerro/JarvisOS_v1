@@ -53,7 +53,7 @@ DeepSeek request behavior.
 
 1. `REVIEW_EXTRA_BODY` is accepted as a JSON object and merged into the model
    request body. Invalid JSON or a non-object value fails loudly. When unset,
-   senior defaults are `{"reasoning_effort": "low", "max_tokens": 8000,
+   senior defaults are `{"reasoning_effort": "low", "max_tokens": 32000,
    "do_sample": false}` and cheap-tier defaults remain `{}`. Explicit keys in
    `REVIEW_EXTRA_BODY` override tier defaults.
 2. Streaming SSE parsing accumulates content, detects whether any
@@ -96,3 +96,20 @@ maintainer:
   (provider closing the connection mid-stream) is not an `OSError` and
   escaped the fail-open handler: red check, no comment, no diagnostics. The
   except tuple now includes `http.client.HTTPException`.
+
+## Post-merge hardening (fix/senior-reasoning-headroom, 2026-07-07)
+
+Two additional live review-pipeline issues were fixed by the maintainer:
+
+- **Senior reasoning headroom.** z.ai can bill GLM reasoning tokens against the
+  same output `max_tokens` cap even when `reasoning_effort` is set to `low`; on
+  large review packs, the former 8k ceiling could be exhausted entirely by
+  reasoning and return zero review content. The unset senior default is now
+  `{"reasoning_effort": "low", "max_tokens": 32000, "do_sample": false}`.
+  This is a hard billing ceiling, not a target; generation still stops when the
+  review completes.
+- **Spec-introduction PR review rule.** When a PR adds the referenced spec file
+  as a `NEW file` and that spec's status is `ready`, reviewers must treat the PR
+  as introducing the spec for later implementation. They should review the spec
+  document's quality and other changed files on their own merits, not report the
+  new spec's acceptance criteria as unimplemented.

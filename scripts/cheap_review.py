@@ -565,6 +565,11 @@ def self_test(repo_root: Path) -> None:
         sys.stderr = old_stderr
     assert "ESCALATE" in build_prompt("d", "", "", "x", "senior")
     assert "ESCALATE" not in build_prompt("d", "", "", "x", "cheap")
+    prompt = build_prompt("diff --git a/docs/specs/020-example.md b/docs/specs/020-example.md\nnew file mode", "020-example.md", "Status: ready", "x", "cheap")
+    assert "Spec-introduction PRs" in prompt
+    assert "NEW file" in prompt
+    assert 'status is "ready"' in prompt
+    assert "do NOT report the new spec's acceptance" in prompt
     assert "ARCH:" in build_prompt("d", "", "", "x", "cheap")
     excerpts = read_agents_sections(repo_root, AGENTS_SECTIONS)
     assert "## Hard invariants" in excerpts
