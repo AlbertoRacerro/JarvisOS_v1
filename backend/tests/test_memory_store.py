@@ -190,6 +190,90 @@ def test_create_list_promote_and_reject_memory_proposals(client: TestClient) -> 
     assert client.post(f"/memory/assumption/{uuid4()}/promote").status_code == 404
 
 
+def test_memory_parameter_proposals_validate_modeling_parameter_contract(client: TestClient) -> None:
+    ai_job_id = _insert_ai_job()
+    malformed_payloads = [
+        {
+            "record_kind": "parameter",
+            "workspace_id": "bluerev",
+            "name": "Empty unit",
+            "unit": "",
+            "source_ai_job_id": ai_job_id,
+        },
+        {
+            "record_kind": "parameter",
+            "workspace_id": "bluerev",
+            "name": "Bad value status",
+            "unit": "m",
+            "value_status": "guessed",
+            "source_ai_job_id": ai_job_id,
+        },
+        {
+            "record_kind": "parameter",
+            "workspace_id": "bluerev",
+            "name": "Bad bounds",
+            "unit": "m",
+            "value_min": 10,
+            "value_max": 1,
+            "source_ai_job_id": ai_job_id,
+        },
+    ]
+
+    for payload in malformed_payloads:
+        response = client.post("/memory/proposals", json=payload)
+        assert response.status_code == 422
+
+    with open_sqlite_connection() as connection:
+        count = connection.execute(
+            "SELECT COUNT(*) FROM parameters WHERE name IN ('Empty unit', 'Bad value status', 'Bad bounds')"
+        ).fetchone()[0]
+    assert count == 0
+
+    parameters_response = client.get("/workspaces/bluerev/parameters")
+    assert parameters_response.status_code == 200
+
+
+def test_calc_parameter_proposals_validate_parameter_contract(client: TestClient) -> None:
+    from pydantic import ValidationError
+
+    from app.modules.memory.models import CalcParameterProposalCreate
+    from app.modules.memory.service import create_calc_parameter_proposals
+
+    with pytest.raises(ValidationError):
+        CalcParameterProposalCreate(
+            workspace_id="bluerev",
+            runner_job_id="runner-1",
+            name="Bad calc status",
+            value_status="guessed",
+        )
+    with pytest.raises(ValidationError):
+        CalcParameterProposalCreate(
+            workspace_id="bluerev",
+            runner_job_id="runner-1",
+            name="Bad calc bounds",
+            value_min=10,
+            value_max=1,
+        )
+
+    records = create_calc_parameter_proposals(
+        [
+            CalcParameterProposalCreate(
+                workspace_id="bluerev",
+                runner_job_id="runner-1",
+                name="Valid calc output",
+                unit="m",
+                value_status="validated",
+                value_min=1,
+                value_max=10,
+            )
+        ]
+    )
+    assert len(records) == 1
+    assert records[0].origin == "calc"
+    assert records[0].source_ref == "runner_job:runner-1"
+    assert client.get("/workspaces/bluerev/parameters").status_code == 200
+
+
 def test_legacy_status_normalization_and_superseded_unreachable(client: TestClient) -> None:
     now = utc_now()
     with open_sqlite_connection() as connection:
