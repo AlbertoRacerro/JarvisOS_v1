@@ -1,4 +1,4 @@
-# 021 — Codex PR autopush without automerge
+# 022 — Codex PR autopush without automerge
 
 Status: ready
 Depends on: 017 (Autonomous three-tier review), 019 (Senior review hardening)
@@ -41,15 +41,21 @@ the no-automerge rule, not from manual branch application friction.
 ## Scope
 
 This spec covers a future autopush capability for Codex-generated PR fixes.
+It also requires the automated review-to-Codex loop to materialize fix attempts
+by default instead of relying on passive advisory comments.
 
 The future implementation may add:
 
-- a GitHub workflow that reacts to authorized Codex/fix-request events;
-- a small script that validates the target PR branch and performs the push or
+- a bootstrap GitHub workflow that reacts to authorized Codex/fix-request events;
+- a bootstrap script that validates the target PR branch and performs the push or
   verifies that Codex-native auto-apply has already pushed;
 - comments that report the final remote branch head SHA;
 - tests for branch targeting, no-automerge behavior, and blocked high-risk
   operations.
+
+The future implementation PR may intentionally add the initial actuator workflow
+or script as a bootstrap change. After that bootstrap is in place, Codex autopush
+must not modify `.github/workflows/**` by default.
 
 The policy is deliberately permissive for ordinary code/docs/test/spec changes.
 Codex is allowed to make imperfect or out-of-scope commits on PR branches. Those
@@ -63,8 +69,9 @@ The future implementation must preserve these boundaries:
 2. Codex or its actuator must never merge a PR.
 3. Codex or its actuator must never force-push.
 4. Codex or its actuator must never delete branches.
-5. Codex or its actuator must not modify `.github/workflows/**` unless the
-   maintainer explicitly requests that class of change in a separate PR.
+5. After bootstrap, Codex or its actuator must not modify `.github/workflows/**`
+   unless the maintainer explicitly requests that class of change in a separate
+   PR.
 6. Codex or its actuator must not modify `.env*`, secret, token, credential, or
    key files unless the maintainer explicitly requests that class of change in a
    separate PR.
@@ -78,7 +85,7 @@ the final integration boundary and the mechanisms that judge Codex's own work.
 - No push to `master`.
 - No force-push.
 - No branch deletion.
-- No default workflow self-modification.
+- No default workflow self-modification after bootstrap.
 - No default secrets/env/credential file modification.
 - No heavy pre-push semantic gate for ordinary source, docs, tests, or specs.
 - No attempt to prevent all bad Codex patches before they reach the PR branch.
@@ -113,6 +120,22 @@ After Codex completes:
 3. the PR conversation records the pushed SHA and changed files;
 4. if the change is bad or out of scope, review asks Codex to correct or revert;
 5. the maintainer merges only after the branch state and reviews are acceptable.
+
+## Review-to-Codex default loop
+
+Every automated review result with `NEEDS_CHANGES`, `REQUEST_CHANGES`, or an
+equivalent blocking parse/failure state must trigger a real Codex fix attempt by
+default. A passive GitHub comment containing `@codex` is not sufficient unless it
+demonstrably creates a Codex task or branch update.
+
+For each blocking review result, Codex must either:
+
+1. push a fix commit to the existing PR branch; or
+2. comment a structured `false positive / no patch` decision with evidence that
+   explains why no code or documentation change is appropriate.
+
+After a Codex push, CI and automated review must run again on the new branch
+head. The loop stops only on clean review, max rounds, or human override.
 
 ## Implementation options
 
@@ -154,8 +177,9 @@ The actuator must still obey the hard boundaries above.
 4. The autopush path refuses to merge.
 5. The autopush path refuses force-push.
 6. The autopush path refuses branch deletion.
-7. The autopush path refuses `.github/workflows/**` changes unless the
-   maintainer explicitly requests workflow modification in a separate PR.
+7. After bootstrap, the autopush path refuses `.github/workflows/**` changes
+   unless the maintainer explicitly requests workflow modification in a separate
+   PR.
 8. The autopush path refuses `.env*`, secret, token, credential, or key file
    changes unless the maintainer explicitly requests that class of change in a
    separate PR.
@@ -167,9 +191,19 @@ The actuator must still obey the hard boundaries above.
 12. If Codex reports a task-local commit that is not present on the remote PR
     branch, the system reports that as non-materialized work rather than treating
     it as complete.
-13. CI and automated review remain the authority for whether the pushed change is
+13. Every automated review result with `NEEDS_CHANGES`, `REQUEST_CHANGES`, or an
+    equivalent blocking parse/failure state triggers a real Codex fix attempt by
+    default.
+14. Passive `@codex` comments are not treated as sufficient unless they
+    demonstrably create a Codex task or branch update.
+15. Codex may satisfy a blocking review result by pushing a fix to the existing
+    PR branch or by commenting a structured `false positive / no patch` decision
+    with evidence.
+16. After a Codex push, CI and automated review run again.
+17. The loop stops only on clean review, max rounds, or human override.
+18. CI and automated review remain the authority for whether the pushed change is
     acceptable.
-14. Human merge authority is unchanged.
+19. Human merge authority is unchanged.
 
 ## Required tests for future implementation
 
@@ -178,12 +212,19 @@ A future implementation must include deterministic tests for:
 * refusing `master` as target branch;
 * refusing force-push mode;
 * refusing branch deletion;
-* refusing workflow file changes by default;
+* refusing workflow file changes by default after bootstrap;
 * refusing env/secret/token/key files by default;
 * allowing ordinary source/docs/tests/spec changes;
 * reporting a final remote branch head SHA after successful push;
 * detecting a Codex summary/commit reference that is not present on the remote
   PR branch;
+* ensuring blocking automated review results trigger a real Codex fix attempt by
+  default;
+* ensuring passive `@codex` comments are not considered sufficient unless they
+  create a Codex task or branch update;
+* ensuring Codex can record a structured `false positive / no patch` decision
+  with evidence;
+* ensuring the loop stops on clean review, max rounds, or human override;
 * ensuring no code path performs merge.
 
 ## Notes for implementation PR
