@@ -1,6 +1,6 @@
 # 040 — MEMORYSTORE-0: AI-proposal write boundary for existing engineering records
 
-Status: ready
+Status: implemented (pending review)
 Depends on: none
 
 ## Goal
@@ -397,3 +397,12 @@ reviewer. None of them block drafting this spec, but they should be resolved
 Additional binding decision: the facade exposes a calc-origin in-process batch
 path for spec 043 (see Design constraints) — `origin='calc'`,
 `source_ref='runner_job:<id>'`, parameters only, single transaction.
+
+
+## Implementation notes
+
+- Implemented the narrowed MEMORYSTORE-0 slice for `assumptions`, `parameters`, and `decisions` only; `requirements` were intentionally left unchanged per the binding Review resolutions.
+- `source_ai_job_id` was added as a plain nullable TEXT column on affected tables, with proposal creation enforcing existence of the referenced `ai_jobs` row in the memory service instead of a declared SQLite foreign key.
+- The public API exposes promote/reject only; the reserved `accepted -> superseded` transition remains intentionally unreachable through this slice's HTTP routes.
+- Added the in-process calc-origin batch helper for parameter proposals only, with `origin='calc'` and `source_ref='runner_job:<id>'`; no HTTP endpoint was added for it.
+- No deviations from the binding non-goals: no FTS, retrieval, UI, new dependencies, AI calls, or changes to the existing modeling create endpoints.
