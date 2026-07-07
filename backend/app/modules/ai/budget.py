@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from app.core.database import open_sqlite_connection
 from app.modules.ai.contracts import AIPolicyMode
@@ -45,6 +46,11 @@ def evaluate_provider_budget_gate(settings: AISettingsRead, provider_id: str) ->
 
 
 def provider_month_to_date_usage(provider_id: str) -> tuple[int, float]:
+    # ai_jobs.created_at is an ISO-8601 UTC string (events.utc_now), so a
+    # lexicographic >= against the first day of the current month is correct.
+    # Without this filter the caps would compare against lifetime usage and
+    # read as permanently exhausted after the first busy month.
+    month_start = datetime.now(UTC).strftime("%Y-%m-01")
     with open_sqlite_connection() as connection:
         row = connection.execute(
             """
@@ -52,9 +58,9 @@ def provider_month_to_date_usage(provider_id: str) -> tuple[int, float]:
                 COALESCE(SUM(COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0)), 0) AS total_tokens,
                 COALESCE(SUM(COALESCE(cost_estimate, 0)), 0) AS total_cost
             FROM ai_jobs
-            WHERE provider_id = ?
+            WHERE provider_id = ? AND created_at >= ?
             """,
-            (provider_id,),
+            (provider_id, month_start),
         ).fetchone()
     return int(row["total_tokens"]), float(row["total_cost"])
 
