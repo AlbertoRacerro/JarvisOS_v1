@@ -600,7 +600,7 @@ def test_runner_job_atomic_claim_runs_only_once(client: TestClient) -> None:
     assert second is False
 
 
-def test_batch_growth_registration_golden_behavior_rejects_script_text(client: TestClient) -> None:
+def test_batch_growth_registration_golden_behavior_ignores_script_text(client: TestClient) -> None:
     model_spec_id = _create_model_spec(client)
     response = client.post(
         "/workspaces/bluerev/model-implementations",
@@ -612,11 +612,11 @@ def test_batch_growth_registration_golden_behavior_rejects_script_text(client: T
         },
     )
 
-    assert response.status_code == 400
-    assert response.json()["detail"] == {
-        "code": "runner_script_text_unsupported",
-        "message": "batch_growth_v0 does not accept caller-supplied script text.",
-    }
+    assert response.status_code == 201
+    implementation = response.json()
+    script_path = Path(str(implementation["script_path"]))
+    assert script_path.name == "batch_growth.py"
+    assert "must not be accepted" not in script_path.read_text(encoding="utf-8")
 
 
 def test_batch_growth_registration_golden_script_bytes_and_response_shape(client: TestClient) -> None:
@@ -664,4 +664,83 @@ def test_batch_growth_registration_golden_script_bytes_and_response_shape(client
         "sha256": implementation["script_sha256"],
         "status": "registered",
         "notes": "Reviewed deterministic batch growth V0 script.",
+    }
+
+
+def test_batch_growth_job_creation_golden_input_error_precedes_script_hash_mismatch(client: TestClient) -> None:
+    implementation = _create_implementation(client)
+    script_path = Path(str(implementation["script_path"]))
+    script_path.write_text(script_path.read_text(encoding="utf-8") + "\n# tamper", encoding="utf-8")
+    input_set = _valid_input_set()
+    input_set["parameters"] = {**dict(input_set["parameters"]), "dt": 0}
+
+    response = client.post(
+        "/workspaces/bluerev/runner-jobs",
+        json={
+            "model_version_id": implementation["id"],
+            "input_set": input_set,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == {"code": "runner_input_invalid", "message": "dt must be greater than zero."}
+
+
+def test_batch_growth_success_golden_run_output_and_artifact_payload(client: TestClient) -> None:
+    implementation = _create_implementation(client)
+    job_response = _create_job(client, str(implementation["id"]))
+    runner_job = job_response["runner_job"]
+    simulation_run = job_response["simulation_run"]
+
+    response = client.post(f"/runner-jobs/{runner_job['id']}/run")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["runner_job"]["status"] == "succeeded"
+    assert body["simulation_run"]["status"] == "succeeded"
+    assert body["error"] is None
+    assert body["output"] == {
+        "schema_version": 1,
+        "status": "succeeded",
+        "outputs": {
+            "final_biomass_concentration": 0.1112770464246234,
+            "point_count": 3,
+        },
+        "series": [
+            {"t": 0.0, "X": 0.05},
+            {"t": 1.0, "X": 0.07459123488206353},
+            {"t": 2.0, "X": 0.1112770464246234},
+        ],
+        "artifacts": [
+            {
+                "path": "outputs/timeseries.csv",
+                "role": "csv",
+                "artifact_type": "csv",
+                "mime_type": "text/csv",
+            }
+        ],
+        "warnings": [],
+        "metadata": {"model": "batch_growth_v0", "deterministic": True},
+    }
+
+    detail = client.get(f"/workspaces/bluerev/simulation-runs/{simulation_run['id']}").json()
+    assert json.loads(detail["output_payload"]) == body["output"]
+    artifacts = client.get(f"/workspaces/bluerev/simulation-runs/{simulation_run['id']}/artifacts").json()
+    assert len(artifacts) == 1
+    assert {
+        "role": artifacts[0]["role"],
+        "artifact_type": artifacts[0]["artifact_type"],
+        "filename": artifacts[0]["filename"],
+        "mime_type": artifacts[0]["mime_type"],
+        "sha256": artifacts[0]["sha256"],
+        "status": artifacts[0]["status"],
+        "under_data_root": artifacts[0]["under_data_root"],
+    } == {
+        "role": "csv",
+        "artifact_type": "csv",
+        "filename": "timeseries.csv",
+        "mime_type": "text/csv",
+        "sha256": "80ee878c6c2bb6b4373867f1c650a96b367455b503b38fd4a62ad847a41b390e",
+        "status": "registered",
+        "under_data_root": True,
     }

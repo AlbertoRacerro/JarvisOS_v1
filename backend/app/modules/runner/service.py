@@ -51,11 +51,6 @@ def create_model_implementation(workspace_id: str, payload: ModelImplementationC
             "runner_implementation_kind_unsupported",
             "Only batch_growth_v0 and bluecad_l2_v0 are supported.",
         )
-    if payload.implementation_kind == IMPLEMENTATION_KIND and payload.script_text is not None:
-        raise RunnerSafetyError(
-            "runner_script_text_unsupported",
-            "batch_growth_v0 does not accept caller-supplied script text.",
-        )
     if payload.implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND and not payload.script_text:
         raise RunnerSafetyError("runner_script_text_required", "bluecad_l2_v0 requires script_text.")
 
@@ -184,18 +179,19 @@ def create_runner_job(workspace_id: str, payload: RunnerJobCreate) -> RunnerJobC
     with open_sqlite_connection() as connection:
         _require_workspace(connection, workspace_id)
         model_version = _load_model_version_with_artifact(connection, workspace_id, payload.model_version_id)
-        script_path = validate_script_path(workspace_id, model_version["script_path"])
-        script_sha = sha256_file(script_path)
-        if script_sha != model_version["script_sha256"]:
-            raise RunnerSafetyError("runner_script_hash_mismatch", "Script hash does not match registered artifact.")
         implementation_kind = model_version["implementation_kind"]
         if implementation_kind == IMPLEMENTATION_KIND:
             input_payload, parameter_payload = validate_batch_growth_input(payload.input_set)
         elif implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND:
-            preflight_script_policy(script_path, ast_import_allowlist=True)
             input_payload, parameter_payload = validate_bluecad_l2_input(payload.input_set)
         else:
             raise RunnerSafetyError("runner_implementation_kind_unsupported", "Unsupported implementation kind.")
+        script_path = validate_script_path(workspace_id, model_version["script_path"])
+        script_sha = sha256_file(script_path)
+        if script_sha != model_version["script_sha256"]:
+            raise RunnerSafetyError("runner_script_hash_mismatch", "Script hash does not match registered artifact.")
+        if implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND:
+            preflight_script_policy(script_path, ast_import_allowlist=True)
 
         job_run_root = run_root(workspace_id, simulation_run_id)
         connection.execute(

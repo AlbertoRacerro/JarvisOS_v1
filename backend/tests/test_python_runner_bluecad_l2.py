@@ -158,7 +158,16 @@ def test_bluecad_l2_rejects_disallowed_imports(client: TestClient, module: str) 
 
 @pytest.mark.parametrize(
     "source",
-    ["from . import x\n", "from math import *\n", "eval('1')\n", "exec('x=1')\n", "__import__('os')\n"],
+    [
+        "from . import x\n",
+        "from math import *\n",
+        "eval('1')\n",
+        "exec('x=1')\n",
+        "__import__('os')\n",
+        "builtins.eval('1')\n",
+        "builtins.exec('x=1')\n",
+        "builtins.__import__('os')\n",
+    ],
 )
 def test_bluecad_l2_rejects_dynamic_or_unknown_import_forms(client: TestClient, source: str) -> None:
     implementation = _create_l2(client, source)

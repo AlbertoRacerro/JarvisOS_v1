@@ -260,7 +260,11 @@ def preflight_bluecad_l2_ast_policy(source: str) -> None:
             _validate_bluecad_l2_import(node.module)
         elif isinstance(node, ast.Call):
             name = _call_name(node.func)
-            if name in {"__import__", "eval", "exec"} or name.startswith("importlib."):
+            if (
+                name in {"__import__", "eval", "exec"}
+                or name.rsplit(".", 1)[-1] in {"__import__", "eval", "exec"}
+                or name.startswith("importlib.")
+            ):
                 raise RunnerSafetyError(SANDBOX_VIOLATION, f"Dynamic code loading is not allowed: {name}.")
 
 
