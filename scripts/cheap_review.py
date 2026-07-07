@@ -3,8 +3,10 @@
 
 Calls an OpenAI-compatible chat-completions endpoint with a scoped pack — PR
 diff, referenced spec, and AGENTS.md excerpts (hard invariants, repo map,
-conventions, non-goals) — and posts a sticky advisory review comment. Standard
-library only; runs inside GitHub Actions.
+conventions, non-goals) — and posts an append-only advisory review comment: a
+new comment each round, so a re-review re-triggers the implementing agent (an
+edited comment fires no GitHub notification). Standard library only; runs inside
+GitHub Actions.
 
 Two tiers share this script, selected by REVIEW_TIER:
 - "cheap" (DeepSeek, every push): drives the @codex fix loop; on approval
@@ -33,10 +35,15 @@ from pathlib import Path
 
 GITHUB_API = "https://api.github.com"
 COMMENT_MARKER = "<!-- cheap-review:{provider} -->"
-# Codex ignores mentions authored by github-actions (anti-loop) and, when a
-# human mentions it, only reads the mentioning comment itself — not "the
-# findings above". The fix request is therefore a separate sticky comment,
-# authored with the maintainer PAT and carrying the findings inline.
+# Comments are APPEND-ONLY: each round posts a NEW comment, never edits a prior
+# one. GitHub fires a notification only on comment creation, not on edit, so an
+# edited @codex fix-request would never re-trigger Codex (it already consumed the
+# old one). The review marker + `round=N` line let a later run count prior rounds
+# by scanning the comment history instead of relying on one sticky. Codex also
+# ignores mentions authored by github-actions (anti-loop) and, when a human
+# mentions it, only reads the mentioning comment itself — not "the findings
+# above": the fix request is a separate comment, authored with the maintainer PAT
+# and carrying the findings inline.
 FIX_REQUEST_MARKER = "<!-- codex-fix-request:{provider} -->"
 AGENTS_SECTIONS = ("Hard invariants", "Repo map", "Conventions", "What NOT to do")
 # z.ai bills reasoning as output and max_tokens caps reasoning+content
@@ -162,6 +169,11 @@ Review the PR diff strictly for substance, not style:
 - For bugfix PRs, verify root-cause adequacy. If the patch only hides a crash,
   catches an exception, or shows a friendlier error without making the intended
   flow work, report a MAJOR finding.
+- Substantiate every blocker. Before you assign CRITICAL or MAJOR, state the
+  concrete input or state that triggers the failure. If you cannot construct one,
+  downgrade it to a lower-severity note or omit it — a speculative or unverified
+  defect reported as a blocker is itself a review defect and wastes the @codex
+  fix loop.
 - Fabricated results (AGENTS.md invariant 9) -> CRITICAL. Hunt specifically for:
   hard-coded or unconditional pass/success/verdict values; placeholder outputs
   standing in for real computation (comments like "placeholder", "neutral",
@@ -413,9 +425,12 @@ def pr_head_sha(repo: str, pr: int, token: str) -> str:
     return json.loads(text).get("head", {}).get("sha", "") or ""
 
 
-def find_sticky(repo: str, pr: int, token: str, marker: str) -> tuple[int | None, int]:
-    """Return (comment_id or None, prior_round_count)."""
-    for page in range(1, 11):
+def list_pr_comments(repo: str, pr: int, token: str) -> list[dict]:
+    """All issue comments on the PR, fully paginated. Append-only means comments
+    accumulate and the newest (highest round) can sit on a later page, so we must
+    read every page — reading only page 1 would undercount the round on a busy PR."""
+    out: list[dict] = []
+    for page in range(1, 21):  # 20 * 100 = far more comments than any real PR
         status, text = gh_request(
             "GET",
             f"{GITHUB_API}/repos/{repo}/issues/{pr}/comments?per_page=100&page={page}",
@@ -423,37 +438,40 @@ def find_sticky(repo: str, pr: int, token: str, marker: str) -> tuple[int | None
             accept="application/vnd.github+json",
         )
         if status != 200:
-            # Posting blind would duplicate the comment and reset the round counter.
+            # Guessing the round blind would reset the counter; fail loud instead.
             die(f"could not list PR comments (status {status})")
-        comments = json.loads(text)
-        for c in comments:
-            if marker in c.get("body", ""):
-                rounds = re.search(r"round=(\d+)", c["body"])
-                return c["id"], int(rounds.group(1)) if rounds else 0
-        if len(comments) < 100:
+        batch = json.loads(text)
+        out.extend(batch)
+        if len(batch) < 100:
             break
-    return None, 0
+    return out
 
 
-def upsert_comment(repo: str, pr: int, token: str, comment_id: int | None, body: str) -> None:
-    if comment_id is not None:
-        status, _ = gh_request(
-            "PATCH",
-            f"{GITHUB_API}/repos/{repo}/issues/comments/{comment_id}",
-            token,
-            accept="application/vnd.github+json",
-            body={"body": body},
-        )
-    else:
-        status, _ = gh_request(
-            "POST",
-            f"{GITHUB_API}/repos/{repo}/issues/{pr}/comments",
-            token,
-            accept="application/vnd.github+json",
-            body={"body": body},
-        )
-    if status not in (200, 201):
-        die(f"could not post/update the review comment (status {status})")
+def next_round(comments: list[dict], marker: str) -> int:
+    """One past the highest `round=N` among this tier's prior review comments."""
+    rounds: list[int] = []
+    for c in comments:
+        body = c.get("body", "")
+        if marker not in body:
+            continue
+        m = re.search(r"round=(\d+)", body)
+        if m:
+            rounds.append(int(m.group(1)))
+    return (max(rounds) if rounds else 0) + 1
+
+
+def post_comment(repo: str, pr: int, token: str, body: str) -> None:
+    """Always POST a new comment (append-only): an edit fires no notification, so a
+    re-review must be a fresh comment to re-trigger the implementing agent."""
+    status, _ = gh_request(
+        "POST",
+        f"{GITHUB_API}/repos/{repo}/issues/{pr}/comments",
+        token,
+        accept="application/vnd.github+json",
+        body={"body": body},
+    )
+    if status != 201:
+        die(f"could not post PR comment (status {status})")
 
 
 def remove_label(repo: str, pr: int, token: str, label: str) -> None:
@@ -571,13 +589,24 @@ def self_test(repo_root: Path) -> None:
     assert 'status is "ready"' in prompt
     assert "do NOT report the new spec's acceptance" in prompt
     assert "ARCH:" in build_prompt("d", "", "", "x", "cheap")
+    assert "Substantiate every blocker" in build_prompt("d", "", "", "x", "cheap")
     excerpts = read_agents_sections(repo_root, AGENTS_SECTIONS)
     assert "## Hard invariants" in excerpts
     assert "## Conventions" in excerpts
     assert "## What NOT to do" in excerpts
-    # Fix-request sticky must never collide with the review sticky of the same provider.
+    # Fix-request marker must never collide with the review marker of the same provider.
     assert FIX_REQUEST_MARKER.format(provider="glm") != COMMENT_MARKER.format(provider="glm")
     assert "codex-fix-request:glm" in FIX_REQUEST_MARKER.format(provider="glm")
+    # Append-only round counting: scan prior comments for the highest round, +1.
+    _mk = COMMENT_MARKER.format(provider="deepseek")
+    assert next_round([], _mk) == 1
+    assert next_round(
+        [{"body": f"{_mk}\n<!-- round=1 -->\nx"}, {"body": f"{_mk}\n<!-- round=2 -->\ny"}], _mk
+    ) == 3
+    # A comment without a round= line (e.g. a provider-error notice) does not count.
+    assert next_round([{"body": "unrelated"}, {"body": f"{_mk}\n(no round line)"}], _mk) == 1
+    # Provider isolation: a senior/glm comment must not advance the cheap/deepseek round.
+    assert next_round([{"body": f"{COMMENT_MARKER.format(provider='glm')}\n<!-- round=5 -->"}], _mk) == 1
     # Mid-stream disconnects and read timeouts must route to fail-open, not crash.
     assert issubclass(http.client.IncompleteRead, PROVIDER_ERRORS)
     assert issubclass(TimeoutError, PROVIDER_ERRORS)
@@ -633,8 +662,7 @@ def main() -> None:
             remove_label(repo, pr, gh_token, stale)
 
     marker = COMMENT_MARKER.format(provider=provider)
-    comment_id, prior_rounds = find_sticky(repo, pr, gh_token, marker)
-    this_round = prior_rounds + 1
+    this_round = next_round(list_pr_comments(repo, pr, gh_token), marker)
     limit_reached = this_round > round_limit
 
     diff_status, diff = gh_request(
@@ -669,15 +697,17 @@ def main() -> None:
         error_detail = str(exc)
         print("cheap_review: provider error detail follows", file=sys.stdout)
         print(error_detail, file=sys.stdout)
+        # No round= line: a provider error is not a review round and must not
+        # advance the counter — it stays as a visible append-only notice.
         body = (
-            f"{marker}\n<!-- round={prior_rounds} -->\n"
+            f"{marker}\n"
             f"### {review_title} ({provider}) — PROVIDER ERROR\n\n"
             f"The {provider} API call failed ({detail}). Review was not produced. "
             f"{next_step}\n\n"
             f"Error detail: `{error_detail}`"
         )
         try:
-            upsert_comment(repo, pr, gh_token, comment_id, body)
+            post_comment(repo, pr, gh_token, body)
         except SystemExit:
             die(f"provider call failed ({detail}); fail-open comment could not be posted")
         # Fail-open for the PR (advisory; merge is not blocked), but fail the
@@ -783,40 +813,35 @@ def main() -> None:
         f"### {review_title} ({provider}) — {header}\n\n"
         f"{review}{note}{footer}"
     )
-    upsert_comment(repo, pr, gh_token, comment_id, body)
+    post_comment(repo, pr, gh_token, body)
     if mark_ready:
         add_label(repo, pr, gh_token, ready_label)
     if trigger_label:
         add_label(repo, pr, label_token, trigger_label)
 
-    # Actuation: the fix request is a separate sticky comment authored with the
-    # maintainer PAT (Codex ignores bot-authored mentions and reads only the
-    # mentioning comment, so the findings must be inline). Written/updated with
-    # label_token so the author is the PAT owner; read with gh_token.
+    # Actuation: a NEW fix-request comment each round, authored with the maintainer
+    # PAT (Codex ignores bot-authored mentions and reads only the mentioning
+    # comment, so the findings must be inline; and a fresh comment — not an edit —
+    # is what re-notifies Codex). Append-only: prior fix requests stay as history;
+    # on approval or limit we simply post none.
     if not chain_may_stall:
-        fix_marker = FIX_REQUEST_MARKER.format(provider=provider)
-        fix_id, _ = find_sticky(repo, pr, gh_token, fix_marker)
         wants_fix = not limit_reached and not escalation and not approved and not stale_head
         if wants_fix:
+            fix_marker = FIX_REQUEST_MARKER.format(provider=provider)
             fix_body = (
                 f"{fix_marker}\n"
-                f"@codex implement the review fixes below on this branch (`{branch}`) "
-                "and push your commits to it. Do not open a new PR. Do not reply with "
-                "a summary instead of commits — apply the changes, then stop and wait "
-                f"for re-review. Findings from the {review_title} (round {this_round}):\n\n"
+                f"@codex evaluate the findings below on this branch (`{branch}`), then "
+                "push your commits. These findings are ADVISORY and often wrong (the "
+                "cheap DeepSeek tier especially produces false positives): for each "
+                "one, first decide whether it is a real defect. Fix the real ones. If "
+                "you judge a finding a false positive, do NOT change code to appease it "
+                "— reply with a short rebuttal backed by a test, a repro, or precise "
+                "reasoning. Do not open a new PR, do not silently ignore a finding, and "
+                "do not summarize instead of acting. When done, stop and wait for "
+                f"re-review. Findings from the {review_title} (round {this_round}):\n\n"
                 f"{review}"
             )
-            upsert_comment(repo, pr, label_token, fix_id, fix_body)
-        elif fix_id is not None:
-            # Neutralize a stale request so Codex is never pointed at findings
-            # that a newer round already resolved or superseded.
-            upsert_comment(
-                repo,
-                pr,
-                label_token,
-                fix_id,
-                f"{fix_marker}\n_Fix request closed (round {this_round}). No pending action._",
-            )
+            post_comment(repo, pr, label_token, fix_body)
 
 
 if __name__ == "__main__":
