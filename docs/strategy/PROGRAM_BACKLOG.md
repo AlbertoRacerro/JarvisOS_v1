@@ -8,7 +8,7 @@ frontier review or drafted by Codex against a kernel) only when their slot
 comes up; this table is the queue.
 
 Sources of binding decisions: `BLUECAD_CORE_DESIGN.md` (contracts, roadmap
-005–014, 037), `JARVISOS_PLATFORM_GAPS_PLAN.md` (kernels 015–016, 019, 034),
+005–014, 037), `JARVISOS_PLATFORM_GAPS_PLAN.md` (kernels 015–016, 034, 039),
 `JARVISOS_CORE_TEAM_V1.md` (roster), `BLUECAD_TOOLING_AND_LICENSING.md`
 (license invariants), `BLUECAD_CONVERSATIONAL_DESIGN_LAYER.md` (north star:
 conversational intent phase + self-extending vocabulary; slices 030–033),
@@ -24,8 +24,11 @@ only once an internal code-navigating agent exists).
 - 035: Domain Foundation navigator (ex 030); 036: multi-agent chat UI (ex 031).
 - 037: chat entry point → workbench (renumbered from 018 — that number was
   taken by the merged provider-gateway-v2 spec,
-  `docs/specs/018-provider-gateway-v2.md`). 038–039 are free.
-- 038: SIM-WIRE (mesh+FEM into the loop) — spec ready (2026-07-07, `docs/specs/038-sim-wire.md`, implement after 044 merges); 039: free.
+  `docs/specs/018-provider-gateway-v2.md`).
+- 038: SIM-WIRE (mesh+FEM into the loop) — spec ready (2026-07-07, `docs/specs/038-sim-wire.md`, implement after 044 merges).
+- 039: FRONTIER-1 (renumbered from 019 on 2026-07-07 — that number was taken
+  by the merged senior-review-hardening spec,
+  `docs/specs/019-senior-review-hardening.md`, PR #40).
 - 047–055: beta program block (BLUEREV-PROCESS-0/1/2, FLOWSHEET-1/RECALC/
   CAD-LINK, DECISION-PACKET, PROPOSAL-REVIEW UI, PROJECT-VIEW) — see
   `JARVISOS_BETA_PROGRAM.md`, which also fixes the SC-1..SC-4 seam contracts.
@@ -70,7 +73,7 @@ only once an internal code-navigating agent exists).
 | --- | --- | --- |
 | 015 | Provider gateway v1 (5 providers, route classes as data) | draft reviewed (PR #13), finalize → ready |
 | 016 | Runner extension for L2 (AST allowlist) | draft reviewed (PR #14), finalize → ready |
-| 019 | FRONTIER-1: Anthropic adapter, `external:frontier`, Fable approval gate | kernel frozen (platform plan); spec to draft |
+| 039 | FRONTIER-1: Anthropic adapter, `external:frontier`, Fable approval gate (renumbered from 019; that number is taken by the merged senior-review-hardening spec) | kernel frozen (platform plan); spec to draft |
 | 034 | AGENT-CORE-1: personas as config (renumbered from 017; that number is taken by the merged review-chain spec) | kernel frozen; spec to draft |
 | 026 | BoardSession (multi-persona stateful sessions) | explicitly deferred post-alpha |
 | 025 | Semantic routing eval: promote local classifier to default-pick per task class | assessment done (memory + below); post-alpha, needs BLUECAD ledger data |
@@ -146,7 +149,7 @@ Who writes the spec when an item's turn comes:
   policy), 026 (BoardSession — needs a design session, kernel does not
   exist yet), 011 (panel semantics).
 - **Codex-draftable from existing kernels/patterns, frontier/human review of
-  the draft** (the 015/016 flow, which worked): 034, 019 (kernels frozen in
+  the draft** (the 015/016 flow, which worked): 034, 039 (kernels frozen in
   `JARVISOS_PLATFORM_GAPS_PLAN.md`), 037, 021, 013, 027 (extends the 009
   pattern), 028, 020/020b/020c (UI — drafts must follow the Horizon 5
   principles and every UI PR ships screenshots for visual review).
