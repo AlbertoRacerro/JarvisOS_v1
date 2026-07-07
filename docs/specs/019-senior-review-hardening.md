@@ -80,3 +80,19 @@ DeepSeek request behavior.
    extra-body defaults/override/invalid JSON, tolerant verdict matching,
    multi-line SSE data, finish-reason capture, and empty-content diagnostics.
 9. Ruff is clean for the touched script.
+
+## Post-merge hardening (fix/review-pipeline-stale-checkout, 2026-07-07)
+
+Two defects observed live on the first post-019 senior runs, fixed by the
+maintainer:
+
+- **Stale merge-ref checkout.** On `labeled` events GitHub can serve a merge
+  ref computed at the PR''s last push, so the workflow silently ran the
+  pre-019 script (observed: run 28845001137 burned ~10 min of GLM reasoning
+  with the old unbounded request and crashed). Both review workflows now pin
+  `scripts/cheap_review.py` to `origin/master` after checkout; the PR
+  checkout is still used for spec/AGENTS resolution.
+- **Mid-stream disconnects crashed bare.** `http.client.IncompleteRead`
+  (provider closing the connection mid-stream) is not an `OSError` and
+  escaped the fail-open handler: red check, no comment, no diagnostics. The
+  except tuple now includes `http.client.HTTPException`.

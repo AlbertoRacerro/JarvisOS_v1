@@ -19,6 +19,7 @@ authority is CI plus the human maintainer (see AGENTS.md "Review authority").
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import re
@@ -34,6 +35,11 @@ GITHUB_API = "https://api.github.com"
 COMMENT_MARKER = "<!-- cheap-review:{provider} -->"
 AGENTS_SECTIONS = ("Hard invariants", "Repo map", "Conventions", "What NOT to do")
 SENIOR_EXTRA_BODY_DEFAULTS = {"reasoning_effort": "low", "max_tokens": 8000, "do_sample": False}
+# Everything a provider call can throw that must reach the fail-open path.
+# http.client.HTTPException covers IncompleteRead: a provider dropping the
+# connection mid-stream (observed live with z.ai) is not an OSError and must
+# still post the fail-open comment, never crash bare.
+PROVIDER_ERRORS = (OSError, KeyError, IndexError, TypeError, ValueError, http.client.HTTPException)
 
 
 @dataclass(frozen=True)
@@ -547,6 +553,10 @@ def self_test(repo_root: Path) -> None:
     assert "## Hard invariants" in excerpts
     assert "## Conventions" in excerpts
     assert "## What NOT to do" in excerpts
+    # Mid-stream disconnects and read timeouts must route to fail-open, not crash.
+    assert issubclass(http.client.IncompleteRead, PROVIDER_ERRORS)
+    assert issubclass(TimeoutError, PROVIDER_ERRORS)
+    assert issubclass(json.JSONDecodeError, PROVIDER_ERRORS)
     print("cheap_review: self-test OK")
 
 
@@ -623,7 +633,7 @@ def main() -> None:
 
     try:
         review = call_model_with_retry(base_url, model, api_key, prompt, timeout=http_timeout, stream=use_stream, tier=tier)
-    except (OSError, KeyError, IndexError, TypeError, ValueError) as exc:
+    except PROVIDER_ERRORS as exc:
         detail = f"HTTP {exc.code}" if isinstance(exc, urllib.error.HTTPError) else type(exc).__name__
         next_step = (
             f"Remove and re-add the `{frontier_label}` label to retry, or apply "
