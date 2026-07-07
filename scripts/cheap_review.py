@@ -33,6 +33,11 @@ from pathlib import Path
 
 GITHUB_API = "https://api.github.com"
 COMMENT_MARKER = "<!-- cheap-review:{provider} -->"
+# Codex ignores mentions authored by github-actions (anti-loop) and, when a
+# human mentions it, only reads the mentioning comment itself — not "the
+# findings above". The fix request is therefore a separate sticky comment,
+# authored with the maintainer PAT and carrying the findings inline.
+FIX_REQUEST_MARKER = "<!-- codex-fix-request:{provider} -->"
 AGENTS_SECTIONS = ("Hard invariants", "Repo map", "Conventions", "What NOT to do")
 SENIOR_EXTRA_BODY_DEFAULTS = {"reasoning_effort": "low", "max_tokens": 8000, "do_sample": False}
 # Everything a provider call can throw that must reach the fail-open path.
@@ -553,6 +558,9 @@ def self_test(repo_root: Path) -> None:
     assert "## Hard invariants" in excerpts
     assert "## Conventions" in excerpts
     assert "## What NOT to do" in excerpts
+    # Fix-request sticky must never collide with the review sticky of the same provider.
+    assert FIX_REQUEST_MARKER.format(provider="glm") != COMMENT_MARKER.format(provider="glm")
+    assert "codex-fix-request:glm" in FIX_REQUEST_MARKER.format(provider="glm")
     # Mid-stream disconnects and read timeouts must route to fail-open, not crash.
     assert issubclass(http.client.IncompleteRead, PROVIDER_ERRORS)
     assert issubclass(TimeoutError, PROVIDER_ERRORS)
@@ -727,10 +735,18 @@ def main() -> None:
         )
     elif not approved:
         header = f"round {this_round}/{round_limit}"
-        footer = (
-            "\n\n@codex please fix the review findings above on this branch, then wait "
-            "for re-review."
-        )
+        if chain_may_stall:
+            # No PAT: best effort, keep the inline mention even though Codex
+            # ignores bot-authored mentions.
+            footer = (
+                "\n\n@codex please fix the review findings above on this branch, then wait "
+                "for re-review."
+            )
+        else:
+            footer = (
+                "\n\n_Fix request posted as a separate maintainer-authored comment "
+                "for the implementing agent._"
+            )
     elif senior:
         header = f"round {this_round}/{round_limit}"
         footer = (
@@ -755,6 +771,35 @@ def main() -> None:
         add_label(repo, pr, gh_token, ready_label)
     if trigger_label:
         add_label(repo, pr, label_token, trigger_label)
+
+    # Actuation: the fix request is a separate sticky comment authored with the
+    # maintainer PAT (Codex ignores bot-authored mentions and reads only the
+    # mentioning comment, so the findings must be inline). Written/updated with
+    # label_token so the author is the PAT owner; read with gh_token.
+    if not chain_may_stall:
+        fix_marker = FIX_REQUEST_MARKER.format(provider=provider)
+        fix_id, _ = find_sticky(repo, pr, gh_token, fix_marker)
+        wants_fix = not limit_reached and not escalation and not approved and not stale_head
+        if wants_fix:
+            fix_body = (
+                f"{fix_marker}\n"
+                f"@codex implement the review fixes below on this branch (`{branch}`) "
+                "and push your commits to it. Do not open a new PR. Do not reply with "
+                "a summary instead of commits — apply the changes, then stop and wait "
+                f"for re-review. Findings from the {review_title} (round {this_round}):\n\n"
+                f"{review}"
+            )
+            upsert_comment(repo, pr, label_token, fix_id, fix_body)
+        elif fix_id is not None:
+            # Neutralize a stale request so Codex is never pointed at findings
+            # that a newer round already resolved or superseded.
+            upsert_comment(
+                repo,
+                pr,
+                label_token,
+                fix_id,
+                f"{fix_marker}\n_Fix request closed (round {this_round}). No pending action._",
+            )
 
 
 if __name__ == "__main__":

@@ -145,6 +145,13 @@ authority; every label is a *trigger* for the next tier, never an approval.
 Never merge your own PR. Never enable auto-merge. Open the PR against `master`
 and stop; fill in the PR template completely.
 
+**Fix requests to the implementing agent:** when a PR comment asks Codex to
+apply review findings, the expected behavior is: implement the fixes on the
+SAME branch the PR is from, push the commits there, and stop (wait for
+re-review). Never open a new PR for review fixes, never reply with a summary
+instead of commits, and never dismiss a finding without either a code change
+or an explicit "cannot fix because ..." reply in the PR.
+
 **Reviewer-owned conformance tests:** files matching
 `backend/tests/**/test_*_conformance.py` are written by the reviewing tier,
 never by the implementer. They measure produced artifacts (exported files,
