@@ -34,6 +34,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      # The pull_request merge ref can be STALE on labeled events (computed at
+      # the PR's last push, not at label time), silently running an outdated
+      # review script. The PR checkout stays for spec/AGENTS resolution; the
+      # script itself always runs from master.
+      - name: Pin review script to master
+        run: |
+          git fetch origin master
+          git checkout FETCH_HEAD -- scripts/cheap_review.py
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"

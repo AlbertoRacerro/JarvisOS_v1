@@ -19,6 +19,7 @@ authority is CI plus the human maintainer (see AGENTS.md "Review authority").
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import re
@@ -623,7 +624,10 @@ def main() -> None:
 
     try:
         review = call_model_with_retry(base_url, model, api_key, prompt, timeout=http_timeout, stream=use_stream, tier=tier)
-    except (OSError, KeyError, IndexError, TypeError, ValueError) as exc:
+    # http.client.HTTPException covers IncompleteRead: the provider dropping the
+    # connection mid-stream (observed live with z.ai after long generations) is
+    # not an OSError and must still hit the fail-open path, never a bare crash.
+    except (OSError, KeyError, IndexError, TypeError, ValueError, http.client.HTTPException) as exc:
         detail = f"HTTP {exc.code}" if isinstance(exc, urllib.error.HTTPError) else type(exc).__name__
         next_step = (
             f"Remove and re-add the `{frontier_label}` label to retry, or apply "
