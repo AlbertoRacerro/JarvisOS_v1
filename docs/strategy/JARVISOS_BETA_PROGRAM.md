@@ -165,7 +165,7 @@ exception to the observed-pain rule, not an application of it.
 | --- | --- | --- |
 | 034 | AGENT-CORE: personas as config (roster frozen) | none |
 | 011 | Review panel: personas critique artifacts, advisory | 034 |
-| 019 | FRONTIER-1: Anthropic adapter + `external:frontier` for the hard loop steps | 015/018 |
+| 039 | FRONTIER-1: Anthropic adapter + `external:frontier` for the hard loop steps | 015/018 |
 | 036 | R5 multi-agent chat UI, honest advisory badges | 020, 034 |
 
 Beta does NOT need real orchestration (045) or the alternative loop (046) to
@@ -210,7 +210,8 @@ for scene 1).
 
 ## Reserved numbering (extends PROGRAM_BACKLOG.md)
 
-- 038: SIM-WIRE; 039: free.
+- 038: SIM-WIRE; 039: FRONTIER-1 (renumbered from 019 — that number is taken by
+  the merged senior-review-hardening spec).
 - 045: AGENT-ORCH (memory/swarm block); 046: ALTERNATIVE-LOOP (memory/swarm block).
 - 047-049: BLUEREV-PROCESS-0/1/2 (process model from the Excel workbook).
 - 050-052: FLOWSHEET-1 / RECALC / CAD-LINK.

@@ -28,12 +28,15 @@ platform specs run behind it.
 | 015 | PROVIDER-GW-1: provider gateway v1 | nothing in alpha; enables multi-provider + future frontier |
 | 016 | RUNNER-EXT-1: scoped runner extension for BLUECAD L2 | spec 012 only |
 | 034 | AGENT-CORE-1: Core Team personas as config + panel plumbing | spec 011 only |
-| 019 | FRONTIER-1: Anthropic adapter + `external:frontier` route class + Fable approval gate | nothing; enables frontier routing |
+| 039 | FRONTIER-1: Anthropic adapter + `external:frontier` route class + Fable approval gate | nothing; enables frontier routing |
 
 Erratum (2026-07-06): AGENT-CORE-1 is spec 034, not 017 — number 017 was taken
 by the autonomous review chain (`docs/specs/017-two-tier-autonomous-review.md`).
 
-## Kernel — FRONTIER-1 (spec 019, binding decisions; user-confirmed 2026-07-03)
+Erratum (2026-07-07): FRONTIER-1 is spec 039, not 019 — number 019 was taken by
+the merged senior-review-hardening spec (`docs/specs/019-senior-review-hardening.md`).
+
+## Kernel — FRONTIER-1 (spec 039, binding decisions; user-confirmed 2026-07-03)
 
 Provider/model targets (maintainer decision): frontier tier = **Opus 4.8
 (default), GPT 5.5 (alternate), Fable 5 (approval-only)** on top of the
@@ -71,7 +74,7 @@ workhorse tier (Kimi K2.7 / DeepSeek V4 / GLM 5.2 via 015).
    `OpenAICompatAdapter(base_url, key_ref)` covers Scaleway, DeepSeek direct,
    GLM direct, Kimi direct, **and OpenAI itself (GPT frontier class — natively
    OpenAI-compatible, wired in 015 as a disabled entry)**. Anthropic adapter
-   is a later, separate class (spec 019) — do not pretend it exists.
+   is a later, separate class (spec 039) — do not pretend it exists.
 4. **Route classes become data**: `external:cheap` / `external:reasoning`
    mappings move from the hardcoded binding table into the registry config.
    Existing behavior must be reproducible byte-for-byte by the default config
