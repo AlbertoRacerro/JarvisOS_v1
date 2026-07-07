@@ -23,19 +23,26 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Validates the PR's own version of the script offline: reviewer-tooling
+      # changes are exercised here, since the live call below is pinned.
+      - name: Self-test review helpers (PR version, offline)
+        run: python scripts/cheap_review.py --self-test
+
       # The pull_request merge ref can be STALE (computed at the PR's last
-      # push), silently running an outdated review script. The PR checkout
-      # stays for spec/AGENTS resolution; the script always runs from master.
+      # push), silently running an outdated review script — and an unpinned
+      # script would let any PR modify its own reviewer. The PR checkout stays
+      # for spec/AGENTS resolution; the live review always runs the master
+      # script (tooling changes go live on merge).
       - name: Pin review script to master
         run: |
           git fetch origin master
           git checkout FETCH_HEAD -- scripts/cheap_review.py
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Self-test review helpers (offline)
+      - name: Self-test review helpers (pinned version, offline)
         run: python scripts/cheap_review.py --self-test
 
       - name: Run cheap-tier review
