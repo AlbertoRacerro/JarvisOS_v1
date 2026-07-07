@@ -39,7 +39,12 @@ COMMENT_MARKER = "<!-- cheap-review:{provider} -->"
 # authored with the maintainer PAT and carrying the findings inline.
 FIX_REQUEST_MARKER = "<!-- codex-fix-request:{provider} -->"
 AGENTS_SECTIONS = ("Hard invariants", "Repo map", "Conventions", "What NOT to do")
-SENIOR_EXTRA_BODY_DEFAULTS = {"reasoning_effort": "low", "max_tokens": 8000, "do_sample": False}
+# z.ai bills reasoning as output and max_tokens caps reasoning+content
+# COMBINED; "low" effort maps internally to "high", which on a full review
+# pack can exceed 8k tokens of reasoning alone (observed live on PR #39:
+# finish_reason=length with zero content). 32k is a billing ceiling
+# (~$0.14 worst case), not a target — generation stops when the review ends.
+SENIOR_EXTRA_BODY_DEFAULTS = {"reasoning_effort": "low", "max_tokens": 32000, "do_sample": False}
 # Everything a provider call can throw that must reach the fail-open path.
 # http.client.HTTPException covers IncompleteRead: a provider dropping the
 # connection mid-stream (observed live with z.ai) is not an OSError and must
@@ -170,6 +175,13 @@ Review the PR diff strictly for substance, not style:
 Do NOT report style nits unless they violate a convention in the AGENTS.md
 excerpts below. Use the repo map and "What NOT to do" excerpts to judge file
 placement and scope creep.
+
+Spec-introduction PRs: if the referenced spec file itself appears in the PR
+DIFF as a NEW file and its status is "ready", this PR is INTRODUCING the spec
+for later implementation. Review the spec document's quality and any other
+changed files on their own merits; do NOT report the new spec's acceptance
+criteria as unimplemented, and do NOT treat its non-goals as violated by files
+this PR changes for other declared reasons.
 
 Findings about strategy or architecture direction, licensing, provider or cost
 choices, or defects in the spec itself are decisions for the human maintainer,
@@ -532,7 +544,7 @@ def self_test(repo_root: Path) -> None:
     senior_request = _model_request("https://api.example.com", "m", "k", "p", True, "senior")
     senior_body = json.loads(senior_request.data.decode())
     assert senior_body["reasoning_effort"] == "low"
-    assert senior_body["max_tokens"] == 8000
+    assert senior_body["max_tokens"] == 32000
     assert senior_body["do_sample"] is False
     cheap_request = _model_request("https://api.example.com", "m", "k", "p", False, "cheap")
     cheap_body = json.loads(cheap_request.data.decode())
