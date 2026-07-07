@@ -1,6 +1,8 @@
 # JarvisOS — Beta program (ordered)
 
-Status: living document (created 2026-07-07). Purpose: the single ordered
+Status: living document (created 2026-07-07; revised 2026-07-07 after expert
+review — scene-2 scope, SC-1 amendment path, 051/052 status, drafting-order
+fixes). Purpose: the single ordered
 backbone from "the memory/swarm spine specs (040-044) are ready" to a beta
 that is both usable and credible. Every item has a number, a one-line scope,
 its dependencies, and — for deferred items — the pre-declared trigger that
@@ -24,7 +26,9 @@ conversation + 3D at the center; every number one click from its evidence.
    memory → calc script produces the numbers → CAD builds → mesh+FEM verify →
    verdict lands as evidence → you promote. All without leaving the home.
 2. **The FEM fails** → the panel explains why in three voices → an alternative
-   is proposed → variants compared side by side in the 3D view.
+   is proposed as a promotable proposal with its reasoning. (The built variant
+   and side-by-side 3D compare are 046 — trigger-gated, deliberately outside
+   the beta gate: the gate demands explanation + proposal, not the full loop.)
 3. **One click** → a dossier of the decision→evidence chain, ready for the
    thesis advisor or an investor.
 
@@ -58,6 +62,14 @@ a new engine, it is a parser over a shared string convention. Specs 047-049
 and 044 must be drafted to emit this form; 040's existing `source_ref` already
 matches it and is the template. **This contract must be settled before 047 is
 drafted** — it is the one seam whose drift is expensive.
+
+Action (2026-07-07): 044 is already `Status: ready` with typed FK columns
+only — before 044 is implemented, amend it with a dated review resolution so
+evidence writes also store the normalized `<kind>:<id>` ref alongside the
+FKs. Records written by 040/041 predate the convention (`source_ai_job_id`
+is a bare id, not `ai_job:<id>`): the 050 resolver normalizes those legacy
+columns at read time. One string convention plus one documented legacy
+mapping — still a parser, not two engines.
 
 ### SC-2 — The promotion surface has an owner (spec 054)
 
@@ -94,10 +106,17 @@ record, deterministically.
 | 038 | SIM-WIRE: call mesh (008) + FEM (009) adapters inside the candidate/attempt loop; outcomes land in `evidence_records` via 044's hooks | 044, and 008/009 already implemented (currently unwired) |
 | 021 | ALPHA-GATE: one CI-runnable script brief→build→validate→mesh→solve→artifacts asserting the outcome; plus data-root backup with a proven restore | 038 |
 
+Note (2026-07-07): 021 now depends transitively on the memory spine
+(038 → 044 → 042). Deliberate — the gate asserts the physical loop
+*including* evidence records — but it redefines "alpha gate green" relative
+to the older Horizon-2 meaning in `PROGRAM_BACKLOG.md`, which predates the
+spine.
+
 ## Phase B — the process model (the Excel becomes code)
 
-The ~18 stable calc candidates from the BlueRev workbook become ~3 specs, not
-18. Each ports the workbook's math **with the model bugs corrected** (never a
+The ~21 ranked calc candidates from the BlueRev workbook (18 stable + 3
+proxies, ranks 19-21) become 3 specs, not 21. Each ports the workbook's math
+**with the model bugs corrected** (never a
 straight copy) and ships a process verification battery (literature values),
 the twin of the FEM battery (024). All depend on 043 (the `calc_v0` runner)
 being merged.
@@ -117,9 +136,10 @@ recording the correction as a traceable decision**, not reproducing the bug.
 
 The `parameters` produced by Phase B are already the nodes; `calc_v0`'s
 `source_ref` is already the provenance. This phase makes the graph explicit
-and then alive. This is the materialized-graph trigger from the handoff: build
-it when multi-hop queries over the flat ledger start to hurt — Phase B is that
-trigger.
+and then alive. This is the materialized-graph trigger from the handoff —
+with one honest caveat: the trigger is pre-fired on *predicted* pain (Phase
+B's multi-hop provenance queries are certain, not speculative). A recorded
+exception to the observed-pain rule, not an application of it.
 
 | # | Scope | Depends on |
 | --- | --- | --- |
@@ -159,7 +179,6 @@ voices. 045/046 stay trigger-gated (below).
 | 024 | FEM verification battery (cantilever, Lamé, beam frequency vs analytic) | 009 |
 | 023 | Adversarial proposal corpus for the 010 loop (hostile/degenerate LLM output must park cleanly) | 010 |
 | 053 | DECISION-PACKET + dossier export: decision-class outputs as typed artifacts (recommendation, alternatives, evidence, assumptions, uncertainty); one click → readable dossier of the decision→evidence chain | 041, 044, 048 |
-| 046 | ALTERNATIVE-LOOP: FEM fails → panel critiques → alternative proposed → variant → side-by-side compare | 038, 011, 006b |
 
 053 is the distinctive move: no coding-agent competitor has it, and for
 BlueRev it is a thesis-chapter / due-diligence generator. It is the handoff's
@@ -180,8 +199,14 @@ sheet already lists these).
 | Structural wave/current/mooring loads | Mark-1 leaves sheltered water for open sea (today's scope is a sheltered module) |
 
 Also trigger-gated: 045 (real orchestration — after the memory spine survives
-a month of dogfood), 046 (after 011 proves useful in practice), FLOWSHEET-
-RECALC/CAD-LINK escalation (after the flat DAG is used and found wanting).
+a month of dogfood); 046 ALTERNATIVE-LOOP (FEM fails → panel critiques →
+alternative variant built → side-by-side compare; deps 038, 011, 006b — was
+listed in Phase F, moved here 2026-07-07 to resolve the contradiction with
+the scene-2 gate; promotes after 011 proves useful in practice; note 006b
+enters the beta path only through 046); escalation of 051/052 *beyond their
+v0 slices* (after the flat DAG is used and found wanting — the v0 slices
+themselves are Phase C and in the beta; 052's calc→CAD link is gate-critical
+for scene 1).
 
 ## Reserved numbering (extends PROGRAM_BACKLOG.md)
 
@@ -192,16 +217,26 @@ RECALC/CAD-LINK escalation (after the flat DAG is used and found wanting).
 - 053: DECISION-PACKET + dossier export.
 - 054: PROPOSAL-REVIEW UI (SC-2); 055: PROJECT-VIEW (SC-3).
 
+Authoritative registry: the Reserved-numbering section of
+`PROGRAM_BACKLOG.md` — claim numbers there first; this list is a convenience
+copy, reconciled after every change.
+
 ## Drafting order (how this index becomes specs)
 
 Full specs are written in dependency batches, 2-3 in flight (handoff carrying-
 capacity rule), never all at once. **Settle SC-1 (the provenance contract)
 before drafting 047** — it is the one seam whose drift is expensive. Natural
-batch order after the current implementation queue (016→040→042→041→043)
+batch order after the current implementation queue (016→040→042→041→043→044)
 lands:
-**038+021 → 047 → 048+049 → 050 → 054+037 → 030+020 → 035+055 → 034+011 →
-053 → the rest.**
-054 (promotion UI) rides early with the first face work, because the
-promote/reject click is what makes every proposal-writing spec upstream
-actually usable. Each batch is drafted (workhorse), expert-reviewed (decisions
-written into the file), set `ready`, then implemented.
+**038+021+024 → 047 → 048+049 → 050 → 051+052 → 037+029 → 030+020 →
+054+035+055 → 034+011 → 053 → the rest.**
+024 rides in the first batch: it depends only on 009 (implemented), touches
+nothing else, and the beta gate requires it green — no reason to queue it.
+029 is drafted before 020, which depends on it. 051+052 follow 050 directly
+because 052's calc→CAD link is gate-critical for scene 1. 054 (promotion UI)
+is drafted in the batch after 020 so it is written against real design tokens
+and layout — producers merge before consumers are drafted — but stays ahead
+of the voices/dossier work, because the promote/reject click is what makes
+every proposal-writing spec upstream actually usable. Each batch is drafted
+(workhorse), expert-reviewed (decisions written into the file), set `ready`,
+then implemented.
