@@ -29,6 +29,9 @@ push → Cheap review (DeepSeek, every push)
 Every push removes the stale `frontier-review`, `expert-review`, and
 `ready-for-merge` labels (cheap tier does this at the start of each run), so a
 verdict never survives a changed diff.
+The maintainer can trigger the expert (Claude) review on any PR at any
+time by manually applying the `expert-review` label; manual application is
+exempt from GitHub's `GITHUB_TOKEN` anti-recursion rule.
 
 ## Key design points
 

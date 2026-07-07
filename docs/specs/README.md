@@ -45,6 +45,7 @@ Review (human + Claude code review) happens on the diff before merge. A spec is
 | 016 | RUNNER-EXT-1: scoped runner extension for BLUECAD L2 | ready |
 | 017 | Autonomous three-tier review: cheap → senior (GLM) → expert (Claude) | implemented (pending live smoke) (after 004) |
 | 018 | PROVIDER-GW-2: cap enforcement, fallback execution, Scaleway retirement | implemented (pending review) (after 015) |
+| 019 | Senior review hardening | implemented (pending review) (after 017) |
 | 040 | MEMORYSTORE-0: AI-proposal write boundary for existing engineering records | ready |
 | 041 | DECISION-CAPTURE-0: structured record proposals from AI task responses | ready (after 040) |
 | 042 | CONTEXT-PACK-1: deterministic, budgeted, inspectable context packs | ready |
