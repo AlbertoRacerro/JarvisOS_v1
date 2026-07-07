@@ -46,6 +46,9 @@ Review (human + Claude code review) happens on the diff before merge. A spec is
 | 017 | Autonomous three-tier review: cheap → senior (GLM) → expert (Claude) | implemented (pending live smoke) (after 004) |
 | 018 | PROVIDER-GW-2: cap enforcement, fallback execution, Scaleway retirement | implemented (pending review) (after 015) |
 | 019 | Senior review hardening | implemented (pending review) (after 017) |
+| 021 | ALPHA-GATE: executable pipeline gate + data-root backup/restore | ready (slice A after 038+044 merge, slice B launchable now) |
+| 024 | FEM verification battery (analytic benchmark ladder) | ready |
+| 038 | SIM-WIRE: wire mesh + FEM into the candidate/attempt loop | ready (implement after 044 merges) |
 | 040 | MEMORYSTORE-0: AI-proposal write boundary for existing engineering records | ready |
 | 041 | DECISION-CAPTURE-0: structured record proposals from AI task responses | ready (after 040) |
 | 042 | CONTEXT-PACK-1: deterministic, budgeted, inspectable context packs | ready |

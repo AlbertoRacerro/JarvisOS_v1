@@ -176,7 +176,7 @@ voices. 045/046 stay trigger-gated (below).
 
 | # | Scope | Depends on |
 | --- | --- | --- |
-| 024 | FEM verification battery (cantilever, Lamé, beam frequency vs analytic) | 009 |
+| 024 | FEM verification battery (cantilever, Lamé, Kirsch plate-with-hole vs analytic; beam-frequency case deferred, gated on 027 — erratum 2026-07-07, see spec 024) | 009 |
 | 023 | Adversarial proposal corpus for the 010 loop (hostile/degenerate LLM output must park cleanly) | 010 |
 | 053 | DECISION-PACKET + dossier export: decision-class outputs as typed artifacts (recommendation, alternatives, evidence, assumptions, uncertainty); one click → readable dossier of the decision→evidence chain | 041, 044, 048 |
 
