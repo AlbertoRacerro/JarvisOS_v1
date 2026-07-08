@@ -24,6 +24,7 @@ from pathlib import Path
 GITHUB_API = "https://api.github.com"
 DEFAULT_BRANCHES = {"master", "main"}
 SECRET_NAME_RE = re.compile(r"(?i)(^|[._/-])(secret|secrets|token|tokens|credential|credentials|key|keys)([._/-]|$)")
+SOURCE_CODE_SUFFIXES = {".py", ".pyi", ".js", ".jsx", ".ts", ".tsx", ".rs", ".go", ".java", ".c", ".cc", ".cpp", ".h", ".hpp"}
 SHA_RE = re.compile(r"\b[0-9a-f]{7,40}\b", re.I)
 
 
@@ -64,7 +65,21 @@ def gh_request(method: str, url: str, token: str, body: dict | None = None) -> t
 def is_env_or_secret_path(path: str) -> bool:
     normalized = path.replace("\\", "/").strip("/")
     name = normalized.rsplit("/", 1)[-1]
-    return name == ".env" or name.startswith(".env.") or SECRET_NAME_RE.search(normalized) is not None
+    if name == ".env" or name.startswith(".env."):
+        return True
+
+    candidate = Path(name)
+    stem = candidate.stem.lower()
+    suffix = candidate.suffix.lower()
+    sensitive_words = {"secret", "secrets", "token", "tokens", "credential", "credentials", "key", "keys"}
+
+    if stem in sensitive_words:
+        return True
+    if suffix in SOURCE_CODE_SUFFIXES:
+        # Ordinary implementation files such as token_counter.py or
+        # api_key_handler.py are source changes, not credential material.
+        return False
+    return SECRET_NAME_RE.search(normalized) is not None
 
 
 def validate_autopush_request(
@@ -234,6 +249,9 @@ def self_test() -> None:
         target_branch="feature",
         changed_files=[
             "backend/app/x.py",
+            "backend/app/modules/ai/token_counter.py",
+            "backend/app/modules/ai/api_key_handler.py",
+            "backend/app/modules/ai/credentials_validator.py",
             "backend/tests/test_x.py",
             "docs/specs/022-codex-pr-autopush.md",
             "scripts/codex_pr_autopush.py",

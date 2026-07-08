@@ -504,6 +504,8 @@ def build_fix_request_comment(*, provider: str, branch: str, review_title: str, 
         f"@codex evaluate the findings below on this branch (`{branch}`), then "
         "push your commits to the existing remote PR branch. A task-local commit "
         "or summary is not sufficient: the GitHub remote branch head must advance. "
+        "Hard boundaries: Do not merge. Do not push to master. Do not force-push. "
+        "Do not delete branches. Do not modify `.github/workflows/**` or secret/env files. "
         "After a successful push, comment `Final remote branch head SHA` and changed files. "
         "If no branch update can be materialized from this bootstrap comment path, "
         "explicitly report `codex-autopush:non-materialized` or provide the structured "
@@ -629,6 +631,10 @@ def self_test(repo_root: Path) -> None:
     )
     assert "remote branch head must advance" in fix_body
     assert "Final remote branch head SHA" in fix_body
+    assert "Do not merge" in fix_body
+    assert "Do not push to master" in fix_body
+    assert "Do not force-push" in fix_body
+    assert "Do not modify `.github/workflows/**` or secret/env files" in fix_body
     assert "codex-autopush:non-materialized" in fix_body
     assert "false positive / no patch" in fix_body
     assert "passive @codex summaries are not a successful loop outcome" in fix_body
