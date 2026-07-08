@@ -828,7 +828,25 @@ def test_allowlisted_record_capture_prompt_is_system_section_with_empty_context(
     assert prompt.startswith("SYSTEM:\n")
 
 
-def test_invalid_facade_record_payload_keeps_task_success_and_writes_no_partial_records(monkeypatch, tmp_path) -> None:
+def test_non_allowlisted_empty_context_prompt_remains_byte_identical(monkeypatch, tmp_path) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    from app.modules.ai.execution import run_ai_task
+
+    adapter = _TextCaptureAdapter("answer")
+    outcome = run_ai_task(
+        user_prompt="plain prompt",
+        task_kind="general",
+        route_class="local:fake",
+        context_blocks=[],
+        adapters={"fake": adapter},
+        workspace_id="bluerev",
+    )
+
+    assert outcome.status == "success"
+    assert adapter.requests[0].prompt == "plain prompt"
+
+
+def test_invalid_facade_record_payload_keeps_task_success_and_drops_only_invalid_record(monkeypatch, tmp_path) -> None:
     _isolate_and_init(monkeypatch, tmp_path)
     _seed_workspace()
     from app.modules.ai.execution import run_ai_task
@@ -849,8 +867,11 @@ def test_invalid_facade_record_payload_keeps_task_success_and_writes_no_partial_
 
     assert outcome.status == "success"
     assert outcome.records_parse_error and "record_create_error[1]" in outcome.records_parse_error
-    assert outcome.proposed_record_ids == []
-    assert _proposal_rows("assumptions") == []
+    assert len(outcome.proposed_record_ids) == 1
+    assumption_rows = _proposal_rows("assumptions")
+    assert len(assumption_rows) == 1
+    assert assumption_rows[0]["id"] == outcome.proposed_record_ids[0]
+    assert assumption_rows[0]["status"] == "proposed"
     assert _proposal_rows("parameters") == []
 
 
