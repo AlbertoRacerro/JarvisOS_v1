@@ -55,3 +55,4 @@ Review (human + Claude code review) happens on the diff before merge. A spec is
 | 042 | CONTEXT-PACK-1: deterministic, budgeted, inspectable context packs | ready |
 | 043 | CALC-1: runner extension for small engineering calculation scripts | ready (after 016 is merged, and after 040) |
 | 044 | EVIDENCE-BRIDGE-1: typed evidence records for simulation/validation outcomes | ready (after 042 is merged) |
+| 056 | BLUECAD property-based geometry testing + determinism canary | ready |
