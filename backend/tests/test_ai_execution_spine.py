@@ -633,6 +633,38 @@ def test_provider_token_cap_blocks_before_adapter_call(monkeypatch, tmp_path) ->
     assert "deepseek_monthly_token_cap_exhausted" in json.loads(rows[-1]["route_reason_json"])["decision_reason"]
 
 
+def test_provider_cap_ignores_previous_months_usage(monkeypatch, tmp_path) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    _configure_external_allowed(monkeypatch)
+    from app.core.database import open_sqlite_connection
+    from app.modules.ai.execution import run_ai_task
+
+    # Enough lifetime usage to exhaust the cap many times over, but all of it
+    # in a past month: the month-to-date gate must not count it.
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO ai_jobs (
+                id, created_at, status, task_kind, requested_route_class, selected_route_class,
+                provider_id, model_id, route_reason_json, input_tokens, output_tokens, latency_ms
+            ) VALUES (?, ?, 'success', 'test', 'external:cheap', 'external:cheap', ?, ?, '{}', ?, ?, 1)
+            """,
+            ("old-usage-row", "2020-01-15T00:00:00+00:00", "deepseek", "deepseek-v4-pro", 900000, 900000),
+        )
+        connection.commit()
+
+    adapter = _SuccessAdapter("deepseek")
+    outcome = run_ai_task(
+        user_prompt="not blocked by ancient usage",
+        route_class="external:cheap",
+        max_output_tokens=64,
+        adapters={"deepseek": adapter, "glm": _SuccessAdapter("glm")},
+    )
+
+    assert outcome.status == "success"
+    assert len(adapter.requests) == 1
+
+
 def test_provider_zero_caps_are_unlimited(monkeypatch, tmp_path) -> None:
     _isolate_and_init(monkeypatch, tmp_path)
     _configure_external_allowed(monkeypatch)

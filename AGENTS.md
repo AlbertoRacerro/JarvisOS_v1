@@ -143,7 +143,35 @@ prefix), never to the implementing agent. No tier's verdict carries merge
 authority; every label is a *trigger* for the next tier, never an approval.
 
 Never merge your own PR. Never enable auto-merge. Open the PR against `master`
-and stop; fill in the PR template completely.
+and fill in the PR template completely; then drive the review loop (below) —
+never merge it yourself. CI-plus-maintainer is the only merge authority.
+
+**Fix requests — the review is advisory and fallible.** Automated findings are
+frequently wrong: the cheap DeepSeek tier especially produces false positives,
+and the senior GLM tier is not exempt — misread architecture, findings that
+contradict the spec, "blockers" with no real failing case. A `@codex`
+fix-request is NOT a command to obey. For each finding: first decide whether it
+is a genuine defect. Fix the real ones on the SAME branch the PR is from and
+push the commits there. If you judge a finding a false positive, do NOT change
+code to appease it — reply on the PR with a short rebuttal backed by a concrete
+test, a repro, or precise reasoning (a bare "I disagree" is not enough; a test
+that proves the claimed failure cannot occur is ideal). Never open a new PR for
+review fixes, never silently ignore a finding, and never reply with a summary in
+place of doing the work. A real disagreement that survives your rebuttal is
+resolved by the round limit escalating to the maintainer — that is the intended
+outcome, not blind compliance and not silent capitulation.
+
+**Autonomy of the implementing agent.** You may proceed without waiting for the
+maintainer between rounds. Within a PR, self-drive the review loop: verify
+findings, fix or rebut them, push, let the re-review run, and iterate until the
+round limit escalates to the maintainer. When you have no active PR, you may
+also pick up the lowest-numbered `Status: ready` spec in `docs/specs/README.md`
+and start implementing it on a new branch under the normal spec workflow,
+without being told to. This autonomy stops at the merge boundary: you still
+never merge your own PR, never enable auto-merge, and CI-plus-maintainer remain
+the only merge authority (unchanged). Autonomy is permission to proceed, never
+permission to lower the bar — the hard invariants and the "verify before acting"
+rule above bind every autonomous step.
 
 **Reviewer-owned conformance tests:** files matching
 `backend/tests/**/test_*_conformance.py` are written by the reviewing tier,

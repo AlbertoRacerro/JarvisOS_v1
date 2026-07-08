@@ -4,8 +4,12 @@ SCHEMA_DATA_INFRASTRUCTURE_MIGRATION_ID = "0002_data_infrastructure_hardening"
 SCHEMA_DATA_INFRASTRUCTURE_MIGRATION_NAME = "0E-B schema tracking, indexes, and artifact readback"
 SCHEMA_AI_POLICY_MIGRATION_ID = "0003_ai_policy_mode_foundation"
 SCHEMA_AI_POLICY_MIGRATION_NAME = "0E-D3 pragmatic AI policy mode foundation"
-CURRENT_SCHEMA_MIGRATION_ID = "0004_engineering_record_schema_freeze"
-CURRENT_SCHEMA_MIGRATION_NAME = "Parameter, assumption, and requirement schema freeze"
+SCHEMA_ENGINEERING_RECORD_MIGRATION_ID = "0004_engineering_record_schema_freeze"
+SCHEMA_ENGINEERING_RECORD_MIGRATION_NAME = "Parameter, assumption, and requirement schema freeze"
+SCHEMA_MEMORYSTORE_MIGRATION_ID = "0005_memorystore_proposal_boundary"
+SCHEMA_MEMORYSTORE_MIGRATION_NAME = "MemoryStore proposal provenance boundary"
+CURRENT_SCHEMA_MIGRATION_ID = "0006_runner_implementation_kind"
+CURRENT_SCHEMA_MIGRATION_NAME = "Runner bluecad_l2_v0 implementation kind dispatch"
 
 SCHEMA_MIGRATION_RECORDS = [
     {
@@ -21,6 +25,16 @@ SCHEMA_MIGRATION_RECORDS = [
     {
         "migration_id": SCHEMA_AI_POLICY_MIGRATION_ID,
         "name": SCHEMA_AI_POLICY_MIGRATION_NAME,
+        "checksum": None,
+    },
+    {
+        "migration_id": SCHEMA_ENGINEERING_RECORD_MIGRATION_ID,
+        "name": SCHEMA_ENGINEERING_RECORD_MIGRATION_NAME,
+        "checksum": None,
+    },
+    {
+        "migration_id": SCHEMA_MEMORYSTORE_MIGRATION_ID,
+        "name": SCHEMA_MEMORYSTORE_MIGRATION_NAME,
         "checksum": None,
     },
     {
@@ -138,6 +152,9 @@ SCHEMA_STATEMENTS = [
         confidence TEXT,
         status TEXT NOT NULL DEFAULT 'proposed',
         source_ref TEXT,
+        origin TEXT NOT NULL DEFAULT 'user',
+        source_ai_job_id TEXT,
+        promoted_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         notes TEXT,
@@ -173,6 +190,9 @@ SCHEMA_STATEMENTS = [
         source_ref TEXT,
         confidence REAL,
         status TEXT NOT NULL DEFAULT 'draft',
+        origin TEXT NOT NULL DEFAULT 'user',
+        source_ai_job_id TEXT,
+        promoted_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         notes TEXT,
@@ -276,6 +296,9 @@ SCHEMA_STATEMENTS = [
         rationale TEXT,
         status TEXT NOT NULL DEFAULT 'draft',
         linked_run_id TEXT,
+        origin TEXT NOT NULL DEFAULT 'user',
+        source_ai_job_id TEXT,
+        promoted_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         notes TEXT,
@@ -408,6 +431,16 @@ SCHEMA_MIGRATION_STATEMENTS = [
     "ALTER TABLE parameters ADD COLUMN source_ref TEXT",
     "ALTER TABLE assumptions ADD COLUMN status TEXT NOT NULL DEFAULT 'proposed'",
     "ALTER TABLE assumptions ADD COLUMN confidence TEXT",
+    "ALTER TABLE assumptions ADD COLUMN origin TEXT NOT NULL DEFAULT 'user'",
+    "ALTER TABLE assumptions ADD COLUMN source_ai_job_id TEXT",
+    "ALTER TABLE assumptions ADD COLUMN promoted_at TEXT",
+    "ALTER TABLE parameters ADD COLUMN origin TEXT NOT NULL DEFAULT 'user'",
+    "ALTER TABLE parameters ADD COLUMN source_ai_job_id TEXT",
+    "ALTER TABLE parameters ADD COLUMN promoted_at TEXT",
+    "ALTER TABLE decisions ADD COLUMN origin TEXT NOT NULL DEFAULT 'user'",
+    "ALTER TABLE decisions ADD COLUMN source_ai_job_id TEXT",
+    "ALTER TABLE decisions ADD COLUMN promoted_at TEXT",
+    # RUNNER-EXT-1 (spec 016): dispatch key for the scoped bluecad_l2_v0 runner kind.
     "ALTER TABLE model_versions ADD COLUMN implementation_kind TEXT NOT NULL DEFAULT 'batch_growth_v0'",
     "ALTER TABLE runner_jobs ADD COLUMN implementation_kind TEXT NOT NULL DEFAULT 'batch_growth_v0'",
 ]
