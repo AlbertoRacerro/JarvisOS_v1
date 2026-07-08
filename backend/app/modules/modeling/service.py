@@ -92,11 +92,15 @@ def _query_requires_literal_like(query: str) -> bool:
     return any(character in query for character in ("+", ".", "-", '"', "'"))
 
 
+def _escape_like_literal(query: str) -> str:
+    return query.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def _like_clause(kind: str, query: str, values: list[object]) -> str:
-    pattern = f"%{query.lower()}%"
+    pattern = f"%{_escape_like_literal(query)}%"
     terms = []
     for column in _CONTEXT_TEXT_COLUMNS[kind]:
-        terms.append(f"LOWER(COALESCE({column}, '')) LIKE ?")
+        terms.append(f"LOWER(COALESCE({column}, '')) LIKE ? ESCAPE '\\'")
         values.append(pattern)
     return "(" + " OR ".join(terms) + ")"
 
