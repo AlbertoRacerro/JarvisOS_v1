@@ -1,3 +1,4 @@
+import ast
 import hashlib
 import json
 from math import isfinite
@@ -5,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.paths import build_paths
+from app.modules.bluecad.spec import SpecValidationError, canonicalize_geometry_spec
 
 MAX_INPUT_JSON_BYTES = 64 * 1024
 MAX_OUTPUT_JSON_BYTES = 1024 * 1024
@@ -15,6 +17,43 @@ DEFAULT_TIMEOUT_SECONDS = 10
 MAX_TIMEOUT_SECONDS = 60
 
 REQUIRED_BATCH_GROWTH_PARAMETERS = ("mu_max", "X0", "t_final", "dt")
+
+ALLOWED_BLUECAD_L2_IMPORT_ROOTS = frozenset({
+    "build123d",
+    "collections",
+    "dataclasses",
+    "decimal",
+    "enum",
+    "functools",
+    "itertools",
+    "json",
+    "math",
+    "operator",
+    "pathlib",
+    "statistics",
+    "typing",
+})
+BLUECAD_L2_REQUIRED_ARTIFACTS = {
+    "bluecad_step": "model.step",
+    "bluecad_stl": "model.stl",
+    "bluecad_glb": "model.glb",
+    "bluecad_manifest": "manifest.json",
+}
+SANDBOX_VIOLATION = "SANDBOX_VIOLATION"
+FORBIDDEN_BLUECAD_L2_NAME_REFERENCES = frozenset({
+    "__import__",
+    "breakpoint",
+    "compile",
+    "delattr",
+    "eval",
+    "exec",
+    "getattr",
+    "globals",
+    "locals",
+    "setattr",
+    "vars",
+})
+
 FORBIDDEN_SCRIPT_MARKERS = (
     "import socket",
     "from socket",
@@ -195,12 +234,79 @@ def validate_run_paths(
     return resolved_working_dir, resolved_input_file, resolved_output_dir
 
 
-def preflight_script_policy(script_path: Path) -> None:
+def validate_bluecad_l2_input(input_set: dict[str, Any]) -> tuple[str, str]:
+    try:
+        normalized = canonicalize_geometry_spec(input_set)
+    except SpecValidationError as exc:
+        raise RunnerSafetyError("runner_input_invalid", f"Invalid GeometrySpec v0 payload: {exc.detail}") from exc
+    encoded = canonical_json(normalized)
+    if len(encoded.encode("utf-8")) > MAX_INPUT_JSON_BYTES:
+        raise RunnerSafetyError("runner_input_too_large", "Input JSON exceeds the V0 runner size limit.")
+    return encoded, encoded
+
+
+def preflight_script_policy(script_path: Path, *, ast_import_allowlist: bool = False) -> None:
     text = script_path.read_text(encoding="utf-8")
     lowered = text.lower()
     for marker in FORBIDDEN_SCRIPT_MARKERS:
         if marker in lowered:
-            raise RunnerSafetyError("runner_policy_blocked", f"Script contains blocked marker: {marker}.")
+            code = SANDBOX_VIOLATION if ast_import_allowlist else "runner_policy_blocked"
+            raise RunnerSafetyError(code, f"Script contains blocked marker: {marker}.")
+    if ast_import_allowlist:
+        preflight_bluecad_l2_ast_policy(text)
+
+
+def preflight_bluecad_l2_ast_policy(source: str) -> None:
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as exc:
+        raise RunnerSafetyError(SANDBOX_VIOLATION, "Script source must be parseable Python.") from exc
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                _validate_bluecad_l2_import(alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level != 0 or node.module is None:
+                raise RunnerSafetyError(SANDBOX_VIOLATION, "Relative imports are not allowed.")
+            if any(alias.name == "*" for alias in node.names):
+                raise RunnerSafetyError(SANDBOX_VIOLATION, "Star imports are not allowed.")
+            _validate_bluecad_l2_import(node.module)
+        elif isinstance(node, ast.Call):
+            name = _call_name(node.func)
+            if (
+                name in FORBIDDEN_BLUECAD_L2_NAME_REFERENCES
+                or name.rsplit(".", 1)[-1] in FORBIDDEN_BLUECAD_L2_NAME_REFERENCES
+                or name.startswith("importlib.")
+            ):
+                raise RunnerSafetyError(SANDBOX_VIOLATION, f"Dynamic code loading is not allowed: {name}.")
+        elif (
+            isinstance(node, ast.Name)
+            and isinstance(node.ctx, ast.Load)
+            and node.id in FORBIDDEN_BLUECAD_L2_NAME_REFERENCES
+        ):
+            raise RunnerSafetyError(
+                SANDBOX_VIOLATION,
+                f"Dangerous builtin reference is not allowed: {node.id}.",
+            )
+
+
+def _validate_bluecad_l2_import(module_name: str) -> None:
+    root = module_name.split(".", 1)[0]
+    if root not in ALLOWED_BLUECAD_L2_IMPORT_ROOTS:
+        raise RunnerSafetyError(SANDBOX_VIOLATION, f"Import is not allowlisted: {module_name}.")
+    if root == "collections" and module_name not in {"collections", "collections.abc"}:
+        raise RunnerSafetyError(SANDBOX_VIOLATION, f"Import is not allowlisted: {module_name}.")
+    if root != "collections" and "." in module_name and root != "build123d":
+        raise RunnerSafetyError(SANDBOX_VIOLATION, f"Submodule import is not allowlisted: {module_name}.")
+
+
+def _call_name(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        base = _call_name(node.value)
+        return f"{base}.{node.attr}" if base else node.attr
+    return ""
 
 
 def safe_artifact_path(output_dir: Path, relative_path: str) -> Path:

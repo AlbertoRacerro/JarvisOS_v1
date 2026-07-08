@@ -186,6 +186,7 @@ SCHEMA_STATEMENTS = [
         model_spec_id TEXT NOT NULL,
         version_label TEXT NOT NULL,
         implementation_artifact_id TEXT,
+        implementation_kind TEXT NOT NULL DEFAULT 'batch_growth_v0',
         status TEXT NOT NULL DEFAULT 'draft',
         changelog TEXT,
         created_at TEXT NOT NULL,
@@ -222,6 +223,7 @@ SCHEMA_STATEMENTS = [
         status TEXT NOT NULL DEFAULT 'queued',
         script_path TEXT NOT NULL,
         script_sha256 TEXT NOT NULL,
+        implementation_kind TEXT NOT NULL DEFAULT 'batch_growth_v0',
         command_json TEXT,
         environment_json TEXT,
         working_dir TEXT NOT NULL,
@@ -406,6 +408,8 @@ SCHEMA_MIGRATION_STATEMENTS = [
     "ALTER TABLE parameters ADD COLUMN source_ref TEXT",
     "ALTER TABLE assumptions ADD COLUMN status TEXT NOT NULL DEFAULT 'proposed'",
     "ALTER TABLE assumptions ADD COLUMN confidence TEXT",
+    "ALTER TABLE model_versions ADD COLUMN implementation_kind TEXT NOT NULL DEFAULT 'batch_growth_v0'",
+    "ALTER TABLE runner_jobs ADD COLUMN implementation_kind TEXT NOT NULL DEFAULT 'batch_growth_v0'",
 ]
 
 SCHEMA_INDEX_STATEMENTS = [
