@@ -128,12 +128,16 @@ def test_fts_backfill_and_literal_query_handling(monkeypatch) -> None:
         assert ids["decision"] in _ids(bundle)
         assert ids["requirement"] in _ids(bundle)
 
-    fts_bundle = build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query="alpha-beta"))
-
     from app.modules import modeling
 
+    with open_sqlite_connection() as connection:
+        assert modeling.service.sqlite_fts5_available(connection)
+
+    fts_bundle = build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query="steady"))
+    assert ids["assumption"] in _ids(fts_bundle)
+
     monkeypatch.setattr(modeling.service, "sqlite_fts5_available", lambda connection: False)
-    like_bundle = build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query="alpha-beta"))
+    like_bundle = build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query="steady"))
     assert _ids(like_bundle) == _ids(fts_bundle)
 
 
