@@ -36,6 +36,7 @@ class AISettingsRead(BaseModel):
     use_fake_provider_when_budget_zero: bool
     scaleway_enabled: bool
     scaleway_smoke_test_enabled: bool
+    scaleway_live_smoke_test_enabled: bool
     scaleway_monthly_token_cap: int
     scaleway_hard_stop_token_cap: int
     scaleway_free_tier_reference_tokens: int
