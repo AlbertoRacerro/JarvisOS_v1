@@ -8,10 +8,10 @@ SCHEMA_ENGINEERING_RECORD_MIGRATION_ID = "0004_engineering_record_schema_freeze"
 SCHEMA_ENGINEERING_RECORD_MIGRATION_NAME = "Parameter, assumption, and requirement schema freeze"
 SCHEMA_MEMORYSTORE_MIGRATION_ID = "0005_memorystore_proposal_boundary"
 SCHEMA_MEMORYSTORE_MIGRATION_NAME = "MemoryStore proposal provenance boundary"
-SCHEMA_RUNNER_IMPLEMENTATION_MIGRATION_ID = "0006_runner_implementation_kind"
-SCHEMA_RUNNER_IMPLEMENTATION_MIGRATION_NAME = "Runner bluecad_l2_v0 implementation kind dispatch"
-CURRENT_SCHEMA_MIGRATION_ID = "0007_context_pack_fts"
-CURRENT_SCHEMA_MIGRATION_NAME = "Context pack FTS index"
+CURRENT_SCHEMA_MIGRATION_ID = "0006_runner_implementation_kind"
+CURRENT_SCHEMA_MIGRATION_NAME = "Runner bluecad_l2_v0 implementation kind dispatch"
+SCHEMA_CONTEXT_PACK_FTS_MIGRATION_ID = "0007_context_pack_fts"
+SCHEMA_CONTEXT_PACK_FTS_MIGRATION_NAME = "Context pack FTS index"
 
 SCHEMA_MIGRATION_RECORDS = [
     {
@@ -40,13 +40,13 @@ SCHEMA_MIGRATION_RECORDS = [
         "checksum": None,
     },
     {
-        "migration_id": SCHEMA_RUNNER_IMPLEMENTATION_MIGRATION_ID,
-        "name": SCHEMA_RUNNER_IMPLEMENTATION_MIGRATION_NAME,
+        "migration_id": CURRENT_SCHEMA_MIGRATION_ID,
+        "name": CURRENT_SCHEMA_MIGRATION_NAME,
         "checksum": None,
     },
     {
-        "migration_id": CURRENT_SCHEMA_MIGRATION_ID,
-        "name": CURRENT_SCHEMA_MIGRATION_NAME,
+        "migration_id": SCHEMA_CONTEXT_PACK_FTS_MIGRATION_ID,
+        "name": SCHEMA_CONTEXT_PACK_FTS_MIGRATION_NAME,
         "checksum": None,
     },
 ]
@@ -502,29 +502,5 @@ CONTEXT_PACK_FTS_STATEMENTS = [
     WHERE NOT EXISTS (
         SELECT 1 FROM context_pack_fts WHERE record_kind = 'requirement' AND record_id = requirements.id
     )
-    """,
-    """
-    CREATE TRIGGER IF NOT EXISTS decisions_context_pack_fts_ai AFTER INSERT ON decisions BEGIN
-        INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
-        VALUES ('decision', new.id, new.workspace_id, COALESCE(new.title, '') || ' ' || COALESCE(new.decision_text, '') || ' ' || COALESCE(new.rationale, '') || ' ' || COALESCE(new.notes, ''));
-    END
-    """,
-    """
-    CREATE TRIGGER IF NOT EXISTS assumptions_context_pack_fts_ai AFTER INSERT ON assumptions BEGIN
-        INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
-        VALUES ('assumption', new.id, new.workspace_id, COALESCE(new.statement, '') || ' ' || COALESCE(new.notes, ''));
-    END
-    """,
-    """
-    CREATE TRIGGER IF NOT EXISTS parameters_context_pack_fts_ai AFTER INSERT ON parameters BEGIN
-        INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
-        VALUES ('parameter', new.id, new.workspace_id, COALESCE(new.name, '') || ' ' || COALESCE(new.symbol, '') || ' ' || COALESCE(new.notes, ''));
-    END
-    """,
-    """
-    CREATE TRIGGER IF NOT EXISTS requirements_context_pack_fts_ai AFTER INSERT ON requirements BEGIN
-        INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
-        VALUES ('requirement', new.id, new.workspace_id, COALESCE(new.statement, '') || ' ' || COALESCE(new.rationale, '') || ' ' || COALESCE(new.notes, ''));
-    END
     """,
 ]
