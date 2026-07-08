@@ -1,6 +1,6 @@
 # 022 — Codex PR autopush without automerge
 
-Status: ready
+Status: implemented (pending review)
 Depends on: 017 (Autonomous three-tier review), 019 (Senior review hardening)
 
 ## Goal
@@ -240,3 +240,9 @@ blocking. The correct failure handling is:
 Do not expand this into a general agent sandbox or enterprise policy system.
 The first implementation should be the smallest working autopush path that
 removes the manual "update branch" step while preserving the hard boundaries.
+
+## Implementation notes
+
+Implemented the bootstrap path as a bounded JarvisOS GitHub actuator because this repository cannot rely on a documented Codex-native auto-apply setting that deterministically advances the existing PR branch head. The actuator verifies the remote branch head after push and comments the final SHA and changed files. It can also report non-materialized Codex task-local commit references when the remote PR branch did not advance.
+
+The bootstrap workflow is intentionally manual (`workflow_dispatch`) so it does not grant automatic merge authority or broaden the review loop beyond the existing append-only review comments. After this bootstrap PR, the actuator refuses `.github/workflows/**` changes by default unless a later maintainer-approved PR explicitly authorizes them.

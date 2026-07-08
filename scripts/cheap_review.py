@@ -27,10 +27,10 @@ import os
 import re
 import sys
 import time
-from dataclasses import dataclass
 import urllib.error
 import urllib.parse
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 
 GITHUB_API = "https://api.github.com"
@@ -831,12 +831,15 @@ def main() -> None:
             fix_body = (
                 f"{fix_marker}\n"
                 f"@codex evaluate the findings below on this branch (`{branch}`), then "
-                "push your commits. These findings are ADVISORY and often wrong (the "
+                "push your commits to the existing remote PR branch. A task-local commit "
+                "or summary is not sufficient: the GitHub remote branch head must advance. "
+                "After a successful push, comment the final remote branch head SHA and changed files. "
+                "These findings are ADVISORY and often wrong (the "
                 "cheap DeepSeek tier especially produces false positives): for each "
                 "one, first decide whether it is a real defect. Fix the real ones. If "
                 "you judge a finding a false positive, do NOT change code to appease it "
-                "— reply with a short rebuttal backed by a test, a repro, or precise "
-                "reasoning. Do not open a new PR, do not silently ignore a finding, and "
+                "— reply with a structured `false positive / no patch` decision backed by "
+                "a test, a repro, or precise reasoning. Do not open a new PR, do not silently ignore a finding, and "
                 "do not summarize instead of acting. When done, stop and wait for "
                 f"re-review. Findings from the {review_title} (round {this_round}):\n\n"
                 f"{review}"

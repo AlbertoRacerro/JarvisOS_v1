@@ -1,0 +1,53 @@
+name: Codex PR Autopush
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "Pull request number"
+        required: true
+      branch:
+        description: "Existing PR head branch to update (never master)"
+        required: true
+      reported_text:
+        description: "Optional Codex task summary/commit text for verify-only reports"
+        required: false
+        default: ""
+      verify_only:
+        description: "Report non-materialized Codex work without pushing"
+        required: false
+        default: "false"
+
+jobs:
+  autopush:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Self-test autopush actuator
+        run: python scripts/codex_pr_autopush.py --self-test
+
+      - name: Materialize or verify Codex PR branch update
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr }}
+          PR_HEAD_BRANCH: ${{ inputs.branch }}
+          CODEX_REPORTED_TEXT: ${{ inputs.reported_text }}
+        run: |
+          args=(--branch "$PR_HEAD_BRANCH" --comment --reported-text "$CODEX_REPORTED_TEXT")
+          if [ '${{ inputs.verify_only }}' = 'true' ]; then
+            args+=(--verify-only)
+          fi
+          python scripts/codex_pr_autopush.py "${args[@]}"

@@ -47,7 +47,7 @@ Review (human + Claude code review) happens on the diff before merge. A spec is
 | 018 | PROVIDER-GW-2: cap enforcement, fallback execution, Scaleway retirement | implemented (pending review) (after 015) |
 | 019 | Senior review hardening | implemented (pending review) (after 017) |
 | 021 | ALPHA-GATE: executable pipeline gate + data-root backup/restore | ready (slice A after 038+044 merge, slice B launchable now) |
-| 022 | Codex PR autopush without automerge | ready (after 017, 019) |
+| 022 | Codex PR autopush without automerge | implemented (pending review) (after 017, 019) |
 | 024 | FEM verification battery (analytic benchmark ladder) | ready |
 | 038 | SIM-WIRE: wire mesh + FEM into the candidate/attempt loop | ready (implement after 044 merges) |
 | 040 | MEMORYSTORE-0: AI-proposal write boundary for existing engineering records | ready |
