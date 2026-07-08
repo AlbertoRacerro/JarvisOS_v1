@@ -254,7 +254,7 @@ def validate_calc_v0_input(input_set: dict[str, Any]) -> tuple[str, str]:
             raise RunnerSafetyError("runner_input_invalid", f"calc_v0 input {name} value must be numeric.")
         try:
             number = float(value)
-        except (TypeError, ValueError) as exc:
+        except (OverflowError, TypeError, ValueError) as exc:
             raise RunnerSafetyError("runner_input_invalid", f"calc_v0 input {name} value must be numeric.") from exc
         if not isfinite(number):
             raise RunnerSafetyError("runner_input_invalid", f"calc_v0 input {name} value must be finite.")
@@ -323,6 +323,7 @@ def _preflight_ast_policy(
         tree = ast.parse(source)
     except SyntaxError as exc:
         raise RunnerSafetyError(SANDBOX_VIOLATION, "Script source must be parseable Python.") from exc
+    parents = _ast_parent_map(tree) if enforce_calc_file_contract else {}
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
@@ -341,8 +342,10 @@ def _preflight_ast_policy(
                 or name.startswith("importlib.")
             ):
                 raise RunnerSafetyError(SANDBOX_VIOLATION, f"Dynamic code loading is not allowed: {name}.")
-            if enforce_calc_file_contract and name == "open":
-                _validate_calc_open_call(node)
+            if enforce_calc_file_contract:
+                _validate_calc_call_file_contract(node)
+        elif enforce_calc_file_contract and _is_forbidden_calc_open_reference(node, parents):
+            raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 open() access must be a direct checked call.")
         elif (
             isinstance(node, ast.Name)
             and isinstance(node.ctx, ast.Load)
@@ -364,11 +367,78 @@ def _validate_ast_import(module_name: str, allowed_import_roots: frozenset[str])
         raise RunnerSafetyError(SANDBOX_VIOLATION, f"Submodule import is not allowlisted: {module_name}.")
 
 
+def _ast_parent_map(tree: ast.AST) -> dict[ast.AST, ast.AST]:
+    parents: dict[ast.AST, ast.AST] = {}
+    for parent in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent):
+            parents[child] = parent
+    return parents
+
+
+def _is_forbidden_calc_open_reference(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> bool:
+    if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id == "open":
+        parent = parents.get(node)
+        return not (isinstance(parent, ast.Call) and parent.func is node)
+    if isinstance(node, ast.Attribute) and node.attr == "open":
+        return True
+    if _is_builtins_open_subscript(node):
+        return True
+    return False
+
+
+def _validate_calc_call_file_contract(node: ast.Call) -> None:
+    name = _call_name(node.func)
+    if name == "open":
+        _validate_calc_open_call(node)
+        return
+    if name.endswith(".open") or _is_builtins_open_subscript(node.func):
+        raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 open() access must be a direct checked call.")
+
+
 def _validate_calc_open_call(node: ast.Call) -> None:
     if not node.args or not isinstance(node.args[0], ast.Constant) or not isinstance(node.args[0].value, str):
         raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 open() paths must be literal input.json or result.json.")
-    if node.args[0].value not in {"input.json", "result.json"}:
+    path = node.args[0].value
+    if path not in {"input.json", "result.json"}:
         raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 scripts may only open input.json and result.json.")
+    mode = _calc_open_mode(node)
+    if path == "input.json" and mode != "r":
+        raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 input.json must be opened read-only text mode.")
+    if path == "result.json" and mode != "w":
+        raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 result.json must be opened write-only text truncate mode.")
+
+
+def _calc_open_mode(node: ast.Call) -> str:
+    mode_node: ast.AST | None = None
+    if len(node.args) >= 2:
+        mode_node = node.args[1]
+    for keyword in node.keywords:
+        if keyword.arg is None:
+            raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 open() does not allow dynamic keyword expansion.")
+        if keyword.arg == "mode":
+            if mode_node is not None:
+                raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 open() mode must be declared once.")
+            mode_node = keyword.value
+    if mode_node is None:
+        return "r"
+    if not isinstance(mode_node, ast.Constant) or not isinstance(mode_node.value, str):
+        raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 open() mode must be a literal string.")
+    mode = mode_node.value
+    if any(marker in mode for marker in ("+", "a", "x", "b")):
+        raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 open() mode is not allowed.")
+    if mode not in {"r", "rt", "w", "wt"}:
+        raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 open() mode is not allowed.")
+    return mode[0]
+
+
+def _is_builtins_open_subscript(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Subscript):
+        return False
+    value = _call_name(node.value)
+    if value != "__builtins__":
+        return False
+    slice_node = node.slice
+    return isinstance(slice_node, ast.Constant) and slice_node.value == "open"
 
 
 def _call_name(node: ast.AST) -> str:

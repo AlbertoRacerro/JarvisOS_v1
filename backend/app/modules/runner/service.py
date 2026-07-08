@@ -390,6 +390,7 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
         calc_outputs: dict[str, dict[str, object]] | None = None
         if implementation_kind == CALC_V0_IMPLEMENTATION_KIND:
             calc_outputs = _validate_calc_v0_output(output)
+            output_payload = _canonical_result_json(output)
             declared_artifacts = [
                 {
                     "path": "result.json",
@@ -429,7 +430,8 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
             )
 
     completed_at = utc_now()
-    output_payload = canonical_json(output)
+    if implementation_kind != CALC_V0_IMPLEMENTATION_KIND:
+        output_payload = canonical_json(output)
     with open_sqlite_connection() as connection:
         connection.execute(
             """
@@ -735,6 +737,13 @@ def _register_declared_artifacts(
     return artifact_ids
 
 
+def _canonical_result_json(output: dict[str, object]) -> str:
+    try:
+        return canonical_json(output)
+    except RunnerSafetyError as exc:
+        raise RunnerSafetyError("runner_result_invalid_json", "Runner result JSON must be finite canonical JSON.") from exc
+
+
 def _validate_calc_v0_output(output: dict[str, object]) -> dict[str, dict[str, object]]:
     outputs = output.get("outputs")
     if not isinstance(outputs, dict):
@@ -750,7 +759,7 @@ def _validate_calc_v0_output(output: dict[str, object]) -> dict[str, dict[str, o
             raise RunnerSafetyError("runner_result_invalid_json", f"calc_v0 output {name} value must be numeric.")
         try:
             number = float(value)
-        except (TypeError, ValueError) as exc:
+        except (OverflowError, TypeError, ValueError) as exc:
             raise RunnerSafetyError("runner_result_invalid_json", f"calc_v0 output {name} value must be numeric.") from exc
         if not isfinite(number):
             raise RunnerSafetyError("runner_result_invalid_json", f"calc_v0 output {name} value must be finite.")

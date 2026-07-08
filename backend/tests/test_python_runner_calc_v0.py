@@ -231,6 +231,9 @@ def test_calc_v0_nonfinite_output_value_fails_without_parameter_records(client: 
         "f = eval\nf(\"__import__('os')\")\n",
         "import socket\n",
         "open('/tmp/escape', 'w')\n",
+        "f = open\nf('/tmp/escape', 'w')\n",
+        "__builtins__.open('/tmp/escape', 'w')\n",
+        "__builtins__['open']('/tmp/escape', 'w')\n",
     ],
 )
 def test_calc_v0_policy_violations_are_sandbox_failures(client: TestClient, source: str) -> None:
@@ -241,6 +244,71 @@ def test_calc_v0_policy_violations_are_sandbox_failures(client: TestClient, sour
     )
     assert response.status_code == 400
     assert response.json()["detail"]["code"] == "SANDBOX_VIOLATION"
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "open('input.json', 'w')\n",
+        "open('input.json', mode='w')\n",
+        "mode = 'r'\nopen('input.json', mode=mode)\n",
+        "open('input.json', 'r+')\n",
+        "open('input.json', 'rb')\n",
+        "open('result.json')\n",
+        "open('result.json', 'r')\n",
+        "open('result.json', mode='r')\n",
+        "mode = 'w'\nopen('result.json', mode=mode)\n",
+        "open('result.json', 'a')\n",
+        "open('result.json', 'x')\n",
+        "open('result.json', 'w+')\n",
+        "open('result.json', 'wb')\n",
+        "open('result.json', **{'mode': 'w'})\n",
+    ],
+)
+def test_calc_v0_open_modes_are_checked(client: TestClient, source: str) -> None:
+    implementation = _create_calc(client, source)
+    response = client.post(
+        "/workspaces/bluerev/runner-jobs",
+        json={"model_version_id": implementation["id"], "input_set": _valid_input()},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "SANDBOX_VIOLATION"
+
+
+def test_calc_v0_noncanonical_diagnostics_fails_before_artifact_or_memory_side_effects(client: TestClient) -> None:
+    script = _safe_script().replace("'diagnostics': {'model': 'fixture'}", "'diagnostics': float('nan')")
+    implementation = _create_calc(client, script)
+    runner_job = _create_job(client, implementation)["runner_job"]
+
+    response = client.post(f"/runner-jobs/{runner_job['id']}/run")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["runner_job"]["status"] == "failed"
+    assert body["error"]["code"] == "runner_result_invalid_json"
+
+    from app.core.database import open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        assert connection.execute("SELECT COUNT(*) AS count FROM parameters").fetchone()["count"] == 0
+        assert connection.execute("SELECT COUNT(*) AS count FROM run_artifacts").fetchone()["count"] == 0
+
+
+def test_calc_v0_numeric_overflow_errors_map_to_validation_codes() -> None:
+    from app.modules.runner.safety import RunnerSafetyError, validate_calc_v0_input
+    from app.modules.runner.service import _validate_calc_v0_output
+
+    class OverflowNumber:
+        def __float__(self) -> float:
+            raise OverflowError("too large")
+
+    with pytest.raises(RunnerSafetyError) as input_error:
+        validate_calc_v0_input({"x": {"value": OverflowNumber(), "unit": "m"}})
+    assert input_error.value.code == "runner_input_invalid"
+
+    with pytest.raises(RunnerSafetyError) as output_error:
+        _validate_calc_v0_output({"outputs": {"x": {"value": OverflowNumber(), "unit": "m"}}})
+    assert output_error.value.code == "runner_result_invalid_json"
 
 
 def test_calc_v0_tamper_rejected_at_job_creation_and_execution(client: TestClient) -> None:
