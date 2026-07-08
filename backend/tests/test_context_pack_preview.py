@@ -104,3 +104,59 @@ def test_fts_backfill_and_literal_query_handling(monkeypatch) -> None:
     monkeypatch.setattr(modeling.service, "sqlite_fts5_available", lambda connection: False)
     like_bundle = build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query="alpha-beta"))
     assert _ids(like_bundle) == _ids(fts_bundle)
+
+
+def test_like_fallback_escapes_sql_wildcards(monkeypatch) -> None:
+    seed_ids = _seed()
+    literal_underscore = create_parameter(
+        "bluerev",
+        ParameterCreate(
+            name="C_D coefficient",
+            symbol="c_d",
+            value="0.8",
+            unit="1",
+            value_status="validated",
+            source_ref="test",
+        ),
+    )
+    wildcard_decoy = create_parameter(
+        "bluerev",
+        ParameterCreate(
+            name="CAD coefficient",
+            symbol="cad",
+            value="0.9",
+            unit="1",
+            value_status="validated",
+            source_ref="test",
+        ),
+    )
+    literal_percent = create_requirement(
+        "bluerev",
+        RequirementCreate(statement="Pump operates at 100% duty", status="active"),
+    )
+    percent_decoy = create_requirement(
+        "bluerev",
+        RequirementCreate(statement="Pump operates at 100x duty", status="active"),
+    )
+
+    from app.modules import modeling
+
+    monkeypatch.setattr(modeling.service, "sqlite_fts5_available", lambda connection: False)
+
+    percent_ids = _ids(build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query="%")))
+    assert literal_percent.id in percent_ids
+    assert percent_decoy.id not in percent_ids
+    assert seed_ids["decision"] not in percent_ids
+
+    underscore_ids = _ids(build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query="_")))
+    assert literal_underscore.id in underscore_ids
+    assert wildcard_decoy.id not in underscore_ids
+    assert seed_ids["decision"] not in underscore_ids
+
+    cd_ids = _ids(build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query="C_D")))
+    assert literal_underscore.id in cd_ids
+    assert wildcard_decoy.id not in cd_ids
+
+    duty_ids = _ids(build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query="100%")))
+    assert literal_percent.id in duty_ids
+    assert percent_decoy.id not in duty_ids
