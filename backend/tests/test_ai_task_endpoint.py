@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 
 import pytest
@@ -304,8 +305,6 @@ def test_task_endpoint_without_project_context_records_no_sources(client: TestCl
 
 
 def test_task_endpoint_include_project_context_injects_workspace_context(client: TestClient) -> None:
-    import json
-
     from app.modules.modeling.models import DecisionCreate, ParameterCreate
     from app.modules.modeling.service import create_decision, create_parameter
 
@@ -338,6 +337,46 @@ def test_task_endpoint_include_project_context_injects_workspace_context(client:
     sources = json.loads(rows[0]["context_sources_json"])
     assert any(source["type"] == "decision" for source in sources)
     assert any(source["type"] == "parameter" for source in sources)
+
+
+def test_task_endpoint_include_project_context_uses_legacy_no_selection_bundle(client: TestClient) -> None:
+    from app.modules.ai.context_builder import build_workspace_context_bundle
+    from app.modules.modeling.models import AssumptionCreate, DecisionCreate, ParameterCreate
+    from app.modules.modeling.service import create_assumption, create_decision, create_parameter
+
+    create_decision(
+        "bluerev", DecisionCreate(title="Legacy decision", decision_text="Keep full dump", status="accepted")
+    )
+    create_assumption(
+        "bluerev", AssumptionCreate(statement="Legacy assumption", confidence="medium", status="accepted")
+    )
+    create_parameter(
+        "bluerev",
+        ParameterCreate(name="legacy_parameter", value="42", unit="mm", source_ref="legacy-spec", status="approved"),
+    )
+    expected_bundle = build_workspace_context_bundle("bluerev")
+
+    response = client.post(
+        "/ai/tasks/run",
+        json={
+            "prompt": "use the unselected legacy workspace context",
+            "route_class": "local:fake",
+            "include_project_context": True,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["include_project_context"] is True
+    assert body["workspace_id"] == "bluerev"
+    assert body["context_digest"] == expected_bundle.context_digest
+    assert body["context_sources_count"] == len(expected_bundle.sources)
+
+    rows = _all_ai_jobs()
+    assert len(rows) == 1
+    assert rows[0]["context_digest"] == expected_bundle.context_digest
+    assert json.loads(rows[0]["context_sources_json"]) == expected_bundle.sources
 
 
 def test_task_endpoint_invalid_workspace_fails_closed_before_provider(client: TestClient) -> None:
@@ -405,7 +444,7 @@ def test_confirm_escalation_happy_path_uses_external_spine(client: TestClient, m
         return FakeProviderAdapter().complete(request)
 
     monkeypatch.setattr(OpenAICompatAdapter, "complete", fake_complete)
-    
+
     response = client.post("/ai/tasks/escalations/confirm", json={"proposal": _proposal(), "task_kind": "general"})
 
     assert response.status_code == 200
@@ -472,7 +511,9 @@ def test_confirm_escalation_budget_zero_fails_closed(client: TestClient, monkeyp
     assert "monthly_budget_zero" in body["task_response"]["decision_reason"]
 
 
-def test_confirm_escalation_credentials_absent_fails_closed(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_confirm_escalation_credentials_absent_fails_closed(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # Acceptance criterion 5, third fail-closed case: paid AI on and budget available,
     # but no Scaleway credential present -> confirm must not execute.
     monkeypatch.delenv("SCALEWAY_API_KEY", raising=False)
