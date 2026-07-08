@@ -497,27 +497,41 @@ def add_label(repo: str, pr: int, token: str, label: str) -> None:
         die(f"could not add label {label} (status {status})")
 
 
+def should_post_fix_request(*, limit_reached: bool, escalation: str | None, approved: bool, stale_head: bool) -> bool:
+    return not limit_reached and not escalation and not approved and not stale_head
+
+
+def fix_request_footer() -> str:
+    return "\n\n_Fix request posted; awaiting Codex outcome marker._"
+
+
 def build_fix_request_comment(*, provider: str, branch: str, review_title: str, this_round: int, review: str) -> str:
     fix_marker = FIX_REQUEST_MARKER.format(provider=provider)
     return (
         f"{fix_marker}\n"
-        f"@codex evaluate the findings below on this branch (`{branch}`), then "
-        "push your commits to the existing remote PR branch. A task-local commit "
-        "or summary is not sufficient: the GitHub remote branch head must advance. "
-        "Hard boundaries: Do not merge. Do not push to master. Do not force-push. "
-        "Do not delete branches. Do not modify `.github/workflows/**` or secret/env files. "
-        "After a successful push, comment `Final remote branch head SHA` and changed files. "
-        "If no branch update can be materialized from this bootstrap comment path, "
-        "explicitly report `codex-autopush:non-materialized` or provide the structured "
-        "no-patch decision below; passive @codex summaries are not a successful loop outcome. "
-        "These findings are ADVISORY and often wrong (the "
-        "cheap DeepSeek tier especially produces false positives): for each "
-        "one, first decide whether it is a real defect. Fix the real ones. If "
-        "you judge a finding a false positive, do NOT change code to appease it "
-        "— reply with a structured `false positive / no patch` decision backed by "
-        "a test, a repro, or precise reasoning. Do not open a new PR, do not silently ignore a finding, and "
-        "do not summarize instead of acting. When done, stop and wait for "
-        f"re-review. Findings from the {review_title} (round {this_round}):\n\n"
+        f"@codex evaluate the findings below on this branch (`{branch}`). These findings "
+        "are ADVISORY and often wrong (the cheap DeepSeek tier especially produces false "
+        "positives): for each one, first decide whether it is a real defect. Fix the real "
+        "ones. If you judge a finding a false positive, do NOT change code to appease it. "
+        "Do not open a new PR, do not silently ignore a finding, and do not summarize "
+        "instead of acting.\n\n"
+        "Hard boundaries: no merge; no push to master; no force-push; no branch deletion; "
+        "no workflow changes; no secret/env changes.\n\n"
+        "When done, reply with exactly one outcome marker line from this list and the "
+        "required evidence for that outcome:\n"
+        "- `codex-result:patch-materialized` — remote PR branch head advanced; include "
+        "the final remote branch head SHA and changed files. A task-local commit or "
+        "summary is not sufficient.\n"
+        "- `codex-result:false-positive-no-patch` — no code change; include precise "
+        "reasoning and a test, repro, or other concrete evidence.\n"
+        "- `codex-result:non-materialized` — a patch may exist locally/task-side but the "
+        "remote PR branch did not advance. Include what prevented materialization.\n"
+        "- `codex-result:blocked` — you could not evaluate or act. Include the reason.\n\n"
+        "Use `codex-result:patch-materialized` only after verifying the existing remote PR "
+        "branch head advanced and reporting its final SHA. Use "
+        "`codex-result:false-positive-no-patch` when the correct outcome is an intentional "
+        "no-patch rebuttal backed by evidence. When done, stop and wait for re-review. "
+        f"Findings from the {review_title} (round {this_round}):\n\n"
         f"{review}"
     )
 
@@ -629,16 +643,45 @@ def self_test(repo_root: Path) -> None:
         this_round=2,
         review="VERDICT: NEEDS_CHANGES\nMAJOR: real issue",
     )
-    assert "remote branch head must advance" in fix_body
-    assert "Final remote branch head SHA" in fix_body
-    assert "Do not merge" in fix_body
-    assert "Do not push to master" in fix_body
-    assert "Do not force-push" in fix_body
-    assert "Do not modify `.github/workflows/**` or secret/env files" in fix_body
-    assert "codex-autopush:non-materialized" in fix_body
-    assert "false positive / no patch" in fix_body
-    assert "passive @codex summaries are not a successful loop outcome" in fix_body
+    senior_fix_body = build_fix_request_comment(
+        provider="glm",
+        branch="codex/example",
+        review_title="Senior review",
+        this_round=2,
+        review="VERDICT: NEEDS_CHANGES\nMAJOR: senior issue",
+    )
+    outcome_markers = (
+        "codex-result:patch-materialized",
+        "codex-result:false-positive-no-patch",
+        "codex-result:non-materialized",
+        "codex-result:blocked",
+    )
+    for body in (fix_body, senior_fix_body):
+        for marker_text in outcome_markers:
+            assert marker_text in body
+        assert "exactly one outcome marker" in body
+        assert "final remote branch head SHA" in body
+        assert "changed files" in body
+        assert "A task-local commit or summary is not sufficient" in body
+        assert "no code change" in body
+        assert "test, repro, or other concrete evidence" in body
+        assert "no merge" in body
+        assert "no push to master" in body
+        assert "no force-push" in body
+        assert "no branch deletion" in body
+        assert "no workflow changes" in body
+        assert "no secret/env changes" in body
+    assert "Cheap-tier review" in fix_body
+    assert "Senior review" in senior_fix_body
     assert "MAJOR: real issue" in fix_body
+    assert "MAJOR: senior issue" in senior_fix_body
+    assert fix_request_footer() == "\n\n_Fix request posted; awaiting Codex outcome marker._"
+    assert "separate maintainer-authored comment" not in fix_request_footer()
+    assert should_post_fix_request(limit_reached=False, escalation=None, approved=False, stale_head=False) is True
+    assert should_post_fix_request(limit_reached=False, escalation=None, approved=True, stale_head=False) is False
+    assert should_post_fix_request(limit_reached=False, escalation="expert needed", approved=False, stale_head=False) is False
+    assert should_post_fix_request(limit_reached=True, escalation=None, approved=False, stale_head=False) is False
+    assert should_post_fix_request(limit_reached=False, escalation=None, approved=False, stale_head=True) is False
     # Append-only round counting: scan prior comments for the highest round, +1.
     _mk = COMMENT_MARKER.format(provider="deepseek")
     assert next_round([], _mk) == 1
@@ -832,10 +875,7 @@ def main() -> None:
                 "for re-review."
             )
         else:
-            footer = (
-                "\n\n_Fix request posted as a separate maintainer-authored comment "
-                "for the implementing agent._"
-            )
+            footer = fix_request_footer()
     elif senior:
         header = f"round {this_round}/{round_limit}"
         footer = (
@@ -867,8 +907,9 @@ def main() -> None:
     # is what re-notifies Codex). Append-only: prior fix requests stay as history;
     # on approval or limit we simply post none.
     if not chain_may_stall:
-        wants_fix = not limit_reached and not escalation and not approved and not stale_head
-        if wants_fix:
+        if should_post_fix_request(
+            limit_reached=limit_reached, escalation=escalation, approved=approved, stale_head=stale_head
+        ):
             fix_body = build_fix_request_comment(
                 provider=provider,
                 branch=branch,
