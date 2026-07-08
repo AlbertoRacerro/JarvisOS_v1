@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from app.core.bootstrap import initialize_storage
 from app.core.database import open_sqlite_connection
 from app.main import app
-from app.modules.ai.context_builder import ContextSelectionSpec, build_workspace_context_bundle
+from app.modules.ai.context_builder import ContextSelectionSpec, _serialize_blocks, build_workspace_context_bundle
 from app.modules.modeling.models import AssumptionCreate, DecisionCreate, ParameterCreate, RequirementCreate
 from app.modules.modeling.service import create_assumption, create_decision, create_parameter, create_requirement
 
@@ -27,6 +27,10 @@ def _seed() -> dict[str, str]:
 
 def _ids(bundle) -> set[str]:
     return {block["id"] for block in bundle.blocks}
+
+
+def _types(bundle) -> list[str]:
+    return [block["type"] for block in bundle.blocks]
 
 
 def test_no_selection_workspace_context_bundle_is_byte_identical() -> None:
@@ -63,12 +67,39 @@ def test_selection_by_kind_status_id_query_and_deterministic_order() -> None:
 
 def test_budget_truncation_and_digest_stability() -> None:
     _seed()
-    bundle = build_workspace_context_bundle("bluerev", budget_chars=520, selection=ContextSelectionSpec(query="alpha-beta"))
-    types = {block["type"] for block in bundle.blocks}
-    assert "decision" in types
-    assert "requirement" in types
-    assert "assumption" not in types or "parameter" not in types
-    assert bundle.context_digest == build_workspace_context_bundle("bluerev", budget_chars=520, selection=ContextSelectionSpec(query="alpha-beta")).context_digest
+    full = build_workspace_context_bundle("bluerev", budget_chars=32_000, selection=ContextSelectionSpec())
+    assert _types(full) == ["decision", "assumption", "parameter", "requirement"]
+
+    without_parameter = [block for block in full.blocks if block["type"] != "parameter"]
+    parameter_dropped = build_workspace_context_bundle(
+        "bluerev",
+        budget_chars=len(_serialize_blocks(without_parameter)),
+        selection=ContextSelectionSpec(),
+    )
+    assert _types(parameter_dropped) == ["decision", "assumption", "requirement"]
+
+    without_parameter_assumption = [
+        block for block in full.blocks if block["type"] not in {"parameter", "assumption"}
+    ]
+    parameter_then_assumption_dropped = build_workspace_context_bundle(
+        "bluerev",
+        budget_chars=len(_serialize_blocks(without_parameter_assumption)),
+        selection=ContextSelectionSpec(),
+    )
+    assert _types(parameter_then_assumption_dropped) == ["decision", "requirement"]
+
+    only_decision = [block for block in full.blocks if block["type"] == "decision"]
+    parameter_assumption_requirement_dropped = build_workspace_context_bundle(
+        "bluerev",
+        budget_chars=len(_serialize_blocks(only_decision)),
+        selection=ContextSelectionSpec(),
+    )
+    assert _types(parameter_assumption_requirement_dropped) == ["decision"]
+    assert parameter_assumption_requirement_dropped.context_digest == build_workspace_context_bundle(
+        "bluerev",
+        budget_chars=len(_serialize_blocks(only_decision)),
+        selection=ContextSelectionSpec(),
+    ).context_digest
 
 
 def test_preview_endpoint_is_side_effect_free_and_manifest_matches() -> None:
