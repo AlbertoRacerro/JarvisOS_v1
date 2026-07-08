@@ -216,6 +216,35 @@ def test_calc_v0_nonfinite_output_value_fails_without_parameter_records(client: 
 
 
 @pytest.mark.parametrize(
+    ("script", "expected_code"),
+    [
+        (_safe_script().replace(
+            "'outputs': {\n            'buoyancy_force': {'value': force, 'unit': 'N'},\n            'sqrt_g': {'value': math.sqrt(inputs['g']['value']), 'unit': 'sqrt(m/s^2)'},\n        }",
+            "'outputs': []",
+        ), "runner_result_invalid_json"),
+        (_safe_script().replace(", 'unit': 'N'", ""), "runner_output_unit_missing"),
+        (
+            _safe_script().replace("'diagnostics': {'model': 'fixture'}", "'diagnostics': float('nan')"),
+            "runner_result_invalid_json",
+        ),
+    ],
+)
+def test_calc_v0_output_validation_errors_mark_job_failed_without_500(
+    client: TestClient, script: str, expected_code: str
+) -> None:
+    implementation = _create_calc(client, script)
+    runner_job = _create_job(client, implementation)["runner_job"]
+
+    response = client.post(f"/runner-jobs/{runner_job['id']}/run")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["runner_job"]["status"] == "failed"
+    assert body["simulation_run"]["status"] == "failed"
+    assert body["error"]["code"] == expected_code
+
+
+@pytest.mark.parametrize(
     "source",
     [
         "import os\n",
