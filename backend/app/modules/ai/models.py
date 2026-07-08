@@ -165,6 +165,8 @@ class AITaskRunResponse(BaseModel):
     workspace_id: str | None = None
     context_digest: str | None = None
     context_sources_count: int = 0
+    records_parse_error: str | None = None
+    proposed_record_ids: list[str] = Field(default_factory=list)
     auto_metadata: dict[str, Any] | None = None
     confirmation_payload: dict[str, Any] | None = None
     escalation_proposal: dict[str, Any] | None = None

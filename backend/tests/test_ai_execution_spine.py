@@ -754,3 +754,189 @@ def test_credential_block_does_not_fallback(monkeypatch, tmp_path) -> None:
     assert len(rows) == 1
     assert rows[0]["provider_id"] == "deepseek"
     assert "deepseek_api_key_missing" in json.loads(rows[0]["route_reason_json"])["decision_reason"]
+
+class _TextCaptureAdapter:
+    provider_id = "fake"
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.requests: list[AIRequest] = []
+
+    def health(self):  # pragma: no cover - not used
+        ...
+
+    def list_models(self):  # pragma: no cover - not used
+        return []
+
+    def complete(self, request: AIRequest) -> AIResponse:
+        self.requests.append(request)
+        return AIResponse(
+            provider_id="fake",
+            model_id=request.model_preference or "fake-model",
+            request_id=request.request_id,
+            text=self.text,
+            content=self.text,
+            usage=AIUsage(provider_id="fake", model_id="fake-model", input_tokens=1, output_tokens=1),
+            safety_status="allowed",
+        )
+
+    def stream(self, request: AIRequest):  # pragma: no cover - not used
+        raise NotImplementedError
+
+
+def _seed_workspace() -> None:
+    from app.modules.workspaces.service import seed_default_workspace
+
+    seed_default_workspace()
+
+
+def _proposal_rows(table: str) -> list[dict]:
+    from app.core.database import open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        rows = connection.execute(f"SELECT * FROM {table} ORDER BY created_at ASC").fetchall()
+    return [dict(row) for row in rows]
+
+
+def _records_block(records: list[dict], extra: dict | None = None) -> str:
+    payload = {"record_version": "jarvis_records_v0", "records": records}
+    if extra:
+        payload.update(extra)
+    return "answer\n```jarvis-records\n" + json.dumps(payload) + "\n```"
+
+
+def test_allowlisted_valid_block_creates_proposed_memory_record(monkeypatch, tmp_path) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    _seed_workspace()
+    from app.modules.ai.execution import run_ai_task
+
+    text = _records_block([{"record_kind": "decision", "title": "Use pump A", "decision_text": "Select pump A."}])
+    adapter = _TextCaptureAdapter(text)
+    outcome = run_ai_task(
+        user_prompt="decide",
+        task_kind="decision_support",
+        route_class="local:fake",
+        adapters={"fake": adapter},
+        workspace_id="bluerev",
+    )
+
+    assert outcome.status == "success"
+    assert outcome.records_parse_error is None
+    assert outcome.proposed_record_ids and len(outcome.proposed_record_ids) == 1
+    assert "SYSTEM_RECORD_CAPTURE" in adapter.requests[0].prompt
+    rows = _proposal_rows("decisions")
+    assert len(rows) == 1
+    assert rows[0]["id"] == outcome.proposed_record_ids[0]
+    assert rows[0]["status"] == "proposed"
+    assert rows[0]["origin"] == "ai_proposed"
+    assert rows[0]["source_ai_job_id"] == outcome.ledger_id
+
+
+def test_allowlisted_malformed_block_keeps_task_success_and_writes_zero_records(monkeypatch, tmp_path) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    _seed_workspace()
+    from app.modules.ai.execution import run_ai_task
+
+    text = "answer\n```jarvis-records\n{not json}\n```"
+    outcome = run_ai_task(
+        user_prompt="decide",
+        task_kind="decision_support",
+        route_class="local:fake",
+        adapters={"fake": _TextCaptureAdapter(text)},
+        workspace_id="bluerev",
+    )
+
+    assert outcome.status == "success"
+    assert outcome.response and outcome.response.text == text
+    assert outcome.records_parse_error and outcome.records_parse_error.startswith("records_json_error")
+    assert outcome.proposed_record_ids == []
+    assert _proposal_rows("decisions") == []
+
+
+def test_non_allowlisted_kind_does_not_inject_or_parse_block(monkeypatch, tmp_path) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    _seed_workspace()
+    from app.modules.ai.execution import run_ai_task
+
+    text = _records_block([{"record_kind": "assumption", "statement": "Ignored."}])
+    adapter = _TextCaptureAdapter(text)
+    outcome = run_ai_task(
+        user_prompt="general",
+        task_kind="general",
+        route_class="local:fake",
+        adapters={"fake": adapter},
+        workspace_id="bluerev",
+    )
+
+    assert outcome.status == "success"
+    assert outcome.response and outcome.response.text == text
+    assert outcome.records_parse_error is None
+    assert outcome.proposed_record_ids == []
+    assert adapter.requests[0].prompt == "general"
+    assert _proposal_rows("assumptions") == []
+
+
+def test_eleven_record_block_creates_first_ten_and_notes_drop(monkeypatch, tmp_path) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    _seed_workspace()
+    from app.modules.ai.execution import run_ai_task
+
+    records = [{"record_kind": "assumption", "statement": f"Assumption {index}"} for index in range(11)]
+    outcome = run_ai_task(
+        user_prompt="capture",
+        task_kind="decision_support",
+        route_class="local:fake",
+        adapters={"fake": _TextCaptureAdapter(_records_block(records))},
+        workspace_id="bluerev",
+    )
+
+    assert outcome.status == "success"
+    assert outcome.records_parse_error == "records_truncated: 1 dropped"
+    assert len(outcome.proposed_record_ids or []) == 10
+    rows = _proposal_rows("assumptions")
+    assert len(rows) == 10
+    assert [row["statement"] for row in rows] == [f"Assumption {index}" for index in range(10)]
+
+
+def test_model_supplied_workspace_id_is_ignored_for_created_record(monkeypatch, tmp_path) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    _seed_workspace()
+    from app.modules.ai.execution import run_ai_task
+
+    text = _records_block(
+        [{"record_kind": "parameter", "name": "Length", "unit": "m", "workspace_id": "foreign"}],
+        extra={"workspace_id": "foreign"},
+    )
+    outcome = run_ai_task(
+        user_prompt="capture",
+        task_kind="decision_support",
+        route_class="local:fake",
+        adapters={"fake": _TextCaptureAdapter(text)},
+        workspace_id="bluerev",
+    )
+
+    assert outcome.status == "success"
+    assert outcome.proposed_record_ids and len(outcome.proposed_record_ids) == 1
+    rows = _proposal_rows("parameters")
+    assert len(rows) == 1
+    assert rows[0]["workspace_id"] == "bluerev"
+
+
+def test_ai_jobs_do_not_store_record_block_or_fields(monkeypatch, tmp_path) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    _seed_workspace()
+    from app.modules.ai.execution import run_ai_task
+
+    text = _records_block([{"record_kind": "decision", "title": "Sensitive title", "decision_text": "Sensitive decision."}])
+    run_ai_task(
+        user_prompt="capture",
+        task_kind="decision_support",
+        route_class="local:fake",
+        adapters={"fake": _TextCaptureAdapter(text)},
+        workspace_id="bluerev",
+    )
+
+    serialized_jobs = json.dumps(_all_ai_jobs(), sort_keys=True)
+    assert "jarvis-records" not in serialized_jobs
+    assert "Sensitive title" not in serialized_jobs
+    assert "Sensitive decision" not in serialized_jobs
