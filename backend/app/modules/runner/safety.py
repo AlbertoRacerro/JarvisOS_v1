@@ -18,6 +18,8 @@ MAX_TIMEOUT_SECONDS = 60
 
 REQUIRED_BATCH_GROWTH_PARAMETERS = ("mu_max", "X0", "t_final", "dt")
 
+ALLOWED_CALC_V0_IMPORT_ROOTS = frozenset({"json", "math", "statistics"})
+
 ALLOWED_BLUECAD_L2_IMPORT_ROOTS = frozenset({
     "build123d",
     "collections",
@@ -40,7 +42,7 @@ BLUECAD_L2_REQUIRED_ARTIFACTS = {
     "bluecad_manifest": "manifest.json",
 }
 SANDBOX_VIOLATION = "SANDBOX_VIOLATION"
-FORBIDDEN_BLUECAD_L2_NAME_REFERENCES = frozenset({
+FORBIDDEN_DYNAMIC_NAME_REFERENCES = frozenset({
     "__import__",
     "breakpoint",
     "compile",
@@ -53,7 +55,8 @@ FORBIDDEN_BLUECAD_L2_NAME_REFERENCES = frozenset({
     "setattr",
     "vars",
 })
-
+FORBIDDEN_BLUECAD_L2_NAME_REFERENCES = FORBIDDEN_DYNAMIC_NAME_REFERENCES
+FORBIDDEN_CALC_V0_NAME_REFERENCES = FORBIDDEN_DYNAMIC_NAME_REFERENCES
 FORBIDDEN_SCRIPT_MARKERS = (
     "import socket",
     "from socket",
@@ -234,6 +237,44 @@ def validate_run_paths(
     return resolved_working_dir, resolved_input_file, resolved_output_dir
 
 
+def validate_calc_v0_input(input_set: dict[str, Any]) -> tuple[str, str]:
+    encoded = canonical_json(input_set)
+    if len(encoded.encode("utf-8")) > MAX_INPUT_JSON_BYTES:
+        raise RunnerSafetyError("runner_input_too_large", "Input JSON exceeds the V0 runner size limit.")
+    if not isinstance(input_set, dict):
+        raise RunnerSafetyError("runner_input_invalid", "calc_v0 input set must be an object.")
+    normalized: dict[str, dict[str, object]] = {}
+    for name, item in input_set.items():
+        if not isinstance(name, str) or not name.strip():
+            raise RunnerSafetyError("runner_input_invalid", "calc_v0 input names must be non-empty strings.")
+        if not isinstance(item, dict):
+            raise RunnerSafetyError("runner_input_invalid", f"calc_v0 input {name} must be an object.")
+        value = item.get("value")
+        if isinstance(value, bool):
+            raise RunnerSafetyError("runner_input_invalid", f"calc_v0 input {name} value must be numeric.")
+        try:
+            number = float(value)
+        except (TypeError, ValueError) as exc:
+            raise RunnerSafetyError("runner_input_invalid", f"calc_v0 input {name} value must be numeric.") from exc
+        if not isfinite(number):
+            raise RunnerSafetyError("runner_input_invalid", f"calc_v0 input {name} value must be finite.")
+        unit = item.get("unit")
+        if not isinstance(unit, str) or not unit.strip():
+            raise RunnerSafetyError("runner_input_invalid", f"calc_v0 input {name} unit must be a non-empty string.")
+        normalized_item: dict[str, object] = {"value": number, "unit": unit}
+        source_parameter_id = item.get("source_parameter_id")
+        if source_parameter_id is not None:
+            if not isinstance(source_parameter_id, str) or not source_parameter_id.strip():
+                raise RunnerSafetyError(
+                    "runner_input_invalid",
+                    f"calc_v0 input {name} source_parameter_id must be a non-empty string.",
+                )
+            normalized_item["source_parameter_id"] = source_parameter_id
+        normalized[name] = normalized_item
+    normalized_encoded = canonical_json(normalized)
+    return normalized_encoded, normalized_encoded
+
+
 def validate_bluecad_l2_input(input_set: dict[str, Any]) -> tuple[str, str]:
     try:
         normalized = canonicalize_geometry_spec(input_set)
@@ -245,18 +286,39 @@ def validate_bluecad_l2_input(input_set: dict[str, Any]) -> tuple[str, str]:
     return encoded, encoded
 
 
-def preflight_script_policy(script_path: Path, *, ast_import_allowlist: bool = False) -> None:
+def preflight_script_policy(script_path: Path, *, ast_policy: str | None = None, ast_import_allowlist: bool = False) -> None:
     text = script_path.read_text(encoding="utf-8")
     lowered = text.lower()
     for marker in FORBIDDEN_SCRIPT_MARKERS:
         if marker in lowered:
-            code = SANDBOX_VIOLATION if ast_import_allowlist else "runner_policy_blocked"
+            code = SANDBOX_VIOLATION if (ast_import_allowlist or ast_policy) else "runner_policy_blocked"
             raise RunnerSafetyError(code, f"Script contains blocked marker: {marker}.")
-    if ast_import_allowlist:
+    if ast_import_allowlist or ast_policy == "bluecad_l2_v0":
         preflight_bluecad_l2_ast_policy(text)
+    elif ast_policy == "calc_v0":
+        preflight_calc_v0_ast_policy(text)
+
+
+def preflight_calc_v0_ast_policy(source: str) -> None:
+    _preflight_ast_policy(
+        source,
+        ALLOWED_CALC_V0_IMPORT_ROOTS,
+        FORBIDDEN_CALC_V0_NAME_REFERENCES,
+        enforce_calc_file_contract=True,
+    )
 
 
 def preflight_bluecad_l2_ast_policy(source: str) -> None:
+    _preflight_ast_policy(source, ALLOWED_BLUECAD_L2_IMPORT_ROOTS, FORBIDDEN_BLUECAD_L2_NAME_REFERENCES)
+
+
+def _preflight_ast_policy(
+    source: str,
+    allowed_import_roots: frozenset[str],
+    forbidden_name_references: frozenset[str],
+    *,
+    enforce_calc_file_contract: bool = False,
+) -> None:
     try:
         tree = ast.parse(source)
     except SyntaxError as exc:
@@ -264,25 +326,27 @@ def preflight_bluecad_l2_ast_policy(source: str) -> None:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                _validate_bluecad_l2_import(alias.name)
+                _validate_ast_import(alias.name, allowed_import_roots)
         elif isinstance(node, ast.ImportFrom):
             if node.level != 0 or node.module is None:
                 raise RunnerSafetyError(SANDBOX_VIOLATION, "Relative imports are not allowed.")
             if any(alias.name == "*" for alias in node.names):
                 raise RunnerSafetyError(SANDBOX_VIOLATION, "Star imports are not allowed.")
-            _validate_bluecad_l2_import(node.module)
+            _validate_ast_import(node.module, allowed_import_roots)
         elif isinstance(node, ast.Call):
             name = _call_name(node.func)
             if (
-                name in FORBIDDEN_BLUECAD_L2_NAME_REFERENCES
-                or name.rsplit(".", 1)[-1] in FORBIDDEN_BLUECAD_L2_NAME_REFERENCES
+                name in forbidden_name_references
+                or name.rsplit(".", 1)[-1] in forbidden_name_references
                 or name.startswith("importlib.")
             ):
                 raise RunnerSafetyError(SANDBOX_VIOLATION, f"Dynamic code loading is not allowed: {name}.")
+            if enforce_calc_file_contract and name == "open":
+                _validate_calc_open_call(node)
         elif (
             isinstance(node, ast.Name)
             and isinstance(node.ctx, ast.Load)
-            and node.id in FORBIDDEN_BLUECAD_L2_NAME_REFERENCES
+            and node.id in forbidden_name_references
         ):
             raise RunnerSafetyError(
                 SANDBOX_VIOLATION,
@@ -290,14 +354,21 @@ def preflight_bluecad_l2_ast_policy(source: str) -> None:
             )
 
 
-def _validate_bluecad_l2_import(module_name: str) -> None:
+def _validate_ast_import(module_name: str, allowed_import_roots: frozenset[str]) -> None:
     root = module_name.split(".", 1)[0]
-    if root not in ALLOWED_BLUECAD_L2_IMPORT_ROOTS:
+    if root not in allowed_import_roots:
         raise RunnerSafetyError(SANDBOX_VIOLATION, f"Import is not allowlisted: {module_name}.")
     if root == "collections" and module_name not in {"collections", "collections.abc"}:
         raise RunnerSafetyError(SANDBOX_VIOLATION, f"Import is not allowlisted: {module_name}.")
     if root != "collections" and "." in module_name and root != "build123d":
         raise RunnerSafetyError(SANDBOX_VIOLATION, f"Submodule import is not allowlisted: {module_name}.")
+
+
+def _validate_calc_open_call(node: ast.Call) -> None:
+    if not node.args or not isinstance(node.args[0], ast.Constant) or not isinstance(node.args[0].value, str):
+        raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 open() paths must be literal input.json or result.json.")
+    if node.args[0].value not in {"input.json", "result.json"}:
+        raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 scripts may only open input.json and result.json.")
 
 
 def _call_name(node: ast.AST) -> str:
