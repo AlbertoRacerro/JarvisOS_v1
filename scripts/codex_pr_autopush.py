@@ -10,6 +10,7 @@ merges, force-pushes, deletes branches, or pushes to master.
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 import re
@@ -237,6 +238,36 @@ def _self_test_materialized_push_reports_final_sha() -> None:
         assert final in format_success_comment(final, ["README.md"])
 
 
+def _self_test_no_forbidden_git_mutations() -> None:
+    """Static guard over concrete run_git calls in this bootstrap actuator."""
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Name) or node.func.id != "run_git":
+            continue
+        if not node.args or not isinstance(node.args[0], ast.List):
+            continue
+        literal_args: list[str] = []
+        for element in node.args[0].elts:
+            if isinstance(element, ast.Constant) and isinstance(element.value, str):
+                literal_args.append(element.value)
+            elif isinstance(element, ast.JoinedStr):
+                literal_args.append("".join(part.value for part in element.values if isinstance(part, ast.Constant)))
+        if not literal_args:
+            continue
+
+        command = literal_args[0]
+        assert command != "merge", f"forbidden merge call at line {node.lineno}"
+        if command != "push":
+            continue
+        assert "--force" not in literal_args, f"forbidden force-push flag at line {node.lineno}"
+        assert "-f" not in literal_args, f"forbidden force-push shorthand at line {node.lineno}"
+        for arg in literal_args[1:]:
+            assert not arg.startswith("+"), f"forbidden force-push refspec at line {node.lineno}"
+            assert not arg.startswith(":refs/heads/"), f"forbidden branch deletion refspec at line {node.lineno}"
+
+
 def self_test() -> None:
     assert not validate_autopush_request(target_branch="master", changed_files=[]).allowed
     assert not validate_autopush_request(target_branch="feature", changed_files=[], force_push=True).allowed
@@ -263,11 +294,7 @@ def self_test() -> None:
     assert "deadbeef" in non_materialized and "not materialized" in non_materialized
     _self_test_non_materialized_push()
     _self_test_materialized_push_reports_final_sha()
-    # The actuator has no merge/force/delete modes; the only mutating git operation
-    # is a normal HEAD-to-refs/heads/<branch> push after policy validation.
-    source = Path(__file__).read_text(encoding="utf-8")
-    assert "git " + "merge" not in source
-    assert ":refs/" + "heads/" not in source.replace("HEAD:refs/" + "heads/", "")
+    _self_test_no_forbidden_git_mutations()
     print("codex_pr_autopush: self-test OK")
 
 
