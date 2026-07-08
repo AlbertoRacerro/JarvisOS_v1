@@ -43,6 +43,9 @@ only once an internal code-navigating agent exists).
   `JARVISOS_BETA_PROGRAM.md`, which also fixes the SC-1..SC-4 seam contracts.
 - 056: Property-based geometry testing + determinism canary (renumbered from
   022; that number is taken by the merged Codex PR autopush bootstrap).
+  Compatibility note: legacy references in already-ready specs to property-
+  based testing or the golden-digest canary as "backlog item 022" refer to
+  this `056` item after the 2026-07-08 registry repair.
 - 057: R2 Workspace home layout (renumbered from 020; that number is taken by
   PIPELINE-DOCTOR). Follow-up UI slices use the same family (`057b`, `057c`).
 
