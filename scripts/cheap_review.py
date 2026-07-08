@@ -27,10 +27,10 @@ import os
 import re
 import sys
 import time
-from dataclasses import dataclass
 import urllib.error
 import urllib.parse
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 
 GITHUB_API = "https://api.github.com"
@@ -497,6 +497,31 @@ def add_label(repo: str, pr: int, token: str, label: str) -> None:
         die(f"could not add label {label} (status {status})")
 
 
+def build_fix_request_comment(*, provider: str, branch: str, review_title: str, this_round: int, review: str) -> str:
+    fix_marker = FIX_REQUEST_MARKER.format(provider=provider)
+    return (
+        f"{fix_marker}\n"
+        f"@codex evaluate the findings below on this branch (`{branch}`), then "
+        "push your commits to the existing remote PR branch. A task-local commit "
+        "or summary is not sufficient: the GitHub remote branch head must advance. "
+        "Hard boundaries: Do not merge. Do not push to master. Do not force-push. "
+        "Do not delete branches. Do not modify `.github/workflows/**` or secret/env files. "
+        "After a successful push, comment `Final remote branch head SHA` and changed files. "
+        "If no branch update can be materialized from this bootstrap comment path, "
+        "explicitly report `codex-autopush:non-materialized` or provide the structured "
+        "no-patch decision below; passive @codex summaries are not a successful loop outcome. "
+        "These findings are ADVISORY and often wrong (the "
+        "cheap DeepSeek tier especially produces false positives): for each "
+        "one, first decide whether it is a real defect. Fix the real ones. If "
+        "you judge a finding a false positive, do NOT change code to appease it "
+        "— reply with a structured `false positive / no patch` decision backed by "
+        "a test, a repro, or precise reasoning. Do not open a new PR, do not silently ignore a finding, and "
+        "do not summarize instead of acting. When done, stop and wait for "
+        f"re-review. Findings from the {review_title} (round {this_round}):\n\n"
+        f"{review}"
+    )
+
+
 def self_test(repo_root: Path) -> None:
     """Offline checks of the pure helpers; needs only the repo checkout."""
     assert parse_verdict("VERDICT: NO_FURTHER_CHANGES\nNo blocking findings.") == "NO_FURTHER_CHANGES"
@@ -597,6 +622,23 @@ def self_test(repo_root: Path) -> None:
     # Fix-request marker must never collide with the review marker of the same provider.
     assert FIX_REQUEST_MARKER.format(provider="glm") != COMMENT_MARKER.format(provider="glm")
     assert "codex-fix-request:glm" in FIX_REQUEST_MARKER.format(provider="glm")
+    fix_body = build_fix_request_comment(
+        provider="deepseek",
+        branch="codex/example",
+        review_title="Cheap-tier review",
+        this_round=2,
+        review="VERDICT: NEEDS_CHANGES\nMAJOR: real issue",
+    )
+    assert "remote branch head must advance" in fix_body
+    assert "Final remote branch head SHA" in fix_body
+    assert "Do not merge" in fix_body
+    assert "Do not push to master" in fix_body
+    assert "Do not force-push" in fix_body
+    assert "Do not modify `.github/workflows/**` or secret/env files" in fix_body
+    assert "codex-autopush:non-materialized" in fix_body
+    assert "false positive / no patch" in fix_body
+    assert "passive @codex summaries are not a successful loop outcome" in fix_body
+    assert "MAJOR: real issue" in fix_body
     # Append-only round counting: scan prior comments for the highest round, +1.
     _mk = COMMENT_MARKER.format(provider="deepseek")
     assert next_round([], _mk) == 1
@@ -827,19 +869,12 @@ def main() -> None:
     if not chain_may_stall:
         wants_fix = not limit_reached and not escalation and not approved and not stale_head
         if wants_fix:
-            fix_marker = FIX_REQUEST_MARKER.format(provider=provider)
-            fix_body = (
-                f"{fix_marker}\n"
-                f"@codex evaluate the findings below on this branch (`{branch}`), then "
-                "push your commits. These findings are ADVISORY and often wrong (the "
-                "cheap DeepSeek tier especially produces false positives): for each "
-                "one, first decide whether it is a real defect. Fix the real ones. If "
-                "you judge a finding a false positive, do NOT change code to appease it "
-                "— reply with a short rebuttal backed by a test, a repro, or precise "
-                "reasoning. Do not open a new PR, do not silently ignore a finding, and "
-                "do not summarize instead of acting. When done, stop and wait for "
-                f"re-review. Findings from the {review_title} (round {this_round}):\n\n"
-                f"{review}"
+            fix_body = build_fix_request_comment(
+                provider=provider,
+                branch=branch,
+                review_title=review_title,
+                this_round=this_round,
+                review=review,
             )
             post_comment(repo, pr, label_token, fix_body)
 
