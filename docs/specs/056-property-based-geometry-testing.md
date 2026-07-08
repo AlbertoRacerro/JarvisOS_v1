@@ -13,8 +13,11 @@ failure the existing golden fixtures do not cover:
 
 1. **Property-based geometry invariants**: generate many random but valid
    `GeometrySpec` inputs inside bounded engineering ranges and assert that the
-   CAD adapter either builds a valid artifact set with sane geometry metrics or
-   fails with a structured, expected validation error. It must never crash,
+   CAD adapter builds a valid artifact set with sane geometry metrics. A
+   generated input labelled valid must not be accepted as a structured
+   rejection: if it fails with `SPEC_INVALID`, `PORT_MISMATCH`, or any other
+   structured validation error, the test fails. Intentionally invalid or
+   adversarial specs belong to item 023. The property suite must never crash,
    hang, write outside its temp output root, or silently produce physically
    impossible manifest values.
 2. **Manifest determinism canary**: rebuild a small checked-in golden fixture
