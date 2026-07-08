@@ -1,6 +1,7 @@
 # JarvisOS / BLUECAD Program Backlog
 
-Status: living document (created 2026-07-03, Fable 5)
+Status: living document (created 2026-07-03, Fable 5; registry repaired
+2026-07-08 to preserve already-claimed spec numbers)
 Purpose: every planned development — alpha and post-alpha, engineering and
 UI — has a number, a one-line scope, and a pointer to where its binding
 decisions live. Nothing exists only in chat history. Specs get written (by
@@ -16,8 +17,13 @@ conversational intent phase + self-extending vocabulary; slices 030–033),
 deferred, trigger-gated; domain/world-model track first, code-graph track
 only once an internal code-navigating agent exists).
 
-## Reserved numbering (fixed 2026-07-06, resolves collisions)
+## Reserved numbering (fixed 2026-07-08, resolves live registry collisions)
 
+- 020: PIPELINE-DOCTOR (`docs/specs/020-pipeline-doctor.md`) — already
+  claimed; do not reuse for UI work.
+- 021: ALPHA-GATE (`docs/specs/021-alpha-gate.md`) — already claimed.
+- 022: CODEX-PR-AUTOPUSH (`docs/specs/022-codex-pr-autopush.md`) — already
+  claimed and bootstrap-implemented; do not reuse for quality work.
 - 030–033: conversational design layer slices (`BLUECAD_CONVERSATIONAL_DESIGN_LAYER.md`).
 - 034: AGENT-CORE-1 (renumbered from 017 — that number was taken by the merged
   review-chain spec `docs/specs/017-two-tier-autonomous-review.md`).
@@ -29,12 +35,16 @@ only once an internal code-navigating agent exists).
 - 039: FRONTIER-1 (renumbered from 019 on 2026-07-07 — that number was taken
   by the merged senior-review-hardening spec,
   `docs/specs/019-senior-review-hardening.md`, PR #40).
-- 047–055: beta program block (BLUEREV-PROCESS-0/1/2, FLOWSHEET-1/RECALC/
-  CAD-LINK, DECISION-PACKET, PROPOSAL-REVIEW UI, PROJECT-VIEW) — see
-  `JARVISOS_BETA_PROGRAM.md`, which also fixes the SC-1..SC-4 seam contracts.
 - 040–046: memory/swarm spine block (MemoryStore, decision capture, context
   packs, calc runner, evidence bridge, orchestration, alternative loop) —
   drafts started 2026-07-06.
+- 047–055: beta program block (BLUEREV-PROCESS-0/1/2, FLOWSHEET-1/RECALC/
+  CAD-LINK, DECISION-PACKET, PROPOSAL-REVIEW UI, PROJECT-VIEW) — see
+  `JARVISOS_BETA_PROGRAM.md`, which also fixes the SC-1..SC-4 seam contracts.
+- 056: Property-based geometry testing + determinism canary (renumbered from
+  022; that number is taken by the merged Codex PR autopush bootstrap).
+- 057: R2 Workspace home layout (renumbered from 020; that number is taken by
+  PIPELINE-DOCTOR). Follow-up UI slices use the same family (`057b`, `057c`).
 
 ## Horizon 1 — Alpha-1 (pipeline proof)
 
@@ -114,20 +124,20 @@ never fake a swarm.
 | # | Item (R-milestone) | State |
 | --- | --- | --- |
 | 029 | **R1 — Settings & secrets page**: provider mode, budget, token caps, API-key entry via the existing secrets endpoints; keys never in localStorage/frontend state/logs/plain repo files | idea; Codex-draftable (backend surface exists) |
-| 020 | **R2 — Workspace home layout**: single home (workbench + right AI chat + status strip), Dashboard→System Overview, Dev Local Chat absorbed as mode; design tokens v0 | idea; needs frontier kernel for layout contract, then Codex |
+| 057 | **R2 — Workspace home layout**: single home (workbench + right AI chat + status strip), Dashboard→System Overview, Dev Local Chat absorbed as mode; design tokens v0 | idea; needs frontier kernel for layout contract, then Codex |
 | 035 | **R3 — Domain Foundation navigator**: search, type filter, edit/delete, detail view over modeling records (endpoints partly exist; add missing update/delete additively) | idea; Codex-draftable |
 | — | **R4 — Pipeline visibility**: largely shipped by 006+010 (attempt history, parked reasons); remainder = live-smoke polish items only | mostly done |
-| 036 | **R5 — Multi-agent chat UI**: persona-labeled chat over the existing single-call spine (Core Team roster as config), honest "advisory" badges; no orchestration | idea; after 020 |
+| 036 | **R5 — Multi-agent chat UI**: persona-labeled chat over the existing single-call spine (Core Team roster as config), honest "advisory" badges; no orchestration | idea; after 057 |
 | 034+011+026 | **R6 — Real multi-agent orchestration** | already in backlog (kernels frozen) |
-| 020b | Workbench UX pass 2: variant comparison, design-history tree from candidate parent links | idea (data model ready) |
-| 020c | Report → 3D linking: failed check highlights the affected part in the viewer | idea; cheap with GLB node names |
+| 057b | Workbench UX pass 2: variant comparison, design-history tree from candidate parent links | idea (data model ready) |
+| 057c | Report → 3D linking: failed check highlights the affected part in the viewer | idea; cheap with GLB node names |
 
 ## Quality program (the "out-of-the-box" tier)
 
 | # | Item | Why it is worth it |
 | --- | --- | --- |
 | 021 | **Executable alpha gate**: one CI-runnable script per horizon that does brief→build→validate→(mesh→solve)→artifacts and asserts the outcome. | Turns "alpha raggiunta" from an opinion into a green check; doubles as backup-tested demo. |
-| 022 | **Property-based geometry testing** (hypothesis): generate random *valid* GeometrySpecs (bounded params) and assert invariants — watertight, volume>0 and < bbox volume, ports frame-coincident after assembly, manifest digest stable. Plus a **determinism canary**: CI job rebuilds golden fixtures and diffs manifest digests on every dependency bump. | Golden tests catch regressions you foresaw; property tests catch kernel edge cases you did not (thin walls, tiny angles, near-tangent bends). The canary catches silent behavior drift in build123d/OCP pins. |
+| 056 | **Property-based geometry testing** (hypothesis): generate random *valid* GeometrySpecs (bounded params) and assert invariants — watertight, volume>0 and < bbox volume, ports frame-coincident after assembly, manifest digest stable. Plus a **determinism canary**: CI job rebuilds golden fixtures and diffs manifest digests on every dependency bump. | Golden tests catch regressions you foresaw; property tests catch kernel edge cases you did not (thin walls, tiny angles, near-tangent bends). The canary catches silent behavior drift in build123d/OCP pins. |
 | 023 | **Adversarial proposal corpus** for the 010 loop: a fixture set of hostile/degenerate LLM outputs (prompt-injection-shaped JSON, 1e30 dimensions, 10k parts, deeply nested junk, unicode tricks) — loop must park cleanly, never crash, never spawn work proportional to input size. | The AI loop is an attack surface even single-user (a poisoned model reply must not DoS the kernel). Cheap to build, permanent safety net. |
 | 024 | **FEM verification battery** (after 009): cantilever tip deflection, thick-wall cylinder hoop stress (Lamé), plate-with-hole SCF (Kirsch, finite-width-corrected; the beam-frequency case is deferred until 027 lands — erratum 2026-07-07, see spec 024) — each vs analytic solution with stated mesh and tolerance, run under the real-solver marker and reported in `reports/`. | This is what makes results *credible engineering*, not numbers from a black box — the professional-grade differentiator for BlueRev use. Verification ladder ≈ solver acceptance test, re-run on every solver/mesh version bump. |
 | 025 | **Semantic routing eval** (post-alpha): label BLUECAD ledger outcomes (cheap-tier sufficient vs escalated) as ground truth; measure local classifier accuracy per task class; promote to default-pick only above threshold, keep escalation-on-failure as the behavioral safety net. | Uses data the alpha generates for free; upgrades routing from static table to measured policy without touching safety invariants. |
@@ -143,7 +153,7 @@ architecture and is prohibited.
 Who writes the spec when an item's turn comes:
 
 - **Frontier-written or frontier-kerneled first** (judgment-heavy; a wrong
-  spec here is expensive): 022 (property-test invariants and generation
+  spec here is expensive): 056 (property-test invariants and generation
   strategies), 023 (adversarial corpus design), 024 (FEM tolerances, mesh
   and benchmark selection — engineering judgment), 025 (promotion-threshold
   policy), 026 (BoardSession — needs a design session, kernel does not
@@ -151,7 +161,7 @@ Who writes the spec when an item's turn comes:
 - **Codex-draftable from existing kernels/patterns, frontier/human review of
   the draft** (the 015/016 flow, which worked): 034, 039 (kernels frozen in
   `JARVISOS_PLATFORM_GAPS_PLAN.md`), 037, 021, 013, 027 (extends the 009
-  pattern), 028, 020/020b/020c (UI — drafts must follow the Horizon 5
+  pattern), 028, 057/057b/057c (UI — drafts must follow the Horizon 5
   principles and every UI PR ships screenshots for visual review).
 
 ## Standing maintenance
