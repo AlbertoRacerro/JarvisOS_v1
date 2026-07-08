@@ -291,7 +291,19 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
 
     script_path = validate_script_path(workspace_id, job["script_path"])
     implementation_kind = job["implementation_kind"]
-    preflight_script_policy(script_path, ast_import_allowlist=implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND)
+    try:
+        preflight_script_policy(script_path, ast_import_allowlist=implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND)
+    except RunnerSafetyError as exc:
+        if implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND and exc.code == "SANDBOX_VIOLATION":
+            return _finish_failed(
+                runner_job_id,
+                workspace_id,
+                simulation_run_id,
+                status="failed",
+                code=exc.code,
+                message=exc.message,
+            )
+        raise
     script_sha = sha256_file(script_path)
     if script_sha != job["script_sha256"]:
         raise RunnerSafetyError("runner_script_hash_mismatch", "Script hash does not match runner job metadata.")

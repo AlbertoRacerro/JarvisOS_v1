@@ -217,4 +217,7 @@ updated, summary written.
   > not be described as network-secure. Stronger isolation
   > (job objects/containers) is a future, separate decision.
 
+- The AST allowlist is best-effort deterrence against naive or accidental
+  escapes, not a security boundary against a determined adversary; real
+  containment remains the deferred OS-level sandbox decision.
 - No OS-level sandboxing, provider path, frontend, tools/agents, or `batch_growth_v0` output-schema changes were implemented.

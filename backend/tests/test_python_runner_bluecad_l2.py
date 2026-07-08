@@ -167,6 +167,9 @@ def test_bluecad_l2_rejects_disallowed_imports(client: TestClient, module: str) 
         "builtins.eval('1')\n",
         "builtins.exec('x=1')\n",
         "builtins.__import__('os')\n",
+        "f = eval\nf('1')\n",
+        "f = eval\nmod = f(\"__import__('o'+'s')\")\nmod.listdir('.')\n",
+        "g = getattr\ng(x, 'y')\n",
     ],
 )
 def test_bluecad_l2_rejects_dynamic_or_unknown_import_forms(client: TestClient, source: str) -> None:
@@ -177,6 +180,23 @@ def test_bluecad_l2_rejects_dynamic_or_unknown_import_forms(client: TestClient, 
     )
     assert response.status_code == 400
     assert response.json()["detail"]["code"] == "SANDBOX_VIOLATION"
+
+
+def test_bluecad_l2_ast_policy_allows_build123d_and_stdlib_script() -> None:
+    from app.modules.runner.safety import preflight_bluecad_l2_ast_policy
+
+    preflight_bluecad_l2_ast_policy(
+        """
+import build123d
+import json
+import math
+from pathlib import Path
+
+output_dir = Path(".")
+payload = {"ok": math.sqrt(4)}
+(output_dir / "manifest.json").write_text(json.dumps(payload), encoding="utf-8")
+""".strip()
+    )
 
 
 def test_bluecad_l2_missing_required_artifact_fails(client: TestClient) -> None:
@@ -233,6 +253,25 @@ def test_bluecad_l2_tamper_rejected_at_job_creation_and_execution(client: TestCl
     response = client.post(f"/runner-jobs/{job['id']}/run")
     assert response.status_code == 400
     assert response.json()["detail"]["code"] == "runner_script_hash_mismatch"
+
+
+def test_bluecad_l2_execution_policy_failure_marks_job_failed(client: TestClient) -> None:
+    implementation = _create_l2(client)
+    job = client.post(
+        "/workspaces/bluerev/runner-jobs",
+        json={"model_version_id": implementation["id"], "input_set": _geometry_spec()},
+    ).json()["runner_job"]
+    script_path = Path(str(implementation["script_path"]))
+    script_path.write_text("f = eval\nf('1')\n", encoding="utf-8")
+
+    response = client.post(f"/runner-jobs/{job['id']}/run")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["runner_job"]["status"] == "failed"
+    assert body["simulation_run"]["status"] == "failed"
+    assert body["error"]["code"] == "SANDBOX_VIOLATION"
+
 
 @pytest.mark.parametrize(
     "module",

@@ -40,6 +40,19 @@ BLUECAD_L2_REQUIRED_ARTIFACTS = {
     "bluecad_manifest": "manifest.json",
 }
 SANDBOX_VIOLATION = "SANDBOX_VIOLATION"
+FORBIDDEN_BLUECAD_L2_NAME_REFERENCES = frozenset({
+    "__import__",
+    "breakpoint",
+    "compile",
+    "delattr",
+    "eval",
+    "exec",
+    "getattr",
+    "globals",
+    "locals",
+    "setattr",
+    "vars",
+})
 
 FORBIDDEN_SCRIPT_MARKERS = (
     "import socket",
@@ -261,11 +274,20 @@ def preflight_bluecad_l2_ast_policy(source: str) -> None:
         elif isinstance(node, ast.Call):
             name = _call_name(node.func)
             if (
-                name in {"__import__", "eval", "exec"}
-                or name.rsplit(".", 1)[-1] in {"__import__", "eval", "exec"}
+                name in FORBIDDEN_BLUECAD_L2_NAME_REFERENCES
+                or name.rsplit(".", 1)[-1] in FORBIDDEN_BLUECAD_L2_NAME_REFERENCES
                 or name.startswith("importlib.")
             ):
                 raise RunnerSafetyError(SANDBOX_VIOLATION, f"Dynamic code loading is not allowed: {name}.")
+        elif (
+            isinstance(node, ast.Name)
+            and isinstance(node.ctx, ast.Load)
+            and node.id in FORBIDDEN_BLUECAD_L2_NAME_REFERENCES
+        ):
+            raise RunnerSafetyError(
+                SANDBOX_VIOLATION,
+                f"Dangerous builtin reference is not allowed: {node.id}.",
+            )
 
 
 def _validate_bluecad_l2_import(module_name: str) -> None:
