@@ -1,12 +1,15 @@
 import json
 import mimetypes
 import shutil
+from math import isfinite
 from pathlib import Path
 from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
 from app.core.paths import build_paths
 from app.modules.events.service import log_event, utc_now
+from app.modules.memory.models import CalcParameterProposalCreate
+from app.modules.memory.service import create_calc_parameter_proposals
 from app.modules.runner.local_python import LocalPythonResult, execute_python_script
 from app.modules.runner.models import (
     ModelImplementationCreate,
@@ -35,6 +38,7 @@ from app.modules.runner.safety import (
     sha256_file,
     validate_batch_growth_input,
     validate_bluecad_l2_input,
+    validate_calc_v0_input,
     validate_run_paths,
     validate_script_path,
 )
@@ -42,17 +46,18 @@ from app.modules.runner.safety import (
 RUNNER_TYPE = "python_local"
 IMPLEMENTATION_KIND = "batch_growth_v0"
 BLUECAD_L2_IMPLEMENTATION_KIND = "bluecad_l2_v0"
-SUPPORTED_IMPLEMENTATION_KINDS = frozenset({IMPLEMENTATION_KIND, BLUECAD_L2_IMPLEMENTATION_KIND})
+CALC_V0_IMPLEMENTATION_KIND = "calc_v0"
+SUPPORTED_IMPLEMENTATION_KINDS = frozenset({IMPLEMENTATION_KIND, BLUECAD_L2_IMPLEMENTATION_KIND, CALC_V0_IMPLEMENTATION_KIND})
 
 
 def create_model_implementation(workspace_id: str, payload: ModelImplementationCreate) -> ModelImplementationRead:
     if payload.implementation_kind not in SUPPORTED_IMPLEMENTATION_KINDS:
         raise RunnerSafetyError(
             "runner_implementation_kind_unsupported",
-            "Only batch_growth_v0 and bluecad_l2_v0 are supported.",
+            "Only batch_growth_v0, bluecad_l2_v0, and calc_v0 are supported.",
         )
-    if payload.implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND and not payload.script_text:
-        raise RunnerSafetyError("runner_script_text_required", "bluecad_l2_v0 requires script_text.")
+    if payload.implementation_kind in {BLUECAD_L2_IMPLEMENTATION_KIND, CALC_V0_IMPLEMENTATION_KIND} and not payload.script_text:
+        raise RunnerSafetyError("runner_script_text_required", f"{payload.implementation_kind} requires script_text.")
 
     now = utc_now()
     model_version_id = str(uuid4())
@@ -73,11 +78,16 @@ def create_model_implementation(workspace_id: str, payload: ModelImplementationC
         shutil.copy2(_example_script_path(), target_script)
         artifact_notes = "Reviewed deterministic batch growth V0 script."
         changelog = "Initial reviewed deterministic batch growth implementation."
-    else:
+    elif payload.implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND:
         target_script = target_dir / "bluecad_l2.py"
         target_script.write_text(payload.script_text or "", encoding="utf-8")
         artifact_notes = "Caller-supplied BLUECAD L2 V0 script."
         changelog = "Initial BLUECAD L2 V0 script implementation."
+    else:
+        target_script = target_dir / "calc_v0.py"
+        target_script.write_text(payload.script_text or "", encoding="utf-8")
+        artifact_notes = "Caller-supplied calc V0 script."
+        changelog = "Initial calc V0 script implementation."
     script_sha = sha256_file(target_script)
 
     with open_sqlite_connection() as connection:
@@ -184,6 +194,8 @@ def create_runner_job(workspace_id: str, payload: RunnerJobCreate) -> RunnerJobC
             input_payload, parameter_payload = validate_batch_growth_input(payload.input_set)
         elif implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND:
             input_payload, parameter_payload = validate_bluecad_l2_input(payload.input_set)
+        elif implementation_kind == CALC_V0_IMPLEMENTATION_KIND:
+            input_payload, parameter_payload = validate_calc_v0_input(payload.input_set)
         else:
             raise RunnerSafetyError("runner_implementation_kind_unsupported", "Unsupported implementation kind.")
         script_path = validate_script_path(workspace_id, model_version["script_path"])
@@ -192,6 +204,8 @@ def create_runner_job(workspace_id: str, payload: RunnerJobCreate) -> RunnerJobC
             raise RunnerSafetyError("runner_script_hash_mismatch", "Script hash does not match registered artifact.")
         if implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND:
             preflight_script_policy(script_path, ast_import_allowlist=True)
+        elif implementation_kind == CALC_V0_IMPLEMENTATION_KIND:
+            preflight_script_policy(script_path, ast_policy=CALC_V0_IMPLEMENTATION_KIND)
 
         job_run_root = run_root(workspace_id, simulation_run_id)
         connection.execute(
@@ -292,9 +306,13 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
     script_path = validate_script_path(workspace_id, job["script_path"])
     implementation_kind = job["implementation_kind"]
     try:
-        preflight_script_policy(script_path, ast_import_allowlist=implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND)
+        preflight_script_policy(
+            script_path,
+            ast_policy=CALC_V0_IMPLEMENTATION_KIND if implementation_kind == CALC_V0_IMPLEMENTATION_KIND else None,
+            ast_import_allowlist=implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND,
+        )
     except RunnerSafetyError as exc:
-        if implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND and exc.code == "SANDBOX_VIOLATION":
+        if implementation_kind in {BLUECAD_L2_IMPLEMENTATION_KIND, CALC_V0_IMPLEMENTATION_KIND} and exc.code == "SANDBOX_VIOLATION":
             return _finish_failed(
                 runner_job_id,
                 workspace_id,
@@ -369,6 +387,18 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
             )
         if implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND:
             _validate_bluecad_l2_output(output_dir, declared_artifacts)
+        calc_outputs: dict[str, dict[str, object]] | None = None
+        if implementation_kind == CALC_V0_IMPLEMENTATION_KIND:
+            calc_outputs = _validate_calc_v0_output(output)
+            output_payload = _canonical_result_json(output)
+            declared_artifacts = [
+                {
+                    "path": "result.json",
+                    "role": "calc_result_json",
+                    "artifact_type": "json",
+                    "mime_type": "application/json",
+                }
+            ]
         artifact_ids = _register_declared_artifacts(
             workspace_id,
             simulation_run_id,
@@ -386,8 +416,22 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
             message=exc.message,
         )
 
+    if implementation_kind == CALC_V0_IMPLEMENTATION_KIND:
+        try:
+            _create_calc_parameter_records(workspace_id, runner_job_id, calc_outputs or {})
+        except Exception as exc:
+            return _finish_failed(
+                runner_job_id,
+                workspace_id,
+                simulation_run_id,
+                status="failed",
+                code="runner_memory_facade_error",
+                message=f"Memory facade failed to create calc parameter proposals: {exc}",
+            )
+
     completed_at = utc_now()
-    output_payload = canonical_json(output)
+    if implementation_kind != CALC_V0_IMPLEMENTATION_KIND:
+        output_payload = canonical_json(output)
     with open_sqlite_connection() as connection:
         connection.execute(
             """
@@ -691,6 +735,57 @@ def _register_declared_artifacts(
             artifact_ids.append(artifact_id)
         connection.commit()
     return artifact_ids
+
+
+def _canonical_result_json(output: dict[str, object]) -> str:
+    try:
+        return canonical_json(output)
+    except RunnerSafetyError as exc:
+        raise RunnerSafetyError("runner_result_invalid_json", "Runner result JSON must be finite canonical JSON.") from exc
+
+
+def _validate_calc_v0_output(output: dict[str, object]) -> dict[str, dict[str, object]]:
+    outputs = output.get("outputs")
+    if not isinstance(outputs, dict):
+        raise RunnerSafetyError("runner_result_invalid_json", "calc_v0 result must include an outputs object.")
+    normalized: dict[str, dict[str, object]] = {}
+    for name, item in outputs.items():
+        if not isinstance(name, str) or not name.strip():
+            raise RunnerSafetyError("runner_result_invalid_json", "calc_v0 output names must be non-empty strings.")
+        if not isinstance(item, dict):
+            raise RunnerSafetyError("runner_result_invalid_json", f"calc_v0 output {name} must be an object.")
+        value = item.get("value")
+        if isinstance(value, bool):
+            raise RunnerSafetyError("runner_result_invalid_json", f"calc_v0 output {name} value must be numeric.")
+        try:
+            number = float(value)
+        except (OverflowError, TypeError, ValueError) as exc:
+            raise RunnerSafetyError("runner_result_invalid_json", f"calc_v0 output {name} value must be numeric.") from exc
+        if not isfinite(number):
+            raise RunnerSafetyError("runner_result_invalid_json", f"calc_v0 output {name} value must be finite.")
+        if not isinstance(item.get("unit"), str) or not str(item.get("unit")).strip():
+            raise RunnerSafetyError("runner_output_unit_missing", f"calc_v0 output {name} unit is required.")
+        normalized[name] = {"value": number, "unit": str(item["unit"])}
+    return normalized
+
+
+def _create_calc_parameter_records(
+    workspace_id: str, runner_job_id: str, outputs: dict[str, dict[str, object]]
+) -> None:
+    payloads = [
+        CalcParameterProposalCreate(
+            workspace_id=workspace_id,
+            runner_job_id=runner_job_id,
+            name=name,
+            value=str(output["value"]),
+            unit=str(output["unit"]),
+            notes="Created from calc_v0 runner output.",
+        )
+        for name, output in outputs.items()
+    ]
+    records = create_calc_parameter_proposals(payloads)
+    if len(records) != len(payloads):
+        raise RuntimeError("Memory facade did not return one record per calc output.")
 
 
 def _validate_bluecad_l2_output(output_dir: Path, artifacts: list[object]) -> None:

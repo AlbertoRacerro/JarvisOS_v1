@@ -744,3 +744,48 @@ def test_batch_growth_success_golden_run_output_and_artifact_payload(client: Tes
         "status": "registered",
         "under_data_root": True,
     }
+
+
+def test_batch_growth_registration_golden_regression(client: TestClient) -> None:
+    implementation = _create_implementation(client)
+    script_path = Path(str(implementation["script_path"]))
+
+    from app.core.database import open_sqlite_connection
+    from app.modules.runner.safety import sha256_file
+    from app.modules.runner.service import _example_script_path
+
+    assert script_path.read_bytes() == _example_script_path().read_bytes()
+    assert implementation["script_sha256"] == sha256_file(_example_script_path())
+
+    with open_sqlite_connection() as connection:
+        version = connection.execute(
+            "SELECT implementation_kind, implementation_artifact_id FROM model_versions WHERE id = ?",
+            (implementation["id"],),
+        ).fetchone()
+        artifact = connection.execute(
+            "SELECT filename, artifact_type, mime_type, sha256 FROM artifacts WHERE id = ?",
+            (implementation["implementation_artifact_id"],),
+        ).fetchone()
+
+    assert version["implementation_kind"] == "batch_growth_v0"
+    assert version["implementation_artifact_id"] == implementation["implementation_artifact_id"]
+    assert dict(artifact) == {
+        "filename": "batch_growth.py",
+        "artifact_type": "python_script",
+        "mime_type": "text/x-python",
+        "sha256": implementation["script_sha256"],
+    }
+
+    response = client.post(
+        "/workspaces/bluerev/model-implementations",
+        json={
+            "model_spec_id": _create_model_spec(client),
+            "version_label": "batch-growth-v0-script-text-ignored",
+            "implementation_kind": "batch_growth_v0",
+            "script_text": "raise SystemExit('must be ignored')\n",
+        },
+    )
+    assert response.status_code == 201
+    ignored = response.json()
+    assert Path(str(ignored["script_path"])).read_bytes() == _example_script_path().read_bytes()
+    assert ignored["script_sha256"] == sha256_file(_example_script_path())
