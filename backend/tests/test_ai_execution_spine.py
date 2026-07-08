@@ -805,6 +805,55 @@ def _records_block(records: list[dict], extra: dict | None = None) -> str:
     return "answer\n```jarvis-records\n" + json.dumps(payload) + "\n```"
 
 
+
+def test_allowlisted_record_capture_prompt_is_system_section_with_empty_context(monkeypatch, tmp_path) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    from app.modules.ai.execution import run_ai_task
+
+    adapter = _TextCaptureAdapter("answer")
+    outcome = run_ai_task(
+        user_prompt="decide",
+        task_kind="decision_support",
+        route_class="local:fake",
+        context_blocks=[],
+        adapters={"fake": adapter},
+        workspace_id="bluerev",
+    )
+
+    assert outcome.status == "success"
+    prompt = adapter.requests[0].prompt
+    assert "SYSTEM_RECORD_CAPTURE" in prompt
+    assert "USER_REQUEST:" in prompt
+    assert prompt.index("SYSTEM_RECORD_CAPTURE") < prompt.index("USER_REQUEST:")
+    assert prompt.startswith("SYSTEM:\n")
+
+
+def test_invalid_facade_record_payload_keeps_task_success_and_writes_no_partial_records(monkeypatch, tmp_path) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    _seed_workspace()
+    from app.modules.ai.execution import run_ai_task
+
+    text = _records_block(
+        [
+            {"record_kind": "assumption", "statement": "Do not partially write."},
+            {"record_kind": "parameter", "name": "Flow rate", "value_status": None},
+        ]
+    )
+    outcome = run_ai_task(
+        user_prompt="capture",
+        task_kind="decision_support",
+        route_class="local:fake",
+        adapters={"fake": _TextCaptureAdapter(text)},
+        workspace_id="bluerev",
+    )
+
+    assert outcome.status == "success"
+    assert outcome.records_parse_error and "record_create_error[1]" in outcome.records_parse_error
+    assert outcome.proposed_record_ids == []
+    assert _proposal_rows("assumptions") == []
+    assert _proposal_rows("parameters") == []
+
+
 def test_allowlisted_valid_block_creates_proposed_memory_record(monkeypatch, tmp_path) -> None:
     _isolate_and_init(monkeypatch, tmp_path)
     _seed_workspace()

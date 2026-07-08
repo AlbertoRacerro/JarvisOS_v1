@@ -298,12 +298,15 @@ def _retryable_error_code(response: AIResponse | None) -> str | None:
 
 
 def _prompt_for_task(task_kind: str, blocks: list[dict], user_prompt: str) -> str:
-    prompt = assemble_prompt(blocks, user_prompt)
     if task_kind not in RECORD_CAPTURE_TASK_KINDS:
-        return prompt
+        return assemble_prompt(blocks, user_prompt)
     from app.modules.ai.record_capture import JARVIS_RECORDS_PROMPT_FRAGMENT
 
-    return f"{prompt}\n\nSYSTEM_RECORD_CAPTURE:\n{JARVIS_RECORDS_PROMPT_FRAGMENT}"
+    return assemble_prompt(
+        blocks,
+        user_prompt,
+        system_suffix=f"SYSTEM_RECORD_CAPTURE:\n{JARVIS_RECORDS_PROMPT_FRAGMENT}",
+    )
 
 
 def _create_proposed_records_from_response(
@@ -320,13 +323,22 @@ def _create_proposed_records_from_response(
         return [], parsed.error or "records_workspace_error: workspace_id is required"
     proposed_ids: list[str] = []
     errors: list[str] = [parsed.error] if parsed.error else []
+    payloads: list[MemoryProposalCreate] = []
     for index, record in enumerate(parsed.records):
-        payload = MemoryProposalCreate(workspace_id=workspace_id, source_ai_job_id=ledger_id, **record)
+        try:
+            payloads.append(MemoryProposalCreate(workspace_id=workspace_id, source_ai_job_id=ledger_id, **record))
+        except ValueError as exc:
+            errors.append(f"record_create_error[{index}]: {exc}")
+
+    if len(payloads) != len(parsed.records):
+        return [], "; ".join(errors) if errors else None
+
+    for index, payload in enumerate(payloads):
         try:
             created = create_proposal(payload)
         except ValueError as exc:
             errors.append(f"record_create_error[{index}]: {exc}")
-            continue
+            return [], "; ".join(errors)
         proposed_ids.append(created.id)
     return proposed_ids, "; ".join(errors) if errors else None
 

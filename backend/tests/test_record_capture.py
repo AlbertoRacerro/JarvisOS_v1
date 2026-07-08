@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 
-from app.modules.ai.record_capture import parse_jarvis_records_block
+from app.modules.ai.record_capture import _validate_payload, parse_jarvis_records_block
 
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "schemas" / "jarvis_records_v0.schema.json"
 
@@ -21,8 +22,20 @@ def _valid_record(kind: str) -> dict:
 
 
 def _schema_accepts(payload: dict) -> bool:
-    from app.modules.ai.record_capture import _validate_payload  # intentional schema-unit seam
+    if importlib.util.find_spec("jsonschema") is not None:
+        import jsonschema
 
+        validator = jsonschema.Draft202012Validator(_schema())
+        return not list(validator.iter_errors(payload))
+
+    schema = _schema()
+    assert schema["additionalProperties"] is False
+    assert all(
+        definition["additionalProperties"] is False
+        for definition in schema["$defs"].values()
+        if definition.get("type") == "object"
+    )
+    # Use the parser validator as the fallback seam only when no standard JSON Schema validator is installed.
     try:
         _validate_payload(payload)
     except ValueError:
