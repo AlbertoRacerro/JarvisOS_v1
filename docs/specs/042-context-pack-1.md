@@ -1,6 +1,6 @@
 # 042 — CONTEXT-PACK-1: deterministic, budgeted, inspectable context packs
 
-Status: ready
+Status: implemented (pending review)
 Depends on: none (parallel to 040)
 
 ## Goal
@@ -409,3 +409,8 @@ guessing.
 
 Test gate green (see `AGENTS.md`), acceptance criteria met, spec status
 updated, summary written.
+
+
+## Implementation notes
+
+Implemented on a fresh branch from the repository's current master-equivalent worktree state without modifying or rebasing PR #51. The selected context-pack path adds deterministic per-kind selection, requirements, trigger-maintained FTS5 with startup backfill and LIKE fallback for literal queries, plus the side-effect-free `/ai/context/packs/preview` endpoint. The no-selection `build_workspace_context_bundle` path remains the legacy full-dump behavior. Spec 041 AI task response fields are preserved.

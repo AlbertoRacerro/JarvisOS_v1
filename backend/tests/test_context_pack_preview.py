@@ -1,0 +1,106 @@
+from __future__ import annotations
+
+import json
+
+from fastapi.testclient import TestClient
+
+from app.core.bootstrap import initialize_storage
+from app.core.database import open_sqlite_connection
+from app.main import app
+from app.modules.ai.context_builder import ContextSelectionSpec, build_workspace_context_bundle
+from app.modules.modeling.models import AssumptionCreate, DecisionCreate, ParameterCreate, RequirementCreate
+from app.modules.modeling.service import create_assumption, create_decision, create_parameter, create_requirement
+
+
+def _seed() -> dict[str, str]:
+    initialize_storage(seed_default=True)
+    decision = create_decision("bluerev", DecisionCreate(title="Use C++ solver", decision_text="alpha-beta stable 1.2", status="accepted"))
+    draft_decision = create_decision("bluerev", DecisionCreate(title="Draft", decision_text="C++ draft", status="draft"))
+    assumption = create_assumption("bluerev", AssumptionCreate(statement="Flow alpha-beta is steady", status="accepted"))
+    parameter = create_parameter(
+        "bluerev",
+        ParameterCreate(name="C++ gain", symbol="k12", value="1.2", unit="m", value_status="validated", source_ref="test"),
+    )
+    requirement = create_requirement("bluerev", RequirementCreate(statement="Controller supports alpha-beta and C++ 1.2", status="active"))
+    return {"decision": decision.id, "draft_decision": draft_decision.id, "assumption": assumption.id, "parameter": parameter.id, "requirement": requirement.id}
+
+
+def _ids(bundle) -> set[str]:
+    return {block["id"] for block in bundle.blocks}
+
+
+def test_no_selection_workspace_context_bundle_is_byte_identical() -> None:
+    _seed()
+    before = build_workspace_context_bundle("bluerev")
+    after = build_workspace_context_bundle("bluerev", selection=None)
+    assert json.dumps(before.blocks, sort_keys=True, separators=(",", ":")) == json.dumps(after.blocks, sort_keys=True, separators=(",", ":"))
+    assert before.context_digest == after.context_digest
+    assert before.sources == after.sources
+    assert before.included_count == after.included_count
+    assert before.dropped_count == after.dropped_count
+
+
+def test_selection_by_kind_status_id_query_and_deterministic_order() -> None:
+    ids = _seed()
+    selected = build_workspace_context_bundle(
+        "bluerev",
+        selection=ContextSelectionSpec(kinds=["decision", "requirement"], query="alpha-beta"),
+    )
+    assert [block["type"] for block in selected.blocks] == ["decision", "requirement"]
+    assert ids["draft_decision"] not in _ids(selected)
+
+    explicit = build_workspace_context_bundle(
+        "bluerev",
+        selection=ContextSelectionSpec(kinds=["decision"], ids=[ids["draft_decision"]]),
+    )
+    assert _ids(explicit) == {ids["draft_decision"]}
+
+    first = build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query="alpha-beta"))
+    second = build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query="alpha-beta"))
+    assert first.blocks == second.blocks
+    assert first.context_digest == second.context_digest
+
+
+def test_budget_truncation_and_digest_stability() -> None:
+    _seed()
+    bundle = build_workspace_context_bundle("bluerev", budget_chars=520, selection=ContextSelectionSpec(query="alpha-beta"))
+    types = {block["type"] for block in bundle.blocks}
+    assert "decision" in types
+    assert "requirement" in types
+    assert "assumption" not in types or "parameter" not in types
+    assert bundle.context_digest == build_workspace_context_bundle("bluerev", budget_chars=520, selection=ContextSelectionSpec(query="alpha-beta")).context_digest
+
+
+def test_preview_endpoint_is_side_effect_free_and_manifest_matches() -> None:
+    _seed()
+    client = TestClient(app)
+    with open_sqlite_connection() as connection:
+        before = connection.execute("SELECT COUNT(*) AS count FROM ai_jobs").fetchone()["count"]
+    response = client.post("/ai/context/packs/preview", json={"workspace_id": "bluerev", "selection": {"query": "alpha-beta"}})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["char_count"] == len(json.dumps(payload["blocks"], sort_keys=True, separators=(",", ":"), ensure_ascii=False))
+    assert payload["estimated_token_count"] == payload["char_count"] // 4
+    assert payload["context_sources_manifest"] == [
+        {"source": block["source"], "type": block.get("type"), "id": block.get("id")} for block in payload["blocks"]
+    ]
+    with open_sqlite_connection() as connection:
+        after = connection.execute("SELECT COUNT(*) AS count FROM ai_jobs").fetchone()["count"]
+    assert after == before
+
+
+def test_fts_backfill_and_literal_query_handling(monkeypatch) -> None:
+    ids = _seed()
+    initialize_storage(seed_default=True)
+    for query in ("C++", "1.2", "alpha-beta"):
+        bundle = build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query=query))
+        assert ids["decision"] in _ids(bundle)
+        assert ids["requirement"] in _ids(bundle)
+
+    fts_bundle = build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query="alpha-beta"))
+
+    from app.modules import modeling
+
+    monkeypatch.setattr(modeling.service, "sqlite_fts5_available", lambda connection: False)
+    like_bundle = build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query="alpha-beta"))
+    assert _ids(like_bundle) == _ids(fts_bundle)

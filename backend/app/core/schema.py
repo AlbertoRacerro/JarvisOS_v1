@@ -8,8 +8,10 @@ SCHEMA_ENGINEERING_RECORD_MIGRATION_ID = "0004_engineering_record_schema_freeze"
 SCHEMA_ENGINEERING_RECORD_MIGRATION_NAME = "Parameter, assumption, and requirement schema freeze"
 SCHEMA_MEMORYSTORE_MIGRATION_ID = "0005_memorystore_proposal_boundary"
 SCHEMA_MEMORYSTORE_MIGRATION_NAME = "MemoryStore proposal provenance boundary"
-CURRENT_SCHEMA_MIGRATION_ID = "0006_runner_implementation_kind"
-CURRENT_SCHEMA_MIGRATION_NAME = "Runner bluecad_l2_v0 implementation kind dispatch"
+SCHEMA_RUNNER_IMPLEMENTATION_KIND_MIGRATION_ID = "0006_runner_implementation_kind"
+SCHEMA_RUNNER_IMPLEMENTATION_KIND_MIGRATION_NAME = "Runner bluecad_l2_v0 implementation kind dispatch"
+CURRENT_SCHEMA_MIGRATION_ID = "0007_context_records_fts"
+CURRENT_SCHEMA_MIGRATION_NAME = "Context pack FTS index and triggers"
 
 SCHEMA_MIGRATION_RECORDS = [
     {
@@ -35,6 +37,11 @@ SCHEMA_MIGRATION_RECORDS = [
     {
         "migration_id": SCHEMA_MEMORYSTORE_MIGRATION_ID,
         "name": SCHEMA_MEMORYSTORE_MIGRATION_NAME,
+        "checksum": None,
+    },
+    {
+        "migration_id": SCHEMA_RUNNER_IMPLEMENTATION_KIND_MIGRATION_ID,
+        "name": SCHEMA_RUNNER_IMPLEMENTATION_KIND_MIGRATION_NAME,
         "checksum": None,
     },
     {
@@ -444,6 +451,50 @@ SCHEMA_MIGRATION_STATEMENTS = [
     "ALTER TABLE model_versions ADD COLUMN implementation_kind TEXT NOT NULL DEFAULT 'batch_growth_v0'",
     "ALTER TABLE runner_jobs ADD COLUMN implementation_kind TEXT NOT NULL DEFAULT 'batch_growth_v0'",
 ]
+
+SCHEMA_FTS_STATEMENTS = [
+    """
+    CREATE VIRTUAL TABLE IF NOT EXISTS context_records_fts USING fts5(
+        kind UNINDEXED,
+        record_id UNINDEXED,
+        workspace_id UNINDEXED,
+        title,
+        body,
+        notes
+    )
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS trg_decisions_context_fts_insert AFTER INSERT ON decisions BEGIN
+        INSERT INTO context_records_fts(kind, record_id, workspace_id, title, body, notes)
+        VALUES ('decision', new.id, new.workspace_id, new.title, COALESCE(new.decision_text, '') || ' ' || COALESCE(new.rationale, ''), new.notes);
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS trg_decisions_context_fts_update AFTER UPDATE ON decisions BEGIN
+        DELETE FROM context_records_fts WHERE kind = 'decision' AND record_id = old.id;
+        INSERT INTO context_records_fts(kind, record_id, workspace_id, title, body, notes)
+        VALUES ('decision', new.id, new.workspace_id, new.title, COALESCE(new.decision_text, '') || ' ' || COALESCE(new.rationale, ''), new.notes);
+    END
+    """,
+    "CREATE TRIGGER IF NOT EXISTS trg_decisions_context_fts_delete AFTER DELETE ON decisions BEGIN DELETE FROM context_records_fts WHERE kind = 'decision' AND record_id = old.id; END",
+    "CREATE TRIGGER IF NOT EXISTS trg_assumptions_context_fts_insert AFTER INSERT ON assumptions BEGIN INSERT INTO context_records_fts(kind, record_id, workspace_id, title, body, notes) VALUES ('assumption', new.id, new.workspace_id, '', new.statement, new.notes); END",
+    "CREATE TRIGGER IF NOT EXISTS trg_assumptions_context_fts_update AFTER UPDATE ON assumptions BEGIN DELETE FROM context_records_fts WHERE kind = 'assumption' AND record_id = old.id; INSERT INTO context_records_fts(kind, record_id, workspace_id, title, body, notes) VALUES ('assumption', new.id, new.workspace_id, '', new.statement, new.notes); END",
+    "CREATE TRIGGER IF NOT EXISTS trg_assumptions_context_fts_delete AFTER DELETE ON assumptions BEGIN DELETE FROM context_records_fts WHERE kind = 'assumption' AND record_id = old.id; END",
+    "CREATE TRIGGER IF NOT EXISTS trg_parameters_context_fts_insert AFTER INSERT ON parameters BEGIN INSERT INTO context_records_fts(kind, record_id, workspace_id, title, body, notes) VALUES ('parameter', new.id, new.workspace_id, new.name, COALESCE(new.symbol, ''), new.notes); END",
+    "CREATE TRIGGER IF NOT EXISTS trg_parameters_context_fts_update AFTER UPDATE ON parameters BEGIN DELETE FROM context_records_fts WHERE kind = 'parameter' AND record_id = old.id; INSERT INTO context_records_fts(kind, record_id, workspace_id, title, body, notes) VALUES ('parameter', new.id, new.workspace_id, new.name, COALESCE(new.symbol, ''), new.notes); END",
+    "CREATE TRIGGER IF NOT EXISTS trg_parameters_context_fts_delete AFTER DELETE ON parameters BEGIN DELETE FROM context_records_fts WHERE kind = 'parameter' AND record_id = old.id; END",
+    "CREATE TRIGGER IF NOT EXISTS trg_requirements_context_fts_insert AFTER INSERT ON requirements BEGIN INSERT INTO context_records_fts(kind, record_id, workspace_id, title, body, notes) VALUES ('requirement', new.id, new.workspace_id, '', COALESCE(new.statement, '') || ' ' || COALESCE(new.rationale, ''), new.notes); END",
+    "CREATE TRIGGER IF NOT EXISTS trg_requirements_context_fts_update AFTER UPDATE ON requirements BEGIN DELETE FROM context_records_fts WHERE kind = 'requirement' AND record_id = old.id; INSERT INTO context_records_fts(kind, record_id, workspace_id, title, body, notes) VALUES ('requirement', new.id, new.workspace_id, '', COALESCE(new.statement, '') || ' ' || COALESCE(new.rationale, ''), new.notes); END",
+    "CREATE TRIGGER IF NOT EXISTS trg_requirements_context_fts_delete AFTER DELETE ON requirements BEGIN DELETE FROM context_records_fts WHERE kind = 'requirement' AND record_id = old.id; END",
+]
+
+CONTEXT_RECORDS_FTS_BACKFILL_STATEMENT = """
+INSERT INTO context_records_fts(kind, record_id, workspace_id, title, body, notes)
+SELECT 'decision', id, workspace_id, title, COALESCE(decision_text, '') || ' ' || COALESCE(rationale, ''), notes FROM decisions
+UNION ALL SELECT 'assumption', id, workspace_id, '', statement, notes FROM assumptions
+UNION ALL SELECT 'parameter', id, workspace_id, name, COALESCE(symbol, ''), notes FROM parameters
+UNION ALL SELECT 'requirement', id, workspace_id, '', COALESCE(statement, '') || ' ' || COALESCE(rationale, ''), notes FROM requirements
+"""
 
 SCHEMA_INDEX_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_events_workspace_created_at ON events(workspace_id, created_at)",

@@ -143,6 +143,35 @@ class AITaskRunRequest(BaseModel):
         return self
 
 
+class ContextPackSelectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kinds: list[str] = Field(default_factory=list)
+    statuses: dict[str, list[str]] | list[str] | None = None
+    ids: list[str] | None = None
+    query: str | None = None
+    max_items_per_kind: int = Field(default=10, ge=1, le=100)
+
+
+class ContextPackPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_id: str = "bluerev"
+    budget_chars: int = Field(default=DEFAULT_CONTEXT_BUDGET_CHARS, ge=1)
+    selection: ContextPackSelectionRequest = Field(default_factory=ContextPackSelectionRequest)
+
+
+class ContextPackPreviewResponse(BaseModel):
+    blocks: list[dict[str, Any]]
+    context_digest: str | None
+    context_sources_manifest: list[dict[str, Any]]
+    char_count: int
+    estimated_token_count: int
+    included_count: int
+    dropped_count: int
+    budget_chars: int
+
+
 class EscalationConfirmRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
