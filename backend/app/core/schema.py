@@ -8,7 +8,9 @@ SCHEMA_ENGINEERING_RECORD_MIGRATION_ID = "0004_engineering_record_schema_freeze"
 SCHEMA_ENGINEERING_RECORD_MIGRATION_NAME = "Parameter, assumption, and requirement schema freeze"
 SCHEMA_MEMORYSTORE_MIGRATION_ID = "0005_memorystore_proposal_boundary"
 SCHEMA_MEMORYSTORE_MIGRATION_NAME = "MemoryStore proposal provenance boundary"
-CURRENT_SCHEMA_MIGRATION_ID = "0006_context_pack_fts"
+SCHEMA_RUNNER_IMPLEMENTATION_MIGRATION_ID = "0006_runner_implementation_kind"
+SCHEMA_RUNNER_IMPLEMENTATION_MIGRATION_NAME = "Runner bluecad_l2_v0 implementation kind dispatch"
+CURRENT_SCHEMA_MIGRATION_ID = "0007_context_pack_fts"
 CURRENT_SCHEMA_MIGRATION_NAME = "Context pack FTS index"
 
 SCHEMA_MIGRATION_RECORDS = [
@@ -35,6 +37,11 @@ SCHEMA_MIGRATION_RECORDS = [
     {
         "migration_id": SCHEMA_MEMORYSTORE_MIGRATION_ID,
         "name": SCHEMA_MEMORYSTORE_MIGRATION_NAME,
+        "checksum": None,
+    },
+    {
+        "migration_id": SCHEMA_RUNNER_IMPLEMENTATION_MIGRATION_ID,
+        "name": SCHEMA_RUNNER_IMPLEMENTATION_MIGRATION_NAME,
         "checksum": None,
     },
     {
@@ -205,6 +212,7 @@ SCHEMA_STATEMENTS = [
         model_spec_id TEXT NOT NULL,
         version_label TEXT NOT NULL,
         implementation_artifact_id TEXT,
+        implementation_kind TEXT NOT NULL DEFAULT 'batch_growth_v0',
         status TEXT NOT NULL DEFAULT 'draft',
         changelog TEXT,
         created_at TEXT NOT NULL,
@@ -241,6 +249,7 @@ SCHEMA_STATEMENTS = [
         status TEXT NOT NULL DEFAULT 'queued',
         script_path TEXT NOT NULL,
         script_sha256 TEXT NOT NULL,
+        implementation_kind TEXT NOT NULL DEFAULT 'batch_growth_v0',
         command_json TEXT,
         environment_json TEXT,
         working_dir TEXT NOT NULL,
@@ -436,6 +445,9 @@ SCHEMA_MIGRATION_STATEMENTS = [
     "ALTER TABLE decisions ADD COLUMN origin TEXT NOT NULL DEFAULT 'user'",
     "ALTER TABLE decisions ADD COLUMN source_ai_job_id TEXT",
     "ALTER TABLE decisions ADD COLUMN promoted_at TEXT",
+    # RUNNER-EXT-1 (spec 016): dispatch key for the scoped bluecad_l2_v0 runner kind.
+    "ALTER TABLE model_versions ADD COLUMN implementation_kind TEXT NOT NULL DEFAULT 'batch_growth_v0'",
+    "ALTER TABLE runner_jobs ADD COLUMN implementation_kind TEXT NOT NULL DEFAULT 'batch_growth_v0'",
 ]
 
 SCHEMA_INDEX_STATEMENTS = [
@@ -498,33 +510,9 @@ CONTEXT_PACK_FTS_STATEMENTS = [
     END
     """,
     """
-    CREATE TRIGGER IF NOT EXISTS decisions_context_pack_fts_au AFTER UPDATE ON decisions BEGIN
-        DELETE FROM context_pack_fts WHERE record_kind = 'decision' AND record_id = old.id;
-        INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
-        VALUES ('decision', new.id, new.workspace_id, COALESCE(new.title, '') || ' ' || COALESCE(new.decision_text, '') || ' ' || COALESCE(new.rationale, '') || ' ' || COALESCE(new.notes, ''));
-    END
-    """,
-    """
-    CREATE TRIGGER IF NOT EXISTS decisions_context_pack_fts_ad AFTER DELETE ON decisions BEGIN
-        DELETE FROM context_pack_fts WHERE record_kind = 'decision' AND record_id = old.id;
-    END
-    """,
-    """
     CREATE TRIGGER IF NOT EXISTS assumptions_context_pack_fts_ai AFTER INSERT ON assumptions BEGIN
         INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
         VALUES ('assumption', new.id, new.workspace_id, COALESCE(new.statement, '') || ' ' || COALESCE(new.notes, ''));
-    END
-    """,
-    """
-    CREATE TRIGGER IF NOT EXISTS assumptions_context_pack_fts_au AFTER UPDATE ON assumptions BEGIN
-        DELETE FROM context_pack_fts WHERE record_kind = 'assumption' AND record_id = old.id;
-        INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
-        VALUES ('assumption', new.id, new.workspace_id, COALESCE(new.statement, '') || ' ' || COALESCE(new.notes, ''));
-    END
-    """,
-    """
-    CREATE TRIGGER IF NOT EXISTS assumptions_context_pack_fts_ad AFTER DELETE ON assumptions BEGIN
-        DELETE FROM context_pack_fts WHERE record_kind = 'assumption' AND record_id = old.id;
     END
     """,
     """
@@ -534,33 +522,9 @@ CONTEXT_PACK_FTS_STATEMENTS = [
     END
     """,
     """
-    CREATE TRIGGER IF NOT EXISTS parameters_context_pack_fts_au AFTER UPDATE ON parameters BEGIN
-        DELETE FROM context_pack_fts WHERE record_kind = 'parameter' AND record_id = old.id;
-        INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
-        VALUES ('parameter', new.id, new.workspace_id, COALESCE(new.name, '') || ' ' || COALESCE(new.symbol, '') || ' ' || COALESCE(new.notes, ''));
-    END
-    """,
-    """
-    CREATE TRIGGER IF NOT EXISTS parameters_context_pack_fts_ad AFTER DELETE ON parameters BEGIN
-        DELETE FROM context_pack_fts WHERE record_kind = 'parameter' AND record_id = old.id;
-    END
-    """,
-    """
     CREATE TRIGGER IF NOT EXISTS requirements_context_pack_fts_ai AFTER INSERT ON requirements BEGIN
         INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
         VALUES ('requirement', new.id, new.workspace_id, COALESCE(new.statement, '') || ' ' || COALESCE(new.rationale, '') || ' ' || COALESCE(new.notes, ''));
-    END
-    """,
-    """
-    CREATE TRIGGER IF NOT EXISTS requirements_context_pack_fts_au AFTER UPDATE ON requirements BEGIN
-        DELETE FROM context_pack_fts WHERE record_kind = 'requirement' AND record_id = old.id;
-        INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
-        VALUES ('requirement', new.id, new.workspace_id, COALESCE(new.statement, '') || ' ' || COALESCE(new.rationale, '') || ' ' || COALESCE(new.notes, ''));
-    END
-    """,
-    """
-    CREATE TRIGGER IF NOT EXISTS requirements_context_pack_fts_ad AFTER DELETE ON requirements BEGIN
-        DELETE FROM context_pack_fts WHERE record_kind = 'requirement' AND record_id = old.id;
     END
     """,
 ]
