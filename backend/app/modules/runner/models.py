@@ -10,6 +10,7 @@ class ModelImplementationCreate(BaseModel):
     version_label: str = "batch-growth-v0"
     implementation_kind: str = "batch_growth_v0"
     notes: str | None = None
+    script_text: str | None = None
 
 
 class ModelImplementationRead(BaseModel):

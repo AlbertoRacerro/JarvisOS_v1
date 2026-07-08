@@ -6,8 +6,10 @@ SCHEMA_AI_POLICY_MIGRATION_ID = "0003_ai_policy_mode_foundation"
 SCHEMA_AI_POLICY_MIGRATION_NAME = "0E-D3 pragmatic AI policy mode foundation"
 SCHEMA_ENGINEERING_RECORD_MIGRATION_ID = "0004_engineering_record_schema_freeze"
 SCHEMA_ENGINEERING_RECORD_MIGRATION_NAME = "Parameter, assumption, and requirement schema freeze"
-CURRENT_SCHEMA_MIGRATION_ID = "0005_memorystore_proposal_boundary"
-CURRENT_SCHEMA_MIGRATION_NAME = "MemoryStore proposal provenance boundary"
+SCHEMA_MEMORYSTORE_MIGRATION_ID = "0005_memorystore_proposal_boundary"
+SCHEMA_MEMORYSTORE_MIGRATION_NAME = "MemoryStore proposal provenance boundary"
+CURRENT_SCHEMA_MIGRATION_ID = "0006_runner_implementation_kind"
+CURRENT_SCHEMA_MIGRATION_NAME = "Runner bluecad_l2_v0 implementation kind dispatch"
 
 SCHEMA_MIGRATION_RECORDS = [
     {
@@ -28,6 +30,11 @@ SCHEMA_MIGRATION_RECORDS = [
     {
         "migration_id": SCHEMA_ENGINEERING_RECORD_MIGRATION_ID,
         "name": SCHEMA_ENGINEERING_RECORD_MIGRATION_NAME,
+        "checksum": None,
+    },
+    {
+        "migration_id": SCHEMA_MEMORYSTORE_MIGRATION_ID,
+        "name": SCHEMA_MEMORYSTORE_MIGRATION_NAME,
         "checksum": None,
     },
     {
@@ -199,6 +206,7 @@ SCHEMA_STATEMENTS = [
         model_spec_id TEXT NOT NULL,
         version_label TEXT NOT NULL,
         implementation_artifact_id TEXT,
+        implementation_kind TEXT NOT NULL DEFAULT 'batch_growth_v0',
         status TEXT NOT NULL DEFAULT 'draft',
         changelog TEXT,
         created_at TEXT NOT NULL,
@@ -235,6 +243,7 @@ SCHEMA_STATEMENTS = [
         status TEXT NOT NULL DEFAULT 'queued',
         script_path TEXT NOT NULL,
         script_sha256 TEXT NOT NULL,
+        implementation_kind TEXT NOT NULL DEFAULT 'batch_growth_v0',
         command_json TEXT,
         environment_json TEXT,
         working_dir TEXT NOT NULL,
@@ -431,6 +440,9 @@ SCHEMA_MIGRATION_STATEMENTS = [
     "ALTER TABLE decisions ADD COLUMN origin TEXT NOT NULL DEFAULT 'user'",
     "ALTER TABLE decisions ADD COLUMN source_ai_job_id TEXT",
     "ALTER TABLE decisions ADD COLUMN promoted_at TEXT",
+    # RUNNER-EXT-1 (spec 016): dispatch key for the scoped bluecad_l2_v0 runner kind.
+    "ALTER TABLE model_versions ADD COLUMN implementation_kind TEXT NOT NULL DEFAULT 'batch_growth_v0'",
+    "ALTER TABLE runner_jobs ADD COLUMN implementation_kind TEXT NOT NULL DEFAULT 'batch_growth_v0'",
 ]
 
 SCHEMA_INDEX_STATEMENTS = [
