@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 MAX_RECORDS = 10
@@ -14,24 +16,27 @@ JARVIS_RECORDS_PROMPT_FRAGMENT = """Optional structured record capture: if your 
 
 _BLOCK_RE = re.compile(r"```[ \t]*jarvis-records[ \t]*\r?\n(?P<body>.*?)\r?\n```", re.DOTALL)
 
-_ALLOWED_TOP = {"record_version", "records"}
-_ALLOWED_BY_KIND = {
-    "decision": {"record_kind", "title", "decision_text", "rationale", "linked_run_id", "notes"},
-    "assumption": {"record_kind", "statement", "scope", "confidence", "source_ref", "notes"},
-    "parameter": {
-        "record_kind",
-        "name",
-        "symbol",
-        "value",
-        "unit",
-        "value_status",
-        "value_min",
-        "value_max",
-        "source_ref",
-        "confidence",
-        "notes",
-    },
-}
+SCHEMA_PATH = Path(__file__).resolve().parents[4] / "schemas" / "jarvis_records_v0.schema.json"
+
+
+@lru_cache(maxsize=1)
+def _schema() -> dict[str, Any]:
+    return json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+
+
+def _schema_def(name: str) -> dict[str, Any]:
+    return _schema()["$defs"][name]
+
+
+def _allowed_top_level_keys() -> set[str]:
+    return set(_schema()["properties"])
+
+
+def _schema_for_kind(kind: str) -> dict[str, Any] | None:
+    definition = _schema()["$defs"].get(kind)
+    if isinstance(definition, dict):
+        return definition
+    return None
 
 
 @dataclass(frozen=True)
@@ -53,42 +58,82 @@ def _strip_workspace_fields(value: Any) -> Any:
     return cleaned
 
 
+def _type_matches(value: Any, expected: str) -> bool:
+    if expected == "object":
+        return isinstance(value, dict)
+    if expected == "array":
+        return isinstance(value, list)
+    if expected == "string":
+        return isinstance(value, str)
+    if expected == "number":
+        return (isinstance(value, int | float) and not isinstance(value, bool))
+    if expected == "null":
+        return value is None
+    return False
+
+
+def _validate_schema_value(value: Any, schema: dict[str, Any], path: str) -> None:
+    if "$ref" in schema:
+        ref_name = schema["$ref"].rsplit("/", 1)[-1]
+        _validate_schema_value(value, _schema_def(ref_name), path)
+        return
+    if "const" in schema and value != schema["const"]:
+        raise ValueError(f"{path} must be {schema['const']}")
+    if "enum" in schema and value not in schema["enum"]:
+        raise ValueError(f"{path} has invalid enum value")
+    expected_type = schema.get("type")
+    if isinstance(expected_type, str) and not _type_matches(value, expected_type):
+        raise ValueError(f"{path} must be {expected_type}")
+    if isinstance(expected_type, list) and not any(_type_matches(value, option) for option in expected_type):
+        raise ValueError(f"{path} has invalid type")
+    if isinstance(value, str) and schema.get("minLength") is not None and len(value) < schema["minLength"]:
+        raise ValueError(f"{path} must not be blank")
+
+
+def _validate_record_with_schema(record: Any, index: int) -> dict[str, Any]:
+    if not isinstance(record, dict):
+        raise ValueError(f"record #{index} must be an object")
+    kind = record.get("record_kind")
+    if not isinstance(kind, str):
+        raise ValueError(f"record #{index} has invalid record_kind")
+    record_schema = _schema_for_kind(kind)
+    if record_schema is None:
+        raise ValueError(f"record #{index} has invalid record_kind")
+    unknown = set(record) - set(record_schema["properties"])
+    if unknown:
+        raise ValueError(f"record #{index} has unknown keys: {sorted(unknown)}")
+    missing = [key for key in record_schema.get("required", []) if key not in record]
+    if missing:
+        raise ValueError(f"record #{index} is missing required keys: {missing}")
+    for key, value in record.items():
+        _validate_schema_value(value, record_schema["properties"][key], f"record #{index} {key}")
+    if kind == "decision" and (not record["title"].strip() or not record["decision_text"].strip()):
+        raise ValueError(f"record #{index} decision requires title and decision_text")
+    if kind == "assumption" and not record["statement"].strip():
+        raise ValueError(f"record #{index} assumption requires statement")
+    if kind == "parameter":
+        if not record["name"].strip():
+            raise ValueError(f"record #{index} parameter requires name")
+        if "unit" in record and not record["unit"].strip():
+            raise ValueError(f"record #{index} parameter unit cannot be blank")
+    return dict(record)
+
+
 def _validate_payload(payload: Any) -> list[dict[str, Any]]:
-    if not isinstance(payload, dict):
-        raise ValueError("payload must be an object")
-    unknown_top = set(payload) - _ALLOWED_TOP
+    schema = _schema()
+    _validate_schema_value(payload, schema, "payload")
+    unknown_top = set(payload) - _allowed_top_level_keys()
     if unknown_top:
         raise ValueError(f"unknown top-level keys: {sorted(unknown_top)}")
-    if payload.get("record_version") != RECORD_VERSION:
-        raise ValueError("record_version must be jarvis_records_v0")
+    missing_top = [key for key in schema.get("required", []) if key not in payload]
+    if missing_top:
+        raise ValueError(f"missing top-level keys: {missing_top}")
+    _validate_schema_value(payload.get("record_version"), schema["properties"]["record_version"], "record_version")
     records = payload.get("records")
-    if not isinstance(records, list):
-        raise ValueError("records must be an array")
+    _validate_schema_value(records, schema["properties"]["records"], "records")
     if len(records) > MAX_RECORDS:
         raise ValueError("records must contain at most 10 items")
-    validated: list[dict[str, Any]] = []
-    for index, record in enumerate(records):
-        if not isinstance(record, dict):
-            raise ValueError(f"record #{index} must be an object")
-        kind = record.get("record_kind")
-        if kind not in _ALLOWED_BY_KIND:
-            raise ValueError(f"record #{index} has invalid record_kind")
-        unknown = set(record) - _ALLOWED_BY_KIND[kind]
-        if unknown:
-            raise ValueError(f"record #{index} has unknown keys: {sorted(unknown)}")
-        if kind == "decision" and (not str(record.get("title") or "").strip() or not str(record.get("decision_text") or "").strip()):
-            raise ValueError(f"record #{index} decision requires title and decision_text")
-        if kind == "assumption" and not str(record.get("statement") or "").strip():
-            raise ValueError(f"record #{index} assumption requires statement")
-        if kind == "parameter":
-            if not str(record.get("name") or "").strip():
-                raise ValueError(f"record #{index} parameter requires name")
-            if "unit" in record and not str(record.get("unit") or "").strip():
-                raise ValueError(f"record #{index} parameter unit cannot be blank")
-            if record.get("value_status") not in {None, "candidate", "literature", "measured", "validated", "accepted"}:
-                raise ValueError(f"record #{index} parameter has invalid value_status")
-        validated.append(dict(record))
-    return validated
+    return [_validate_record_with_schema(record, index) for index, record in enumerate(records)]
 
 
 def parse_jarvis_records_block(response_text: str) -> RecordParseResult:

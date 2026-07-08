@@ -72,6 +72,24 @@ def test_parser_valid_block_returns_records() -> None:
     assert parsed.records == [{"record_kind": "assumption", "statement": "Flow is steady."}]
 
 
+def test_parser_rejects_parameter_confidence_string_from_schema() -> None:
+    text = (
+        'answer\n```jarvis-records\n'
+        + json.dumps(
+            {
+                "record_version": "jarvis_records_v0",
+                "records": [{"record_kind": "parameter", "name": "Flow rate", "confidence": "high"}],
+            }
+        )
+        + "\n```"
+    )
+
+    parsed = parse_jarvis_records_block(text)
+
+    assert parsed.records == []
+    assert parsed.error and parsed.error.startswith("records_schema_error")
+
+
 def test_parser_malformed_json_and_schema_violation_are_errors_not_exceptions() -> None:
     malformed = parse_jarvis_records_block("```jarvis-records\n{not json}\n```")
     assert malformed.records == []
