@@ -406,6 +406,7 @@ def list_decisions(workspace_id: str) -> list[DecisionRead]:
         ).fetchall()
     return rows_to_models(rows, DecisionRead)
 
+
 CONTEXT_RECORD_KINDS = ("decision", "assumption", "parameter", "requirement")
 CONTEXT_KIND_MODELS = {
     "decision": DecisionRead,
@@ -444,6 +445,10 @@ def context_pack_fts_available(connection: sqlite3.Connection) -> bool:
     return row is not None
 
 
+def _fts_literal_query(query: str) -> str:
+    return '"' + query.replace('"', '""') + '"'
+
+
 def _query_ids_for_kind(
     connection: sqlite3.Connection, *, workspace_id: str, kind: str, query: str, fts_available: bool
 ) -> set[str]:
@@ -453,7 +458,7 @@ def _query_ids_for_kind(
             SELECT record_id FROM context_pack_fts
             WHERE workspace_id = ? AND record_kind = ? AND context_pack_fts MATCH ?
             """,
-            (workspace_id, kind, query),
+            (workspace_id, kind, _fts_literal_query(query)),
         ).fetchall()
         return {row["record_id"] for row in rows}
     table = CONTEXT_KIND_TABLES[kind]

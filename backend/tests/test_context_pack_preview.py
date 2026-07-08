@@ -17,15 +17,69 @@ def _seed() -> None:
     from app.core.database import open_sqlite_connection
 
     rows = [
-        ("dec-old", "decisions", "title, decision_text, rationale, status, linked_run_id, notes", ("Old", "old alpha", None, "accepted", None, None), "2026-01-01T00:00:00Z"),
-        ("dec-new", "decisions", "title, decision_text, rationale, status, linked_run_id, notes", ("New", "new needle", "rat", "accepted", None, None), "2026-01-02T00:00:00Z"),
-        ("dec-draft", "decisions", "title, decision_text, rationale, status, linked_run_id, notes", ("Draft", "needle", None, "draft", None, None), "2026-01-03T00:00:00Z"),
-        ("asm-ok", "assumptions", "statement, scope, confidence, status, source_ref, notes", ("assume needle", None, "high", "accepted", None, None), "2026-01-02T00:00:00Z"),
-        ("asm-no", "assumptions", "statement, scope, confidence, status, source_ref, notes", ("assume no", None, None, "proposed", None, None), "2026-01-04T00:00:00Z"),
-        ("par-ok", "parameters", "name, symbol, value, unit, value_status, value_min, value_max, source_ref, confidence, status, notes", ("param needle", "pn", "1", "m", "validated", None, None, "src", None, "draft", None), "2026-01-02T00:00:00Z"),
-        ("par-no", "parameters", "name, symbol, value, unit, value_status, value_min, value_max, source_ref, confidence, status, notes", ("param no", None, "1", "m", "candidate", None, None, None, None, "draft", None), "2026-01-04T00:00:00Z"),
-        ("req-ok", "requirements", "statement, rationale, status, notes, schema_version", ("require needle", None, "active", None, 1), "2026-01-02T00:00:00Z"),
-        ("req-no", "requirements", "statement, rationale, status, notes, schema_version", ("require no", None, "draft", None, 1), "2026-01-04T00:00:00Z"),
+        (
+            "dec-old",
+            "decisions",
+            "title, decision_text, rationale, status, linked_run_id, notes",
+            ("Old", "old alpha", None, "accepted", None, None),
+            "2026-01-01T00:00:00Z",
+        ),
+        (
+            "dec-new",
+            "decisions",
+            "title, decision_text, rationale, status, linked_run_id, notes",
+            ("New", "new needle", "rat", "accepted", None, None),
+            "2026-01-02T00:00:00Z",
+        ),
+        (
+            "dec-draft",
+            "decisions",
+            "title, decision_text, rationale, status, linked_run_id, notes",
+            ("Draft", "needle", None, "draft", None, None),
+            "2026-01-03T00:00:00Z",
+        ),
+        (
+            "asm-ok",
+            "assumptions",
+            "statement, scope, confidence, status, source_ref, notes",
+            ("assume needle", None, "high", "accepted", None, None),
+            "2026-01-02T00:00:00Z",
+        ),
+        (
+            "asm-no",
+            "assumptions",
+            "statement, scope, confidence, status, source_ref, notes",
+            ("assume no", None, None, "proposed", None, None),
+            "2026-01-04T00:00:00Z",
+        ),
+        (
+            "par-ok",
+            "parameters",
+            "name, symbol, value, unit, value_status, value_min, value_max, source_ref, confidence, status, notes",
+            ("param needle", "pn", "1", "m", "validated", None, None, "src", None, "draft", None),
+            "2026-01-02T00:00:00Z",
+        ),
+        (
+            "par-no",
+            "parameters",
+            "name, symbol, value, unit, value_status, value_min, value_max, source_ref, confidence, status, notes",
+            ("param no", None, "1", "m", "candidate", None, None, None, None, "draft", None),
+            "2026-01-04T00:00:00Z",
+        ),
+        (
+            "req-ok",
+            "requirements",
+            "statement, rationale, status, notes, schema_version",
+            ("require needle", None, "active", None, 1),
+            "2026-01-02T00:00:00Z",
+        ),
+        (
+            "req-no",
+            "requirements",
+            "statement, rationale, status, notes, schema_version",
+            ("require no", None, "draft", None, 1),
+            "2026-01-04T00:00:00Z",
+        ),
     ]
     with open_sqlite_connection() as connection:
         for record_id, table, cols, values, ts in rows:
@@ -111,3 +165,102 @@ def test_preview_endpoint_has_no_ai_side_effects_and_manifest_matches() -> None:
     with open_sqlite_connection() as connection:
         after = connection.execute("SELECT COUNT(*) AS count FROM ai_jobs").fetchone()["count"]
     assert after == before
+
+
+def test_context_pack_fts_backfills_existing_records(monkeypatch) -> None:
+    from app.core import database
+    from app.core.bootstrap import initialize_storage
+    from app.core.database import open_sqlite_connection
+    from app.modules.ai.context_builder import ContextSelectionSpec, build_workspace_context_bundle
+
+    monkeypatch.setattr(database, "sqlite_supports_fts5", lambda connection: False)
+    initialize_storage(seed_default=True)
+    _seed()
+
+    monkeypatch.setattr(database, "sqlite_supports_fts5", lambda connection: True)
+    initialize_storage(seed_default=True)
+
+    with open_sqlite_connection() as connection:
+        indexed = connection.execute("SELECT COUNT(*) AS count FROM context_pack_fts").fetchone()["count"]
+    assert indexed == 9
+
+    bundle = build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query="needle"))
+    assert _ids(bundle) == ["dec-new", "asm-ok", "par-ok", "req-ok"]
+
+
+def test_preview_fts_queries_treat_engineering_terms_as_literals() -> None:
+    _init()
+    from app.core.database import open_sqlite_connection
+
+    rows = [
+        ("dec-cpp", "C++ parser", "accepted"),
+        ("dec-version", "version 1.2 parser", "accepted"),
+        ("dec-hyphen", "alpha-beta parser", "accepted"),
+    ]
+    with open_sqlite_connection() as connection:
+        for record_id, text, status in rows:
+            connection.execute(
+                """
+                INSERT INTO decisions (
+                    id, workspace_id, title, decision_text, rationale, status,
+                    linked_run_id, notes, created_at, updated_at
+                )
+                VALUES (?, 'bluerev', ?, ?, NULL, ?, NULL, NULL,
+                    '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+                """,
+                (record_id, text, text, status),
+            )
+        connection.commit()
+
+    client = TestClient(app)
+    for query in ("C++", "1.2", "alpha-beta"):
+        response = client.post(
+            "/ai/context/packs/preview",
+            json={"workspace_id": "bluerev", "selection": {"query": query, "kinds": ["decision"]}},
+        )
+        assert response.status_code == 200, response.text
+        assert response.json()["blocks"]
+
+
+def test_spec_041_and_042_ai_models_coexist() -> None:
+    from app.modules.ai.models import AITaskRunResponse, ContextPackPreviewRequest, ContextPackPreviewResponse
+
+    response = AITaskRunResponse(
+        status="completed",
+        ledger_id="job-1",
+        selected_route_class="local",
+        decision_reason="test",
+    )
+    assert response.records_parse_error is None
+    assert response.proposed_record_ids == []
+    assert ContextPackPreviewRequest().selection.max_items_per_kind == 10
+    preview = ContextPackPreviewResponse(
+        blocks=[],
+        context_sources_manifest=[],
+        char_count=2,
+        estimated_token_count=0,
+        context_digest=None,
+    )
+    assert preview.blocks == []
+
+
+def test_no_selection_context_bundle_legacy_serialization_is_stable() -> None:
+    _init()
+    _seed()
+    from app.modules.ai.context_builder import build_workspace_context_bundle
+
+    bundle = build_workspace_context_bundle("bluerev")
+    serialized = json.dumps(bundle.blocks, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    assert serialized == (
+        '[{"content":"title=Draft; decision=needle; status=draft","id":"dec-draft",'
+        '"source":"decision:dec-draft","type":"decision"},{"content":"title=New; decision=new needle; '
+        'status=accepted; rationale=rat","id":"dec-new","source":"decision:dec-new","type":"decision"},'
+        '{"content":"title=Old; decision=old alpha; status=accepted","id":"dec-old",'
+        '"source":"decision:dec-old","type":"decision"},{"content":"statement=assume no; status=proposed",'
+        '"id":"asm-no","source":"assumption:asm-no","type":"assumption"},{"content":"statement=assume '
+        'needle; status=accepted; confidence=high","id":"asm-ok","source":"assumption:asm-ok","type":"assumption"},'
+        '{"content":"name=param no; value=1; unit=m; status=draft; source=MISSING; [incomplete: not '
+        'authoritative]","id":"par-no","source":"parameter:par-no","type":"parameter"},{"content":"name=param '
+        'needle; symbol=pn; value=1; unit=m; status=draft; source=src","id":"par-ok",'
+        '"source":"parameter:par-ok","type":"parameter"}]'
+    )

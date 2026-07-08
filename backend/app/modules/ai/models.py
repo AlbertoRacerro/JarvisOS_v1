@@ -168,6 +168,8 @@ class AITaskRunResponse(BaseModel):
     auto_metadata: dict[str, Any] | None = None
     confirmation_payload: dict[str, Any] | None = None
     escalation_proposal: dict[str, Any] | None = None
+    records_parse_error: str | None = None
+    proposed_record_ids: list[str] = Field(default_factory=list)
 
 
 class EscalationConfirmResponse(BaseModel):
@@ -301,6 +303,7 @@ class SupervisorPublicTestResponse(BaseModel):
     external_call_attempted: bool
     external_call_succeeded: bool
     limitations: list[str] = Field(default_factory=list)
+
 
 class ContextSelectionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")

@@ -161,7 +161,6 @@ SCHEMA_STATEMENTS = [
         FOREIGN KEY (workspace_id) REFERENCES workspaces(id)
     )
     """,
-
     """
     CREATE TABLE IF NOT EXISTS requirements (
         id TEXT PRIMARY KEY,
@@ -326,7 +325,6 @@ SCHEMA_STATEMENTS = [
         error_type TEXT
     )
     """,
-
     """
     CREATE TABLE IF NOT EXISTS bluecad_candidates (
         id TEXT PRIMARY KEY,
@@ -459,6 +457,38 @@ CONTEXT_PACK_FTS_STATEMENTS = [
         record_id UNINDEXED,
         workspace_id UNINDEXED,
         text
+    )
+    """,
+    """
+    INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
+    SELECT 'decision', id, workspace_id, COALESCE(title, '') || ' ' || COALESCE(decision_text, '') || ' ' || COALESCE(rationale, '') || ' ' || COALESCE(notes, '')
+    FROM decisions
+    WHERE NOT EXISTS (
+        SELECT 1 FROM context_pack_fts WHERE record_kind = 'decision' AND record_id = decisions.id
+    )
+    """,
+    """
+    INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
+    SELECT 'assumption', id, workspace_id, COALESCE(statement, '') || ' ' || COALESCE(notes, '')
+    FROM assumptions
+    WHERE NOT EXISTS (
+        SELECT 1 FROM context_pack_fts WHERE record_kind = 'assumption' AND record_id = assumptions.id
+    )
+    """,
+    """
+    INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
+    SELECT 'parameter', id, workspace_id, COALESCE(name, '') || ' ' || COALESCE(symbol, '') || ' ' || COALESCE(notes, '')
+    FROM parameters
+    WHERE NOT EXISTS (
+        SELECT 1 FROM context_pack_fts WHERE record_kind = 'parameter' AND record_id = parameters.id
+    )
+    """,
+    """
+    INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
+    SELECT 'requirement', id, workspace_id, COALESCE(statement, '') || ' ' || COALESCE(rationale, '') || ' ' || COALESCE(notes, '')
+    FROM requirements
+    WHERE NOT EXISTS (
+        SELECT 1 FROM context_pack_fts WHERE record_kind = 'requirement' AND record_id = requirements.id
     )
     """,
     """
