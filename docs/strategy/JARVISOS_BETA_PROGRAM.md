@@ -2,7 +2,7 @@
 
 Status: living document (created 2026-07-07; revised 2026-07-07 after expert
 review — scene-2 scope, SC-1 amendment path, 051/052 status, drafting-order
-fixes). Purpose: the single ordered
+fixes; registry references reconciled 2026-07-08). Purpose: the single ordered
 backbone from "the memory/swarm spine specs (040-044) are ready" to a beta
 that is both usable and credible. Every item has a number, a one-line scope,
 its dependencies, and — for deferred items — the pre-declared trigger that
@@ -154,9 +154,9 @@ exception to the observed-pain rule, not an application of it.
 | 037 | Chat entry point → workbench (creates a candidate) | 042 |
 | 030 | Conversation v0: multi-turn → drafted GeometrySpec you approve → loop runs | 037 |
 | 029 | R1 settings & secrets page (backend surface exists) | none |
-| 020 | R2 workspace home: workbench + right AI chat + status strip; design tokens v0 | 029 |
+| 057 | R2 workspace home: workbench + right AI chat + status strip; design tokens v0 | 029 |
 | 035 | R3 Domain Foundation navigator: search/filter/edit over records — **flowsheet-aware per SC-4** (record view leaves room for depends-on/feeds edges, not a hard-coded flat list) | none |
-| 054 | PROPOSAL-REVIEW UI (SC-2): the promote/reject surface — proposed records shown with provenance, one-click promote/reject over 040's endpoints; the load-bearing user moment | 040, 041, 020 |
+| 054 | PROPOSAL-REVIEW UI (SC-2): the promote/reject surface — proposed records shown with provenance, one-click promote/reject over 040's endpoints; the load-bearing user moment | 040, 041, 057 |
 | 055 | PROJECT-VIEW (SC-3): the Mark-1 as one navigable object — its decisions, calcs, CAD, evidence, and (when it lands) flowsheet in one workspace surface | 035, 044 |
 
 ## Phase E — the voices (honest swarm, not fake)
@@ -166,7 +166,7 @@ exception to the observed-pain rule, not an application of it.
 | 034 | AGENT-CORE: personas as config (roster frozen) | none |
 | 011 | Review panel: personas critique artifacts, advisory | 034 |
 | 039 | FRONTIER-1: Anthropic adapter + `external:frontier` for the hard loop steps | 015/018 |
-| 036 | R5 multi-agent chat UI, honest advisory badges | 020, 034 |
+| 036 | R5 multi-agent chat UI, honest advisory badges | 057, 034 |
 
 Beta does NOT need real orchestration (045) or the alternative loop (046) to
 feel like a swarm — it needs the panel to explain a FEM failure in three
@@ -217,6 +217,8 @@ for scene 1).
 - 050-052: FLOWSHEET-1 / RECALC / CAD-LINK.
 - 053: DECISION-PACKET + dossier export.
 - 054: PROPOSAL-REVIEW UI (SC-2); 055: PROJECT-VIEW (SC-3).
+- 056: property-based geometry testing + determinism canary.
+- 057: R2 Workspace home layout.
 
 Authoritative registry: the Reserved-numbering section of
 `PROGRAM_BACKLOG.md` — claim numbers there first; this list is a convenience
@@ -229,13 +231,13 @@ capacity rule), never all at once. **Settle SC-1 (the provenance contract)
 before drafting 047** — it is the one seam whose drift is expensive. Natural
 batch order after the current implementation queue (016→040→042→041→043→044)
 lands:
-**038+021+024 → 047 → 048+049 → 050 → 051+052 → 037+029 → 030+020 →
+**038+021+024 → 047 → 048+049 → 050 → 051+052 → 037+029 → 030+057 →
 054+035+055 → 034+011 → 053 → the rest.**
 024 rides in the first batch: it depends only on 009 (implemented), touches
 nothing else, and the beta gate requires it green — no reason to queue it.
-029 is drafted before 020, which depends on it. 051+052 follow 050 directly
+029 is drafted before 057, which depends on it. 051+052 follow 050 directly
 because 052's calc→CAD link is gate-critical for scene 1. 054 (promotion UI)
-is drafted in the batch after 020 so it is written against real design tokens
+is drafted in the batch after 057 so it is written against real design tokens
 and layout — producers merge before consumers are drafted — but stays ahead
 of the voices/dossier work, because the promote/reject click is what makes
 every proposal-writing spec upstream actually usable. Each batch is drafted

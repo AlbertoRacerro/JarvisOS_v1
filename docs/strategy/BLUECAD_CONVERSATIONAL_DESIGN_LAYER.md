@@ -1,6 +1,7 @@
 # BLUECAD — Conversational Design Layer & Self-Extending Vocabulary
 
-Status: north-star design (v0.1, 2026-07-04, Fable 5)
+Status: north-star design (v0.1, 2026-07-04, Fable 5; registry references
+reconciled 2026-07-08)
 Relates to: `BLUECAD_CORE_DESIGN.md` (the loop, validators), specs 010 (loop),
 011 (review panel), 012 (L2 scripts), 016 (runner extension), 037 (chat entry;
 renumbered from 018 — that number is now taken by the merged
@@ -76,7 +77,7 @@ Three levels, from safest to most powerful:
 | Level | What the AI does | Permanence | Gate | Status |
 | --- | --- | --- | --- | --- |
 | **L-eph** | Writes a build123d script for the novel part, for THIS design only | ephemeral (one candidate) | sandboxed runner + the same Tier 0/1 validators (watertight, ports, volume) | **already designed** = L2 scripts (spec 012), needs runner-ext (016) |
-| **L-prop** | Drafts a *candidate builder* for a new named kind (e.g. `collar`): code + param schema + a proposed golden fixture | proposed, not yet trusted | validated across a param range (property-based, like slice 022) + Core Team code review; **the human promotes it into the vocabulary** | new arc (below) |
+| **L-prop** | Drafts a *candidate builder* for a new named kind (e.g. `collar`): code + param schema + a proposed golden fixture | proposed, not yet trusted | validated across a param range (property-based, like slice 056) + Core Team code review; **the human promotes it into the vocabulary** | new arc (below) |
 | **L-auto** | Adds part kinds to the trusted vocabulary with no human gate | permanent, unreviewed | none | **NOT RECOMMENDED** — see risk R1 |
 
 Recommended path: **L-eph gives you self-extension now-ish** (the AI already can
@@ -119,7 +120,7 @@ The AI drove the extension; determinism and a human kept it safe.
 - **Provider gateway (015)** is a prerequisite: a chat that asks good
   clarifying questions and drafts specs wants strong models (DeepSeek/GLM/
   frontier), which 015 unlocks.
-- **Property-based testing (022)** is the validation muscle for L-prop.
+- **Property-based testing (056)** is the validation muscle for L-prop.
 - **The green mockup** (JarvisOS shell, central CAD workspace, right-side
   multi-agent chat) is this layer's eventual UI.
 
@@ -138,7 +139,7 @@ The AI drove the extension; determinism and a human kept it safe.
 5. **033 — L-prop, propose-a-kind**: AI drafts a new part-kind builder +
    fixture; property-based validation; human promotion flow. The durable
    self-extension, human-gated.
-6. UI arc (020-series) folds the conversation + CAD viewer into the workspace
+6. UI arc (057-series) folds the conversation + CAD viewer into the workspace
    shell.
 
 ## Non-goals and risks

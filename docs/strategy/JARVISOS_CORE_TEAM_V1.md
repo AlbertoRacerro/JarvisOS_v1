@@ -1,7 +1,7 @@
 # JarvisOS Core Team v1 — Frozen Roster
 
 Status: frozen v1 (2026-07-03). Changes to the roster require a Decision.
-Implementation: spec 017 (AGENT-CORE-1). Kernel decisions in
+Implementation: spec 034 (AGENT-CORE-1; renumbered from 017). Kernel decisions in
 `JARVISOS_PLATFORM_GAPS_PLAN.md`.
 
 ## What a persona is (and is not)
