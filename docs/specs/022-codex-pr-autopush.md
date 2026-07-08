@@ -1,6 +1,6 @@
 # 022 — Codex PR autopush without automerge
 
-Status: implemented (pending review)
+Status: bootstrap implemented (pending review)
 Depends on: 017 (Autonomous three-tier review), 019 (Senior review hardening)
 
 ## Goal
@@ -243,6 +243,6 @@ removes the manual "update branch" step while preserving the hard boundaries.
 
 ## Implementation notes
 
-Implemented the bootstrap path as a bounded JarvisOS GitHub actuator because this repository cannot rely on a documented Codex-native auto-apply setting that deterministically advances the existing PR branch head. The actuator verifies the remote branch head after push and comments the final SHA and changed files. It can also report non-materialized Codex task-local commit references when the remote PR branch did not advance.
+Implemented this PR as a bootstrap-only bounded JarvisOS GitHub actuator because this repository cannot rely on a documented Codex-native auto-apply setting that deterministically advances the existing PR branch head. The actuator verifies the remote branch head after push, requires the final head to differ from the pre-push remote head before reporting success, and comments the final SHA and changed files only for materialized branch updates. It reports non-materialized Codex task-local commit references, including no-op pushes where `HEAD` already equals the remote PR branch head, instead of treating them as complete.
 
-The bootstrap workflow is intentionally manual (`workflow_dispatch`) so it does not grant automatic merge authority or broaden the review loop beyond the existing append-only review comments. After this bootstrap PR, the actuator refuses `.github/workflows/**` changes by default unless a later maintainer-approved PR explicitly authorizes them.
+The bootstrap workflow is intentionally manual (`workflow_dispatch`) so it does not grant automatic merge authority or broaden the review loop beyond the existing append-only review comments. The cheap-review fix request now explicitly treats passive `@codex` summaries as insufficient and requires either a materialized branch update, a `codex-autopush:non-materialized` report, or a structured `false positive / no patch` decision with evidence. This bootstrap does not claim to satisfy acceptance criterion 13's fully automatic Codex task creation path; that remains a follow-up unless the maintainer decides the repository's GitHub Codex integration demonstrably materializes branch updates from the comment path. After this bootstrap PR, the actuator refuses `.github/workflows/**` changes by default unless a later maintainer-approved PR explicitly authorizes them.
