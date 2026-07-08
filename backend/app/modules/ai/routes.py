@@ -1,5 +1,8 @@
+import json
+
 from fastapi import APIRouter
 
+from app.modules.ai.context_builder import ContextSelectionSpec, build_workspace_context_bundle
 from app.modules.ai.escalations import confirm_escalation
 from app.modules.ai.gateway import AIGateway
 from app.modules.ai.models import (
@@ -8,6 +11,8 @@ from app.modules.ai.models import (
     AIStatusRead,
     AITaskRunRequest,
     AITaskRunResponse,
+    ContextPackPreviewRequest,
+    ContextPackPreviewResponse,
     EscalationConfirmRequest,
     EscalationConfirmResponse,
     ModelingDraftRequest,
@@ -46,6 +51,22 @@ def read_ai_status() -> AIStatusRead:
 def create_modeling_draft(payload: ModelingDraftRequest) -> ModelingDraftResponse:
     ensure_ai_settings()
     return AIGateway().create_modeling_draft(payload)
+
+
+@router.post("/context/packs/preview", response_model=ContextPackPreviewResponse)
+def preview_context_pack(payload: ContextPackPreviewRequest) -> ContextPackPreviewResponse:
+    selection = ContextSelectionSpec(**payload.selection.model_dump())
+    bundle = build_workspace_context_bundle(
+        payload.workspace_id, budget_chars=payload.budget_chars, selection=selection
+    )
+    char_count = len(json.dumps(bundle.blocks, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
+    return ContextPackPreviewResponse(
+        blocks=bundle.blocks,
+        context_sources_manifest=bundle.sources,
+        char_count=char_count,
+        estimated_token_count=char_count // 4,
+        context_digest=bundle.context_digest,
+    )
 
 
 @router.post("/tasks/run", response_model=AITaskRunResponse)

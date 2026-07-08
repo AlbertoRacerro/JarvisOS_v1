@@ -1,6 +1,6 @@
 # 042 — CONTEXT-PACK-1: deterministic, budgeted, inspectable context packs
 
-Status: ready
+Status: implemented (pending review)
 Depends on: none (parallel to 040)
 
 ## Goal
@@ -409,3 +409,10 @@ guessing.
 
 Test gate green (see `AGENTS.md`), acceptance criteria met, spec status
 updated, summary written.
+## Implementation notes
+
+- Implemented context-pack selection as a `ContextSelectionSpec` extension to `build_workspace_context_bundle`; calls without a selection spec retain the historical full-dump path unchanged.
+- Added trigger-maintained SQLite FTS5 indexing for Domain Foundation records when FTS5 is available, with service-level LIKE fallback when the mandatory capability probe reports unavailable.
+- Added `POST /ai/context/packs/preview` under the existing `/ai` router. It assembles packs only and does not call providers or write `ai_jobs`.
+- Documented and implemented whole-block budget drop priority for selection-spec packs: parameters → assumptions → requirements → decisions.
+- Did not wire selection specs into `POST /ai/tasks/run`, per the binding review resolution deferring native transport to a later slice.

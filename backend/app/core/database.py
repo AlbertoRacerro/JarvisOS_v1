@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.core.paths import build_paths
 from app.core.schema import (
+    CONTEXT_PACK_FTS_STATEMENTS,
     SCHEMA_INDEX_STATEMENTS,
     SCHEMA_MIGRATION_RECORDS,
     SCHEMA_MIGRATION_STATEMENTS,
@@ -58,6 +59,15 @@ def open_sqlite_connection() -> Iterator[sqlite3.Connection]:
         connection.close()
 
 
+
+def sqlite_supports_fts5(connection: sqlite3.Connection) -> bool:
+    try:
+        connection.execute("CREATE VIRTUAL TABLE IF NOT EXISTS temp._jarvisos_fts5_probe USING fts5(x)")
+        connection.execute("DROP TABLE IF EXISTS temp._jarvisos_fts5_probe")
+    except sqlite3.OperationalError:
+        return False
+    return True
+
 def initialize_database() -> DatabaseInfo:
     with open_sqlite_connection() as connection:
         for statement in SCHEMA_STATEMENTS:
@@ -70,6 +80,9 @@ def initialize_database() -> DatabaseInfo:
                     raise
         for statement in SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
+        if sqlite_supports_fts5(connection):
+            for statement in CONTEXT_PACK_FTS_STATEMENTS:
+                connection.execute(statement)
         _record_schema_migrations(connection)
         connection.commit()
     return get_database_info()

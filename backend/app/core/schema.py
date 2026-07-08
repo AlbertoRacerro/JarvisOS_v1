@@ -6,8 +6,10 @@ SCHEMA_AI_POLICY_MIGRATION_ID = "0003_ai_policy_mode_foundation"
 SCHEMA_AI_POLICY_MIGRATION_NAME = "0E-D3 pragmatic AI policy mode foundation"
 SCHEMA_ENGINEERING_RECORD_MIGRATION_ID = "0004_engineering_record_schema_freeze"
 SCHEMA_ENGINEERING_RECORD_MIGRATION_NAME = "Parameter, assumption, and requirement schema freeze"
-CURRENT_SCHEMA_MIGRATION_ID = "0005_memorystore_proposal_boundary"
-CURRENT_SCHEMA_MIGRATION_NAME = "MemoryStore proposal provenance boundary"
+SCHEMA_MEMORYSTORE_MIGRATION_ID = "0005_memorystore_proposal_boundary"
+SCHEMA_MEMORYSTORE_MIGRATION_NAME = "MemoryStore proposal provenance boundary"
+CURRENT_SCHEMA_MIGRATION_ID = "0006_context_pack_fts"
+CURRENT_SCHEMA_MIGRATION_NAME = "Context pack FTS index"
 
 SCHEMA_MIGRATION_RECORDS = [
     {
@@ -28,6 +30,11 @@ SCHEMA_MIGRATION_RECORDS = [
     {
         "migration_id": SCHEMA_ENGINEERING_RECORD_MIGRATION_ID,
         "name": SCHEMA_ENGINEERING_RECORD_MIGRATION_NAME,
+        "checksum": None,
+    },
+    {
+        "migration_id": SCHEMA_MEMORYSTORE_MIGRATION_ID,
+        "name": SCHEMA_MEMORYSTORE_MIGRATION_NAME,
         "checksum": None,
     },
     {
@@ -443,4 +450,87 @@ SCHEMA_INDEX_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_model_versions_workspace_model_spec ON model_versions(workspace_id, model_spec_id)",
     "CREATE INDEX IF NOT EXISTS idx_bluecad_candidates_workspace_created ON bluecad_candidates(workspace_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_bluecad_attempts_candidate_attempt ON bluecad_attempts(candidate_id, attempt_no)",
+]
+
+CONTEXT_PACK_FTS_STATEMENTS = [
+    """
+    CREATE VIRTUAL TABLE IF NOT EXISTS context_pack_fts USING fts5(
+        record_kind UNINDEXED,
+        record_id UNINDEXED,
+        workspace_id UNINDEXED,
+        text
+    )
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS decisions_context_pack_fts_ai AFTER INSERT ON decisions BEGIN
+        INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
+        VALUES ('decision', new.id, new.workspace_id, COALESCE(new.title, '') || ' ' || COALESCE(new.decision_text, '') || ' ' || COALESCE(new.rationale, '') || ' ' || COALESCE(new.notes, ''));
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS decisions_context_pack_fts_au AFTER UPDATE ON decisions BEGIN
+        DELETE FROM context_pack_fts WHERE record_kind = 'decision' AND record_id = old.id;
+        INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
+        VALUES ('decision', new.id, new.workspace_id, COALESCE(new.title, '') || ' ' || COALESCE(new.decision_text, '') || ' ' || COALESCE(new.rationale, '') || ' ' || COALESCE(new.notes, ''));
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS decisions_context_pack_fts_ad AFTER DELETE ON decisions BEGIN
+        DELETE FROM context_pack_fts WHERE record_kind = 'decision' AND record_id = old.id;
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS assumptions_context_pack_fts_ai AFTER INSERT ON assumptions BEGIN
+        INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
+        VALUES ('assumption', new.id, new.workspace_id, COALESCE(new.statement, '') || ' ' || COALESCE(new.notes, ''));
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS assumptions_context_pack_fts_au AFTER UPDATE ON assumptions BEGIN
+        DELETE FROM context_pack_fts WHERE record_kind = 'assumption' AND record_id = old.id;
+        INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
+        VALUES ('assumption', new.id, new.workspace_id, COALESCE(new.statement, '') || ' ' || COALESCE(new.notes, ''));
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS assumptions_context_pack_fts_ad AFTER DELETE ON assumptions BEGIN
+        DELETE FROM context_pack_fts WHERE record_kind = 'assumption' AND record_id = old.id;
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS parameters_context_pack_fts_ai AFTER INSERT ON parameters BEGIN
+        INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
+        VALUES ('parameter', new.id, new.workspace_id, COALESCE(new.name, '') || ' ' || COALESCE(new.symbol, '') || ' ' || COALESCE(new.notes, ''));
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS parameters_context_pack_fts_au AFTER UPDATE ON parameters BEGIN
+        DELETE FROM context_pack_fts WHERE record_kind = 'parameter' AND record_id = old.id;
+        INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
+        VALUES ('parameter', new.id, new.workspace_id, COALESCE(new.name, '') || ' ' || COALESCE(new.symbol, '') || ' ' || COALESCE(new.notes, ''));
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS parameters_context_pack_fts_ad AFTER DELETE ON parameters BEGIN
+        DELETE FROM context_pack_fts WHERE record_kind = 'parameter' AND record_id = old.id;
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS requirements_context_pack_fts_ai AFTER INSERT ON requirements BEGIN
+        INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
+        VALUES ('requirement', new.id, new.workspace_id, COALESCE(new.statement, '') || ' ' || COALESCE(new.rationale, '') || ' ' || COALESCE(new.notes, ''));
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS requirements_context_pack_fts_au AFTER UPDATE ON requirements BEGIN
+        DELETE FROM context_pack_fts WHERE record_kind = 'requirement' AND record_id = old.id;
+        INSERT INTO context_pack_fts(record_kind, record_id, workspace_id, text)
+        VALUES ('requirement', new.id, new.workspace_id, COALESCE(new.statement, '') || ' ' || COALESCE(new.rationale, '') || ' ' || COALESCE(new.notes, ''));
+    END
+    """,
+    """
+    CREATE TRIGGER IF NOT EXISTS requirements_context_pack_fts_ad AFTER DELETE ON requirements BEGIN
+        DELETE FROM context_pack_fts WHERE record_kind = 'requirement' AND record_id = old.id;
+    END
+    """,
 ]

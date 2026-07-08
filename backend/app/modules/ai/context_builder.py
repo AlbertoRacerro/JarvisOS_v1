@@ -17,10 +17,21 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 DEFAULT_CONTEXT_BUDGET_CHARS = 32_000
 MAX_CONTEXT_BLOCKS = 20
+DEFAULT_CONTEXT_PACK_MAX_ITEMS_PER_KIND = 10
+CONTEXT_PACK_KINDS = ("decision", "assumption", "parameter", "requirement")
+CONTEXT_PACK_DEFAULT_STATUSES = {
+    "decision": ["accepted"],
+    "assumption": ["accepted"],
+    "parameter": ["validated", "accepted"],
+    "requirement": ["active"],
+}
+# When a selected pack exceeds budget, whole blocks are dropped in this order so
+# decisions and requirements survive longer than parameters and assumptions.
+CONTEXT_PACK_DROP_PRIORITY = {"parameter": 0, "assumption": 1, "requirement": 2, "decision": 3}
 
 SYSTEM_INSTRUCTIONS = (
     "You are JarvisOS, a local technical engineering assistant. "
@@ -109,6 +120,15 @@ def assemble_prompt(blocks: list[dict], user_prompt: str) -> str:
 
 
 @dataclass
+class ContextSelectionSpec:
+    kinds: list[str] = field(default_factory=lambda: list(CONTEXT_PACK_KINDS))
+    statuses: dict[str, list[str]] | list[str] | None = None
+    ids: list[str] | None = None
+    query: str | None = None
+    max_items_per_kind: int = DEFAULT_CONTEXT_PACK_MAX_ITEMS_PER_KIND
+
+
+@dataclass
 class ContextBundle:
     blocks: list[dict]
     context_digest: str | None
@@ -134,6 +154,15 @@ def _format_assumption(assumption) -> str:
     return "; ".join(parts)
 
 
+def _format_requirement(requirement) -> str:
+    parts = [f"statement={requirement.statement}", f"status={requirement.status}"]
+    if requirement.rationale:
+        parts.append(f"rationale={requirement.rationale}")
+    if requirement.notes:
+        parts.append(f"notes={requirement.notes}")
+    return "; ".join(parts)
+
+
 def _format_parameter(parameter) -> str:
     parts = [f"name={parameter.name}"]
     if parameter.symbol:
@@ -147,12 +176,75 @@ def _format_parameter(parameter) -> str:
     return "; ".join(parts)
 
 
+def _statuses_by_kind(selection: ContextSelectionSpec, kinds: list[str]) -> dict[str, list[str]]:
+    if selection.statuses is None:
+        return {kind: list(CONTEXT_PACK_DEFAULT_STATUSES[kind]) for kind in kinds}
+    if isinstance(selection.statuses, list):
+        return {kind: list(selection.statuses) for kind in kinds}
+    return {kind: list(selection.statuses.get(kind, CONTEXT_PACK_DEFAULT_STATUSES[kind])) for kind in kinds}
+
+
+def _block_for_record(kind: str, record: object) -> dict:
+    formatters = {
+        "decision": _format_decision,
+        "assumption": _format_assumption,
+        "parameter": _format_parameter,
+        "requirement": _format_requirement,
+    }
+    record_id = record.id
+    return {"source": f"{kind}:{record_id}", "type": kind, "id": record_id, "content": formatters[kind](record)}
+
+
+def _build_selected_context_bundle(workspace_id: str, budget_chars: int, selection: ContextSelectionSpec) -> ContextBundle:
+    from app.modules.modeling.service import select_context_records
+
+    kinds = [kind for kind in (selection.kinds or list(CONTEXT_PACK_KINDS)) if kind in CONTEXT_PACK_KINDS]
+    statuses_by_kind = _statuses_by_kind(selection, kinds)
+    records_by_kind = select_context_records(
+        workspace_id,
+        kinds=kinds,
+        statuses_by_kind=statuses_by_kind,
+        ids=selection.ids,
+        query=selection.query,
+        max_items_per_kind=selection.max_items_per_kind,
+    )
+    raw: list[dict] = []
+    for kind in kinds:
+        raw.extend(_block_for_record(kind, record) for record in records_by_kind.get(kind, []))
+
+    included = list(raw)
+    while (len(included) > MAX_CONTEXT_BLOCKS or len(_serialize_blocks(included)) > budget_chars) and included:
+        drop_index = min(
+            range(len(included)),
+            key=lambda index: (CONTEXT_PACK_DROP_PRIORITY[included[index].get("type", "parameter")], index),
+        )
+        included.pop(drop_index)
+    return ContextBundle(
+        blocks=included,
+        context_digest=canonical_digest(included) if included else None,
+        sources=context_sources_manifest(included),
+        included_count=len(included),
+        dropped_count=len(raw) - len(included),
+        budget_chars=budget_chars,
+    )
+
+
 def build_workspace_context_bundle(
-    workspace_id: str = "bluerev", budget_chars: int = DEFAULT_CONTEXT_BUDGET_CHARS
+    workspace_id: str = "bluerev",
+    budget_chars: int = DEFAULT_CONTEXT_BUDGET_CHARS,
+    selection: ContextSelectionSpec | None = None,
 ) -> ContextBundle:
-    """Deterministic full-dump (by budget) of a workspace's project memory.
-    Order: decisions, then assumptions, then parameters (most to least
-    authoritative). Blocks are dropped whole once the budget is reached."""
+    """Deterministic full-dump or selected context pack for project memory.
+
+    With no selection spec, this preserves the historical decisions → assumptions
+    → parameters full-dump behavior byte-for-byte. Selection specs add
+    requirements, use updated_at DESC/id ASC per kind, and drop whole blocks
+    under budget pressure in this order: parameters, assumptions, requirements,
+    decisions.
+    """
+    if selection is not None:
+        return _build_selected_context_bundle(workspace_id, budget_chars, selection)
+
     from app.modules.modeling.service import list_assumptions, list_decisions, list_parameters
 
     raw: list[dict] = []

@@ -301,3 +301,28 @@ class SupervisorPublicTestResponse(BaseModel):
     external_call_attempted: bool
     external_call_succeeded: bool
     limitations: list[str] = Field(default_factory=list)
+
+class ContextSelectionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kinds: list[str] | None = None
+    statuses: dict[str, list[str]] | list[str] | None = None
+    ids: list[str] | None = None
+    query: str | None = None
+    max_items_per_kind: int = Field(default=10, ge=1)
+
+
+class ContextPackPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_id: str = "bluerev"
+    budget_chars: int = Field(default=DEFAULT_CONTEXT_BUDGET_CHARS, ge=1)
+    selection: ContextSelectionRequest = Field(default_factory=ContextSelectionRequest)
+
+
+class ContextPackPreviewResponse(BaseModel):
+    blocks: list[dict[str, Any]]
+    context_sources_manifest: list[dict[str, Any]]
+    char_count: int
+    estimated_token_count: int
+    context_digest: str | None

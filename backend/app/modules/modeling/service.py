@@ -405,3 +405,118 @@ def list_decisions(workspace_id: str) -> list[DecisionRead]:
             (workspace_id,),
         ).fetchall()
     return rows_to_models(rows, DecisionRead)
+
+CONTEXT_RECORD_KINDS = ("decision", "assumption", "parameter", "requirement")
+CONTEXT_KIND_MODELS = {
+    "decision": DecisionRead,
+    "assumption": AssumptionRead,
+    "parameter": ParameterRead,
+    "requirement": RequirementRead,
+}
+CONTEXT_KIND_TABLES = {
+    "decision": "decisions",
+    "assumption": "assumptions",
+    "parameter": "parameters",
+    "requirement": "requirements",
+}
+CONTEXT_KIND_STATUS_COLUMNS = {
+    "decision": "status",
+    "assumption": "status",
+    "parameter": "value_status",
+    "requirement": "status",
+}
+CONTEXT_KIND_LIKE_COLUMNS = {
+    "decision": ("title", "decision_text", "rationale", "notes"),
+    "assumption": ("statement", "notes"),
+    "parameter": ("name", "symbol", "notes"),
+    "requirement": ("statement", "rationale", "notes"),
+}
+
+
+def context_pack_fts_available(connection: sqlite3.Connection) -> bool:
+    from app.core.database import sqlite_supports_fts5
+
+    if not sqlite_supports_fts5(connection):
+        return False
+    row = connection.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'context_pack_fts'"
+    ).fetchone()
+    return row is not None
+
+
+def _query_ids_for_kind(
+    connection: sqlite3.Connection, *, workspace_id: str, kind: str, query: str, fts_available: bool
+) -> set[str]:
+    if fts_available:
+        rows = connection.execute(
+            """
+            SELECT record_id FROM context_pack_fts
+            WHERE workspace_id = ? AND record_kind = ? AND context_pack_fts MATCH ?
+            """,
+            (workspace_id, kind, query),
+        ).fetchall()
+        return {row["record_id"] for row in rows}
+    table = CONTEXT_KIND_TABLES[kind]
+    clauses = [f"COALESCE({column}, '') LIKE ? COLLATE NOCASE" for column in CONTEXT_KIND_LIKE_COLUMNS[kind]]
+    pattern = f"%{query}%"
+    rows = connection.execute(
+        f"SELECT id FROM {table} WHERE workspace_id = ? AND ({' OR '.join(clauses)})",
+        [workspace_id, *([pattern] * len(clauses))],
+    ).fetchall()
+    return {row["id"] for row in rows}
+
+
+def select_context_records(
+    workspace_id: str,
+    *,
+    kinds: list[str],
+    statuses_by_kind: dict[str, list[str]],
+    ids: list[str] | None,
+    query: str | None,
+    max_items_per_kind: int,
+) -> dict[str, list[object]]:
+    """Select context-pack records ordered updated_at DESC, id ASC.
+
+    Explicit ids bypass status filtering but must belong to an included kind. A
+    non-empty query uses trigger-maintained FTS5 when available, otherwise the
+    same per-kind columns are searched with LIKE.
+    """
+    selected_ids = set(ids or [])
+    clean_query = query.strip() if query else ""
+    result: dict[str, list[object]] = {}
+    with open_sqlite_connection() as connection:
+        _require_workspace(connection, workspace_id)
+        fts_available = context_pack_fts_available(connection) if clean_query else False
+        for kind in kinds:
+            table = CONTEXT_KIND_TABLES[kind]
+            status_column = CONTEXT_KIND_STATUS_COLUMNS[kind]
+            params: list[object] = [workspace_id]
+            where = ["workspace_id = ?"]
+            status_values = statuses_by_kind.get(kind, [])
+            if selected_ids:
+                status_clause = "0"
+                if status_values:
+                    status_clause = f"{status_column} IN ({','.join('?' for _ in status_values)})"
+                    params.extend(status_values)
+                id_clause = f"id IN ({','.join('?' for _ in selected_ids)})"
+                params.extend(sorted(selected_ids))
+                where.append(f"(({status_clause}) OR ({id_clause}))")
+            elif status_values:
+                where.append(f"{status_column} IN ({','.join('?' for _ in status_values)})")
+                params.extend(status_values)
+            if clean_query:
+                matching_ids = _query_ids_for_kind(
+                    connection, workspace_id=workspace_id, kind=kind, query=clean_query, fts_available=fts_available
+                )
+                if not matching_ids:
+                    result[kind] = []
+                    continue
+                where.append(f"id IN ({','.join('?' for _ in matching_ids)})")
+                params.extend(sorted(matching_ids))
+            params.append(max_items_per_kind)
+            rows = connection.execute(
+                f"SELECT * FROM {table} WHERE {' AND '.join(where)} ORDER BY updated_at DESC, id ASC LIMIT ?",
+                params,
+            ).fetchall()
+            result[kind] = rows_to_models(rows, CONTEXT_KIND_MODELS[kind])
+    return result
