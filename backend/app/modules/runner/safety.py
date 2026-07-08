@@ -346,6 +346,8 @@ def _preflight_ast_policy(
                 _validate_calc_call_file_contract(node)
         elif enforce_calc_file_contract and _is_forbidden_calc_open_reference(node, parents):
             raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 open() access must be a direct checked call.")
+        elif enforce_calc_file_contract and _is_loaded_dunder_reference(node):
+            raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 dunder introspection is not allowed.")
         elif (
             isinstance(node, ast.Name)
             and isinstance(node.ctx, ast.Load)
@@ -373,6 +375,18 @@ def _ast_parent_map(tree: ast.AST) -> dict[ast.AST, ast.AST]:
         for child in ast.iter_child_nodes(parent):
             parents[child] = parent
     return parents
+
+
+def _is_loaded_dunder_reference(node: ast.AST) -> bool:
+    if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+        return _is_dunder_name(node.id)
+    if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load):
+        return _is_dunder_name(node.attr)
+    return False
+
+
+def _is_dunder_name(name: str) -> bool:
+    return len(name) > 4 and name.startswith("__") and name.endswith("__")
 
 
 def _is_forbidden_calc_open_reference(node: ast.AST, parents: dict[ast.AST, ast.AST]) -> bool:

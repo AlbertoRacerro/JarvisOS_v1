@@ -282,6 +282,31 @@ def test_calc_v0_policy_violations_are_sandbox_failures(client: TestClient, sour
 @pytest.mark.parametrize(
     "source",
     [
+        "().__class__\n",
+        "().__class__.__base__.__subclasses__()\n",
+        "().__class__.__mro__\n",
+        "().__class__.__dict__\n",
+    ],
+)
+def test_calc_v0_dunder_introspection_fails_before_queueing(client: TestClient, source: str) -> None:
+    implementation = _create_calc(client, source)
+    response = client.post(
+        "/workspaces/bluerev/runner-jobs",
+        json={"model_version_id": implementation["id"], "input_set": _valid_input()},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "SANDBOX_VIOLATION"
+
+    from app.core.database import open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        assert connection.execute("SELECT COUNT(*) AS count FROM runner_jobs").fetchone()["count"] == 0
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
         "open('input.json', 'w')\n",
         "open('input.json', mode='w')\n",
         "mode = 'r'\nopen('input.json', mode=mode)\n",
