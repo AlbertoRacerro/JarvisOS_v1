@@ -111,6 +111,7 @@ class AIGateway:
             max_output_tokens=request.max_tokens,
             external_blocked_reason=external_blocked_reason,
             context_build_error=context_build_error,
+            workspace_id=requested_workspace_id,
         )
         response = outcome.response
         return AITaskRunResponse(
@@ -128,6 +129,8 @@ class AIGateway:
             workspace_id=requested_workspace_id,
             context_digest=outcome.context_digest,
             context_sources_count=outcome.context_sources_count,
+            records_parse_error=outcome.records_parse_error,
+            proposed_record_ids=outcome.proposed_record_ids or [],
         )
 
     def create_modeling_draft(self, request: ModelingDraftRequest) -> ModelingDraftResponse:

@@ -1,6 +1,6 @@
 # 041 — DECISION-CAPTURE-0: structured record proposals from AI task responses
 
-Status: ready (after 040)
+Status: implemented (pending review)
 Depends on: 040
 
 ## Goal
@@ -335,3 +335,9 @@ updated, summary written.
 5. (fragment storage) Constant in `record_capture.py` confirmed. Note there is
    in fact a precedent for prompt text as module constants:
    `backend/app/modules/bluecad/prompts.py` — consistent with this choice.
+
+## Implementation notes
+
+- Implemented deterministic `jarvis-records` parsing in the AI execution spine for the `decision_support` task kind allowlist.
+- Record proposals are written through the MemoryStore facade only after successful provider responses; malformed blocks remain non-blocking metadata.
+- No provider adapters, `ai_jobs` columns, retrieval/context-pack behavior, or frontend surfaces were changed.

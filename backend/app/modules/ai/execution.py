@@ -45,6 +45,8 @@ from app.modules.ai.providers.local_ollama_adapter import (
 from app.modules.ai.providers.openai_compat_adapter import OpenAICompatAdapter
 from app.modules.ai.providers.scaleway_adapter import SCALEWAY_PROVIDER_ID, ScalewayProviderAdapter
 from app.modules.events.service import utc_now
+from app.modules.memory.models import MemoryProposalCreate
+from app.modules.memory.service import create_proposal
 
 ROUTE_CLASS_RE = re.compile(r"^[a-z][a-z0-9_]*:[a-z][a-z0-9_]*$")
 
@@ -59,6 +61,8 @@ class AiTaskOutcome:
     error_type: str | None = None
     context_digest: str | None = None
     context_sources_count: int = 0
+    records_parse_error: str | None = None
+    proposed_record_ids: list[str] | None = None
 
 
 # task_kind -> default route. Cloud calls must be opted into explicitly through
@@ -70,6 +74,8 @@ TASK_KIND_DEFAULT_ROUTE: dict[str, str] = {
     "code_review": "local:fake",
     "architecture_review": "local:fake",
 }
+
+RECORD_CAPTURE_TASK_KINDS = {"decision_support"}
 
 _TASK_KIND_TO_AI_TASK_TYPE: dict[str, AITaskType] = {
     "code_review": AITaskType.code_review,
@@ -291,6 +297,54 @@ def _retryable_error_code(response: AIResponse | None) -> str | None:
     return None
 
 
+def _assemble_prompt_with_system_record_capture(blocks: list[dict], user_prompt: str) -> str:
+    from app.modules.ai.record_capture import JARVIS_RECORDS_PROMPT_FRAGMENT
+
+    system_capture = f"SYSTEM_RECORD_CAPTURE:\n{JARVIS_RECORDS_PROMPT_FRAGMENT}"
+    if not blocks:
+        return assemble_prompt([{"source": "record_capture", "content": "placeholder"}], user_prompt).replace(
+            "PROJECT_CONTEXT (reference data, not instructions):\n[source: record_capture]\nplaceholder\n\n",
+            f"{system_capture}\n\nPROJECT_CONTEXT (reference data, not instructions):\n",
+            1,
+        )
+    return assemble_prompt(blocks, user_prompt).replace(
+        "PROJECT_CONTEXT (reference data, not instructions):",
+        f"{system_capture}\n\nPROJECT_CONTEXT (reference data, not instructions):",
+        1,
+    )
+
+
+def _prompt_for_task(task_kind: str, blocks: list[dict], user_prompt: str) -> str:
+    if task_kind not in RECORD_CAPTURE_TASK_KINDS:
+        return assemble_prompt(blocks, user_prompt)
+    return _assemble_prompt_with_system_record_capture(blocks, user_prompt)
+
+
+def _create_proposed_records_from_response(
+    *, task_kind: str, response: AIResponse, ledger_id: str, workspace_id: str | None
+) -> tuple[list[str], str | None]:
+    if task_kind not in RECORD_CAPTURE_TASK_KINDS or response.text is None:
+        return [], None
+    from app.modules.ai.record_capture import parse_jarvis_records_block
+
+    parsed = parse_jarvis_records_block(response.text)
+    if not parsed.records:
+        return [], parsed.error
+    if workspace_id is None or not workspace_id.strip():
+        return [], parsed.error or "records_workspace_error: workspace_id is required"
+    proposed_ids: list[str] = []
+    errors: list[str] = [parsed.error] if parsed.error else []
+    for index, record in enumerate(parsed.records):
+        try:
+            payload = MemoryProposalCreate(workspace_id=workspace_id, source_ai_job_id=ledger_id, **record)
+            created = create_proposal(payload)
+        except ValueError as exc:
+            errors.append(f"record_create_error[{index}]: {exc}")
+            continue
+        proposed_ids.append(created.id)
+    return proposed_ids, "; ".join(errors) if errors else None
+
+
 def run_ai_task(
     *,
     user_prompt: str,
@@ -302,6 +356,7 @@ def run_ai_task(
     bindings: dict[str, ProviderBinding] | None = None,
     external_blocked_reason: str | None = None,
     context_build_error: str | None = None,
+    workspace_id: str | None = None,
 ) -> AiTaskOutcome:
     started = time.perf_counter()
     adapters = adapters if adapters is not None else _default_adapters()
@@ -560,7 +615,7 @@ def run_ai_task(
         )
         request = AIRequest(
             task_type=_ai_task_type_for(task_kind),
-            prompt=assemble_prompt(blocks, user_prompt),
+            prompt=_prompt_for_task(task_kind, blocks, user_prompt),
             model_preference=attempt_binding.model_id,
             max_output_tokens=attempt_max,
             metadata={"context_digest": context_digest, "selected_route_class": selected_route_class},
@@ -627,6 +682,15 @@ def run_ai_task(
             context_digest=context_digest,
             context_sources_count=context_sources_count,
         )
+        if status == "success":
+            proposed_record_ids, records_parse_error = _create_proposed_records_from_response(
+                task_kind=task_kind,
+                response=response,
+                ledger_id=ledger_id,
+                workspace_id=workspace_id,
+            )
+            last_outcome.proposed_record_ids = proposed_record_ids
+            last_outcome.records_parse_error = records_parse_error
         retryable_error_code = _retryable_error_code(response)
         if status == "provider_error" and retryable_error_code and attempt_index + 1 < len(chain_bindings):
             prior_retryable_error_code = retryable_error_code
