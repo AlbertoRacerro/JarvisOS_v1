@@ -108,6 +108,28 @@ def test_record_mesh_quality_evidence_error_without_counts(tmp_path: Path) -> No
     }
 
 
+def test_record_mesh_quality_evidence_fail_without_counts(tmp_path: Path) -> None:
+    _init()
+    report_id = _artifact(tmp_path)
+    result = {
+        "verdict": "fail",
+        "attempts": [{"counts": {}}],
+        "errors": [{"code": "GMSH_EXIT_NONZERO", "detail": {"returncode": 1}}],
+    }
+
+    record_id = record_mesh_quality_evidence("bluerev", result, source_run_id=None, report_artifact_id=report_id)
+
+    record = get_evidence_record(record_id)
+    assert record is not None
+    assert record.verdict == "fail"
+    assert json.loads(record.metrics_json) == {
+        "elements_total": None,
+        "nodes_total": None,
+        "empty_groups": [],
+        "attempts": 1,
+    }
+
+
 def test_record_fem_static_evidence_pass_and_error(tmp_path: Path) -> None:
     _init()
     report_id = _artifact(tmp_path)

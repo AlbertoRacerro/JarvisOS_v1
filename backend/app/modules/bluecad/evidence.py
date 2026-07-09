@@ -72,14 +72,14 @@ def map_mesh_quality_evidence(
     if not isinstance(attempts, list) or not attempts:
         raise ValueError("mesh result requires at least one attempt")
     last_attempt = _require_mapping(attempts[-1], "last mesh attempt")
-    is_error = verdict == "error"
-    if is_error:
+    requires_totals = verdict == "pass"
+    if requires_totals:
+        counts = _require_mapping(last_attempt.get("counts"), "mesh counts")
+    else:
         counts = last_attempt.get("counts", {})
         if counts is None:
             counts = {}
         counts = _require_mapping(counts, "mesh counts")
-    else:
-        counts = _require_mapping(last_attempt.get("counts"), "mesh counts")
     errors = result.get("errors", [])
     if not isinstance(errors, list):
         raise ValueError("mesh errors must be a list")
@@ -89,12 +89,12 @@ def map_mesh_quality_evidence(
             detail = error.get("detail", {})
             if isinstance(detail, dict) and isinstance(detail.get("group"), str):
                 empty_groups.append(detail["group"])
-    if is_error:
-        elements_total = counts.get("elements_total")
-        nodes_total = counts.get("nodes_total")
-    else:
+    if requires_totals:
         elements_total = counts["elements_total"]
         nodes_total = counts["nodes_total"]
+    else:
+        elements_total = counts.get("elements_total")
+        nodes_total = counts.get("nodes_total")
     metrics = {
         "elements_total": None if elements_total is None else int(elements_total),
         "nodes_total": None if nodes_total is None else int(nodes_total),

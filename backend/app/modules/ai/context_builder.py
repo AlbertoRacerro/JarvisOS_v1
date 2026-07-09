@@ -265,6 +265,9 @@ def _build_selected_workspace_context_bundle(
     kinds = [kind for kind in (selection.kinds or list(CONTEXT_PACK_KINDS)) if kind in CONTEXT_PACK_KINDS]
     statuses_by_kind = _statuses_for_selection(selection, kinds)
     domain_kinds = [kind for kind in kinds if kind != "evidence"]
+    # Always route through the domain selector once so evidence-only packs
+    # preserve the established missing-workspace contract before querying
+    # evidence_records directly.
     records_by_kind = select_context_records(
         workspace_id,
         kinds=domain_kinds,
@@ -272,7 +275,7 @@ def _build_selected_workspace_context_bundle(
         ids=selection.ids,
         query=selection.query,
         max_items_per_kind=selection.max_items_per_kind,
-    ) if domain_kinds else {}
+    )
     if "evidence" in kinds:
         records_by_kind["evidence"] = select_evidence_records(
             workspace_id,
