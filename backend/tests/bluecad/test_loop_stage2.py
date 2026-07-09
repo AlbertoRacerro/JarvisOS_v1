@@ -115,6 +115,26 @@ def test_repair_prompt_contains_previous_validation_report_detail() -> None:
     assert len(candidate.attempts) == 2
     assert candidate.attempts[0].validation_verdict == "fail"
     assert candidate.attempts[1].validation_verdict == "pass"
+    from app.core.database import open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        evidence = connection.execute(
+            "SELECT kind, verdict, candidate_id, attempt_id FROM evidence_records ORDER BY created_at, id"
+        ).fetchall()
+    assert [dict(row) for row in evidence] == [
+        {
+            "kind": "validation_v0",
+            "verdict": "fail",
+            "candidate_id": candidate.id,
+            "attempt_id": candidate.attempts[0].id,
+        },
+        {
+            "kind": "validation_v0",
+            "verdict": "pass",
+            "candidate_id": candidate.id,
+            "attempt_id": candidate.attempts[1].id,
+        },
+    ]
     assert len(adapter.prompts) == 2
     assert "T1_VOLUME_DECL" in adapter.prompts[1]
 

@@ -95,17 +95,12 @@ def map_mesh_quality_evidence(
     else:
         elements_total = counts["elements_total"]
         nodes_total = counts["nodes_total"]
-    error_code = None
-    if is_error and errors and isinstance(errors[0], dict):
-        error_code = errors[0].get("code")
     metrics = {
         "elements_total": None if elements_total is None else int(elements_total),
         "nodes_total": None if nodes_total is None else int(nodes_total),
         "empty_groups": empty_groups,
         "attempts": len(attempts),
     }
-    if error_code is not None:
-        metrics["error_code"] = error_code
     return EvidenceRecordCreate(
         workspace_id=workspace_id,
         kind="mesh_quality_v0",

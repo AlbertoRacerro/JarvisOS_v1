@@ -105,7 +105,6 @@ def test_record_mesh_quality_evidence_error_without_counts(tmp_path: Path) -> No
         "nodes_total": None,
         "empty_groups": [],
         "attempts": 1,
-        "error_code": "MESH_TOOL_ERROR",
     }
 
 
