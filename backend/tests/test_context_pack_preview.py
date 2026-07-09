@@ -138,6 +138,9 @@ def test_preview_endpoint_is_side_effect_free_and_manifest_matches() -> None:
     response = client.post("/ai/context/packs/preview", json={"workspace_id": "bluerev", "selection": {"query": "alpha-beta"}})
     assert response.status_code == 200
     payload = response.json()
+    assert payload["blocks"]
+    assert {"decision", "requirement"}.issubset({block["type"] for block in payload["blocks"]})
+    assert all(block["content"] for block in payload["blocks"])
     assert payload["char_count"] == len(json.dumps(payload["blocks"], sort_keys=True, separators=(",", ":"), ensure_ascii=False))
     assert payload["estimated_token_count"] == payload["char_count"] // 4
     assert payload["context_sources_manifest"] == [
@@ -146,6 +149,17 @@ def test_preview_endpoint_is_side_effect_free_and_manifest_matches() -> None:
     with open_sqlite_connection() as connection:
         after = connection.execute("SELECT COUNT(*) AS count FROM ai_jobs").fetchone()["count"]
     assert after == before
+
+
+def test_preview_endpoint_unknown_workspace_returns_404() -> None:
+    initialize_storage(seed_default=True)
+    client = TestClient(app)
+    response = client.post(
+        "/ai/context/packs/preview",
+        json={"workspace_id": "missing-workspace", "selection": {"query": "alpha-beta"}},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Workspace not found."
 
 
 def test_fts_backfill_and_literal_query_handling(monkeypatch) -> None:
