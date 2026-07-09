@@ -65,6 +65,34 @@ def test_selection_by_kind_status_id_query_and_deterministic_order() -> None:
     assert first.context_digest == second.context_digest
 
 
+def test_empty_statuses_are_explicit_filters_not_defaults() -> None:
+    ids = _seed()
+
+    empty_for_kind = build_workspace_context_bundle(
+        "bluerev",
+        selection=ContextSelectionSpec(kinds=["decision"], statuses={"decision": []}),
+    )
+    assert empty_for_kind.blocks == []
+
+    missing_kind_key = build_workspace_context_bundle(
+        "bluerev",
+        selection=ContextSelectionSpec(kinds=["decision"], statuses={}),
+    )
+    assert _ids(missing_kind_key) == {ids["decision"]}
+
+    draft_only = build_workspace_context_bundle(
+        "bluerev",
+        selection=ContextSelectionSpec(kinds=["decision"], statuses={"decision": ["draft"]}),
+    )
+    assert _ids(draft_only) == {ids["draft_decision"]}
+
+    empty_for_all_selected_kinds = build_workspace_context_bundle(
+        "bluerev",
+        selection=ContextSelectionSpec(kinds=["decision", "requirement"], statuses=[]),
+    )
+    assert empty_for_all_selected_kinds.blocks == []
+
+
 def test_budget_truncation_and_digest_stability() -> None:
     _seed()
     full = build_workspace_context_bundle("bluerev", budget_chars=32_000, selection=ContextSelectionSpec())
@@ -175,23 +203,21 @@ def test_like_fallback_escapes_sql_wildcards(monkeypatch) -> None:
     )
 
     from app.modules import modeling
+    from app.modules.modeling.service import _query_requires_literal_like
 
-    monkeypatch.setattr(modeling.service, "sqlite_fts5_available", lambda connection: False)
-
-    percent_ids = _ids(build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query="%")))
-    assert literal_percent.id in percent_ids
-    assert percent_decoy.id not in percent_ids
-    assert seed_ids["decision"] not in percent_ids
-
-    underscore_ids = _ids(build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query="_")))
-    assert literal_underscore.id in underscore_ids
-    assert wildcard_decoy.id not in underscore_ids
-    assert seed_ids["decision"] not in underscore_ids
-
-    cd_ids = _ids(build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query="C_D")))
-    assert literal_underscore.id in cd_ids
-    assert wildcard_decoy.id not in cd_ids
-
-    duty_ids = _ids(build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query="100%")))
-    assert literal_percent.id in duty_ids
-    assert percent_decoy.id not in duty_ids
+    expected_results = {
+        "%": ({literal_percent.id}, {percent_decoy.id, seed_ids["decision"]}),
+        "_": ({literal_underscore.id}, {wildcard_decoy.id, seed_ids["decision"]}),
+        "C_D": ({literal_underscore.id}, {wildcard_decoy.id}),
+        "100%": ({literal_percent.id}, {percent_decoy.id}),
+    }
+    for query, (included_ids, excluded_ids) in expected_results.items():
+        assert _query_requires_literal_like(query) is True
+        normal_bundle = build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query=query))
+        with monkeypatch.context() as fallback:
+            fallback.setattr(modeling.service, "sqlite_fts5_available", lambda connection: False)
+            forced_like_bundle = build_workspace_context_bundle("bluerev", selection=ContextSelectionSpec(query=query))
+        normal_ids = _ids(normal_bundle)
+        assert normal_ids == _ids(forced_like_bundle)
+        assert included_ids.issubset(normal_ids)
+        assert normal_ids.isdisjoint(excluded_ids)
