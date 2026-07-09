@@ -89,7 +89,7 @@ def sqlite_fts5_available(connection: sqlite3.Connection) -> bool:
 
 
 def _query_requires_literal_like(query: str) -> bool:
-    return any(character in query for character in ("+", ".", "-", '"', "'"))
+    return any(character in query for character in ("+", ".", "-", '"', "'", "%", "_", "\\"))
 
 
 def _escape_like_literal(query: str) -> str:
@@ -145,6 +145,9 @@ def select_context_records(
                 values.extend(sorted(selected_ids))
             else:
                 statuses = statuses_by_kind[kind]
+                if not statuses:
+                    results[kind] = []
+                    continue
                 placeholders = ", ".join("?" for _ in statuses)
                 clauses.append(f"{status_column} IN ({placeholders})")
                 values.extend(statuses)
