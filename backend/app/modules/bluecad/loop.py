@@ -10,6 +10,7 @@ from app.modules.ai.budget import evaluate_ai_status
 from app.modules.ai.contracts import AIProviderAdapter
 from app.modules.ai.execution import ProviderBinding, resolve_binding, run_ai_task
 from app.modules.ai.settings import get_ai_settings
+from app.modules.bluecad.evidence import record_validation_evidence
 from app.modules.bluecad.ledger import (
     candidate_work_dir,
     create_candidate_record,
@@ -116,6 +117,13 @@ def create_bluecad_candidate(
                 report_artifact_id=build["report_artifact_id"],
                 manifest_artifact_id=build["manifest_artifact_id"],
                 error_detail={"prompt_version": PROMPT_VERSION},
+            )
+            record_validation_evidence(
+                workspace_id,
+                candidate.id,
+                attempt.id,
+                build["report"],
+                report_artifact_id=build["report_artifact_id"],
             )
             update_candidate_artifacts(
                 candidate.id,

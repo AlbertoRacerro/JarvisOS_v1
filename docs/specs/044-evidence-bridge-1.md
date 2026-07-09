@@ -1,6 +1,6 @@
 # 044 — EVIDENCE-BRIDGE-1: typed evidence records for simulation/validation outcomes
 
-Status: ready (after 042 is merged)
+Status: implemented (pending review)
 Depends on: 042 (must be implemented first — hard dependency for the pack
 integration). 009 is already implemented (`backend/app/modules/bluecad/
 fem_adapter.py`, verified 2026-07-06) — its writer hook can be wired against
@@ -426,3 +426,29 @@ updated, summary written.
 4. (README index staleness) Fixed directly on `master` as part of this batch.
 5. (last-attempt mesh metrics) Approved: headline metrics come from the last
    attempt only, the one that determined the final verdict.
+
+
+## Implementation notes
+
+Implemented on branch `codex/spec-044-evidence-bridge` for PR linked to #60.
+
+Files touched:
+- `backend/app/core/schema.py`: added additive `evidence_records` table, workspace/kind/created-at index, and schema migration record `0008_evidence_records` after the current `0007_context_records_fts` migration.
+- `backend/app/modules/bluecad/evidence.py`: added typed evidence create/read helpers, deterministic mapping functions and writers for `mesh_quality_v0`, `fem_static_v0`, and `validation_v0`, evidence selection helpers, and the <=300-character evidence pack-line serializer.
+- `backend/app/modules/ai/context_builder.py`: extended the real 042 context-pack selection path to include `kind="evidence"` alongside existing record kinds. Evidence status filtering maps to `verdict`; ids map to `evidence_records.id`; query matches `kind` or `verdict`; ordering is `created_at DESC, id ASC`.
+- `backend/app/modules/bluecad/loop.py`: hooked `validation_v0` evidence recording immediately after the existing `finish_attempt(..., validation_verdict=..., report_artifact_id=...)` call.
+- `backend/tests/bluecad/test_evidence_records.py`: added schema/idempotence, writer fixture, and malformed-input tests.
+- `backend/tests/bluecad/test_evidence_pack_lines.py`: added serializer, truncation, digest stability, and mixed context-pack selection tests.
+- `backend/tests/bluecad/test_loop_stage2.py`: added a loop regression assertion that validation evidence is written without changing the existing candidate/attempt assertions.
+
+Tests/checks run:
+- `cd backend && python -m pytest -q tests/bluecad/test_evidence_records.py tests/bluecad/test_evidence_pack_lines.py`
+- `cd backend && python -m ruff check app/modules/bluecad/evidence.py app/modules/bluecad/loop.py app/modules/ai/context_builder.py tests/bluecad/test_evidence_records.py tests/bluecad/test_evidence_pack_lines.py tests/bluecad/test_loop_stage2.py --fix`
+- `rg "run_ai_task|provider|runner" backend/app/modules/bluecad/evidence.py; test $? -eq 1`
+
+Deviations and production wiring status:
+- No mesh or FEM production hook was added. Verified with `rg "mesh_analysis_spec\(|solve_static_analysis\(|append_tier3_checks\(" backend/app -n` that `mesh_adapter.mesh_analysis_spec()` and `fem_adapter.solve_static_analysis()` / `append_tier3_checks()` still have no production service/route/loop call site that persists report artifacts. Per the dispatch and this spec, only writer functions and fixture tests were added for `mesh_quality_v0` and `fem_static_v0`; the production wiring gap remains for spec 038 or another explicit wiring slice.
+- `validation_v0` is wired because the real BLUECAD loop already persists the validation report artifact and calls `finish_attempt(...)` with the validation verdict.
+
+Residual risk:
+- The full backend test gate should remain green, but the loop regression that exercises actual geometry building remains subject to the existing `build123d` availability skip in `test_loop_stage2.py`.

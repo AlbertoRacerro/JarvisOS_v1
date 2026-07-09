@@ -162,6 +162,17 @@ def test_preview_endpoint_unknown_workspace_returns_404() -> None:
     assert response.json()["detail"] == "Workspace not found."
 
 
+def test_preview_endpoint_evidence_only_unknown_workspace_returns_404() -> None:
+    initialize_storage(seed_default=True)
+    client = TestClient(app)
+    response = client.post(
+        "/ai/context/packs/preview",
+        json={"workspace_id": "missing-workspace", "selection": {"kinds": ["evidence"]}},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Workspace not found."
+
+
 def test_fts_backfill_and_literal_query_handling(monkeypatch) -> None:
     ids = _seed()
     initialize_storage(seed_default=True)
