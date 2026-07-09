@@ -1,5 +1,9 @@
-from fastapi import APIRouter
+import json
+import sqlite3
 
+from fastapi import APIRouter, HTTPException
+
+from app.modules.ai.context_builder import ContextSelectionSpec, build_workspace_context_bundle
 from app.modules.ai.escalations import confirm_escalation
 from app.modules.ai.gateway import AIGateway
 from app.modules.ai.models import (
@@ -8,6 +12,8 @@ from app.modules.ai.models import (
     AIStatusRead,
     AITaskRunRequest,
     AITaskRunResponse,
+    ContextPackPreviewRequest,
+    ContextPackPreviewResponse,
     EscalationConfirmRequest,
     EscalationConfirmResponse,
     ModelingDraftRequest,
@@ -52,6 +58,30 @@ def create_modeling_draft(payload: ModelingDraftRequest) -> ModelingDraftRespons
 def run_ai_task_endpoint(payload: AITaskRunRequest) -> AITaskRunResponse:
     ensure_ai_settings()
     return AIGateway().run_task(payload)
+
+
+@router.post("/context/packs/preview", response_model=ContextPackPreviewResponse)
+def preview_context_pack(payload: ContextPackPreviewRequest) -> ContextPackPreviewResponse:
+    selection = ContextSelectionSpec(**payload.selection.model_dump())
+    try:
+        bundle = build_workspace_context_bundle(
+            payload.workspace_id, budget_chars=payload.budget_chars, selection=selection
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(status_code=400, detail="Related record was not found.") from exc
+    char_count = len(json.dumps(bundle.blocks, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
+    return ContextPackPreviewResponse(
+        blocks=bundle.blocks,
+        context_digest=bundle.context_digest,
+        context_sources_manifest=bundle.sources,
+        char_count=char_count,
+        estimated_token_count=char_count // 4,
+        included_count=bundle.included_count,
+        dropped_count=bundle.dropped_count,
+        budget_chars=bundle.budget_chars,
+    )
 
 
 @router.post("/tasks/escalations/confirm", response_model=EscalationConfirmResponse)

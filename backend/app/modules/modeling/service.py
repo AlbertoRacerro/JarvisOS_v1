@@ -51,6 +51,124 @@ def _log_creation(
     )
 
 
+
+CONTEXT_RECORD_KINDS = ("decision", "assumption", "parameter", "requirement")
+_CONTEXT_STATUS_COLUMNS = {
+    "decision": "status",
+    "assumption": "status",
+    "parameter": "value_status",
+    "requirement": "status",
+}
+_CONTEXT_MODELS = {
+    "decision": DecisionRead,
+    "assumption": AssumptionRead,
+    "parameter": ParameterRead,
+    "requirement": RequirementRead,
+}
+_CONTEXT_TABLES = {
+    "decision": "decisions",
+    "assumption": "assumptions",
+    "parameter": "parameters",
+    "requirement": "requirements",
+}
+_CONTEXT_TEXT_COLUMNS = {
+    "decision": ("title", "decision_text", "rationale", "notes"),
+    "assumption": ("statement", "notes"),
+    "parameter": ("name", "symbol", "notes"),
+    "requirement": ("statement", "rationale", "notes"),
+}
+
+
+def sqlite_fts5_available(connection: sqlite3.Connection) -> bool:
+    try:
+        connection.execute("CREATE VIRTUAL TABLE IF NOT EXISTS temp.jarvisos_fts5_probe USING fts5(x)")
+        connection.execute("DROP TABLE IF EXISTS temp.jarvisos_fts5_probe")
+    except sqlite3.OperationalError:
+        return False
+    return True
+
+
+def _query_requires_literal_like(query: str) -> bool:
+    return any(character in query for character in ("+", ".", "-", '"', "'", "%", "_", "\\"))
+
+
+def _escape_like_literal(query: str) -> str:
+    return query.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _like_clause(kind: str, query: str, values: list[object]) -> str:
+    pattern = f"%{_escape_like_literal(query)}%"
+    terms = []
+    for column in _CONTEXT_TEXT_COLUMNS[kind]:
+        terms.append(f"LOWER(COALESCE({column}, '')) LIKE ? ESCAPE '\\'")
+        values.append(pattern)
+    return "(" + " OR ".join(terms) + ")"
+
+
+def _fts_ids(connection: sqlite3.Connection, workspace_id: str, kind: str, query: str) -> set[str]:
+    if _query_requires_literal_like(query):
+        return set()
+    escaped = query.replace('"', '""')
+    rows = connection.execute(
+        """
+        SELECT record_id FROM context_records_fts
+        WHERE context_records_fts MATCH ? AND workspace_id = ? AND kind = ?
+        """,
+        (f'"{escaped}"', workspace_id, kind),
+    ).fetchall()
+    return {row["record_id"] for row in rows}
+
+
+def select_context_records(
+    workspace_id: str,
+    *,
+    kinds: list[str],
+    statuses_by_kind: dict[str, list[str]],
+    ids: list[str] | None,
+    query: str | None,
+    max_items_per_kind: int,
+) -> dict[str, list[object]]:
+    selected_ids = set(ids or [])
+    normalized_query = query.strip() if query else None
+    results: dict[str, list[object]] = {}
+    with open_sqlite_connection() as connection:
+        _require_workspace(connection, workspace_id)
+        fts_available = bool(normalized_query) and sqlite_fts5_available(connection) and not _query_requires_literal_like(normalized_query)
+        for kind in kinds:
+            table = _CONTEXT_TABLES[kind]
+            status_column = _CONTEXT_STATUS_COLUMNS[kind]
+            values: list[object] = [workspace_id]
+            clauses = ["workspace_id = ?"]
+            if selected_ids:
+                placeholders = ", ".join("?" for _ in selected_ids)
+                clauses.append(f"id IN ({placeholders})")
+                values.extend(sorted(selected_ids))
+            else:
+                statuses = statuses_by_kind[kind]
+                if not statuses:
+                    results[kind] = []
+                    continue
+                placeholders = ", ".join("?" for _ in statuses)
+                clauses.append(f"{status_column} IN ({placeholders})")
+                values.extend(statuses)
+            if normalized_query:
+                if fts_available:
+                    matched_ids = _fts_ids(connection, workspace_id, kind, normalized_query)
+                    if not matched_ids:
+                        results[kind] = []
+                        continue
+                    placeholders = ", ".join("?" for _ in matched_ids)
+                    clauses.append(f"id IN ({placeholders})")
+                    values.extend(sorted(matched_ids))
+                else:
+                    clauses.append(_like_clause(kind, normalized_query, values))
+            rows = connection.execute(
+                f"SELECT * FROM {table} WHERE {' AND '.join(clauses)} ORDER BY updated_at DESC, id ASC LIMIT ?",
+                (*values, max_items_per_kind),
+            ).fetchall()
+            results[kind] = rows_to_models(rows, _CONTEXT_MODELS[kind])
+    return results
+
 def create_model_spec(workspace_id: str, payload: ModelSpecCreate) -> ModelSpecRead:
     now = utc_now()
     record_id = str(uuid4())
