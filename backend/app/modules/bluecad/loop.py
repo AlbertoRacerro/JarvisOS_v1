@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from app.modules.ai.alpha_gate import evaluate_alpha_execution_gate
 from app.modules.ai.budget import evaluate_ai_status
 from app.modules.ai.contracts import AIProviderAdapter
 from app.modules.ai.execution import ProviderBinding, resolve_binding, run_ai_task
@@ -45,6 +46,11 @@ def create_bluecad_candidate(
     blocked_reason = None if force_external_allowed else _external_blocked_reason()
     if blocked_reason is not None:
         park_candidate(candidate.id, "budget_blocked", notes=f"external_blocked_reason={blocked_reason}")
+        return _require_candidate(workspace_id, candidate.id)
+
+    gate_decision = _alpha_gate_decision(loop_config, force_external_allowed=force_external_allowed)
+    if not gate_decision.allowed:
+        park_candidate(candidate.id, "policy_blocked", notes=f"alpha_gate_reason={gate_decision.reason}")
         return _require_candidate(workspace_id, candidate.id)
 
     attempt_no = 0
@@ -242,6 +248,24 @@ def _build_error_code(errors: list[dict[str, Any]]) -> str:
         return "error"
     code = errors[0].get("code")
     return str(code or "error")
+
+
+def _alpha_gate_decision(loop_config: BluecadLoopConfig, *, force_external_allowed: bool):
+    if force_external_allowed:
+        return evaluate_alpha_execution_gate(
+            settings=get_ai_settings(),
+            provider_mode="scaleway",
+            operation="bluecad_candidate_external_fixture",
+            side_effectful=False,
+        )
+    binding, _decision = resolve_binding(loop_config.tier_ladder[0])
+    provider_mode = binding.provider_id if binding is not None else loop_config.tier_ladder[0]
+    return evaluate_alpha_execution_gate(
+        settings=get_ai_settings(),
+        provider_mode=provider_mode,
+        operation="bluecad_candidate_external",
+        side_effectful=True,
+    )
 
 
 def _external_blocked_reason(route_class: str = "external:cheap") -> str | None:
