@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from app.modules.ai.execution import ProviderBinding
 from app.modules.bluecad.ledger import ScriptedFakeBluecadAdapter
@@ -112,6 +113,36 @@ def _evidence() -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+def _simulation_run_payloads() -> list[dict[str, Any]]:
+    from app.core.database import open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        rows = connection.execute("SELECT parameter_payload FROM simulation_runs ORDER BY created_at, id").fetchall()
+    return [json.loads(row["parameter_payload"]) for row in rows]
+
+
+def test_analysis_spec_rejects_malformed_nested_blocks() -> None:
+    for key in ["material", "mesh"]:
+        malformed = _analysis_spec()
+        malformed[key] = {}
+        with pytest.raises(ValidationError):
+            BluecadLoopConfig(analysis_spec=malformed)
+
+
+def test_analysis_spec_rejects_missing_nested_load_contract() -> None:
+    malformed = _analysis_spec()
+    malformed["loads"] = [{"port_label": "run1.port_b", "force": [1.0, 0.0, 0.0]}]
+    with pytest.raises(ValidationError):
+        BluecadLoopConfig(analysis_spec=malformed)
+
+
+def test_analysis_spec_rejects_caller_supplied_geometry() -> None:
+    malformed = _analysis_spec()
+    malformed["geometry"] = {"step_path": "caller.step", "manifest_path": "caller.json"}
+    with pytest.raises(ValidationError):
+        BluecadLoopConfig(analysis_spec=malformed)
+
+
 @requires_kernel
 def test_analysis_spec_absent_skips_simulation(monkeypatch: pytest.MonkeyPatch) -> None:
     _init()
@@ -196,6 +227,10 @@ def test_analysis_spec_success_records_artifact_links_and_deterministic_metrics(
     assert all(row["candidate_id"] == first.id and row["attempt_id"] == first.attempts[0].id for row in rows)
     assert all(row["source_run_id"] for row in rows)
     assert all(row["report_artifact_id"] for row in rows)
+    run_payloads = _simulation_run_payloads()
+    assert len(run_payloads) == 1
+    assert run_payloads[0]["geometry"]["step_path"].endswith("model.step")
+    assert run_payloads[0]["geometry"]["manifest_path"].endswith("manifest.json")
     first_metrics = [(row["kind"], row["metrics_json"]) for row in rows]
 
     second = create_bluecad_candidate(

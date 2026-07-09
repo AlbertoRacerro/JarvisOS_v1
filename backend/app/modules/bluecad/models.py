@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 ErrorCode = Literal["SPEC_INVALID", "PORT_MISMATCH", "KERNEL_ERROR", "EXPORT_ERROR", "TIMEOUT"]
 Verdict = Literal["pass", "fail", "error"]
@@ -140,6 +140,75 @@ ProposalOutcome = Literal["ok", "malformed", "provider_error", "blocked"]
 ValidationVerdict = Literal["pass", "fail"]
 
 
+
+class _AnalysisMaterial(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    E: float = Field(gt=0)
+    nu: float
+    rho: float = Field(gt=0)
+    yield_strength: float = Field(gt=0)
+
+
+class _AnalysisBoundaryCondition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    port_label: str = Field(min_length=1)
+    kind: Literal["fixed"]
+
+
+class _AnalysisLoad(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    port_label: str = Field(min_length=1)
+    type: Literal["pressure", "force_total"]
+    force: list[float] | None = Field(default=None, min_length=3, max_length=3)
+    vector_n: list[float] | None = Field(default=None, min_length=3, max_length=3)
+    pressure: float | None = None
+
+
+class _AnalysisMeshQuality(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    min_element_quality: float | None = Field(default=None, ge=0)
+
+
+class _AnalysisMesh(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_size: float = Field(gt=0)
+    refinements: dict[str, float] | None = None
+    quality: _AnalysisMeshQuality | None = None
+
+    @model_validator(mode="after")
+    def _validate_refinements(self) -> _AnalysisMesh:
+        if self.refinements is not None and any(value <= 0 for value in self.refinements.values()):
+            raise ValueError("mesh refinements must be positive")
+        return self
+
+
+class _AnalysisPassCriterion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    metric: Literal["max_displacement", "max_von_mises"]
+    op: Literal["<=", "<", ">=", ">", "=="]
+    value: float
+
+
+class _AnalysisSpecWithoutGeometry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["bluecad_analysis_spec_v0_1"]
+    analysis_id: str = Field(min_length=1)
+    analysis_type: Literal["static"]
+    material: _AnalysisMaterial
+    bcs: list[_AnalysisBoundaryCondition]
+    loads: list[_AnalysisLoad]
+    mesh: _AnalysisMesh
+    pass_criteria: list[_AnalysisPassCriterion]
+    timeout_s: float | None = Field(default=None, gt=0)
+
 class BluecadLoopConfig(BaseModel):
     max_attempts_per_tier: int = Field(default=3, ge=1, le=10)
     tier_ladder: list[str] = Field(default_factory=lambda: ["external:cheap", "external:reasoning"])
@@ -155,14 +224,7 @@ class BluecadLoopConfig(BaseModel):
             raise ValueError("analysis_spec must be an object")
         if "geometry" in self.analysis_spec:
             raise ValueError("analysis_spec geometry is filled from build artifacts by the loop")
-        required = {"schema_version", "analysis_id", "analysis_type", "material", "bcs", "loads", "mesh", "pass_criteria"}
-        missing = sorted(required - self.analysis_spec.keys())
-        if missing:
-            raise ValueError(f"analysis_spec missing required fields: {', '.join(missing)}")
-        if self.analysis_spec.get("schema_version") != "bluecad_analysis_spec_v0_1":
-            raise ValueError("analysis_spec schema_version must be bluecad_analysis_spec_v0_1")
-        if self.analysis_spec.get("analysis_type") != "static":
-            raise ValueError("analysis_spec analysis_type must be static")
+        _AnalysisSpecWithoutGeometry.model_validate(self.analysis_spec)
         return self
 
 

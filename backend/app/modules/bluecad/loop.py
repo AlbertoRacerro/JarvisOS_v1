@@ -164,8 +164,8 @@ def _run_simulation_stage(
     try:
         out_dir = candidate_work_dir(workspace_id, candidate_id, attempt_no) / "simulation"
         out_dir.mkdir(parents=True, exist_ok=True)
-        source_run_id = _create_simulation_run(workspace_id, candidate_id, attempt_id, analysis_spec_without_geometry)
         analysis_spec = _analysis_spec_with_geometry(analysis_spec_without_geometry, build)
+        source_run_id = _create_simulation_run(workspace_id, candidate_id, attempt_id, analysis_spec)
     except Exception:
         return
     source_ref = f"bluecad_candidate:{candidate_id}:attempt:{attempt_no}:sim:{source_run_id}"
