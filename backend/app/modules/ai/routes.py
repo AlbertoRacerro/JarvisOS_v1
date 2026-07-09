@@ -1,6 +1,7 @@
 import json
+import sqlite3
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.modules.ai.context_builder import ContextSelectionSpec, build_workspace_context_bundle
 from app.modules.ai.escalations import confirm_escalation
@@ -62,9 +63,14 @@ def run_ai_task_endpoint(payload: AITaskRunRequest) -> AITaskRunResponse:
 @router.post("/context/packs/preview", response_model=ContextPackPreviewResponse)
 def preview_context_pack(payload: ContextPackPreviewRequest) -> ContextPackPreviewResponse:
     selection = ContextSelectionSpec(**payload.selection.model_dump())
-    bundle = build_workspace_context_bundle(
-        payload.workspace_id, budget_chars=payload.budget_chars, selection=selection
-    )
+    try:
+        bundle = build_workspace_context_bundle(
+            payload.workspace_id, budget_chars=payload.budget_chars, selection=selection
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except sqlite3.IntegrityError as exc:
+        raise HTTPException(status_code=400, detail="Related record was not found.") from exc
     char_count = len(json.dumps(bundle.blocks, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
     return ContextPackPreviewResponse(
         blocks=bundle.blocks,
