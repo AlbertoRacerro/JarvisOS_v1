@@ -86,6 +86,29 @@ def test_record_mesh_quality_evidence_pass_and_empty_group_fail(tmp_path: Path) 
     assert json.loads(second.metrics_json) == {"elements_total": 3, "nodes_total": 4, "empty_groups": ["loads"], "attempts": 2}
 
 
+def test_record_mesh_quality_evidence_error_without_counts(tmp_path: Path) -> None:
+    _init()
+    report_id = _artifact(tmp_path)
+    result = {
+        "verdict": "error",
+        "attempts": [{}],
+        "errors": [{"code": "MESH_TOOL_ERROR", "detail": {"message": "tool failed"}}],
+    }
+
+    record_id = record_mesh_quality_evidence("bluerev", result, source_run_id=None, report_artifact_id=report_id)
+
+    record = get_evidence_record(record_id)
+    assert record is not None
+    assert record.verdict == "error"
+    assert json.loads(record.metrics_json) == {
+        "elements_total": None,
+        "nodes_total": None,
+        "empty_groups": [],
+        "attempts": 1,
+        "error_code": "MESH_TOOL_ERROR",
+    }
+
+
 def test_record_fem_static_evidence_pass_and_error(tmp_path: Path) -> None:
     _init()
     report_id = _artifact(tmp_path)
@@ -115,6 +138,29 @@ def test_record_fem_static_evidence_pass_and_error(tmp_path: Path) -> None:
     error = get_evidence_record(error_id)
     assert error is not None
     assert json.loads(error.metrics_json)["solver_error_code"] == "SOLVE_ERROR"
+
+
+def test_record_fem_static_evidence_error_without_extrema(tmp_path: Path) -> None:
+    _init()
+    report_id = _artifact(tmp_path)
+    error_summary = {
+        "verdict": "error",
+        "solver": {"tool_id": "calculix", "returncode": 124},
+        "errors": [{"code": "SOLVER_TIMEOUT", "message": "solver timed out"}],
+    }
+
+    record_id = record_fem_static_evidence("bluerev", error_summary, None, source_run_id=None, report_artifact_id=report_id)
+
+    record = get_evidence_record(record_id)
+    assert record is not None
+    assert record.verdict == "error"
+    assert json.loads(record.metrics_json) == {
+        "max_displacement_value": None,
+        "max_von_mises_value": None,
+        "solver_error_code": "SOLVER_TIMEOUT",
+        "t3_checks_total": 0,
+        "t3_checks_failed": 0,
+    }
 
 
 def test_record_validation_evidence_pass_and_fail(tmp_path: Path) -> None:

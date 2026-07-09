@@ -72,7 +72,14 @@ def map_mesh_quality_evidence(
     if not isinstance(attempts, list) or not attempts:
         raise ValueError("mesh result requires at least one attempt")
     last_attempt = _require_mapping(attempts[-1], "last mesh attempt")
-    counts = _require_mapping(last_attempt.get("counts"), "mesh counts")
+    is_error = verdict == "error"
+    if is_error:
+        counts = last_attempt.get("counts", {})
+        if counts is None:
+            counts = {}
+        counts = _require_mapping(counts, "mesh counts")
+    else:
+        counts = _require_mapping(last_attempt.get("counts"), "mesh counts")
     errors = result.get("errors", [])
     if not isinstance(errors, list):
         raise ValueError("mesh errors must be a list")
@@ -82,12 +89,23 @@ def map_mesh_quality_evidence(
             detail = error.get("detail", {})
             if isinstance(detail, dict) and isinstance(detail.get("group"), str):
                 empty_groups.append(detail["group"])
+    if is_error:
+        elements_total = counts.get("elements_total")
+        nodes_total = counts.get("nodes_total")
+    else:
+        elements_total = counts["elements_total"]
+        nodes_total = counts["nodes_total"]
+    error_code = None
+    if is_error and errors and isinstance(errors[0], dict):
+        error_code = errors[0].get("code")
     metrics = {
-        "elements_total": int(counts["elements_total"]),
-        "nodes_total": int(counts["nodes_total"]),
+        "elements_total": None if elements_total is None else int(elements_total),
+        "nodes_total": None if nodes_total is None else int(nodes_total),
         "empty_groups": empty_groups,
         "attempts": len(attempts),
     }
+    if error_code is not None:
+        metrics["error_code"] = error_code
     return EvidenceRecordCreate(
         workspace_id=workspace_id,
         kind="mesh_quality_v0",
@@ -107,8 +125,17 @@ def map_fem_static_evidence(
     report_artifact_id: str,
 ) -> EvidenceRecordCreate:
     verdict = _require_verdict((report or result_summary).get("verdict"))
-    max_displacement = _require_mapping(result_summary.get("max_displacement"), "max_displacement")
-    max_von_mises = _require_mapping(result_summary.get("max_von_mises"), "max_von_mises")
+    is_error = result_summary.get("verdict") == "error"
+    if is_error:
+        max_displacement = result_summary.get("max_displacement")
+        max_von_mises = result_summary.get("max_von_mises")
+        if max_displacement is not None:
+            max_displacement = _require_mapping(max_displacement, "max_displacement")
+        if max_von_mises is not None:
+            max_von_mises = _require_mapping(max_von_mises, "max_von_mises")
+    else:
+        max_displacement = _require_mapping(result_summary.get("max_displacement"), "max_displacement")
+        max_von_mises = _require_mapping(result_summary.get("max_von_mises"), "max_von_mises")
     errors = result_summary.get("errors", [])
     if not isinstance(errors, list):
         raise ValueError("FEM errors must be a list")
@@ -119,8 +146,8 @@ def map_fem_static_evidence(
     if result_summary.get("verdict") == "error" and errors and isinstance(errors[0], dict):
         solver_error_code = errors[0].get("code")
     metrics = {
-        "max_displacement_value": float(max_displacement["value"]),
-        "max_von_mises_value": float(max_von_mises["value"]),
+        "max_displacement_value": None if max_displacement is None else float(max_displacement["value"]),
+        "max_von_mises_value": None if max_von_mises is None else float(max_von_mises["value"]),
         "solver_error_code": solver_error_code,
         "t3_checks_total": len(checks),
         "t3_checks_failed": sum(1 for check in checks if not isinstance(check, dict) or check.get("status") != "pass"),
