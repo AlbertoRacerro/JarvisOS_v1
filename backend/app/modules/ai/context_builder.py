@@ -23,16 +23,17 @@ from typing import Literal
 DEFAULT_CONTEXT_BUDGET_CHARS = 32_000
 MAX_CONTEXT_BLOCKS = 20
 DEFAULT_CONTEXT_PACK_MAX_ITEMS_PER_KIND = 10
-CONTEXT_PACK_KINDS = ("decision", "assumption", "parameter", "requirement")
+CONTEXT_PACK_KINDS = ("decision", "assumption", "parameter", "requirement", "evidence")
 _CONTEXT_PACK_DEFAULT_STATUSES = {
     "decision": ["accepted"],
     "assumption": ["accepted"],
     "parameter": ["validated", "accepted"],
     "requirement": ["active"],
+    "evidence": ["pass"],
 }
 # When a selected pack exceeds budget, lower-priority blocks are dropped whole
 # in this order so decisions and requirements survive longest.
-_CONTEXT_PACK_DROP_PRIORITY = {"parameter": 0, "assumption": 1, "requirement": 2, "decision": 3}
+_CONTEXT_PACK_DROP_PRIORITY = {"parameter": 0, "assumption": 1, "evidence": 2, "requirement": 3, "decision": 4}
 
 SYSTEM_INSTRUCTIONS = (
     "You are JarvisOS, a local technical engineering assistant. "
@@ -122,7 +123,7 @@ def assemble_prompt(blocks: list[dict], user_prompt: str) -> str:
 
 @dataclass
 class ContextSelectionSpec:
-    kinds: list[Literal["decision", "assumption", "parameter", "requirement"]] = field(default_factory=list)
+    kinds: list[Literal["decision", "assumption", "parameter", "requirement", "evidence"]] = field(default_factory=list)
     statuses: dict[str, list[str]] | list[str] | None = None
     ids: list[str] | None = None
     query: str | None = None
@@ -242,6 +243,10 @@ def _statuses_for_selection(selection: ContextSelectionSpec, kinds: list[str]) -
 
 
 def _block_for_record(kind: str, record) -> dict:
+    if kind == "evidence":
+        from app.modules.bluecad.evidence import evidence_pack_line
+
+        return {"source": f"{kind}:{record.id}", "type": kind, "id": record.id, "content": evidence_pack_line(record)}
     formatters = {
         "decision": _format_decision,
         "assumption": _format_assumption,
@@ -254,18 +259,28 @@ def _block_for_record(kind: str, record) -> dict:
 def _build_selected_workspace_context_bundle(
     workspace_id: str, budget_chars: int, selection: ContextSelectionSpec
 ) -> ContextBundle:
+    from app.modules.bluecad.evidence import select_evidence_records
     from app.modules.modeling.service import select_context_records
 
     kinds = [kind for kind in (selection.kinds or list(CONTEXT_PACK_KINDS)) if kind in CONTEXT_PACK_KINDS]
     statuses_by_kind = _statuses_for_selection(selection, kinds)
+    domain_kinds = [kind for kind in kinds if kind != "evidence"]
     records_by_kind = select_context_records(
         workspace_id,
-        kinds=kinds,
+        kinds=domain_kinds,
         statuses_by_kind=statuses_by_kind,
         ids=selection.ids,
         query=selection.query,
         max_items_per_kind=selection.max_items_per_kind,
-    )
+    ) if domain_kinds else {}
+    if "evidence" in kinds:
+        records_by_kind["evidence"] = select_evidence_records(
+            workspace_id,
+            statuses=statuses_by_kind["evidence"],
+            ids=selection.ids,
+            query=selection.query,
+            max_items=selection.max_items_per_kind,
+        )
     raw = [_block_for_record(kind, record) for kind in kinds for record in records_by_kind.get(kind, [])]
     kept = list(raw)
     while kept and (len(kept) > MAX_CONTEXT_BLOCKS or len(_serialize_blocks(kept)) > budget_chars):

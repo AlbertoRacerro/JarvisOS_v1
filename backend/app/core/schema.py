@@ -10,8 +10,10 @@ SCHEMA_MEMORYSTORE_MIGRATION_ID = "0005_memorystore_proposal_boundary"
 SCHEMA_MEMORYSTORE_MIGRATION_NAME = "MemoryStore proposal provenance boundary"
 SCHEMA_RUNNER_IMPLEMENTATION_KIND_MIGRATION_ID = "0006_runner_implementation_kind"
 SCHEMA_RUNNER_IMPLEMENTATION_KIND_MIGRATION_NAME = "Runner bluecad_l2_v0 implementation kind dispatch"
-CURRENT_SCHEMA_MIGRATION_ID = "0007_context_records_fts"
-CURRENT_SCHEMA_MIGRATION_NAME = "Context pack FTS index and triggers"
+SCHEMA_CONTEXT_RECORDS_FTS_MIGRATION_ID = "0007_context_records_fts"
+SCHEMA_CONTEXT_RECORDS_FTS_MIGRATION_NAME = "Context pack FTS index and triggers"
+CURRENT_SCHEMA_MIGRATION_ID = "0008_evidence_records"
+CURRENT_SCHEMA_MIGRATION_NAME = "Evidence records for BLUECAD outcomes"
 
 SCHEMA_MIGRATION_RECORDS = [
     {
@@ -42,6 +44,11 @@ SCHEMA_MIGRATION_RECORDS = [
     {
         "migration_id": SCHEMA_RUNNER_IMPLEMENTATION_KIND_MIGRATION_ID,
         "name": SCHEMA_RUNNER_IMPLEMENTATION_KIND_MIGRATION_NAME,
+        "checksum": None,
+    },
+    {
+        "migration_id": SCHEMA_CONTEXT_RECORDS_FTS_MIGRATION_ID,
+        "name": SCHEMA_CONTEXT_RECORDS_FTS_MIGRATION_NAME,
         "checksum": None,
     },
     {
@@ -387,6 +394,25 @@ SCHEMA_STATEMENTS = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS evidence_records (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        verdict TEXT NOT NULL,
+        metrics_json TEXT NOT NULL,
+        source_run_id TEXT,
+        candidate_id TEXT,
+        attempt_id TEXT,
+        report_artifact_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id),
+        FOREIGN KEY (source_run_id) REFERENCES simulation_runs(id),
+        FOREIGN KEY (candidate_id) REFERENCES bluecad_candidates(id),
+        FOREIGN KEY (attempt_id) REFERENCES bluecad_attempts(id),
+        FOREIGN KEY (report_artifact_id) REFERENCES artifacts(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS ai_settings (
         id TEXT PRIMARY KEY,
         policy_mode TEXT NOT NULL DEFAULT 'FAST_DEV',
@@ -506,4 +532,5 @@ SCHEMA_INDEX_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_model_versions_workspace_model_spec ON model_versions(workspace_id, model_spec_id)",
     "CREATE INDEX IF NOT EXISTS idx_bluecad_candidates_workspace_created ON bluecad_candidates(workspace_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_bluecad_attempts_candidate_attempt ON bluecad_attempts(candidate_id, attempt_no)",
+    "CREATE INDEX IF NOT EXISTS idx_evidence_records_workspace_kind ON evidence_records(workspace_id, kind, created_at)",
 ]

@@ -88,6 +88,13 @@ def test_happy_path_valid_candidate_records_attempt_and_artifacts() -> None:
     assert candidate.spec_artifact_id is not None
     assert candidate.report_artifact_id is not None
     assert candidate.glb_artifact_id is not None
+    from app.core.database import open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        evidence = connection.execute("SELECT kind, verdict, candidate_id, attempt_id FROM evidence_records").fetchall()
+    assert [dict(row) for row in evidence] == [
+        {"kind": "validation_v0", "verdict": "pass", "candidate_id": candidate.id, "attempt_id": attempt.id}
+    ]
     assert _ai_job_count() == 1
 
 
