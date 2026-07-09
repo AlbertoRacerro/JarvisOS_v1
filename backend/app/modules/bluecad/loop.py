@@ -175,14 +175,13 @@ def _run_simulation_stage(
         mesh_result = _mesh_error_result(exc, analysis_spec)
     try:
         mesh_report_artifact_id = _register_sim_report(workspace_id, out_dir / "mesh_result.json", mesh_result, source_ref)
-        record_mesh_quality_evidence(
+        mesh_evidence_id = record_mesh_quality_evidence(
             workspace_id,
             mesh_result,
             source_run_id=source_run_id,
             report_artifact_id=mesh_report_artifact_id,
-            candidate_id=candidate_id,
-            attempt_id=attempt_id,
         )
+        _link_sim_evidence_context(mesh_evidence_id, candidate_id, attempt_id)
     except Exception:
         return
     if mesh_result.get("verdict") != "pass" or "mesh_inp" not in mesh_result.get("artifacts", {}):
@@ -200,17 +199,25 @@ def _run_simulation_stage(
     fem_payload = {"result_summary": fem_summary, "report": fem_report}
     try:
         fem_report_artifact_id = _register_sim_report(workspace_id, out_dir / "fem_result.json", fem_payload, source_ref)
-        record_fem_static_evidence(
+        fem_evidence_id = record_fem_static_evidence(
             workspace_id,
             fem_summary,
             fem_report,
             source_run_id=source_run_id,
             report_artifact_id=fem_report_artifact_id,
-            candidate_id=candidate_id,
-            attempt_id=attempt_id,
         )
+        _link_sim_evidence_context(fem_evidence_id, candidate_id, attempt_id)
     except Exception:
         return
+
+
+def _link_sim_evidence_context(record_id: str, candidate_id: str, attempt_id: str) -> None:
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            "UPDATE evidence_records SET candidate_id = ?, attempt_id = ? WHERE id = ?",
+            (candidate_id, attempt_id, record_id),
+        )
+        connection.commit()
 
 
 def _analysis_spec_with_geometry(analysis_spec_without_geometry: dict[str, Any], build: dict[str, Any]) -> dict[str, Any]:

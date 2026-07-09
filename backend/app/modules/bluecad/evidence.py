@@ -237,8 +237,6 @@ def record_mesh_quality_evidence(
     *,
     source_run_id: str | None,
     report_artifact_id: str,
-    candidate_id: str | None = None,
-    attempt_id: str | None = None,
 ) -> str:
     return create_evidence_record(
         map_mesh_quality_evidence(
@@ -246,8 +244,6 @@ def record_mesh_quality_evidence(
             result,
             source_run_id=source_run_id,
             report_artifact_id=report_artifact_id,
-            candidate_id=candidate_id,
-            attempt_id=attempt_id,
         )
     ).id
 
@@ -259,8 +255,6 @@ def record_fem_static_evidence(
     *,
     source_run_id: str | None,
     report_artifact_id: str,
-    candidate_id: str | None = None,
-    attempt_id: str | None = None,
 ) -> str:
     return create_evidence_record(
         map_fem_static_evidence(
@@ -269,8 +263,6 @@ def record_fem_static_evidence(
             report,
             source_run_id=source_run_id,
             report_artifact_id=report_artifact_id,
-            candidate_id=candidate_id,
-            attempt_id=attempt_id,
         )
     ).id
 
