@@ -11,6 +11,7 @@ from app.modules.ai.execution import ProviderBinding
 from app.modules.bluecad.ledger import ScriptedFakeBluecadAdapter
 from app.modules.bluecad.loop import create_bluecad_candidate
 from app.modules.bluecad.models import BluecadCandidateCreate, BluecadLoopConfig
+from app.modules.bluecad.registry import ToolRegistryError, resolve_tool
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -231,7 +232,32 @@ def test_validation_fail_does_not_run_simulation(monkeypatch: pytest.MonkeyPatch
     assert [row["kind"] for row in _evidence()] == ["validation_v0"]
 
 
+def _require_registry_enabled_real_solver(tool_id: str) -> None:
+    try:
+        resolve_tool(tool_id)
+    except ToolRegistryError as exc:
+        pytest.skip(f"{tool_id} real-solver integration requires registry-enabled tool: {exc.code}")
+
+
+@requires_kernel
 @pytest.mark.bluecad_gmsh
 @pytest.mark.bluecad_ccx
 def test_real_solver_marker_documents_full_chain() -> None:
-    pytest.skip("Real Gmsh/CalculiX end-to-end run is skipped unless registry-enabled in a maintainer environment.")
+    _require_registry_enabled_real_solver("gmsh")
+    _require_registry_enabled_real_solver("calculix")
+    _init()
+
+    candidate = create_bluecad_candidate(
+        "bluerev",
+        BluecadCandidateCreate(brief_text="single tube", loop_config=BluecadLoopConfig(analysis_spec=_analysis_spec())),
+        adapters={"scaleway": ScriptedFakeBluecadAdapter([_spec()])},
+        bindings=_bindings(),
+        force_external_allowed=True,
+    )
+
+    assert candidate.status == "valid"
+    rows = _evidence()
+    assert [row["kind"] for row in rows] == ["validation_v0", "mesh_quality_v0", "fem_static_v0"]
+    assert all(row["candidate_id"] == candidate.id and row["attempt_id"] == candidate.attempts[0].id for row in rows)
+    assert all(row["source_run_id"] for row in rows[1:])
+    assert all(row["report_artifact_id"] for row in rows[1:])
