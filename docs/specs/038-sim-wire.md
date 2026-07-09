@@ -1,6 +1,6 @@
 # 038 — SIM-WIRE: wire mesh + FEM into the candidate/attempt loop
 
-Status: ready (implement after 044 merges; drafted 2026-07-07 from expert
+Status: implemented (pending review) (implemented 2026-07-09; drafted 2026-07-07 from expert
 kernel, expert review resolutions written same day — see final section)
 Depends on: 044 (hard dependency — `evidence_records` table and writer hooks
 must exist and be merged before this spec starts; do not build a stand-in).
@@ -376,3 +376,11 @@ updated, summary written.
    that needs it (006/020/055).
 4. **The integration test carries both existing markers** (`bluecad_gmsh` +
    `bluecad_ccx`); no third combined marker.
+
+
+## Implementation notes (2026-07-09)
+
+- The loop opt-in is `BluecadLoopConfig.analysis_spec`; absence leaves existing behavior unchanged. The caller supplies the AnalysisSpec content without `geometry`, and the loop fills `geometry.step_path` and `geometry.manifest_path` from the validated build artifacts.
+- The sim stage runs synchronously after geometry validation passes and after the candidate is marked valid. Mesh/FEM/Tier-3/evidence failures are caught at the sim boundary and remain advisory.
+- One `simulation_runs` row is created per simulation invocation and its id is passed as `source_run_id` to mesh/FEM evidence. No `bluecad_attempts` or `bluecad_candidates` columns were added; evidence rows are linked by `candidate_id` and `attempt_id`.
+- The merged 044 evidence writer signatures did not accept `candidate_id`/`attempt_id` for mesh/FEM records, so this slice made a minimal additive signature extension while preserving existing call compatibility.

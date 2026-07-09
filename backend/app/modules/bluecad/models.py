@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 ErrorCode = Literal["SPEC_INVALID", "PORT_MISMATCH", "KERNEL_ERROR", "EXPORT_ERROR", "TIMEOUT"]
 Verdict = Literal["pass", "fail", "error"]
@@ -145,6 +145,25 @@ class BluecadLoopConfig(BaseModel):
     tier_ladder: list[str] = Field(default_factory=lambda: ["external:cheap", "external:reasoning"])
     max_output_tokens: int = Field(default=4000, ge=128, le=32000)
     per_call_timeout_s: float = Field(default=20.0, gt=0, le=120)
+    analysis_spec: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def _validate_analysis_spec_without_geometry(self) -> BluecadLoopConfig:
+        if self.analysis_spec is None:
+            return self
+        if not isinstance(self.analysis_spec, dict):
+            raise ValueError("analysis_spec must be an object")
+        if "geometry" in self.analysis_spec:
+            raise ValueError("analysis_spec geometry is filled from build artifacts by the loop")
+        required = {"schema_version", "analysis_id", "analysis_type", "material", "bcs", "loads", "mesh", "pass_criteria"}
+        missing = sorted(required - self.analysis_spec.keys())
+        if missing:
+            raise ValueError(f"analysis_spec missing required fields: {', '.join(missing)}")
+        if self.analysis_spec.get("schema_version") != "bluecad_analysis_spec_v0_1":
+            raise ValueError("analysis_spec schema_version must be bluecad_analysis_spec_v0_1")
+        if self.analysis_spec.get("analysis_type") != "static":
+            raise ValueError("analysis_spec analysis_type must be static")
+        return self
 
 
 class BluecadCandidateCreate(BaseModel):

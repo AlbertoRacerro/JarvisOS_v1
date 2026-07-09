@@ -66,6 +66,8 @@ def map_mesh_quality_evidence(
     *,
     source_run_id: str | None,
     report_artifact_id: str,
+    candidate_id: str | None = None,
+    attempt_id: str | None = None,
 ) -> EvidenceRecordCreate:
     verdict = _require_verdict(result.get("verdict"))
     attempts = result.get("attempts")
@@ -107,6 +109,8 @@ def map_mesh_quality_evidence(
         verdict=verdict,
         metrics_json=_json_metrics(metrics),
         source_run_id=source_run_id,
+        candidate_id=candidate_id,
+        attempt_id=attempt_id,
         report_artifact_id=report_artifact_id,
     )
 
@@ -118,6 +122,8 @@ def map_fem_static_evidence(
     *,
     source_run_id: str | None,
     report_artifact_id: str,
+    candidate_id: str | None = None,
+    attempt_id: str | None = None,
 ) -> EvidenceRecordCreate:
     verdict = _require_verdict((report or result_summary).get("verdict"))
     is_error = result_summary.get("verdict") == "error"
@@ -153,6 +159,8 @@ def map_fem_static_evidence(
         verdict=verdict,
         metrics_json=_json_metrics(metrics),
         source_run_id=source_run_id,
+        candidate_id=candidate_id,
+        attempt_id=attempt_id,
         report_artifact_id=report_artifact_id,
     )
 
@@ -223,12 +231,48 @@ def get_evidence_record(record_id: str) -> EvidenceRecord | None:
     return optional_row_to_model(row, EvidenceRecord)
 
 
-def record_mesh_quality_evidence(workspace_id: str, result: dict[str, Any], *, source_run_id: str | None, report_artifact_id: str) -> str:
-    return create_evidence_record(map_mesh_quality_evidence(workspace_id, result, source_run_id=source_run_id, report_artifact_id=report_artifact_id)).id
+def record_mesh_quality_evidence(
+    workspace_id: str,
+    result: dict[str, Any],
+    *,
+    source_run_id: str | None,
+    report_artifact_id: str,
+    candidate_id: str | None = None,
+    attempt_id: str | None = None,
+) -> str:
+    return create_evidence_record(
+        map_mesh_quality_evidence(
+            workspace_id,
+            result,
+            source_run_id=source_run_id,
+            report_artifact_id=report_artifact_id,
+            candidate_id=candidate_id,
+            attempt_id=attempt_id,
+        )
+    ).id
 
 
-def record_fem_static_evidence(workspace_id: str, result_summary: dict[str, Any], report: dict[str, Any] | None, *, source_run_id: str | None, report_artifact_id: str) -> str:
-    return create_evidence_record(map_fem_static_evidence(workspace_id, result_summary, report, source_run_id=source_run_id, report_artifact_id=report_artifact_id)).id
+def record_fem_static_evidence(
+    workspace_id: str,
+    result_summary: dict[str, Any],
+    report: dict[str, Any] | None,
+    *,
+    source_run_id: str | None,
+    report_artifact_id: str,
+    candidate_id: str | None = None,
+    attempt_id: str | None = None,
+) -> str:
+    return create_evidence_record(
+        map_fem_static_evidence(
+            workspace_id,
+            result_summary,
+            report,
+            source_run_id=source_run_id,
+            report_artifact_id=report_artifact_id,
+            candidate_id=candidate_id,
+            attempt_id=attempt_id,
+        )
+    ).id
 
 
 def record_validation_evidence(workspace_id: str, candidate_id: str, attempt_id: str, report: dict[str, Any], *, report_artifact_id: str) -> str:
