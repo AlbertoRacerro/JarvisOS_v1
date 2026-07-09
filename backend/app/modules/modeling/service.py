@@ -51,7 +51,6 @@ def _log_creation(
     )
 
 
-
 CONTEXT_RECORD_KINDS = ("decision", "assumption", "parameter", "requirement")
 _CONTEXT_STATUS_COLUMNS = {
     "decision": "status",
@@ -89,14 +88,18 @@ def sqlite_fts5_available(connection: sqlite3.Connection) -> bool:
 
 
 def _query_requires_literal_like(query: str) -> bool:
-    return any(character in query for character in ("+", ".", "-", '"', "'"))
+    return any(character in query for character in ("+", ".", "-", '"', "'", "%", "_", "\\"))
+
+
+def _escape_like_literal(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def _like_clause(kind: str, query: str, values: list[object]) -> str:
-    pattern = f"%{query.lower()}%"
+    pattern = f"%{_escape_like_literal(query.lower())}%"
     terms = []
     for column in _CONTEXT_TEXT_COLUMNS[kind]:
-        terms.append(f"LOWER(COALESCE({column}, '')) LIKE ?")
+        terms.append(f"LOWER(COALESCE({column}, '')) LIKE ? ESCAPE '\\'")
         values.append(pattern)
     return "(" + " OR ".join(terms) + ")"
 
@@ -129,7 +132,11 @@ def select_context_records(
     results: dict[str, list[object]] = {}
     with open_sqlite_connection() as connection:
         _require_workspace(connection, workspace_id)
-        fts_available = bool(normalized_query) and sqlite_fts5_available(connection) and not _query_requires_literal_like(normalized_query)
+        fts_available = (
+            bool(normalized_query)
+            and sqlite_fts5_available(connection)
+            and not _query_requires_literal_like(normalized_query)
+        )
         for kind in kinds:
             table = _CONTEXT_TABLES[kind]
             status_column = _CONTEXT_STATUS_COLUMNS[kind]
@@ -141,6 +148,9 @@ def select_context_records(
                 values.extend(sorted(selected_ids))
             else:
                 statuses = statuses_by_kind[kind]
+                if not statuses:
+                    results[kind] = []
+                    continue
                 placeholders = ", ".join("?" for _ in statuses)
                 clauses.append(f"{status_column} IN ({placeholders})")
                 values.extend(statuses)
@@ -161,6 +171,7 @@ def select_context_records(
             ).fetchall()
             results[kind] = rows_to_models(rows, _CONTEXT_MODELS[kind])
     return results
+
 
 def create_model_spec(workspace_id: str, payload: ModelSpecCreate) -> ModelSpecRead:
     now = utc_now()

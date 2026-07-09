@@ -233,7 +233,12 @@ def _statuses_for_selection(selection: ContextSelectionSpec, kinds: list[str]) -
         return {kind: list(_CONTEXT_PACK_DEFAULT_STATUSES[kind]) for kind in kinds}
     if isinstance(selection.statuses, list):
         return {kind: list(selection.statuses) for kind in kinds}
-    return {kind: list(selection.statuses.get(kind) or _CONTEXT_PACK_DEFAULT_STATUSES[kind]) for kind in kinds}
+    return {
+        kind: list(selection.statuses[kind])
+        if kind in selection.statuses
+        else list(_CONTEXT_PACK_DEFAULT_STATUSES[kind])
+        for kind in kinds
+    }
 
 
 def _block_for_record(kind: str, record) -> dict:
