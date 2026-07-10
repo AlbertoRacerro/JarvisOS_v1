@@ -134,60 +134,55 @@ Notes:
 
 ## Review authority
 
-Automated review output (Codex code review, or any model-generated review) is
-**advisory**. It never authorizes a merge by itself. Merge authority is, in order:
+Automated review output, Codex code review, and any other model-generated review
+are **optional and advisory**. They never authorize a merge and are not required
+for routine pull requests. Merge authority is, in order:
 
-1. Deterministic gates: CI green (pytest + ruff), invariants in this file intact.
-2. Human maintainer decision, informed by Claude review of the diff against the
-   spec.
+1. Deterministic gates: CI green, required tests and Ruff passing, and the hard
+   invariants in this file intact.
+2. Human maintainer decision, optionally informed by a manually requested external
+   review for a high-risk or unusually difficult change.
 
-Review is tiered by cost (see ADR-057, spec 017): a cheap external model
-(DeepSeek) reviews every push and drives the fix iteration loop with the
-implementing agent; when it is satisfied it triggers the senior review (GLM),
-the default last automated gate, which either continues the fix loop, marks
-the PR ready for human merge, or — rarely, when it does not trust its own
-judgment — escalates to the expert (Claude) review. Findings about strategy,
-architecture, licensing, or spec defects are routed to the maintainer (`ARCH:`
-prefix), never to the implementing agent. No tier's verdict carries merge
-authority; every label is a *trigger* for the next tier, never an approval.
+External review workflows are manual-only:
 
-Never merge your own PR. Never enable auto-merge. Open the PR against `master`
-and fill in the PR template completely; then drive the review loop (below) —
-never merge it yourself. CI-plus-maintainer is the only merge authority.
+- `Manual Cheap Review` and `Manual Senior Review` run only through
+  `workflow_dispatch` from `master` with an explicit PR number.
+- `Manual Expert Review` runs only when the maintainer explicitly applies the
+  `expert-review` label.
+- No review workflow may add or remove tier/readiness labels, invoke or mention
+  `@codex`, dispatch another review tier, push changes, or merge.
+- `ready-for-merge` is a maintainer-owned informational label, not a model verdict.
 
-**Fix requests — the review is advisory and fallible.** Automated findings are
-frequently wrong: the cheap DeepSeek tier especially produces false positives,
-and the senior GLM tier is not exempt — misread architecture, findings that
-contradict the spec, "blockers" with no real failing case. A `@codex`
-fix-request is NOT a command to obey. For each finding: first decide whether it
-is a genuine defect. Fix the real ones on the SAME branch the PR is from and
-push the commits there. If you judge a finding a false positive, do NOT change
-code to appease it — reply on the PR with a short rebuttal backed by a concrete
-test, a repro, or precise reasoning (a bare "I disagree" is not enough; a test
-that proves the claimed failure cannot occur is ideal). Never open a new PR for
-review fixes, never silently ignore a finding, and never reply with a summary in
-place of doing the work. A real disagreement that survives your rebuttal is
-resolved by the round limit escalating to the maintainer — that is the intended
-outcome, not blind compliance and not silent capitulation.
+Never merge your own PR. Never enable auto-merge. Open the PR against `master`,
+fill in the PR template completely, verify the current head and deterministic
+gates, and leave the merge decision to the maintainer.
 
-**Autonomy of the implementing agent.** You may proceed without waiting for the
-maintainer between rounds. Within a PR, self-drive the review loop: verify
-findings, fix or rebut them, push, let the re-review run, and iterate until the
-round limit escalates to the maintainer. When you have no active PR, you may
-also pick up the lowest-numbered `ready` spec in `docs/specs/STATUS.md` whose
-hard dependencies are `merged`, and start it on a new branch under the normal
-spec workflow, without being told to. This autonomy stops at the merge
-boundary: you still never merge your own PR, never enable auto-merge, and
-CI-plus-maintainer remain the only merge authority (unchanged). Autonomy is
-permission to proceed, never permission to lower the bar — the hard invariants
-and the "verify before acting" rule above bind every autonomous step.
+**Model findings are fallible.** A manually requested review is evidence to inspect,
+not a command. For each finding, construct the concrete failing input or state,
+check the current spec and head, and reproduce it where possible. Fix genuine
+defects on the same PR branch. If a finding is false, record a concise rebuttal
+backed by a test, reproduction, authoritative source, or precise code path. Never
+change correct code merely to satisfy a reviewer.
 
-**Reviewer-owned conformance tests:** files matching
-`backend/tests/**/test_*_conformance.py` are written by the reviewing tier,
-never by the implementer. They measure produced artifacts (exported files,
-report verdicts, hashes) instead of trusting implementation self-reports.
-Implementation PRs must not add, modify, or delete these files; if one blocks
-you and you believe it is wrong, stop and report — do not edit it.
+**Codex is explicit-only.** No workflow sends automatic fix requests. Codex or any
+other implementing agent acts only after an explicit maintainer request. A manual
+request still does not waive verification: evaluate each finding independently,
+respect the current branch and scope, and never merge, force-push, delete branches,
+or change secrets without explicit authority.
+
+**Autonomy of the implementing agent.** Within an assigned slice, proceed through
+inspection, implementation, tests, CI diagnosis, and evidence collection without
+waiting between reversible steps. When there is no active overlapping PR, an agent
+may also pick up the lowest-numbered `ready` spec in `docs/specs/STATUS.md` whose
+hard dependencies are `merged`, unless the maintainer has set a different priority.
+This autonomy stops at external spending, destructive or irreversible actions,
+secret changes, workflow dispatches that call paid models, and the merge boundary.
+
+**Maintainer-owned conformance tests:** files matching
+`backend/tests/**/test_*_conformance.py` are protected acceptance evidence. An
+implementation agent must not add, modify, or delete them unless the maintainer
+explicitly assigns that exact change. If one blocks the implementation and appears
+wrong, stop and report rather than editing it to turn CI green.
 
 ## Definition of done
 

@@ -1,7 +1,15 @@
 # 019 — Senior review hardening
 
-Status: implemented (pending review)
-Depends on: 017 (Autonomous three-tier review)
+Status: implemented; retained for manually dispatched review only
+Depends on: 017 (historical autonomous three-tier review)
+
+## Operational supersession — 2026-07-10
+
+The request-shaping, streaming, verdict parsing, timeout, and diagnostic
+hardening defined here remain in use, but the senior review is no longer an
+automated gate. It runs only when the maintainer manually dispatches `Manual
+Senior Review` with an explicit PR number. It does not apply labels, trigger
+Claude, mention Codex, or authorize merge.
 
 ## Goal
 
@@ -87,29 +95,18 @@ Two defects observed live on the first post-019 senior runs, fixed by the
 maintainer:
 
 - **Stale merge-ref checkout.** On `labeled` events GitHub can serve a merge
-  ref computed at the PR''s last push, so the workflow silently ran the
-  pre-019 script (observed: run 28845001137 burned ~10 min of GLM reasoning
-  with the old unbounded request and crashed). Both review workflows now pin
-  `scripts/cheap_review.py` to `origin/master` after checkout; the PR
-  checkout is still used for spec/AGENTS resolution.
+  ref computed at the PR's last push, so the workflow silently ran the
+  pre-019 script. Review workflows now pin executable reviewer scripts to
+  `origin/master` after checking out the PR head; the PR checkout is still used
+  for spec and AGENTS resolution.
 - **Mid-stream disconnects crashed bare.** `http.client.IncompleteRead`
-  (provider closing the connection mid-stream) is not an `OSError` and
-  escaped the fail-open handler: red check, no comment, no diagnostics. The
-  except tuple now includes `http.client.HTTPException`.
+  (provider closing the connection mid-stream) is not an `OSError` and escaped
+  the fail-open handler. The exception tuple includes
+  `http.client.HTTPException`.
 
-## Post-merge hardening (fix/senior-reasoning-headroom, 2026-07-07)
+## Current manual-use boundary
 
-Two additional live review-pipeline issues were fixed by the maintainer:
-
-- **Senior reasoning headroom.** z.ai can bill GLM reasoning tokens against the
-  same output `max_tokens` cap even when `reasoning_effort` is set to `low`; on
-  large review packs, the former 8k ceiling could be exhausted entirely by
-  reasoning and return zero review content. The unset senior default is now
-  `{"reasoning_effort": "low", "max_tokens": 32000, "do_sample": false}`.
-  This is a hard billing ceiling, not a target; generation still stops when the
-  review completes.
-- **Spec-introduction PR review rule.** When a PR adds the referenced spec file
-  as a `NEW file` and that spec's status is `ready`, reviewers must treat the PR
-  as introducing the spec for later implementation. They should review the spec
-  document's quality and other changed files on their own merits, not report the
-  new spec's acceptance criteria as unimplemented.
+- `scripts/cheap_review.py` remains the hardened provider/prompt/parser library.
+- `scripts/manual_review.py` owns manually dispatched, no-actuation execution.
+- Provider keys are read only during an explicit maintainer dispatch.
+- `REVIEW_BOT_TOKEN` is not consumed by the manual review workflows.

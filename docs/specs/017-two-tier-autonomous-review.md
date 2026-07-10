@@ -1,7 +1,24 @@
 # 017 — Autonomous three-tier review: cheap → senior (GLM) → expert (Claude)
 
-Status: implemented (pending live smoke)
-Depends on: 004 (tiered PR review — this spec supersedes its frontier wiring)
+Status: implemented; automatic orchestration superseded by maintainer policy
+Depends on: 004 (tiered PR review — this spec superseded its frontier wiring)
+
+## Operational supersession — 2026-07-10
+
+The automatic cheap → senior → expert chain and automatic Codex fix loop are no
+longer active. The maintainer found that model reviews produced too many
+spec-misaligned findings relative to their API cost and supervision burden.
+Current live policy is defined in `AGENTS.md`:
+
+- Cheap and Senior reviews are optional `workflow_dispatch` actions with an
+  explicit PR number.
+- Expert review runs only after the maintainer manually applies `expert-review`.
+- No review workflow mentions Codex, applies readiness/tier labels, triggers
+  another review, pushes code, or authorizes merge.
+- CI and the human maintainer remain the authority.
+
+The remainder of this document is retained as historical implementation context,
+not as the current operating procedure.
 
 ## Goal
 
@@ -66,47 +83,11 @@ exempt from GitHub's `GITHUB_TOKEN` anti-recursion rule.
   replaces the manual GLM fallback.
 - `AGENTS.md` — Review authority section updated to the three-tier chain.
 
-## Maintainer setup (one-time, before first run)
+## Maintainer setup (historical)
 
-1. **Create the `REVIEW_BOT_TOKEN` secret** — without it the chain stalls
-   between tiers (visible note in the review comment, nothing breaks):
-   GitHub → Settings (profile) → Developer settings → Fine-grained tokens →
-   generate a token scoped to `JarvisOS_v1` with *Pull requests: Read and
-   write* and *Issues: Read and write*; then repo → Settings → Secrets →
-   Actions → new secret `REVIEW_BOT_TOKEN`.
-2. Labels `expert-review` and `ready-for-merge` — already created (2026-07-06).
-3. `GLM_API_KEY` — already present. `DEEPSEEK_API_KEY` — already present.
-4. After merge, delete the now-unused `frontier-review-fallback` label.
-
-## Acceptance criteria
-
-1. A push to a non-draft PR runs the cheap review; on `NO_FURTHER_CHANGES` the
-   `frontier-review` label is applied and (with `REVIEW_BOT_TOKEN` set) the
-   senior review starts on its own.
-2. Senior `NO_FURTHER_CHANGES` applies `ready-for-merge`; senior
-   `NEEDS_CHANGES` mentions @codex; a senior `ESCALATE:` line applies
-   `expert-review` and the Claude workflow starts.
-3. The Claude workflow no longer triggers on `frontier-review`.
-4. A new push removes all three verdict labels before anything else runs.
-5. Without `REVIEW_BOT_TOKEN`, the review comment carries the explicit
-   "next tier will NOT start on its own" note instead of failing silently.
-6. `--self-test` passes offline; both workflows parse as YAML.
-
-## Residual risks (accepted, watched at smoke)
-
-- **Codex may ignore bot mentions.** The @codex fix loop assumes Codex reacts
-  to mentions posted by github-actions. Verified for the Claude-posted
-  mentions historically; the bot-posted path is confirmed at the first live
-  smoke. If Codex ignores bots, the maintainer re-mentions manually and we
-  move the mention into a PAT-authored comment.
-- **GLM verdict quality is unmeasured.** The senior tier has never gated a
-  real merge. First PRs: maintainer skims the senior comment before merging;
-  confidence grows from the miss-rate observed when expert reviews run.
-- **Escalation calibration unknown.** GLM may escalate too often (burns Claude
-  budget) or never (expert tier goes unused). Watch the rate over the first
-  ~10 PRs; tune the prompt threshold wording if needed.
-- **`glm-5.2` model id / endpoint** confirmed from Z.ai docs 2026-07-06; if the
-  API 404s, check `https://docs.z.ai` for the current id.
-- **Data egress:** the pack (diff + spec + AGENTS excerpts) already goes to
-  DeepSeek (China) per the 004 maintainer decision; GLM via z.ai is the same
-  accepted posture. Redaction rules for workspace/project context still apply.
+1. `REVIEW_BOT_TOKEN` previously drove cross-workflow labels. It is no longer
+   consumed by the manual review workflows and may be removed from repository
+   Actions secrets after this supersession merges.
+2. `expert-review` remains the explicit manual trigger for Claude.
+3. Provider API keys remain optional and are consumed only when the maintainer
+   deliberately dispatches the corresponding review.
