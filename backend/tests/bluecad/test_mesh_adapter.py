@@ -36,6 +36,7 @@ tools:
 
 
 def _analysis(tmp_path: Path, element_order: object | None = None) -> dict:
+    tmp_path.mkdir(parents=True, exist_ok=True)
     step = tmp_path / "model.step"
     step.write_text("STEP", encoding="utf-8")
     manifest = tmp_path / "manifest.json"
