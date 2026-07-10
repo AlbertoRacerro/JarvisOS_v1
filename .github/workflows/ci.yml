@@ -66,27 +66,10 @@ jobs:
           PY
 
       - name: Ruff
-        id: ruff
-        continue-on-error: true
         working-directory: backend
-        run: |
-          set -o pipefail
-          python -m ruff check app tests ../scripts/check_spec_status.py \
-            ../scripts/cheap_review.py ../scripts/manual_review.py \
-            2>&1 | tee ../ruff-diagnostics.txt
-
-      - name: Upload Ruff diagnostics
-        if: steps.ruff.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ruff-diagnostics
-          path: ruff-diagnostics.txt
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Enforce Ruff gate
-        if: steps.ruff.outcome == 'failure'
-        run: exit 1
+        run: >-
+          python -m ruff check app tests ../scripts/check_spec_status.py
+          ../scripts/cheap_review.py ../scripts/manual_review.py
 
       - name: Pytest
         working-directory: backend
