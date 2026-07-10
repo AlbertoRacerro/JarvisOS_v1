@@ -1,6 +1,14 @@
 # PR checklist
 
-**Spec:** docs/specs/NNN — <title>
+**Spec:** docs/specs/NNN — <title>, or N/A
+
+**Spec gate:** implementation NNN | definition NNN | N/A
+
+- `implementation NNN`: `docs/specs/STATUS.md` must show `in_review`, this PR
+  number, and only `merged` hard dependencies.
+- `definition NNN`: the registry row must exist as `planned`, `blocked`, or
+  `ready`; the implementation PR column stays `—`.
+- `N/A`: use only when the PR does not implement or define a numbered spec.
 
 ## What changed
 
