@@ -15,6 +15,15 @@ for path in (ROOT / "backend", ROOT / "scripts"):
 from app.core.config import DEFAULT_DATA_ROOT, get_settings  # noqa: E402
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--require-bluecad-real-tools",
+        action="store_true",
+        default=False,
+        help="Fail instead of skipping when the hash-verified Gmsh/CalculiX proof toolchain is unavailable.",
+    )
+
+
 @pytest.fixture(autouse=True)
 def isolated_data_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[None]:
     isolated_root = tmp_path / "jarvisos-data"
@@ -27,9 +36,7 @@ def isolated_data_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Itera
     resolved_tmp = tmp_path.resolve()
     default_root = DEFAULT_DATA_ROOT.resolve()
 
-    assert resolved_root != default_root, (
-        f"data_root still points to default {default_root}"
-    )
+    assert resolved_root != default_root, f"data_root still points to default {default_root}"
     assert resolved_tmp in resolved_root.parents or resolved_root == resolved_tmp, (
         f"data_root {resolved_root} is not under tmp_path {resolved_tmp}"
     )

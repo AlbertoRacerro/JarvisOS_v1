@@ -88,7 +88,7 @@ that no open PR overlaps the target files or runtime boundary.
 | 019 | merged | [#40](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/40), [#41](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/41), [#44](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/44) | Senior review hardening | 017 | Harden streaming, reasoning budgets, verdict parsing, stale-script behavior, retry limits, and review diagnostics. |
 | 020 | ready | — | Pipeline doctor | 017, 019 | Add a deterministic watchdog for silent review-pipeline failures, stale branches, missing labels/comments, and stalled fix requests. |
 | 021 | merged | [#70](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/70) | ALPHA-GATE hardening | — | Enforce the server-owned external-provider decision at the shared execution spine for every concrete network binding and fallback; PR #70 supersedes stale PR #66. |
-| 021b | ready | — | ALPHA-GATE completion: real-tool proof + recoverable data root | 021, 038, 044 | Add strict hash-verified real-tool proof and atomic path-rebased data-root backup/restore as two separately reviewed implementation slices. |
+| 021b | in_review | [#72](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/72) | ALPHA-GATE completion: real-tool proof + recoverable data root | 021, 038, 044 | Slice A strict real-tool proof is in review; atomic path-rebased backup/restore remains the separate Slice B implementation. |
 | 022 | merged | [#49](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/49) | Codex PR autopush without automerge | 017, 019 | Add a bounded actuator for pushing materialized fixes to an existing PR branch while forbidding merge, protected-branch pushes, force-push, and secret/workflow changes. |
 | 023 | planned | — | Adversarial proposal corpus | 010 | Add bounded hostile and degenerate model-output fixtures; the loop must reject or park them without crashes, unbounded work, provider calls, or authority bypass. |
 | 024 | ready | — | FEM verification battery | 008, 009 | Build an analytic benchmark ladder that checks mesh/FEM results against known mechanics solutions and convergence expectations. |
@@ -139,9 +139,9 @@ that no open PR overlaps the target files or runtime boundary.
   superseded by `058`, `058b`, and `058c`; `057` remains the cancelled
   SPEC-LEDGER-0 and must not be reused.
 - PR #66 is superseded by merged spec `021` implementation PR #70.
-- Spec `021` owns the shared external-provider execution boundary. Remaining
-  strict real-tool proof and relocatable backup/restore are defined in ready spec
-  `021b` and must be implemented as two separate PRs.
+- Spec `021` owns the shared external-provider execution boundary. Slice 021b-A
+  is in review in PR #72; relocatable backup/restore remains the separate 021b-B
+  implementation.
 
 ## Notes requiring later reconciliation
 

@@ -15,6 +15,7 @@ from typing import Any
 import yaml
 
 REGISTRY_VERSION = "bluecad_tool_registry_v0_1"
+REGISTRY_ENV_VAR = "JARVISOS_BLUECAD_TOOL_REGISTRY"
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 DEFAULT_REGISTRY_PATH = _REPO_ROOT / "configs" / "bluecad_tools.yaml"
 
@@ -68,6 +69,19 @@ class ToolRunResult:
 
 ToolEntry = dict[str, Any]
 Registry = dict[str, Any]
+
+
+def resolve_registry_path(path: str | Path | None = None) -> Path:
+    """Resolve one operator-owned registry path for the whole tool call chain."""
+    if path is not None:
+        value = str(path).strip()
+        if not value:
+            raise ToolRegistryError("REGISTRY_PATH_INVALID", "Explicit registry path must not be blank")
+        return Path(value)
+    configured = os.getenv(REGISTRY_ENV_VAR)
+    if configured is not None and configured.strip():
+        return Path(configured.strip())
+    return DEFAULT_REGISTRY_PATH
 
 
 def _load_raw_registry(path: Path) -> Any:
@@ -166,8 +180,8 @@ def _validate_hash_field(value: Any, tool_id: str) -> None:
 
 
 def load_registry(path: str | Path | None = None) -> Registry:
-    """Load and validate a BLUECAD tool registry."""
-    registry_path = Path(path) if path is not None else DEFAULT_REGISTRY_PATH
+    """Load and validate the explicitly selected or operator-configured registry."""
+    registry_path = resolve_registry_path(path)
     registry = _validate_registry(_load_raw_registry(registry_path))
     validate_license_boundaries(registry)
     return registry
@@ -280,24 +294,25 @@ def _run_health_check(tool: ToolEntry, registry_path: str | Path | None) -> Tool
     if not health_check:
         return None
     if tool["integration_mode"] in _HASH_MODES:
-        cwd = DEFAULT_REGISTRY_PATH.parent if registry_path is None else Path(registry_path).parent
-        return run_tool(tool["id"], _health_check_args(tool), cwd, 10, registry_path)
+        resolved_path = resolve_registry_path(registry_path)
+        return run_tool(tool["id"], _health_check_args(tool), resolved_path.parent, 10, resolved_path)
     return _run_in_process_health_check(health_check)
 
 
 def check_registry(registry_path: str | Path | None = None) -> tuple[int, str]:
-    registry = load_registry(registry_path)
-    rows = ["tool\tenabled\thash\thealth"]
+    resolved_path = resolve_registry_path(registry_path)
+    registry = load_registry(resolved_path)
+    rows = [f"registry\t{resolved_path}", "tool\tenabled\thash\thealth"]
     exit_code = 0
     for tool in registry["tools"]:
         hash_status = "not-required"
         health_status = "skipped"
         if tool["enabled"]:
             try:
-                resolved = resolve_tool(tool["id"], registry_path)
+                resolved = resolve_tool(tool["id"], resolved_path)
                 if resolved["integration_mode"] in _HASH_MODES:
                     hash_status = "ok"
-                health_result = _run_health_check(resolved, registry_path)
+                health_result = _run_health_check(resolved, resolved_path)
                 if health_result is None:
                     health_status = "not-configured"
                 else:
@@ -317,7 +332,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="BLUECAD tool registry utilities")
     subparsers = parser.add_subparsers(dest="command", required=True)
     check_parser = subparsers.add_parser("check", help="Check registry tool availability")
-    check_parser.add_argument("--registry", type=Path, default=DEFAULT_REGISTRY_PATH)
+    check_parser.add_argument("--registry", type=Path, default=None)
     args = parser.parse_args(argv)
     if args.command == "check":
         exit_code, output = check_registry(args.registry)
