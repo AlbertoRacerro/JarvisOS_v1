@@ -1,0 +1,73 @@
+name: One-shot 024-A model sync
+
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  sync-model:
+    if: github.event.pull_request.number == 77 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Apply exact model and test replacements
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          model_path = Path("backend/app/modules/bluecad/models.py")
+          model_text = model_path.read_text(encoding="utf-8")
+          old_model = """    target_size: float = Field(gt=0)
+              refinements: dict[str, float] | None = None"""
+          new_model = """    target_size: float = Field(gt=0)
+              element_order: Literal[1, 2] = 1
+              refinements: dict[str, float] | None = None"""
+          if model_text.count(old_model) != 1:
+              raise SystemExit("unexpected _AnalysisMesh shape")
+          model_path.write_text(model_text.replace(old_model, new_model), encoding="utf-8")
+
+          test_path = Path("backend/tests/bluecad/test_mesh_adapter.py")
+          test_text = test_path.read_text(encoding="utf-8")
+          old_import = "from app.modules.bluecad.mesh_adapter import _gmsh_args, mesh_analysis_spec\n"
+          new_import = old_import + "from app.modules.bluecad.models import BluecadLoopConfig\n"
+          if test_text.count(old_import) != 1:
+              raise SystemExit("unexpected test import shape")
+          test_text = test_text.replace(old_import, new_import)
+          marker = """def test_analysis_schema_full_static_example_round_trips(tmp_path: Path) -> None:
+          """
+          added = """def test_loop_config_accepts_only_integer_element_orders(tmp_path: Path) -> None:
+              spec = _analysis(tmp_path, 2)
+              spec.pop("geometry")
+              spec["pass_criteria"] = [{"metric": "max_displacement", "op": "<=", "value": 1.0}]
+              config = BluecadLoopConfig(analysis_spec=spec)
+              assert config.analysis_spec is not None
+              assert config.analysis_spec["mesh"]["element_order"] == 2
+              for invalid in (0, 3, True, 1.0, "2"):
+                  spec["mesh"]["element_order"] = invalid
+                  with pytest.raises(ValueError):
+                      BluecadLoopConfig(analysis_spec=spec)
+
+
+          """ + marker
+          if test_text.count(marker) != 1:
+              raise SystemExit("unexpected schema test marker")
+          test_path.write_text(test_text.replace(marker, added), encoding="utf-8")
+          PY
+
+      - name: Commit model fix and remove one-shot workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/one-shot-model-024a.yml
+          git add backend/app/modules/bluecad/models.py backend/tests/bluecad/test_mesh_adapter.py
+          git commit -m "Add 024-A loop model contract"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
