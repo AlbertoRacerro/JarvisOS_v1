@@ -277,8 +277,8 @@ def test_analysis_spec_success_records_artifact_links_and_deterministic_metrics(
     assert run_payloads[0]["geometry"]["manifest_path"].endswith("manifest.json")
     fem_artifact = _artifact_json(rows[1]["report_artifact_id"])
     fem_report = fem_artifact["report"]
-    assert "schema_version" in fem_report
-    assert any(check["tier"] == 0 for check in fem_report["checks"])
+    assert fem_report["report_version"] == "bluecad_validation_report_v0_1"
+    assert any(check["id"].startswith("T0_") for check in fem_report["checks"])
     assert any(check["tier"] == 3 for check in fem_report["checks"])
     first_metrics = [(row["kind"], row["metrics_json"]) for row in rows]
 
