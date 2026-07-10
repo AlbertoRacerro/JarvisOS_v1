@@ -50,6 +50,29 @@ def test_symlink_special_file_and_case_collision_are_rejected(tmp_path: Path) ->
         )
 
 
+def test_broken_included_root_symlink_is_rejected(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    seed_data_root(source)
+    shutil.rmtree(source / "workspaces")
+    try:
+        os.symlink(
+            source / "missing-workspaces",
+            source / "workspaces",
+            target_is_directory=True,
+        )
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unavailable")
+
+    with pytest.raises(jdr.DataRootError, match="symlink"):
+        jdr.create_snapshot(
+            source_root=source,
+            destination=tmp_path / "snapshots-broken-link",
+            snapshot_id="broken-link",
+        )
+    assert not (tmp_path / "snapshots-broken-link/snapshot-broken-link").exists()
+
+
 def test_destination_under_source_and_invalid_retention_are_rejected(
     tmp_path: Path,
 ) -> None:
