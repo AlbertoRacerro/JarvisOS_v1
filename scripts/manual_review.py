@@ -10,7 +10,6 @@ must decide what to do with every finding.
 from __future__ import annotations
 
 import json
-import os
 import sys
 import urllib.error
 from pathlib import Path
