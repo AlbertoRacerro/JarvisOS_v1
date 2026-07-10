@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -11,13 +12,15 @@ import pytest
 from app.core.bootstrap import initialize_storage
 from app.core.paths import build_paths
 from app.modules.bluecad.export import sha256_file
-from app.modules.bluecad.ledger import ScriptedFakeBluecadAdapter
+from app.modules.bluecad.ledger import ScriptedFakeBluecadAdapter, candidate_work_dir
 from app.modules.bluecad.loop import create_bluecad_candidate
 from app.modules.bluecad.models import BluecadCandidateCreate, BluecadLoopConfig
 from app.modules.bluecad.registry import ToolRegistryError, check_registry, resolve_registry_path, resolve_tool
 from tests.bluecad.alpha_real_tools_support import analysis_spec, assert_full_chain, offline_bindings
 
 FIXTURES = Path(__file__).parent / "fixtures"
+_DIAGNOSTIC_SUFFIXES = {".inp", ".log", ".frd", ".dat", ".sta", ".cvg", ".geo", ".msh"}
+_MAX_DIAGNOSTIC_FILE_BYTES = 2 * 1024 * 1024
 
 
 def _handle_unavailable(*, strict: bool, reason: str) -> None:
@@ -43,6 +46,25 @@ def _require_toolchain(request: pytest.FixtureRequest) -> tuple[dict[str, Any], 
         if str(entry["version_pin"]).lower().startswith("fake"):
             _handle_unavailable(strict=strict, reason=f"{entry['id']} uses a fake version pin")
     return gmsh, calculix, output
+
+
+def _preserve_text_diagnostics(candidates: list[Any]) -> None:
+    configured = os.getenv("JARVISOS_BLUECAD_PROOF_DEBUG_DIR")
+    if not configured:
+        return
+    destination_root = Path(configured)
+    destination_root.mkdir(parents=True, exist_ok=True)
+    for candidate in candidates:
+        source_root = candidate_work_dir("bluerev", candidate.id, 1) / "simulation"
+        destination = destination_root / candidate.id
+        for source in source_root.rglob("*"):
+            if not source.is_file() or source.suffix.lower() not in _DIAGNOSTIC_SUFFIXES:
+                continue
+            if source.stat().st_size > _MAX_DIAGNOSTIC_FILE_BYTES:
+                continue
+            target = destination / source.relative_to(source_root)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
 
 
 def test_ordinary_mode_skips_unavailable_real_tools() -> None:
@@ -82,6 +104,7 @@ def test_strict_real_tool_full_chain_twice(request: pytest.FixtureRequest) -> No
         )
         for _ in range(2)
     ]
+    _preserve_text_diagnostics(candidates)
     assert len(adapter.prompts) == 2
     manifests = [assert_full_chain(candidate) for candidate in candidates]
     assert manifests[0].read_bytes() == manifests[1].read_bytes()
