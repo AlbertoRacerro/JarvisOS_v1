@@ -62,13 +62,24 @@ def _simulation_row(candidate_id: str) -> dict[str, Any]:
     raise AssertionError(f"simulation run missing for candidate {candidate_id}")
 
 
+def _simulation_reports(artifacts: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        row["filename"]: json.loads(Path(row["stored_path"]).read_text(encoding="utf-8"))
+        for row in artifacts
+        if row["artifact_type"] == "bluecad_sim_report"
+    }
+
+
 def assert_full_chain(candidate: Any) -> Path:
     assert candidate.status == "valid"
     assert len(candidate.attempts) == 1
     attempt = candidate.attempts[0]
     assert (attempt.proposal_outcome, attempt.build_outcome, attempt.validation_verdict) == ("ok", "ok", "pass")
 
+    artifacts = _artifact_rows(candidate.id)
+    reports = _simulation_reports(artifacts)
     evidence = _evidence_rows(candidate.id)
+    simulation = _simulation_row(candidate.id)
     actual_evidence = [(row["kind"], row["verdict"]) for row in evidence]
     expected_evidence = [
         ("validation_v0", "pass"),
@@ -78,12 +89,13 @@ def assert_full_chain(candidate: Any) -> Path:
     assert actual_evidence == expected_evidence, {
         "candidate_id": candidate.id,
         "evidence": evidence,
-        "simulation": _simulation_row(candidate.id),
+        "simulation": simulation,
+        "reports": reports,
+        "artifacts": artifacts,
     }
     assert all(row["candidate_id"] == candidate.id and row["attempt_id"] == attempt.id for row in evidence)
     assert all(row["source_run_id"] and row["report_artifact_id"] for row in evidence[1:])
 
-    simulation = _simulation_row(candidate.id)
     assert simulation["status"] == "completed"
     assert json.loads(simulation["output_payload"]) == {
         "status": "completed",
@@ -91,7 +103,6 @@ def assert_full_chain(candidate: Any) -> Path:
         "fem_verdict": "pass",
     }
 
-    artifacts = _artifact_rows(candidate.id)
     roles = [row["artifact_type"] for row in artifacts]
     for role, expected in {
         "bluecad_spec": 1,
@@ -106,11 +117,6 @@ def assert_full_chain(candidate: Any) -> Path:
         assert path.is_file() and path.stat().st_size > 0
         assert sha256_file(path) == row["sha256"]
 
-    reports = {
-        row["filename"]: json.loads(Path(row["stored_path"]).read_text(encoding="utf-8"))
-        for row in artifacts
-        if row["artifact_type"] == "bluecad_sim_report"
-    }
     mesh = reports["mesh_result.json"]
     fem = reports["fem_result.json"]["result_summary"]
     assert mesh["attempts"][0]["gmsh_returncode"] == 0
