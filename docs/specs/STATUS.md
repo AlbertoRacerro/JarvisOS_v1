@@ -9,13 +9,17 @@ merges, or a spec is cancelled. GitHub PR diffs are the authoritative list of
 files created or modified by a spec; this registry intentionally does not copy
 those file lists into a second place.
 
+The `Implementation PR` column records implementation PRs only. A PR that merely
+creates or revises a spec does not occupy that column and does not move the spec
+to `in_review`; link such planning evidence in the description only when useful.
+
 ## Status values
 
 - `planned`: the work is identified, but the spec is not ready to implement.
 - `blocked`: the spec exists but a dependency or decision prevents work.
 - `ready`: the spec is complete and may be started.
 - `in_progress`: implementation is active and no PR is open yet.
-- `in_review`: a PR is open; CI/review/maintainer decision is pending.
+- `in_review`: an implementation PR is open; CI/review/maintainer decision is pending.
 - `merged`: the implementation PR is merged into `master`.
 - `cancelled`: the work will not be implemented or has been superseded.
 
@@ -24,12 +28,16 @@ those file lists into a second place.
 1. Before starting work, confirm the row is `ready` and all hard dependencies are
    `merged`.
 2. Set the row to `in_progress` when a branch or implementation session starts.
-3. Set it to `in_review` and add the PR number as soon as the PR exists.
+3. Set it to `in_review` and add the implementation PR number as soon as that PR
+   exists.
 4. The merge owner sets it to `merged` immediately after merge.
 5. Use `blocked` with an explicit dependency or blocker; do not hide blockers in
    prose elsewhere.
 6. Do not duplicate live spec state in `README.md`, individual spec files,
    `docs/JARVISOS_CURRENT_CONTEXT.md`, chat handoffs, or strategy documents.
+7. CI runs `python scripts/check_spec_status.py --event "$GITHUB_EVENT_PATH"` on
+   pull requests. A spec implementation PR fails if its row is absent, not
+   `in_review`, missing the current PR number, or has an unmerged hard dependency.
 
 ## Current priority
 
@@ -38,7 +46,7 @@ those file lists into a second place.
 
 ## Registry
 
-| Spec | Status | PR | Name | Depends on | Description |
+| Spec | Status | Implementation PR | Name | Depends on | Description |
 | --- | --- | --- | --- | --- | --- |
 | 001 | merged | [#4](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/4) | Parameter/Assumption schema freeze + Requirement record | — | Freeze engineering-record units, provenance, uncertainty fields, and requirement CRUD with additive migration behavior. |
 | 002 | merged | [#7](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/7) | Local route smoke matrix + routing eval set | 001 | Add repeatable local-route measurements and an offline routing evaluation set without making live model calls in CI. |
@@ -59,7 +67,7 @@ those file lists into a second place.
 | 018 | merged | [#33](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/33), [#43](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/43) | PROVIDER-GW-2 | 015 | Complete provider-cap/fallback enforcement and correct provider usage accounting while preserving explicit routing and audit controls. |
 | 019 | merged | [#40](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/40), [#41](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/41), [#44](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/44) | Senior review hardening | 017 | Harden streaming, reasoning budgets, verdict parsing, stale-script behavior, retry limits, and review diagnostics. |
 | 020 | ready | — | Pipeline doctor | 017, 019 | Add a deterministic watchdog for silent review-pipeline failures, stale branches, missing labels/comments, and stalled fix requests. |
-| 021 | in_review | [#66](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/66) | ALPHA-GATE | 038, 044 for the full pipeline; current hardening slice is independently reviewable | Enforce a deterministic server-owned gate before side-effectful BLUECAD execution and reject request-payload self-authorization. |
+| 021 | in_review | [#66](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/66) | ALPHA-GATE hardening | — | Track the independent server-owned execution-gate hardening in PR #66. The later full executable pipeline gate still depends on 038 and 044 and must be tracked separately before dispatch. |
 | 022 | merged | [#49](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/49) | Codex PR autopush without automerge | 017, 019 | Add a bounded actuator for pushing materialized fixes to an existing PR branch while forbidding merge, protected-branch pushes, force-push, and secret/workflow changes. |
 | 024 | ready | — | FEM verification battery | 008, 009 | Build an analytic benchmark ladder that checks mesh/FEM results against known mechanics solutions and convergence expectations. |
 | 038 | in_review | [#65](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/65) | SIM-WIRE | 044 | Wire the existing mesh and static-FEM adapters into the BLUECAD attempt loop as an opt-in advisory stage with evidence records and no auto-promotion. |
@@ -70,7 +78,7 @@ those file lists into a second place.
 | 044 | merged | [#62](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/62) | EVIDENCE-BRIDGE-1 | 042 | Add typed validation/mesh/FEM evidence records and deterministic bounded evidence lines for context packs. |
 | 045 | planned | — | Runner hardening boundary | 043 | Define the next isolation/hardening step and prevent the policy-guarded runner from being misrepresented as an OS-level hostile-code sandbox. |
 | 056 | ready | — | BLUECAD property-based geometry testing + determinism canary | 005 | Add generated valid GeometrySpec coverage and a checked-in manifest-digest canary without invoking live CAD/solver tools in normal CI. |
-| 057 | cancelled | [#64](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/64) | SPEC-LEDGER-0 | — | Cancelled: a generated ledger script and parallel handoff file are unnecessary; this manually maintained canonical registry solves the immediate problem with less infrastructure. |
+| 057 | cancelled | — | SPEC-LEDGER-0 | — | Cancelled after [planning PR #64](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/64): a generated ledger script and parallel handoff file are unnecessary while this canonical registry is sufficient. |
 
 ## Notes requiring later reconciliation
 
@@ -79,4 +87,5 @@ those file lists into a second place.
 - Historical individual spec `Status:` lines may still use the old vocabulary.
   They should not be used for dispatch decisions and do not need a bulk cleanup.
 - If a row conflicts with merged code or GitHub PR state, correct this file in the
-  smallest possible follow-up and record the evidence in the PR column.
+  smallest possible follow-up and record the evidence in the implementation PR
+  column or description according to the column contract above.
