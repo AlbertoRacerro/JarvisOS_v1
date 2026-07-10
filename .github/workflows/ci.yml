@@ -63,7 +63,7 @@ jobs:
 
       - name: Ruff
         working-directory: backend
-        run: python -m ruff check app tests
+        run: python -m ruff check app tests ../scripts/check_spec_status.py
 
       - name: Pytest
         working-directory: backend
