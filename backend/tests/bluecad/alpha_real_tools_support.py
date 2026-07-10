@@ -9,7 +9,10 @@ from app.modules.ai.execution import ProviderBinding
 from app.modules.bluecad.export import sha256_file
 
 
-def analysis_spec() -> dict[str, Any]:
+def analysis_spec(*, element_order: int | None = None) -> dict[str, Any]:
+    mesh: dict[str, Any] = {"target_size": 25.0}
+    if element_order is not None:
+        mesh["element_order"] = element_order
     return {
         "schema_version": "bluecad_analysis_spec_v0_1",
         "analysis_id": "alpha-real-tools",
@@ -17,7 +20,7 @@ def analysis_spec() -> dict[str, Any]:
         "material": {"name": "steel", "E": 200000.0, "nu": 0.3, "rho": 7.8e-9, "yield_strength": 250.0},
         "bcs": [{"port_label": "tube1.port_a", "kind": "fixed"}],
         "loads": [{"port_label": "tube1.port_b", "type": "force_total", "force": [100.0, 0.0, 0.0]}],
-        "mesh": {"target_size": 25.0},
+        "mesh": mesh,
         "pass_criteria": [
             {"metric": "max_displacement", "op": "<=", "value": 100.0},
             {"metric": "max_von_mises", "op": "<=", "value": 1_000_000.0},
@@ -70,7 +73,7 @@ def _simulation_reports(artifacts: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def assert_full_chain(candidate: Any) -> Path:
+def assert_full_chain(candidate: Any, *, expected_volume_element_type: str | None = None) -> Path:
     assert candidate.status == "valid"
     assert len(candidate.attempts) == 1
     attempt = candidate.attempts[0]
@@ -123,6 +126,9 @@ def assert_full_chain(candidate: Any) -> Path:
     counts = mesh["attempts"][0]["counts"]
     assert counts["nodes_total"] > 0 and counts["elements_total"] > 0
     assert all(count > 0 for count in counts["physical_groups"].values())
+    if expected_volume_element_type is not None:
+        assert set(counts["volume_element_types"]) == {expected_volume_element_type}
+        assert counts["volume_element_types"][expected_volume_element_type] == counts["elements_total"]
     assert fem["solver"]["returncode"] == 0
     assert not str(fem["solver"]["version"]).lower().startswith("fake")
     for metric in ("max_displacement", "max_von_mises"):

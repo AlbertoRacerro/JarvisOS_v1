@@ -211,8 +211,16 @@ class _AnalysisMesh(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     target_size: float = Field(gt=0)
+    element_order: Literal[1, 2] = 1
     refinements: dict[str, float] | None = None
     quality: _AnalysisMeshQuality | None = None
+
+    @field_validator("element_order", mode="before")
+    @classmethod
+    def _validate_element_order(cls, value: Any) -> int:
+        if type(value) is not int or value not in (1, 2):
+            raise ValueError("mesh.element_order must be integer 1 or 2")
+        return value
 
     @model_validator(mode="after")
     def _validate_refinements(self) -> _AnalysisMesh:

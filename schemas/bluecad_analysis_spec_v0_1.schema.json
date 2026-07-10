@@ -77,7 +77,7 @@
           "exclusiveMinimum": 0
         }
       },
-      "description": "Static v0 material. Units are BLUECAD mm/kg/s with force in N and stress in MPa; no adapter unit conversion is performed."
+      "description": "Static v0 material. Units are BLUECAD N-mm-s with mass in tonne, density in tonne/mm^3, and stress in MPa; no adapter unit conversion is performed."
     },
     "bcs": {
       "type": "array",
@@ -151,6 +151,15 @@
         "target_size": {
           "type": "number",
           "exclusiveMinimum": 0
+        },
+        "element_order": {
+          "type": "integer",
+          "enum": [
+            1,
+            2
+          ],
+          "default": 1,
+          "description": "Optional tetrahedral element order. Omission is equivalent to 1; order 2 must be verified from the generated mesh artifact rather than inferred from the request."
         },
         "refinements": {
           "type": "object",
