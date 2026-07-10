@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,8 @@ from app.modules.bluecad.models import BluecadError, BuiltPart
 from app.modules.bluecad.spec import canonical_json, canonicalize_geometry_spec
 
 ARTIFACT_NAMES = ("model.step", "model.stl", "model.glb")
+_CANONICAL_STEP_TIMESTAMP = "1970-01-01T00:00:00"
+_STEP_FILE_NAME_TIMESTAMP_RE = re.compile(r"(FILE_NAME\('[^']*',)'[^']*'")
 
 
 def build_artifacts(spec_payload: dict[str, Any], out_dir: str | Path) -> dict[str, Any]:
@@ -38,13 +41,31 @@ def _export_shapes(parts: dict[str, BuiltPart], out_dir: Path) -> None:
         raise BluecadError("KERNEL_ERROR", {"message": "build123d is not installed"}) from exc
     shapes = [part.shape for part in parts.values()]
     shape = shapes[0] if len(shapes) == 1 else bd.Compound(children=shapes)
-    bd.export_step(shape, out_dir / "model.step")
+    step_path = out_dir / "model.step"
+    bd.export_step(shape, step_path)
+    _normalize_step_header_timestamp(step_path)
     bd.export_stl(shape, out_dir / "model.stl")
     bd.export_gltf(shape, out_dir / "model.glb", binary=True, linear_deflection=0.001, angular_deflection=0.1)
     for name in ARTIFACT_NAMES:
         path = out_dir / name
         if not path.exists() or path.stat().st_size <= 0:
             raise BluecadError("EXPORT_ERROR", {"artifact": name, "message": "artifact was not written"})
+
+
+def _normalize_step_header_timestamp(path: Path) -> None:
+    """Remove OCCT wall-clock drift without changing STEP geometry data."""
+    text = path.read_text(encoding="utf-8")
+    normalized, count = _STEP_FILE_NAME_TIMESTAMP_RE.subn(
+        lambda match: f"{match.group(1)}'{_CANONICAL_STEP_TIMESTAMP}'",
+        text,
+        count=1,
+    )
+    if count != 1:
+        raise BluecadError(
+            "EXPORT_ERROR",
+            {"artifact": path.name, "message": "STEP FILE_NAME timestamp header was not found exactly once"},
+        )
+    path.write_text(normalized, encoding="utf-8")
 
 
 def _manifest(spec: dict[str, Any], parts: dict[str, BuiltPart], out_dir: Path) -> dict[str, Any]:
