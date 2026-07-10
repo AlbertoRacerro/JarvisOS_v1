@@ -10,6 +10,7 @@ in MPa; no unit conversion is performed here.
 from __future__ import annotations
 
 import math
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -41,10 +42,11 @@ def solve_static_analysis(
     log_path = out_path / "analysis.log"
     try:
         tool = resolve_tool("calculix", registry_path)
-        mesh_path = Path(mesh_result["artifacts"]["mesh_inp"]["path"])
+        mesh_path = Path(mesh_result["artifacts"]["mesh_inp"]["path"]).resolve()
         mesh = _parse_mesh(mesh_path.read_text(encoding="utf-8"))
+        mesh_include = Path(os.path.relpath(mesh_path, out_path.resolve()))
         inp_path = out_path / "analysis.inp"
-        inp_path.write_text(_deck_text(analysis_spec, mesh_path, mesh), encoding="utf-8")
+        inp_path.write_text(_deck_text(analysis_spec, mesh_include, mesh), encoding="utf-8")
         artifacts.update(_artifact_map({"inp": inp_path}))
         run = run_tool(
             "calculix",
@@ -223,9 +225,6 @@ def _parse_mesh(text: str) -> dict[str, Any]:
         elif section == "elset" and active_set:
             element_sets[active_set].update(values)
 
-    # Existing synthetic fixtures represent surface groups as inline S3 elements.
-    # Convert those to node sets so the public force_total/BC contract matches the
-    # real Gmsh output, which writes physical surface NSET blocks.
     for set_name, element_ids in element_sets.items():
         if set_name.startswith(("BC_", "LOAD_")) and set_name not in node_sets:
             member_nodes: set[int] = set()
@@ -254,8 +253,6 @@ def _parse_outputs(frd_path: Path, dat_path: Path, mesh: dict[str, Any]) -> dict
     text = frd_path.read_text(encoding="utf-8", errors="replace")
     displacement, stress = _parse_native_frd(text)
     if not displacement or not stress:
-        # Backward-compatible clean-room synthetic format retained for focused
-        # error tests; strict proof rejects fake tool version pins separately.
         displacement, stress = _parse_legacy_frd(text)
     if not displacement or not stress:
         raise ValueError("frd missing displacement or stress records")
@@ -280,11 +277,7 @@ def _parse_outputs(frd_path: Path, dat_path: Path, mesh: dict[str, Any]) -> dict
 
 
 def _parse_native_frd(text: str) -> tuple[dict[int, list[float]], dict[int, list[float]]]:
-    """Parse CalculiX fixed-width nodal DISP/STRESS result blocks.
-
-    This is a narrow clean-room reader for the public FRD block structure. It
-    deliberately ignores mesh blocks and keeps the last result block of each kind.
-    """
+    """Parse CalculiX fixed-width nodal DISP/STRESS result blocks."""
     lines = text.splitlines()
     displacement: dict[int, list[float]] = {}
     stress: dict[int, list[float]] = {}
@@ -349,8 +342,6 @@ def _parse_frd_value_tail(tail: str) -> list[float]:
     values: list[float] = []
     if not tail:
         return values
-    # Native FRD values occupy fixed 12-character fields and may touch without
-    # whitespace, e.g. ``-7.97E+10-3.75E-01``.
     padded = tail.rstrip()
     for offset in range(0, len(padded), 12):
         field = padded[offset : offset + 12].strip()
@@ -377,7 +368,6 @@ def _parse_legacy_frd(text: str) -> tuple[dict[int, list[float]], dict[int, list
         if tag == "DISP" and len(parts) == 5:
             displacement[int(parts[1])] = [float(value) for value in parts[2:5]]
         elif tag == "STRESS" and len(parts) >= 4:
-            # Historical fake format carried a precomputed von-Mises scalar.
             stress[int(parts[2])] = [float(parts[3]), 0.0, 0.0, 0.0, 0.0, 0.0]
     return displacement, stress
 
