@@ -20,6 +20,15 @@ jobs:
             backend/requirements.txt
             backend/requirements-dev.txt
 
+      - name: Spec status registry gate
+        run: |
+          python scripts/check_spec_status.py --self-test
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            python scripts/check_spec_status.py --event "$GITHUB_EVENT_PATH"
+          else
+            python scripts/check_spec_status.py
+          fi
+
       - name: Install dependencies
         working-directory: backend
         run: |
