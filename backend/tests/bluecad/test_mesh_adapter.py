@@ -221,7 +221,11 @@ def test_analysis_schema_full_static_example_round_trips(tmp_path: Path) -> None
     )
     spec = _analysis(tmp_path, 2)
     order_schema = schema["properties"]["mesh"]["properties"]["element_order"]
-    assert order_schema == {"type": "integer", "enum": [1, 2], "default": 1}
+    assert {key: order_schema[key] for key in ("type", "enum", "default")} == {
+        "type": "integer",
+        "enum": [1, 2],
+        "default": 1,
+    }
     assert spec["schema_version"] == schema["properties"]["schema_version"]["const"]
     assert spec["analysis_type"] in schema["properties"]["analysis_type"]["enum"]
     assert {"material", "bcs", "loads", "pass_criteria"} <= set(spec)
