@@ -19,11 +19,20 @@ legacy `Status:` lines inside those files are not authoritative.
    writing anything** — specs are written from docs-level knowledge and may be
    slightly stale. If reality conflicts with the spec, stop and report.
 5. Implement within scope. Non-goals are binding.
-6. Run the test gate in `AGENTS.md`.
-7. Open one PR, set the registry row to `in_review`, add the PR number, and note
-   deviations or discoveries in the PR summary or an `## Implementation notes`
-   section in the spec when needed.
-8. The merge owner changes the registry row to `merged` immediately after merge.
+6. Run the test gate in `AGENTS.md` and
+   `python scripts/check_spec_status.py --self-test`.
+7. Open one PR, declare `**Spec gate:** implementation NNN` in the PR body, set
+   the registry row to `in_review`, and add the implementation PR number. CI
+   checks that the row exists, the status/PR match, and all hard dependencies
+   are `merged`.
+8. Note deviations or discoveries in the PR summary or an
+   `## Implementation notes` section in the spec when needed.
+9. The merge owner changes the registry row to `merged` immediately after merge.
+
+A PR that only creates or revises a spec declares
+`**Spec gate:** definition NNN`; the row stays `planned`, `blocked`, or `ready`
+and its implementation PR column remains `—`. Unnumbered infrastructure or
+process work declares `**Spec gate:** N/A`.
 
 Review is human-controlled and supported by automated review. A spec is merged
 only when its implementation PR is incorporated into `master`; model verdicts or
