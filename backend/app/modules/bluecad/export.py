@@ -25,7 +25,7 @@ def build_artifacts(spec_payload: dict[str, Any], out_dir: str | Path) -> dict[s
         if isinstance(exc, BluecadError):
             raise
         raise BluecadError("EXPORT_ERROR", {"message": str(exc)}) from exc
-    manifest = _manifest(spec, parts)
+    manifest = _manifest(spec, parts, out_path)
     manifest_path = out_path / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return manifest
@@ -47,13 +47,12 @@ def _export_shapes(parts: dict[str, BuiltPart], out_dir: Path) -> None:
             raise BluecadError("EXPORT_ERROR", {"artifact": name, "message": "artifact was not written"})
 
 
-def _manifest(spec: dict[str, Any], parts: dict[str, BuiltPart]) -> dict[str, Any]:
+def _manifest(spec: dict[str, Any], parts: dict[str, BuiltPart], out_dir: Path) -> dict[str, Any]:
     """Return the canonical geometry manifest.
 
-    Runtime duration and exported-binary hashes are deliberately excluded. STEP and
-    GLB serializers may embed operational metadata, while the canonical manifest is
-    the stable semantic identity used by the alpha proof and determinism canary.
-    File integrity remains recorded by the artifact ledger when files are registered.
+    Runtime duration is excluded. Exported-file hashes remain part of the public
+    manifest integrity contract and are expected to be deterministic for an
+    equivalent build under one pinned kernel/tool environment.
     """
     total_bbox = _total_bbox(parts)
     payload: dict[str, Any] = {
@@ -73,7 +72,10 @@ def _manifest(spec: dict[str, Any], parts: dict[str, BuiltPart]) -> dict[str, An
             },
             "kernel_checks": _kernel_checks(parts),
         },
-        "artifacts": {name: {"role": name.removeprefix("model.")} for name in ARTIFACT_NAMES},
+        "artifacts": {
+            name: {"sha256": sha256_file(out_dir / name), "bytes": (out_dir / name).stat().st_size}
+            for name in ARTIFACT_NAMES
+        },
     }
     payload["manifest_digest"] = hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
     return payload
