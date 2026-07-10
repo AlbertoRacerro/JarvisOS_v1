@@ -121,6 +121,15 @@ def _simulation_run_payloads() -> list[dict[str, Any]]:
     return [json.loads(row["parameter_payload"]) for row in rows]
 
 
+def _artifact_json(artifact_id: str) -> dict[str, Any]:
+    from app.core.database import open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        row = connection.execute("SELECT stored_path FROM artifacts WHERE id = ?", (artifact_id,)).fetchone()
+    assert row is not None
+    return json.loads(Path(row["stored_path"]).read_text(encoding="utf-8"))
+
+
 def test_analysis_spec_rejects_malformed_nested_blocks() -> None:
     for key in ["material", "mesh"]:
         malformed = _analysis_spec()
@@ -146,6 +155,29 @@ def test_analysis_spec_rejects_malformed_load_payloads() -> None:
     missing_force_total["loads"] = [{"port_label": "run1.port_b", "type": "force_total"}]
     with pytest.raises(ValidationError):
         BluecadLoopConfig(analysis_spec=missing_force_total)
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("material", "E"), "200000.0"),
+        (("material", "nu"), "0.3"),
+        (("material", "rho"), "7.8e-9"),
+        (("material", "yield_strength"), "250.0"),
+        (("mesh", "target_size"), "5.0"),
+        (("loads", 0, "force", 0), "1.0"),
+        (("pass_criteria", 0, "value"), "300.0"),
+        (("timeout_s",), "30.0"),
+    ],
+)
+def test_analysis_spec_rejects_string_numeric_values(path: tuple[str | int, ...], value: str) -> None:
+    malformed = _analysis_spec()
+    target: Any = malformed
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+    with pytest.raises(ValidationError):
+        BluecadLoopConfig(analysis_spec=malformed)
 
 
 def test_analysis_spec_rejects_caller_supplied_geometry() -> None:
@@ -243,6 +275,11 @@ def test_analysis_spec_success_records_artifact_links_and_deterministic_metrics(
     assert len(run_payloads) == 1
     assert run_payloads[0]["geometry"]["step_path"].endswith("model.step")
     assert run_payloads[0]["geometry"]["manifest_path"].endswith("manifest.json")
+    fem_artifact = _artifact_json(rows[1]["report_artifact_id"])
+    fem_report = fem_artifact["report"]
+    assert "schema_version" in fem_report
+    assert any(check["tier"] == 0 for check in fem_report["checks"])
+    assert any(check["tier"] == 3 for check in fem_report["checks"])
     first_metrics = [(row["kind"], row["metrics_json"]) for row in rows]
 
     second = create_bluecad_candidate(

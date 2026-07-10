@@ -142,7 +142,7 @@ ValidationVerdict = Literal["pass", "fail"]
 
 
 class _AnalysisMaterial(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     name: str
     E: float = Field(gt=0)
@@ -152,14 +152,14 @@ class _AnalysisMaterial(BaseModel):
 
 
 class _AnalysisBoundaryCondition(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     port_label: str = Field(min_length=1)
     kind: Literal["fixed"]
 
 
 class _AnalysisLoad(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     port_label: str = Field(min_length=1)
     type: Literal["pressure", "force_total"]
@@ -177,13 +177,13 @@ class _AnalysisLoad(BaseModel):
 
 
 class _AnalysisMeshQuality(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     min_element_quality: float | None = Field(default=None, ge=0)
 
 
 class _AnalysisMesh(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     target_size: float = Field(gt=0)
     refinements: dict[str, float] | None = None
@@ -197,7 +197,7 @@ class _AnalysisMesh(BaseModel):
 
 
 class _AnalysisPassCriterion(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     metric: Literal["max_displacement", "max_von_mises"]
     op: Literal["<=", "<", ">=", ">", "=="]
@@ -205,7 +205,7 @@ class _AnalysisPassCriterion(BaseModel):
 
 
 class _AnalysisSpecWithoutGeometry(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     schema_version: Literal["bluecad_analysis_spec_v0_1"]
     analysis_id: str = Field(min_length=1)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -193,7 +194,7 @@ def _run_simulation_stage(
     fem_report = None
     if fem_summary.get("verdict") == "pass" and analysis_spec.get("pass_criteria"):
         try:
-            fem_report = append_tier3_checks({"verdict": "pass", "checks": [], "errors": []}, fem_summary, analysis_spec["pass_criteria"])
+            fem_report = append_tier3_checks(deepcopy(build["report"]), fem_summary, analysis_spec["pass_criteria"])
         except Exception as exc:  # noqa: BLE001 - Tier 3 failures are advisory evidence only.
             fem_report = {"verdict": "error", "checks": [], "errors": [{"code": "TIER3_ERROR", "detail": {"message": str(exc), "type": type(exc).__name__}}]}
     fem_payload = {"result_summary": fem_summary, "report": fem_report}
