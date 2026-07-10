@@ -501,3 +501,34 @@ models do most of the work" is superseded by this record. This ADR does not
 change execution invariants: external calls remain gated by explicit user
 confirmation and deterministic policy (`route_class="auto"` still never
 executes external providers), and safe defaults remain safe.
+
+## ADR-058: Digital twin is a rendering consumer of the data spine
+
+Status: Accepted
+
+JarvisOS may grow a richer 3D "digital twin" surface (up to a walkable
+first-person scene of a Mark-1 design). This ADR fixes the data contract now so
+that specs 047–055 produce twin-compatible data by construction, while the twin
+itself stays a later, optional rendering layer.
+
+Binding rules:
+
+1. The twin renders the GLB artifacts the BLUECAD pipeline already produces
+   (spec 006 viewer path). No second geometry format or export pipeline.
+2. Every selectable node in a twin scene carries the normalized record
+   reference `<kind>:<id>` — the same resolver that spec 050 owns. New writers
+   introduced by 047–049 emit these references; legacy provenance forms are
+   normalized at read time by 050, never migrated retroactively for the twin.
+3. Overlays (FEM colormaps, process KPIs, residence time, cost contribution)
+   bind to records by those references. The twin stores no engineering values
+   of its own; MemoryStore and the artifact store remain the single source of
+   truth, and a stale upstream record (spec 051) renders as visibly stale.
+4. Accepted records render by default; proposals may render only when
+   explicitly labeled as proposals. Promote/reject stays in the proposal-review
+   surface (spec 054); the twin has no promotion authority.
+5. AI changes the twin only by proposing record or GeometrySpec changes through
+   the existing gated paths. There is no direct scene-mutation channel.
+
+This ADR adds no runtime, no route, no dependency, and no spec. Walkable
+rendering is a future extension of specs 006/055 (report-to-3D linking is
+already 058c) and remains trigger-gated on 047 producing real process data.
