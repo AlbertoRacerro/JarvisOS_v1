@@ -51,7 +51,7 @@ def _spec() -> dict:
     return {"schema_version": "bluecad_analysis_spec_v0_1", "analysis_id": "a1", "analysis_type": "static", "geometry": {"step_path": "model.step", "manifest_path": "manifest.json"}, "material": {"name": "steel", "E": 200000.0, "nu": 0.3, "rho": 7.8e-9, "yield_strength": 250.0}, "bcs": [{"port_label": "run1.port_a", "kind": "fixed"}], "loads": [{"port_label": "joint1.port_b", "type": "force_total", "force": [30.0, 0.0, 0.0]}], "mesh": {"target_size": 5.0}, "pass_criteria": [{"metric": "max_von_mises", "op": "<=", "value": 300.0}]}
 
 
-def test_happy_path_result_summary_and_stable_deck(tmp_path: Path) -> None:
+def test_happy_path_result_summary_and_native_frd_parser(tmp_path: Path) -> None:
     result = solve_static_analysis(_spec(), _mesh(tmp_path), tmp_path / "solve", registry_path=_registry(tmp_path))
     assert result["verdict"] == "pass"
     assert result["max_displacement"] == {"node_id": 2, "value": 5.0}
@@ -60,7 +60,8 @@ def test_happy_path_result_summary_and_stable_deck(tmp_path: Path) -> None:
     assert {"inp", "frd", "dat", "log"} <= set(result["artifacts"])
     deck = (tmp_path / "solve" / "analysis.inp").read_text(encoding="utf-8")
     assert "*MATERIAL, NAME=steel" in deck
-    assert "BC_run1_port_a, 1, 6, 0" in deck
+    assert "*SOLID SECTION, ELSET=BODY, MATERIAL=steel" in deck
+    assert "BC_run1_port_a, 1, 3, 0" in deck
     assert "2, 1, 10" in deck and "3, 1, 10" in deck and "4, 1, 10" in deck
     assert "LOAD_joint1_port_b" not in deck.split("*STEP", 1)[0]
 
