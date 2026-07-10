@@ -30,6 +30,12 @@ where authority and data live, not which models do the work.
    something, stop and report it. An undisclosed placeholder or simplification
    that makes checks pass is treated as a violation of this file, not as
    progress.
+10. **Prefer the smallest sufficient change.** Before proposing or implementing a new
+    subsystem, automation, parallel source of truth, refactor, or optimization,
+    inspect the mechanisms that already exist and state whether a smaller change —
+    or no new work — solves the actual need. Do not build or optimize infrastructure
+    that is likely to be removed or replaced soon. Broader work requires a concrete,
+    demonstrated gap and explicit maintainer confirmation.
 
 If a spec appears to require violating one of these, stop and report instead of
 implementing.
