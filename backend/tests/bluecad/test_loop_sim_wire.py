@@ -121,6 +121,16 @@ def _simulation_run_payloads() -> list[dict[str, Any]]:
     return [json.loads(row["parameter_payload"]) for row in rows]
 
 
+def _simulation_runs() -> list[dict[str, Any]]:
+    from app.core.database import open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        rows = connection.execute(
+            "SELECT status, output_payload, started_at, completed_at FROM simulation_runs ORDER BY created_at, id"
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def _artifact_json(artifact_id: str) -> dict[str, Any]:
     from app.core.database import open_sqlite_connection
 
@@ -235,6 +245,35 @@ def test_analysis_spec_mesh_fail_records_evidence_without_solve(monkeypatch: pyt
     assert [(row["kind"], row["verdict"]) for row in rows] == [("validation_v0", "pass"), ("mesh_quality_v0", "fail")]
     assert rows[1]["candidate_id"] == candidate.id
     assert rows[1]["attempt_id"] == candidate.attempts[0].id
+    sim_runs = _simulation_runs()
+    assert len(sim_runs) == 1
+    assert sim_runs[0]["status"] == "completed"
+    assert sim_runs[0]["started_at"] is not None
+    assert sim_runs[0]["completed_at"] is not None
+    assert json.loads(sim_runs[0]["output_payload"]) == {"status": "completed", "mesh_verdict": "fail", "fem_verdict": None}
+
+
+@requires_kernel
+def test_simulation_run_is_running_while_mesh_executes(monkeypatch: pytest.MonkeyPatch) -> None:
+    _init()
+
+    def mesh(*_args: object, **_kwargs: object) -> dict[str, Any]:
+        sim_runs = _simulation_runs()
+        assert len(sim_runs) == 1
+        assert sim_runs[0]["status"] == "running"
+        assert sim_runs[0]["started_at"] is not None
+        assert sim_runs[0]["completed_at"] is None
+        assert sim_runs[0]["output_payload"] is None
+        return _mesh_fail()
+
+    monkeypatch.setattr("app.modules.bluecad.loop.mesh_analysis_spec", mesh)
+    create_bluecad_candidate(
+        "bluerev",
+        BluecadCandidateCreate(brief_text="single tube", loop_config=BluecadLoopConfig(analysis_spec=_analysis_spec())),
+        adapters={"scaleway": ScriptedFakeBluecadAdapter([_spec()])},
+        bindings=_bindings(),
+        force_external_allowed=True,
+    )
 
 
 @requires_kernel
@@ -252,6 +291,39 @@ def test_analysis_spec_mesh_pass_solve_error_records_both(monkeypatch: pytest.Mo
     assert candidate.status == "valid"
     rows = _evidence()
     assert [(row["kind"], row["verdict"]) for row in rows] == [("validation_v0", "pass"), ("mesh_quality_v0", "pass"), ("fem_static_v0", "error")]
+    sim_runs = _simulation_runs()
+    assert len(sim_runs) == 1
+    assert sim_runs[0]["status"] == "completed"
+    assert json.loads(sim_runs[0]["output_payload"]) == {"status": "completed", "mesh_verdict": "pass", "fem_verdict": "error"}
+
+
+@requires_kernel
+def test_simulation_evidence_persistence_failure_marks_run_failed_without_crashing(monkeypatch: pytest.MonkeyPatch) -> None:
+    _init()
+    monkeypatch.setattr("app.modules.bluecad.loop.mesh_analysis_spec", lambda *_args, **_kwargs: _mesh_fail())
+
+    def fail_record(*_args: object, **_kwargs: object) -> str:
+        raise RuntimeError("evidence store unavailable")
+
+    monkeypatch.setattr("app.modules.bluecad.loop.record_mesh_quality_evidence", fail_record)
+    candidate = create_bluecad_candidate(
+        "bluerev",
+        BluecadCandidateCreate(brief_text="single tube", loop_config=BluecadLoopConfig(analysis_spec=_analysis_spec())),
+        adapters={"scaleway": ScriptedFakeBluecadAdapter([_spec()])},
+        bindings=_bindings(),
+        force_external_allowed=True,
+    )
+    assert candidate.status == "valid"
+    sim_runs = _simulation_runs()
+    assert len(sim_runs) == 1
+    assert sim_runs[0]["status"] == "failed"
+    assert sim_runs[0]["completed_at"] is not None
+    assert json.loads(sim_runs[0]["output_payload"]) == {
+        "status": "failed",
+        "error": {"code": "mesh_evidence_persistence_failed"},
+        "mesh_verdict": None,
+        "fem_verdict": None,
+    }
 
 
 @requires_kernel

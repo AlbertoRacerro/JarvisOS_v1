@@ -184,8 +184,10 @@ def _run_simulation_stage(
         )
         _link_sim_evidence_context(mesh_evidence_id, candidate_id, attempt_id)
     except Exception:
+        _best_effort_fail_simulation_run(source_run_id, "mesh_evidence_persistence_failed")
         return
     if mesh_result.get("verdict") != "pass" or "mesh_inp" not in mesh_result.get("artifacts", {}):
+        _complete_simulation_run(source_run_id, mesh_result, None)
         return
     try:
         fem_summary = solve_static_analysis(analysis_spec, mesh_result, out_dir / "fem")
@@ -209,7 +211,9 @@ def _run_simulation_stage(
         )
         _link_sim_evidence_context(fem_evidence_id, candidate_id, attempt_id)
     except Exception:
+        _best_effort_fail_simulation_run(source_run_id, "fem_evidence_persistence_failed")
         return
+    _complete_simulation_run(source_run_id, mesh_result, fem_summary)
 
 
 def _link_sim_evidence_context(record_id: str, candidate_id: str, attempt_id: str) -> None:
@@ -248,7 +252,7 @@ def _create_simulation_run(workspace_id: str, candidate_id: str, attempt_id: str
                 id, workspace_id, model_version_id, run_label, status,
                 input_payload, parameter_payload, output_payload, started_at,
                 completed_at, created_at, notes
-            ) VALUES (?, ?, NULL, ?, 'completed', ?, ?, NULL, ?, ?, ?, ?)
+            ) VALUES (?, ?, NULL, ?, 'running', ?, ?, NULL, ?, NULL, ?, ?)
             """,
             (
                 run_id,
@@ -258,12 +262,55 @@ def _create_simulation_run(workspace_id: str, candidate_id: str, attempt_id: str
                 json.dumps(analysis_spec, sort_keys=True),
                 now,
                 now,
-                now,
                 "BLUECAD advisory synchronous mesh/FEM stage.",
             ),
         )
         connection.commit()
     return run_id
+
+
+def _complete_simulation_run(source_run_id: str, mesh_result: dict[str, Any], fem_summary: dict[str, Any] | None) -> None:
+    try:
+        completed_at = utc_now()
+        output_payload = _simulation_run_output_payload(mesh_result, fem_summary)
+        with open_sqlite_connection() as connection:
+            connection.execute(
+                """
+                UPDATE simulation_runs
+                SET status = 'completed', output_payload = ?, completed_at = ?
+                WHERE id = ?
+                """,
+                (canonical_json(output_payload), completed_at, source_run_id),
+            )
+            connection.commit()
+    except Exception:
+        return
+
+
+def _best_effort_fail_simulation_run(source_run_id: str, error_code: str) -> None:
+    try:
+        completed_at = utc_now()
+        output_payload = {"status": "failed", "error": {"code": error_code}, "mesh_verdict": None, "fem_verdict": None}
+        with open_sqlite_connection() as connection:
+            connection.execute(
+                """
+                UPDATE simulation_runs
+                SET status = 'failed', output_payload = ?, completed_at = ?
+                WHERE id = ?
+                """,
+                (canonical_json(output_payload), completed_at, source_run_id),
+            )
+            connection.commit()
+    except Exception:
+        return
+
+
+def _simulation_run_output_payload(mesh_result: dict[str, Any], fem_summary: dict[str, Any] | None) -> dict[str, Any]:
+    return {
+        "status": "completed",
+        "mesh_verdict": mesh_result.get("verdict"),
+        "fem_verdict": fem_summary.get("verdict") if fem_summary is not None else None,
+    }
 
 
 def _mesh_error_result(exc: Exception, analysis_spec: dict[str, Any]) -> dict[str, Any]:
