@@ -19,6 +19,7 @@ from .common import (
     _current_migration_id,
     _foreign_key_check,
     _integrity_check,
+    _is_absolute_path_string,
     _is_same_or_descendant,
     _json_mentions_source_root,
     _open_regular_file_no_follow,
@@ -56,7 +57,11 @@ def _rebase_command_metadata(
             raise DataRootError("runner command_json.argv must be a string list")
         new_argv: list[str] = []
         for index, item in enumerate(argv):
-            if index > 0 and _relative_parts_under_root(item, source_root) is not None:
+            if index > 0 and _is_absolute_path_string(item):
+                if _relative_parts_under_root(item, source_root) is None:
+                    raise DataRootError(
+                        f"runner command path is outside the snapshot source root: {item}"
+                    )
                 new_argv.append(rebase_absolute_path(item, source_root, target_root))
             else:
                 new_argv.append(item)
@@ -316,7 +321,11 @@ def _verify_restored_database(
                         )
                     staged_path = staged_target_root.joinpath(*relative)
                     _assert_regular_not_symlink(staged_path, f"artifact {artifact_id}")
-                    if digest is not None and sha256_file(staged_path) != digest:
+                    if not isinstance(digest, str) or len(digest) != 64:
+                        raise DataRootError(
+                            f"artifact {artifact_id} has no valid stored SHA-256"
+                        )
+                    if sha256_file(staged_path) != digest:
                         raise DataRootError(
                             f"artifact {artifact_id} hash mismatch after restore"
                         )
