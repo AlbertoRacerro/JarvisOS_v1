@@ -35,6 +35,21 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
+      - name: Run affected offline regression tests
+        working-directory: backend
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m pytest -q \
+            tests/bluecad/test_registry.py \
+            tests/bluecad/test_mesh_adapter.py \
+            tests/bluecad/test_fem_adapter.py \
+            tests/bluecad/test_manifest_canonical.py \
+            tests/bluecad/test_alpha_real_tools.py \
+            tests/bluecad/test_loop_sim_wire.py \
+            tests/bluecad/test_adapter_stage2.py \
+            2>&1 | tee "$RUNNER_TEMP/bluecad-offline-regression.log"
+
       - name: Install distro-pinned Gmsh and CalculiX
         run: |
           sudo apt-get update
@@ -143,18 +158,24 @@ jobs:
 
       - name: Run strict full-chain proof
         working-directory: backend
+        shell: bash
         env:
           JARVISOS_BLUECAD_TOOL_REGISTRY: ${{ steps.registry.outputs.path }}
           JARVISOS_BLUECAD_PROOF_JSON: ${{ runner.temp }}/bluecad-alpha-proof.json
         run: |
+          set -o pipefail
           python -m pytest -q tests/bluecad/test_alpha_real_tools.py \
-            --require-bluecad-real-tools
+            --require-bluecad-real-tools \
+            2>&1 | tee "$RUNNER_TEMP/bluecad-alpha-proof.log"
 
-      - name: Upload bounded proof artifact
+      - name: Upload bounded proof artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: bluecad-alpha-real-tool-proof
-          path: ${{ runner.temp }}/bluecad-alpha-proof.json
+          path: |
+            ${{ runner.temp }}/bluecad-offline-regression.log
+            ${{ runner.temp }}/bluecad-alpha-proof.log
+            ${{ runner.temp }}/bluecad-alpha-proof.json
           if-no-files-found: warn
           retention-days: 14
