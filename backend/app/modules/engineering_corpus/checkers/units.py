@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from math import isfinite
-import re
 
 from pydantic import BaseModel
 
