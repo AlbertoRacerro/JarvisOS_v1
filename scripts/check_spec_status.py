@@ -204,10 +204,13 @@ def self_test() -> None:
             "| 005b | ready | — | Definition | 001 | later |",
         )
     )
-    event = lambda body, number=99, title="": {
-        "number": number,
-        "pull_request": {"body": body, "title": title},
-    }
+
+    def event(body, number=99, title=""):
+        return {
+            "number": number,
+            "pull_request": {"body": body, "title": title},
+        }
+
     assert check_event(rows, event("**Spec gate:** implementation 002")).endswith("OK")
     assert check_event(rows, event("**Spec gate:** definition 005b", 77)).endswith("OK")
     assert check_event(rows, event("**Spec gate:** N/A", 77)).endswith("OK")
