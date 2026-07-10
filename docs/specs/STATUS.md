@@ -45,17 +45,16 @@ before Codex or another coding agent may act on them.
 
 ## Current priority and drafting order
 
-1. Finish review and merge `021` (server-owned external-provider execution gate).
-2. Reconcile `021b` against merged `021`, `038`, and `044` before promoting it
-   from preserved planning evidence to an implementation-ready full spec.
-3. Implement the already-ready engineering quality slices `024` and `056`.
-4. Before serious BlueRev dogfood with real project IP or cloud providers, draft
+1. Implement `021b` as two sequential PRs: strict real-tool alpha proof, then
+   atomic backup/restore with relocation verification.
+2. Implement the already-ready engineering quality slices `024` and `056`.
+3. Before serious BlueRev dogfood with real project IP or cloud providers, draft
    and implement `059` (sensitivity, retrieval, and egress enforcement).
-5. Then draft in small dependency batches:
+4. Then draft in small dependency batches:
    `047` → `048` + `049` → `050` → `051` + `052` →
    `029` + `037` → `030` + `058` → `054` + `035` + `055` →
    `034` + `011` → `053`.
-6. Trigger-gated rows remain `planned` until their stated evidence exists; do not
+5. Trigger-gated rows remain `planned` until their stated evidence exists; do not
    start them merely because their number is lower.
 
 Always check rows marked `in_review` before choosing any `ready` spec, and confirm
@@ -88,8 +87,8 @@ that no open PR overlaps the target files or runtime boundary.
 | 018 | merged | [#33](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/33), [#43](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/43) | PROVIDER-GW-2 | 015 | Complete provider-cap/fallback enforcement and correct provider usage accounting while preserving explicit routing and audit controls. |
 | 019 | merged | [#40](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/40), [#41](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/41), [#44](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/44) | Senior review hardening | 017 | Harden streaming, reasoning budgets, verdict parsing, stale-script behavior, retry limits, and review diagnostics. |
 | 020 | ready | — | Pipeline doctor | 017, 019 | Add a deterministic watchdog for silent review-pipeline failures, stale branches, missing labels/comments, and stalled fix requests. |
-| 021 | in_review | [#70](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/70) | ALPHA-GATE hardening | — | Enforce the server-owned external-provider decision at the shared execution spine for every concrete network binding and fallback; PR #70 supersedes stale PR #66. |
-| 021b | planned | — | ALPHA-GATE completion: executable pipeline + proven backup/restore | 021, 038, 044 | Preserve and later reconcile the original real-tool pipeline proof and deterministic data-root backup/restore scope after 021 merges. |
+| 021 | merged | [#70](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/70) | ALPHA-GATE hardening | — | Enforce the server-owned external-provider decision at the shared execution spine for every concrete network binding and fallback; PR #70 supersedes stale PR #66. |
+| 021b | ready | — | ALPHA-GATE completion: real-tool proof + recoverable data root | 021, 038, 044 | Add strict hash-verified real-tool proof and atomic path-rebased data-root backup/restore as two separately reviewed implementation slices. |
 | 022 | merged | [#49](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/49) | Codex PR autopush without automerge | 017, 019 | Add a bounded actuator for pushing materialized fixes to an existing PR branch while forbidding merge, protected-branch pushes, force-push, and secret/workflow changes. |
 | 023 | planned | — | Adversarial proposal corpus | 010 | Add bounded hostile and degenerate model-output fixtures; the loop must reject or park them without crashes, unbounded work, provider calls, or authority bypass. |
 | 024 | ready | — | FEM verification battery | 008, 009 | Build an analytic benchmark ladder that checks mesh/FEM results against known mechanics solutions and convergence expectations. |
@@ -139,11 +138,10 @@ that no open PR overlaps the target files or runtime boundary.
 - Historical `057 = Workspace home`, `057b`, and `057c` references are
   superseded by `058`, `058b`, and `058c`; `057` remains the cancelled
   SPEC-LEDGER-0 and must not be reused.
-- PR #66 is superseded by the current spec `021` implementation PR #70.
-- The current `021` implementation covers the shared external-provider
-  execution boundary only. Remaining executable end-to-end alpha proof plus
-  backup/restore work is preserved as planned `021b` until a reconciled full
-  spec is approved.
+- PR #66 is superseded by merged spec `021` implementation PR #70.
+- Spec `021` owns the shared external-provider execution boundary. Remaining
+  strict real-tool proof and relocatable backup/restore are defined in ready spec
+  `021b` and must be implemented as two separate PRs.
 
 ## Notes requiring later reconciliation
 
