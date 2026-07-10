@@ -1,29 +1,23 @@
-name: Senior Review
-
-# Senior tier (GLM 5.2 via z.ai): the default automated pre-merge review.
-# Triggered when the cheap tier applies the `frontier-review` label (or the
-# maintainer applies it manually). Outcomes:
-#   - NEEDS_CHANGES  -> @codex fix loop continues
-#   - NO_FURTHER_CHANGES -> applies `ready-for-merge` for the maintainer
-#   - ESCALATE (rare) -> applies `expert-review`, which triggers the Claude
-#     expert review workflow
-# ADVISORY only: never merges. Merge authority is CI plus the human maintainer
-# (AGENTS.md "Review authority").
+name: Manual Senior Review
 
 on:
-  pull_request:
-    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Open pull request number to review"
+        required: true
+        type: string
 
 concurrency:
-  group: senior-review-${{ github.event.pull_request.number }}
+  group: manual-senior-review-${{ inputs.pr_number }}
   cancel-in-progress: true
 
 jobs:
   review:
-    if: ${{ github.event.label.name == 'frontier-review' && !github.event.pull_request.draft }}
+    # Dispatch from master only. This prevents a feature branch from changing the
+    # workflow and then receiving provider secrets.
+    if: ${{ github.ref == 'refs/heads/master' }}
     runs-on: ubuntu-latest
-    # GLM 5.2 can take several minutes on a large pack: 2 attempts x 480s
-    # HTTP timeout (REVIEW_HTTP_TIMEOUT) must fit inside the job timeout.
     timeout-minutes: 20
     permissions:
       contents: read
@@ -32,51 +26,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: refs/pull/${{ inputs.pr_number }}/head
           fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # Validates the PR's own version of the script offline: reviewer-tooling
-      # changes are exercised here, since the live call below is pinned.
-      - name: Self-test review helpers (PR version, offline)
-        run: python scripts/cheap_review.py --self-test
-
-      # The pull_request merge ref can be STALE on labeled events (computed at
-      # the PR's last push, not at label time), silently running an outdated
-      # review script — and an unpinned script would let any PR modify its own
-      # reviewer. The PR checkout stays for spec/AGENTS resolution; the live
-      # review always runs the master script (tooling changes go live on merge).
-      - name: Pin review script to master
+      # The PR checkout supplies its spec, AGENTS.md, and diff context. Executable
+      # reviewer code is always replaced with the trusted master copy before use.
+      - name: Pin manual reviewer to master
         run: |
           git fetch origin master
-          git checkout FETCH_HEAD -- scripts/cheap_review.py
+          git checkout FETCH_HEAD -- scripts/cheap_review.py scripts/manual_review.py
 
-      - name: Self-test review helpers (pinned version, offline)
-        run: python scripts/cheap_review.py --self-test
+      - name: Self-test trusted review helpers
+        run: |
+          python scripts/cheap_review.py --self-test
+          python scripts/manual_review.py --self-test
 
-      - name: Run senior review (GLM 5.2 via z.ai)
+      - name: Run manually requested senior review
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # PAT for label writes: labels added with the default GITHUB_TOKEN do
-          # not trigger other workflows, so the escalation to the expert tier
-          # needs this. Falls back to GITHUB_TOKEN with a visible note.
-          LABEL_TOKEN: ${{ secrets.REVIEW_BOT_TOKEN }}
+          REVIEW_PR_NUMBER: ${{ inputs.pr_number }}
           CHEAP_REVIEW_PROVIDER: glm
           CHEAP_REVIEW_BASE_URL: https://api.z.ai/api/paas/v4/chat/completions
           CHEAP_REVIEW_MODEL: glm-5.2
           CHEAP_REVIEW_API_KEY: ${{ secrets.GLM_API_KEY }}
           REVIEW_TIER: senior
-          REVIEW_TITLE: "Senior review"
-          FRONTIER_LABEL: frontier-review
-          EXPERT_LABEL: expert-review
-          READY_LABEL: ready-for-merge
-          ROUND_LIMIT: "3"
+          REVIEW_TITLE: "Manual senior review"
           CHEAP_REVIEW_DIFF_CAP: "60000"
           REVIEW_HTTP_TIMEOUT: "480"
-          # GLM 5.2 thinks for minutes on a full pack; non-streaming requests
-          # time out waiting for the complete body. Streaming keeps the
-          # connection alive (timeout applies per chunk, not per response).
           REVIEW_STREAM: "true"
-        run: python scripts/cheap_review.py
+        run: python scripts/manual_review.py
