@@ -35,20 +35,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Run affected offline regression tests
+      - name: Run offline regression suite
+        id: offline
         working-directory: backend
         shell: bash
         run: |
           set -o pipefail
-          python -m pytest -q \
-            tests/bluecad/test_registry.py \
-            tests/bluecad/test_mesh_adapter.py \
-            tests/bluecad/test_fem_adapter.py \
-            tests/bluecad/test_manifest_canonical.py \
-            tests/bluecad/test_alpha_real_tools.py \
-            tests/bluecad/test_loop_sim_wire.py \
-            tests/bluecad/test_adapter_stage2.py \
-            2>&1 | tee "$RUNNER_TEMP/bluecad-offline-regression.log"
+          set +e
+          python -m pytest -q 2>&1 | tee "$RUNNER_TEMP/bluecad-offline-regression.log"
+          status=${PIPESTATUS[0]}
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
 
       - name: Install distro-pinned Gmsh and CalculiX
         run: |
@@ -157,6 +154,7 @@ jobs:
         run: python -m app.modules.bluecad.registry check
 
       - name: Run strict full-chain proof
+        id: strict
         working-directory: backend
         shell: bash
         env:
@@ -164,9 +162,13 @@ jobs:
           JARVISOS_BLUECAD_PROOF_JSON: ${{ runner.temp }}/bluecad-alpha-proof.json
         run: |
           set -o pipefail
+          set +e
           python -m pytest -q tests/bluecad/test_alpha_real_tools.py \
             --require-bluecad-real-tools \
             2>&1 | tee "$RUNNER_TEMP/bluecad-alpha-proof.log"
+          status=${PIPESTATUS[0]}
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
 
       - name: Upload bounded proof artifacts
         if: always()
@@ -179,3 +181,10 @@ jobs:
             ${{ runner.temp }}/bluecad-alpha-proof.json
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Enforce offline and strict proof gates
+        if: always()
+        shell: bash
+        run: |
+          test "${{ steps.offline.outputs.status }}" = "0"
+          test "${{ steps.strict.outputs.status }}" = "0"
