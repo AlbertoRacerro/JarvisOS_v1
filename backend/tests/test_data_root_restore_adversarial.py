@@ -37,6 +37,55 @@ def test_restore_rejects_path_outside_source_root(tmp_path: Path) -> None:
     assert result.snapshot_dir.exists()
 
 
+def test_restore_rejects_absolute_runner_argv_outside_source_root(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    seed_data_root(source)
+    with sqlite3.connect(source / "jarvisos.db") as connection:
+        command = json.loads(
+            connection.execute("SELECT command_json FROM runner_jobs").fetchone()[0]
+        )
+        command["argv"].append(str(tmp_path / "outside-input.json"))
+        connection.execute(
+            "UPDATE runner_jobs SET command_json=?",
+            (json.dumps(command),),
+        )
+        connection.commit()
+    result = jdr.create_snapshot(
+        source_root=source,
+        destination=tmp_path / "snapshots",
+        snapshot_id="outside-argv",
+    )
+    target = tmp_path / "target"
+
+    with pytest.raises(jdr.DataRootError, match="outside"):
+        jdr.restore_snapshot(snapshot_dir=result.snapshot_dir, target_root=target)
+    assert not target.exists()
+    assert result.snapshot_dir.exists()
+
+
+def test_restore_rejects_registered_artifact_without_sha256(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    seed_data_root(source)
+    with sqlite3.connect(source / "jarvisos.db") as connection:
+        connection.execute("UPDATE artifacts SET sha256=NULL WHERE id='a1'")
+        connection.commit()
+    result = jdr.create_snapshot(
+        source_root=source,
+        destination=tmp_path / "snapshots",
+        snapshot_id="missing-artifact-sha",
+    )
+    target = tmp_path / "target"
+
+    with pytest.raises(jdr.DataRootError, match="SHA-256"):
+        jdr.restore_snapshot(snapshot_dir=result.snapshot_dir, target_root=target)
+    assert not target.exists()
+    assert result.snapshot_dir.exists()
+
+
 def test_restore_rejects_undocumented_old_root_occurrence(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()
