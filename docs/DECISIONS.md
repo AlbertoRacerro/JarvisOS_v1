@@ -501,3 +501,47 @@ models do most of the work" is superseded by this record. This ADR does not
 change execution invariants: external calls remain gated by explicit user
 confirmation and deterministic policy (`route_class="auto"` still never
 executes external providers), and safe defaults remain safe.
+
+## ADR-058: Digital twin is a rendering consumer of the data spine
+
+Status: Accepted (principles); scene-graph and binding mechanics deliberately deferred
+
+JarvisOS may grow a richer 3D "digital twin" surface (up to a walkable
+first-person scene of a Mark-1 design). This ADR freezes the architectural
+principles now so that the data spine and the future twin cannot diverge,
+while leaving unproven implementation choices to the owning specs.
+
+Accepted principles:
+
+1. Any twin surface is a view over the data spine. It introduces no second
+   store: engineering values live in records and artifacts, never in the
+   scene.
+2. GLB remains the canonical rendering format (the spec 006 viewer path). No
+   second geometry export pipeline.
+3. Scene identity and record identity are distinct. Every selectable scene
+   component must carry a deterministic, stable `scene_component_id`. A
+   binding manifest associates each component with zero or more normalized
+   record references `<kind>:<id>`, each with a typed relation (for example
+   `represents`, `decided_by`, `validated_by`, `costed_by`). One physical
+   component may bind to many records.
+4. Accepted records render by default; proposals render only when explicitly
+   labeled as proposals. Promotion authority stays in the proposal-review
+   surface (spec 054); the twin never promotes.
+5. AI changes the twin only by proposing record or GeometrySpec changes
+   through the existing gated paths. There is no direct scene-mutation
+   channel.
+
+Deliberately deferred to specs 050/052/055 and their follow-ups:
+
+- the exact scene-graph structure, including how the current single-Compound
+  GLB export (`backend/app/modules/bluecad/export.py`) evolves to expose
+  named, stable components;
+- binding transport: glTF `extras` versus a sidecar manifest;
+- the relation vocabulary and its cardinality rules;
+- FEM/process overlays and stale-state rendering (spec 051 signals).
+
+This ADR adds no runtime, no route, and no dependency. It does not constrain
+the 047–049 process writers, which stay unaware of GLB structure:
+geometry↔record binding is owned by spec 052, the `<kind>:<id>` resolver by
+spec 050, and view assembly by spec 055. Walkable rendering remains
+trigger-gated on 047 producing real process data.
