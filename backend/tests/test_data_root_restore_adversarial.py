@@ -7,9 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 import jarvisos_data_root as jdr
+import pytest
 from data_root_recovery_support import seed_data_root
 
 ROOT = Path(__file__).resolve().parents[2]
