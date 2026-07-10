@@ -504,31 +504,44 @@ executes external providers), and safe defaults remain safe.
 
 ## ADR-058: Digital twin is a rendering consumer of the data spine
 
-Status: Accepted
+Status: Accepted (principles); scene-graph and binding mechanics deliberately deferred
 
 JarvisOS may grow a richer 3D "digital twin" surface (up to a walkable
-first-person scene of a Mark-1 design). This ADR fixes the data contract now so
-that specs 047–055 produce twin-compatible data by construction, while the twin
-itself stays a later, optional rendering layer.
+first-person scene of a Mark-1 design). This ADR freezes the architectural
+principles now so that the data spine and the future twin cannot diverge,
+while leaving unproven implementation choices to the owning specs.
 
-Binding rules:
+Accepted principles:
 
-1. The twin renders the GLB artifacts the BLUECAD pipeline already produces
-   (spec 006 viewer path). No second geometry format or export pipeline.
-2. Every selectable node in a twin scene carries the normalized record
-   reference `<kind>:<id>` — the same resolver that spec 050 owns. New writers
-   introduced by 047–049 emit these references; legacy provenance forms are
-   normalized at read time by 050, never migrated retroactively for the twin.
-3. Overlays (FEM colormaps, process KPIs, residence time, cost contribution)
-   bind to records by those references. The twin stores no engineering values
-   of its own; MemoryStore and the artifact store remain the single source of
-   truth, and a stale upstream record (spec 051) renders as visibly stale.
-4. Accepted records render by default; proposals may render only when
-   explicitly labeled as proposals. Promote/reject stays in the proposal-review
-   surface (spec 054); the twin has no promotion authority.
-5. AI changes the twin only by proposing record or GeometrySpec changes through
-   the existing gated paths. There is no direct scene-mutation channel.
+1. Any twin surface is a view over the data spine. It introduces no second
+   store: engineering values live in records and artifacts, never in the
+   scene.
+2. GLB remains the canonical rendering format (the spec 006 viewer path). No
+   second geometry export pipeline.
+3. Scene identity and record identity are distinct. Every selectable scene
+   component must carry a deterministic, stable `scene_component_id`. A
+   binding manifest associates each component with zero or more normalized
+   record references `<kind>:<id>`, each with a typed relation (for example
+   `represents`, `decided_by`, `validated_by`, `costed_by`). One physical
+   component may bind to many records.
+4. Accepted records render by default; proposals render only when explicitly
+   labeled as proposals. Promotion authority stays in the proposal-review
+   surface (spec 054); the twin never promotes.
+5. AI changes the twin only by proposing record or GeometrySpec changes
+   through the existing gated paths. There is no direct scene-mutation
+   channel.
 
-This ADR adds no runtime, no route, no dependency, and no spec. Walkable
-rendering is a future extension of specs 006/055 (report-to-3D linking is
-already 058c) and remains trigger-gated on 047 producing real process data.
+Deliberately deferred to specs 050/052/055 and their follow-ups:
+
+- the exact scene-graph structure, including how the current single-Compound
+  GLB export (`backend/app/modules/bluecad/export.py`) evolves to expose
+  named, stable components;
+- binding transport: glTF `extras` versus a sidecar manifest;
+- the relation vocabulary and its cardinality rules;
+- FEM/process overlays and stale-state rendering (spec 051 signals).
+
+This ADR adds no runtime, no route, and no dependency. It does not constrain
+the 047–049 process writers, which stay unaware of GLB structure:
+geometry↔record binding is owned by spec 052, the `<kind>:<id>` resolver by
+spec 050, and view assembly by spec 055. Walkable rendering remains
+trigger-gated on 047 producing real process data.
