@@ -50,14 +50,14 @@ def _bad_volume_spec() -> str:
     return json.dumps(payload)
 
 
-def _analysis_spec() -> dict[str, Any]:
+def _analysis_spec(part_id: str = "run1") -> dict[str, Any]:
     return {
         "schema_version": "bluecad_analysis_spec_v0_1",
         "analysis_id": "a1",
         "analysis_type": "static",
         "material": {"name": "steel", "E": 200000.0, "nu": 0.3, "rho": 7.8e-9, "yield_strength": 250.0},
-        "bcs": [{"port_label": "run1.port_a", "kind": "fixed"}],
-        "loads": [{"port_label": "run1.port_b", "type": "force_total", "force": [1.0, 0.0, 0.0]}],
+        "bcs": [{"port_label": f"{part_id}.port_a", "kind": "fixed"}],
+        "loads": [{"port_label": f"{part_id}.port_b", "type": "force_total", "force": [1.0, 0.0, 0.0]}],
         "mesh": {"target_size": 5.0},
         "pass_criteria": [{"metric": "max_von_mises", "op": "<=", "value": 300.0}],
     }
@@ -134,6 +134,18 @@ def test_analysis_spec_rejects_missing_nested_load_contract() -> None:
     malformed["loads"] = [{"port_label": "run1.port_b", "force": [1.0, 0.0, 0.0]}]
     with pytest.raises(ValidationError):
         BluecadLoopConfig(analysis_spec=malformed)
+
+
+def test_analysis_spec_rejects_malformed_load_payloads() -> None:
+    missing_pressure = _analysis_spec()
+    missing_pressure["loads"] = [{"port_label": "run1.port_b", "type": "pressure"}]
+    with pytest.raises(ValidationError):
+        BluecadLoopConfig(analysis_spec=missing_pressure)
+
+    missing_force_total = _analysis_spec()
+    missing_force_total["loads"] = [{"port_label": "run1.port_b", "type": "force_total"}]
+    with pytest.raises(ValidationError):
+        BluecadLoopConfig(analysis_spec=missing_force_total)
 
 
 def test_analysis_spec_rejects_caller_supplied_geometry() -> None:
@@ -284,7 +296,7 @@ def test_real_solver_marker_documents_full_chain() -> None:
 
     candidate = create_bluecad_candidate(
         "bluerev",
-        BluecadCandidateCreate(brief_text="single tube", loop_config=BluecadLoopConfig(analysis_spec=_analysis_spec())),
+        BluecadCandidateCreate(brief_text="single tube", loop_config=BluecadLoopConfig(analysis_spec=_analysis_spec("tube1"))),
         adapters={"scaleway": ScriptedFakeBluecadAdapter([_spec()])},
         bindings=_bindings(),
         force_external_allowed=True,

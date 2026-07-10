@@ -167,6 +167,14 @@ class _AnalysisLoad(BaseModel):
     vector_n: list[float] | None = Field(default=None, min_length=3, max_length=3)
     pressure: float | None = None
 
+    @model_validator(mode="after")
+    def _validate_required_magnitude(self) -> _AnalysisLoad:
+        if self.type == "pressure" and self.pressure is None:
+            raise ValueError("pressure loads require pressure")
+        if self.type == "force_total" and self.force is None and self.vector_n is None:
+            raise ValueError("force_total loads require force or vector_n")
+        return self
+
 
 class _AnalysisMeshQuality(BaseModel):
     model_config = ConfigDict(extra="forbid")
