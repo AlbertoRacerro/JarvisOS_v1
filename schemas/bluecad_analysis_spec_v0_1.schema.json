@@ -158,7 +158,8 @@
             1,
             2
           ],
-          "default": 1
+          "default": 1,
+          "description": "Optional tetrahedral element order. Omission is equivalent to 1; order 2 must be verified from the generated mesh artifact rather than inferred from the request."
         },
         "refinements": {
           "type": "object",
