@@ -213,7 +213,7 @@ def _run_simulation_stage(
     except Exception:
         _best_effort_fail_simulation_run(source_run_id, "fem_evidence_persistence_failed")
         return
-    _complete_simulation_run(source_run_id, mesh_result, fem_summary)
+    _complete_simulation_run(source_run_id, mesh_result, fem_summary, fem_report)
 
 
 def _link_sim_evidence_context(record_id: str, candidate_id: str, attempt_id: str) -> None:
@@ -269,10 +269,10 @@ def _create_simulation_run(workspace_id: str, candidate_id: str, attempt_id: str
     return run_id
 
 
-def _complete_simulation_run(source_run_id: str, mesh_result: dict[str, Any], fem_summary: dict[str, Any] | None) -> None:
+def _complete_simulation_run(source_run_id: str, mesh_result: dict[str, Any], fem_summary: dict[str, Any] | None, fem_report: dict[str, Any] | None = None) -> None:
     try:
         completed_at = utc_now()
-        output_payload = _simulation_run_output_payload(mesh_result, fem_summary)
+        output_payload = _simulation_run_output_payload(mesh_result, fem_summary, fem_report)
         with open_sqlite_connection() as connection:
             connection.execute(
                 """
@@ -305,11 +305,11 @@ def _best_effort_fail_simulation_run(source_run_id: str, error_code: str) -> Non
         return
 
 
-def _simulation_run_output_payload(mesh_result: dict[str, Any], fem_summary: dict[str, Any] | None) -> dict[str, Any]:
+def _simulation_run_output_payload(mesh_result: dict[str, Any], fem_summary: dict[str, Any] | None, fem_report: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
         "status": "completed",
         "mesh_verdict": mesh_result.get("verdict"),
-        "fem_verdict": fem_summary.get("verdict") if fem_summary is not None else None,
+        "fem_verdict": fem_report.get("verdict") if fem_report is not None else (fem_summary.get("verdict") if fem_summary is not None else None),
     }
 
 

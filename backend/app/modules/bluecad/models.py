@@ -169,6 +169,9 @@ class _AnalysisLoad(BaseModel):
 
     @model_validator(mode="after")
     def _validate_required_magnitude(self) -> _AnalysisLoad:
+        for field_name in ("force", "vector_n", "pressure"):
+            if field_name in self.model_fields_set and getattr(self, field_name) is None:
+                raise ValueError(f"{field_name} cannot be null when supplied")
         if self.type == "pressure" and self.pressure is None:
             raise ValueError("pressure loads require pressure")
         if self.type == "force_total" and self.force is None and self.vector_n is None:

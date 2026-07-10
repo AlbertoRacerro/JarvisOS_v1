@@ -166,6 +166,21 @@ def test_analysis_spec_rejects_malformed_load_payloads() -> None:
     with pytest.raises(ValidationError):
         BluecadLoopConfig(analysis_spec=missing_force_total)
 
+    null_force_with_vector = _analysis_spec()
+    null_force_with_vector["loads"] = [{"port_label": "run1.port_b", "type": "force_total", "force": None, "vector_n": [1.0, 0.0, 0.0]}]
+    with pytest.raises(ValidationError):
+        BluecadLoopConfig(analysis_spec=null_force_with_vector)
+
+    null_vector_with_force = _analysis_spec()
+    null_vector_with_force["loads"] = [{"port_label": "run1.port_b", "type": "force_total", "force": [1.0, 0.0, 0.0], "vector_n": None}]
+    with pytest.raises(ValidationError):
+        BluecadLoopConfig(analysis_spec=null_vector_with_force)
+
+    null_pressure = _analysis_spec()
+    null_pressure["loads"] = [{"port_label": "run1.port_b", "type": "pressure", "pressure": None}]
+    with pytest.raises(ValidationError):
+        BluecadLoopConfig(analysis_spec=null_pressure)
+
 
 @pytest.mark.parametrize(
     ("path", "value"),
@@ -294,6 +309,51 @@ def test_analysis_spec_mesh_pass_solve_error_records_both(monkeypatch: pytest.Mo
     sim_runs = _simulation_runs()
     assert len(sim_runs) == 1
     assert sim_runs[0]["status"] == "completed"
+    assert json.loads(sim_runs[0]["output_payload"]) == {"status": "completed", "mesh_verdict": "pass", "fem_verdict": "error"}
+
+
+@requires_kernel
+def test_tier3_fail_verdict_is_stored_in_simulation_run_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    _init()
+    monkeypatch.setattr("app.modules.bluecad.loop.mesh_analysis_spec", lambda *_args, **_kwargs: _mesh_pass())
+    monkeypatch.setattr("app.modules.bluecad.loop.solve_static_analysis", lambda *_args, **_kwargs: _fem())
+    analysis_spec = _analysis_spec()
+    analysis_spec["pass_criteria"] = [{"metric": "max_von_mises", "op": "<=", "value": 50.0}]
+    create_bluecad_candidate(
+        "bluerev",
+        BluecadCandidateCreate(brief_text="single tube", loop_config=BluecadLoopConfig(analysis_spec=analysis_spec)),
+        adapters={"scaleway": ScriptedFakeBluecadAdapter([_spec()])},
+        bindings=_bindings(),
+        force_external_allowed=True,
+    )
+    rows = _evidence()
+    assert rows[-1]["kind"] == "fem_static_v0"
+    assert rows[-1]["verdict"] == "fail"
+    sim_runs = _simulation_runs()
+    assert json.loads(sim_runs[0]["output_payload"]) == {"status": "completed", "mesh_verdict": "pass", "fem_verdict": "fail"}
+
+
+@requires_kernel
+def test_tier3_error_verdict_is_stored_in_simulation_run_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    _init()
+    monkeypatch.setattr("app.modules.bluecad.loop.mesh_analysis_spec", lambda *_args, **_kwargs: _mesh_pass())
+    monkeypatch.setattr("app.modules.bluecad.loop.solve_static_analysis", lambda *_args, **_kwargs: _fem())
+
+    def fail_tier3(*_args: object, **_kwargs: object) -> dict[str, Any]:
+        raise RuntimeError("criteria evaluation unavailable")
+
+    monkeypatch.setattr("app.modules.bluecad.loop.append_tier3_checks", fail_tier3)
+    create_bluecad_candidate(
+        "bluerev",
+        BluecadCandidateCreate(brief_text="single tube", loop_config=BluecadLoopConfig(analysis_spec=_analysis_spec())),
+        adapters={"scaleway": ScriptedFakeBluecadAdapter([_spec()])},
+        bindings=_bindings(),
+        force_external_allowed=True,
+    )
+    rows = _evidence()
+    assert rows[-1]["kind"] == "fem_static_v0"
+    assert rows[-1]["verdict"] == "error"
+    sim_runs = _simulation_runs()
     assert json.loads(sim_runs[0]["output_payload"]) == {"status": "completed", "mesh_verdict": "pass", "fem_verdict": "error"}
 
 
