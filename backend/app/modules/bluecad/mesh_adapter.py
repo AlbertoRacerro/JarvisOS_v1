@@ -25,6 +25,10 @@ _HIGH_ORDER_INVALID_LOG_PATTERNS = (
         r"\b(?:(?P<count>\d+)\s+)?inverted\s+(?:high[- ]order\s+)?elements?\b",
         re.IGNORECASE,
     ),
+    re.compile(
+        r"\b(?:(?P<count>\d+)\s+)?elements?\s+(?:are\s+)?(?:completely\s+)?inverted\b",
+        re.IGNORECASE,
+    ),
 )
 
 
