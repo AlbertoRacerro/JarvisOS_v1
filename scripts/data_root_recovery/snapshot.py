@@ -175,7 +175,7 @@ def create_snapshot(
 ) -> SnapshotResult:
     default_root, default_database_filename = _default_settings()
     supplied_source_root = (source_root or default_root).expanduser()
-    if supplied_source_root.exists() and supplied_source_root.is_symlink():
+    if supplied_source_root.is_symlink():
         raise DataRootError("source data root must not be a symlink")
     source_root = supplied_source_root.resolve(strict=False)
     database_filename = _validate_database_filename(
@@ -184,7 +184,7 @@ def create_snapshot(
     if keep_last is not None and keep_last < 1:
         raise DataRootError("keep-last must be at least 1")
     supplied_destination = destination.expanduser()
-    if supplied_destination.exists() and supplied_destination.is_symlink():
+    if supplied_destination.is_symlink():
         raise DataRootError("snapshot destination must not be a symlink")
     destination = supplied_destination.resolve(strict=False)
     if _is_same_or_descendant(destination, source_root):
