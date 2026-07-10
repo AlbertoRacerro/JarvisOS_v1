@@ -3,8 +3,9 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-import jarvisos_data_root as jdr
 import pytest
+
+import jarvisos_data_root as jdr
 from data_root_recovery_support import digest, seed_data_root
 
 
