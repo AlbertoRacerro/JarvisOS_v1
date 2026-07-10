@@ -133,7 +133,9 @@ def seed_data_root(root: Path) -> dict[str, Path]:
     }
 
 
-def rewrite_manifest(snapshot: Path, mutate: Callable[[dict[str, object]], None]) -> None:
+def rewrite_manifest(
+    snapshot: Path, mutate: Callable[[dict[str, object]], None]
+) -> None:
     manifest_path = snapshot / jdr.MANIFEST_NAME
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
     mutate(data)
