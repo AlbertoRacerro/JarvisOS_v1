@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 
-from app.modules.bluecad.export import _manifest
+from app.modules.bluecad.export import ARTIFACT_NAMES, _manifest, sha256_file
 from app.modules.bluecad.models import BuiltPart, PortFrame
 from app.modules.bluecad.spec import canonical_json
 
@@ -28,18 +29,21 @@ def _parts() -> dict[str, BuiltPart]:
     }
 
 
-def test_canonical_manifest_excludes_runtime_and_binary_serialization_noise() -> None:
+def test_canonical_manifest_excludes_runtime_timing_and_preserves_artifact_integrity(tmp_path: Path) -> None:
+    for index, name in enumerate(ARTIFACT_NAMES, start=1):
+        (tmp_path / name).write_bytes(f"stable-{index}-{name}\n".encode())
+
     spec = {"spec_id": "sha256:" + "1" * 64}
-    first = _manifest(spec, _parts())
-    second = _manifest(spec, _parts())
+    first = _manifest(spec, _parts(), tmp_path)
+    second = _manifest(spec, _parts(), tmp_path)
 
     assert first == second
     assert "timing" not in first
-    assert first["artifacts"] == {
-        "model.step": {"role": "step"},
-        "model.stl": {"role": "stl"},
-        "model.glb": {"role": "glb"},
-    }
-    assert all("sha256" not in metadata and "bytes" not in metadata for metadata in first["artifacts"].values())
+    for name in ARTIFACT_NAMES:
+        path = tmp_path / name
+        assert first["artifacts"][name] == {
+            "sha256": sha256_file(path),
+            "bytes": path.stat().st_size,
+        }
     payload = {key: value for key, value in first.items() if key != "manifest_digest"}
     assert first["manifest_digest"] == hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
