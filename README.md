@@ -75,8 +75,9 @@ adaptive routing.
 - `AGENTS.md` is the single source of instructions for AI coding agents:
   invariants, environments (Windows local vs Linux CI/cloud), test gate,
   conventions.
-- Work items are specs in `docs/specs/` (see `docs/specs/README.md`), sized for
-  one agent session and one reviewable PR each.
+- Work items are specs in `docs/specs/`; the live status and roadmap are in
+  `docs/specs/STATUS.md`, and the execution workflow is in
+  `docs/specs/README.md`.
 - CI (GitHub Actions) runs ruff + the full backend pytest suite on every PR.
   Automated code review is advisory; merge authority is CI green plus human
   review. No self-merge, no auto-merge, no direct pushes to `master`.
@@ -88,7 +89,8 @@ adaptive routing.
 - Runbooks: `docs/RUNBOOKS.md`
 - UI start guide: `docs/UI_START.md`
 - Local AI evidence: `docs/LOCAL_AI_EVALUATION_EVIDENCE.md`
-- Work-item specs: `docs/specs/README.md`
+- Spec status and roadmap: `docs/specs/STATUS.md`
+- Spec workflow: `docs/specs/README.md`
 - Strategy review pack: `docs/strategy/FABLE_REVIEW_INDEX.md`
 
 Everything else under `docs/` is design material or historical milestone
@@ -173,8 +175,6 @@ npm run build
 
 ## Next Milestones
 
-The live roadmap is `docs/specs/README.md`. Current sequence: parameter/
-assumption schema freeze (001), local route smoke matrix + routing eval set
-(002), external escalation proposal + confirm (003). Historical milestone
-numbering (`1G-*`, `POS-*`, `BRIDGE-*`, roadmap `1A–6C`) is superseded and kept
-only as evidence in older docs.
+The only live roadmap and spec-state registry is `docs/specs/STATUS.md`. Do not
+copy a current sequence into this README; update the registry when priorities,
+dependencies, PR state, or merge state change.

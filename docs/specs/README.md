@@ -4,55 +4,50 @@ Each file `NNN-<slug>.md` is one implementation slice, sized for a single agent
 session and a single reviewable diff. Specs are written by the maintainer (with
 strategic-review support) and executed by AI coding agents.
 
+The live status and roadmap are maintained only in [`STATUS.md`](STATUS.md).
+Individual spec files define scope, acceptance criteria, tests, and non-goals;
+legacy `Status:` lines inside those files are not authoritative.
+
 ## Execution workflow
 
-1. Pick the lowest-numbered spec with `Status: ready`.
-2. Create a branch: `spec/NNN-<slug>`.
-3. Read the spec fully. **Verify the "Files likely touched" list against the actual
-   code before writing anything** — specs are written from docs-level knowledge and
-   may be slightly stale. If reality conflicts with the spec, stop and report.
-4. Implement within scope. Non-goals are binding.
-5. Run the test gate in `AGENTS.md`.
-6. Update the spec's `Status:` line to `implemented (pending review)` and note any
-   deviations in a `## Implementation notes` section appended to the spec.
-7. Summarize: what changed, files touched, test output, deviations, discoveries.
+1. Read [`STATUS.md`](STATUS.md). Pick a `ready` spec only after confirming all
+   hard dependencies are `merged` and no active PR overlaps the same files or
+   runtime boundary.
+2. Read the selected spec fully, then create a branch: `spec/NNN-<slug>`.
+3. Set the registry row to `in_progress` when implementation starts.
+4. **Verify the "Files likely touched" list against the actual code before
+   writing anything** — specs are written from docs-level knowledge and may be
+   slightly stale. If reality conflicts with the spec, stop and report.
+5. Implement within scope. Non-goals are binding.
+6. Run the test gate in `AGENTS.md` and
+   `python scripts/check_spec_status.py --self-test`.
+7. Open one PR, declare `**Spec gate:** implementation NNN` in the PR body, set
+   the registry row to `in_review`, and add the implementation PR number. CI
+   checks that the row exists, the status/PR match, and all hard dependencies
+   are `merged`.
+8. Note deviations or discoveries in the PR summary or an
+   `## Implementation notes` section in the spec when needed.
+9. The merge owner changes the registry row to `merged` immediately after merge.
 
-Review (human + Claude code review) happens on the diff before merge. A spec is
-`done` only after merge.
+A PR that only creates or revises a spec declares
+`**Spec gate:** definition NNN`; the row stays `planned`, `blocked`, or `ready`
+and its implementation PR column remains `—`. Unnumbered infrastructure or
+process work declares `**Spec gate:** N/A`.
+
+Review is human-controlled and supported by automated review. A spec is merged
+only when its implementation PR is incorporated into `master`; model verdicts or
+passing self-authored tests do not change status by themselves.
 
 ## Status values
 
-`draft` → `ready` → `implemented (pending review)` → `done` (or `blocked: <reason>`)
+- `planned`
+- `blocked`
+- `ready`
+- `in_progress`
+- `in_review`
+- `merged`
+- `cancelled`
 
-## Index
-
-| Spec | Title | Status |
-| --- | --- | --- |
-| 001 | Parameter/Assumption schema freeze + Requirement record | implemented (pending review) |
-| 002 | Local route smoke matrix + routing eval set | implemented (pending review) |
-| 003 | ESCALATE-CONFIRM-0: external escalation proposal + confirm | implemented (pending review) |
-| 004 | Tiered PR review: cheap-tier (GLM/DeepSeek) loop + A/B, frontier pre-merge only | implemented (pending review) |
-| 005 | BLUECAD CAD adapter MVP (GeometrySpec v0, build123d, Tier 0–1 validation) | implemented (pending review) |
-| 005b | BLUECAD remaining part-kind builders (parametric stubs) | implemented (pending review) (after 005) |
-| 006 | BLUECAD workbench: 3D viewer + validation report + attempt history | implemented (pending review) (after 005, 010) |
-| 006b | BLUECAD parametric variants (sliders → deterministic rebuild) | ready (after 006) |
-| 006c | BLUECAD workbench UX pass (archive, malformed detail, promote, retry) | implemented (pending review) (after 006) |
-| 007 | BLUECAD tool registry, health checks, CI license-boundary gate | implemented (pending review) |
-| 008 | BLUECAD Gmsh mesh adapter (subprocess, physical groups, quality gate) | implemented (pending review) (after 005, 007) |
-| 009 | BLUECAD CalculiX FEM adapter (static v0) + ResultSummary + Tier 3 | implemented (pending review) (after 008) — adapter has no call site in routes/loop yet |
-| 010 | BLUECAD AI loop v0 (L1 generate → build → validate → repair) | implemented (pending review) (after 005) |
-| 015 | PROVIDER-GW-1: provider gateway v1 | implemented (stage 1; completed by 018) |
-| 016 | RUNNER-EXT-1: scoped runner extension for BLUECAD L2 | ready |
-| 017 | Autonomous three-tier review: cheap → senior (GLM) → expert (Claude) | implemented (pending live smoke) (after 004) |
-| 018 | PROVIDER-GW-2: cap enforcement, fallback execution, Scaleway retirement | implemented (pending review) (after 015) |
-| 019 | Senior review hardening | implemented (pending review) (after 017) |
-| 021 | ALPHA-GATE: executable pipeline gate + data-root backup/restore | ready (slice A after 038+044 merge, slice B launchable now) |
-| 022 | Codex PR autopush without automerge | 022 bootstrap implemented (pending review) (after 017, 019) |
-| 024 | FEM verification battery (analytic benchmark ladder) | ready |
-| 038 | SIM-WIRE: wire mesh + FEM into the candidate/attempt loop | ready (implement after 044 merges) |
-| 040 | MEMORYSTORE-0: AI-proposal write boundary for existing engineering records | ready |
-| 041 | DECISION-CAPTURE-0: structured record proposals from AI task responses | ready (after 040) |
-| 042 | CONTEXT-PACK-1: deterministic, budgeted, inspectable context packs | ready |
-| 043 | CALC-1: runner extension for small engineering calculation scripts | ready (after 016 is merged, and after 040) |
-| 044 | EVIDENCE-BRIDGE-1: typed evidence records for simulation/validation outcomes | ready (after 042 is merged) |
-| 056 | BLUECAD property-based geometry testing + determinism canary | ready |
+Definitions and update rules live in [`STATUS.md`](STATUS.md). Do not recreate a
+second live index in this file, the root README, strategy documents, chat
+handoffs, or individual specs.
