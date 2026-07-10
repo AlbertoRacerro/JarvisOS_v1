@@ -371,7 +371,7 @@ def restore_snapshot(
     snapshot_dir = snapshot_dir.expanduser()
     manifest = verify_snapshot(snapshot_dir)
     supplied_target_root = target_root.expanduser()
-    if supplied_target_root.exists() and supplied_target_root.is_symlink():
+    if supplied_target_root.is_symlink():
         raise DataRootError("restore target must not be a symlink")
     target_root = supplied_target_root.resolve(strict=False)
     target_root.parent.mkdir(parents=True, exist_ok=True)
@@ -426,7 +426,7 @@ def restore_snapshot(
                 moved_previous = False
             raise
         if moved_previous:
-            shutil.rmtree(previous_root)
+            shutil.rmtree(previous_root, ignore_errors=True)
             moved_previous = False
         return target_root
     except Exception:
