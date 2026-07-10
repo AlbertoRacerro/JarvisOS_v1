@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 ErrorCode = Literal["SPEC_INVALID", "PORT_MISMATCH", "KERNEL_ERROR", "EXPORT_ERROR", "TIMEOUT"]
 Verdict = Literal["pass", "fail", "error"]
@@ -139,6 +140,20 @@ CandidateOrigin = Literal["ai", "parametric_variant"]
 ProposalOutcome = Literal["ok", "malformed", "provider_error", "blocked"]
 ValidationVerdict = Literal["pass", "fail"]
 
+_CALCULIX_SAFE_MATERIAL_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
+
+
+def _reject_nulls_and_non_finite_numbers(value: Any, path: str = "analysis_spec") -> None:
+    if value is None:
+        raise ValueError(f"{path} cannot be null")
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError(f"{path} must be finite")
+    if isinstance(value, dict):
+        for key, child in value.items():
+            _reject_nulls_and_non_finite_numbers(child, f"{path}.{key}")
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _reject_nulls_and_non_finite_numbers(child, f"{path}[{index}]")
 
 
 class _AnalysisMaterial(BaseModel):
@@ -149,6 +164,13 @@ class _AnalysisMaterial(BaseModel):
     nu: float
     rho: float = Field(gt=0)
     yield_strength: float = Field(gt=0)
+
+    @field_validator("name")
+    @classmethod
+    def _validate_calculix_safe_name(cls, value: str) -> str:
+        if not _CALCULIX_SAFE_MATERIAL_NAME.fullmatch(value):
+            raise ValueError("material name must be a CalculiX-safe identifier")
+        return value
 
 
 class _AnalysisBoundaryCondition(BaseModel):
@@ -220,6 +242,7 @@ class _AnalysisSpecWithoutGeometry(BaseModel):
     pass_criteria: list[_AnalysisPassCriterion]
     timeout_s: float | None = Field(default=None, gt=0)
 
+
 class BluecadLoopConfig(BaseModel):
     max_attempts_per_tier: int = Field(default=3, ge=1, le=10)
     tier_ladder: list[str] = Field(default_factory=lambda: ["external:cheap", "external:reasoning"])
@@ -233,6 +256,7 @@ class BluecadLoopConfig(BaseModel):
             return self
         if not isinstance(self.analysis_spec, dict):
             raise ValueError("analysis_spec must be an object")
+        _reject_nulls_and_non_finite_numbers(self.analysis_spec)
         if "geometry" in self.analysis_spec:
             raise ValueError("analysis_spec geometry is filled from build artifacts by the loop")
         _AnalysisSpecWithoutGeometry.model_validate(self.analysis_spec)

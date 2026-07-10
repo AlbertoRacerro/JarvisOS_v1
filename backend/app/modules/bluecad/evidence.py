@@ -66,8 +66,6 @@ def map_mesh_quality_evidence(
     *,
     source_run_id: str | None,
     report_artifact_id: str,
-    candidate_id: str | None = None,
-    attempt_id: str | None = None,
 ) -> EvidenceRecordCreate:
     verdict = _require_verdict(result.get("verdict"))
     attempts = result.get("attempts")
@@ -109,8 +107,6 @@ def map_mesh_quality_evidence(
         verdict=verdict,
         metrics_json=_json_metrics(metrics),
         source_run_id=source_run_id,
-        candidate_id=candidate_id,
-        attempt_id=attempt_id,
         report_artifact_id=report_artifact_id,
     )
 
@@ -122,8 +118,6 @@ def map_fem_static_evidence(
     *,
     source_run_id: str | None,
     report_artifact_id: str,
-    candidate_id: str | None = None,
-    attempt_id: str | None = None,
 ) -> EvidenceRecordCreate:
     verdict = _require_verdict((report or result_summary).get("verdict"))
     is_error = result_summary.get("verdict") == "error"
@@ -159,8 +153,6 @@ def map_fem_static_evidence(
         verdict=verdict,
         metrics_json=_json_metrics(metrics),
         source_run_id=source_run_id,
-        candidate_id=candidate_id,
-        attempt_id=attempt_id,
         report_artifact_id=report_artifact_id,
     )
 

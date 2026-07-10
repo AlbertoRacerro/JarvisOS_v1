@@ -140,6 +140,10 @@ def _artifact_json(artifact_id: str) -> dict[str, Any]:
     return json.loads(Path(row["stored_path"]).read_text(encoding="utf-8"))
 
 
+def test_analysis_spec_allows_omitted_optional_fields() -> None:
+    BluecadLoopConfig(analysis_spec=_analysis_spec())
+
+
 def test_analysis_spec_rejects_malformed_nested_blocks() -> None:
     for key in ["material", "mesh"]:
         malformed = _analysis_spec()
@@ -203,6 +207,88 @@ def test_analysis_spec_rejects_string_numeric_values(path: tuple[str | int, ...]
     target[path[-1]] = value
     with pytest.raises(ValidationError):
         BluecadLoopConfig(analysis_spec=malformed)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        ("timeout_s",),
+        ("mesh", "refinements"),
+        ("mesh", "quality"),
+        ("mesh", "quality", "min_element_quality"),
+    ],
+)
+def test_analysis_spec_rejects_explicit_null_optional_fields(path: tuple[str, ...]) -> None:
+    malformed = _analysis_spec()
+    if path == ("mesh", "quality", "min_element_quality"):
+        malformed["mesh"]["quality"] = {"min_element_quality": None}
+    else:
+        target: Any = malformed
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = None
+    with pytest.raises(ValidationError):
+        BluecadLoopConfig(analysis_spec=malformed)
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("material", "E"), float("nan")),
+        (("material", "nu"), float("inf")),
+        (("material", "rho"), float("-inf")),
+        (("loads", 0, "force", 0), float("nan")),
+        (("mesh", "target_size"), float("inf")),
+        (("mesh", "refinements", "run1.port_b"), float("nan")),
+        (("mesh", "quality", "min_element_quality"), float("inf")),
+        (("pass_criteria", 0, "value"), float("-inf")),
+        (("timeout_s",), float("nan")),
+    ],
+)
+def test_analysis_spec_rejects_non_finite_numbers(path: tuple[str | int, ...], value: float) -> None:
+    malformed = _analysis_spec()
+    malformed["mesh"]["refinements"] = {"run1.port_b": 2.5}
+    malformed["mesh"]["quality"] = {"min_element_quality": 0.1}
+    malformed["timeout_s"] = 30.0
+    target: Any = malformed
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+    with pytest.raises(ValidationError):
+        BluecadLoopConfig(analysis_spec=malformed)
+
+
+@pytest.mark.parametrize(
+    "material_name",
+    [
+        "steel\n*INCLUDE, INPUT=/tmp/payload",
+        "steel\r*INCLUDE",
+        "steel,evil",
+        "*MATERIAL",
+        "steel comment",
+        "steel#comment",
+    ],
+)
+def test_analysis_spec_rejects_unsafe_material_names_before_sim_execution(
+    material_name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = {"mesh": 0, "solve": 0}
+
+    def mesh(*_args: object, **_kwargs: object) -> dict[str, Any]:
+        calls["mesh"] += 1
+        return _mesh_pass()
+
+    def solve(*_args: object, **_kwargs: object) -> dict[str, Any]:
+        calls["solve"] += 1
+        return _fem()
+
+    monkeypatch.setattr("app.modules.bluecad.loop.mesh_analysis_spec", mesh)
+    monkeypatch.setattr("app.modules.bluecad.loop.solve_static_analysis", solve)
+    malformed = _analysis_spec()
+    malformed["material"]["name"] = material_name
+    with pytest.raises(ValidationError):
+        BluecadCandidateCreate(brief_text="single tube", loop_config=BluecadLoopConfig(analysis_spec=malformed))
+    assert calls == {"mesh": 0, "solve": 0}
 
 
 def test_analysis_spec_rejects_caller_supplied_geometry() -> None:
