@@ -24,7 +24,6 @@ command -v gmsh
 command -v ccx
 sha256sum "$(command -v gmsh)" "$(command -v ccx)"
 gmsh -version
-ccx -v
 ```
 
 Create a YAML file outside the repository using
@@ -41,10 +40,13 @@ enabled: true
 entrypoint: "<absolute executable path>"
 binary_sha256: "<64 hex characters>"
 provenance_url: "<operator-recorded source>"
-health_check: "<same executable path> -version"
+health_check: "<same executable path> <operator-owned health arguments>"
 ```
 
-For CalculiX, use the executable's supported version switch, commonly `-v`.
+Gmsh may use `-version`. CalculiX 2.21 does not provide a reliable zero-exit
+version-only command in every package build; use a minimal valid static deck in
+the registry directory and set the health check to `<ccx-path> <deck-basename>`.
+The dedicated GitHub workflow creates and solves such a tetrahedron deck.
 
 ## Check the registry
 
@@ -92,7 +94,20 @@ The command exits zero only after two equivalent real-tool runs complete with:
 
 GitHub Actions runs the same strict command in
 `.github/workflows/bluecad-real-tool-proof.yml` using an external registry built
-from the runner's installed packages.
+from the runner's installed packages. The workflow also runs the complete offline
+backend test suite and uploads bounded text diagnostics plus the final proof JSON.
+
+## Determinism boundary
+
+The canonical manifest excludes elapsed runtime. It retains STEP/STL/GLB hashes
+and sizes as integrity evidence. Open Cascade writes the wall-clock export time
+into the STEP `FILE_NAME` header, so BLUECAD normalizes only that header timestamp
+to `1970-01-01T00:00:00` immediately after export. Geometry data, entity ordering,
+and all other STEP content remain untouched. A missing or ambiguous header fails
+as `EXPORT_ERROR` rather than silently weakening the manifest.
+
+CalculiX input uses a relative mesh include path. This avoids its fixed input-line
+limit without copying or duplicating the canonical mesh artifact.
 
 ## Interpreting failures
 
@@ -101,9 +116,12 @@ from the runner's installed packages.
   weaken hash/license checks.
 - **Mesh group failure:** inspect `mesh.geo`, `mesh.inp`, and `gmsh.log`; do not
   substitute fake groups.
+- **Solver input failure:** inspect `analysis.inp` and `analysis.log`. Keep mesh
+  includes relative; do not shorten the test data root to hide a line-length bug.
 - **FRD parse failure:** preserve the real `.frd` artifact and fix the narrow
   public-format parser; do not make the real solver emit the fake fixture format.
-- **Manifest mismatch:** investigate semantic manifest drift. Runtime duration and
-  binary serializer hashes are intentionally outside the canonical manifest.
+- **Manifest mismatch:** compare artifact hashes first. Runtime duration is outside
+  the manifest; STEP header time is normalized, while every geometry artifact hash
+  remains binding integrity evidence.
 - **Tier 3 failure:** the integration proof failed. Accuracy and tolerance tuning
   belongs to spec 024, but a failing result cannot be represented as green.
