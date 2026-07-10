@@ -59,6 +59,8 @@ def test_happy_path_result_summary_and_native_frd_parser(tmp_path: Path) -> None
     assert result["reactions"] == [{"node_id": 1, "force": [-10.0, 0.0, 0.0]}]
     assert {"inp", "frd", "dat", "log"} <= set(result["artifacts"])
     deck = (tmp_path / "solve" / "analysis.inp").read_text(encoding="utf-8")
+    assert "*INCLUDE, INPUT=../mesh.inp" in deck
+    assert str(tmp_path.resolve()) not in deck
     assert "*MATERIAL, NAME=steel" in deck
     assert "*SOLID SECTION, ELSET=BODY, MATERIAL=steel" in deck
     assert "BC_run1_port_a, 1, 3, 0" in deck
