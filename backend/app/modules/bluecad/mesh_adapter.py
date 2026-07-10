@@ -29,7 +29,9 @@ def mesh_analysis_spec(
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     refs = _referenced_groups(analysis_spec)
     _validate_labels(refs)
-    target_size = float(analysis_spec["mesh"]["target_size"])
+    mesh_config = analysis_spec["mesh"]
+    target_size = float(mesh_config["target_size"])
+    element_order = _element_order(mesh_config)
 
     attempts: list[dict[str, Any]] = []
     artifacts: dict[str, Any] = {}
@@ -42,13 +44,13 @@ def mesh_analysis_spec(
         msh_path = attempt_dir / "mesh.msh"
         log_path = attempt_dir / "gmsh.log"
         geo_path.write_text(
-            _geo_text(step_path, manifest, refs, size, analysis_spec.get("mesh", {}).get("refinements", {})),
+            _geo_text(step_path, manifest, refs, size, mesh_config.get("refinements", {})),
             encoding="utf-8",
         )
         try:
             run = run_tool(
                 "gmsh",
-                ["-3", str(geo_path), "-format", "inp", "-o", str(inp_path), "-save_all"],
+                _gmsh_args(geo_path, inp_path, element_order),
                 attempt_dir,
                 timeout_s,
                 registry_path,
@@ -60,7 +62,7 @@ def mesh_analysis_spec(
         log_path.write_text((run.stdout or "") + (run.stderr or ""), encoding="utf-8")
         if not msh_path.exists():
             msh_path.write_text("", encoding="utf-8")
-        errors, counts, warnings = _post_check(run.returncode, inp_path, refs, log_path)
+        errors, counts, warnings = _post_check(run.returncode, inp_path, refs, log_path, element_order)
         attempt = _attempt(attempt_no, size, geo_path, inp_path, msh_path, log_path, run.returncode, errors, counts, warnings)
         attempts.append(attempt)
         artifacts = _artifacts(attempt_dir, artifacts)
@@ -72,6 +74,21 @@ def mesh_analysis_spec(
         if attempt_no == 2:
             break
     return _result("fail", final_errors, attempts, artifacts)
+
+
+def _element_order(mesh_config: dict[str, Any]) -> int:
+    value = mesh_config.get("element_order", 1)
+    if type(value) is not int or value not in (1, 2):
+        raise ValueError("mesh.element_order must be integer 1 or 2")
+    return value
+
+
+def _gmsh_args(geo_path: Path, inp_path: Path, element_order: int) -> list[str]:
+    args = ["-3", str(geo_path)]
+    if element_order == 2:
+        args.extend(["-order", "2"])
+    args.extend(["-format", "inp", "-o", str(inp_path), "-save_all"])
+    return args
 
 
 def _referenced_groups(spec: dict[str, Any]) -> list[tuple[str, str, str]]:
@@ -140,6 +157,7 @@ def _post_check(
     inp_path: Path,
     refs: list[tuple[str, str, str]],
     log_path: Path,
+    element_order: int,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], list[str]]:
     warnings = [
         line
@@ -159,6 +177,17 @@ def _post_check(
     errors: list[dict[str, Any]] = []
     if counts["elements_total"] <= 0:
         errors.append({"code": "MESH_FAIL", "detail": {"message": "zero volume elements"}})
+    if element_order == 2 and set(counts["volume_element_types"]) != {"C3D10"}:
+        errors.append(
+            {
+                "code": "MESH_ELEMENT_ORDER_MISMATCH",
+                "detail": {
+                    "requested_order": 2,
+                    "expected_volume_type": "C3D10",
+                    "actual_volume_types": counts["volume_element_types"],
+                },
+            }
+        )
     if counts["physical_groups"].get("BODY", 0) <= 0:
         errors.append({"code": "MESH_GROUP_EMPTY", "detail": {"group": "BODY"}})
     for prefix, label, _ in refs:
@@ -171,6 +200,7 @@ def _post_check(
 def _parse_inp_counts(text: str, refs: list[tuple[str, str, str]]) -> dict[str, Any]:
     nodes: set[int] = set()
     volume_elements: set[int] = set()
+    volume_element_types: dict[str, int] = {}
     inline_element_sets: dict[str, set[int]] = {}
     explicit_element_sets: dict[str, set[int]] = {}
     node_sets: dict[str, set[int]] = {}
@@ -220,6 +250,7 @@ def _parse_inp_counts(text: str, refs: list[tuple[str, str, str]]) -> dict[str, 
                 inline_element_sets[active_group].add(element_id)
             if active_element_type and active_element_type.startswith(_VOLUME_ELEMENT_PREFIXES):
                 volume_elements.add(element_id)
+                volume_element_types[active_element_type] = volume_element_types.get(active_element_type, 0) + 1
         elif section == "elset" and active_group:
             explicit_element_sets[active_group].update(values)
         elif section == "nset" and active_group:
@@ -236,6 +267,7 @@ def _parse_inp_counts(text: str, refs: list[tuple[str, str, str]]) -> dict[str, 
     return {
         "nodes_total": len(nodes),
         "elements_total": len(volume_elements),
+        "volume_element_types": dict(sorted(volume_element_types.items())),
         "physical_groups": physical_groups,
     }
 
