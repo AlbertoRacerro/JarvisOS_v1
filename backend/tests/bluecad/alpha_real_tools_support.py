@@ -69,11 +69,17 @@ def assert_full_chain(candidate: Any) -> Path:
     assert (attempt.proposal_outcome, attempt.build_outcome, attempt.validation_verdict) == ("ok", "ok", "pass")
 
     evidence = _evidence_rows(candidate.id)
-    assert [(row["kind"], row["verdict"]) for row in evidence] == [
+    actual_evidence = [(row["kind"], row["verdict"]) for row in evidence]
+    expected_evidence = [
         ("validation_v0", "pass"),
         ("mesh_quality_v0", "pass"),
         ("fem_static_v0", "pass"),
     ]
+    assert actual_evidence == expected_evidence, {
+        "candidate_id": candidate.id,
+        "evidence": evidence,
+        "simulation": _simulation_row(candidate.id),
+    }
     assert all(row["candidate_id"] == candidate.id and row["attempt_id"] == attempt.id for row in evidence)
     assert all(row["source_run_id"] and row["report_artifact_id"] for row in evidence[1:])
 
