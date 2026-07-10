@@ -9,10 +9,14 @@ from pathlib import Path
 
 import pytest
 
+from app.modules.bluecad.models import BluecadCandidateCreate
 from app.modules.bluecad.registry import (
+    DEFAULT_REGISTRY_PATH,
+    REGISTRY_ENV_VAR,
     ToolRegistryError,
     check_registry,
     load_registry,
+    resolve_registry_path,
     resolve_tool,
     run_tool,
     validate_license_boundaries,
@@ -78,6 +82,41 @@ def test_load_registry_rejects_duplicate_ids_unknown_fields_and_missing_spdx(tmp
     with pytest.raises(ToolRegistryError) as exc_info:
         load_registry(_registry(tmp_path, [missing_spdx]))
     assert exc_info.value.code == "SPDX_REQUIRED"
+
+
+def test_operator_registry_env_override_and_explicit_precedence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env_exe = _write_tool(tmp_path / "env.py")
+    explicit_exe = _write_tool(tmp_path / "explicit.py")
+    env_dir = tmp_path / "env-registry"
+    env_dir.mkdir()
+    explicit_dir = tmp_path / "explicit-registry"
+    explicit_dir.mkdir()
+    env_registry = _registry(env_dir, [_subprocess_tool(env_exe)])
+    explicit_registry = _registry(explicit_dir, [_subprocess_tool(explicit_exe)])
+
+    monkeypatch.setenv(REGISTRY_ENV_VAR, str(env_registry))
+    assert resolve_registry_path() == env_registry
+    assert resolve_tool("fake")["entrypoint"] == str(env_exe)
+    assert resolve_registry_path(explicit_registry) == explicit_registry
+    assert resolve_tool("fake", explicit_registry)["entrypoint"] == str(explicit_exe)
+
+    monkeypatch.setenv(REGISTRY_ENV_VAR, "   ")
+    assert resolve_registry_path() == DEFAULT_REGISTRY_PATH
+    with pytest.raises(ToolRegistryError) as exc_info:
+        resolve_registry_path("   ")
+    assert exc_info.value.code == "REGISTRY_PATH_INVALID"
+
+
+def test_request_shaped_data_cannot_select_tool_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    exe = _write_tool(tmp_path / "fake.py")
+    registry = _registry(tmp_path, [_subprocess_tool(exe)])
+    monkeypatch.setenv(REGISTRY_ENV_VAR, str(registry))
+
+    payload = BluecadCandidateCreate.model_validate(
+        {"brief_text": "single tube", "registry_path": "/request/controlled/tools.yaml"}
+    )
+    assert "registry_path" not in payload.model_dump()
+    assert resolve_tool("fake")["entrypoint"] == str(exe)
 
 
 def test_resolve_tool_fail_closed_errors_are_distinct(tmp_path: Path) -> None:
@@ -161,6 +200,7 @@ def test_registry_check_cli_exit_codes(tmp_path: Path) -> None:
     passing_registry = _registry(tmp_path, [_subprocess_tool(exe)])
     exit_code, output = check_registry(passing_registry)
     assert exit_code == 0
+    assert f"registry\t{passing_registry}" in output
     assert "fake\tTrue\tok\tok" in output
 
     failing_registry = _registry(tmp_path, [_subprocess_tool(tmp_path / "missing.py")])
