@@ -45,10 +45,9 @@ before Codex or another coding agent may act on them.
 
 ## Current priority and drafting order
 
-1. Finish and merge the two active implementation PRs: `038` (SIM-WIRE) and
-   `021` (server-owned execution-gate hardening).
-2. Draft `021b` only after reconciling the remaining executable-pipeline and
-   backup/restore scope against the merged `021` and `038` code.
+1. Finish review and merge `021` (server-owned external-provider execution gate).
+2. Reconcile `021b` against merged `021`, `038`, and `044` before promoting it
+   from preserved planning evidence to an implementation-ready full spec.
 3. Implement the already-ready engineering quality slices `024` and `056`.
 4. Before serious BlueRev dogfood with real project IP or cloud providers, draft
    and implement `059` (sensitivity, retrieval, and egress enforcement).
@@ -89,8 +88,8 @@ that no open PR overlaps the target files or runtime boundary.
 | 018 | merged | [#33](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/33), [#43](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/43) | PROVIDER-GW-2 | 015 | Complete provider-cap/fallback enforcement and correct provider usage accounting while preserving explicit routing and audit controls. |
 | 019 | merged | [#40](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/40), [#41](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/41), [#44](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/44) | Senior review hardening | 017 | Harden streaming, reasoning budgets, verdict parsing, stale-script behavior, retry limits, and review diagnostics. |
 | 020 | ready | — | Pipeline doctor | 017, 019 | Add a deterministic watchdog for silent review-pipeline failures, stale branches, missing labels/comments, and stalled fix requests. |
-| 021 | in_review | [#66](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/66) | ALPHA-GATE hardening | — | Track the independent server-owned execution-gate hardening in PR #66; it does not by itself complete the original executable-pipeline and backup/restore scope. |
-| 021b | planned | — | ALPHA-GATE completion: executable pipeline + proven backup/restore | 021, 038, 044 | Reconcile the remaining original 021 scope after active PRs merge: run brief→build→validate→mesh→solve→artifacts/evidence with real-tool markers, and prove data-root snapshot restore deterministically. |
+| 021 | in_review | [#70](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/70) | ALPHA-GATE hardening | — | Enforce the server-owned external-provider decision at the shared execution spine for every concrete network binding and fallback; PR #70 supersedes stale PR #66. |
+| 021b | planned | — | ALPHA-GATE completion: executable pipeline + proven backup/restore | 021, 038, 044 | Preserve and later reconcile the original real-tool pipeline proof and deterministic data-root backup/restore scope after 021 merges. |
 | 022 | merged | [#49](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/49) | Codex PR autopush without automerge | 017, 019 | Add a bounded actuator for pushing materialized fixes to an existing PR branch while forbidding merge, protected-branch pushes, force-push, and secret/workflow changes. |
 | 023 | planned | — | Adversarial proposal corpus | 010 | Add bounded hostile and degenerate model-output fixtures; the loop must reject or park them without crashes, unbounded work, provider calls, or authority bypass. |
 | 024 | ready | — | FEM verification battery | 008, 009 | Build an analytic benchmark ladder that checks mesh/FEM results against known mechanics solutions and convergence expectations. |
@@ -107,7 +106,7 @@ that no open PR overlaps the target files or runtime boundary.
 | 035 | planned | — | Domain Foundation navigator | 040, 050 | Add searchable/editable modeling-record navigation designed around provenance and future depends-on/feeds edges rather than a flat database list. |
 | 036 | planned | — | Honest multi-agent chat UI | 034, 058 | Present clearly labeled advisory persona calls in the unified workspace; do not claim a real swarm until orchestration evidence exists. |
 | 037 | planned | — | Chat entry point to BLUECAD workbench | 010, 042 | Add the smallest chat on-ramp that creates or drafts a candidate in the existing workbench instead of introducing a second product surface. |
-| 038 | in_review | [#65](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/65) | SIM-WIRE | 044 | Wire the existing mesh and static-FEM adapters into the BLUECAD attempt loop as an opt-in advisory stage with evidence records and no auto-promotion. |
+| 038 | merged | [#65](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/65) | SIM-WIRE | 044 | Wire the existing mesh and static-FEM adapters into the BLUECAD attempt loop as an opt-in advisory stage with evidence records and no auto-promotion. |
 | 039 | planned | — | FRONTIER-1 provider route | 015, 018, 059 | Add the frontier provider adapter/route only behind the same budget, confirmation, sensitivity, redaction, provenance, and audit boundaries as every other external call. |
 | 040 | merged | [#38](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/38) | MEMORYSTORE-0 | — | Add the single proposal/promotion boundary for AI- and calculation-originated engineering records with provenance and additive migration support. |
 | 041 | merged | [#50](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/50) | DECISION-CAPTURE-0 | 040 | Parse bounded `jarvis-records` blocks from approved AI task responses and create proposed records through MemoryStore without extra model calls. |
@@ -140,9 +139,11 @@ that no open PR overlaps the target files or runtime boundary.
 - Historical `057 = Workspace home`, `057b`, and `057c` references are
   superseded by `058`, `058b`, and `058c`; `057` remains the cancelled
   SPEC-LEDGER-0 and must not be reused.
-- The current `021` implementation PR covers execution-gate hardening only.
-  Remaining executable end-to-end alpha proof plus backup/restore work is
-  tracked as planned `021b` until a full reconciled spec is written.
+- PR #66 is superseded by the current spec `021` implementation PR #70.
+- The current `021` implementation covers the shared external-provider
+  execution boundary only. Remaining executable end-to-end alpha proof plus
+  backup/restore work is preserved as planned `021b` until a reconciled full
+  spec is approved.
 
 ## Notes requiring later reconciliation
 
