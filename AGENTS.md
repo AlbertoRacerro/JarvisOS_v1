@@ -58,13 +58,16 @@ and deterministic policy, regardless of how common it is.
 
 ## How work is assigned: spec-driven slices
 
-- Work items live in `docs/specs/NNN-*.md`. Read `docs/specs/README.md` first.
+- Work items live in `docs/specs/NNN-*.md`. Read `docs/specs/STATUS.md` first for
+  the only live status/roadmap, then `docs/specs/README.md` and the selected spec.
 - Implement **exactly one spec per session/branch**. Do not bundle extra improvements,
   refactors, or drive-by fixes — flag them in your summary instead.
 - Each spec defines scope, acceptance criteria, required tests, and non-goals.
   Non-goals are binding.
 - If the spec conflicts with the actual code you find, stop and report the conflict;
   do not guess.
+- Do not infer live state from legacy `Status:` lines inside individual specs,
+  strategy documents, README prose, or chat handoffs. Update `docs/specs/STATUS.md`.
 
 ## Repo map
 
@@ -82,7 +85,7 @@ and deterministic policy, regardless of how common it is.
 | `backend/tests/` | pytest suite |
 | `frontend/` | React/Vite operator UI |
 | `docs/` | canonical docs; `docs/ARCHITECTURE.md` and `docs/DECISIONS.md` win conflicts |
-| `docs/specs/` | work-item specs for agents |
+| `docs/specs/` | work-item specs, workflow, and canonical `STATUS.md` registry |
 | `reports/` | generated evaluation/smoke reports |
 
 ## Environments
@@ -171,13 +174,13 @@ outcome, not blind compliance and not silent capitulation.
 maintainer between rounds. Within a PR, self-drive the review loop: verify
 findings, fix or rebut them, push, let the re-review run, and iterate until the
 round limit escalates to the maintainer. When you have no active PR, you may
-also pick up the lowest-numbered `Status: ready` spec in `docs/specs/README.md`
-and start implementing it on a new branch under the normal spec workflow,
-without being told to. This autonomy stops at the merge boundary: you still
-never merge your own PR, never enable auto-merge, and CI-plus-maintainer remain
-the only merge authority (unchanged). Autonomy is permission to proceed, never
-permission to lower the bar — the hard invariants and the "verify before acting"
-rule above bind every autonomous step.
+also pick up the lowest-numbered `ready` spec in `docs/specs/STATUS.md` whose
+hard dependencies are `merged`, and start it on a new branch under the normal
+spec workflow, without being told to. This autonomy stops at the merge
+boundary: you still never merge your own PR, never enable auto-merge, and
+CI-plus-maintainer remain the only merge authority (unchanged). Autonomy is
+permission to proceed, never permission to lower the bar — the hard invariants
+and the "verify before acting" rule above bind every autonomous step.
 
 **Reviewer-owned conformance tests:** files matching
 `backend/tests/**/test_*_conformance.py` are written by the reviewing tier,
@@ -196,6 +199,8 @@ you and you believe it is wrong, stop and report — do not edit it.
 5. Docs updated only where the spec says so.
 6. Summary states: what changed, files touched, test results, anything deferred or
    discovered.
+7. `docs/specs/STATUS.md` shows `in_review` with the PR number before review; the
+   merge owner changes it to `merged` after merge.
 
 ## Conventions
 
