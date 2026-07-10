@@ -21,7 +21,7 @@ def _load_jsonl(path: Path) -> dict[str, dict[str, Any]]:
     records: dict[str, dict[str, Any]] = {}
     try:
         with path.open(encoding="utf-8") as handle:
-            for line_number, line in enumerate(handle, start=1):
+            for line in handle:
                 if not line.strip():
                     continue
                 value = json.loads(line)
@@ -54,7 +54,7 @@ def _lookup_answer_path(answer: dict[str, Any], path: str) -> tuple[bool, Any]:
 
 
 def _bounded_actual(value: Any) -> Any:
-    if value is None or isinstance(value, (bool, int, float)):
+    if value is None or isinstance(value, bool | int | float):
         return value
     if isinstance(value, str):
         return value if len(value) <= 200 else f"{value[:199]}…"
