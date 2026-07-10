@@ -10,6 +10,10 @@ cwd = str(pathlib.Path.cwd())
 mode = "fail" if "failcase" in cwd else ("empty" if "emptycase" in cwd else "ok")
 if "ignoreorder" in cwd:
     mode = "ignoreorder"
+elif "negativejac" in cwd:
+    mode = "negativejac"
+elif "zerojac" in cwd:
+    mode = "zerojac"
 
 if mode == "fail":
     print("Error: meshing failed", file=sys.stderr)
@@ -40,5 +44,9 @@ ok_mesh = f"""*Heading
 
 out.write_text(ok_mesh, encoding="utf-8")
 (pathlib.Path.cwd() / "mesh.msh").write_text("$MeshFormat\n", encoding="utf-8")
+if mode == "negativejac":
+    print("Warning: 244 elements with jac. < 0")
+elif mode == "zerojac":
+    print("Info: 0 elements with jac. < 0")
 print(f"Info: fake gmsh quality ok requested_order={requested_order} effective_order={effective_order}")
 print("ARGS: " + " ".join(args))
