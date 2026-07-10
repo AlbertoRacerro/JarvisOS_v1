@@ -13,6 +13,10 @@ The `Implementation PR` column records implementation PRs only. A PR that merely
 creates or revises a spec does not occupy that column and does not move the spec
 to `in_review`; link such planning evidence in the description only when useful.
 
+Rows marked `planned` are roadmap outlines, not implementation contracts. They
+must pass the normal backlog row → kernel → full spec → implementation ladder
+before Codex or another coding agent may act on them.
+
 ## Status values
 
 - `planned`: the work is identified, but the spec is not ready to implement.
@@ -39,10 +43,24 @@ to `in_review`; link such planning evidence in the description only when useful.
    pull requests. A spec implementation PR fails if its row is absent, not
    `in_review`, missing the current PR number, or has an unmerged hard dependency.
 
-## Current priority
+## Current priority and drafting order
 
-- Check rows marked `in_review` in the registry before choosing any `ready` spec.
-- Choose the next `ready` spec only after confirming no open PR overlaps the target work.
+1. Finish and merge the two active implementation PRs: `038` (SIM-WIRE) and
+   `021` (server-owned execution-gate hardening).
+2. Draft `021b` only after reconciling the remaining executable-pipeline and
+   backup/restore scope against the merged `021` and `038` code.
+3. Implement the already-ready engineering quality slices `024` and `056`.
+4. Before serious BlueRev dogfood with real project IP or cloud providers, draft
+   and implement `059` (sensitivity, retrieval, and egress enforcement).
+5. Then draft in small dependency batches:
+   `047` → `048` + `049` → `050` → `051` + `052` →
+   `029` + `037` → `030` + `058` → `054` + `035` + `055` →
+   `034` + `011` → `053`.
+6. Trigger-gated rows remain `planned` until their stated evidence exists; do not
+   start them merely because their number is lower.
+
+Always check rows marked `in_review` before choosing any `ready` spec, and confirm
+that no open PR overlaps the target files or runtime boundary.
 
 ## Registry
 
@@ -61,31 +79,85 @@ to `in_review`; link such planning evidence in the description only when useful.
 | 008 | merged | [#32](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/32) | BLUECAD Gmsh mesh adapter | 005, 007 | Generate deterministic Gmsh inputs and physical groups, invoke Gmsh through the registry, and return structured mesh-quality outcomes. |
 | 009 | merged | [#35](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/35) | BLUECAD CalculiX FEM adapter | 008 | Assemble deterministic static CalculiX decks, run the registered solver, parse result summaries, and evaluate Tier 3 criteria. |
 | 010 | merged | [#20](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/20), [#26](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/26), [#28](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/28) | BLUECAD AI loop v0 | 005 | Add the bounded candidate/attempt loop, safe-default parking, prompt/schema flow, validation, repair attempts, and traceable prompt versions. |
+| 011 | planned | — | Core Team review panel | 034 | Add advisory persona reviews over artifacts and evidence; personas are bounded configurations, not autonomous authorities or a fake swarm. |
+| 012 | planned | — | L2 ephemeral free-script proposals | 010, 016 | Let AI propose one-design-only BLUECAD scripts through the existing bounded runner and validators; first verify that current `bluecad_l2_v0` contracts are sufficient rather than inventing a second runner. |
+| 013 | planned | — | Tier 2 domain-validator plugin interface | 005, 010 | Define a narrow plugin boundary for BlueRev-specific engineering checks that emit deterministic validation evidence without letting plugins own routing, memory, or promotion. |
+| 014 | planned | — | OpenFOAM CFD case-bundle adapter v0 | 007, 008, 049 | Produce inspectable OpenFOAM case bundles and evidence only when process/light proxies leave a concrete decision unresolved; no generic CFD platform or automatic solver authority. |
 | 015 | merged | [#33](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/33) | PROVIDER-GW-1 | 003 | Replace hardcoded bindings with a validated provider registry and generic OpenAI-compatible adapter while preserving safe defaults. |
 | 016 | merged | [#39](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/39) | RUNNER-EXT-1: BLUECAD L2 | 005, 007 | Extend the bounded runner with a hashed, AST-checked `bluecad_l2_v0` implementation kind and strict GeometrySpec/artifact contracts. |
 | 017 | merged | [#37](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/37) | Autonomous three-tier review | 004 | Implement cheap → senior → expert advisory review with bounded Codex fix loops and human-only merge authority. |
 | 018 | merged | [#33](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/33), [#43](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/43) | PROVIDER-GW-2 | 015 | Complete provider-cap/fallback enforcement and correct provider usage accounting while preserving explicit routing and audit controls. |
 | 019 | merged | [#40](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/40), [#41](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/41), [#44](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/44) | Senior review hardening | 017 | Harden streaming, reasoning budgets, verdict parsing, stale-script behavior, retry limits, and review diagnostics. |
 | 020 | ready | — | Pipeline doctor | 017, 019 | Add a deterministic watchdog for silent review-pipeline failures, stale branches, missing labels/comments, and stalled fix requests. |
-| 021 | in_review | [#66](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/66) | ALPHA-GATE hardening | — | Track the independent server-owned execution-gate hardening in PR #66. The later full executable pipeline gate still depends on 038 and 044 and must be tracked separately before dispatch. |
+| 021 | in_review | [#66](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/66) | ALPHA-GATE hardening | — | Track the independent server-owned execution-gate hardening in PR #66; it does not by itself complete the original executable-pipeline and backup/restore scope. |
+| 021b | planned | — | ALPHA-GATE completion: executable pipeline + proven backup/restore | 021, 038, 044 | Reconcile the remaining original 021 scope after active PRs merge: run brief→build→validate→mesh→solve→artifacts/evidence with real-tool markers, and prove data-root snapshot restore deterministically. |
 | 022 | merged | [#49](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/49) | Codex PR autopush without automerge | 017, 019 | Add a bounded actuator for pushing materialized fixes to an existing PR branch while forbidding merge, protected-branch pushes, force-push, and secret/workflow changes. |
+| 023 | planned | — | Adversarial proposal corpus | 010 | Add bounded hostile and degenerate model-output fixtures; the loop must reject or park them without crashes, unbounded work, provider calls, or authority bypass. |
 | 024 | ready | — | FEM verification battery | 008, 009 | Build an analytic benchmark ladder that checks mesh/FEM results against known mechanics solutions and convergence expectations. |
+| 025 | planned | — | Semantic routing evaluation and promotion policy | 002, 010 | Use labeled real task/ledger outcomes only after enough dogfood data exists; promote a local classifier per task family only above explicit thresholds and preserve deterministic escalation. |
+| 026 | planned | — | BoardSession stateful multi-persona sessions | 011, 034, 040 | Deferred post-alpha: add shared-state multi-persona sessions only after the advisory panel and memory/context spine prove useful in real work. |
+| 027 | planned | — | Modal and thermal analysis types | 009, 024 | Extend the verified static-FEM boundary only when a real BlueRev decision requires modal or thermal analysis; do not pre-build a broad solver matrix. |
+| 028 | planned | — | Additive migration discipline | — | Document and test the existing versioned, additive migration policy before schema growth makes drift costly; no migration framework rewrite. |
+| 029 | planned | — | Settings and secrets operator page | 015, 018 | Expose existing provider mode, budget, token-cap, and secret-entry endpoints safely; keys never enter localStorage, logs, repository files, or normal frontend state. |
+| 030 | planned | — | Conversation v0 | 037, 042 | Turn a workspace-bound multi-turn conversation into a drafted brief or GeometrySpec that the user explicitly approves before the existing deterministic loop runs. |
+| 031 | planned | — | Vocabulary-aware design conversation | 005, 030 | Give chat the live part-kind catalog and limits so it reports what is expressible, approximate, or unsupported instead of silently degrading requests. |
+| 032 | planned | — | Core Team critique inside design conversation | 011, 030, 034 | Add advisory persona critiques to the approved design-conversation flow without pretending independent agents or bypassing validation and promotion gates. |
+| 033 | planned | — | Human-gated reusable part-kind proposal | 011, 012, 031, 056 | Let AI draft a builder, parameter schema, and golden fixture for a new kind; property/conformance checks and explicit human code promotion are mandatory, and autonomous trusted-vocabulary mutation is forbidden. |
+| 034 | planned | — | AGENT-CORE-1: personas as configuration | — | Freeze persona prompts, capabilities, context profiles, and advisory labels as configuration over the existing AI spine; no independent memory, permissions, or orchestration engine. |
+| 035 | planned | — | Domain Foundation navigator | 040, 050 | Add searchable/editable modeling-record navigation designed around provenance and future depends-on/feeds edges rather than a flat database list. |
+| 036 | planned | — | Honest multi-agent chat UI | 034, 058 | Present clearly labeled advisory persona calls in the unified workspace; do not claim a real swarm until orchestration evidence exists. |
+| 037 | planned | — | Chat entry point to BLUECAD workbench | 010, 042 | Add the smallest chat on-ramp that creates or drafts a candidate in the existing workbench instead of introducing a second product surface. |
 | 038 | in_review | [#65](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/65) | SIM-WIRE | 044 | Wire the existing mesh and static-FEM adapters into the BLUECAD attempt loop as an opt-in advisory stage with evidence records and no auto-promotion. |
+| 039 | planned | — | FRONTIER-1 provider route | 015, 018, 059 | Add the frontier provider adapter/route only behind the same budget, confirmation, sensitivity, redaction, provenance, and audit boundaries as every other external call. |
 | 040 | merged | [#38](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/38) | MEMORYSTORE-0 | — | Add the single proposal/promotion boundary for AI- and calculation-originated engineering records with provenance and additive migration support. |
 | 041 | merged | [#50](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/50) | DECISION-CAPTURE-0 | 040 | Parse bounded `jarvis-records` blocks from approved AI task responses and create proposed records through MemoryStore without extra model calls. |
 | 042 | merged | [#56](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/56) | CONTEXT-PACK-1 | 040 | Add deterministic, budgeted, inspectable record selection with FTS/LIKE fallback and a side-effect-free preview endpoint. |
 | 043 | merged | [#52](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/52) | CALC-1 | 016, 040 | Add a narrow `calc_v0` runner contract with AST policy, unit-bearing JSON outputs, deterministic artifacts, and parameter proposals. |
 | 044 | merged | [#62](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/62) | EVIDENCE-BRIDGE-1 | 042 | Add typed validation/mesh/FEM evidence records and deterministic bounded evidence lines for context packs. |
-| 045 | planned | — | Runner hardening boundary | 043 | Define the next isolation/hardening step and prevent the policy-guarded runner from being misrepresented as an OS-level hostile-code sandbox. |
+| 045 | planned | — | Runner hardening boundary | 043 | Define the next measured isolation step and prevent policy-guarded local Python execution from being represented as an OS-level hostile-code sandbox. |
+| 046 | planned | — | Alternative design loop | 006b, 011, 038 | Trigger only after the review panel proves useful: explain a failed FEM result, propose a bounded alternative, build it, and compare variants without auto-promotion. |
+| 047 | planned | — | BLUEREV-PROCESS-0: geometry, hydraulics, and pumping | 043 | Port workbook ranks 1–7 into unit-bearing `calc_v0` nodes, correct hydraulic-vs-illuminated area and residence-vs-loop-turnover definitions, and ship deterministic/literature verification cases. |
+| 048 | planned | — | BLUEREV-PROCESS-1: biomass, nutrients, gas, harvest, and energy/cost KPIs | 043, 047 | Port ranks 8–18 while correcting productive-volume, recovery-balance, and pump-only-vs-total KPI errors; every claim carries units, assumptions, provenance, and verification cases. |
+| 049 | planned | — | BLUEREV-PROCESS-2: buoyancy and light/transmittance proxies | 043, 047 | Add hardware mass and safety factor to buoyancy; require explicit optical path length; label proxies honestly and expose the measurements that would promote real light models. |
+| 050 | planned | — | FLOWSHEET-1 dependency DAG | 047, 048, 049 | Materialize an inspectable graph from existing provenance without a recompute engine; normalize legacy FK/source forms at read time and own the shared `<kind>:<id>` resolver. |
+| 051 | planned | — | FLOWSHEET-RECALC stale propagation | 050 | When an accepted input changes, deterministically mark dependent outputs stale and explain the dependency path; no automatic recomputation or silent promotion. |
+| 052 | planned | — | CAD-LINK: process calculations to geometry and evidence back-links | 005, 038, 050 | Map accepted diameter, length, and tube-count outputs into GeometrySpec inputs and return validation/FEM evidence to the upstream nodes without making solver output authoritative. |
+| 053 | planned | — | Decision packet and dossier export | 041, 044, 048 | Export recommendations, alternatives, evidence, assumptions, uncertainty, and provenance as a readable decision-to-evidence dossier for thesis, advisor, investor, or later IP/grant workflows. |
+| 054 | planned | — | Proposal-review UI | 040, 041, 058 | Show proposed records with provenance and provide explicit promote/reject actions over existing endpoints; this is the load-bearing human authority surface. |
+| 055 | planned | — | Project view: Mark-1 as one navigable object | 035, 044, 050 | Assemble decisions, calculations, CAD, evidence, and flowsheet for one workspace without inventing a second store or duplicating canonical data. |
 | 056 | ready | — | BLUECAD property-based geometry testing + determinism canary | 005 | Add generated valid GeometrySpec coverage and a checked-in manifest-digest canary without invoking live CAD/solver tools in normal CI. |
 | 057 | cancelled | — | SPEC-LEDGER-0 | — | Cancelled after [planning PR #64](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/64): a generated ledger script and parallel handoff file are unnecessary while this canonical registry is sufficient. |
+| 058 | planned | — | Unified workspace home layout | 006, 029, 037 | Replace page-first navigation with the BLUECAD workbench/3D surface, persistent right-side AI entry, compact status strip, and shared design tokens; historical roadmap references to workspace-home `057` now mean `058`. |
+| 058b | planned | — | Workbench UX pass 2: variant comparison and design history | 006b, 058 | Add bounded side-by-side variant comparison and a parent-link history tree after parametric variants and the unified workspace exist. |
+| 058c | planned | — | Report-to-3D linking | 006, 044, 058 | Let a failed validation/evidence check highlight the affected named geometry in the viewer, reusing existing artifact/node identities. |
+| 059 | planned | — | IP-EGRESS-1: sensitivity, retrieval, and external-boundary enforcement | 015, 018, 040, 042 | Turn the existing S0–S4 PRE contracts into one fail-closed runtime decision boundary for memory/history/retrieval, provider/tool eligibility, redaction, confirmation, and provenance-preserving sanitized derivatives before real BlueRev IP is dogfooded externally. |
+| 060 | planned | — | AGENT-ORCH: bounded real orchestration | 011, 034, 040, 042 | Supersede historical orchestration references to `045`; trigger only after memory/context and the advisory panel survive sustained dogfood, then add auditable bounded steps rather than a second authority or manager stack. |
+
+## Superseded planning aliases and resolved collisions
+
+- Historical `045 = AGENT-ORCH` references are superseded by `060`; `045` is
+  already owned by the runner-hardening boundary.
+- Historical `057 = Workspace home`, `057b`, and `057c` references are
+  superseded by `058`, `058b`, and `058c`; `057` remains the cancelled
+  SPEC-LEDGER-0 and must not be reused.
+- The current `021` implementation PR covers execution-gate hardening only.
+  Remaining executable end-to-end alpha proof plus backup/restore work is
+  tracked as planned `021b` until a full reconciled spec is written.
 
 ## Notes requiring later reconciliation
 
-- Strategy/backlog documents may contain planned numbers that do not yet have a
-  ready spec file. They are not live spec state until added to this registry.
+- Strategy/backlog documents are planning evidence, not live state. Where their
+  numbering or sequence conflicts with this file, this registry wins; update the
+  strategy document only when it is next touched for a real drafting decision.
 - Historical individual spec `Status:` lines may still use the old vocabulary.
   They should not be used for dispatch decisions and do not need a bulk cleanup.
+- The process verification battery remains acceptance scope inside `047`–`049`;
+  do not create a separate subsystem unless implementation exposes a concrete gap.
+- Founder-layer ideas (patent/prior-art, grants, BOM/supplier, regulatory) remain
+  trigger-gated product directions, not specs, until a real filing, deadline,
+  procurement decision, or regulatory question creates a bounded deliverable.
+- The separate local-model/Hermes benchmark program remains postponed until
+  2026-07-22 and does not belong in this JarvisOS implementation registry yet.
 - If a row conflicts with merged code or GitHub PR state, correct this file in the
   smallest possible follow-up and record the evidence in the implementation PR
   column or description according to the column contract above.
