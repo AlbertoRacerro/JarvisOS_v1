@@ -33,9 +33,8 @@ those file lists into a second place.
 
 ## Current priority
 
-- `038` is in review in PR #65.
-- `021` alpha-gate hardening is in review in PR #66.
-- Choose the next `ready` spec only after checking these open PRs for overlap.
+- Check rows marked `in_review` in the registry before choosing any `ready` spec.
+- Choose the next `ready` spec only after confirming no open PR overlaps the target work.
 
 ## Registry
 
@@ -59,7 +58,7 @@ those file lists into a second place.
 | 017 | merged | [#37](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/37) | Autonomous three-tier review | 004 | Implement cheap → senior → expert advisory review with bounded Codex fix loops and human-only merge authority. |
 | 018 | merged | [#33](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/33), [#43](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/43) | PROVIDER-GW-2 | 015 | Complete provider-cap/fallback enforcement and correct provider usage accounting while preserving explicit routing and audit controls. |
 | 019 | merged | [#40](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/40), [#41](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/41), [#44](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/44) | Senior review hardening | 017 | Harden streaming, reasoning budgets, verdict parsing, stale-script behavior, retry limits, and review diagnostics. |
-| 020 | ready | [#42](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/42) | Pipeline doctor | 017, 019 | Add a deterministic watchdog for silent review-pipeline failures, stale branches, missing labels/comments, and stalled fix requests. |
+| 020 | ready | — | Pipeline doctor | 017, 019 | Add a deterministic watchdog for silent review-pipeline failures, stale branches, missing labels/comments, and stalled fix requests. |
 | 021 | in_review | [#66](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/66) | ALPHA-GATE | 038, 044 for the full pipeline; current hardening slice is independently reviewable | Enforce a deterministic server-owned gate before side-effectful BLUECAD execution and reject request-payload self-authorization. |
 | 022 | merged | [#49](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/49) | Codex PR autopush without automerge | 017, 019 | Add a bounded actuator for pushing materialized fixes to an existing PR branch while forbidding merge, protected-branch pushes, force-push, and secret/workflow changes. |
 | 024 | ready | — | FEM verification battery | 008, 009 | Build an analytic benchmark ladder that checks mesh/FEM results against known mechanics solutions and convergence expectations. |
@@ -69,8 +68,8 @@ those file lists into a second place.
 | 042 | merged | [#56](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/56) | CONTEXT-PACK-1 | 040 | Add deterministic, budgeted, inspectable record selection with FTS/LIKE fallback and a side-effect-free preview endpoint. |
 | 043 | merged | [#52](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/52) | CALC-1 | 016, 040 | Add a narrow `calc_v0` runner contract with AST policy, unit-bearing JSON outputs, deterministic artifacts, and parameter proposals. |
 | 044 | merged | [#62](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/62) | EVIDENCE-BRIDGE-1 | 042 | Add typed validation/mesh/FEM evidence records and deterministic bounded evidence lines for context packs. |
-| 045 | planned | [#58](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/58) | Runner hardening boundary | 043 | Define the next isolation/hardening step and prevent the policy-guarded runner from being misrepresented as an OS-level hostile-code sandbox. |
-| 056 | ready | [#55](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/55) | BLUECAD property-based geometry testing + determinism canary | 005 | Add generated valid GeometrySpec coverage and a checked-in manifest-digest canary without invoking live CAD/solver tools in normal CI. |
+| 045 | planned | — | Runner hardening boundary | 043 | Define the next isolation/hardening step and prevent the policy-guarded runner from being misrepresented as an OS-level hostile-code sandbox. |
+| 056 | ready | — | BLUECAD property-based geometry testing + determinism canary | 005 | Add generated valid GeometrySpec coverage and a checked-in manifest-digest canary without invoking live CAD/solver tools in normal CI. |
 | 057 | cancelled | [#64](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/64) | SPEC-LEDGER-0 | — | Cancelled: a generated ledger script and parallel handoff file are unnecessary; this manually maintained canonical registry solves the immediate problem with less infrastructure. |
 
 ## Notes requiring later reconciliation
