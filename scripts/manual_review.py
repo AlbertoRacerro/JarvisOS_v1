@@ -46,6 +46,11 @@ def _manual_prompt(prompt: str) -> str:
     )
 
 
+def _sanitize_review_output(review: str) -> str:
+    """Prevent a disobedient reviewer from emitting an actionable Codex mention."""
+    return review.replace("@codex", "Codex").replace("@Codex", "Codex")
+
+
 def _fetch_pr(repo: str, pr_number: int, token: str) -> dict:
     status, payload = gh_request(
         "GET",
@@ -93,6 +98,9 @@ def self_test() -> None:
     assert "explicitly requested" in prompt
     assert prompt.count("@codex") == 1
     assert "base prompt with an implementation agent reference" in prompt
+    sanitized = _sanitize_review_output("ask @codex or @Codex to patch")
+    assert sanitized == "ask Codex or Codex to patch"
+    assert "@codex" not in sanitized.lower()
     for footer in (
         _manual_footer(approved=True, escalation=None, stale_head=False, truncated=False),
         _manual_footer(approved=False, escalation=None, stale_head=False, truncated=False),
@@ -178,6 +186,7 @@ def main() -> None:
         )
         raise RuntimeError(f"manual review provider call failed ({detail})") from exc
 
+    review = _sanitize_review_output(review)
     verdict = parse_verdict(review)
     approved = verdict == "NO_FURTHER_CHANGES"
     escalation = parse_escalation(review) if tier == "senior" else None
