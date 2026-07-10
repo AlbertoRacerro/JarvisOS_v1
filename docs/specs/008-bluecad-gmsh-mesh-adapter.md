@@ -125,3 +125,10 @@ the generated C3D10 mesh artifact. Implementation and real-tool proof belong to
 024-A, not to spec 008 itself. See
 `docs/specs/024-fem-verification-battery.md`, section `024-A — quadratic
 tetrahedron contract`.
+
+Implementation PR #77 adds the field to the JSON Schema and server-owned
+Pydantic model, preserves the exact order-1 subprocess argv, requests `-order 2`
+only for order 2, records actual volume-element types from the generated INP,
+and fails closed unless an order-2 request yields an exclusively C3D10 volume
+mesh. The same strict real-tool job then passes that retained C3D10 mesh through
+CalculiX; pressure behavior remains out of scope for 024-A.
