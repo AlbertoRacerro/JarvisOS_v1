@@ -147,6 +147,37 @@ def test_order_two_fails_when_tool_ignores_request(tmp_path: Path) -> None:
     ]
 
 
+def test_order_two_rejects_positive_negative_jacobian_count(tmp_path: Path) -> None:
+    result = mesh_analysis_spec(
+        _analysis(tmp_path, 2),
+        tmp_path / "negativejac",
+        registry_path=_registry(tmp_path),
+    )
+    assert result["verdict"] == "fail"
+    assert result["errors"] == [
+        {
+            "code": "MESH_HIGH_ORDER_INVALID",
+            "detail": {
+                "requested_order": 2,
+                "diagnostics": ["Warning: 244 elements with jac. < 0"],
+                "reported_invalid_elements": 244,
+            },
+        }
+    ]
+    assert len(result["attempts"]) == 1
+    assert result["attempts"][0]["counts"]["volume_element_types"] == {"C3D10": 1}
+
+
+def test_order_two_accepts_explicit_zero_negative_jacobian_count(tmp_path: Path) -> None:
+    result = mesh_analysis_spec(
+        _analysis(tmp_path, 2),
+        tmp_path / "zerojac",
+        registry_path=_registry(tmp_path),
+    )
+    assert result["verdict"] == "pass"
+    assert result["attempts"][0]["counts"]["volume_element_types"] == {"C3D10": 1}
+
+
 @pytest.mark.parametrize("value", [0, 3, True, 1.0, "2"])
 def test_invalid_runtime_element_order_fails_before_execution(tmp_path: Path, value: object) -> None:
     spec = _analysis(tmp_path, value)
