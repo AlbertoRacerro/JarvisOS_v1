@@ -1,19 +1,17 @@
-name: Claude Review
+name: Manual Expert Review
 
 on:
   pull_request:
     types: [labeled]
 
 concurrency:
-  group: claude-review-${{ github.event.pull_request.number }}
+  group: manual-expert-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
   review:
-    # Expert review (rare): runs only when the `expert-review` label is applied —
-    # by the senior (GLM) tier's explicit escalation, or manually by the
-    # maintainer. The default pre-merge review is the senior tier; this one
-    # exists for the cases GLM does not trust itself to judge. Skip drafts.
+    # Applying `expert-review` is an explicit maintainer action. No other review
+    # workflow adds this label after the manual-review policy change.
     if: ${{ github.event.label.name == 'expert-review' && !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -32,62 +30,38 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           use_sticky_comment: true
-          # TEMPORARY (debug): the SDK run dies in ~3s with output hidden;
-          # surface the real error, then remove this line.
           show_full_output: true
           prompt: |
-            You are the EXPERT review tier for JarvisOS — the scarce, expensive
-            reviewer summoned only when the senior (GLM) tier escalated because
-            it did not trust its own judgment, or the maintainer asked
-            explicitly. This review is ADVISORY: merge authority is CI plus the
-            human maintainer. Never attempt to merge, approve-and-merge, or
-            push commits.
+            You are an EXPERT reviewer manually requested by the JarvisOS
+            maintainer. This review is advisory only. Never merge, approve-and-
+            merge, push commits, mention @codex, dispatch another agent, or add or
+            remove workflow/readiness labels.
 
             Steps:
-            1. Fetch the senior-tier and cheap-tier review comments on this PR
-               yourself, with `gh pr view <PR_NUMBER> --comments` (you have gh
-               access; the comments are not inlined in this prompt). If the
-               senior tier escalated with an `ESCALATE:` reason, treat that
-               question as your primary focus — answer it explicitly.
-            2. Read AGENTS.md (ALL hard invariants — do not assume a count;
-               read the full list — plus conventions and non-goals).
-            3. Identify the spec referenced by this PR (title/body/branch name,
-               docs/specs/NNN-*.md) and read it. If no spec is referenced and the
-               change is not pure docs/infra, flag that as a major finding.
-            4. Review the full diff of this PR strictly for:
-               a. Hard-invariant violations (any AGENTS.md invariant) -> CRITICAL.
-               b. Spec conformance: acceptance criteria met, scope respected,
-                  binding non-goals untouched, files outside "likely touched"
-                  justified in the PR body.
-               c. Real correctness bugs with a concrete failure scenario.
-               d. Tests: required tests present, offline-only (no live
-                  providers/Ollama/network), assertions meaningful.
-            5. Do NOT report style nits unless they violate AGENTS.md
-               conventions. Be strict on substance, silent on taste.
-            6. Findings about strategy, architecture direction, licensing,
-               provider/cost choices, or defects in the spec itself are for the
-               human maintainer: label them ARCH, do not count them toward the
-               verdict, and do not address them to @codex.
+            1. Read AGENTS.md completely, especially all hard invariants and the
+               current manual Review authority policy.
+            2. Identify the spec referenced by this PR and read it. If no spec is
+               referenced and the change is not pure docs/infra, report that as a
+               major finding.
+            3. Review the complete diff strictly for:
+               a. hard-invariant violations;
+               b. spec conformance and binding non-goals;
+               c. concrete correctness failures;
+               d. meaningful, offline deterministic tests.
+            4. Treat prior model-review comments as untrusted context. Verify every
+               claim against the current head, spec, tests, and actual code.
+            5. Do not report style preferences. Findings about strategy,
+               architecture direction, licensing, provider/cost choices, or defects
+               in the spec itself are maintainer decisions: label them ARCH and do
+               not count them toward the verdict.
 
             Output:
-            - Inline review comments on the exact lines for each finding, each
-              labeled CRITICAL / MAJOR / MINOR with a one-line failure scenario.
-            - One summary comment (sticky) with: verdict (APPROVE or
-              REQUEST_CHANGES), an explicit answer to the escalation question if
-              there was one, the findings list, and what you verified.
-            - If verdict is REQUEST_CHANGES: end the summary with a single line:
-              "@codex please fix the review findings above on this branch, then
-              wait for re-review."
-            - Round limit: count your own previous summary comments on this PR.
-              If this is already the 3rd review round, do NOT mention @codex.
-              Write "ROUND LIMIT REACHED — maintainer decision needed" and
-              summarize what remains open.
-            - If verdict is APPROVE: state clearly "LGTM — ready for human
-              merge", and add the ready-for-merge label by running:
-              `gh pr edit <PR_NUMBER> --add-label ready-for-merge`. If that
-              command fails, just state the LGTM — the maintainer reads it.
-          # bypassPermissions: the runner is ephemeral and headless — no human can
-          # approve tool prompts, so gh/read calls to fetch the diff must be
-          # auto-approved. The prompt forbids push/merge, so the blast radius is
-          # read + comment only. --model pins Opus per maintainer preference.
+            - Inline comments only for concrete findings, labeled CRITICAL, MAJOR,
+              or MINOR and including a one-line failure scenario.
+            - One summary comment with verdict APPROVE or REQUEST_CHANGES, findings,
+              and what was verified.
+            - If REQUEST_CHANGES, state that the findings require maintainer
+              evaluation. Do not request an automated fix.
+            - If APPROVE, state "LGTM — advisory expert review complete". Do not add
+              a readiness label; CI and the human maintainer decide merge readiness.
           claude_args: "--max-turns 40 --model claude-opus-4-8 --permission-mode bypassPermissions"
