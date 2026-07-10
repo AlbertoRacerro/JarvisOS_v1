@@ -215,6 +215,13 @@ class _AnalysisMesh(BaseModel):
     refinements: dict[str, float] | None = None
     quality: _AnalysisMeshQuality | None = None
 
+    @field_validator("element_order", mode="before")
+    @classmethod
+    def _validate_element_order(cls, value: Any) -> int:
+        if type(value) is not int or value not in (1, 2):
+            raise ValueError("mesh.element_order must be integer 1 or 2")
+        return value
+
     @model_validator(mode="after")
     def _validate_refinements(self) -> _AnalysisMesh:
         if self.refinements is not None and any(value <= 0 for value in self.refinements.values()):
