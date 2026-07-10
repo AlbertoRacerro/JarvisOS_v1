@@ -45,10 +45,10 @@ before Codex or another coding agent may act on them.
 
 ## Current priority and drafting order
 
-1. Complete `021b` Slice B: atomic backup/restore with relocation verification;
-   Slice A merged in PR #72.
-2. Implement the already-ready engineering quality slices `024` and `056` only
-   after reconciling their known definition blockers.
+1. Merge definition PR [#76](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/76),
+   then implement `024` in ordered slices: `024-A` (C3D10), `024-B`
+   (solid-face pressure proof), and `024-C` (analytic battery).
+2. Reconcile the known definition blockers in `056` before implementation.
 3. Before serious BlueRev dogfood with real project IP or cloud providers, draft
    and implement `059` (sensitivity, retrieval, and egress enforcement).
 4. Then draft in small dependency batches:
@@ -89,10 +89,10 @@ that no open PR overlaps the target files or runtime boundary.
 | 019 | merged | [#40](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/40), [#41](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/41), [#44](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/44) | Senior review hardening | 017 | Retain bounded requests, streaming, parsing, staleness, and diagnostics for manually dispatched reviews only. |
 | 020 | cancelled | — | Pipeline doctor | 017, 019 | Cancelled because the automatic review/fix pipeline was removed; deterministic CI and explicit maintainer review remain authoritative. |
 | 021 | merged | [#70](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/70) | ALPHA-GATE hardening | — | Enforce the server-owned external-provider decision at the shared execution spine for every concrete network binding and fallback; PR #70 supersedes stale PR #66. |
-| 021b | in_review | [#72](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/72), [#75](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/75) | ALPHA-GATE completion: real-tool proof + recoverable data root | 021, 038, 044 | Slice A strict real-tool proof merged in [#72](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/72); Slice B atomic path-rebased backup/restore is under review in [#75](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/75). |
+| 021b | merged | [#72](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/72), [#75](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/75) | ALPHA-GATE completion: real-tool proof + recoverable data root | 021, 038, 044 | Strict hash-verified real-tool proof merged in [#72](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/72), and atomic path-rebased backup/restore merged in [#75](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/75). |
 | 022 | merged | [#49](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/49) | Codex PR autopush without automerge | 017, 019 | Retain the bounded same-branch actuator for explicit maintainer-requested Codex work; no workflow dispatches it automatically. |
 | 023 | planned | — | Adversarial proposal corpus | 010 | Add bounded hostile and degenerate model-output fixtures; the loop must reject or park them without crashes, unbounded work, provider calls, or authority bypass. |
-| 024 | ready | — | FEM verification battery | 008, 009 | Build an analytic benchmark ladder that checks mesh/FEM results against known mechanics solutions and convergence expectations. |
+| 024 | ready | — | FEM verification battery | 008, 009, 021b | Implement ordered slices 024-A (verified C3D10), 024-B (solid-face pressure mapping and real reaction-balance proof), and 024-C (location-specific cantilever, Lamé, and Kirsch analytic battery). |
 | 025 | planned | — | Semantic routing evaluation and promotion policy | 002, 010 | Use labeled real task/ledger outcomes only after enough dogfood data exists; promote a local classifier per task family only above explicit thresholds and preserve deterministic escalation. |
 | 026 | planned | — | BoardSession stateful multi-persona sessions | 011, 034, 040 | Deferred post-alpha: add shared-state multi-persona sessions only after the advisory panel and memory/context spine prove useful in real work. |
 | 027 | planned | — | Modal and thermal analysis types | 009, 024 | Extend the verified static-FEM boundary only when a real BlueRev decision requires modal or thermal analysis; do not pre-build a broad solver matrix. |
