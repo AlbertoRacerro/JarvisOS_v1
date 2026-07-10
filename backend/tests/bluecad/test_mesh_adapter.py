@@ -8,6 +8,7 @@ import pytest
 
 from app.modules.bluecad.fem_adapter import _parse_mesh
 from app.modules.bluecad.mesh_adapter import _gmsh_args, mesh_analysis_spec
+from app.modules.bluecad.models import BluecadLoopConfig
 from app.modules.bluecad.registry import ToolRegistryError, resolve_tool
 
 FAKE_GMSH = Path(__file__).parent / "fixtures" / "fake_gmsh.py"
@@ -197,6 +198,19 @@ def test_injection_rejected_before_write(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         mesh_analysis_spec(spec, tmp_path / "mesh", registry_path=_registry(tmp_path))
     assert not (tmp_path / "mesh" / "mesh.geo").exists()
+
+
+def test_loop_config_accepts_only_integer_element_orders(tmp_path: Path) -> None:
+    spec = _analysis(tmp_path, 2)
+    spec.pop("geometry")
+    spec["pass_criteria"] = [{"metric": "max_displacement", "op": "<=", "value": 1.0}]
+    config = BluecadLoopConfig(analysis_spec=spec)
+    assert config.analysis_spec is not None
+    assert config.analysis_spec["mesh"]["element_order"] == 2
+    for invalid in (0, 3, True, 1.0, "2"):
+        spec["mesh"]["element_order"] = invalid
+        with pytest.raises(ValueError):
+            BluecadLoopConfig(analysis_spec=spec)
 
 
 def test_analysis_schema_full_static_example_round_trips(tmp_path: Path) -> None:

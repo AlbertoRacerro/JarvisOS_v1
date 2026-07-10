@@ -211,6 +211,7 @@ class _AnalysisMesh(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
     target_size: float = Field(gt=0)
+    element_order: Literal[1, 2] = 1
     refinements: dict[str, float] | None = None
     quality: _AnalysisMeshQuality | None = None
 
