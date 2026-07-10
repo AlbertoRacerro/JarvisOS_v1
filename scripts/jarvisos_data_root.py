@@ -1,16 +1,37 @@
-"""Atomic JarvisOS data-root snapshot, verification, and restore CLI.
+#!/usr/bin/env python3
+"""Atomic snapshot, verification, and restore for the JarvisOS data root."""
 
-Implementation is intentionally completed within spec 021b-B. This initial
-module establishes the dedicated script path for the draft implementation PR;
-all operations fail closed until the implementation and tests land.
-"""
+from data_root_recovery import (
+    COMPLETION_MARKER,
+    MANIFEST_NAME,
+    DataRootError,
+    SnapshotResult,
+    create_snapshot,
+    rebase_absolute_path,
+    restore_snapshot,
+    sha256_file,
+    verify_snapshot,
+)
+from data_root_recovery.cli import main
+from data_root_recovery.common import (
+    _canonical_json_bytes,
+    _string_mentions_source_root,
+)
 
-from __future__ import annotations
-
-
-def main() -> int:
-    raise SystemExit("spec 021b-B implementation in progress")
-
+__all__ = [
+    "COMPLETION_MARKER",
+    "MANIFEST_NAME",
+    "DataRootError",
+    "SnapshotResult",
+    "_canonical_json_bytes",
+    "_string_mentions_source_root",
+    "create_snapshot",
+    "main",
+    "rebase_absolute_path",
+    "restore_snapshot",
+    "sha256_file",
+    "verify_snapshot",
+]
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
