@@ -13,7 +13,7 @@ claims instead of conflating them:
 1. the mesh adapter can request and verify quadratic tetrahedra without changing
    existing first-order behavior;
 2. a pressure attached to a named geometric surface reaches the correct faces of
-   solid elements and produces the expected resultant reaction;
+   solid elements and produces the expected load balance;
 3. prescribed benchmark results agree with closed-form mechanics solutions at
    stated locations and tolerances.
 
@@ -162,7 +162,7 @@ Before Lamé is permitted, run a rectangular solid patch test:
 - C3D10 mesh;
 - reaction resultant on the fixed face must oppose the applied load and agree
   within `1%`;
-- no transverse resultant may exceed `0.5%` of `p A`.
+- no unintended transverse resultant may exceed `0.5%` of `p A`.
 
 This test proves surface selection, face numbering, pressure sign, deck syntax,
 and solver interpretation together. A deck-text assertion alone is insufficient.
@@ -204,10 +204,17 @@ All cases:
   comparison data in the report artifact;
 - compare the analytic quantity at the analytic location, not merely against a
   global maximum;
-- fail closed when the expected sampling region is absent or under-resolved;
-- verify that the fixed-face reaction resultant agrees with the applied force or
-  pressure resultant within `1%`, with unintended transverse components below
-  `0.5%` of the intended resultant.
+- fail closed when the expected sampling region is absent or under-resolved.
+
+Load-balance evidence is case-aware:
+
+- for non-zero-resultant load cases (cantilever and plate, plus the 024-B patch),
+  fixed-face reaction must oppose and match the applied resultant within `1%`,
+  with unintended transverse components below `0.5%` of its magnitude;
+- the complete cylindrical bore pressure is vectorially self-equilibrated. For
+  Lamé, the mapped loaded area must agree with `2 pi a L` within `1%`, and both
+  the integrated applied-force vector and fixed-face reaction vector must have
+  norm below `0.5%` of the scalar pressure-force scale `p (2 pi a L)`.
 
 Material for all three cases unless a fixture states otherwise:
 
@@ -278,12 +285,18 @@ Prescribed reference fixture:
 
 The current mesh adapter uses cubic port-selection boxes. One cube large enough
 to contain the full long bore would also contain the outer cylinder and end
-faces. Therefore the fixture must partition the bore into deterministic axial
-surface bands, each short enough for its selection cube to exclude the outer and
-end surfaces. Each band has a distinct manifest label and an identical pressure
-load. The union of mapped bands must cover the bore exactly once: no gaps,
-duplicates, outer-surface elements, or end-face elements. This is fixture design,
-not a new generic surface-selection API.
+faces. Therefore the fixture partitions the bore into exactly eight axial bands
+of `20 mm`, centered at `z = 10, 30, ..., 150 mm`. Each band has a distinct
+manifest label and an identical pressure load. Its fixture selection value is
+chosen so the adapter's `0.75 × outer_d/pad_d` cube half-side is `20.5 mm`:
+large enough to contain the radius-20 band, but smaller than the radius-40 outer
+surface and too short to fully contain either adjacent band. The real group audit
+must prove this assumption rather than infer it from the manifest.
+
+The union of mapped bands must cover the bore exactly once: no gaps, duplicate
+faces, outer-surface elements, or end-face elements. The summed mapped triangle
+area must agree with `2 pi a L` within `1%`. This is fixture design, not a new
+generic surface-selection API.
 
 Sampling contract:
 
@@ -362,6 +375,7 @@ Add pure, offline-testable functions for:
 - INP coordinate/connectivity/group parsing;
 - FRD component-aware stress parsing;
 - Cartesian-to-cylindrical/tangential stress transformation;
+- surface-area and applied-resultant integration;
 - location filtering and deterministic aggregation;
 - Markdown and JSON report rendering.
 
@@ -375,7 +389,7 @@ The generated report contains at minimum:
 - per-case coarse/fine target sizes where applicable;
 - analytic formula, inputs, expected value, sampled value, relative error,
   tolerance, and verdict;
-- applied and reaction resultants;
+- mapped loaded area plus applied and reaction resultants;
 - sampling node IDs and location residuals;
 - artifact paths relative to the uploaded proof root;
 - explicit limitations: linear elasticity, static analysis, ideal geometry,
@@ -427,7 +441,8 @@ unrelated provider or execution path.
 - INP group/coordinate parsing;
 - cylindrical/tangential transformations;
 - location-selection rejection tests;
-- segmented-bore coverage/duplication rejection;
+- segmented-bore group, area, gap, and duplication rejection;
+- nonzero-resultant and self-equilibrated load-balance tests;
 - report determinism with normalized environment inputs;
 - one real test per benchmark plus the cantilever refinement sanity run;
 - corrupt/missing FRD, missing group, insufficient angular samples, and wrong
@@ -441,9 +456,10 @@ unrelated provider or execution path.
    backward compatible;
 2. real CalculiX pressure on a named solid face passes the patch-test reaction
    balance;
-3. cantilever, Lamé, and finite-width-hole cases pass `2%`, `5%`, and `7%`
+3. the segmented Lamé bore passes group coverage, mapped-area, and
+   self-equilibrated resultant checks;
+4. cantilever, Lamé, and finite-width-hole cases pass `2%`, `5%`, and `7%`
    location-specific tolerances respectively;
-4. applied and reaction resultants pass their balance checks;
 5. the battery report and raw bounded artifacts are uploaded from the same run;
 6. the complete backend suite and Ruff pass;
 7. no conformance test is weakened, skipped by default when strict mode is
@@ -459,7 +475,7 @@ Stop and amend the spec rather than guessing when:
 - CalculiX or the current parser cannot consume the generated C3D10 mesh;
 - surface-to-solid-face mapping cannot be made unique from the exported mesh;
 - cubic bounding-box groups cannot isolate every segmented bore band without
-  selecting outer or end surfaces;
+  selecting outer, end, or neighboring band surfaces;
 - the pressure patch test fails sign or resultant checks;
 - the retained artifacts do not expose coordinates/components needed for
   location-specific sampling;
