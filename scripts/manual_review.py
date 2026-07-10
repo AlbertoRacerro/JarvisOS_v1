@@ -37,12 +37,13 @@ MANUAL_COMMENT_MARKER = "<!-- manual-review:{provider}:{tier} -->"
 
 
 def _manual_prompt(prompt: str) -> str:
+    sanitized = prompt.replace("@codex", "an implementation agent")
     return (
         "This review was explicitly requested by the maintainer. Return advisory "
         "findings only. Do not mention or address @codex, do not request an automated "
         "fix, do not apply or recommend workflow labels, and do not claim gate or merge "
         "authority. The maintainer will independently verify every finding.\n\n"
-        + prompt
+        + sanitized
     )
 
 
@@ -77,8 +78,8 @@ def _manual_footer(*, approved: bool, escalation: str | None, stale_head: bool, 
         )
     elif approved:
         notes.append(
-            "No blocking findings were reported. No readiness label was applied; "
-            "CI and the human maintainer remain the only merge authority."
+            "No blocking findings were reported. No readiness label was applied "
+            "automatically; CI and the human maintainer remain the only merge authority."
         )
     else:
         notes.append(
@@ -89,9 +90,10 @@ def _manual_footer(*, approved: bool, escalation: str | None, stale_head: bool, 
 
 
 def self_test() -> None:
-    prompt = _manual_prompt("base prompt")
+    prompt = _manual_prompt("base prompt with @codex reference")
     assert "explicitly requested" in prompt
-    assert "Do not mention or address @codex" in prompt
+    assert prompt.count("@codex") == 1
+    assert "base prompt with an implementation agent reference" in prompt
     for footer in (
         _manual_footer(approved=True, escalation=None, stale_head=False, truncated=False),
         _manual_footer(approved=False, escalation=None, stale_head=False, truncated=False),
