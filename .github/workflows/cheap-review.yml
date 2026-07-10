@@ -1,17 +1,22 @@
-name: Cheap Review
+name: Manual Cheap Review
 
 on:
-  pull_request:
-    types: [opened, synchronize, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Open pull request number to review"
+        required: true
+        type: string
 
 concurrency:
-  group: cheap-review-${{ github.event.pull_request.number }}
+  group: manual-cheap-review-${{ inputs.pr_number }}
   cancel-in-progress: true
 
 jobs:
   review:
-    # Skip drafts; review everything else, including Codex-authored PRs.
-    if: ${{ !github.event.pull_request.draft }}
+    # Dispatch from master only. This prevents a feature branch from changing the
+    # workflow and then receiving provider secrets.
+    if: ${{ github.ref == 'refs/heads/master' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -21,52 +26,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: refs/pull/${{ inputs.pr_number }}/head
           fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # Validates the PR's own version of the script offline: reviewer-tooling
-      # changes are exercised here, since the live call below is pinned.
-      - name: Self-test review helpers (PR version, offline)
-        run: python scripts/cheap_review.py --self-test
-
-      # The pull_request merge ref can be STALE (computed at the PR's last
-      # push), silently running an outdated review script — and an unpinned
-      # script would let any PR modify its own reviewer. The PR checkout stays
-      # for spec/AGENTS resolution; the live review always runs the master
-      # script (tooling changes go live on merge).
-      - name: Pin review script to master
+      # The PR checkout supplies its spec, AGENTS.md, and diff context. Executable
+      # reviewer code is always replaced with the trusted master copy before use.
+      - name: Pin manual reviewer to master
         run: |
           git fetch origin master
-          git checkout FETCH_HEAD -- scripts/cheap_review.py
+          git checkout FETCH_HEAD -- scripts/cheap_review.py scripts/manual_review.py
 
-      - name: Self-test review helpers (pinned version, offline)
-        run: python scripts/cheap_review.py --self-test
+      - name: Self-test trusted review helpers
+        run: |
+          python scripts/cheap_review.py --self-test
+          python scripts/manual_review.py --self-test
 
-      - name: Run cheap-tier review
+      - name: Run manually requested cheap review
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # PAT for label writes: labels added with the default GITHUB_TOKEN do
-          # not trigger other workflows, so the `frontier-review` label would
-          # never start the senior (GLM) review without this. Falls back to
-          # GITHUB_TOKEN with a visible note in the review comment.
-          LABEL_TOKEN: ${{ secrets.REVIEW_BOT_TOKEN }}
-          # Provider config. Defaults target the DeepSeek direct API; override
-          # these three to switch provider without changing the script.
+          REVIEW_PR_NUMBER: ${{ inputs.pr_number }}
           CHEAP_REVIEW_PROVIDER: deepseek
           CHEAP_REVIEW_BASE_URL: https://api.deepseek.com
-          # deepseek-v4-pro (was deepseek-chat / "flash") — stronger cheap-tier
-          # reviewer. If this id 404s, revert to deepseek-chat.
           CHEAP_REVIEW_MODEL: deepseek-v4-pro
           CHEAP_REVIEW_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           REVIEW_TIER: cheap
-          FRONTIER_LABEL: frontier-review
-          EXPERT_LABEL: expert-review
-          READY_LABEL: ready-for-merge
-          ROUND_LIMIT: "3"
-          # Reviews of diffs larger than this are partial and never auto-apply
-          # the frontier label. Raise after confirming the model's context size.
+          REVIEW_TITLE: "Manual cheap review"
           CHEAP_REVIEW_DIFF_CAP: "60000"
-        run: python scripts/cheap_review.py
+        run: python scripts/manual_review.py
