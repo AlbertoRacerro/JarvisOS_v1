@@ -26,7 +26,7 @@ class NumericCheckResult(BaseModel):
 
 def _is_sequence(value: object) -> bool:
     return isinstance(value, Sequence) and not isinstance(
-        value, (str, bytes, bytearray)
+        value, str | bytes | bytearray
     )
 
 
