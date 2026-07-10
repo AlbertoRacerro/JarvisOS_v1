@@ -66,8 +66,40 @@ jobs:
           def digest(path: str) -> str:
               return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
+          registry_path = Path(os.environ["REGISTRY_PATH"])
           gmsh = os.environ["GMSH_BIN"]
           ccx = os.environ["CCX_BIN"]
+          health_deck = registry_path.with_name("health.inp")
+          health_deck.write_text(
+              """*HEADING
+          BLUECAD CalculiX registry health check
+          *NODE
+          1,0,0,0
+          2,1,0,0
+          3,0,1,0
+          4,0,0,1
+          *ELEMENT, TYPE=C3D4, ELSET=BODY
+          1,1,2,3,4
+          *MATERIAL, NAME=STEEL
+          *ELASTIC
+          200000.,0.3
+          *SOLID SECTION, ELSET=BODY, MATERIAL=STEEL
+          *BOUNDARY
+          1,1,3,0
+          2,2,3,0
+          3,3,3,0
+          *STEP
+          *STATIC
+          *CLOAD
+          4,1,1.
+          *NODE FILE
+          U
+          *EL FILE
+          S
+          *END STEP
+          """,
+              encoding="utf-8",
+          )
           payload = {
               "registry_version": "bluecad_tool_registry_v0_1",
               "tools": [
@@ -95,11 +127,11 @@ jobs:
                       "binary_sha256": digest(ccx),
                       "provenance_url": "https://packages.ubuntu.com/noble/calculix-ccx",
                       "capabilities": ["static"],
-                      "health_check": f"{ccx} -v",
+                      "health_check": f"{ccx} health",
                   },
               ],
           }
-          Path(os.environ["REGISTRY_PATH"]).write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+          registry_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
           PY
           echo "path=$REGISTRY_PATH" >> "$GITHUB_OUTPUT"
 
