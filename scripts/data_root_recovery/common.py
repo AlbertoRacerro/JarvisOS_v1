@@ -13,11 +13,10 @@ import stat
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 from uuid import uuid4
-
 
 MANIFEST_SCHEMA_VERSION = 1
 MANIFEST_NAME = "manifest.json"
@@ -59,13 +58,11 @@ class SnapshotResult:
 
 
 def _utc_now() -> str:
-    return (
-        datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-    )
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _default_settings() -> tuple[Path, str]:
-    backend_dir = Path(__file__).resolve().parents[1] / "backend"
+    backend_dir = Path(__file__).resolve().parents[2] / "backend"
     if backend_dir.is_dir():
         backend_text = str(backend_dir)
         if backend_text not in sys.path:
@@ -114,7 +111,7 @@ def _validate_database_filename(value: str) -> str:
 
 
 def _new_snapshot_id() -> str:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     return f"{stamp}-{uuid4().hex[:12]}"
 
 
@@ -133,6 +130,14 @@ def sha256_file(path: Path) -> str:
 
 
 def _open_regular_file_no_follow(path: Path) -> tuple[Any, os.stat_result]:
+    try:
+        path_metadata = os.lstat(path)
+    except OSError as exc:
+        raise DataRootError(f"cannot inspect source file: {path}") from exc
+    if stat.S_ISLNK(path_metadata.st_mode):
+        raise DataRootError(f"source symlink is forbidden: {path}")
+    if not stat.S_ISREG(path_metadata.st_mode):
+        raise DataRootError(f"unsupported non-regular file: {path}")
     flags = os.O_RDONLY
     if hasattr(os, "O_BINARY"):
         flags |= os.O_BINARY
@@ -146,6 +151,13 @@ def _open_regular_file_no_follow(path: Path) -> tuple[Any, os.stat_result]:
         metadata = os.fstat(descriptor)
         if not stat.S_ISREG(metadata.st_mode):
             raise DataRootError(f"unsupported non-regular file: {path}")
+        if (
+            path_metadata.st_ino
+            and metadata.st_ino
+            and (path_metadata.st_dev, path_metadata.st_ino)
+            != (metadata.st_dev, metadata.st_ino)
+        ):
+            raise DataRootError(f"source file changed before opening: {path}")
         return os.fdopen(descriptor, "rb", closefd=True), metadata
     except Exception:
         os.close(descriptor)
@@ -217,8 +229,12 @@ def _inventory_tree(source_root: Path) -> list[FileRecord]:
 
     for root_name in INCLUDED_ROOTS:
         path = source_root / root_name
-        if not path.exists():
+        try:
+            os.lstat(path)
+        except FileNotFoundError:
             continue
+        except OSError as exc:
+            raise DataRootError(f"cannot inspect included root: {path}") from exc
         visit(path, PurePosixPath(root_name))
     return sorted(records)
 
@@ -378,6 +394,10 @@ def _path_flavor(value: str) -> str:
 
 def _pure_path(value: str, flavor: str) -> PureWindowsPath | PurePosixPath:
     return PureWindowsPath(value) if flavor == "windows" else PurePosixPath(value)
+
+
+def _is_absolute_path_string(value: str) -> bool:
+    return _pure_path(value, _path_flavor(value)).is_absolute()
 
 
 def _absolute_parts(value: str, flavor: str) -> tuple[str, ...]:
