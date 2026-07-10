@@ -33,12 +33,12 @@ jobs:
         with:
           python-version: "3.11"
 
-      # The PR checkout supplies its spec, AGENTS.md, and diff context. Executable
-      # reviewer code is always replaced with the trusted master copy before use.
-      - name: Pin manual reviewer to master
+      # The PR checkout supplies its spec and diff context. Executable reviewer
+      # code and authority policy are always replaced with trusted master copies.
+      - name: Pin manual reviewer and policy to master
         run: |
           git fetch origin master
-          git checkout FETCH_HEAD -- scripts/cheap_review.py scripts/manual_review.py
+          git checkout FETCH_HEAD -- AGENTS.md scripts/cheap_review.py scripts/manual_review.py
 
       - name: Self-test trusted review helpers
         run: |
