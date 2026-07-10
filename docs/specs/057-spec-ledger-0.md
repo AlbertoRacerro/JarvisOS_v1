@@ -1,7 +1,18 @@
 # 057 — SPEC-LEDGER-0: spec progress ledger + fast handoff context
 
-Status: ready
-Depends on: none (can run in parallel with BLUECAD implementation specs; must not modify runtime behavior)
+Status: cancelled
+Depends on: none
+
+## Cancellation
+
+Cancelled in favor of the smaller solution in `docs/specs/STATUS.md`.
+
+A generated ledger script, tests, and a second handoff state file would add
+infrastructure and another synchronization surface before there is evidence that
+manual maintenance of one canonical registry is insufficient. The live status
+and roadmap now belong only to `docs/specs/STATUS.md`; this file is retained as
+historical design evidence and must not be implemented unless a measured gap is
+reported and the maintainer explicitly reopens it.
 
 ## Goal
 
