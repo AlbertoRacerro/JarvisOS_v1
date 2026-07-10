@@ -160,6 +160,7 @@ jobs:
         env:
           JARVISOS_BLUECAD_TOOL_REGISTRY: ${{ steps.registry.outputs.path }}
           JARVISOS_BLUECAD_PROOF_JSON: ${{ runner.temp }}/bluecad-alpha-proof.json
+          JARVISOS_BLUECAD_PROOF_DEBUG_DIR: ${{ runner.temp }}/bluecad-proof-debug
         run: |
           set -o pipefail
           set +e
@@ -179,6 +180,7 @@ jobs:
             ${{ runner.temp }}/bluecad-offline-regression.log
             ${{ runner.temp }}/bluecad-alpha-proof.log
             ${{ runner.temp }}/bluecad-alpha-proof.json
+            ${{ runner.temp }}/bluecad-proof-debug
           if-no-files-found: warn
           retention-days: 14
 
