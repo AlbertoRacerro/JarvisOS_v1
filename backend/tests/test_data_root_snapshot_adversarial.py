@@ -5,9 +5,8 @@ import shutil
 import sqlite3
 from pathlib import Path
 
-import pytest
-
 import jarvisos_data_root as jdr
+import pytest
 from data_root_recovery_support import digest, rewrite_manifest, seed_data_root
 
 
