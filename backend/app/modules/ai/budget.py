@@ -10,6 +10,17 @@ from app.modules.secrets.storage import get_effective_scaleway_api_key, resolve_
 SCALEWAY_STUB_IMPLEMENTATION = "stub_no_external_calls"
 SCALEWAY_LIVE_IMPLEMENTATION = "live_chat_completions"
 DEEPSEEK_PROVIDER_MODE = "deepseek"
+ALPHA_EXTERNAL_PROVIDER_CALL = "external_provider_call"
+
+
+@dataclass(frozen=True)
+class AlphaGateDecision:
+    allowed: bool
+    reason: str
+    operation: str
+    provider_id: str | None = None
+    usage_tokens_month_to_date: int = 0
+    cost_month_to_date_usd: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -21,7 +32,72 @@ class ProviderBudgetGate:
     cost_month_to_date_usd: float = 0.0
 
 
+def evaluate_alpha_execution_gate(
+    *,
+    settings: AISettingsRead | None,
+    provider_id: str | None,
+    operation: str,
+) -> AlphaGateDecision:
+    """Evaluate the server-owned external-provider execution boundary.
+
+    The execution spine decides whether a binding requires network access. It
+    invokes this gate only for the concrete network binding about to execute,
+    including every fallback attempt. Callers cannot mark an external binding
+    as read-only or authorize it with request-payload flags.
+    """
+    if operation != ALPHA_EXTERNAL_PROVIDER_CALL:
+        return AlphaGateDecision(
+            False,
+            f"alpha_gate_unsupported_operation:{operation}",
+            operation,
+            provider_id,
+        )
+    if settings is None:
+        return AlphaGateDecision(
+            False,
+            "alpha_gate_missing_context",
+            operation,
+            provider_id,
+        )
+    if provider_id is None or not provider_id.strip():
+        return AlphaGateDecision(
+            False,
+            "alpha_gate_missing_provider",
+            operation,
+            provider_id,
+        )
+
+    policy = _evaluate_external_provider_policy(settings, provider_id)
+    return AlphaGateDecision(
+        policy.allowed,
+        "alpha_gate_open" if policy.allowed else (policy.blocking_reason or "alpha_gate_closed"),
+        operation,
+        provider_id,
+        policy.usage_tokens_month_to_date,
+        policy.cost_month_to_date_usd,
+    )
+
+
 def evaluate_provider_budget_gate(settings: AISettingsRead, provider_id: str) -> ProviderBudgetGate:
+    """Compatibility wrapper used by the execution spine and status surfaces."""
+    decision = evaluate_alpha_execution_gate(
+        settings=settings,
+        provider_id=provider_id,
+        operation=ALPHA_EXTERNAL_PROVIDER_CALL,
+    )
+    return ProviderBudgetGate(
+        decision.allowed,
+        None if decision.allowed else decision.reason,
+        decision.provider_id,
+        decision.usage_tokens_month_to_date,
+        decision.cost_month_to_date_usd,
+    )
+
+
+def _evaluate_external_provider_policy(
+    settings: AISettingsRead,
+    provider_id: str,
+) -> ProviderBudgetGate:
     if settings.policy_mode == AIPolicyMode.DISABLED:
         return ProviderBudgetGate(False, "ai_policy_disabled", provider_id)
     if not settings.paid_ai_enabled:
@@ -39,9 +115,21 @@ def evaluate_provider_budget_gate(settings: AISettingsRead, provider_id: str) ->
 
     usage_tokens, cost = provider_month_to_date_usage(provider_id)
     if provider.monthly_token_cap > 0 and usage_tokens >= provider.monthly_token_cap:
-        return ProviderBudgetGate(False, f"{provider_id}_monthly_token_cap_exhausted", provider_id, usage_tokens, cost)
+        return ProviderBudgetGate(
+            False,
+            f"{provider_id}_monthly_token_cap_exhausted",
+            provider_id,
+            usage_tokens,
+            cost,
+        )
     if provider.monthly_cost_cap_usd > 0 and cost >= provider.monthly_cost_cap_usd:
-        return ProviderBudgetGate(False, f"{provider_id}_monthly_cost_cap_exhausted", provider_id, usage_tokens, cost)
+        return ProviderBudgetGate(
+            False,
+            f"{provider_id}_monthly_cost_cap_exhausted",
+            provider_id,
+            usage_tokens,
+            cost,
+        )
     return ProviderBudgetGate(True, None, provider_id, usage_tokens, cost)
 
 
@@ -134,7 +222,9 @@ def evaluate_ai_status(settings: AISettingsRead, provider_mode: str | None = Non
         fake_provider_enabled=True,
         scaleway_enabled=settings.scaleway_enabled,
         scaleway_api_key_configured=key_configured,
-        scaleway_provider_implementation=SCALEWAY_LIVE_IMPLEMENTATION if settings.scaleway_live_smoke_test_enabled else SCALEWAY_STUB_IMPLEMENTATION,
+        scaleway_provider_implementation=SCALEWAY_LIVE_IMPLEMENTATION
+        if settings.scaleway_live_smoke_test_enabled
+        else SCALEWAY_STUB_IMPLEMENTATION,
         scaleway_smoke_test_enabled=settings.scaleway_smoke_test_enabled,
         scaleway_live_smoke_test_enabled=settings.scaleway_live_smoke_test_enabled,
         paid_ai_enabled=settings.paid_ai_enabled,
