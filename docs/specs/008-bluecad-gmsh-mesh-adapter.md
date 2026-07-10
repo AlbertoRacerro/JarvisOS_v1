@@ -115,12 +115,13 @@ Status updated after implementing the subprocess-only Gmsh mesh adapter. The ada
 
 Deviations from spec: none. The real-Gmsh A3 test is present behind the `bluecad_gmsh` marker and skips unless a maintainer supplies an enabled real Gmsh registry entry outside the shipped config.
 
-## Amendment (2026-07-07)
+## Amendment (reconciled 2026-07-10)
 
-Spec 024 (FEM verification battery), review resolution 1, adds one
-narrowly-scoped additive capability to this adapter: an optional
-`mesh.element_order` field in the AnalysisSpec schema (enum `[1, 2]`,
-default `1` — all existing behavior unchanged); when `2`, the gmsh
-invocation gains `-order 2` (quadratic tetrahedra, `C3D10`). Implemented as
-the first slice of 024's implementation. See
-`docs/specs/024-fem-verification-battery.md`, review resolutions 1–2.
+Spec 024-A owns one narrowly scoped additive capability for this adapter: an
+optional `mesh.element_order` field in the AnalysisSpec schema with integer enum
+`[1, 2]`. Absence is equivalent to order `1` and preserves all current behavior;
+order `2` requests quadratic tetrahedra from Gmsh and must be verified against
+the generated C3D10 mesh artifact. Implementation and real-tool proof belong to
+024-A, not to spec 008 itself. See
+`docs/specs/024-fem-verification-battery.md`, section `024-A — quadratic
+tetrahedron contract`.
