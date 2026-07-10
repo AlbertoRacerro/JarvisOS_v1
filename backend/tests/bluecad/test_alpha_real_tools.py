@@ -67,6 +67,24 @@ def _preserve_text_diagnostics(candidates: list[Any]) -> None:
             shutil.copy2(source, target)
 
 
+def _create_candidate(adapter: ScriptedFakeBluecadAdapter, *, quadratic: bool) -> Any:
+    payload = BluecadCandidateCreate(
+        brief_text="deterministic single tube real-tool alpha proof",
+        loop_config=BluecadLoopConfig(
+            max_attempts_per_tier=1,
+            tier_ladder=["external:cheap"],
+            analysis_spec=analysis_spec(element_order=2 if quadratic else None),
+        ),
+    )
+    return create_bluecad_candidate(
+        "bluerev",
+        payload,
+        adapters={"scaleway": adapter},
+        bindings=offline_bindings(),
+        force_external_allowed=True,
+    )
+
+
 def test_ordinary_mode_skips_unavailable_real_tools() -> None:
     with pytest.raises(pytest.skip.Exception):
         _handle_unavailable(strict=False, reason="missing")
@@ -85,25 +103,8 @@ def test_strict_real_tool_full_chain_twice(request: pytest.FixtureRequest) -> No
     initialize_storage(seed_default=True)
     fixture_text = (FIXTURES / "minimal_single_tube.json").read_text(encoding="utf-8")
     adapter = ScriptedFakeBluecadAdapter([fixture_text, fixture_text])
-    payload = BluecadCandidateCreate(
-        brief_text="deterministic single tube real-tool alpha proof",
-        loop_config=BluecadLoopConfig(
-            max_attempts_per_tier=1,
-            tier_ladder=["external:cheap"],
-            analysis_spec=analysis_spec(),
-        ),
-    )
 
-    candidates = [
-        create_bluecad_candidate(
-            "bluerev",
-            payload,
-            adapters={"scaleway": adapter},
-            bindings=offline_bindings(),
-            force_external_allowed=True,
-        )
-        for _ in range(2)
-    ]
+    candidates = [_create_candidate(adapter, quadratic=False) for _ in range(2)]
     _preserve_text_diagnostics(candidates)
     assert len(adapter.prompts) == 2
     manifests = [assert_full_chain(candidate) for candidate in candidates]
@@ -127,3 +128,18 @@ def test_strict_real_tool_full_chain_twice(request: pytest.FixtureRequest) -> No
     )
     proof_path.parent.mkdir(parents=True, exist_ok=True)
     proof_path.write_text(json.dumps(proof, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+@pytest.mark.bluecad_kernel
+@pytest.mark.bluecad_gmsh
+@pytest.mark.bluecad_ccx
+def test_strict_real_tool_quadratic_mesh_and_solve(request: pytest.FixtureRequest) -> None:
+    _require_toolchain(request)
+    initialize_storage(seed_default=True)
+    fixture_text = (FIXTURES / "minimal_single_tube.json").read_text(encoding="utf-8")
+    adapter = ScriptedFakeBluecadAdapter([fixture_text])
+
+    candidate = _create_candidate(adapter, quadratic=True)
+    _preserve_text_diagnostics([candidate])
+    assert len(adapter.prompts) == 1
+    assert_full_chain(candidate, expected_volume_element_type="C3D10")
