@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from app.core.database import open_sqlite_connection
 from app.modules.ai.budget import evaluate_ai_status
 from app.modules.ai.contracts import AIProviderAdapter
 from app.modules.ai.execution import ProviderBinding, resolve_binding, run_ai_task
 from app.modules.ai.settings import get_ai_settings
-from app.modules.bluecad.evidence import record_validation_evidence
+from app.modules.bluecad.evidence import (
+    record_fem_static_evidence,
+    record_mesh_quality_evidence,
+    record_validation_evidence,
+)
+from app.modules.bluecad.fem_adapter import append_tier3_checks, solve_static_analysis
 from app.modules.bluecad.ledger import (
     candidate_work_dir,
     create_candidate_record,
@@ -22,10 +29,12 @@ from app.modules.bluecad.ledger import (
     start_attempt,
     update_candidate_artifacts,
 )
+from app.modules.bluecad.mesh_adapter import mesh_analysis_spec
 from app.modules.bluecad.models import BluecadCandidateCreate, BluecadCandidateRead, BluecadLoopConfig
 from app.modules.bluecad.prompts import PROMPT_VERSION, generate_prompt, repair_prompt
 from app.modules.bluecad.service import build_geometry_spec
 from app.modules.bluecad.spec import SpecValidationError, canonical_json, canonicalize_geometry_spec
+from app.modules.events.service import utc_now
 
 _EXTERNAL_ROUTES = {"external:cheap", "external:reasoning"}
 
@@ -134,12 +143,194 @@ def create_bluecad_candidate(
             last_report = build["report"]
             if verdict == "pass":
                 mark_candidate_valid(candidate.id)
+                _run_simulation_stage(workspace_id, candidate.id, attempt.id, attempt_no, loop_config.analysis_spec, build)
                 return _require_candidate(workspace_id, candidate.id)
             saw_build_or_validation_failure = True
 
     reason = "malformed_repeated" if saw_malformed and not saw_build_or_validation_failure else "attempts_exhausted"
     park_candidate(candidate.id, reason)
     return _require_candidate(workspace_id, candidate.id)
+
+
+def _run_simulation_stage(
+    workspace_id: str,
+    candidate_id: str,
+    attempt_id: str,
+    attempt_no: int,
+    analysis_spec_without_geometry: dict[str, Any] | None,
+    build: dict[str, Any],
+) -> None:
+    if analysis_spec_without_geometry is None:
+        return
+    try:
+        out_dir = candidate_work_dir(workspace_id, candidate_id, attempt_no) / "simulation"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        analysis_spec = _analysis_spec_with_geometry(analysis_spec_without_geometry, build)
+        source_run_id = _create_simulation_run(workspace_id, candidate_id, attempt_id, analysis_spec)
+    except Exception:
+        return
+    source_ref = f"bluecad_candidate:{candidate_id}:attempt:{attempt_no}:sim:{source_run_id}"
+    try:
+        mesh_result = mesh_analysis_spec(analysis_spec, out_dir / "mesh")
+    except Exception as exc:  # noqa: BLE001 - sim failures are advisory evidence only.
+        mesh_result = _mesh_error_result(exc, analysis_spec)
+    try:
+        mesh_report_artifact_id = _register_sim_report(workspace_id, out_dir / "mesh_result.json", mesh_result, source_ref)
+        mesh_evidence_id = record_mesh_quality_evidence(
+            workspace_id,
+            mesh_result,
+            source_run_id=source_run_id,
+            report_artifact_id=mesh_report_artifact_id,
+        )
+        _link_sim_evidence_context(mesh_evidence_id, candidate_id, attempt_id)
+    except Exception:
+        _best_effort_fail_simulation_run(source_run_id, "mesh_evidence_persistence_failed")
+        return
+    if mesh_result.get("verdict") != "pass" or "mesh_inp" not in mesh_result.get("artifacts", {}):
+        _complete_simulation_run(source_run_id, mesh_result, None)
+        return
+    try:
+        fem_summary = solve_static_analysis(analysis_spec, mesh_result, out_dir / "fem")
+    except Exception as exc:  # noqa: BLE001 - sim failures are advisory evidence only.
+        fem_summary = _fem_error_result(exc)
+    fem_report = None
+    if fem_summary.get("verdict") == "pass" and analysis_spec.get("pass_criteria"):
+        try:
+            fem_report = append_tier3_checks(deepcopy(build["report"]), fem_summary, analysis_spec["pass_criteria"])
+        except Exception as exc:  # noqa: BLE001 - Tier 3 failures are advisory evidence only.
+            fem_report = {"verdict": "error", "checks": [], "errors": [{"code": "TIER3_ERROR", "detail": {"message": str(exc), "type": type(exc).__name__}}]}
+    fem_payload = {"result_summary": fem_summary, "report": fem_report}
+    try:
+        fem_report_artifact_id = _register_sim_report(workspace_id, out_dir / "fem_result.json", fem_payload, source_ref)
+        fem_evidence_id = record_fem_static_evidence(
+            workspace_id,
+            fem_summary,
+            fem_report,
+            source_run_id=source_run_id,
+            report_artifact_id=fem_report_artifact_id,
+        )
+        _link_sim_evidence_context(fem_evidence_id, candidate_id, attempt_id)
+    except Exception:
+        _best_effort_fail_simulation_run(source_run_id, "fem_evidence_persistence_failed")
+        return
+    _complete_simulation_run(source_run_id, mesh_result, fem_summary, fem_report)
+
+
+def _link_sim_evidence_context(record_id: str, candidate_id: str, attempt_id: str) -> None:
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            "UPDATE evidence_records SET candidate_id = ?, attempt_id = ? WHERE id = ?",
+            (candidate_id, attempt_id, record_id),
+        )
+        connection.commit()
+
+
+def _analysis_spec_with_geometry(analysis_spec_without_geometry: dict[str, Any], build: dict[str, Any]) -> dict[str, Any]:
+    result = build["result"]
+    step_path = result.out_dir / "model.step"
+    manifest_path = result.manifest_path
+    if manifest_path is None:
+        raise RuntimeError("validated BLUECAD build missing manifest for simulation")
+    return {**analysis_spec_without_geometry, "geometry": {"step_path": str(step_path), "manifest_path": str(manifest_path)}}
+
+
+def _register_sim_report(workspace_id: str, path: Path, payload: dict[str, Any], source_ref: str) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    return register_artifact(workspace_id, path, role="bluecad_sim_report", source_ref=source_ref)
+
+
+def _create_simulation_run(workspace_id: str, candidate_id: str, attempt_id: str, analysis_spec: dict[str, Any]) -> str:
+    from uuid import uuid4
+
+    run_id = str(uuid4())
+    now = utc_now()
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO simulation_runs (
+                id, workspace_id, model_version_id, run_label, status,
+                input_payload, parameter_payload, output_payload, started_at,
+                completed_at, created_at, notes
+            ) VALUES (?, ?, NULL, ?, 'running', ?, ?, NULL, ?, NULL, ?, ?)
+            """,
+            (
+                run_id,
+                workspace_id,
+                f"bluecad_attempt_{attempt_id}",
+                json.dumps({"candidate_id": candidate_id, "attempt_id": attempt_id}, sort_keys=True),
+                json.dumps(analysis_spec, sort_keys=True),
+                now,
+                now,
+                "BLUECAD advisory synchronous mesh/FEM stage.",
+            ),
+        )
+        connection.commit()
+    return run_id
+
+
+def _complete_simulation_run(source_run_id: str, mesh_result: dict[str, Any], fem_summary: dict[str, Any] | None, fem_report: dict[str, Any] | None = None) -> None:
+    try:
+        completed_at = utc_now()
+        output_payload = _simulation_run_output_payload(mesh_result, fem_summary, fem_report)
+        with open_sqlite_connection() as connection:
+            connection.execute(
+                """
+                UPDATE simulation_runs
+                SET status = 'completed', output_payload = ?, completed_at = ?
+                WHERE id = ?
+                """,
+                (canonical_json(output_payload), completed_at, source_run_id),
+            )
+            connection.commit()
+    except Exception:
+        return
+
+
+def _best_effort_fail_simulation_run(source_run_id: str, error_code: str) -> None:
+    try:
+        completed_at = utc_now()
+        output_payload = {"status": "failed", "error": {"code": error_code}, "mesh_verdict": None, "fem_verdict": None}
+        with open_sqlite_connection() as connection:
+            connection.execute(
+                """
+                UPDATE simulation_runs
+                SET status = 'failed', output_payload = ?, completed_at = ?
+                WHERE id = ?
+                """,
+                (canonical_json(output_payload), completed_at, source_run_id),
+            )
+            connection.commit()
+    except Exception:
+        return
+
+
+def _simulation_run_output_payload(mesh_result: dict[str, Any], fem_summary: dict[str, Any] | None, fem_report: dict[str, Any] | None = None) -> dict[str, Any]:
+    return {
+        "status": "completed",
+        "mesh_verdict": mesh_result.get("verdict"),
+        "fem_verdict": fem_report.get("verdict") if fem_report is not None else (fem_summary.get("verdict") if fem_summary is not None else None),
+    }
+
+
+def _mesh_error_result(exc: Exception, analysis_spec: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "schema_version": "bluecad_mesh_result_v0_1",
+        "verdict": "error",
+        "errors": [{"code": "MESH_ERROR", "detail": {"message": str(exc), "type": type(exc).__name__}}],
+        "attempts": [{"attempt_no": 1, "target_size": analysis_spec.get("mesh", {}).get("target_size"), "counts": {}, "errors": []}],
+        "artifacts": {},
+    }
+
+
+def _fem_error_result(exc: Exception) -> dict[str, Any]:
+    return {
+        "schema_version": "bluecad_result_summary_v0_1",
+        "verdict": "error",
+        "errors": [{"code": "SOLVE_ERROR", "detail": {"message": str(exc), "type": type(exc).__name__}}],
+        "solver": {"tool_id": "calculix", "version": None, "returncode": None},
+        "artifacts": {},
+    }
 
 
 def parse_geometry_spec_response(text: str) -> dict[str, Any]:

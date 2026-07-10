@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 ErrorCode = Literal["SPEC_INVALID", "PORT_MISMATCH", "KERNEL_ERROR", "EXPORT_ERROR", "TIMEOUT"]
 Verdict = Literal["pass", "fail", "error"]
@@ -139,12 +140,127 @@ CandidateOrigin = Literal["ai", "parametric_variant"]
 ProposalOutcome = Literal["ok", "malformed", "provider_error", "blocked"]
 ValidationVerdict = Literal["pass", "fail"]
 
+_CALCULIX_SAFE_MATERIAL_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
+
+
+def _reject_nulls_and_non_finite_numbers(value: Any, path: str = "analysis_spec") -> None:
+    if value is None:
+        raise ValueError(f"{path} cannot be null")
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError(f"{path} must be finite")
+    if isinstance(value, dict):
+        for key, child in value.items():
+            _reject_nulls_and_non_finite_numbers(child, f"{path}.{key}")
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _reject_nulls_and_non_finite_numbers(child, f"{path}[{index}]")
+
+
+class _AnalysisMaterial(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    name: str
+    E: float = Field(gt=0)
+    nu: float
+    rho: float = Field(gt=0)
+    yield_strength: float = Field(gt=0)
+
+    @field_validator("name")
+    @classmethod
+    def _validate_calculix_safe_name(cls, value: str) -> str:
+        if not _CALCULIX_SAFE_MATERIAL_NAME.fullmatch(value):
+            raise ValueError("material name must be a CalculiX-safe identifier")
+        return value
+
+
+class _AnalysisBoundaryCondition(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    port_label: str = Field(min_length=1)
+    kind: Literal["fixed"]
+
+
+class _AnalysisLoad(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    port_label: str = Field(min_length=1)
+    type: Literal["pressure", "force_total"]
+    force: list[float] | None = Field(default=None, min_length=3, max_length=3)
+    vector_n: list[float] | None = Field(default=None, min_length=3, max_length=3)
+    pressure: float | None = None
+
+    @model_validator(mode="after")
+    def _validate_required_magnitude(self) -> _AnalysisLoad:
+        for field_name in ("force", "vector_n", "pressure"):
+            if field_name in self.model_fields_set and getattr(self, field_name) is None:
+                raise ValueError(f"{field_name} cannot be null when supplied")
+        if self.type == "pressure" and self.pressure is None:
+            raise ValueError("pressure loads require pressure")
+        if self.type == "force_total" and self.force is None and self.vector_n is None:
+            raise ValueError("force_total loads require force or vector_n")
+        return self
+
+
+class _AnalysisMeshQuality(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    min_element_quality: float | None = Field(default=None, ge=0)
+
+
+class _AnalysisMesh(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    target_size: float = Field(gt=0)
+    refinements: dict[str, float] | None = None
+    quality: _AnalysisMeshQuality | None = None
+
+    @model_validator(mode="after")
+    def _validate_refinements(self) -> _AnalysisMesh:
+        if self.refinements is not None and any(value <= 0 for value in self.refinements.values()):
+            raise ValueError("mesh refinements must be positive")
+        return self
+
+
+class _AnalysisPassCriterion(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    metric: Literal["max_displacement", "max_von_mises"]
+    op: Literal["<=", "<", ">=", ">", "=="]
+    value: float
+
+
+class _AnalysisSpecWithoutGeometry(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    schema_version: Literal["bluecad_analysis_spec_v0_1"]
+    analysis_id: str = Field(min_length=1)
+    analysis_type: Literal["static"]
+    material: _AnalysisMaterial
+    bcs: list[_AnalysisBoundaryCondition]
+    loads: list[_AnalysisLoad]
+    mesh: _AnalysisMesh
+    pass_criteria: list[_AnalysisPassCriterion]
+    timeout_s: float | None = Field(default=None, gt=0)
+
 
 class BluecadLoopConfig(BaseModel):
     max_attempts_per_tier: int = Field(default=3, ge=1, le=10)
     tier_ladder: list[str] = Field(default_factory=lambda: ["external:cheap", "external:reasoning"])
     max_output_tokens: int = Field(default=4000, ge=128, le=32000)
     per_call_timeout_s: float = Field(default=20.0, gt=0, le=120)
+    analysis_spec: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def _validate_analysis_spec_without_geometry(self) -> BluecadLoopConfig:
+        if self.analysis_spec is None:
+            return self
+        if not isinstance(self.analysis_spec, dict):
+            raise ValueError("analysis_spec must be an object")
+        _reject_nulls_and_non_finite_numbers(self.analysis_spec)
+        if "geometry" in self.analysis_spec:
+            raise ValueError("analysis_spec geometry is filled from build artifacts by the loop")
+        _AnalysisSpecWithoutGeometry.model_validate(self.analysis_spec)
+        return self
 
 
 class BluecadCandidateCreate(BaseModel):
