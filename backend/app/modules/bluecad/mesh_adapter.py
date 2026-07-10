@@ -12,6 +12,20 @@ from app.modules.bluecad.registry import ToolRegistryError, run_tool
 
 _LABEL_RE = re.compile(r"^[A-Za-z0-9_]+$")
 _VOLUME_ELEMENT_PREFIXES = ("C3D", "DC3D")
+_HIGH_ORDER_INVALID_LOG_PATTERNS = (
+    re.compile(
+        r"\b(?P<count>\d+)\s+elements?\s+with\s+jac\.?\s*<\s*0\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:(?P<count>\d+)\s+)?negative(?:\s+|-)?jacobians?\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:(?P<count>\d+)\s+)?inverted\s+(?:high[- ]order\s+)?elements?\b",
+        re.IGNORECASE,
+    ),
+)
 
 
 def mesh_analysis_spec(
@@ -159,11 +173,8 @@ def _post_check(
     log_path: Path,
     element_order: int,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], list[str]]:
-    warnings = [
-        line
-        for line in log_path.read_text(encoding="utf-8").splitlines()
-        if "warning" in line.lower() or "quality" in line.lower()
-    ]
+    log_lines = log_path.read_text(encoding="utf-8").splitlines()
+    warnings = [line for line in log_lines if "warning" in line.lower() or "quality" in line.lower()]
     if returncode != 0:
         return ([{"code": "TIMEOUT" if returncode == 124 else "MESH_FAIL", "detail": {"returncode": returncode}}], {}, warnings)
     try:
@@ -188,6 +199,10 @@ def _post_check(
                 },
             }
         )
+    if element_order == 2:
+        high_order_error = _high_order_invalid_error(log_lines)
+        if high_order_error is not None:
+            errors.append(high_order_error)
     if counts["physical_groups"].get("BODY", 0) <= 0:
         errors.append({"code": "MESH_GROUP_EMPTY", "detail": {"group": "BODY"}})
     for prefix, label, _ in refs:
@@ -195,6 +210,30 @@ def _post_check(
         if counts["physical_groups"].get(name, 0) <= 0:
             errors.append({"code": "MESH_GROUP_EMPTY", "detail": {"group": name}})
     return errors, counts, warnings
+
+
+def _high_order_invalid_error(log_lines: list[str]) -> dict[str, Any] | None:
+    diagnostics: list[str] = []
+    reported_invalid_elements = 0
+    for line in log_lines:
+        for pattern in _HIGH_ORDER_INVALID_LOG_PATTERNS:
+            match = pattern.search(line)
+            if match is None:
+                continue
+            count_text = match.groupdict().get("count")
+            if count_text is not None:
+                count = int(count_text)
+                if count <= 0:
+                    break
+                reported_invalid_elements = max(reported_invalid_elements, count)
+            diagnostics.append(line)
+            break
+    if not diagnostics:
+        return None
+    detail: dict[str, Any] = {"requested_order": 2, "diagnostics": diagnostics}
+    if reported_invalid_elements > 0:
+        detail["reported_invalid_elements"] = reported_invalid_elements
+    return {"code": "MESH_HIGH_ORDER_INVALID", "detail": detail}
 
 
 def _parse_inp_counts(text: str, refs: list[tuple[str, str, str]]) -> dict[str, Any]:
