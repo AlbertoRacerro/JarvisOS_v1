@@ -1,31 +1,48 @@
-# Retention and Freshness Policy
+# BlueRev Engineering Playbook retention and freshness policy
 
 ## Binding retention rule
 
-This playbook stores **capabilities**, not encyclopedic facts.
+The playbook stores reusable engineering capability rather than encyclopedic content.
 
-Every entry is retained permanently when it contains at least one of:
+A valid playbook is retained permanently when it captures one or more of:
 
-- a reusable workflow;
-- decision criteria or trade-offs;
+- a workflow or algorithm;
+- model or method selection logic;
+- decision criteria and trade-offs;
 - an architecture pattern;
-- a diagnostic or failure-recovery method;
-- a current or future engineering direction;
-- tacit teaching advice that changes how work is performed;
+- a diagnostic, verification or fallback method;
+- a high-value didactic heuristic;
+- a current, emerging or frontier research direction;
 - a BlueRev-specific transfer path.
 
-Entries are retained regardless of whether their horizon is `now`, `near_term`, `future` or `fleet`.
+Retention is independent of immediate usability. Entries may be tagged `now`, `near_term`, `future` or `fleet`. Maturity controls warnings, ranking and evidence requirements; it does not determine whether the direction is remembered.
 
-## What is deliberately not stored as a primary entry
+## Missing evidence is not deletion
+
+When a direction is relevant but evidence is incomplete, the playbook stores:
+
+- the engineering question;
+- candidate model or method families;
+- what is currently known;
+- what remains unknown;
+- the cheapest discriminating experiment or research task;
+- the conditions that would permit promotion to stronger guidance.
+
+The system must not invent species-specific parameters, standards compliance, field validation or industrial readiness. An unresolved research requirement remains retrievable as a research direction, not as a verified design claim.
+
+## Excluded primary records
+
+The following are not stored as standalone canonical playbooks:
 
 - isolated standard formulas;
-- textbook definitions that can be retrieved reliably on demand;
-- one exercise's inputs, intermediate values or final answer;
-- a spreadsheet cell result;
-- a copied standard, article or vendor manual;
-- current prices, weather, regulation or vendor specifications.
+- textbook definitions;
+- spreadsheet-cell values;
+- case-specific exercise inputs or answers;
+- unqualified parameter values;
+- vendor claims without context;
+- obsolete snapshots that can be retrieved reliably at use time.
 
-A standard formula may be mentioned inside a workflow only when needed to explain a selection or verification procedure.
+They may appear as supporting context, temporary QA fixtures or live-looked-up evidence.
 
 ## Live lookup boundary
 
@@ -38,12 +55,38 @@ The following must be refreshed at the moment of consequential use:
 5. prices, energy tariffs, market values and financing conditions;
 6. site-specific metocean, weather and environmental data.
 
+## Freshness classes
+
+Each playbook should state its freshness class:
+
+- `stable_foundation` — enduring engineering reasoning or workflow;
+- `slow_change` — mature industrial practice or standards-aligned architecture;
+- `active_research` — methods or evidence developing on a multi-year horizon;
+- `fast_change` — software, vendor capability, current regulation, pricing or rapidly evolving benchmarks.
+
+Stable reasoning may remain canonical. Fast-changing implementation details must be checked live before consequential use.
+
 ## Retrieval behavior
 
 - Mature and urgent entries should rank first for current design questions.
 - Future and frontier entries must remain searchable and must never be deleted merely because BlueRev cannot yet implement them.
 - The assistant must label frontier material as such and distinguish guidance from demonstrated BlueRev capability.
 - High-consequence decisions require current sources, competent review and representative evidence.
+
+## Consequential-use boundary
+
+The playbook may guide learning, research planning, model comparison, design framing and experiment selection.
+
+It is not by itself authority for:
+
+- final equipment design;
+- safety or control logic;
+- legal or regulatory compliance;
+- certification;
+- autonomous field operation;
+- unreviewed economic commitments.
+
+Those uses require current source verification, domain review and BlueRev-specific validation.
 
 ## Supersession
 
