@@ -2,31 +2,37 @@
 
 ## Binding rule
 
-The retrievable engineering memory stores only corrected canonical knowledge.
+Retrievable engineering memory stores only corrected canonical knowledge.
 
-It does not retain:
+Allowed:
+
+- normalized definitions, equations, assumptions, validity conditions and procedures;
+- explicit units, coefficient bases and model conventions;
+- source file SHA-256 and exact PDF or spreadsheet locator;
+- passing verification evidence that supports the canonical formulation;
+- general failure modes that remain useful across problems.
+
+Excluded from retrieval, training reference and benchmark reference:
 
 - rejected numerical values;
-- misleading conceptual explanations;
-- duplicated wrong alternatives;
-- narratives about who made an error;
-- evaluator-only solutions or gold.
+- rejected formulas or explanations;
+- narratives about who made a source error;
+- failing source-audit evidence;
+- unresolved candidates marked non-exportable;
+- evaluator-only gold.
 
-## Ingestion sequence
+Rejected fragments may exist temporarily in bounded QA evidence so a reviewer can reproduce the correction. They must not be copied into `knowledge` or `canonical_export`.
 
-1. Extract candidate content into a temporary QA workspace.
-2. Check equations, dimensions, balances, limiting cases, numerical reproducibility and runtime behavior where applicable.
-3. Correct conceptual or numerical problems.
-4. Write only the accepted formulation into the microtopic `knowledge` block.
-5. Retain source file SHA-256 and exact locator as provenance.
-6. Keep rejected fragments only as temporary QA evidence outside retrieval, training and benchmark-reference stores.
+## Mechanical export conditions
 
-## Export gate
-
-A record may enter retrieval only when:
+A record enters model-visible reference memory only when:
 
 - `governance.retention_policy == canonical_verified_knowledge_only`;
 - `verification.knowledge_exportable == true`;
-- verification status satisfies the configured project threshold.
+- all major and critical embedded checks pass;
+- no unresolved issue remains;
+- units and bases are explicit;
+- the required typed contract has been verified;
+- governance visibility is `model_visible_reference`.
 
-A source label such as “official” is evidence of provenance, not proof of correctness.
+The v2.2 production rehearsal exported 37/150 records. The remaining 113 records stay QA-only rather than being promoted with weaker evidence.
