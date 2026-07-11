@@ -1,36 +1,35 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://jarvisos.local/schemas/engineering-microtopic-v2.schema.json",
-  "title": "Engineering Microtopic Record v2",
+  "$id": "https://jarvisos.local/schemas/engineering-microtopic-v2.1.schema.json",
+  "title": "Engineering Microtopic Record v2.1",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "schema_version",
     "identity",
     "classification",
-    "source_claims",
-    "normalized_knowledge",
+    "source_evidence",
+    "knowledge",
     "verification",
     "assessment",
     "jarvis",
     "governance"
   ],
   "properties": {
-    "schema_version": {"const": "2.0.0"},
+    "schema_version": {"const": "2.1.0"},
     "identity": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["microtopic_id", "title", "primary_record_type", "record_types", "granularity"],
+      "required": ["microtopic_id", "title", "canonical_name", "aliases", "primary_record_type", "record_types", "granularity", "parent_ids"],
       "properties": {
         "microtopic_id": {"type": "string", "minLength": 3},
         "title": {"type": "string", "minLength": 3},
-        "canonical_name": {"type": "string"},
+        "canonical_name": {"type": "string", "minLength": 3},
         "aliases": {"type": "array", "items": {"type": "string"}},
         "primary_record_type": {"type": "string"},
         "record_types": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
         "granularity": {"enum": ["atomic", "compound", "bridge"]},
-        "parent_ids": {"type": "array", "items": {"type": "string"}},
-        "decomposition_reason": {"type": "string"}
+        "parent_ids": {"type": "array", "items": {"type": "string"}}
       }
     },
     "classification": {
@@ -45,72 +44,64 @@
         "tags": {"type": "array", "items": {"type": "string"}}
       }
     },
-    "source_claims": {
+    "source_evidence": {
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["claim_id", "source_id", "source_file", "source_sha256", "location", "authority", "claim_type", "claim_text"],
+        "required": ["source_id", "source_file", "source_sha256", "locator", "authority", "evidence_type", "supports_fields"],
         "properties": {
-          "claim_id": {"type": "string"},
           "source_id": {"type": "string"},
           "source_file": {"type": "string"},
           "source_sha256": {"type": "string", "pattern": "^[0-9A-F]{64}$"},
-          "location": {"type": "string"},
+          "locator": {"type": "string"},
           "authority": {"type": "string"},
-          "claim_type": {"enum": ["definition", "equation", "assumption", "procedure", "numeric_result", "warning", "code_behavior", "task_request"]},
-          "claim_text": {"type": "string"},
-          "verbatim_excerpt": {"type": "string"}
+          "evidence_type": {"type": "string"},
+          "supports_fields": {"type": "array", "minItems": 1, "items": {"type": "string"}}
         }
       }
     },
-    "normalized_knowledge": {
+    "knowledge": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["summary", "physical_meaning", "inputs", "outputs", "assumptions", "validity", "invalidity", "equations", "variables", "relations"],
+      "required": ["summary", "physical_meaning", "inputs", "outputs", "assumptions", "validity", "invalidity", "equations", "variables", "procedure", "relations"],
       "properties": {
-        "summary": {"type": "string"},
-        "physical_meaning": {"type": "string"},
+        "summary": {"type": "string", "minLength": 10},
+        "physical_meaning": {"type": "string", "minLength": 10},
         "inputs": {"type": "array", "items": {"type": "string"}},
         "outputs": {"type": "array", "items": {"type": "string"}},
         "assumptions": {"type": "array", "items": {"type": "string"}},
         "validity": {"type": "array", "items": {"type": "string"}},
         "invalidity": {"type": "array", "items": {"type": "string"}},
-        "model_context": {"type": "object"},
         "equations": {"type": "array", "items": {"type": "object"}},
         "variables": {"type": "array", "items": {"type": "object"}},
-        "constraints": {"type": "array", "items": {"type": "object"}},
-        "limiting_cases": {"type": "array", "items": {"type": "object"}},
-        "relations": {"type": "array", "items": {"type": "object", "required": ["relation", "target_id"]}},
-        "correlation_contract": {"type": ["object", "null"]}
+        "procedure": {"type": "array", "items": {"type": "string"}},
+        "relations": {"type": "array", "items": {"type": "object"}}
       }
     },
     "verification": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["overall_status", "claim_checks", "deterministic_checks", "sanity_checks", "unresolved_issues", "confidence"],
+      "required": ["status", "methods", "deterministic_checks", "confidence", "limitations", "knowledge_exportable"],
       "properties": {
-        "overall_status": {"enum": ["unreviewed", "transcribed", "partially_verified", "verified", "disputed", "incorrect"]},
-        "claim_checks": {"type": "array", "items": {"type": "object"}},
-        "deterministic_checks": {"type": "array", "items": {"type": "object"}},
-        "sanity_checks": {"type": "array", "items": {"type": "object"}},
-        "unresolved_issues": {"type": "array", "items": {"type": "string"}},
-        "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+        "status": {"enum": ["unreviewed", "source_supported", "dimensionally_checked", "numerically_reproduced", "cross_source_verified", "expert_verified"]},
+        "methods": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "deterministic_checks": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "limitations": {"type": "array", "items": {"type": "string"}},
+        "knowledge_exportable": {"type": "boolean"}
       }
     },
-    "artifacts": {"type": "array", "items": {"type": "object"}},
     "assessment": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["benchmark_eligible", "task_types", "benchmark_readiness", "contamination_class", "gold_policy", "adversarial_variants"],
+      "required": ["benchmark_eligible", "task_types", "benchmark_readiness", "contamination_class"],
       "properties": {
         "benchmark_eligible": {"type": "boolean"},
         "task_types": {"type": "array", "items": {"type": "string"}},
-        "benchmark_readiness": {"enum": ["not_candidate", "candidate", "development_ready", "holdout_ready"]},
-        "contamination_class": {"enum": ["reference_only", "development_public", "private_holdout", "contains_solution", "contains_gold"]},
-        "gold_policy": {"type": "string"},
-        "adversarial_variants": {"type": "array", "items": {"type": "string"}}
+        "benchmark_readiness": {"enum": ["not_candidate", "candidate", "development", "holdout_ready"]},
+        "contamination_class": {"type": "string"}
       }
     },
     "jarvis": {
@@ -128,12 +119,11 @@
     "governance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["lifecycle_status", "visibility", "copyright_class", "reviewer_roles", "created_utc", "updated_utc"],
+      "required": ["lifecycle_status", "visibility", "retention_policy", "created_utc", "updated_utc"],
       "properties": {
-        "lifecycle_status": {"enum": ["extracted", "structured", "reviewed", "verified", "benchmark_ready", "jarvis_ready", "rejected"]},
-        "visibility": {"enum": ["private_corpus", "model_visible_reference", "development_benchmark", "private_holdout", "evaluator_only"]},
-        "copyright_class": {"type": "string"},
-        "reviewer_roles": {"type": "array", "items": {"type": "string"}},
+        "lifecycle_status": {"enum": ["extracted", "reviewed", "verified", "benchmark_ready", "deprecated"]},
+        "visibility": {"type": "string"},
+        "retention_policy": {"const": "canonical_verified_knowledge_only"},
         "created_utc": {"type": "string"},
         "updated_utc": {"type": "string"}
       }
