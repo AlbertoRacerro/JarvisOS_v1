@@ -492,7 +492,11 @@ def _candidate_for_snapshot(
 ) -> tuple[_CandidateBlock | None, dict[str, Any]]:
     label = get_current_sensitivity_label(snapshot.workspace_id, snapshot.subject_ref)
     floor = deterministic_floor(snapshot.block["content"])
-    label_current = label is not None and label.current
+    label_current = (
+        label is not None
+        and label.current
+        and label.content_digest == snapshot.content_digest
+    )
     effective_level = (
         _max_level(label.level, floor) if label_current else "unknown"
     )
@@ -520,6 +524,8 @@ def _candidate_for_snapshot(
         return _candidate_from_derivative(derivative), {}
     if label is None:
         reason = "missing_current_label"
+    elif label.current and label.content_digest != snapshot.content_digest:
+        reason = "source_changed_during_preview"
     elif not label.current:
         reason = "stale_label"
     else:
@@ -622,7 +628,11 @@ def _approved_derivative_for_source(
 def _effective_source_level(snapshot: SourceSnapshot) -> str:
     label = get_current_sensitivity_label(snapshot.workspace_id, snapshot.subject_ref)
     floor = deterministic_floor(snapshot.block["content"])
-    if label is None or not label.current:
+    if (
+        label is None
+        or not label.current
+        or label.content_digest != snapshot.content_digest
+    ):
         return floor or "unknown"
     return _max_level(label.level, floor)
 
