@@ -11,6 +11,7 @@ from app.modules.ai.sensitivity import (
     get_current_sensitivity_label,
     get_sanitized_derivative,
     preview_manual_context,
+    revalidate_sanitized_derivative,
     revoke_sanitized_derivative,
 )
 from app.modules.ai.sensitivity_models import (
@@ -42,7 +43,10 @@ def create_label(payload: SensitivityLabelCreate) -> SensitivityLabelRead:
 
 
 @router.get("/labels/current", response_model=SensitivityLabelRead | None)
-def read_current_label(workspace_id: str, subject_ref: str) -> SensitivityLabelRead | None:
+def read_current_label(
+    workspace_id: str,
+    subject_ref: str,
+) -> SensitivityLabelRead | None:
     try:
         return get_current_sensitivity_label(workspace_id, subject_ref)
     except SensitivityNotFoundError as exc:
@@ -56,7 +60,9 @@ def read_current_label(workspace_id: str, subject_ref: str) -> SensitivityLabelR
     response_model=SanitizedDerivativeRead,
     status_code=status.HTTP_201_CREATED,
 )
-def create_derivative(payload: SanitizedDerivativeCreate) -> SanitizedDerivativeRead:
+def create_derivative(
+    payload: SanitizedDerivativeCreate,
+) -> SanitizedDerivativeRead:
     try:
         return create_sanitized_derivative(payload)
     except SensitivityNotFoundError as exc:
@@ -65,12 +71,41 @@ def create_derivative(payload: SanitizedDerivativeCreate) -> SanitizedDerivative
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
-@router.get("/derivatives/{derivative_id}", response_model=SanitizedDerivativeRead)
-def read_derivative(derivative_id: str, workspace_id: str) -> SanitizedDerivativeRead:
+@router.get(
+    "/derivatives/{derivative_id}",
+    response_model=SanitizedDerivativeRead,
+)
+def read_derivative(
+    derivative_id: str,
+    workspace_id: str,
+) -> SanitizedDerivativeRead:
     try:
-        return get_sanitized_derivative(workspace_id, derivative_id)
+        return get_sanitized_derivative(
+            workspace_id,
+            derivative_id,
+            refresh=False,
+        )
     except SensitivityNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post(
+    "/derivatives/{derivative_id}/revalidate",
+    response_model=SanitizedDerivativeRead,
+)
+def revalidate_derivative(
+    derivative_id: str,
+    workspace_id: str,
+) -> SanitizedDerivativeRead:
+    try:
+        return revalidate_sanitized_derivative(
+            workspace_id,
+            derivative_id,
+        )
+    except SensitivityNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SensitivityPolicyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post(
@@ -98,9 +133,15 @@ def approve_derivative(
     "/derivatives/{derivative_id}/revoke",
     response_model=SanitizedDerivativeRead,
 )
-def revoke_derivative(derivative_id: str, workspace_id: str) -> SanitizedDerivativeRead:
+def revoke_derivative(
+    derivative_id: str,
+    workspace_id: str,
+) -> SanitizedDerivativeRead:
     try:
-        return revoke_sanitized_derivative(workspace_id, derivative_id)
+        return revoke_sanitized_derivative(
+            workspace_id,
+            derivative_id,
+        )
     except SensitivityNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SensitivityPolicyError as exc:
@@ -114,7 +155,9 @@ def revoke_derivative(derivative_id: str, workspace_id: str) -> SanitizedDerivat
 def external_context_preview(
     payload: SensitivityContextPreviewRequest,
 ) -> SensitivityContextPreviewResponse:
-    selection = ContextSelectionSpec(**payload.selection.model_dump())
+    selection = ContextSelectionSpec(
+        **payload.selection.model_dump()
+    )
     try:
         return build_external_context_preview(
             payload.workspace_id,
@@ -125,6 +168,8 @@ def external_context_preview(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except SensitivityPolicyError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post(
