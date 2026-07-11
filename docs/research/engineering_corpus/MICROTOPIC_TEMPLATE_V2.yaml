@@ -1,4 +1,4 @@
-schema_version: 2.1.0
+schema_version: 2.2.0
 identity:
   microtopic_id: null
   title: null
@@ -8,6 +8,7 @@ identity:
   record_types: []
   granularity: atomic
   parent_ids: []
+  decomposition_reason: null
 classification:
   course: null
   domain: null
@@ -18,43 +19,67 @@ source_evidence:
 - source_id: null
   source_file: null
   source_sha256: null
-  locator: null
-  authority: null
-  evidence_type: null
-  supports_fields: []
+  source_type: null
+  locator:
+    kind: null
+    page_start: null
+    page_end: null
+    sheet: null
+    cell_range: null
+  anchor_terms: []
 knowledge:
   summary: null
   physical_meaning: null
+  knowledge_strength: null
   inputs: []
   outputs: []
   assumptions: []
   validity: []
   invalidity: []
-  equations: []
-  variables: []
+  equations:
+  - label: null
+    expression_machine: null
+    expression_latex: null
+    equation_kind: null
+    symbols: []
+  variables:
+  - symbol: null
+    meaning: null
+    unit: null
+    canonical_quantity_id: null
+    basis: null
   procedure: []
-  relations: []
+  relations:
+  - relation: null
+    target_id: null
+  correlation_contract: null
+  graphical_method_contract: null
+  spreadsheet_lineage: null
+  fem_verification_target: null
 verification:
-  status: unreviewed
-  methods: []
-  deterministic_checks: []
-  confidence: 0.0
-  limitations: []
+  status: source_grounded
   knowledge_exportable: false
+  review_passes: []
+  checks:
+  - check_id: null
+    check_type: null
+    status: not_run
+    severity: null
+    evidence: null
+  unresolved_issues: []
+  confidence: 0.0
 assessment:
   benchmark_eligible: false
   task_types: []
   benchmark_readiness: not_candidate
   contamination_class: reference_only
-jarvis:
-  capability_eligible: false
-  capability_candidates: []
-  deterministic_core: []
-  ai_role: []
-  required_tools: []
+  gold_policy: null
+  adversarial_variants: []
 governance:
-  lifecycle_status: extracted
+  lifecycle_status: structured
   visibility: private_corpus
   retention_policy: canonical_verified_knowledge_only
+  copyright_class: null
+  reviewer_roles: []
   created_utc: null
   updated_utc: null
