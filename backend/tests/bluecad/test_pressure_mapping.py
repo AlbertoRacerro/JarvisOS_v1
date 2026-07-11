@@ -87,6 +87,25 @@ def test_maps_every_c3d10_face_with_midside_identity(face_number: int) -> None:
 
 
 @pytest.mark.parametrize(
+    ("solid_type", "surface_type", "surface_nodes", "expected_face"),
+    [
+        ("C3D4", "CPS3", _C3D4_FACE_NODES[1], "P1"),
+        ("C3D10", "CPS6", _C3D10_FACE_NODES[1], "P1"),
+    ],
+)
+def test_accepts_gmsh_calculix_surface_aliases(
+    solid_type: str,
+    surface_type: str,
+    surface_nodes: list[int],
+    expected_face: str,
+) -> None:
+    mesh = _parse_mesh(_mesh_text(solid_type, surface_type, surface_nodes))
+    mapping = map_pressure_surface(mesh, "LOAD_box_loaded")
+    assert mapping[0]["surface_element_type"] == surface_type
+    assert mapping[0]["face_label"] == expected_face
+
+
+@pytest.mark.parametrize(
     ("mutator", "code"),
     [
         (
@@ -172,7 +191,7 @@ def test_rejects_duplicate_surface_topology() -> None:
         )
     )
     with pytest.raises(PressureMappingError) as excinfo:
-        map_pressure_surface(mesh, "LOAD_box_loaded")
+        map_presssure_surface(mesh, "LOAD_box_loaded")
     assert excinfo.value.code == "PRESSURE_DUPLICATE_SURFACE_ASSIGNMENT"
 
 

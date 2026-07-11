@@ -29,8 +29,26 @@ _FACE_NODE_INDEXES: dict[str, dict[int, tuple[int, ...]]] = {
         4: (2, 3, 0, 9, 7, 6),
     },
 }
-_EXPECTED_CONNECTIVITY = {"C3D4": 4, "C3D10": 10, "S3": 3, "S6": 6}
-_SURFACE_TO_SOLID = {"S3": "C3D4", "S6": "C3D10"}
+_EXPECTED_CONNECTIVITY = {
+    "C3D4": 4,
+    "C3D10": 10,
+    "S3": 3,
+    "CPS3": 3,
+    "S6": 6,
+    "CPS6": 6,
+}
+_SURFACE_TO_SOLID = {
+    "S3": "C3D4",
+    "CPS3": "C3D4",
+    "S6": "C3D10",
+    "CPS6": "C3D10",
+}
+_CANONICAL_SURFACE_TYPE = {
+    "S3": "S3",
+    "CPS3": "S3",
+    "S6": "S6",
+    "CPS6": "S6",
+}
 
 
 def map_pressure_surface(
@@ -78,6 +96,7 @@ def map_pressure_surface(
         )
 
     surface_types: set[str] = set()
+    raw_surface_types: set[str] = set()
     surface_elements: list[tuple[int, dict[str, Any]]] = []
     seen_surface_topology: set[frozenset[int]] = set()
     for element_id in entries:
@@ -116,12 +135,13 @@ def map_pressure_surface(
                 {"surface_set": surface_set, "surface_element_id": element_id},
             )
         seen_surface_topology.add(topology)
-        surface_types.add(element_type)
+        surface_types.add(_CANONICAL_SURFACE_TYPE[element_type])
+        raw_surface_types.add(element_type)
         surface_elements.append((element_id, element))
     if len(surface_types) != 1:
         raise PressureMappingError(
             "PRESSURE_MIXED_SURFACE_ORDER",
-            {"surface_set": surface_set, "surface_element_types": sorted(surface_types)},
+            {"surface_set": surface_set, "surface_element_types": sorted(raw_surface_types)},
         )
 
     surface_type = next(iter(surface_types))
@@ -210,7 +230,7 @@ def map_pressure_surface(
             {
                 "surface_set": surface_set,
                 "surface_element_id": surface_element_id,
-                "surface_element_type": surface_type,
+                "surface_element_type": str(surface_element["type"]).upper(),
                 "surface_nodes": list(surface_nodes),
                 "body_element_id": body_element_id,
                 "body_element_type": str(body_element["type"]).upper(),
@@ -342,7 +362,7 @@ def _validate_connectivity(
 def _face_geometry(
     body_element: dict[str, Any],
     local_face_number: int,
-    node_coordinates: dict[int, tuple[float, float, float]],
+    node_coordinates: dict[int, tuple[float, float, float,
 ) -> tuple[float, tuple[float, float, float]]:
     element_type = str(body_element["type"]).upper()
     nodes = tuple(int(node) for node in body_element["nodes"])
