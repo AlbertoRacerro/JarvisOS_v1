@@ -12,13 +12,14 @@ from pathlib import Path, PureWindowsPath
 from tempfile import TemporaryDirectory
 from typing import Any
 
+from hypothesis import HealthCheck, settings
+from hypothesis.errors import InvalidArgument
+
 from app.modules.bluecad.assembly import ABS_TOL
 from app.modules.bluecad.export import ARTIFACT_NAMES, sha256_file
 from app.modules.bluecad.models import BuildResult
 from app.modules.bluecad.service import build_geometry_spec
 from app.modules.bluecad.spec import canonical_json, canonicalize_geometry_spec
-from hypothesis import HealthCheck, settings
-from hypothesis.errors import InvalidArgument
 
 PROPERTY_PROFILE = "bluecad_property_ci"
 CANARY_PROFILE_ID = "ubuntu24-py311"
