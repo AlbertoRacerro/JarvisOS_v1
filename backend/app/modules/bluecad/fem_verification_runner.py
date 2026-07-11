@@ -92,10 +92,12 @@ def run_fem_verification_battery(
     )
 
     cylinder_root = fixture_root / "segmented_cylinder"
+    lame_target = 4.0
     lame_run = _run_case(
         lame_spec(
             cylinder_root / "model.step",
             cylinder_root / "manifest.json",
+            target_size=lame_target,
         ),
         root / "lame",
         registry,
@@ -108,7 +110,7 @@ def run_fem_verification_battery(
         frd_text=_artifact_text(lame_run["fem"], "frd"),
         pressure_loads=mapping.get("loads", []),
         reaction_resultant=lame_run["fem"].get("reaction_resultant"),
-        target_size=5.0,
+        target_size=lame_target,
     )
     _attach_run_evidence(lame, lame_run, root)
 
@@ -260,7 +262,7 @@ def _run_evidence(
             {
                 "attempt_no": item.get("attempt_no"),
                 "target_size": item.get("target_size"),
-                "returncode": item.get("returncode"),
+                "returncode": item.get("gmsh_returncode"),
                 "warnings": item.get("warnings", []),
             }
             for item in mesh.get("attempts", [])
