@@ -17,7 +17,7 @@ on:
 jobs:
   strict-alpha-proof:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -160,13 +160,16 @@ jobs:
         env:
           JARVISOS_BLUECAD_TOOL_REGISTRY: ${{ steps.registry.outputs.path }}
           JARVISOS_BLUECAD_PROOF_JSON: ${{ runner.temp }}/bluecad-alpha-proof.json
+          JARVISOS_BLUECAD_FEM_BATTERY_JSON: ${{ runner.temp }}/bluecad-fem-verification-battery.json
           JARVISOS_BLUECAD_PROOF_DEBUG_DIR: ${{ runner.temp }}/bluecad-proof-debug
+          JARVISOS_BLUECAD_PROOF_GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -o pipefail
           set +e
           python -m pytest -q \
             tests/bluecad/test_alpha_real_tools.py \
             tests/bluecad/test_fem_verification_real_tools.py \
+            tests/bluecad/test_fem_verification_battery_real_tools.py \
             --require-bluecad-real-tools \
             2>&1 | tee "$RUNNER_TEMP/bluecad-alpha-proof.log"
           status=${PIPESTATUS[0]}
@@ -182,6 +185,7 @@ jobs:
             ${{ runner.temp }}/bluecad-offline-regression.log
             ${{ runner.temp }}/bluecad-alpha-proof.log
             ${{ runner.temp }}/bluecad-alpha-proof.json
+            ${{ runner.temp }}/bluecad-fem-verification-battery.json
             ${{ runner.temp }}/bluecad-proof-debug
           if-no-files-found: warn
           retention-days: 14

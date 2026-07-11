@@ -155,7 +155,8 @@ def _solid_solver_mesh_text(mesh: dict[str, Any]) -> str:
     for node_id in sorted(required_node_ids):
         x, y, z = node_coordinates[node_id]
         lines.append(
-            f"{node_id},{x:.17g},{y:.17g},{z:.17g}"
+            f"{node_id},{_format_solver_coordinate(x)},"
+            f"{_format_solver_coordinate(y)},{_format_solver_coordinate(z)}"
         )
 
     for element_type in sorted(body_by_type):
@@ -174,6 +175,22 @@ def _solid_solver_mesh_text(mesh: dict[str, Any]) -> str:
 
     lines.append("")
     return "\n".join(lines)
+
+
+def _format_solver_coordinate(value: Any) -> str:
+    """Render a finite coordinate within CalculiX's bounded free-field width."""
+
+    numeric = float(value)
+    if not math.isfinite(numeric):
+        raise ValueError("solver mesh contains a non-finite node coordinate")
+    if numeric == 0.0:
+        return "0"
+    rendered = f"{numeric:.12g}".replace("e", "E")
+    if len(rendered) > 20:
+        raise ValueError(
+            f"solver mesh coordinate exceeds CalculiX field width: {rendered}"
+        )
+    return rendered
 
 
 def _deck_text(

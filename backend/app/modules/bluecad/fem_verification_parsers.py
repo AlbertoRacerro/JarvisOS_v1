@@ -99,6 +99,8 @@ def parse_inp_mesh(text: str) -> dict[str, Any]:
             nodes[node_id] = coordinates
             continue
 
+        if section is None:
+            continue
         values = _integer_values(line, line_number)
         if section == "element":
             if len(values) < 2:
