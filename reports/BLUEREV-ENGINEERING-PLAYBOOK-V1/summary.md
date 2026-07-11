@@ -34,7 +34,7 @@ Standard formulas, definitions and case-specific exercise results are not primar
 
 ## Biological-modeling addition
 
-The repository now records an explicit gap audit for a first dynamic BlueRev model using *Nannochloropsis gaditana*.
+The repository records an explicit gap audit for a first dynamic BlueRev model using *Nannochloropsis gaditana*.
 
 The audit confirms that the current playbook provides a useful generic modeling agenda but does not yet contain the species- and strain-specific physiology, parameter evidence or experiment design required for a credible operational model.
 
@@ -67,4 +67,4 @@ The package-integrity validator passes with exit code `0`. The strict validator 
 
 `NOT_AUTHORIZED` as automatic design authority, control/safety logic or certification basis.
 
-The complete machine-readable and human-readable playbook remains in the external research package while content review proceeds.
+This v1.2 direction supersedes the closed microtopic and Engineering Knowledge Unit drafts. The complete generated catalog remains an external reviewed research artifact; this merge introduces no runtime retrieval or automatic design authority.
