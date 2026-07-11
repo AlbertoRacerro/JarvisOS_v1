@@ -162,6 +162,7 @@ jobs:
           JARVISOS_BLUECAD_PROOF_JSON: ${{ runner.temp }}/bluecad-alpha-proof.json
           JARVISOS_BLUECAD_FEM_BATTERY_JSON: ${{ runner.temp }}/bluecad-fem-verification-battery.json
           JARVISOS_BLUECAD_PROOF_DEBUG_DIR: ${{ runner.temp }}/bluecad-proof-debug
+          JARVISOS_BLUECAD_PROOF_GIT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -o pipefail
           set +e
