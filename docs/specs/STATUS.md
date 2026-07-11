@@ -45,9 +45,9 @@ before Codex or another coding agent may act on them.
 
 ## Current priority and drafting order
 
-1. Complete `024-A` (verified C3D10) in implementation PR
-   [#77](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/77), then implement
-   `024-B` (solid-face pressure proof) and `024-C` (analytic battery) in order.
+1. Complete `024-B` (solid-face pressure proof) in implementation PR
+   [#79](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/79), then implement
+   `024-C` (analytic battery).
 2. Reconcile the known definition blockers in `056` before implementation.
 3. Before serious BlueRev dogfood with real project IP or cloud providers, draft
    and implement `059` (sensitivity, retrieval, and egress enforcement).
@@ -92,7 +92,7 @@ that no open PR overlaps the target files or runtime boundary.
 | 021b | merged | [#72](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/72), [#75](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/75) | ALPHA-GATE completion: real-tool proof + recoverable data root | 021, 038, 044 | Strict hash-verified real-tool proof merged in [#72](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/72), and atomic path-rebased backup/restore merged in [#75](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/75). |
 | 022 | merged | [#49](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/49) | Codex PR autopush without automerge | 017, 019 | Retain the bounded same-branch actuator for explicit maintainer-requested Codex work; no workflow dispatches it automatically. |
 | 023 | planned | — | Adversarial proposal corpus | 010 | Add bounded hostile and degenerate model-output fixtures; the loop must reject or park them without crashes, unbounded work, provider calls, or authority bypass. |
-| 024 | in_review | [#77](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/77) | FEM verification battery | 008, 009, 021b | Slice 024-A verified C3D10 is under review in #77; 024-B solid-face pressure proof and 024-C location-specific analytic battery remain pending. |
+| 024 | in_review | [#77](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/77), [#79](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/79) | FEM verification battery | 008, 009, 021b | Slice 024-A verified C3D10 is merged; 024-B solid-face pressure proof is under review in #79; 024-C location-specific analytic battery remains pending. |
 | 025 | planned | — | Semantic routing evaluation and promotion policy | 002, 010 | Use labeled real task/ledger outcomes only after enough dogfood data exists; promote a local classifier per task family only above explicit thresholds and preserve deterministic escalation. |
 | 026 | planned | — | BoardSession stateful multi-persona sessions | 011, 034, 040 | Deferred post-alpha: add shared-state multi-persona sessions only after the advisory panel and memory/context spine prove useful in real work. |
 | 027 | planned | — | Modal and thermal analysis types | 009, 024 | Extend the verified static-FEM boundary only when a real BlueRev decision requires modal or thermal analysis; do not pre-build a broad solver matrix. |
