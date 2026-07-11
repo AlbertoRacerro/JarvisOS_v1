@@ -11,6 +11,7 @@ from app.modules.bluecad.fem_pressure_integration import (
     _deck_text,
     _parse_mesh,
     _prepare_pressure_mappings,
+    _write_solid_solver_mesh,
 )
 from app.modules.bluecad.fem_reactions import _parse_reactions
 from app.modules.bluecad.pressure_mapping import PressureMappingError
@@ -26,6 +27,7 @@ _DIVERGED_PATTERN = _base._DIVERGED_PATTERN
 # The retained 009 parser calls this module-global hook. Bind it to the hardened
 # native/synthetic reaction parser before any solve executes.
 _base._parse_reactions = _parse_reactions
+
 
 def solve_static_analysis(
     analysis_spec: dict[str, Any],
@@ -57,7 +59,14 @@ def solve_static_analysis(
             out_path,
             artifacts,
         )
-        mesh_include = Path(os.path.relpath(mesh_path, out_path.resolve()))
+        solver_mesh_path = (
+            _write_solid_solver_mesh(mesh, out_path, artifacts)
+            if pressure_mappings
+            else mesh_path
+        )
+        mesh_include = Path(
+            os.path.relpath(solver_mesh_path, out_path.resolve())
+        )
         inp_path = out_path / "analysis.inp"
         inp_path.write_text(
             _deck_text(
@@ -76,7 +85,10 @@ def solve_static_analysis(
             timeout_s or float(analysis_spec.get("timeout_s", 60)),
             registry_path,
         )
-        log_path.write_text((run.stdout or "") + (run.stderr or ""), encoding="utf-8")
+        log_path.write_text(
+            (run.stdout or "") + (run.stderr or ""),
+            encoding="utf-8",
+        )
         artifacts.update(_artifact_map({"log": log_path}))
         if run.timed_out:
             return _error(
@@ -137,7 +149,6 @@ def solve_static_analysis(
     }
 
 
-
 append_tier3_checks = _base.append_tier3_checks
 _parse_outputs_base = _base._parse_outputs
 _parse_native_frd = _base._parse_native_frd
@@ -154,7 +165,11 @@ _require_node_set = _base._require_node_set
 _require_element_set = _base._require_element_set
 
 
-def _parse_outputs(frd_path: Path, dat_path: Path, mesh: dict[str, Any]) -> dict[str, Any]:
+def _parse_outputs(
+    frd_path: Path,
+    dat_path: Path,
+    mesh: dict[str, Any],
+) -> dict[str, Any]:
     parsed = _parse_outputs_base(frd_path, dat_path, mesh)
     reactions = parsed.get("reactions", [])
     parsed["reaction_resultant"] = (
