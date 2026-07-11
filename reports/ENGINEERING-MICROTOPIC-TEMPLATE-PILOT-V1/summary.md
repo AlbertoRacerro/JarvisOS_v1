@@ -1,35 +1,31 @@
-# Engineering Microtopic Template Pilot v1
+# Engineering Microtopic Template Pilot v2.1
 
 ## Scope
 
-Knowledge-first research slice. No runtime JarvisOS wiring, API route, corpus binary, provider call, or benchmark execution path is introduced.
+Knowledge-first research slice. No runtime JarvisOS wiring, API route, corpus binary, provider call or benchmark execution path is introduced.
 
 ## Delivered
 
-- microtopic template v1;
-- 30-record pilot compiled from 8 source files across 5 material groups;
-- 14 structural gaps derived from real compilation;
-- microtopic template and JSON Schema v2;
-- 30 migrated v2 records, all schema-valid;
-- 25 deterministic pilot checks, all passed;
-- quality gates and systematic full-corpus mapping plan.
+- initial 30-record template pilot;
+- 14 first-pilot structural gaps;
+- corrected canonical-only template and JSON Schema v2.1;
+- second pilot with 75 microtopics from 16 sources;
+- 7 additional structural gaps;
+- quality gates and systematic mapping plan.
 
-The repository contains the schema, template, gap log and complete 30-record index. The external research package contains all 30 v1/v2 records plus six representative v2 fixtures and the deterministic check evidence.
+## Canonical retention rule
 
-## Key finding
+Retrievable memory stores only corrected canonical engineering knowledge. It does not preserve rejected values, misleading explanations or narratives about who made an error. Source file hash and exact location remain as provenance. Temporary QA evidence stays outside retrieval.
 
-The decisive change from v1 to v2 is separation of `source_claims` from `normalized_knowledge` and claim-level verification. This preserves official errors without either deleting the source claim or treating it as accepted truth.
+## Measured second-pilot results
 
-## Measured results
-
-- records: 30 v1 + 30 migrated v2;
-- source files: 8;
-- material groups: 5;
-- template gaps: 14;
-- schema validation: 30/30;
-- deterministic checks: 25/25;
-- confirmed incorrect source claims represented: PIC average rate, Python runtime dependency, uncalibrated adsorption placeholder.
+- records: 75;
+- source files: 16;
+- coverage: thermodynamics, flash, distillation, liquid-liquid extraction, packed columns, heat exchange, hydraulics, pinch, kinetics, spreadsheets and FEM;
+- schema validation: 75/75 records, 0 errors;
+- deterministic checks: 33/33 passed;
+- new template gaps: 7.
 
 ## Decision boundary
 
-Before mapping the full corpus, run a second 50–75-record pilot over thermodynamics, separations, reactor engineering, spreadsheets and FEM. Freeze v2 only if no critical meaning-loss gap remains.
+Use v2.1 for the next larger mapping pilot. Do not yet freeze the schema for the entire corpus. First implement typed contracts for correlations, graphical methods, spreadsheet lineage and FEM verification targets.
