@@ -16,7 +16,7 @@ from hypothesis import HealthCheck, settings
 from hypothesis.errors import InvalidArgument
 
 from app.modules.bluecad.assembly import ABS_TOL
-from app.modules.bluecad.export import ARTIFACT_NAMES
+from app.modules.bluecad.export import ARTIFACT_NAMES, sha256_file
 from app.modules.bluecad.models import BuildResult
 from app.modules.bluecad.service import build_geometry_spec
 from app.modules.bluecad.spec import canonical_json, canonicalize_geometry_spec
@@ -73,7 +73,7 @@ def build_and_assert(
     assert disk_report == result.report
     assert disk_manifest["spec_id"] == result.spec_id
     assert disk_report["spec_id"] == result.spec_id
-    assert disk_report["manifest_sha256"] == disk_manifest["manifest_digest"]
+    assert disk_report["manifest_sha256"] == sha256_file(result.manifest_path)
 
     assert_manifest_digest(disk_manifest)
     assert_manifest_invariants(disk_manifest, root, connection=connection)
@@ -102,11 +102,6 @@ def build_twice_and_assert(
         assert_manifest_digest(first.manifest)
         assert_manifest_digest(second.manifest)
         return first, second
-
-
-def temporary_build_root(prefix: str) -> Iterator[Path]:
-    with TemporaryDirectory(prefix=prefix) as directory:
-        yield Path(directory)
 
 
 def assert_manifest_digest(manifest: Mapping[str, Any]) -> None:
