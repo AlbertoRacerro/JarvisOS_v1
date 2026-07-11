@@ -1,0 +1,75 @@
+name: Temporary 059a snapshot binding fix
+
+on:
+  push:
+    branches: [impl/spec-059a-sensitivity-context]
+    paths: [.github/workflows/tmp-059a-snapshot-fix.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-snapshot-fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: impl/spec-059a-sensitivity-context
+          fetch-depth: 0
+
+      - name: Apply deterministic snapshot-binding replacements
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: Path, old: str, new: str) -> None:
+              text = path.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one replacement target, found {count}")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          sensitivity = Path("backend/app/modules/ai/sensitivity.py")
+          replace_once(
+              sensitivity,
+              '''    model = _SOURCE_MODELS[kind].model_validate(dict(row))\n    block = _block_for_record(kind, model)\n    return _snapshot_from_block(workspace_id, block)\n\n\ndef create_sensitivity_label''',
+              '''    model = _SOURCE_MODELS[kind].model_validate(dict(row))\n    block = _block_for_record(kind, model)\n    return _snapshot_from_block(workspace_id, block)\n\n\ndef _resolve_current_snapshot_and_label(\n    workspace_id: str, subject_ref: str\n) -> tuple[SourceSnapshot, SensitivityLabelRead | None]:\n    """Read the source row and latest label from one SQLite read snapshot."""\n    kind, record_id = _parse_subject_ref(subject_ref)\n    with open_sqlite_connection() as connection:\n        _require_workspace(connection, workspace_id)\n        connection.execute("BEGIN")\n        source_row = connection.execute(\n            f"SELECT * FROM {_SOURCE_TABLES[kind]} WHERE id = ? AND workspace_id = ?",\n            (record_id, workspace_id),\n        ).fetchone()\n        label_row = connection.execute(\n            """\n            SELECT * FROM sensitivity_labels\n            WHERE workspace_id = ? AND subject_ref = ?\n            ORDER BY created_at DESC, id DESC LIMIT 1\n            """,\n            (workspace_id, f"{kind}:{record_id}"),\n        ).fetchone()\n    if source_row is None:\n        raise SensitivityNotFoundError(f"Source not found: {subject_ref}")\n    model = _SOURCE_MODELS[kind].model_validate(dict(source_row))\n    snapshot = _snapshot_from_block(workspace_id, _block_for_record(kind, model))\n    if label_row is None:\n        return snapshot, None\n    current = label_row["content_digest"] == snapshot.content_digest\n    label = _label_read(\n        label_row,\n        current=current,\n        stale_reason=None if current else "content_digest_mismatch",\n    )\n    return snapshot, label\n\n\ndef create_sensitivity_label''',
+          )
+          replace_once(
+              sensitivity,
+              '''def get_current_sensitivity_label(\n    workspace_id: str, subject_ref: str\n) -> SensitivityLabelRead | None:\n    snapshot = resolve_source_snapshot(workspace_id, subject_ref)\n    with open_sqlite_connection() as connection:\n        row = connection.execute(\n            """\n            SELECT * FROM sensitivity_labels\n            WHERE workspace_id = ? AND subject_ref = ?\n            ORDER BY created_at DESC, id DESC LIMIT 1\n            """,\n            (workspace_id, snapshot.subject_ref),\n        ).fetchone()\n    if row is None:\n        return None\n    current = row["content_digest"] == snapshot.content_digest\n    return _label_read(row, current=current, stale_reason=None if current else "content_digest_mismatch")''',
+              '''def get_current_sensitivity_label(\n    workspace_id: str, subject_ref: str\n) -> SensitivityLabelRead | None:\n    _, label = _resolve_current_snapshot_and_label(workspace_id, subject_ref)\n    return label''',
+          )
+          replace_once(
+              sensitivity,
+              '''def _candidate_for_snapshot(\n    snapshot: SourceSnapshot, *, allowed_derivative_sources: set[str]\n) -> tuple[_CandidateBlock | None, dict[str, Any]]:\n    label = get_current_sensitivity_label(snapshot.workspace_id, snapshot.subject_ref)\n    floor = deterministic_floor(snapshot.block["content"])''',
+              '''def _candidate_for_snapshot(\n    snapshot: SourceSnapshot, *, allowed_derivative_sources: set[str]\n) -> tuple[_CandidateBlock | None, dict[str, Any]]:\n    current_snapshot, label = _resolve_current_snapshot_and_label(\n        snapshot.workspace_id, snapshot.subject_ref\n    )\n    if current_snapshot.content_digest != snapshot.content_digest:\n        return (\n            None,\n            {\n                "source_ref": snapshot.subject_ref,\n                "effective_level": "unknown",\n                "reason": "source_changed_during_preview",\n            },\n        )\n    snapshot = current_snapshot\n    floor = deterministic_floor(snapshot.block["content"])''',
+          )
+          replace_once(
+              sensitivity,
+              '''def _effective_source_level(snapshot: SourceSnapshot) -> str:\n    label = get_current_sensitivity_label(snapshot.workspace_id, snapshot.subject_ref)\n    floor = deterministic_floor(snapshot.block["content"])\n    if label is None or not label.current:\n        return floor or "unknown"\n    return _max_level(label.level, floor)''',
+              '''def _effective_source_level(snapshot: SourceSnapshot) -> str:\n    current_snapshot, label = _resolve_current_snapshot_and_label(\n        snapshot.workspace_id, snapshot.subject_ref\n    )\n    floor = deterministic_floor(current_snapshot.block["content"])\n    if current_snapshot.content_digest != snapshot.content_digest:\n        return floor or "unknown"\n    if label is None or not label.current:\n        return floor or "unknown"\n    return _max_level(label.level, floor)''',
+          )
+
+          tests = Path("backend/tests/test_ai_sensitivity_context.py")
+          replace_once(
+              tests,
+              '''import pytest\n\nfrom app.core.database import (''',
+              '''import pytest\n\nimport app.modules.ai.sensitivity as sensitivity_module\nfrom app.core.database import (''',
+          )
+          text = tests.read_text(encoding="utf-8")
+          marker = "def test_preview_withholds_source_changed_after_selection"
+          if marker in text:
+              raise SystemExit("snapshot race regression already present")
+          text += '''\n\n\ndef test_preview_withholds_source_changed_after_selection(monkeypatch: pytest.MonkeyPatch) -> None:\n    _bootstrap()\n    record_id = _decision("Generic public-domain pump sizing note")\n    source_ref = f"decision:{record_id}"\n    create_sensitivity_label(\n        SensitivityLabelCreate(\n            workspace_id=WORKSPACE_ID,\n            subject_ref=source_ref,\n            level="S1",\n        )\n    )\n    original_select = sensitivity_module.select_context_records\n\n    def racing_select(*args, **kwargs):\n        selected = original_select(*args, **kwargs)\n        _update_decision(record_id, "Changed generic note after selection")\n        return selected\n\n    monkeypatch.setattr(sensitivity_module, "select_context_records", racing_select)\n\n    preview = build_external_context_preview(WORKSPACE_ID, 32_000, _selection(record_id))\n\n    assert preview.blocks == []\n    assert preview.withheld_sources_manifest == [\n        {\n            "source_ref": source_ref,\n            "effective_level": "unknown",\n            "reason": "source_changed_during_preview",\n        }\n    ]\n''' 
+          tests.write_text(text, encoding="utf-8")
+          PY
+
+          git rm .github/workflows/tmp-059a-snapshot-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/app/modules/ai/sensitivity.py backend/tests/test_ai_sensitivity_context.py
+          git commit -m "Bind 059a previews to one source snapshot"
+          git push origin HEAD:impl/spec-059a-sensitivity-context
