@@ -45,6 +45,7 @@ No unsupported *Nannochloropsis* parameter is promoted into the playbook. Missin
 Documents:
 
 - `BIOPROCESS_MODELING_GAP_AUDIT.md` — modeling gaps, fidelity ladder and research streams;
+- `BIOPROCESS_RESEARCH_BACKLOG.md` — P0-P3 research ordering by decision value and evidence needs;
 - `DEEP_RESEARCH_PROMPT_MICROALGAE_MODELING.md` — citation-rich research prompt for species-specific model selection, data, experiments and reproducible implementations.
 
 ## Validation boundary
