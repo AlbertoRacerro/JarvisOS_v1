@@ -1,0 +1,100 @@
+name: Temporary 059a reviewed fix
+
+on:
+  push:
+    branches: [impl/spec-059a-sensitivity-context]
+    paths: [.github/workflows/tmp-059a-fix.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-reviewed-fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: impl/spec-059a-sensitivity-context
+          fetch-depth: 0
+
+      - name: Apply deterministic reviewed replacements
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: Path, old: str, new: str) -> None:
+              text = path.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one replacement target, found {count}")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          schema = Path("backend/app/core/schema.py")
+          replace_once(
+              schema,
+              '''SCHEMA_CONTEXT_RECORDS_FTS_MIGRATION_ID = "0007_context_records_fts"\nSCHEMA_CONTEXT_RECORDS_FTS_MIGRATION_NAME = "Context pack FTS index and triggers"\nCURRENT_SCHEMA_MIGRATION_ID = "0008_evidence_records"\nCURRENT_SCHEMA_MIGRATION_NAME = "Evidence records for BLUECAD outcomes"''',
+              '''SCHEMA_CONTEXT_RECORDS_FTS_MIGRATION_ID = "0007_context_records_fts"\nSCHEMA_CONTEXT_RECORDS_FTS_MIGRATION_NAME = "Context pack FTS index and triggers"\nSCHEMA_EVIDENCE_RECORDS_MIGRATION_ID = "0008_evidence_records"\nSCHEMA_EVIDENCE_RECORDS_MIGRATION_NAME = "Evidence records for BLUECAD outcomes"\nCURRENT_SCHEMA_MIGRATION_ID = "0009_sensitivity_context_foundation"\nCURRENT_SCHEMA_MIGRATION_NAME = "IP egress sensitivity labels and sanitized derivatives"''',
+          )
+          replace_once(
+              schema,
+              '''    {\n        "migration_id": CURRENT_SCHEMA_MIGRATION_ID,\n        "name": CURRENT_SCHEMA_MIGRATION_NAME,\n        "checksum": None,\n    },\n]''',
+              '''    {\n        "migration_id": SCHEMA_EVIDENCE_RECORDS_MIGRATION_ID,\n        "name": SCHEMA_EVIDENCE_RECORDS_MIGRATION_NAME,\n        "checksum": None,\n    },\n    {\n        "migration_id": CURRENT_SCHEMA_MIGRATION_ID,\n        "name": CURRENT_SCHEMA_MIGRATION_NAME,\n        "checksum": None,\n    },\n]''',
+          )
+
+          database = Path("backend/app/core/database.py")
+          replace_once(
+              database,
+              '''from app.core.sensitivity_schema import (\n    SENSITIVITY_SCHEMA_INDEX_STATEMENTS,\n    SENSITIVITY_SCHEMA_MIGRATION_RECORD,\n    SENSITIVITY_SCHEMA_STATEMENTS,\n)''',
+              '''from app.core.sensitivity_schema import (\n    SENSITIVITY_SCHEMA_INDEX_STATEMENTS,\n    SENSITIVITY_SCHEMA_STATEMENTS,\n)''',
+          )
+          replace_once(
+              database,
+              '    for record in [*SCHEMA_MIGRATION_RECORDS, SENSITIVITY_SCHEMA_MIGRATION_RECORD]:',
+              '    for record in SCHEMA_MIGRATION_RECORDS:',
+          )
+
+          sensitivity = Path("backend/app/modules/ai/sensitivity.py")
+          replace_once(
+              sensitivity,
+              '''        if prior is not None and _LEVEL_RANK[prior["level"]] >= _LEVEL_RANK["S2"]:\n            if _LEVEL_RANK[final_level] < _LEVEL_RANK[prior["level"]]:''',
+              '''        if prior is not None and _LEVEL_RANK[prior["level"]] >= _LEVEL_RANK["S2"]:\n            if _LEVEL_RANK[payload.level] < _LEVEL_RANK[prior["level"]]:''',
+          )
+          replace_once(
+              sensitivity,
+              '''            derivative = get_sanitized_derivative(workspace_id, derivative_id)\n        except SensitivityNotFoundError:''',
+              '''            derivative = get_sanitized_derivative(workspace_id, derivative_id, refresh=False)\n        except SensitivityNotFoundError:''',
+          )
+          replace_once(
+              sensitivity,
+              '''        if derivative.status != "approved":\n            withheld.append(\n                {\n                    "source_ref": block["source"],\n                    "effective_level": derivative.effective_level,\n                    "reason": f"derivative_{derivative.status}",\n                }\n            )\n            continue\n        if _derivative_content_digest(block["content"]) != derivative.content_digest:''',
+              '''        if derivative.status != "approved":\n            withheld.append(\n                {\n                    "source_ref": block["source"],\n                    "effective_level": derivative.effective_level,\n                    "reason": f"derivative_{derivative.status}",\n                }\n            )\n            continue\n        if _derivative_stale_reason(derivative) is not None:\n            withheld.append(\n                {\n                    "source_ref": block["source"],\n                    "effective_level": derivative.effective_level,\n                    "reason": "derivative_stale",\n                }\n            )\n            continue\n        if _derivative_content_digest(block["content"]) != derivative.content_digest:''',
+          )
+          replace_once(
+              sensitivity,
+              '''        stale_reason = _derivative_stale_reason(derivative)\n        if stale_reason is not None:\n            _mark_derivative_stale(workspace_id, derivative.id, stale_reason)\n            continue''',
+              '''        stale_reason = _derivative_stale_reason(derivative)\n        if stale_reason is not None:\n            continue''',
+          )
+          replace_once(
+              sensitivity,
+              '''        if derivative.source_digests.get(ref) != snapshot.content_digest:\n            return f"source_digest_mismatch:{ref}"\n    return None''',
+              '''        if derivative.source_digests.get(ref) != snapshot.content_digest:\n            return f"source_digest_mismatch:{ref}"\n        source_level = _effective_source_level(snapshot)\n        if source_level == "S4" and _LEVEL_RANK[derivative.effective_level] > _LEVEL_RANK["S1"]:\n            return f"source_level_incompatible:{ref}:S4"\n    return None''',
+          )
+
+          tests = Path("backend/tests/test_ai_sensitivity_context.py")
+          text = tests.read_text(encoding="utf-8")
+          marker = "def test_external_preview_relabel_staleness_is_read_only()"
+          if marker in text:
+              raise SystemExit("focused 059a regression tests already present")
+          text += '''\n\n\ndef _derivative_db_state(derivative_id: str) -> tuple[str, str | None, int]:\n    with open_sqlite_connection() as connection:\n        row = connection.execute(\n            "SELECT status, stale_reason FROM sanitized_derivatives WHERE id = ?",\n            (derivative_id,),\n        ).fetchone()\n        event_count = connection.execute("SELECT COUNT(*) AS count FROM events").fetchone()["count"]\n    assert row is not None\n    return row["status"], row["stale_reason"], int(event_count)\n\n\ndef test_external_preview_relabel_staleness_is_read_only() -> None:\n    _bootstrap()\n    record_id = _decision("BlueRev proprietary geometry decision")\n    source_ref = f"decision:{record_id}"\n    create_sensitivity_label(\n        SensitivityLabelCreate(\n            workspace_id=WORKSPACE_ID,\n            subject_ref=source_ref,\n            level="S3",\n        )\n    )\n    derivative = create_sanitized_derivative(\n        SanitizedDerivativeCreate(\n            workspace_id=WORKSPACE_ID,\n            source_refs=[source_ref],\n            content="Confidential sanitized project summary.",\n            effective_level="S2",\n            transformations=["Removed secret material"],\n        )\n    )\n    derivative = approve_sanitized_derivative(WORKSPACE_ID, derivative.id)\n    create_sensitivity_label(\n        SensitivityLabelCreate(\n            workspace_id=WORKSPACE_ID,\n            subject_ref=source_ref,\n            level="S4",\n        )\n    )\n    before = _derivative_db_state(derivative.id)\n\n    preview = build_external_context_preview(WORKSPACE_ID, 32_000, _selection(record_id))\n    after = _derivative_db_state(derivative.id)\n\n    assert preview.blocks == []\n    assert preview.withheld_sources_manifest[0]["reason"] == "raw_level_not_external_eligible"\n    assert before == after\n    refreshed = get_sanitized_derivative(WORKSPACE_ID, derivative.id)\n    assert refreshed.status == "stale"\n    assert refreshed.stale_reason == f"source_level_incompatible:{source_ref}:S4"\n\n\ndef test_manual_preview_stale_derivative_is_read_only() -> None:\n    _bootstrap()\n    record_id = _decision("BlueRev proprietary geometry decision")\n    source_ref = f"decision:{record_id}"\n    create_sensitivity_label(\n        SensitivityLabelCreate(\n            workspace_id=WORKSPACE_ID,\n            subject_ref=source_ref,\n            level="S3",\n        )\n    )\n    derivative = create_sanitized_derivative(\n        SanitizedDerivativeCreate(\n            workspace_id=WORKSPACE_ID,\n            source_refs=[source_ref],\n            content="Generic sanitized design summary.",\n            effective_level="S1",\n            transformations=["Removed proprietary values"],\n        )\n    )\n    derivative = approve_sanitized_derivative(WORKSPACE_ID, derivative.id)\n    _update_decision(record_id, "Changed BlueRev proprietary geometry decision")\n    before = _derivative_db_state(derivative.id)\n\n    preview = preview_manual_context(\n        WORKSPACE_ID,\n        [\n            {\n                "source": f"derivative:{derivative.id}",\n                "type": "sanitized_derivative",\n                "id": derivative.id,\n                "content": derivative.content,\n            }\n        ],\n        32_000,\n    )\n    after = _derivative_db_state(derivative.id)\n\n    assert preview.blocks == []\n    assert preview.withheld_sources_manifest[0]["reason"] == "derivative_stale"\n    assert before == after\n''' 
+          tests.write_text(text, encoding="utf-8")
+          PY
+
+          git rm .github/workflows/tmp-059a-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/app/core/schema.py backend/app/core/database.py \
+            backend/app/modules/ai/sensitivity.py backend/tests/test_ai_sensitivity_context.py
+          git commit -m "Fix reviewed 059a sensitivity invariants"
+          git push origin HEAD:impl/spec-059a-sensitivity-context
