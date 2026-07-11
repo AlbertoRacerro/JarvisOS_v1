@@ -1,0 +1,50 @@
+schema_version: 1.0.0
+microtopic_id: null
+title: null
+canonical_name: null
+aliases: []
+course: null
+domain: null
+subdomain: null
+record_type: concept|equation|model|procedure|exercise|solution|dataset|code_artifact|equipment|failure_mode|benchmark_candidate|jarvis_capability_candidate
+language: null
+provenance:
+  source_id: null
+  source_file: null
+  source_sha256: null
+  source_location: null
+  source_authority: null
+  source_excerpt: null
+definition: null
+physical_meaning: null
+problem_class: null
+inputs: []
+outputs: []
+prerequisites: []
+related_microtopics: []
+assumptions: []
+validity_conditions: []
+invalidity_conditions: []
+boundary_conditions: []
+initial_conditions: []
+regime: []
+variables:
+- symbol: null
+  meaning: null
+  unit: null
+  dimensions: null
+equations:
+- label: null
+  expression_latex: null
+  expression_machine: null
+  equation_kind: null
+verification_status: unreviewed|source_transcribed|dimensionally_checked|numerically_reproduced|cross_source_verified|expert_verified|disputed|incorrect
+verification_methods: []
+conflicting_sources: []
+known_issues: []
+confidence: null
+review_notes: null
+benchmark_candidate:
+  eligible: false
+jarvis_capability_candidate:
+  eligible: false
