@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from tests.bluecad.property_geometry_support import (
     artifact_hashes,
     build_twice_and_assert,
