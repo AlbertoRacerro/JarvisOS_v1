@@ -62,3 +62,5 @@ Independent domain review, standards-compliance review, BlueRev prototype valida
 ## Repository boundary
 
 This repository stores the binding playbook specification, policies, audits and research prompts. The generated 324-entry machine-readable catalog remains an external reviewed research artifact; no runtime retrieval or automatic design authority is introduced by this merge.
+
+This v1.2 direction is the canonical successor of the closed microtopic and engineering-knowledge-unit drafts.
