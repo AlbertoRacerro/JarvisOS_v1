@@ -66,31 +66,10 @@ jobs:
           PY
 
       - name: Ruff
-        id: ruff
         working-directory: backend
-        shell: bash
-        run: |
-          set -o pipefail
-          set +e
-          python -m ruff check app tests ../scripts/check_spec_status.py \
-            ../scripts/cheap_review.py ../scripts/manual_review.py \
-            2>&1 | tee "$RUNNER_TEMP/ruff.log"
-          status=${PIPESTATUS[0]}
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit 0
-
-      - name: Upload temporary Ruff diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-ruff-diagnostic
-          path: ${{ runner.temp }}/ruff.log
-          if-no-files-found: error
-          retention-days: 2
-
-      - name: Enforce Ruff
-        if: always()
-        run: test "${{ steps.ruff.outputs.status }}" = "0"
+        run: >-
+          python -m ruff check app tests ../scripts/check_spec_status.py
+          ../scripts/cheap_review.py ../scripts/manual_review.py
 
       - name: Pytest
         working-directory: backend
