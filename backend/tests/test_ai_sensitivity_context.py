@@ -409,3 +409,99 @@ def test_sensitivity_withholding_is_distinct_from_budget_dropping() -> None:
     assert preview.withheld_sources_manifest[0]["source_ref"] == f"decision:{third}"
     assert preview.dropped_count >= 1
     assert preview.included_count + preview.dropped_count == 2
+
+
+
+def _derivative_db_state(derivative_id: str) -> tuple[str, str | None, int]:
+    with open_sqlite_connection() as connection:
+        row = connection.execute(
+            "SELECT status, stale_reason FROM sanitized_derivatives WHERE id = ?",
+            (derivative_id,),
+        ).fetchone()
+        event_count = connection.execute("SELECT COUNT(*) AS count FROM events").fetchone()["count"]
+    assert row is not None
+    return row["status"], row["stale_reason"], int(event_count)
+
+
+def test_external_preview_relabel_staleness_is_read_only() -> None:
+    _bootstrap()
+    record_id = _decision("BlueRev proprietary geometry decision")
+    source_ref = f"decision:{record_id}"
+    create_sensitivity_label(
+        SensitivityLabelCreate(
+            workspace_id=WORKSPACE_ID,
+            subject_ref=source_ref,
+            level="S3",
+        )
+    )
+    derivative = create_sanitized_derivative(
+        SanitizedDerivativeCreate(
+            workspace_id=WORKSPACE_ID,
+            source_refs=[source_ref],
+            content="Confidential sanitized project summary.",
+            effective_level="S2",
+            transformations=["Removed secret material"],
+        )
+    )
+    derivative = approve_sanitized_derivative(WORKSPACE_ID, derivative.id)
+    create_sensitivity_label(
+        SensitivityLabelCreate(
+            workspace_id=WORKSPACE_ID,
+            subject_ref=source_ref,
+            level="S4",
+        )
+    )
+    before = _derivative_db_state(derivative.id)
+
+    preview = build_external_context_preview(WORKSPACE_ID, 32_000, _selection(record_id))
+    after = _derivative_db_state(derivative.id)
+
+    assert preview.blocks == []
+    assert preview.withheld_sources_manifest[0]["reason"] == "raw_level_not_external_eligible"
+    assert before == after
+    refreshed = get_sanitized_derivative(WORKSPACE_ID, derivative.id)
+    assert refreshed.status == "stale"
+    assert refreshed.stale_reason == f"source_level_incompatible:{source_ref}:S4"
+
+
+def test_manual_preview_stale_derivative_is_read_only() -> None:
+    _bootstrap()
+    record_id = _decision("BlueRev proprietary geometry decision")
+    source_ref = f"decision:{record_id}"
+    create_sensitivity_label(
+        SensitivityLabelCreate(
+            workspace_id=WORKSPACE_ID,
+            subject_ref=source_ref,
+            level="S3",
+        )
+    )
+    derivative = create_sanitized_derivative(
+        SanitizedDerivativeCreate(
+            workspace_id=WORKSPACE_ID,
+            source_refs=[source_ref],
+            content="Generic sanitized design summary.",
+            effective_level="S1",
+            transformations=["Removed proprietary values"],
+        )
+    )
+    derivative = approve_sanitized_derivative(WORKSPACE_ID, derivative.id)
+    _update_decision(record_id, "Changed BlueRev proprietary geometry decision")
+    before = _derivative_db_state(derivative.id)
+
+    preview = preview_manual_context(
+        WORKSPACE_ID,
+        [
+            {
+                "source": f"derivative:{derivative.id}",
+                "type": "sanitized_derivative",
+                "id": derivative.id,
+                "content": derivative.content,
+            }
+        ],
+        32_000,
+    )
+    after = _derivative_db_state(derivative.id)
+
+    assert preview.blocks == []
+    assert preview.withheld_sources_manifest[0]["reason"] == "derivative_stale"
+    assert before == after

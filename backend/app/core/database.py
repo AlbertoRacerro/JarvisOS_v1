@@ -15,7 +15,6 @@ from app.core.schema import (
 )
 from app.core.sensitivity_schema import (
     SENSITIVITY_SCHEMA_INDEX_STATEMENTS,
-    SENSITIVITY_SCHEMA_MIGRATION_RECORD,
     SENSITIVITY_SCHEMA_STATEMENTS,
 )
 from app.modules.events.service import utc_now
@@ -176,7 +175,7 @@ def count_schema_migrations() -> int:
 
 def _record_schema_migrations(connection: sqlite3.Connection) -> None:
     now = utc_now()
-    for record in [*SCHEMA_MIGRATION_RECORDS, SENSITIVITY_SCHEMA_MIGRATION_RECORD]:
+    for record in SCHEMA_MIGRATION_RECORDS:
         connection.execute(
             """
             INSERT INTO schema_migrations (migration_id, name, applied_at, checksum, status)

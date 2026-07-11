@@ -139,7 +139,7 @@ def create_sensitivity_label(payload: SensitivityLabelCreate) -> SensitivityLabe
             (payload.workspace_id, snapshot.subject_ref),
         ).fetchone()
         if prior is not None and _LEVEL_RANK[prior["level"]] >= _LEVEL_RANK["S2"]:
-            if _LEVEL_RANK[final_level] < _LEVEL_RANK[prior["level"]]:
+            if _LEVEL_RANK[payload.level] < _LEVEL_RANK[prior["level"]]:
                 raise SensitivityPolicyError(
                     "S2-S4 sources cannot be downgraded in place; create a sanitized derivative."
                 )
@@ -443,7 +443,7 @@ def preview_manual_context(
             )
             continue
         try:
-            derivative = get_sanitized_derivative(workspace_id, derivative_id)
+            derivative = get_sanitized_derivative(workspace_id, derivative_id, refresh=False)
         except SensitivityNotFoundError:
             withheld.append(
                 {
@@ -459,6 +459,15 @@ def preview_manual_context(
                     "source_ref": block["source"],
                     "effective_level": derivative.effective_level,
                     "reason": f"derivative_{derivative.status}",
+                }
+            )
+            continue
+        if _derivative_stale_reason(derivative) is not None:
+            withheld.append(
+                {
+                    "source_ref": block["source"],
+                    "effective_level": derivative.effective_level,
+                    "reason": "derivative_stale",
                 }
             )
             continue
@@ -605,7 +614,6 @@ def _approved_derivative_for_source(
             continue
         stale_reason = _derivative_stale_reason(derivative)
         if stale_reason is not None:
-            _mark_derivative_stale(workspace_id, derivative.id, stale_reason)
             continue
         return derivative
     return None
@@ -629,6 +637,9 @@ def _derivative_stale_reason(derivative: SanitizedDerivativeRead) -> str | None:
             return f"source_missing:{ref}"
         if derivative.source_digests.get(ref) != snapshot.content_digest:
             return f"source_digest_mismatch:{ref}"
+        source_level = _effective_source_level(snapshot)
+        if source_level == "S4" and _LEVEL_RANK[derivative.effective_level] > _LEVEL_RANK["S1"]:
+            return f"source_level_incompatible:{ref}:S4"
     return None
 
 
