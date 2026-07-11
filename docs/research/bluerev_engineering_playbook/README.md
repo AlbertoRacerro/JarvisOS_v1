@@ -5,7 +5,7 @@ This research slice replaces formula-centric corpus extraction with a permanent 
 The playbook stores:
 
 - workflows and algorithms;
-- decision criteria and trade-offs;
+- method/model selection criteria and trade-offs;
 - architecture patterns;
 - diagnostic and fallback methods;
 - didactic problem-solving advice;
@@ -14,18 +14,26 @@ The playbook stores:
 
 It does not use isolated formulas, definitions, spreadsheet cells or exercise answers as primary records. Those remain live-retrieval material or temporary QA evidence.
 
-## Catalog
+## Catalog v1.1
 
-- 96 entries;
-- 12 domains;
-- 8 entries per domain;
-- 63 established, 31 emerging and 2 frontier entries;
-- every horizon is retained permanently, including future and fleet directions;
+- **324 entries** across 12 domains;
+- 96 v1 playbooks retained;
+- **228 new model-selection and engineering-heuristic playbooks**;
+- explicit two-film / penetration / surface-renewal selection;
+- expanded thermodynamics, reaction engineering, transport, rheology, numerical methods, instrumentation and operations;
+- every horizon retained permanently, including future and fleet directions;
 - 0 formula-only records;
 - 0 case-specific exercise-result records.
 
 ## Validation boundary
 
-Automated structure and retention checks pass. Independent domain review, standards-compliance review, BlueRev prototype validation and field validation are not run. The catalog is guidance, not automatic design authority or certification evidence.
+Automated package checks report:
 
-The complete machine-readable and human-readable playbook is maintained in the external research package while this draft direction is reviewed.
+- 324/324 schema-valid records;
+- 3240/3240 record-level structure and policy assertions;
+- 26/26 catalog checks;
+- zero exact duplicate titles and unresolved source IDs.
+
+Independent domain review, standards-compliance review, BlueRev prototype validation and field validation are not run. The strict gate therefore remains failed. The catalog is guidance, not automatic design authority or certification evidence.
+
+The complete machine-readable and human-readable catalog remains in the external research package while this draft direction and content are reviewed.
