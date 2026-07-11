@@ -97,3 +97,5 @@ A playbook entry is revised, not silently overwritten. Material changes must pre
 - changed evidence;
 - affected BlueRev decisions;
 - required revalidation.
+
+The v1.2 playbook direction supersedes the closed microtopic and engineering-knowledge-unit drafts.
