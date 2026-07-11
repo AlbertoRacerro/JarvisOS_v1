@@ -81,6 +81,23 @@ def _update_decision(record_id: str, text: str) -> None:
         connection.commit()
 
 
+def _requirement(text: str) -> str:
+    record_id = str(uuid4())
+    now = utc_now()
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO requirements (
+                id, workspace_id, statement, rationale, status, notes,
+                schema_version, created_at, updated_at
+            ) VALUES (?, ?, ?, NULL, 'active', NULL, 1, ?, ?)
+            """,
+            (record_id, WORKSPACE_ID, text, now, now),
+        )
+        connection.commit()
+    return record_id
+
+
 def _label(record_id: str, level: str) -> None:
     create_sensitivity_label(
         SensitivityLabelCreate(
@@ -237,11 +254,19 @@ def test_derivative_get_is_read_only_and_revalidate_is_explicit() -> None:
 
 def test_derivative_inherits_source_budget_priority() -> None:
     _bootstrap()
-    public_id = _decision("Public note " + "p" * 260)
+    public_requirement_id = _requirement(
+        "Public requirement " + "p" * 260
+    )
     sensitive_id = _decision(
         "BlueRev proprietary geometry decision " + "s" * 260
     )
-    _label(public_id, "S1")
+    create_sensitivity_label(
+        SensitivityLabelCreate(
+            workspace_id=WORKSPACE_ID,
+            subject_ref=f"requirement:{public_requirement_id}",
+            level="S1",
+        )
+    )
     _label(sensitive_id, "S3")
     derivative = approve_sanitized_derivative(
         WORKSPACE_ID,
@@ -255,8 +280,8 @@ def test_derivative_inherits_source_budget_priority() -> None:
         WORKSPACE_ID,
         500,
         ContextSelectionSpec(
-            kinds=["decision"],
-            ids=[public_id, sensitive_id],
+            kinds=["decision", "requirement"],
+            ids=[public_requirement_id, sensitive_id],
         ),
     )
 
@@ -267,7 +292,7 @@ def test_derivative_inherits_source_budget_priority() -> None:
     assert preview.dropped_count == 1
     assert preview.dropped_sources_manifest[0][
         "source_ref"
-    ] == f"decision:{public_id}"
+    ] == f"requirement:{public_requirement_id}"
 
 
 def test_sensitivity_preview_matches_raw_pack_and_calls_no_provider(
