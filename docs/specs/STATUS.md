@@ -45,12 +45,8 @@ before Codex or another coding agent may act on them.
 
 ## Current priority and drafting order
 
-1. Complete definition review PR [#89](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/89) for umbrella spec `059` and obtain a completed Codex review;
-   do not merge until its findings have been read and resolved or explicitly
-   dispositioned.
-2. After the definition merges, implement registry gate `059a` and then `059b`.
-   Each PR requires green deterministic gates and a completed Codex review before
-   maintainer merge.
+1. Complete `059a` through implementation PR [#90](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/90), preserving the digest-bound label, reviewed-derivative, stale-source, and pre-serialization withholding contracts. Do not merge until a completed Codex review on the final head has been read and resolved or explicitly dispositioned.
+2. After `059a` merges, move `059b` from `blocked` to `ready` and implement the exact-packet, single-use ticket, replay-prevention, and execution-spine boundary in a separate PR with its own Codex review.
 3. Then draft in small dependency batches:
    `047` → `048` + `049` → `050` → `051` + `052` →
    `029` + `037` → `030` + `058` → `054` + `035` + `055` →
@@ -129,8 +125,8 @@ that no open PR overlaps the target files or runtime boundary.
 | 058 | planned | — | Unified workspace home layout | 006, 029, 037 | Replace page-first navigation with the BLUECAD workbench/3D surface, persistent right-side AI entry, compact status strip, and shared design tokens; historical roadmap references to workspace-home `057` now mean `058`. |
 | 058b | planned | — | Workbench UX pass 2: variant comparison and design history | 006b, 058 | Add bounded side-by-side variant comparison and a parent-link history tree after parametric variants and the unified workspace exist. |
 | 058c | planned | — | Report-to-3D linking | 006, 044, 058 | Let a failed validation/evidence check highlight the affected named geometry in the viewer, reusing existing artifact/node identities. |
-| 059 | planned | — | IP-EGRESS-1 umbrella definition | 003, 015, 018, 021, 040, 042 | Definition review is open in [#89](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/89). This row is definition-only and must not receive an implementation PR; delivery is tracked by 059a and 059b. |
-| 059a | ready | — | IP-EGRESS-1A: sensitivity and context foundation | 003, 015, 018, 021, 040, 042 | Add digest-bound sensitivity labels, reviewed sanitized derivatives, deterministic floors, stale-label handling, and sensitivity-aware context selection/preview. |
+| 059 | planned | — | IP-EGRESS-1 umbrella definition | 003, 015, 018, 021, 040, 042 | Definition merged in [#89](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/89). This row is definition-only and must not receive an implementation PR; delivery is tracked by 059a and 059b. |
+| 059a | in_review | [#90](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/90) | IP-EGRESS-1A: sensitivity and context foundation | 003, 015, 018, 021, 040, 042 | Digest-bound labels, reviewed derivatives, deterministic floors, stale-source handling, and sensitivity-aware context preview are under review in #90. |
 | 059b | blocked | — | IP-EGRESS-1B: packet, ticket, and execution enforcement | 059a | Blocked until 059a is merged; then add exact egress packets/decisions, server-owned single-use confirmation tickets, replay prevention, and per-binding execution-spine enforcement. |
 | 060 | planned | — | AGENT-ORCH: bounded real orchestration | 011, 034, 040, 042 | Supersede historical orchestration references to `045`; trigger only after memory/context and the advisory panel survive sustained dogfood, then add auditable bounded steps rather than a second authority or manager stack. |
 
