@@ -15,7 +15,7 @@ from tests.bluecad.property_geometry_support import (
 )
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures"
-EXPECTED_PATH = FIXTURE_ROOT / "property_geometry_expected.json"
+EXPECTED_PATH = FIXTURE_ROOT / "property_geometry" / "expected.json"
 FIXTURE_PATHS = (
     "minimal_single_tube.json",
     "chain_tube_bend_joint.json",
