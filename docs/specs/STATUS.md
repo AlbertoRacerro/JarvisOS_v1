@@ -45,18 +45,14 @@ before Codex or another coding agent may act on them.
 
 ## Current priority and drafting order
 
-1. Implement `024-C` (location-specific analytic FEM battery) using the bounded
-   preflight plan in `reports/024-C-PREFLIGHT/summary.md`; `024-A` and `024-B` are
-   merged in implementation PRs [#77](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/77)
-   and [#79](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/79).
-2. Reconcile the known definition blockers in `056` before implementation.
-3. Before serious BlueRev dogfood with real project IP or cloud providers, draft
+1. Reconcile the known definition blockers in `056` before implementation.
+2. Before serious BlueRev dogfood with real project IP or cloud providers, draft
    and implement `059` (sensitivity, retrieval, and egress enforcement).
-4. Then draft in small dependency batches:
+3. Then draft in small dependency batches:
    `047` → `048` + `049` → `050` → `051` + `052` →
    `029` + `037` → `030` + `058` → `054` + `035` + `055` →
    `034` + `011` → `053`.
-5. Trigger-gated rows remain `planned` until their stated evidence exists; do not
+4. Trigger-gated rows remain `planned` until their stated evidence exists; do not
    start them merely because their number is lower.
 
 Always check rows marked `in_review` before choosing any `ready` spec, and confirm
@@ -93,7 +89,7 @@ that no open PR overlaps the target files or runtime boundary.
 | 021b | merged | [#72](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/72), [#75](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/75) | ALPHA-GATE completion: real-tool proof + recoverable data root | 021, 038, 044 | Strict hash-verified real-tool proof merged in [#72](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/72), and atomic path-rebased backup/restore merged in [#75](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/75). |
 | 022 | merged | [#49](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/49) | Codex PR autopush without automerge | 017, 019 | Retain the bounded same-branch actuator for explicit maintainer-requested Codex work; no workflow dispatches it automatically. |
 | 023 | planned | — | Adversarial proposal corpus | 010 | Add bounded hostile and degenerate model-output fixtures; the loop must reject or park them without crashes, unbounded work, provider calls, or authority bypass. |
-| 024 | in_review | [#77](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/77), [#79](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/79), [#84](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/84), [#85](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/85) | FEM verification battery | 008, 009, 021b | 024-A, 024-B, and 024-C1 are merged; final slice 024-C2 analytic solves and deterministic report are under review in #85. |
+| 024 | merged | [#77](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/77), [#79](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/79), [#84](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/84), [#85](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/85) | FEM verification battery | 008, 009, 021b | 024-A, 024-B, 024-C1, and 024-C2 are merged; the registry-bound C3D10 analytic verification battery and deterministic report are complete. |
 | 025 | planned | — | Semantic routing evaluation and promotion policy | 002, 010 | Use labeled real task/ledger outcomes only after enough dogfood data exists; promote a local classifier per task family only above explicit thresholds and preserve deterministic escalation. |
 | 026 | planned | — | BoardSession stateful multi-persona sessions | 011, 034, 040 | Deferred post-alpha: add shared-state multi-persona sessions only after the advisory panel and memory/context spine prove useful in real work. |
 | 027 | planned | — | Modal and thermal analysis types | 009, 024 | Extend the verified static-FEM boundary only when a real BlueRev decision requires modal or thermal analysis; do not pre-build a broad solver matrix. |
