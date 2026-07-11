@@ -15,6 +15,9 @@ adds:
 - prescribed C3D10 AnalysisSpec builders for the cantilever, segmented open-end
   Lamé cylinder, and finite-width plate with a central hole;
 - a coarse and fine cantilever run using target sizes `20/3 mm` and `10/3 mm`;
+- a Lamé target size of `4 mm`, within the spec requirement `<= 5 mm` and reused
+  from the successful C1 segmented-bore proof; an initial `5 mm` C2 run was
+  rejected because both bounded attempts reported one inverted C3D10;
 - real execution exclusively through `mesh_analysis_spec` and
   `solve_static_analysis` with the operator registry;
 - location-specific displacement/stress sampling from retained INP and FRD
@@ -23,7 +26,8 @@ adds:
 - deterministic JSON and Markdown report rendering with normalized-input tests;
 - relative artifact paths, fixture digests, mesh counts, tool pins/hashes,
   sampling coordinates, analytic inputs, errors, tolerances, and limitations;
-- strict workflow upload of the battery report and complete bounded diagnostics.
+- strict workflow upload of the battery report and complete bounded diagnostics,
+  including partial proof roots when execution fails before report generation.
 
 ## Prescribed acceptance values
 
@@ -75,6 +79,7 @@ binary invocation is permitted.
 
 - `backend/app/modules/bluecad/fem_verification_battery.py`
 - `backend/app/modules/bluecad/fem_verification_runner.py`
+- verification parser compatibility with real Gmsh heading payloads
 - public verification exports only
 - focused offline and strict real-tool tests
 - existing BLUECAD real-tool workflow and runbook
