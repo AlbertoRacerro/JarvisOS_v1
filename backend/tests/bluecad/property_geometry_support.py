@@ -12,14 +12,13 @@ from pathlib import Path, PureWindowsPath
 from tempfile import TemporaryDirectory
 from typing import Any
 
-from hypothesis import HealthCheck, settings
-from hypothesis.errors import InvalidArgument
-
 from app.modules.bluecad.assembly import ABS_TOL
 from app.modules.bluecad.export import ARTIFACT_NAMES, sha256_file
 from app.modules.bluecad.models import BuildResult
 from app.modules.bluecad.service import build_geometry_spec
 from app.modules.bluecad.spec import canonical_json, canonicalize_geometry_spec
+from hypothesis import HealthCheck, settings
+from hypothesis.errors import InvalidArgument
 
 PROPERTY_PROFILE = "bluecad_property_ci"
 CANARY_PROFILE_ID = "ubuntu24-py311"
@@ -132,8 +131,14 @@ def assert_manifest_invariants(
         assert math.isfinite(volume) and volume > 0.0
         assert len(mins) == len(maxs) == 3
         assert all(math.isfinite(value) for value in (*mins, *maxs))
-        assert all(minimum <= maximum for minimum, maximum in zip(mins, maxs, strict=True))
-        envelope = math.prod(maximum - minimum for minimum, maximum in zip(mins, maxs, strict=True))
+        assert all(
+            minimum <= maximum
+            for minimum, maximum in zip(mins, maxs, strict=True)
+        )
+        envelope = math.prod(
+            maximum - minimum
+            for minimum, maximum in zip(mins, maxs, strict=True)
+        )
         assert envelope > 0.0
         if part["kind"] in {"tube_run", "float"}:
             assert volume <= envelope * (1.0 + 1.0e-9)
@@ -235,6 +240,8 @@ def _walk_json(value: Any, key: str = "") -> Iterator[tuple[str, Any]]:
     if isinstance(value, Mapping):
         for child_key, child in value.items():
             yield from _walk_json(child, str(child_key))
-    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+    elif isinstance(value, Sequence) and not isinstance(
+        value, (str, bytes, bytearray)
+    ):
         for child in value:
             yield from _walk_json(child, key)
