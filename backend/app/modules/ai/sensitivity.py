@@ -301,81 +301,89 @@ def approve_sanitized_derivative(
     *,
     reviewer_notes: str | None = None,
 ) -> SanitizedDerivativeRead:
-    derivative = get_sanitized_derivative(
-        workspace_id,
-        derivative_id,
-        refresh=False,
-    )
-    if derivative.status != "draft":
-        raise SensitivityPolicyError("Only a draft derivative can be approved.")
-    stale_reason = _derivative_stale_reason(derivative)
-    if stale_reason is not None:
-        _mark_derivative_stale(
-            workspace_id,
-            derivative_id,
-            stale_reason,
-            allowed_statuses={"draft", "approved"},
-        )
-        raise SensitivityPolicyError(
-            f"Derivative sources are stale: {stale_reason}"
-        )
-
-    content_floor = deterministic_floor(derivative.content)
-    if content_floor in {"S3", "S4"}:
-        raise SensitivityPolicyError(
-            "Derivative content remains external-ineligible "
-            f"at deterministic floor {content_floor}."
-        )
-    if (
-        content_floor is not None
-        and _LEVEL_RANK[content_floor] > _LEVEL_RANK[derivative.effective_level]
-    ):
-        raise SensitivityPolicyError(
-            f"Derivative level {derivative.effective_level} "
-            f"is below deterministic floor {content_floor}."
-        )
-    source_levels = [
-        _effective_source_level(resolve_source_snapshot(workspace_id, ref))
-        for ref in derivative.source_refs
-    ]
-    if (
-        "S4" in source_levels
-        and _LEVEL_RANK[derivative.effective_level] > _LEVEL_RANK["S1"]
-    ):
-        raise SensitivityPolicyError(
-            "A derivative of an S4 source may be approved only S0 or S1."
-        )
-
     now = utc_now()
+    stale_error: str | None = None
     with open_sqlite_connection() as connection:
-        cursor = connection.execute(
+        connection.execute("BEGIN IMMEDIATE")
+        _require_workspace(connection, workspace_id)
+        row = connection.execute(
             """
-            UPDATE sanitized_derivatives
-            SET status = 'approved', reviewer = 'local-user', reviewed_at = ?,
-                stale_reason = NULL, updated_at = ?
-            WHERE id = ? AND workspace_id = ? AND status = 'draft'
+            SELECT * FROM sanitized_derivatives
+            WHERE id = ? AND workspace_id = ?
             """,
-            (now, now, derivative_id, workspace_id),
-        )
-        if cursor.rowcount != 1:
-            raise SensitivityPolicyError(
-                "Derivative state changed before approval."
+            (derivative_id, workspace_id),
+        ).fetchone()
+        if row is None:
+            raise SensitivityNotFoundError(
+                f"Sanitized derivative not found: {derivative_id}"
             )
-        log_event(
+        derivative = _derivative_read(row)
+        if derivative.status != "draft":
+            raise SensitivityPolicyError("Only a draft derivative can be approved.")
+
+        stale_reason = _derivative_stale_reason_in_connection(
             connection,
-            event_type="SanitizedDerivativeApproved",
-            actor="local-user",
-            target_type="SanitizedDerivative",
-            target_id=derivative_id,
-            workspace_id=workspace_id,
-            payload={
-                "content_digest": derivative.content_digest,
-                "effective_level": derivative.effective_level,
-                "policy_version": POLICY_VERSION,
-                "reviewer_notes_present": bool(reviewer_notes),
-            },
+            derivative,
         )
-        connection.commit()
+        if stale_reason is not None:
+            _mark_derivative_stale_in_connection(
+                connection,
+                derivative,
+                stale_reason,
+                allowed_statuses={"draft", "approved"},
+            )
+            connection.commit()
+            stale_error = stale_reason
+        else:
+            content_floor = deterministic_floor(derivative.content)
+            if content_floor in {"S3", "S4"}:
+                raise SensitivityPolicyError(
+                    "Derivative content remains external-ineligible "
+                    f"at deterministic floor {content_floor}."
+                )
+            if (
+                content_floor is not None
+                and _LEVEL_RANK[content_floor]
+                > _LEVEL_RANK[derivative.effective_level]
+            ):
+                raise SensitivityPolicyError(
+                    f"Derivative level {derivative.effective_level} "
+                    f"is below deterministic floor {content_floor}."
+                )
+
+            cursor = connection.execute(
+                """
+                UPDATE sanitized_derivatives
+                SET status = 'approved', reviewer = 'local-user', reviewed_at = ?,
+                    stale_reason = NULL, updated_at = ?
+                WHERE id = ? AND workspace_id = ? AND status = 'draft'
+                """,
+                (now, now, derivative_id, workspace_id),
+            )
+            if cursor.rowcount != 1:
+                raise SensitivityPolicyError(
+                    "Derivative state changed before approval."
+                )
+            log_event(
+                connection,
+                event_type="SanitizedDerivativeApproved",
+                actor="local-user",
+                target_type="SanitizedDerivative",
+                target_id=derivative_id,
+                workspace_id=workspace_id,
+                payload={
+                    "content_digest": derivative.content_digest,
+                    "effective_level": derivative.effective_level,
+                    "policy_version": POLICY_VERSION,
+                    "reviewer_notes_present": bool(reviewer_notes),
+                },
+            )
+            connection.commit()
+
+    if stale_error is not None:
+        raise SensitivityPolicyError(
+            f"Derivative sources are stale: {stale_error}"
+        )
     return get_sanitized_derivative(
         workspace_id,
         derivative_id,
@@ -463,27 +471,48 @@ def revalidate_sanitized_derivative(
     workspace_id: str,
     derivative_id: str,
 ) -> SanitizedDerivativeRead:
-    derivative = get_sanitized_derivative(
-        workspace_id,
-        derivative_id,
-        refresh=False,
-    )
-    if derivative.status != "approved":
-        return derivative
-    stale_reason = _derivative_stale_reason(derivative)
-    if stale_reason is None:
-        return derivative
-    _mark_derivative_stale(
-        workspace_id,
-        derivative_id,
-        stale_reason,
-        allowed_statuses={"approved"},
-    )
-    return get_sanitized_derivative(
-        workspace_id,
-        derivative_id,
-        refresh=False,
-    )
+    with open_sqlite_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        _require_workspace(connection, workspace_id)
+        row = connection.execute(
+            """
+            SELECT * FROM sanitized_derivatives
+            WHERE id = ? AND workspace_id = ?
+            """,
+            (derivative_id, workspace_id),
+        ).fetchone()
+        if row is None:
+            raise SensitivityNotFoundError(
+                f"Sanitized derivative not found: {derivative_id}"
+            )
+        derivative = _derivative_read(row)
+        if derivative.status != "approved":
+            connection.commit()
+            return derivative
+        stale_reason = _derivative_stale_reason_in_connection(
+            connection,
+            derivative,
+        )
+        if stale_reason is None:
+            connection.commit()
+            return derivative
+        _mark_derivative_stale_in_connection(
+            connection,
+            derivative,
+            stale_reason,
+            allowed_statuses={"approved"},
+        )
+        connection.commit()
+        refreshed = connection.execute(
+            """
+            SELECT * FROM sanitized_derivatives
+            WHERE id = ? AND workspace_id = ?
+            """,
+            (derivative_id, workspace_id),
+        ).fetchone()
+    if refreshed is None:
+        raise RuntimeError("Derivative disappeared after revalidation")
+    return _derivative_read(refreshed)
 
 
 def build_external_context_preview(
@@ -765,6 +794,8 @@ def _approved_derivative_for_source(
     allowed_source_refs: set[str],
 ) -> SanitizedDerivativeRead | None:
     with open_sqlite_connection() as connection:
+        connection.execute("BEGIN")
+        _require_workspace(connection, workspace_id)
         rows = connection.execute(
             """
             SELECT * FROM sanitized_derivatives
@@ -773,17 +804,18 @@ def _approved_derivative_for_source(
             """,
             (workspace_id,),
         ).fetchall()
-    for row in rows:
-        derivative = _derivative_read(row)
-        if subject_ref not in derivative.source_refs:
-            continue
-        if not set(derivative.source_refs).issubset(
-            allowed_source_refs
-        ):
-            continue
-        if _derivative_stale_reason(derivative) is not None:
-            continue
-        return derivative
+        for row in rows:
+            derivative = _derivative_read(row)
+            if subject_ref not in derivative.source_refs:
+                continue
+            if not set(derivative.source_refs).issubset(allowed_source_refs):
+                continue
+            if (
+                _derivative_stale_reason_in_connection(connection, derivative)
+                is not None
+            ):
+                continue
+            return derivative
     return None
 
 
@@ -792,9 +824,51 @@ def _effective_source_level(snapshot: SourceSnapshot) -> str:
         snapshot.workspace_id,
         snapshot.subject_ref,
     )
-    floor = deterministic_floor(snapshot.block["content"])
     if current_snapshot.content_digest != snapshot.content_digest:
         return "S4"
+    return _effective_level_for_bound_snapshot(current_snapshot, label)
+
+
+def _derivative_stale_reason(
+    derivative: SanitizedDerivativeRead,
+) -> str | None:
+    with open_sqlite_connection() as connection:
+        connection.execute("BEGIN")
+        _require_workspace(connection, derivative.workspace_id)
+        return _derivative_stale_reason_in_connection(connection, derivative)
+
+
+def _derivative_stale_reason_in_connection(
+    connection: sqlite3.Connection,
+    derivative: SanitizedDerivativeRead,
+) -> str | None:
+    if derivative.policy_version != POLICY_VERSION:
+        return "policy_version_mismatch"
+    for ref in derivative.source_refs:
+        try:
+            snapshot, label = _resolve_source_snapshot_and_label_in_connection(
+                connection,
+                derivative.workspace_id,
+                ref,
+            )
+        except SensitivityNotFoundError:
+            return f"source_missing:{ref}"
+        if derivative.source_digests.get(ref) != snapshot.content_digest:
+            return f"source_digest_mismatch:{ref}"
+        source_level = _effective_level_for_bound_snapshot(snapshot, label)
+        if (
+            source_level == "S4"
+            and _LEVEL_RANK[derivative.effective_level] > _LEVEL_RANK["S1"]
+        ):
+            return f"source_level_incompatible:{ref}:S4"
+    return None
+
+
+def _effective_level_for_bound_snapshot(
+    snapshot: SourceSnapshot,
+    label: SensitivityLabelRead | None,
+) -> str:
+    floor = deterministic_floor(snapshot.block["content"])
     if (
         label is None
         or not label.current
@@ -804,34 +878,6 @@ def _effective_source_level(snapshot: SourceSnapshot) -> str:
     return _max_level(label.level, floor)
 
 
-def _derivative_stale_reason(
-    derivative: SanitizedDerivativeRead,
-) -> str | None:
-    if derivative.policy_version != POLICY_VERSION:
-        return "policy_version_mismatch"
-    for ref in derivative.source_refs:
-        try:
-            snapshot = resolve_source_snapshot(
-                derivative.workspace_id,
-                ref,
-            )
-        except SensitivityNotFoundError:
-            return f"source_missing:{ref}"
-        if (
-            derivative.source_digests.get(ref)
-            != snapshot.content_digest
-        ):
-            return f"source_digest_mismatch:{ref}"
-        source_level = _effective_source_level(snapshot)
-        if (
-            source_level == "S4"
-            and _LEVEL_RANK[derivative.effective_level]
-            > _LEVEL_RANK["S1"]
-        ):
-            return f"source_level_incompatible:{ref}:S4"
-    return None
-
-
 def _mark_derivative_stale(
     workspace_id: str,
     derivative_id: str,
@@ -839,16 +885,9 @@ def _mark_derivative_stale(
     *,
     allowed_statuses: set[str],
 ) -> bool:
-    statuses = sorted(
-        status
-        for status in allowed_statuses
-        if status in {"draft", "approved"}
-    )
-    if not statuses:
-        return False
-    placeholders = ", ".join("?" for _ in statuses)
-    now = utc_now()
     with open_sqlite_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        _require_workspace(connection, workspace_id)
         row = connection.execute(
             """
             SELECT * FROM sanitized_derivatives
@@ -860,40 +899,63 @@ def _mark_derivative_stale(
             raise SensitivityNotFoundError(
                 f"Sanitized derivative not found: {derivative_id}"
             )
-        if row["status"] not in statuses:
-            return False
-        cursor = connection.execute(
-            f"""
-            UPDATE sanitized_derivatives
-            SET status = 'stale', stale_reason = ?, updated_at = ?
-            WHERE id = ? AND workspace_id = ?
-              AND status IN ({placeholders})
-            """,
-            (
-                reason,
-                now,
-                derivative_id,
-                workspace_id,
-                *statuses,
-            ),
-        )
-        if cursor.rowcount != 1:
-            return False
-        log_event(
+        changed = _mark_derivative_stale_in_connection(
             connection,
-            event_type="SanitizedDerivativeMarkedStale",
-            actor="deterministic-policy",
-            target_type="SanitizedDerivative",
-            target_id=derivative_id,
-            workspace_id=workspace_id,
-            payload={
-                "content_digest": row["content_digest"],
-                "previous_status": row["status"],
-                "stale_reason": reason,
-                "policy_version": POLICY_VERSION,
-            },
+            _derivative_read(row),
+            reason,
+            allowed_statuses=allowed_statuses,
         )
         connection.commit()
+    return changed
+
+
+def _mark_derivative_stale_in_connection(
+    connection: sqlite3.Connection,
+    derivative: SanitizedDerivativeRead,
+    reason: str,
+    *,
+    allowed_statuses: set[str],
+) -> bool:
+    statuses = sorted(
+        status
+        for status in allowed_statuses
+        if status in {"draft", "approved"}
+    )
+    if not statuses or derivative.status not in statuses:
+        return False
+    placeholders = ", ".join("?" for _ in statuses)
+    now = utc_now()
+    cursor = connection.execute(
+        f"""
+        UPDATE sanitized_derivatives
+        SET status = 'stale', stale_reason = ?, updated_at = ?
+        WHERE id = ? AND workspace_id = ?
+          AND status IN ({placeholders})
+        """,
+        (
+            reason,
+            now,
+            derivative.id,
+            derivative.workspace_id,
+            *statuses,
+        ),
+    )
+    if cursor.rowcount != 1:
+        return False
+    log_event(
+        connection,
+        event_type="SanitizedDerivativeMarkedStale",
+        actor="deterministic-policy",
+        target_type="SanitizedDerivative",
+        target_id=derivative.id,
+        workspace_id=derivative.workspace_id,
+        payload={
+            "content_digest": derivative.content_digest,
+            "previous_status": derivative.status,
+            "stale_reason": reason,
+            "policy_version": POLICY_VERSION,
+        },
+    )
     return True
 
 
@@ -901,34 +963,42 @@ def _resolve_source_snapshot_and_label(
     workspace_id: str,
     subject_ref: str,
 ) -> tuple[SourceSnapshot, SensitivityLabelRead | None]:
-    kind, record_id = _parse_subject_ref(subject_ref)
     with open_sqlite_connection() as connection:
         connection.execute("BEGIN")
-        _require_workspace(connection, workspace_id)
-        source_row = connection.execute(
-            f"SELECT * FROM {_SOURCE_TABLES[kind]} "
-            "WHERE id = ? AND workspace_id = ?",
-            (record_id, workspace_id),
-        ).fetchone()
-        if source_row is None:
-            raise SensitivityNotFoundError(
-                f"Source not found: {subject_ref}"
-            )
-        model = _SOURCE_MODELS[kind].model_validate(
-            dict(source_row)
-        )
-        snapshot = _snapshot_from_block(
+        return _resolve_source_snapshot_and_label_in_connection(
+            connection,
             workspace_id,
-            _block_for_record(kind, model),
+            subject_ref,
         )
-        label_row = connection.execute(
-            """
-            SELECT * FROM sensitivity_labels
-            WHERE workspace_id = ? AND subject_ref = ?
-            ORDER BY created_at DESC, id DESC LIMIT 1
-            """,
-            (workspace_id, snapshot.subject_ref),
-        ).fetchone()
+
+
+def _resolve_source_snapshot_and_label_in_connection(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    subject_ref: str,
+) -> tuple[SourceSnapshot, SensitivityLabelRead | None]:
+    kind, record_id = _parse_subject_ref(subject_ref)
+    _require_workspace(connection, workspace_id)
+    source_row = connection.execute(
+        f"SELECT * FROM {_SOURCE_TABLES[kind]} "
+        "WHERE id = ? AND workspace_id = ?",
+        (record_id, workspace_id),
+    ).fetchone()
+    if source_row is None:
+        raise SensitivityNotFoundError(f"Source not found: {subject_ref}")
+    model = _SOURCE_MODELS[kind].model_validate(dict(source_row))
+    snapshot = _snapshot_from_block(
+        workspace_id,
+        _block_for_record(kind, model),
+    )
+    label_row = connection.execute(
+        """
+        SELECT * FROM sensitivity_labels
+        WHERE workspace_id = ? AND subject_ref = ?
+        ORDER BY created_at DESC, id DESC LIMIT 1
+        """,
+        (workspace_id, snapshot.subject_ref),
+    ).fetchone()
     if label_row is None:
         return snapshot, None
     current = label_row["content_digest"] == snapshot.content_digest
@@ -937,9 +1007,7 @@ def _resolve_source_snapshot_and_label(
         _label_read(
             label_row,
             current=current,
-            stale_reason=(
-                None if current else "content_digest_mismatch"
-            ),
+            stale_reason=None if current else "content_digest_mismatch",
         ),
     )
 
