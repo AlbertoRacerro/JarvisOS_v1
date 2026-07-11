@@ -1,14 +1,8 @@
-"""Additive schema owned by spec 059a.
+"""Additive policy-table schema owned by spec 059a.
 
-Kept separate from the historical foundation schema so the policy tables and
-migration record remain a bounded, reviewable sidecar.
+The canonical migration identifier and name live in ``app.core.schema``. This
+bounded sidecar owns only the sensitivity table and index statements.
 """
-
-SENSITIVITY_SCHEMA_MIGRATION_RECORD = {
-    "migration_id": "0009_sensitivity_context_foundation",
-    "name": "IP egress sensitivity labels and sanitized derivatives",
-    "checksum": None,
-}
 
 SENSITIVITY_SCHEMA_STATEMENTS = [
     """
