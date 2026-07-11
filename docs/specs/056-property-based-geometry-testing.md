@@ -294,7 +294,7 @@ Verify paths against `master` before implementation:
 - `backend/tests/bluecad/test_geometry_property_invariants.py`;
 - `backend/tests/bluecad/test_manifest_determinism_canary.py`;
 - `backend/tests/bluecad/fixtures/property_geometry/minimal_float.json`;
-- `backend/tests/bluecad/fixtures/property_geometry_expected.json`;
+- `backend/tests/bluecad/fixtures/property_geometry/expected.json`;
 - `.github/workflows/ci.yml` — dedicated canonical canary job;
 - this spec, with implementation notes appended;
 - one implementation report under `reports/056-*`.
@@ -354,3 +354,48 @@ Stop and amend the definition rather than weakening tests when:
 - FEM analytic verification → completed 024.
 - Human-gated vocabulary extension → 033.
 - Parametric user-facing variants → 006b.
+
+## Implementation notes
+
+- Development dependency: `hypothesis==6.156.6` in
+  `backend/requirements-dev.txt` only.
+- Loaded profile: `bluecad_property_ci` with `derandomize=True`, `database=None`,
+  `deadline=None`, `print_blob=True`, and only `HealthCheck.too_slow` suppressed.
+- Generated invariant coverage is 8 single-tube examples, 6 compatible two-tube
+  assemblies, and 6 single-float examples: 20 full adapter builds.
+- Generated repeatability coverage is 3 examples per family, each built twice: 18
+  full adapter builds. Four fixed canary fixtures are each built twice: 8 builds.
+  Total canonical bound: 46 full `build_geometry_spec` executions.
+- The reviewed bootstrap run completed the property module and canary in 132.24
+  seconds on the canonical runner, below the 240-second ceiling.
+- Canonical metadata is stored at
+  `backend/tests/bluecad/fixtures/property_geometry/expected.json`. It was moved
+  beneath the dedicated subdirectory because the historical golden-fixture test
+  treats every JSON file directly under `fixtures/` as a GeometrySpec.
+- Canonical profile: Ubuntu 24.04, CPython 3.11, x86_64, build123d 0.11.1,
+  `cadquery-ocp-novtk` 7.9.3.1.1.
+- Random Phase 1 coverage includes `tube_run`, compatible connected `tube_run`
+  assemblies, and `float`. Bend is represented by fixed canaries. Joint,
+  manifold, anchor_mount, and harvest_module remain deliberately excluded from
+  random generation under this definition.
+- No production CAD defect was found and no production CAD file changed. The
+  implementation exposed only a test-fixture discovery collision; the correction
+  isolated canary metadata without weakening any invariant or changing a digest.
+- This is the initial reviewed baseline, so every previous value was `TBD`. The
+  accepted fixture bindings are:
+  - `minimal_single_tube.json`: spec ID
+    `sha256:bd04044e65c001b9911ce7adbc5e18b64618b0002f2fa25af5f34c1912a05050`,
+    manifest digest
+    `19b5f925b8d9fd2a3b837177958a68abf3256fba3d5bb44c31253603dd0729f4`;
+  - `chain_tube_bend_joint.json`: spec ID
+    `sha256:155ec1b90a0cbe47c6ce0821360f838504695057f8a1bc0b1cf9a67b2851367f`,
+    manifest digest
+    `88b0d778047f662d38fb4ee91440c05ae160bacc59e7c570c9a99dc22d3f87cd`;
+  - `u_shape_two_bends.json`: spec ID
+    `sha256:5178bfeb841266749e2df7bec3fa777a27a236d31e2e9b232ee6b8944869e14f`,
+    manifest digest
+    `73d951bb102e93d45392dc8defc3b580cdd932773b878f2a6aab5cc306e217db`;
+  - `property_geometry/minimal_float.json`: spec ID
+    `sha256:7631c98b0cb478cc1a879200a577ef140c63d887c484bfbf65efaff7951b51b9`,
+    manifest digest
+    `cd5ab4daca78410797c8e12451263eae7e31e17f175899c5712c3bc4eefa0230`.
