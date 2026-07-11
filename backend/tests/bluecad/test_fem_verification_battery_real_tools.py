@@ -60,7 +60,10 @@ def real_battery(
             FIXTURES / "fixture_index.json",
             root,
             registry_path=registry_path,
-            git_sha=os.getenv("GITHUB_SHA", "local-real-tool-proof"),
+            git_sha=os.getenv(
+                "JARVISOS_BLUECAD_PROOF_GIT_SHA",
+                os.getenv("GITHUB_SHA", "local-real-tool-proof"),
+            ),
         )
     finally:
         _preserve_debug_root(root)
