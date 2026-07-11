@@ -55,12 +55,15 @@ def real_battery(
 ) -> dict[str, Any]:
     registry_path = _require_toolchain(request)
     root = tmp_path_factory.mktemp("fem-verification-c2") / "battery"
-    result = run_fem_verification_battery(
-        FIXTURES / "fixture_index.json",
-        root,
-        registry_path=registry_path,
-        git_sha=os.getenv("GITHUB_SHA", "local-real-tool-proof"),
-    )
+    try:
+        result = run_fem_verification_battery(
+            FIXTURES / "fixture_index.json",
+            root,
+            registry_path=registry_path,
+            git_sha=os.getenv("GITHUB_SHA", "local-real-tool-proof"),
+        )
+    finally:
+        _preserve_debug_root(root)
     configured_report = os.getenv("JARVISOS_BLUECAD_FEM_BATTERY_JSON")
     if configured_report:
         destination = Path(configured_report)
@@ -69,11 +72,14 @@ def real_battery(
             json.dumps(result["report"], indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+    return result
+
+
+def _preserve_debug_root(root: Path) -> None:
     configured_debug = os.getenv("JARVISOS_BLUECAD_PROOF_DEBUG_DIR")
-    if configured_debug:
+    if configured_debug and root.is_dir():
         destination = Path(configured_debug) / "fem-verification-c2-battery"
         shutil.copytree(root, destination, dirs_exist_ok=True)
-    return result
 
 
 @pytest.mark.bluecad_kernel
