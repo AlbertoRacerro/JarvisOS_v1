@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,7 @@ FIXTURE_PATHS = (
     "property_geometry/minimal_float.json",
 )
 EXPECTED_SCHEMA_VERSION = "bluecad_property_geometry_expected_v0_1"
+DIAGNOSTIC_ENV = "JARVISOS_BLUECAD_CANARY_ACTUAL"
 
 
 def test_canonical_full_manifest_digest_canary() -> None:
@@ -60,4 +62,12 @@ def test_canonical_full_manifest_digest_canary() -> None:
     }
     diagnostics["expected"] = expected
     diagnostics["actual"] = actual
+    diagnostic_path = os.getenv(DIAGNOSTIC_ENV)
+    if diagnostic_path:
+        path = Path(diagnostic_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(diagnostics, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     assert actual == expected, json.dumps(diagnostics, indent=2, sort_keys=True)
