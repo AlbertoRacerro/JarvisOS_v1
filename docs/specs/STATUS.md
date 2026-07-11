@@ -45,14 +45,13 @@ before Codex or another coding agent may act on them.
 
 ## Current priority and drafting order
 
-1. Complete `056` through implementation PR [#88](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/88), preserving the reconciled valid-domain, deterministic-profile, and CI-budget contract.
-2. Before serious BlueRev dogfood with real project IP or cloud providers, draft
+1. Before serious BlueRev dogfood with real project IP or cloud providers, draft
    and implement `059` (sensitivity, retrieval, and egress enforcement).
-3. Then draft in small dependency batches:
+2. Then draft in small dependency batches:
    `047` → `048` + `049` → `050` → `051` + `052` →
    `029` + `037` → `030` + `058` → `054` + `035` + `055` →
    `034` + `011` → `053`.
-4. Trigger-gated rows remain `planned` until their stated evidence exists; do not
+3. Trigger-gated rows remain `planned` until their stated evidence exists; do not
    start them merely because their number is lower.
 
 Always check rows marked `in_review` before choosing any `ready` spec, and confirm
@@ -121,7 +120,7 @@ that no open PR overlaps the target files or runtime boundary.
 | 053 | planned | — | Decision packet and dossier export | 041, 044, 048 | Export recommendations, alternatives, evidence, assumptions, uncertainty, and provenance as a readable decision-to-evidence dossier for thesis, advisor, investor, or later IP/grant workflows. |
 | 054 | planned | — | Proposal-review UI | 040, 041, 058 | Show proposed records with provenance and provide explicit promote/reject actions over existing endpoints; this is the load-bearing human authority surface. |
 | 055 | planned | — | Project view: Mark-1 as one navigable object | 035, 044, 050 | Assemble decisions, calculations, CAD, evidence, and flowsheet for one workspace without inventing a second store or duplicating canonical data; 3D/digital-twin rendering follows the ADR-058 contract (`scene_component_id` plus a typed binding manifest to `<kind>:<id>` records; no engineering values stored in the view). |
-| 056 | in_review | [#88](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/88) | BLUECAD property-based geometry testing + determinism canary | 005 | Valid-domain property coverage and the canonical Linux full-manifest digest canary are under review in #88. |
+| 056 | merged | [#88](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/88) | BLUECAD property-based geometry testing + determinism canary | 005 | Valid-domain property coverage, same-environment repeatability, and the canonical Linux full-manifest digest canary are merged. |
 | 057 | cancelled | — | SPEC-LEDGER-0 | — | Cancelled after [planning PR #64](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/64): a generated ledger script and parallel handoff file are unnecessary while this canonical registry is sufficient. |
 | 058 | planned | — | Unified workspace home layout | 006, 029, 037 | Replace page-first navigation with the BLUECAD workbench/3D surface, persistent right-side AI entry, compact status strip, and shared design tokens; historical roadmap references to workspace-home `057` now mean `058`. |
 | 058b | planned | — | Workbench UX pass 2: variant comparison and design history | 006b, 058 | Add bounded side-by-side variant comparison and a parent-link history tree after parametric variants and the unified workspace exist. |
