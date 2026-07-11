@@ -1,51 +1,101 @@
-# Engineering Knowledge Quality Gates
+# Quality Gates v2.2
 
-## Gate A — candidate extraction
+## Non-cheating rule
 
-- source SHA-256 and exact location are present;
-- equations, diagrams and tables are checked against the rendered source;
-- authority is evidence, not proof;
-- extracted content remains non-exportable.
+A gate may pass only from evidence generated independently of the value being checked. A failed gate cannot be cleared by:
 
-## Gate B — canonicalization
+- copying the source result into the expected value;
+- increasing tolerance without a physical or numerical justification;
+- deleting the failing assertion;
+- reclassifying a failed check as informational;
+- treating schema validity as engineering correctness;
+- claiming multiple review agents when only one runtime performed the work.
 
-- the microtopic is atomic enough to explain and test independently;
-- equations, symbols, units, assumptions and validity conditions are explicit;
-- conceptual or numerical errors are corrected before the `knowledge` block is written;
-- rejected alternatives and error narratives are not copied into retrievable knowledge;
-- source evidence records only provenance and which canonical fields it supports.
+## Gate A — source identity and grounding
 
-## Gate C — engineering verification
+Required:
 
-- dimensions and units pass;
-- balances and governing-equation residuals pass where applicable;
-- numerical outputs are independently reproduced when data are sufficient;
-- limiting cases and physical sanity are checked;
-- empirical coefficients are bound to convention, units, range and source;
-- unresolved ambiguity keeps `knowledge_exportable` false.
+- source SHA-256 matches the manifest;
+- exact PDF page or spreadsheet sheet/range exists;
+- anchor terms are found in the selected source region;
+- equations are checked against the rendered or cell-level source.
 
-## Gate D — knowledge export
+Failure blocks promotion.
 
-Export is allowed only when:
+## Gate B — canonical-only retention
 
-- `governance.retention_policy` is `canonical_verified_knowledge_only`;
-- `verification.knowledge_exportable` is true;
-- verification status meets the configured threshold;
-- the record contains no rejected values, source-error narrative or evaluator-only material.
+The retrievable record contains:
 
-## Gate E — benchmark promotion
+- corrected normalized knowledge;
+- provenance;
+- verification evidence supporting the corrected knowledge.
 
-- prompt, reference knowledge, solution and gold are separable;
-- gold is independently reproduced;
-- deterministic grading covers all load-bearing outputs;
-- alternative valid methods are accepted;
-- contamination class and allowed context are explicit;
-- adversarial variants test assumptions, units, model choice or interpretation.
+It does not contain:
 
-## Gate F — Jarvis capability promotion
+- rejected numerical values;
+- rejected formulas;
+- source-error narratives;
+- copied solutions used as unquestioned gold;
+- failing source-audit evidence.
 
-- deterministic authority is identified wherever a mechanical check exists;
-- AI remains advisory around that authority;
-- regression tests cover the important failure modes;
-- tool and runtime requirements are explicit;
-- no production caller is added until boundary tests pass.
+Rejected fragments may exist only in temporary QA evidence.
+
+## Gate C — structural completeness
+
+Required:
+
+- unique atomic microtopic ID;
+- every equation symbol is registered;
+- units and bases are explicit;
+- assumptions and validity are present where applicable;
+- typed relations use valid targets or remain explicitly unresolved;
+- conditional contracts are present for correlations, graphical methods, spreadsheets and FEM.
+
+Schema success alone does not satisfy engineering verification.
+
+## Gate D — engineering verification
+
+At least one load-bearing check must be appropriate to the record:
+
+- dimensional consistency;
+- independent numerical reproduction;
+- material/energy/elemental balance;
+- limiting-case behavior;
+- residual of governing equations;
+- spreadsheet formula lineage and cell recomputation;
+- FEM target at a declared location with expected convergence behavior.
+
+Major or critical failures block export.
+
+## Gate E — strict promotion
+
+A record is exportable only when all conditions hold:
+
+- status is `dimensionally_checked`, `numerically_reproduced` or `cross_checked`;
+- source-grounding, deterministic and domain passes are present;
+- confidence is at least `0.90`;
+- no unresolved issue;
+- no major or critical failed check;
+- no unresolved variable unit or basis;
+- required typed contract has been verified;
+- spreadsheet records have a substantive numeric, balance or dimensional check;
+- FEM records with verification targets pass a FEM-target check.
+
+The v2.2 rehearsal promoted 37/150 records. The other 113 remain QA-only.
+
+## Gate F — benchmark promotion
+
+Not run in this slice. Before benchmark generation:
+
+- prompt and gold must be separable;
+- gold must be independently reproduced;
+- alternative valid methods must be accepted;
+- deterministic grading must cover load-bearing outputs;
+- holdout families must be split before model exposure;
+- a failed source audit cannot become benchmark gold.
+
+## Gate G — independent review
+
+Full-corpus mapping requires two genuinely independent review passes, or one independent domain pass plus deterministic authority. Orthogonal checks from one runtime do not count as independent reviewers.
+
+Status in the v2.2 rehearsal: `not_run`.
