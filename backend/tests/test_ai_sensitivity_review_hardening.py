@@ -3,11 +3,11 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import app.modules.ai.gateway as gateway_module
 from app.core.database import initialize_database, open_sqlite_connection
-from app.main import create_app
 from app.modules.ai.context_builder import (
     ContextSelectionSpec,
     build_workspace_context_bundle,
@@ -24,9 +24,16 @@ from app.modules.ai.sensitivity_models import (
     SanitizedDerivativeCreate,
     SensitivityLabelCreate,
 )
+from app.modules.ai.sensitivity_routes import router as sensitivity_router
 from app.modules.events.service import utc_now
 
 WORKSPACE_ID = "bluerev"
+
+
+def _client() -> TestClient:
+    app = FastAPI()
+    app.include_router(sensitivity_router)
+    return TestClient(app)
 
 
 def _bootstrap() -> None:
@@ -122,7 +129,7 @@ def _event_count(event_type: str | None = None) -> int:
 
 def test_preview_routes_map_missing_workspace_to_404() -> None:
     initialize_database()
-    with TestClient(create_app()) as client:
+    with _client() as client:
         external = client.post(
             "/ai/sensitivity/context-preview",
             json={
@@ -201,7 +208,7 @@ def test_derivative_get_is_read_only_and_revalidate_is_explicit() -> None:
     )
     before_events = _event_count()
 
-    with TestClient(create_app()) as client:
+    with _client() as client:
         read_response = client.get(
             f"/ai/sensitivity/derivatives/{derivative.id}",
             params={"workspace_id": WORKSPACE_ID},
@@ -246,7 +253,7 @@ def test_derivative_inherits_source_budget_priority() -> None:
 
     preview = build_external_context_preview(
         WORKSPACE_ID,
-        430,
+        500,
         ContextSelectionSpec(
             kinds=["decision"],
             ids=[public_id, sensitive_id],
@@ -306,7 +313,7 @@ def test_route_status_contract_for_policy_and_validation_errors() -> None:
     record_id = _decision("BlueRev proprietary geometry decision")
     _label(record_id, "S3")
 
-    with TestClient(create_app()) as client:
+    with _client() as client:
         downgrade = client.post(
             "/ai/sensitivity/labels",
             json={
