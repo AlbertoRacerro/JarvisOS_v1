@@ -164,7 +164,9 @@ jobs:
         run: |
           set -o pipefail
           set +e
-          python -m pytest -q tests/bluecad/test_alpha_real_tools.py \
+          python -m pytest -q \
+            tests/bluecad/test_alpha_real_tools.py \
+            tests/bluecad/test_fem_verification_real_tools.py \
             --require-bluecad-real-tools \
             2>&1 | tee "$RUNNER_TEMP/bluecad-alpha-proof.log"
           status=${PIPESTATUS[0]}
