@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from app.modules.bluecad.fem_pressure_integration import _parse_mesh
+from app.modules.bluecad.fem_verification import (
+    audit_segmented_pressure_surface,
+    verify_fixture_index,
+)
 from app.modules.bluecad.mesh_adapter import mesh_analysis_spec
 from app.modules.bluecad.pressure_mapping import (
     map_pressure_surface,
@@ -19,11 +24,6 @@ from app.modules.bluecad.registry import (
     check_registry,
     resolve_registry_path,
     resolve_tool,
-)
-
-from app.modules.bluecad.fem_verification import (
-    audit_segmented_pressure_surface,
-    verify_fixture_index,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "fem_verification"
