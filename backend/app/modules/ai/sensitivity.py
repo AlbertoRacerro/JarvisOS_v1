@@ -15,11 +15,11 @@ from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
 from app.modules.ai.context_builder import (
+    _CONTEXT_PACK_DROP_PRIORITY,
     CONTEXT_PACK_KINDS,
     MAX_CONTEXT_BLOCKS,
     ContextSelectionSpec,
     _block_for_record,
-    _CONTEXT_PACK_DROP_PRIORITY,
     _serialize_blocks,
     _statuses_for_selection,
     canonical_digest,
