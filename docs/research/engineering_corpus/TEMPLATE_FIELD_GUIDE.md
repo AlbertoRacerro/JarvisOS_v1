@@ -1,34 +1,35 @@
-# Template v1 Field Guide
+# Engineering Microtopic Template v2.1 Field Guide
 
 ## Purpose
 
-A microtopic is the smallest unit that can be explained, verified and assessed without importing an entire chapter. A record must preserve both **what the source says** and **what verification accepts**.
+A microtopic is the smallest engineering unit that can be explained, verified and assessed without importing an entire chapter. The retrievable record stores the corrected canonical knowledge, not a history of rejected claims.
 
 ## Atomicity rule
 
-Create a separate microtopic when any of these changes independently: governing equation, assumptions, validity range, boundary conditions, numerical method, source claim, verification verdict, or benchmark target. Do not split mere notation changes.
+Create a separate microtopic when the governing equation, assumptions, validity range, boundary conditions, numerical method or assessment target changes independently. Do not split mere notation changes.
 
-## Required interpretation
+## Field interpretation
 
-- `provenance` identifies the exact source and location; authority is not truth.
-- `definition` is normalized wording, not a copied paragraph.
-- `physical_meaning` states what the relation means in engineering terms.
-- `assumptions`, `validity_conditions`, and `invalidity_conditions` are mandatory for equations and models.
-- `variables` bind symbols to meanings and units.
-- `verification_status` describes evidence, not confidence in the source author.
-- `benchmark_candidate` is only a proposal until the gold is reproduced independently.
-- `jarvis_capability_candidate` separates deterministic authority from AI interpretation.
+- `identity` gives a stable canonical identifier and record type.
+- `classification` places the record in course, domain and subdomain.
+- `source_evidence` contains file hash, exact locator and authority. It proves provenance only.
+- `knowledge` contains the corrected definition, physical meaning, equations, variables, assumptions, validity, procedure and relations.
+- `verification` records the methods that justify the canonical content and controls whether it can be exported.
+- `assessment` proposes benchmark uses without embedding solutions or gold.
+- `jarvis` separates deterministic tool authority from AI interpretation.
+- `governance.retention_policy` must equal `canonical_verified_knowledge_only`.
 
 ## Verification ladder
 
-1. `source_transcribed` — faithful extraction only.
-2. `dimensionally_checked` — units and dimensions are consistent.
-3. `numerically_reproduced` — stated results are recalculated.
-4. `cross_source_verified` — derivation or independent reference agrees.
-5. `expert_verified` — domain expert approves assumptions and interpretation.
-6. `disputed` — evidence conflicts or specification is incomplete.
-7. `incorrect` — a claim is falsified by reproducible checks.
+1. `unreviewed` — candidate only; never export.
+2. `source_supported` — coherent with the source but not independently reproduced.
+3. `dimensionally_checked` — units and dimensions are consistent.
+4. `numerically_reproduced` — calculations or data transformations have been independently reproduced.
+5. `cross_source_verified` — derivation, reference or independent formulation agrees.
+6. `expert_verified` — assumptions and interpretation have received domain review.
 
-## Why v1 is temporary
+`knowledge_exportable` is a separate explicit gate. A high-confidence source is not sufficient by itself.
 
-The pilot showed that record-level provenance and verification are too coarse. Template v2 therefore moves to source claims and claim-level checks.
+## Handling source errors
+
+Correct them during QA. Store only the corrected canonical statement in `knowledge`. Preserve source file hash and locator so the decision can be reproduced, but do not teach the model the rejected value or an anecdote about the error.
