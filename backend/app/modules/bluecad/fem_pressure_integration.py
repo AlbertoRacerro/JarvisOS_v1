@@ -16,11 +16,13 @@ from app.modules.bluecad.pressure_mapping import (
 )
 
 _VOLUME_ELEMENT_PREFIXES = ("C3D", "DC3D")
+_SOLID_PRESSURE_ELEMENT_TYPES = frozenset({"C3D4", "C3D10"})
 _artifact_map = _base._artifact_map
 _integer_values = _base._integer_values
 _parse_header = _base._parse_header
 _require_element_set = _base._require_element_set
 _require_node_set = _base._require_node_set
+
 
 def _prepare_pressure_mappings(
     spec: dict[str, Any],
@@ -77,6 +79,101 @@ def _prepare_pressure_mappings(
             _artifact_map({"pressure_face_mapping": mapping_path})
         )
     return pressure_mappings
+
+
+def _write_solid_solver_mesh(
+    mesh: dict[str, Any],
+    out_path: Path,
+    artifacts: dict[str, Any],
+) -> Path:
+    """Write a BODY-only mesh so boundary evidence is not solved as 2D elements."""
+
+    solver_mesh_path = out_path / "solver_mesh.inp"
+    solver_mesh_path.write_text(
+        _solid_solver_mesh_text(mesh),
+        encoding="utf-8",
+    )
+    artifacts.update(_artifact_map({"solver_mesh_inp": solver_mesh_path}))
+    return solver_mesh_path
+
+
+def _solid_solver_mesh_text(mesh: dict[str, Any]) -> str:
+    """Render only BODY tetrahedra plus node sets needed by the solver deck.
+
+    Gmsh's CalculiX export includes T3D3/CPS3/CPS6 boundary elements. They are
+    retained in the source mesh for topology mapping and audit, but must not enter
+    the CalculiX solve because they are standalone 1D/2D elements with no section
+    or thickness in this solid-only contract.
+    """
+
+    _require_element_set(mesh, "BODY")
+    body_ids = sorted(int(value) for value in mesh["element_sets"]["BODY"])
+    elements = mesh["elements"]
+    node_coordinates = mesh["node_coordinates"]
+
+    body_by_type: dict[str, list[tuple[int, tuple[int, ...]]]] = {}
+    required_node_ids: set[int] = set()
+    for element_id in body_ids:
+        element = elements.get(element_id)
+        if element is None:
+            raise ValueError(f"BODY element is missing: {element_id}")
+        element_type = str(element.get("type", "")).upper()
+        if element_type not in _SOLID_PRESSURE_ELEMENT_TYPES:
+            raise ValueError(
+                f"unsupported BODY element type for solid solver mesh: {element_type}"
+            )
+        nodes = tuple(int(node) for node in element.get("nodes", ()))
+        expected = 4 if element_type == "C3D4" else 10
+        if len(nodes) != expected or len(set(nodes)) != expected:
+            raise ValueError(
+                f"invalid {element_type} connectivity for BODY element {element_id}"
+            )
+        missing = sorted(node for node in nodes if node not in node_coordinates)
+        if missing:
+            raise ValueError(
+                f"BODY element {element_id} references missing nodes: {missing}"
+            )
+        required_node_ids.update(nodes)
+        body_by_type.setdefault(element_type, []).append((element_id, nodes))
+
+    for node_set in mesh.get("node_sets", {}).values():
+        required_node_ids.update(int(node) for node in node_set)
+
+    missing_coordinates = sorted(
+        node for node in required_node_ids if node not in node_coordinates
+    )
+    if missing_coordinates:
+        raise ValueError(
+            f"solver mesh node sets reference missing nodes: {missing_coordinates}"
+        )
+
+    lines = [
+        "*HEADING",
+        "** BLUECAD solid-only solver mesh derived from retained source mesh",
+        "*NODE",
+    ]
+    for node_id in sorted(required_node_ids):
+        x, y, z = node_coordinates[node_id]
+        lines.append(
+            f"{node_id},{x:.17g},{y:.17g},{z:.17g}"
+        )
+
+    for element_type in sorted(body_by_type):
+        lines.append(f"*ELEMENT, TYPE={element_type}, ELSET=BODY")
+        for element_id, nodes in body_by_type[element_type]:
+            connectivity = ",".join(str(node) for node in nodes)
+            lines.append(f"{element_id},{connectivity}")
+
+    for set_name, node_ids in sorted(mesh.get("node_sets", {}).items()):
+        members = sorted(int(node) for node in node_ids)
+        if not members:
+            continue
+        lines.append(f"*NSET,NSET={set_name}")
+        for offset in range(0, len(members), 16):
+            lines.append(", ".join(str(node) for node in members[offset : offset + 16]))
+
+    lines.append("")
+    return "\n".join(lines)
 
 
 def _deck_text(
@@ -257,5 +354,3 @@ def _node_record(line: str) -> tuple[int, tuple[float, float, float]]:
     if not all(math.isfinite(value) for value in coordinates):
         raise ValueError(f"non-finite node coordinates: {node_id}")
     return node_id, coordinates
-
-
