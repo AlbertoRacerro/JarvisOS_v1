@@ -1,0 +1,75 @@
+schema_version: 2.0.0
+identity:
+  microtopic_id: null
+  title: null
+  canonical_name: null
+  aliases: []
+  primary_record_type: null
+  record_types: []
+  granularity: atomic
+  parent_ids: []
+  decomposition_reason: null
+classification:
+  course: null
+  domain: null
+  subdomain: null
+  language: null
+  tags: []
+source_claims:
+- claim_id: null
+  source_id: null
+  source_file: null
+  source_sha256: null
+  location: null
+  authority: null
+  claim_type: null
+  claim_text: null
+  verbatim_excerpt: null
+normalized_knowledge:
+  summary: null
+  physical_meaning: null
+  inputs: []
+  outputs: []
+  assumptions: []
+  validity: []
+  invalidity: []
+  model_context:
+    coordinate_system: null
+    boundary_conditions: []
+    initial_conditions: []
+    regime: []
+    sign_convention: null
+  equations: []
+  variables: []
+  constraints: []
+  limiting_cases: []
+  relations: []
+  correlation_contract: null
+verification:
+  overall_status: unreviewed
+  claim_checks: []
+  deterministic_checks: []
+  sanity_checks: []
+  unresolved_issues: []
+  confidence: 0.0
+artifacts: []
+assessment:
+  benchmark_eligible: false
+  task_types: []
+  benchmark_readiness: not_candidate
+  contamination_class: reference_only
+  gold_policy: null
+  adversarial_variants: []
+jarvis:
+  capability_eligible: false
+  capability_candidates: []
+  deterministic_core: []
+  ai_role: []
+  required_tools: []
+governance:
+  lifecycle_status: extracted
+  visibility: private_corpus
+  copyright_class: null
+  reviewer_roles: []
+  created_utc: null
+  updated_utc: null
