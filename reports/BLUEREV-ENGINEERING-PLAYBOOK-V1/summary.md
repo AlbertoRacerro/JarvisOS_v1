@@ -45,6 +45,7 @@ It defines:
 - measurement, identifiability and model-discrimination requirements;
 - a staged M0-M3 fidelity ladder;
 - 16 future research streams;
+- a P0-P3 research backlog ordered by decision value;
 - a complete Deep Research prompt with evidence and deliverable requirements.
 
 No unverified species-specific parameters or universal model claims were added.
