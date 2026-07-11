@@ -13,6 +13,11 @@ from app.core.schema import (
     SCHEMA_MIGRATION_STATEMENTS,
     SCHEMA_STATEMENTS,
 )
+from app.core.sensitivity_schema import (
+    SENSITIVITY_SCHEMA_INDEX_STATEMENTS,
+    SENSITIVITY_SCHEMA_MIGRATION_RECORD,
+    SENSITIVITY_SCHEMA_STATEMENTS,
+)
 from app.modules.events.service import utc_now
 
 
@@ -64,6 +69,8 @@ def initialize_database() -> DatabaseInfo:
     with open_sqlite_connection() as connection:
         for statement in SCHEMA_STATEMENTS:
             connection.execute(statement)
+        for statement in SENSITIVITY_SCHEMA_STATEMENTS:
+            connection.execute(statement)
         for statement in SCHEMA_MIGRATION_STATEMENTS:
             try:
                 connection.execute(statement)
@@ -71,6 +78,8 @@ def initialize_database() -> DatabaseInfo:
                 if "duplicate column name" not in str(exc).lower():
                     raise
         for statement in SCHEMA_INDEX_STATEMENTS:
+            connection.execute(statement)
+        for statement in SENSITIVITY_SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         if _sqlite_fts5_available(connection):
             for statement in SCHEMA_FTS_STATEMENTS:
@@ -101,6 +110,8 @@ def is_database_initialized() -> bool:
         "run_artifacts",
         "decisions",
         "ai_settings",
+        "sensitivity_labels",
+        "sanitized_derivatives",
     }
     with open_sqlite_connection() as connection:
         rows = connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
@@ -165,7 +176,7 @@ def count_schema_migrations() -> int:
 
 def _record_schema_migrations(connection: sqlite3.Connection) -> None:
     now = utc_now()
-    for record in SCHEMA_MIGRATION_RECORDS:
+    for record in [*SCHEMA_MIGRATION_RECORDS, SENSITIVITY_SCHEMA_MIGRATION_RECORD]:
         connection.execute(
             """
             INSERT INTO schema_migrations (migration_id, name, applied_at, checksum, status)
