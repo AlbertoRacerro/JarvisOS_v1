@@ -2,9 +2,10 @@
 
 ## Scope
 
-This is a documentation-only pre-implementation audit for spec 059. It changes no
-backend runtime, database schema, provider adapter, route, confirmation endpoint,
-context builder, frontend, workflow, corpus, runner, CAD, mesh, or FEM behavior.
+This is a documentation-only pre-implementation audit for umbrella spec 059. It
+changes no backend runtime, database schema, provider adapter, route, confirmation
+endpoint, context builder, frontend, workflow, corpus, runner, CAD, mesh, or FEM
+behavior.
 
 Base commit: `4ae612a4aedec37608970ab8c2c67ab5ba454317`.
 
@@ -64,30 +65,41 @@ Base commit: `4ae612a4aedec37608970ab8c2c67ab5ba454317`.
 - Safe ledger metadata contains digests, levels, counts, ids, and reason codes;
   not prompt/source/secret bodies.
 
-## Delivery
+## Mechanically gateable delivery
 
-- **059-A:** sensitivity labels, sanitized derivatives, deterministic floors,
-  stale-digest handling, and sensitivity-aware context preview/selection.
-- **059-B:** canonical packet/decision, server-owned ticket, confirmation replay
-  prevention, and per-binding execution-spine enforcement.
+The parent `059` registry row is definition-only and must never receive an
+implementation PR.
 
-059-A must merge before 059-B begins. Neither slice adds a provider, external-tool
-runtime, conversation history, vector retrieval, automatic redaction, or frontend.
+- **059-A maps to registry gate `059a`:** sensitivity labels, sanitized
+  derivatives, deterministic floors, stale-digest handling, and
+  sensitivity-aware context preview/selection.
+- **059-B maps to registry gate `059b`:** canonical packet/decision, server-owned
+  ticket, confirmation replay prevention, and per-binding execution-spine
+  enforcement.
+
+`059a` is ready after this definition merges. `059b` remains blocked with a hard
+registry dependency on `059a`; the status gate must reject a 059b implementation
+until 059a is merged. Spec 039 depends on 059b because frontier routing requires
+the completed execution boundary.
+
+Neither implementation slice adds a provider, external-tool runtime, conversation
+history, vector retrieval, automatic redaction, or frontend.
 
 ## Review and merge gate
 
-- This definition PR requires a completed Codex review.
+- This definition PR requires a completed Codex review on its current head.
 - Review findings must be read and resolved or explicitly dispositioned.
+- Each `059a` and `059b` implementation PR requires its own completed Codex review.
 - The assistant must not merge this or either implementation PR before that gate.
 - CI green is necessary but not sufficient; final merge authority remains human.
 
 ## Residual risks carried into implementation
 
 - A normalized `<kind>:<id>` resolver and exact record-content digest contract must
-  be proven against every source kind used by 059-A.
+  be proven against every source kind used by 059a.
 - Atomic allow-once consumption must be strong enough to prevent ordinary replay
-  in the local SQLite deployment model.
+  in the local SQLite deployment model used by 059b.
 - Sanitized derivative approval remains a human judgment; automated tests can
   prove provenance and structural constraints, not semantic completeness.
-- Existing external smoke/supervisor paths must be audited during 059-B so no
+- Existing external smoke/supervisor paths must be audited during 059b so no
   network adapter remains outside the shared enforcement spine.
