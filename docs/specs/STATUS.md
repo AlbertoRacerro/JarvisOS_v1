@@ -45,13 +45,17 @@ before Codex or another coding agent may act on them.
 
 ## Current priority and drafting order
 
-1. Before serious BlueRev dogfood with real project IP or cloud providers, draft
-   and implement `059` (sensitivity, retrieval, and egress enforcement).
-2. Then draft in small dependency batches:
+1. Complete definition review PR [#89](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/89) for `059` and obtain a completed Codex review;
+   do not merge until its findings have been read and resolved or explicitly
+   dispositioned.
+2. After the definition merges, implement `059-A` and then `059-B` as separate
+   PRs. Each PR requires green deterministic gates and a completed Codex review
+   before maintainer merge.
+3. Then draft in small dependency batches:
    `047` → `048` + `049` → `050` → `051` + `052` →
    `029` + `037` → `030` + `058` → `054` + `035` + `055` →
    `034` + `011` → `053`.
-3. Trigger-gated rows remain `planned` until their stated evidence exists; do not
+4. Trigger-gated rows remain `planned` until their stated evidence exists; do not
    start them merely because their number is lower.
 
 Always check rows marked `in_review` before choosing any `ready` spec, and confirm
@@ -125,7 +129,7 @@ that no open PR overlaps the target files or runtime boundary.
 | 058 | planned | — | Unified workspace home layout | 006, 029, 037 | Replace page-first navigation with the BLUECAD workbench/3D surface, persistent right-side AI entry, compact status strip, and shared design tokens; historical roadmap references to workspace-home `057` now mean `058`. |
 | 058b | planned | — | Workbench UX pass 2: variant comparison and design history | 006b, 058 | Add bounded side-by-side variant comparison and a parent-link history tree after parametric variants and the unified workspace exist. |
 | 058c | planned | — | Report-to-3D linking | 006, 044, 058 | Let a failed validation/evidence check highlight the affected named geometry in the viewer, reusing existing artifact/node identities. |
-| 059 | planned | — | IP-EGRESS-1: sensitivity, retrieval, and external-boundary enforcement | 015, 018, 040, 042 | Turn the existing S0–S4 PRE contracts into one fail-closed runtime decision boundary for memory/history/retrieval, provider/tool eligibility, redaction, confirmation, and provenance-preserving sanitized derivatives before real BlueRev IP is dogfooded externally. |
+| 059 | ready | — | IP-EGRESS-1: sensitivity, retrieval, and external-boundary enforcement | 003, 015, 018, 021, 040, 042 | Definition review is open in [#89](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/89); it freezes the 059-A sensitivity/context foundation and 059-B packet/ticket enforcement split. Real BlueRev IP/cloud dogfood remains blocked until both merge, and every PR requires completed Codex review before maintainer merge. |
 | 060 | planned | — | AGENT-ORCH: bounded real orchestration | 011, 034, 040, 042 | Supersede historical orchestration references to `045`; trigger only after memory/context and the advisory panel survive sustained dogfood, then add auditable bounded steps rather than a second authority or manager stack. |
 
 ## Superseded planning aliases and resolved collisions
