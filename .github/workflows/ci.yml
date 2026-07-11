@@ -80,7 +80,6 @@ jobs:
     timeout-minutes: 10
     env:
       JARVISOS_BLUECAD_CANARY_PROFILE: ubuntu24-py311
-      JARVISOS_BLUECAD_CANARY_ACTUAL: ${{ runner.temp }}/bluecad-property-canary-actual.json
     steps:
       - uses: actions/checkout@v4
 
@@ -102,6 +101,8 @@ jobs:
         id: property
         working-directory: backend
         shell: bash
+        env:
+          JARVISOS_BLUECAD_CANARY_ACTUAL: ${{ runner.temp }}/bluecad-property-canary-actual.json
         run: |
           set -o pipefail
           set +e
