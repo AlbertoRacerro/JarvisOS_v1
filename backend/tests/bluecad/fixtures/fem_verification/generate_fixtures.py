@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import build123d as bd
@@ -14,7 +14,7 @@ from OCP.BRepFeat import BRepFeat_SplitShape
 from OCP.gp import gp_Ax2, gp_Circ, gp_Dir, gp_Pnt
 
 GENERATOR_VERSION = "bluecad_fem_verification_fixtures_v0_1"
-FIXED_TIMESTAMP = datetime(2026, 7, 11, tzinfo=timezone.utc)
+FIXED_TIMESTAMP = datetime(2026, 7, 11, tzinfo=UTC)
 ROOT = Path(__file__).resolve().parent
 
 
