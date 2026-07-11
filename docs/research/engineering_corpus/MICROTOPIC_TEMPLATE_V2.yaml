@@ -1,4 +1,4 @@
-schema_version: 2.0.0
+schema_version: 2.1.0
 identity:
   microtopic_id: null
   title: null
@@ -8,24 +8,21 @@ identity:
   record_types: []
   granularity: atomic
   parent_ids: []
-  decomposition_reason: null
 classification:
   course: null
   domain: null
   subdomain: null
   language: null
   tags: []
-source_claims:
-- claim_id: null
-  source_id: null
+source_evidence:
+- source_id: null
   source_file: null
   source_sha256: null
-  location: null
+  locator: null
   authority: null
-  claim_type: null
-  claim_text: null
-  verbatim_excerpt: null
-normalized_knowledge:
+  evidence_type: null
+  supports_fields: []
+knowledge:
   summary: null
   physical_meaning: null
   inputs: []
@@ -33,33 +30,22 @@ normalized_knowledge:
   assumptions: []
   validity: []
   invalidity: []
-  model_context:
-    coordinate_system: null
-    boundary_conditions: []
-    initial_conditions: []
-    regime: []
-    sign_convention: null
   equations: []
   variables: []
-  constraints: []
-  limiting_cases: []
+  procedure: []
   relations: []
-  correlation_contract: null
 verification:
-  overall_status: unreviewed
-  claim_checks: []
+  status: unreviewed
+  methods: []
   deterministic_checks: []
-  sanity_checks: []
-  unresolved_issues: []
   confidence: 0.0
-artifacts: []
+  limitations: []
+  knowledge_exportable: false
 assessment:
   benchmark_eligible: false
   task_types: []
   benchmark_readiness: not_candidate
   contamination_class: reference_only
-  gold_policy: null
-  adversarial_variants: []
 jarvis:
   capability_eligible: false
   capability_candidates: []
@@ -69,7 +55,6 @@ jarvis:
 governance:
   lifecycle_status: extracted
   visibility: private_corpus
-  copyright_class: null
-  reviewer_roles: []
+  retention_policy: canonical_verified_knowledge_only
   created_utc: null
   updated_utc: null
