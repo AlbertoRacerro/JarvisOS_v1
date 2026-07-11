@@ -1,28 +1,28 @@
-# Pilot Retrospective
+# Engineering Microtopic Pilot Retrospective
 
-## What v1 handled well
+## Pilot 1
 
-- forced explicit assumptions, validity and units;
-- separated exercise, equation, solution and failure-mode records;
-- made benchmark and Jarvis capability opportunities visible;
-- represented the confirmed PIC numerical error instead of silently accepting the official answer.
+The first 30-record pilot established atomic microtopics, explicit assumptions, validity, variables, provenance, benchmark candidacy and Jarvis capability candidates.
 
-## What failed structurally
+Its initial v2 design preserved rejected source claims inside the structured record. That is now superseded.
 
-The 14 logged gaps are not cosmetic. The largest issue is that a source can make several claims with different verdicts. In PIC Ex4 the profile and bottom concentration are correct, while the printed average rate is wrong. A single record-wide `verification_status` cannot express that safely.
+## User correction and v2.1 rule
 
-The code examples exposed two additional needs: empirical correlations require a binding to their exact convention and coefficient source; executable artifacts require environment and run evidence.
+Retrievable engineering memory must contain only the corrected canonical knowledge. It must not retain an incorrect numerical value, a misleading explanation, or a narrative about who made an error.
+
+Source file hash and location remain as provenance. Rejected candidate content may exist temporarily in QA evidence while a reviewer reaches a decision, but it is not exported to retrieval, training or benchmark-reference memory.
+
+## Pilot 2
+
+A second pilot compiled 75 canonical microtopics from 16 sources across thermodynamics, flash, distillation, liquid-liquid extraction, packed columns, heat exchange, hydraulics, pinch analysis, kinetics, spreadsheets and FEM.
+
+Results:
+
+- 75/75 records valid against schema v2.1;
+- 33/33 deterministic checks passed;
+- 7 additional structural gaps logged;
+- no rejected source claim stored in the retrievable records.
 
 ## Decision
 
-Promote **template v2** before full-corpus mapping. Do not expand v1 beyond the pilot. V2 treats source statements as claims, attaches checks to individual claims, supports multiple record types, and records benchmark visibility and artifact execution explicitly.
-
-## Pilot correctness findings
-
-- Planar reaction-diffusion bottom concentration independently reproduced: `0.03947710 M`.
-- Correct average consumption rate: `5.810872146e-05 mol/(m^3 s)`; official printed value `2.90e-09` is low by about `20037x`.
-- Spherical oxygen center concentration: `0.00314815 kg/m^3`; maximum viable radius `1.6267 mm`.
-- FTCS pure-diffusion limit and centered-advection instability represented as separate claims.
-- OTR/OUR and critical-kLa equations passed dimensional and algebraic checks.
-- Python adsorption artifact has a runtime blocker plus correlation/provenance failures.
-- MATLAB PSA artifact defines a 5% threshold but does not use it as an event; reproduced event time is approximately `58.7921 min`.
+Adopt v2.1 as the current working template. It is ready for a larger mapping pilot, but not yet frozen for the entire corpus. Typed contracts are still needed for empirical correlations, graphical constructions, spreadsheet lineage and FEM verification targets.
