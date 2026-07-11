@@ -1,0 +1,71 @@
+schema_version: 1.0.0
+identity:
+  unit_id: null
+  title: null
+  knowledge_type: null
+  knowledge_strength: null
+  domain: null
+  subdomain: null
+  aliases: []
+  reusability_scope: null
+problem:
+  engineering_problem: null
+  decisions_supported: []
+  failure_if_missing: null
+canonical:
+  statement: null
+  physical_meaning: null
+  equations:
+  - name: null
+    expression: null
+    role: null
+    conditions: []
+  variables:
+  - symbol: null
+    meaning: null
+    unit_or_dimension: null
+    basis: null
+  parameters:
+  - name: null
+    value: null
+    unit: null
+    basis: null
+    validity: null
+  algorithm:
+    inputs: []
+    outputs: []
+    initialization: []
+    steps: []
+    stopping_conditions: []
+    convergence_checks: []
+  procedure: []
+  strategy: []
+  assumptions: []
+  applicability: []
+  invalidity: []
+  general_failure_modes: []
+  verification_methods: []
+blue_rev:
+  subsystems: []
+  decisions: []
+  experiments: []
+  business_effects: []
+  priority: P2
+  time_horizon: research
+evidence:
+- source_id: null
+  locator: null
+  supports: []
+  evidence_level: null
+verification:
+  status: candidate
+  methods_completed: []
+  unresolved_questions: []
+  retrieval_eligible: false
+  confidence: 0.0
+governance:
+  lifecycle_status: candidate
+  retention_policy: generic_reusable_knowledge_only
+  contains_case_specific_results: false
+  created_utc: null
+  updated_utc: null
