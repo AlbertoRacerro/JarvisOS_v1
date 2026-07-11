@@ -14,7 +14,7 @@ Knowledge-first research slice. No runtime JarvisOS wiring, API route, corpus bi
 - 25 deterministic pilot checks, all passed;
 - quality gates and systematic full-corpus mapping plan.
 
-The repository fixture includes six representative v2 records. The complete 30-record package remains an external research artifact until the schema direction is accepted.
+The repository contains the schema, template, gap log and complete 30-record index. The external research package contains all 30 v1/v2 records plus six representative v2 fixtures and the deterministic check evidence.
 
 ## Key finding
 
