@@ -27,7 +27,7 @@ It does not use isolated formulas, definitions, spreadsheet cells or exercise an
 
 ## BlueRev biological-modeling boundary
 
-The playbook now includes a dedicated gap audit for modeling outdoor marine cultivation of *Nannochloropsis gaditana*.
+The playbook includes a dedicated gap audit for modeling outdoor marine cultivation of *Nannochloropsis gaditana*.
 
 The audit distinguishes the current generic modeling agenda from the species-specific knowledge still required for:
 
@@ -59,4 +59,6 @@ Automated package checks report:
 
 Independent domain review, standards-compliance review, BlueRev prototype validation and field validation are not run. The strict gate therefore remains failed. The catalog is guidance, not automatic design authority or certification evidence.
 
-The complete machine-readable and human-readable catalog remains in the external research package while content review continues.
+## Repository boundary
+
+This repository stores the binding playbook specification, policies, audits and research prompts. The generated 324-entry machine-readable catalog remains an external reviewed research artifact; no runtime retrieval or automatic design authority is introduced by this merge.
