@@ -48,5 +48,6 @@ SENSITIVITY_SCHEMA_STATEMENTS = [
 
 SENSITIVITY_SCHEMA_INDEX_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_sensitivity_labels_subject_created ON sensitivity_labels(workspace_id, subject_ref, created_at, id)",
+    "CREATE INDEX IF NOT EXISTS idx_sensitivity_labels_prior ON sensitivity_labels(prior_label_id)",
     "CREATE INDEX IF NOT EXISTS idx_sanitized_derivatives_workspace_status ON sanitized_derivatives(workspace_id, status, updated_at, id)",
 ]
