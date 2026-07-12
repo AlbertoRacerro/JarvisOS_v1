@@ -264,3 +264,140 @@ The ledger records safe metadata:
 - ticket id and consumption state;
 - deterministic deny reason;
 - concrete provider/model and fallback attempt index.
+
+Sanitized derivatives and policy labels retain their own provenance records.
+A denied request writes a normal pre-provider ledger row and makes zero network
+adapter calls.
+
+## Delivery split
+
+059 is intentionally split into two implementation PRs after this definition PR.
+
+### 059-A — sensitivity and context foundation
+
+- additive schema migration for policy labels and sanitized derivatives;
+- services/models for digest-bound labels and approved derivatives;
+- deterministic sensitivity floors and stale-label handling;
+- sensitivity-aware context selection and preview manifests;
+- tests for legacy unknown defaults, digest staleness, withholding, derivative
+  provenance, and zero provider calls.
+
+059-A must not alter `adapter.complete(...)`, confirmation semantics, or provider
+execution.
+
+### 059-B — packet, ticket, and execution enforcement
+
+- canonical `EgressPacket` and immutable `EgressDecision`;
+- server-owned expiring single-use egress tickets;
+- ID/digest-bound escalation confirmation;
+- execution-spine and per-fallback enforcement immediately before adapters;
+- safe ledger metadata and replay prevention;
+- mutation-resistant integration tests proving zero adapter calls on every denial.
+
+059-B depends on merged 059-A.
+
+## Files expected to change
+
+Verify paths against `master`; do not create parallel gateways or stores.
+
+Likely 059-A surface:
+
+- `backend/app/core/schema.py`;
+- a bounded policy module under `backend/app/modules/ai/`;
+- `backend/app/modules/ai/context_builder.py`;
+- `backend/app/modules/ai/models.py` and `routes.py` only for label/derivative and
+  preview contracts;
+- Domain Foundation/MemoryStore read helpers only as needed for normalized
+  `<kind>:<id>` resolution;
+- focused tests and one implementation report.
+
+Likely 059-B surface:
+
+- the same bounded policy module;
+- `backend/app/modules/ai/execution.py`;
+- `backend/app/modules/ai/escalations.py`;
+- `backend/app/modules/ai/models.py` and `routes.py`;
+- `backend/app/modules/ai/routing/bridge.py` only for proposal metadata, never as
+  the authoritative final gate;
+- focused tests and one implementation report.
+
+Provider adapters, BLUECAD product callers, frontend, corpus PRs, and unrelated
+runner/solver code should remain unchanged unless a concrete integration test
+proves a shared-spine defect.
+
+## Required tests
+
+### 059-A
+
+- legacy unlabeled records are `unknown` for external selection;
+- human initial classification is audited and digest-bound;
+- source mutation makes a label/derivative stale;
+- an `S2`/`S3`/`S4` source cannot be downgraded in place;
+- approved derivative preserves source refs/digests and passes secret scanning;
+- `S4` derivative cannot be approved above `S1`;
+- explicit ids do not bypass sensitivity withholding;
+- manual blocks cannot self-declare an external-safe level;
+- preview returns included and withheld manifests but no withheld content;
+- local preview/build behavior remains deterministic and makes zero provider calls.
+
+### 059-B
+
+- direct explicit external route without a ticket makes zero adapter calls;
+- unsupported egress operation, missing policy context, unknown level, raw `S2`,
+  raw `S3`, and raw `S4` fail closed;
+- approved derivative packet can be proposed but not executed before confirmation;
+- client mutation of text, route, target, tokens, or digest is ignored/rejected;
+- expired, revoked, stale, mismatched, and consumed tickets make zero adapter calls;
+- one confirmation is consumed exactly once, including after provider error;
+- fallback providers are independently checked against the ticket target set and
+  current alpha/budget state;
+- removal of the egress-gate call from the execution spine makes an integration
+  test fail;
+- local non-network fixtures remain testable and `S4` is not sent to a local model;
+- ledger rows contain only safe metadata and deterministic reason codes;
+- all existing provider, Auto, context-pack, MemoryStore, BLUECAD, and full backend
+  tests remain green.
+
+## Stop conditions
+
+Stop and amend this definition rather than weakening the boundary if:
+
+- labels cannot be bound to a stable digest of the content actually retrieved;
+- sensitivity filtering can occur only after withheld content has already entered
+  the outbound prompt;
+- any network adapter can be called outside the shared execution spine;
+- fallback execution can reuse approval for an unbound provider/model;
+- confirmation requires trusting client-supplied outbound text or route data;
+- a ticket cannot be consumed atomically enough to prevent ordinary replay;
+- raw `S2`/`S3`/`S4`/`unknown` content must be persisted in an egress proposal to make
+  the flow work;
+- the implementation requires automatic semantic redaction or claims that a
+  deterministic secret scan proves IP removal;
+- legacy records must be silently labelled public/internal;
+- a model hint becomes final sensitivity or permission authority;
+- implementation requires a second provider gateway, second MemoryStore, external
+  tool runtime, conversation system, vector database, frontend, or provider SDK.
+
+## Non-goals
+
+- No automatic semantic redaction or model-approved downgrade.
+- No vector retrieval, embeddings, LLM reranking, or conversation history runtime.
+- No external-tool execution runtime.
+- No provider/model addition and no live provider calls in tests.
+- No frontend settings or proposal-review UI.
+- No encryption-at-rest claim or forensic secure-delete claim.
+- No automatic relabelling of the existing database.
+- No change to local CAD, mesh, FEM, runner, promotion, or engineering authority.
+
+## Acceptance criteria
+
+1. The definition PR is docs/registry/report only and receives Codex review before
+   maintainer merge.
+2. 059-A and 059-B are separate implementation PRs.
+3. Each implementation PR has green focused tests, full backend Pytest, Ruff, and
+   any applicable existing BLUECAD proof.
+4. Each implementation PR receives a completed Codex review whose findings are
+   read and resolved or explicitly dispositioned before merge.
+5. No implementation PR is self-merged; human merge authority remains final.
+6. After 059-B, deleting or bypassing the egress check permits no green test suite.
+7. Real BlueRev IP/cloud dogfood remains blocked until both slices are merged.
