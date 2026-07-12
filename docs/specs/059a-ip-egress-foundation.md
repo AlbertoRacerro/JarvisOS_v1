@@ -21,6 +21,14 @@ parent definition. It owns only:
 It must not alter provider-adapter invocation, confirmation semantics, fallback
 execution, or ticket consumption. Those belong to 059b.
 
+## External-eligibility rule
+
+Only effective levels `S0` and `S1` are eligible for inclusion in an external
+preview or outbound packet. An `S2` derivative may be created, reviewed, and retained
+as an internal sanitized artifact, but approval alone never makes it external-safe.
+Automatic and manual previews must withhold approved `S2` derivatives with an
+explicit deterministic reason.
+
 ## Merge gate
 
 An implementation PR must declare `**Spec gate:** implementation 059a`, update the
