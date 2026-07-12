@@ -15,12 +15,16 @@ spine; those remain owned by 059b.
 
 ## Implemented contracts
 
-- legacy records without a current digest-bound label are `unknown` and withheld;
-- deterministic floors may raise a human label but never grant permission;
+- legacy records without a current digest-bound label are withheld; their manifest
+  level is `unknown` only when no deterministic S2-S4 floor is known;
+- deterministic floors may raise a human label and remain visible in withheld audit
+  manifests, but never grant permission;
 - explicit downgrade attempts from S2-S4 are rejected before floor normalization;
 - S2-S4 source records are never modified to create an external-safe form;
 - sanitized derivatives preserve source refs, source digests, transformations,
   policy version, reviewer state, and their own content digest;
+- multi-source derivative drafts resolve every source digest and effective level and
+  write the draft plus audit event under one serialized SQLite transaction;
 - only effective `S0` and `S1` raw records or derivatives may enter external or
   manual previews; approved `S2` derivatives remain internal review artifacts and
   are withheld with an explicit reason;
@@ -70,6 +74,11 @@ The obsolete fail-closed test was removed: once selection has started inside the
 read transaction, a concurrent source deletion is intentionally observed only by a
 later preview. The current preview remains bound to its coherent old SQLite snapshot.
 
+The same audit found two additional consistency defects. Unlabelled records with a
+hard S2-S4 floor were being reported as `unknown`, discarding a known restrictive
+signal. Multi-source derivative drafting also assembled source state across multiple
+connections. Both paths are now bound to their deterministic or transactional truth.
+
 ## Added regression evidence
 
 The sensitivity regression modules cover:
@@ -86,6 +95,8 @@ The sensitivity regression modules cover:
 - policy-version invalidation;
 - coherent read-snapshot behavior for selection and eligibility, including
   concurrent predicate changes and source deletion;
+- one-transaction source binding for multi-source derivative drafting;
+- preservation of known S2, S3, and S4 deterministic floors in withheld manifests;
 - multi-source atomic replacement and overlap rejection.
 
 ## Known infrastructure blocker
