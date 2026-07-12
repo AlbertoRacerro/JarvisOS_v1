@@ -166,10 +166,8 @@ def external_context_preview(
         )
     except SensitivityNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except SensitivityPolicyError as exc:
+    except (SensitivityPolicyError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post(
