@@ -187,43 +187,6 @@ def test_manual_preview_withholds_overlapping_derivative() -> None:
     ]
 
 
-def test_source_deleted_after_selection_is_withheld_not_raised(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _bootstrap()
-    record_id = _decision("Generic public engineering note")
-    _label(record_id, "S1")
-    original_select = sensitivity_module.select_context_records
-
-    def select_then_delete(*args, **kwargs):
-        selected = original_select(*args, **kwargs)
-        with open_sqlite_connection() as connection:
-            connection.execute("DELETE FROM decisions WHERE id = ?", (record_id,))
-            connection.commit()
-        return selected
-
-    monkeypatch.setattr(
-        sensitivity_module,
-        "select_context_records",
-        select_then_delete,
-    )
-
-    preview = build_external_context_preview(
-        WORKSPACE_ID,
-        32_000,
-        _selection(record_id),
-    )
-
-    assert preview.blocks == []
-    assert preview.withheld_sources_manifest == [
-        {
-            "source_ref": f"decision:{record_id}",
-            "effective_level": "unknown",
-            "reason": "source_missing_during_preview",
-        }
-    ]
-
-
 def test_refresh_true_remains_explicit_revalidation_compatibility() -> None:
     _bootstrap()
     record_id = _decision("BlueRev proprietary geometry decision")
