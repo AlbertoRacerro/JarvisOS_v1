@@ -9,10 +9,16 @@ import app.modules.ai.sensitivity as sensitivity_module
 from app.core.database import initialize_database, open_sqlite_connection
 from app.modules.ai.context_builder import ContextSelectionSpec
 from app.modules.ai.sensitivity import (
+    approve_sanitized_derivative,
     build_external_context_preview,
     create_sanitized_derivative,
+    create_sensitivity_label,
+    revalidate_sanitized_derivative,
 )
-from app.modules.ai.sensitivity_models import SanitizedDerivativeCreate
+from app.modules.ai.sensitivity_models import (
+    SanitizedDerivativeCreate,
+    SensitivityLabelCreate,
+)
 from app.modules.events.service import utc_now
 
 WORKSPACE_ID = "bluerev"
@@ -117,3 +123,34 @@ def test_multisource_derivative_draft_uses_one_database_snapshot(
         f"decision:{first}",
         f"decision:{second}",
     }
+
+
+def test_source_deleted_before_revalidation_marks_derivative_stale() -> None:
+    _bootstrap()
+    record_id = _decision("BlueRev proprietary geometry decision")
+    source_ref = f"decision:{record_id}"
+    create_sensitivity_label(
+        SensitivityLabelCreate(
+            workspace_id=WORKSPACE_ID,
+            subject_ref=source_ref,
+            level="S3",
+        )
+    )
+    derivative = create_sanitized_derivative(
+        SanitizedDerivativeCreate(
+            workspace_id=WORKSPACE_ID,
+            source_refs=[source_ref],
+            content="Generic sanitized engineering summary.",
+            effective_level="S1",
+            transformations=["Removed project-specific details"],
+        )
+    )
+    derivative = approve_sanitized_derivative(WORKSPACE_ID, derivative.id)
+    with open_sqlite_connection() as connection:
+        connection.execute("DELETE FROM decisions WHERE id = ?", (record_id,))
+        connection.commit()
+
+    stale = revalidate_sanitized_derivative(WORKSPACE_ID, derivative.id)
+
+    assert stale.status == "stale"
+    assert stale.stale_reason == f"source_missing:{source_ref}"
