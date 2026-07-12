@@ -70,9 +70,11 @@ classification and derivative review level, but external eligibility is restrict
 to S0/S1. This rule is now explicit in both parent spec 059 and slice 059a.
 
 A later senior audit found two regressions encoding opposite deletion semantics.
-The obsolete fail-closed test was removed: once selection has started inside the
-read transaction, a concurrent source deletion is intentionally observed only by a
-later preview. The current preview remains bound to its coherent old SQLite snapshot.
+The obsolete mixed-snapshot expectation was removed: once selection has started
+inside the read transaction, a concurrent source deletion is intentionally observed
+only by a later preview. The current preview remains bound to its coherent old
+SQLite snapshot. A source already missing before explicit revalidation instead
+marks the derivative `stale` with `source_missing:<ref>`.
 
 The same audit found two additional consistency defects. Unlabelled records with a
 hard S2-S4 floor were being reported as `unknown`, discarding a known restrictive
@@ -94,7 +96,8 @@ The sensitivity regression modules cover:
 - causal latest-label ordering with adversarial timestamps;
 - policy-version invalidation;
 - coherent read-snapshot behavior for selection and eligibility, including
-  concurrent predicate changes and source deletion;
+  concurrent predicate changes and source deletion after snapshot acquisition;
+- fail-closed stale transition when a source is missing before revalidation;
 - one-transaction source binding for multi-source derivative drafting;
 - preservation of known S2, S3, and S4 deterministic floors in withheld manifests;
 - multi-source atomic replacement and overlap rejection.
