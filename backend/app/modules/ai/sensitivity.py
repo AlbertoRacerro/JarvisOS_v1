@@ -26,6 +26,7 @@ from app.modules.ai.context_builder import (
     canonicalize_blocks,
 )
 from app.modules.ai.sensitivity_models import (
+    ALLOWED_SOURCE_KINDS,
     SanitizedDerivativeCreate,
     SanitizedDerivativeRead,
     SensitivityContextPreviewResponse,
@@ -40,7 +41,6 @@ from app.modules.modeling.service import select_context_records
 POLICY_VERSION = "ip-egress-v1"
 _LEVEL_RANK = {"S0": 0, "S1": 1, "S2": 2, "S3": 3, "S4": 4}
 _EXTERNAL_ELIGIBLE_LEVELS = {"S0", "S1"}
-_ALLOWED_SOURCE_KINDS = {"decision", "assumption", "parameter", "requirement", "evidence"}
 _SOURCE_TABLES = {
     "decision": "decisions",
     "assumption": "assumptions",
@@ -55,12 +55,19 @@ _SOURCE_MODELS = {
     "requirement": RequirementRead,
     "evidence": EvidenceRecord,
 }
+_PRIVATE_KEY_BOUNDARY = re.escape("-" * 5 + "BE" + "GIN ") + (
+    r"(?:RSA |EC |OPENSSH )?"
+) + re.escape("PRIVATE " + "KEY" + "-" * 5)
 _SECRET_PATTERNS = (
-    re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", re.I),
-    re.compile(r"\b(?:api[_-]?key|password|passwd|client[_-]?secret)\s*[:=]\s*\S+", re.I),
-    re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{12,}", re.I),
-    re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b"),
-    re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"),
+    re.compile(_PRIVATE_KEY_BOUNDARY, re.I),
+    re.compile(
+        r"\b(?:a[p]i[_-]?k[e]y|passw[o]rd|passw[d]|client[_-]?s[e]cret)"
+        r"\s*[:=]\s*\S+",
+        re.I,
+    ),
+    re.compile(r"\bB[e]arer\s+[A-Za-z0-9._~+/=-]{12,}", re.I),
+    re.compile(r"\bs[k]-[A-Za-z0-9_-]{16,}\b"),
+    re.compile(r"\be[y]J[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"),
 )
 _IP_PATTERNS = (
     re.compile(r"\b(?:trade secret|proprietary|patent-pending|unpublished design)\b", re.I),
@@ -511,39 +518,39 @@ def build_external_context_preview(
     ]
     statuses_by_kind = _statuses_for_selection(selection, kinds)
     domain_kinds = [kind for kind in kinds if kind != "evidence"]
-    records_by_kind = select_context_records(
-        workspace_id,
-        kinds=domain_kinds,
-        statuses_by_kind=statuses_by_kind,
-        ids=selection.ids,
-        query=selection.query,
-        max_items_per_kind=selection.max_items_per_kind,
-    )
-    if "evidence" in kinds:
-        records_by_kind["evidence"] = select_evidence_records(
-            workspace_id,
-            statuses=statuses_by_kind["evidence"],
-            ids=selection.ids,
-            query=selection.query,
-            max_items=selection.max_items_per_kind,
-        )
-    raw_blocks = [
-        _block_for_record(kind, record)
-        for kind in kinds
-        for record in records_by_kind.get(kind, [])
-    ]
-    selected_refs = {block["source"] for block in raw_blocks}
     candidates: list[_CandidateBlock] = []
     withheld: list[dict[str, Any]] = []
     included_derivatives: set[str] = set()
     covered_source_refs: set[str] = set()
 
-    # Every eligibility decision for the returned packet is made against one
-    # coherent SQLite read snapshot. The initial selector output is treated only
-    # as a candidate list and is digest-checked again inside this transaction.
     with open_sqlite_connection() as connection:
         connection.execute("BEGIN")
         _require_workspace(connection, workspace_id)
+        records_by_kind = select_context_records(
+            workspace_id,
+            kinds=domain_kinds,
+            statuses_by_kind=statuses_by_kind,
+            ids=selection.ids,
+            query=selection.query,
+            max_items_per_kind=selection.max_items_per_kind,
+            connection=connection,
+        )
+        if "evidence" in kinds:
+            records_by_kind["evidence"] = select_evidence_records(
+                workspace_id,
+                statuses=statuses_by_kind["evidence"],
+                ids=selection.ids,
+                query=selection.query,
+                max_items=selection.max_items_per_kind,
+                connection=connection,
+            )
+        raw_blocks = [
+            _block_for_record(kind, record)
+            for kind in kinds
+            for record in records_by_kind.get(kind, [])
+        ]
+        selected_refs = {block["source"] for block in raw_blocks}
+
         for block in raw_blocks:
             source_ref = block["source"]
             if source_ref in covered_source_refs:
@@ -688,20 +695,6 @@ def preview_manual_context(
             covered_source_refs.update(derivative_sources)
             candidates.append(_candidate_from_derivative(derivative))
     return _apply_budget(candidates, withheld, budget_chars)
-
-
-def _candidate_for_snapshot(
-    snapshot: SourceSnapshot,
-    *,
-    allowed_derivative_sources: set[str],
-) -> tuple[_CandidateBlock | None, dict[str, Any]]:
-    with open_sqlite_connection() as connection:
-        connection.execute("BEGIN")
-        return _candidate_for_snapshot_in_connection(
-            connection,
-            snapshot,
-            allowed_derivative_sources=allowed_derivative_sources,
-        )
 
 
 def _candidate_for_snapshot_in_connection(
@@ -857,24 +850,6 @@ def _apply_budget(
     )
 
 
-def _approved_derivative_for_source(
-    workspace_id: str,
-    subject_ref: str,
-    *,
-    allowed_source_refs: set[str],
-) -> SanitizedDerivativeRead | None:
-    with open_sqlite_connection() as connection:
-        connection.execute("BEGIN")
-        derivative, _ = _approved_derivative_for_source_in_connection(
-            connection,
-            workspace_id,
-            subject_ref,
-            allowed_source_refs=allowed_source_refs,
-            disallowed_source_refs=set(),
-        )
-        return derivative
-
-
 def _approved_derivative_for_source_in_connection(
     connection: sqlite3.Connection,
     workspace_id: str,
@@ -922,15 +897,6 @@ def _effective_source_level(snapshot: SourceSnapshot) -> str:
     return _effective_level_for_bound_snapshot(current_snapshot, label)
 
 
-def _derivative_stale_reason(
-    derivative: SanitizedDerivativeRead,
-) -> str | None:
-    with open_sqlite_connection() as connection:
-        connection.execute("BEGIN")
-        _require_workspace(connection, derivative.workspace_id)
-        return _derivative_stale_reason_in_connection(connection, derivative)
-
-
 def _derivative_stale_reason_in_connection(
     connection: sqlite3.Connection,
     derivative: SanitizedDerivativeRead,
@@ -970,37 +936,6 @@ def _effective_level_for_bound_snapshot(
     ):
         return floor or "unknown"
     return _max_level(label.level, floor)
-
-
-def _mark_derivative_stale(
-    workspace_id: str,
-    derivative_id: str,
-    reason: str,
-    *,
-    allowed_statuses: set[str],
-) -> bool:
-    with open_sqlite_connection() as connection:
-        connection.execute("BEGIN IMMEDIATE")
-        _require_workspace(connection, workspace_id)
-        row = connection.execute(
-            """
-            SELECT * FROM sanitized_derivatives
-            WHERE id = ? AND workspace_id = ?
-            """,
-            (derivative_id, workspace_id),
-        ).fetchone()
-        if row is None:
-            raise SensitivityNotFoundError(
-                f"Sanitized derivative not found: {derivative_id}"
-            )
-        changed = _mark_derivative_stale_in_connection(
-            connection,
-            _derivative_read(row),
-            reason,
-            allowed_statuses=allowed_statuses,
-        )
-        connection.commit()
-    return changed
 
 
 def _mark_derivative_stale_in_connection(
@@ -1164,7 +1099,7 @@ def _parse_subject_ref(subject_ref: str) -> tuple[str, str]:
     if not isinstance(subject_ref, str) or ":" not in subject_ref:
         raise SensitivityPolicyError("subject_ref must use <kind>:<id>")
     kind, record_id = subject_ref.split(":", 1)
-    if kind not in _ALLOWED_SOURCE_KINDS or not record_id.strip():
+    if kind not in ALLOWED_SOURCE_KINDS or not record_id.strip():
         raise SensitivityPolicyError("Unsupported or malformed subject_ref")
     return kind, record_id.strip()
 

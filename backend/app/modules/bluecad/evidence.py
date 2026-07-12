@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -270,7 +271,19 @@ def select_evidence_records(
     ids: list[str] | None,
     query: str | None,
     max_items: int,
+    connection: sqlite3.Connection | None = None,
 ) -> list[EvidenceRecord]:
+    if connection is None:
+        with open_sqlite_connection() as owned_connection:
+            return select_evidence_records(
+                workspace_id,
+                statuses=statuses,
+                ids=ids,
+                query=query,
+                max_items=max_items,
+                connection=owned_connection,
+            )
+
     values: list[object] = [workspace_id]
     clauses = ["workspace_id = ?"]
     selected_ids = set(ids or [])
@@ -290,11 +303,10 @@ def select_evidence_records(
         escaped_query = normalized_query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         pattern = f"%{escaped_query}%"
         values.extend([pattern, pattern])
-    with open_sqlite_connection() as connection:
-        rows = connection.execute(
-            f"SELECT * FROM evidence_records WHERE {' AND '.join(clauses)} ORDER BY created_at DESC, id ASC LIMIT ?",
-            (*values, max_items),
-        ).fetchall()
+    rows = connection.execute(
+        f"SELECT * FROM evidence_records WHERE {' AND '.join(clauses)} ORDER BY created_at DESC, id ASC LIMIT ?",
+        (*values, max_items),
+    ).fetchall()
     return rows_to_models(rows, EvidenceRecord)
 
 

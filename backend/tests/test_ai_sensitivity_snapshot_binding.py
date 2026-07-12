@@ -48,21 +48,43 @@ def _decision(text: str) -> str:
     return record_id
 
 
-def _update_decision(record_id: str, text: str) -> None:
+def _parameter() -> str:
+    record_id = str(uuid4())
+    now = utc_now()
     with open_sqlite_connection() as connection:
         connection.execute(
-            "UPDATE decisions SET decision_text = ?, updated_at = ? WHERE id = ?",
-            (text, utc_now(), record_id),
+            """
+            INSERT INTO parameters (
+                id, workspace_id, name, symbol, value, unit, value_status,
+                value_min, value_max, source_ref, confidence, status,
+                created_at, updated_at, notes
+            ) VALUES (?, ?, 'Flow rate', 'F', '10', 'kg/s', 'accepted',
+                      NULL, NULL, 'public-reference', NULL, 'draft', ?, ?, 'needle-query')
+            """,
+            (record_id, WORKSPACE_ID, now, now),
         )
         connection.commit()
+    return record_id
 
 
-def test_preview_rejects_label_for_newer_source_snapshot(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _bootstrap()
-    record_id = _decision("Original generic pump note")
-    subject_ref = f"decision:{record_id}"
+def _evidence() -> str:
+    record_id = str(uuid4())
+    now = utc_now()
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO evidence_records (
+                id, workspace_id, kind, verdict, metrics_json, source_run_id,
+                candidate_id, attempt_id, report_artifact_id, created_at
+            ) VALUES (?, ?, 'validation_v0', 'pass', '{}', NULL, NULL, NULL, ?, ?)
+            """,
+            (record_id, WORKSPACE_ID, str(uuid4()), now),
+        )
+        connection.commit()
+    return record_id
+
+
+def _label(subject_ref: str) -> None:
     create_sensitivity_label(
         SensitivityLabelCreate(
             workspace_id=WORKSPACE_ID,
@@ -70,24 +92,116 @@ def test_preview_rejects_label_for_newer_source_snapshot(
             level="S1",
         )
     )
+
+
+def test_parameter_status_and_query_change_do_not_mix_snapshots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _bootstrap()
+    record_id = _parameter()
+    subject_ref = f"parameter:{record_id}"
+    _label(subject_ref)
     original_select = sensitivity_module.select_context_records
 
-    def select_then_replace_and_relabel(*args, **kwargs):
+    def select_then_change_predicates(*args, **kwargs):
         selected = original_select(*args, **kwargs)
-        _update_decision(record_id, "Replacement generic pump note")
-        create_sensitivity_label(
-            SensitivityLabelCreate(
-                workspace_id=WORKSPACE_ID,
-                subject_ref=subject_ref,
-                level="S1",
+        with open_sqlite_connection() as connection:
+            connection.execute(
+                """
+                UPDATE parameters
+                SET value_status = 'candidate', notes = 'no-longer-matches'
+                WHERE id = ?
+                """,
+                (record_id,),
             )
-        )
+            connection.commit()
         return selected
 
     monkeypatch.setattr(
         sensitivity_module,
         "select_context_records",
-        select_then_replace_and_relabel,
+        select_then_change_predicates,
+    )
+
+    preview = build_external_context_preview(
+        WORKSPACE_ID,
+        32_000,
+        ContextSelectionSpec(kinds=["parameter"], query="needle-query"),
+    )
+
+    assert [block["source"] for block in preview.blocks] == [subject_ref]
+    with open_sqlite_connection() as connection:
+        row = connection.execute(
+            "SELECT value_status, notes FROM parameters WHERE id = ?",
+            (record_id,),
+        ).fetchone()
+    assert row is not None
+    assert row["value_status"] == "candidate"
+    assert row["notes"] == "no-longer-matches"
+
+
+def test_evidence_verdict_change_does_not_mix_snapshots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _bootstrap()
+    record_id = _evidence()
+    subject_ref = f"evidence:{record_id}"
+    _label(subject_ref)
+    original_select = sensitivity_module.select_evidence_records
+
+    def select_then_change_verdict(*args, **kwargs):
+        selected = original_select(*args, **kwargs)
+        with open_sqlite_connection() as connection:
+            connection.execute(
+                "UPDATE evidence_records SET verdict = 'fail' WHERE id = ?",
+                (record_id,),
+            )
+            connection.commit()
+        return selected
+
+    monkeypatch.setattr(
+        sensitivity_module,
+        "select_evidence_records",
+        select_then_change_verdict,
+    )
+
+    preview = build_external_context_preview(
+        WORKSPACE_ID,
+        32_000,
+        ContextSelectionSpec(kinds=["evidence"]),
+    )
+
+    assert [block["source"] for block in preview.blocks] == [subject_ref]
+    assert "verdict=pass" in preview.blocks[0]["content"]
+    with open_sqlite_connection() as connection:
+        row = connection.execute(
+            "SELECT verdict FROM evidence_records WHERE id = ?",
+            (record_id,),
+        ).fetchone()
+    assert row is not None
+    assert row["verdict"] == "fail"
+
+
+def test_source_deletion_after_selection_uses_coherent_old_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _bootstrap()
+    record_id = _decision("Original generic pump note")
+    subject_ref = f"decision:{record_id}"
+    _label(subject_ref)
+    original_select = sensitivity_module.select_context_records
+
+    def select_then_delete(*args, **kwargs):
+        selected = original_select(*args, **kwargs)
+        with open_sqlite_connection() as connection:
+            connection.execute("DELETE FROM decisions WHERE id = ?", (record_id,))
+            connection.commit()
+        return selected
+
+    monkeypatch.setattr(
+        sensitivity_module,
+        "select_context_records",
+        select_then_delete,
     )
 
     preview = build_external_context_preview(
@@ -96,12 +210,10 @@ def test_preview_rejects_label_for_newer_source_snapshot(
         ContextSelectionSpec(kinds=["decision"], ids=[record_id]),
     )
 
-    assert preview.blocks == []
-    assert preview.included_count == 0
-    assert preview.withheld_sources_manifest == [
-        {
-            "source_ref": subject_ref,
-            "effective_level": "unknown",
-            "reason": "source_changed_during_preview",
-        }
-    ]
+    assert [block["source"] for block in preview.blocks] == [subject_ref]
+    with open_sqlite_connection() as connection:
+        row = connection.execute(
+            "SELECT id FROM decisions WHERE id = ?",
+            (record_id,),
+        ).fetchone()
+    assert row is None
