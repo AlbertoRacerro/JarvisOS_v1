@@ -61,8 +61,8 @@ cannot authorize egress or lower sensitivity.
 | --- | --- | --- | --- |
 | `S0` | `public` | published literature, public standards excerpts, synthetic smoke data | eligible after ordinary external confirmation and all other gates |
 | `S1` | `internal` | non-proprietary working notes, generic code, ordinary internal task text | eligible after ordinary external confirmation and all other gates |
-| `S2` | `confidential` | private project planning or partner/internal material that can be safely abstracted | raw denied; only an approved sanitized derivative may be eligible |
-| `S3` | `sensitive_ip` | proprietary BlueRev geometry, correlations, process parameters, unpublished design decisions | raw denied; only a separately reviewed derivative with effective level `S0`–`S2` may be eligible |
+| `S2` | `confidential` | private project planning or partner/internal material that can be safely abstracted | raw denied; an approved `S2` derivative remains internal-only, and only an approved derivative with effective level `S0` or `S1` may be external-eligible |
+| `S3` | `sensitive_ip` | proprietary BlueRev geometry, correlations, process parameters, unpublished design decisions | raw denied; only a separately reviewed derivative with effective level `S0` or `S1` may be external-eligible |
 | `S4` | `secret` | credentials, private keys, tokens, passwords, secret material | raw denied; a derivative may be eligible only when no secret-bearing content survives and its effective level is `S0` or `S1` |
 
 `unknown` is not a sixth permissive level. It is a fail-closed state for external
@@ -142,6 +142,9 @@ Rules:
    the derivative unusable for egress.
 7. Approval is a human authority event; schema validity or model output is not
    evidence that redaction is complete.
+8. Only effective `S0` and `S1` derivatives are external-eligible. An approved
+   effective `S2` derivative is a reviewable internal artifact and must be withheld
+   from automatic and manual external previews.
 
 ## Context selection and preview contract
 
@@ -160,6 +163,9 @@ policy metadata is explicit. For external eligibility:
 
 - a workspace record requires a current digest-bound label or an approved
   derivative;
+- only effective `S0` or `S1` raw records and derivatives may be included;
+- an approved `S2` derivative is withheld even when its source digests and review
+  state are current;
 - a caller-supplied manual block is `unknown` and external-ineligible unless it
   references a server-owned approved derivative with an exact digest match;
 - explicit record ids bypass status filters as in spec 042, but never bypass
@@ -186,8 +192,9 @@ The packet has a canonical SHA-256 digest. Confirmation and execution bind to th
 exact digest. Any change to prompt, context, provider/model, route, token cap,
 source digest, derivative, or policy version invalidates the confirmation.
 
-Raw `S3`, raw `S4`, and `unknown` content must never be placed in an externally
-eligible packet. Logging uses digests and safe metadata only.
+Raw `S2`, raw `S3`, raw `S4`, effective `S2` derivatives, and `unknown` content must
+never be placed in an externally eligible packet. Logging uses digests and safe
+metadata only.
 
 ## Egress decision
 
@@ -362,8 +369,8 @@ Stop and amend this definition rather than weakening the boundary if:
 - fallback execution can reuse approval for an unbound provider/model;
 - confirmation requires trusting client-supplied outbound text or route data;
 - a ticket cannot be consumed atomically enough to prevent ordinary replay;
-- raw `S3`/`S4`/unknown content must be persisted in an egress proposal to make the
-  flow work;
+- raw `S2`/`S3`/`S4`/`unknown` content must be persisted in an egress proposal to make
+  the flow work;
 - the implementation requires automatic semantic redaction or claims that a
   deterministic secret scan proves IP removal;
 - legacy records must be silently labelled public/internal;

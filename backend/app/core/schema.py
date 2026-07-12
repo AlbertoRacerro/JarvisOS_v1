@@ -12,8 +12,10 @@ SCHEMA_RUNNER_IMPLEMENTATION_KIND_MIGRATION_ID = "0006_runner_implementation_kin
 SCHEMA_RUNNER_IMPLEMENTATION_KIND_MIGRATION_NAME = "Runner bluecad_l2_v0 implementation kind dispatch"
 SCHEMA_CONTEXT_RECORDS_FTS_MIGRATION_ID = "0007_context_records_fts"
 SCHEMA_CONTEXT_RECORDS_FTS_MIGRATION_NAME = "Context pack FTS index and triggers"
-CURRENT_SCHEMA_MIGRATION_ID = "0008_evidence_records"
-CURRENT_SCHEMA_MIGRATION_NAME = "Evidence records for BLUECAD outcomes"
+SCHEMA_EVIDENCE_RECORDS_MIGRATION_ID = "0008_evidence_records"
+SCHEMA_EVIDENCE_RECORDS_MIGRATION_NAME = "Evidence records for BLUECAD outcomes"
+CURRENT_SCHEMA_MIGRATION_ID = "0009_sensitivity_context_foundation"
+CURRENT_SCHEMA_MIGRATION_NAME = "IP egress sensitivity labels and sanitized derivatives"
 
 SCHEMA_MIGRATION_RECORDS = [
     {
@@ -49,6 +51,11 @@ SCHEMA_MIGRATION_RECORDS = [
     {
         "migration_id": SCHEMA_CONTEXT_RECORDS_FTS_MIGRATION_ID,
         "name": SCHEMA_CONTEXT_RECORDS_FTS_MIGRATION_NAME,
+        "checksum": None,
+    },
+    {
+        "migration_id": SCHEMA_EVIDENCE_RECORDS_MIGRATION_ID,
+        "name": SCHEMA_EVIDENCE_RECORDS_MIGRATION_NAME,
         "checksum": None,
     },
     {
