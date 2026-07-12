@@ -2,9 +2,6 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-import pytest
-
-import app.modules.ai.sensitivity as sensitivity_module
 from app.core.database import initialize_database, open_sqlite_connection
 from app.modules.ai.context_builder import ContextSelectionSpec
 from app.modules.ai.sensitivity import (
