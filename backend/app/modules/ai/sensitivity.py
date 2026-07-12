@@ -224,13 +224,6 @@ def get_current_sensitivity_label(
 def create_sanitized_derivative(
     payload: SanitizedDerivativeCreate,
 ) -> SanitizedDerivativeRead:
-    snapshots = [
-        resolve_source_snapshot(payload.workspace_id, ref)
-        for ref in payload.source_refs
-    ]
-    source_digests = {
-        snapshot.subject_ref: snapshot.content_digest for snapshot in snapshots
-    }
     content_floor = deterministic_floor(payload.content)
     if content_floor == "S4":
         raise SensitivityPolicyError(
@@ -244,20 +237,37 @@ def create_sanitized_derivative(
             f"Declared derivative level {payload.effective_level} "
             f"is below deterministic floor {content_floor}."
         )
-    source_levels = [_effective_source_level(snapshot) for snapshot in snapshots]
-    if (
-        "S4" in source_levels
-        and _LEVEL_RANK[payload.effective_level] > _LEVEL_RANK["S1"]
-    ):
-        raise SensitivityPolicyError(
-            "A derivative of an S4 source may be declared only S0 or S1."
-        )
 
     derivative_id = str(uuid4())
-    now = utc_now()
     content_digest = _derivative_content_digest(payload.content)
     with open_sqlite_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        now = utc_now()
         _require_workspace(connection, payload.workspace_id)
+        resolved_sources = [
+            _resolve_source_snapshot_and_label_in_connection(
+                connection,
+                payload.workspace_id,
+                ref,
+            )
+            for ref in payload.source_refs
+        ]
+        source_digests = {
+            snapshot.subject_ref: snapshot.content_digest
+            for snapshot, _ in resolved_sources
+        }
+        source_levels = [
+            _effective_level_for_bound_snapshot(snapshot, label)
+            for snapshot, label in resolved_sources
+        ]
+        if (
+            "S4" in source_levels
+            and _LEVEL_RANK[payload.effective_level] > _LEVEL_RANK["S1"]
+        ):
+            raise SensitivityPolicyError(
+                "A derivative of an S4 source may be declared only S0 or S1."
+            )
+
         connection.execute(
             """
             INSERT INTO sanitized_derivatives (
@@ -296,8 +306,17 @@ def create_sanitized_derivative(
                 "policy_version": POLICY_VERSION,
             },
         )
+        inserted = connection.execute(
+            """
+            SELECT * FROM sanitized_derivatives
+            WHERE id = ? AND workspace_id = ?
+            """,
+            (derivative_id, payload.workspace_id),
+        ).fetchone()
         connection.commit()
-    return get_sanitized_derivative(payload.workspace_id, derivative_id)
+    if inserted is None:
+        raise RuntimeError("Sanitized derivative disappeared after creation")
+    return _derivative_read(inserted)
 
 
 def approve_sanitized_derivative(
@@ -729,7 +748,7 @@ def _candidate_for_snapshot_in_connection(
     effective_level = (
         _max_level(label.level, floor)
         if label_current
-        else "unknown"
+        else floor or "unknown"
     )
     if label_current and _is_external_eligible(effective_level):
         return (
@@ -885,16 +904,6 @@ def _approved_derivative_for_source_in_connection(
             continue
         return derivative, ineligible
     return None, ineligible
-
-
-def _effective_source_level(snapshot: SourceSnapshot) -> str:
-    current_snapshot, label = _resolve_source_snapshot_and_label(
-        snapshot.workspace_id,
-        snapshot.subject_ref,
-    )
-    if current_snapshot.content_digest != snapshot.content_digest:
-        return "S4"
-    return _effective_level_for_bound_snapshot(current_snapshot, label)
 
 
 def _derivative_stale_reason_in_connection(
