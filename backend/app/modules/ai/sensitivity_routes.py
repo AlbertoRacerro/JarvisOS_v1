@@ -28,6 +28,12 @@ from app.modules.ai.sensitivity_models import (
 router = APIRouter(prefix="/ai/sensitivity", tags=["ai-sensitivity"])
 
 
+def _preview_value_error(exc: ValueError) -> HTTPException:
+    if str(exc) == "Workspace not found.":
+        return HTTPException(status_code=404, detail=str(exc))
+    return HTTPException(status_code=422, detail=str(exc))
+
+
 @router.post(
     "/labels",
     response_model=SensitivityLabelRead,
@@ -166,8 +172,10 @@ def external_context_preview(
         )
     except SensitivityNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except (SensitivityPolicyError, ValueError) as exc:
+    except SensitivityPolicyError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise _preview_value_error(exc) from exc
 
 
 @router.post(
@@ -185,5 +193,7 @@ def manual_context_preview(
         )
     except SensitivityNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except (SensitivityPolicyError, ValueError) as exc:
+    except SensitivityPolicyError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise _preview_value_error(exc) from exc
