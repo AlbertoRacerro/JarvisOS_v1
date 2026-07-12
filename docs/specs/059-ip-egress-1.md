@@ -1,403 +1,409 @@
 # 059 — IP-EGRESS-1: sensitivity, retrieval, and external-boundary enforcement
 
-Status: ready after definition reconciliation; `docs/specs/STATUS.md` is authoritative.
+Status: ready after maintainer amendment; `docs/specs/STATUS.md` is authoritative.
 
 Depends on: 003, 015, 018, 021, 040, 042
 
+## Binding maintainer amendment — 2026-07-12
+
+This definition supersedes the earlier assumption that every external provider call
+requires human confirmation. JarvisOS will normally use external providers through
+a server-owned policy autopilot. Human confirmation is exceptional and occurs only
+when a configured trigger fires.
+
+The maintainer explicitly accepts the residual risk that an automatically sanitized
+S2/S3-derived representation may still retain some project-specific information.
+Prototype velocity takes priority over exhaustive IP protection. This accepted risk
+changes policy defaults and ceremony, not the execution-spine mechanics.
+
+The amendment does not weaken these invariants:
+
+- every provider call passes through `run_ai_task` and writes an `ai_jobs` row;
+- models, frontend code, and request fields may recommend but never authorize a
+  provider route, budget, permission, sensitivity downgrade, or state change;
+- exact packet construction, policy decisions, provider/model binding, and fallback
+  checks are server-owned;
+- safe defaults remain paid AI disabled, budget zero, and fake provider;
+- `route_class="auto"` remains local-only; policy autopilot resolves an explicit
+  external route before execution;
+- S4 and secret-bearing content never leaves JarvisOS;
+- monthly hard-budget denial cannot be confirmed away.
+
+Spec 059a was merged through PR #90 and is the unchanged substrate for this
+amendment. In particular, external eligibility remains strictly effective S0/S1.
+059b must build on that rule rather than reopening or bypassing it.
+
 ## Goal
 
-Add one fail-closed, server-owned policy boundary that determines whether the
-**exact outbound packet** for an AI provider or future external tool may leave
-JarvisOS.
+Add one fail-closed, server-owned boundary that decides whether the **exact outbound
+packet** for an external provider may leave JarvisOS.
 
-The boundary must cover the current prompt, manual context, workspace/context-pack
-records, sanitized derivatives, target provider/model, explicit user confirmation,
-and provenance. It must run immediately before every concrete external provider
-attempt, including each fallback, while preserving the independent budget and
-credential gate from spec 021.
+The normal path is:
 
-After 059, real BlueRev project data may be dogfooded only when its sensitivity
-and provenance are known and the outbound packet satisfies this contract. A model,
-request body, route label, caller-supplied `confirmed` flag, or provider response
-cannot authorize egress or lower sensitivity.
+1. select the minimum necessary context;
+2. classify current sources using the merged 059a labels, derivatives, floors, and
+   stale-state rules;
+3. automatically sanitize eligible S2/S3/unknown sources locally;
+4. require the resulting outbound representation to be effectively S0 or S1;
+5. construct and digest the exact packet;
+6. apply egress, projected-economic, credential, provider, and trigger policy;
+7. silently allow the packet when no configured confirmation trigger fires;
+8. execute through the shared spine and record the decision and call.
+
+The boundary runs immediately before every concrete provider attempt, including
+each fallback. A model, route label, request body, caller-supplied confirmation flag,
+or provider response cannot authorize egress or lower sensitivity.
 
 ## Current runtime facts that bind this definition
 
-1. `run_ai_task` is the shared provider execution spine. It resolves concrete
-   bindings and currently calls `adapter.complete(...)` after route/config and
-   budget checks.
-2. `evaluate_alpha_execution_gate(...)` in `ai/budget.py` governs provider,
-   credential, usage, and cost state. It intentionally does not govern IP,
-   retrieval, redaction, or confirmation.
-3. `AITaskRunRequest` permits a caller to select an explicit external route and
-   attach arbitrary `context_blocks`. The current block schema contains only
-   `source`, `content`, `type`, and `id`; it carries no authoritative sensitivity
-   or provenance binding.
-4. `build_workspace_context_bundle` and the context-pack preview select accepted
-   project records deterministically but do not filter them by sensitivity.
-5. Domain Foundation and MemoryStore records have no persisted sensitivity label.
-   Existing rows therefore cannot be assumed public or internal.
-6. `AIRequest.privacy_class` and model `allowed_privacy_classes` exist as contract
-   fields, but the execution spine currently creates requests without an
-   authoritative final privacy class.
-7. Auto classification sensitivity is advisory. Deterministic hard overrides and
-   JarvisOS policy remain authoritative.
-8. The current escalation-confirm endpoint accepts a client-supplied proposal
-   object and directly reuses its `outbound_text`, route, and token limit. This is
-   not an authorization boundary: 059 must replace it with a server-loaded,
-   digest-bound, single-use confirmation ticket.
-9. No production external-tool execution path exists today. The shared egress
-   operation enum must deny unsupported external-tool operations by default; 059
-   must not invent a tool runtime.
-10. Conversation history runtime is not yet implemented. Future history/chat must
-    enter through the same context-source and egress-packet contracts rather than
-    creating a parallel path.
+1. `run_ai_task` is the shared provider execution spine.
+2. `evaluate_alpha_execution_gate(...)` governs provider, credential, usage, and
+   cost state but does not own IP sensitivity, sanitization, exact-packet binding,
+   or confirmation-ticket integrity.
+3. Explicit external routes and manual context currently lack one final exact-packet
+   egress decision immediately before adapter invocation.
+4. The merged 059a implementation provides digest-bound labels and derivatives,
+   deterministic floors, stale handling, sensitivity-aware selection, and
+   read-only included/withheld previews.
+5. 059a permits only effective S0/S1 records or derivatives in external previews.
+   Approved S2 derivatives remain internal-only.
+6. Auto sensitivity classification remains advisory. Deterministic policy is
+   authoritative.
+7. The legacy escalation-confirm path accepts client-supplied outbound text, route,
+   and token metadata. 059b must replace this trust with server-loaded packet state.
+8. Unsupported external-tool operations deny by default; 059 does not create an
+   external-tool runtime.
+9. Conversation history is not yet a separate authority or egress path. Future
+   history must enter through the same context and packet contracts.
 
 ## Canonical sensitivity taxonomy
 
-059 maps the existing privacy vocabulary onto one persisted five-level scale:
+| Level | Existing meaning | Raw external rule |
+| --- | --- | --- |
+| `S0` | public | eligible for silent policy allow when all other gates pass and no trigger fires |
+| `S1` | internal/non-proprietary | eligible for silent policy allow when all other gates pass and no trigger fires |
+| `S2` | confidential/private project material | raw denied; derivative path only; final external representation must be S0/S1 |
+| `S3` | proprietary or sensitive IP | raw denied; derivative path only; final external representation must be S0/S1 |
+| `S4` | credentials, private keys, tokens, passwords, equivalent secret material | deny always; no confirmation override |
 
-| Level | Existing meaning | Examples | Raw external rule |
-| --- | --- | --- | --- |
-| `S0` | `public` | published literature, public standards excerpts, synthetic smoke data | eligible after ordinary external confirmation and all other gates |
-| `S1` | `internal` | non-proprietary working notes, generic code, ordinary internal task text | eligible after ordinary external confirmation and all other gates |
-| `S2` | `confidential` | private project planning or partner/internal material that can be safely abstracted | raw denied; an approved `S2` derivative remains internal-only, and only an approved derivative with effective level `S0` or `S1` may be external-eligible |
-| `S3` | `sensitive_ip` | proprietary BlueRev geometry, correlations, process parameters, unpublished design decisions | raw denied; only a separately reviewed derivative with effective level `S0` or `S1` may be external-eligible |
-| `S4` | `secret` | credentials, private keys, tokens, passwords, secret material | raw denied; a derivative may be eligible only when no secret-bearing content survives and its effective level is `S0` or `S1` |
-
-`unknown` is not a sixth permissive level. It is a fail-closed state for external
-use and is treated at least as restrictive as `S3` until a human-reviewed label or
-approved derivative resolves it.
+`unknown` is not a permissive sixth level. It is treated at least as restrictive as
+S3 for raw egress and enters the local sanitization/review path. It is never sent
+raw.
 
 ### Final-level rules
 
-- JarvisOS computes one final level as the most restrictive applicable signal.
-- Deterministic secret/credential detection floors to `S4`.
-- Explicit proprietary BlueRev/IP markers floor to `S3`.
-- Explicit private/confidential project markers floor to `S2`.
-- A local-model hint may raise the floor but can never lower it or authorize
-  external use. Low-confidence or failed classification remains `unknown` where
-  no deterministic level is available.
-- Caller-supplied labels may raise sensitivity but cannot lower a server-owned
-  record label or make an unlabeled manual block external-eligible.
-- In `STRICT_IP`, an otherwise unclassified raw prompt is `unknown`, not `S1`.
-- In `FAST_DEV`, a bounded prompt with no project/manual context and no hard
-  marker may retain the existing pragmatic `S1` default. This exception never
-  labels project records and never applies to attached/manual context.
+- JarvisOS computes the most restrictive applicable level.
+- Deterministic credential/secret evidence floors to S4.
+- Explicit proprietary/IP evidence floors to S3.
+- Explicit private/confidential evidence floors to S2.
+- Model hints and caller labels may raise but never lower the final level.
+- Missing, stale, malformed, or policy-version-mismatched authority becomes
+  `unknown` for external use.
+- A source once classified S2/S3/S4 cannot be downgraded in place; a lower-level
+  representation is a separate derivative with immutable provenance.
+- `STRICT_IP` retains fail-closed unknown handling.
+- `FAST_DEV` may retain the existing bounded S1 default only for ordinary prompt
+  text with no attached project/manual context and no hard marker.
 - `DISABLED` continues to deny AI execution.
 
-## Policy-owned labels
+## 059a substrate: labels and derivatives
 
-Add an additive sidecar label store rather than duplicating a sensitivity column
-across every record table.
+059a is merged and remains authoritative for:
 
-A label binds:
+- normalized `<kind>:<id>` subject references;
+- labels bound to workspace, source content digest, level, policy version,
+  classification source, actor/reviewer, timestamp, and prior-label chain;
+- deterministic floors and causal latest-label resolution;
+- immutable derivative identity, source references/digests, content digest,
+  effective level, transformations, reviewer, policy version, and lifecycle state;
+- stale/revoked/source-missing/policy-mismatch behavior;
+- coherent SQLite read snapshots for selection and eligibility;
+- read-only preview and ordinary derivative reads;
+- explicit revalidation for persisted stale transitions;
+- effective S0/S1-only external preview eligibility.
 
-- normalized subject reference `<kind>:<id>`;
-- workspace id;
-- `S0`–`S4` level;
-- canonical digest of the labelled content;
-- classification source (`human`, `deterministic_floor`, `import`, or
-  `sanitized_derivative`);
-- policy version;
-- reviewer/actor and timestamps;
-- optional prior label id for audit.
+The derivative `reviewer` field is an actor/provenance field. A value such as
+`policy-sanitizer-vN` is valid for an automatically approved derivative and binds
+the exact sanitizer policy/version; it need not identify a human.
 
-Binding to the content digest is mandatory. If the source record changes, the old
-label becomes stale and that source is `unknown` for external use until relabelled.
-Missing labels on legacy rows are `unknown`; the migration must not mass-label old
-records as public/internal.
+## Automatic sanitization
 
-A human may classify an unlabeled/unknown record. Once a source is labelled `S2`,
-`S3`, or `S4`, that source record may not be downgraded in place. A lower-level
-representation must be a new sanitized derivative preserving the original source
-reference and digest.
+S2, S3, and `unknown` sources may become external-eligible only through a
+provenance-preserving local pipeline:
 
-## Sanitized derivatives
+1. load current source content and 059a authority in one coherent read snapshot;
+2. apply deterministic floors and context minimization;
+3. locally rewrite, abstract, redact, or summarize;
+4. run deterministic secret and IP scans before and after rewriting;
+5. recompute content digest and effective level;
+6. persist source digests, sanitizer/model/config version, transformations,
+   `reviewer = policy-sanitizer-vN`, approval state, and policy version;
+7. fail closed on malformed output, stale source, missing provenance, scan failure,
+   S4 evidence, or any final level above S1.
 
-059 does not claim automatic semantic redaction. The first implementation accepts
-operator-reviewed sanitized text and validates deterministic structural rules.
-No model-generated derivative is trusted or promoted automatically.
+Raw S2/S3/unknown never enters an external packet. S4 does not use this external
+eligibility path.
 
-Each derivative stores:
+An effectively S0/S1 derivative may be auto-approved and may follow silent
+policy autopilot. A result that remains S2/S3 is **not** externally eligible and
+cannot be made eligible by confirmation. It invokes trigger `t3`, which pauses for
+review, requires another sanitization pass, or remains local. This preserves the
+merged 059a contract while implementing the maintainer's sampled-review posture.
 
-- immutable derivative id and workspace id;
-- source references and source content digests;
-- sanitized content and its digest;
-- declared effective `S0`–`S2` level;
-- deterministic sanitizer/policy version;
-- transformations/redactions summary;
-- reviewer/actor and review timestamp;
-- status (`draft`, `approved`, `revoked`, `stale`);
-- stale/revoked reason where applicable.
+Deterministic scans are guardrails, not proof of semantic IP removal.
 
-Rules:
+## Sampled human audit
 
-1. Source records are never overwritten or relabelled downward.
-2. Every source digest must still match when the derivative is used.
-3. Structural-secret scanning runs on the derivative and fails closed.
-4. A derivative of an `S4` source can be approved only as `S0` or `S1`.
-5. An approved derivative may still be raised by deterministic floors.
-6. Any source change, policy-version mismatch, revocation, or missing source makes
-   the derivative unusable for egress.
-7. Approval is a human authority event; schema validity or model output is not
-   evidence that redaction is complete.
-8. Only effective `S0` and `S1` derivatives are external-eligible. An approved
-   effective `S2` derivative is a reviewable internal artifact and must be withheld
-   from automatic and manual external previews.
+Human review is sampled rather than required for every automatically approved
+derivative:
 
-## Context selection and preview contract
+- default sample: 5% of auto-approved derivatives per calendar week;
+- selection, sample cohort, and policy version are deterministic and auditable;
+- sampled rejection revokes the derivative, logs a sanitizer failure, and blocks
+  reuse;
+- policy may increase sampling or require full review by workspace, provider family,
+  task kind, recent failure window, or explicit `ask_me` preference;
+- reducing the default below 5% requires a separate maintainer decision.
 
-Sensitivity enforcement occurs **before content is serialized into an outbound
-prompt**.
+## Context minimization
 
-The context builder must produce two manifests:
+- Never place an entire workspace, conversation archive, vault, or corpus in one
+  packet.
+- Every block carries server-owned source/derivative identity and digest.
+- Configuration defines fail-closed per-packet count and serialized-size caps for
+  blocks derived from S2/S3/unknown sources.
+- Explicit IDs, model requests, and task requests never bypass these caps.
+- Sensitivity withholding and policy caps occur before serialization.
+- Token-budget truncation occurs afterward, with withheld, sanitizer-failed,
+  policy-capped, and budget-dropped reasons kept distinct.
+- Packet manifests partition outbound blocks and preserve derivative `source_refs`;
+  they are not assumed to map one-to-one to selected raw rows.
 
-- included sources: source ref, content digest, effective level, label/derivative
-  id, and inclusion reason;
-- withheld sources: source ref, effective level or `unknown`, and deterministic
-  exclusion reason, without returning withheld content.
-
-For local-only execution, current legacy blocks remain usable, but their missing
-policy metadata is explicit. For external eligibility:
-
-- a workspace record requires a current digest-bound label or an approved
-  derivative;
-- only effective `S0` or `S1` raw records and derivatives may be included;
-- an approved `S2` derivative is withheld even when its source digests and review
-  state are current;
-- a caller-supplied manual block is `unknown` and external-ineligible unless it
-  references a server-owned approved derivative with an exact digest match;
-- explicit record ids bypass status filters as in spec 042, but never bypass
-  sensitivity filtering;
-- budget truncation happens after sensitivity withholding so dropped and withheld
-  counts/reasons remain distinct;
-- the preview endpoint is read-only, invokes no model/provider, writes no AI job,
-  and never exposes withheld content;
-- context digests and source manifests cover only the exact included packet.
+Provider-family diversification is a separate planned follow-up. It may route
+families of derived content across provider accounts, but it may not weaken packet,
+budget, sensitivity, or audit gates.
 
 ## Exact outbound packet
 
-Before any network attempt, JarvisOS constructs one canonical `EgressPacket` from:
+Before any network attempt, JarvisOS constructs one canonical `EgressPacket`
+containing at least:
 
-- current user prompt or approved prompt derivative;
-- included context blocks;
-- included/withheld source manifests;
-- target route, concrete provider id, and model id;
-- task kind and token limit;
-- policy version and sensitivity decision ids;
-- derivative ids where used.
+- exact user prompt or approved prompt derivative;
+- exact included context blocks;
+- included, withheld, sanitizer-failed, policy-capped, and budget-dropped manifests;
+- source/derivative IDs and current digests;
+- explicit route and concrete provider/model binding;
+- task kind and server-sized token limit;
+- sensitivity, sanitizer, trigger, and policy versions;
+- final effective level.
 
-The packet has a canonical SHA-256 digest. Confirmation and execution bind to this
-exact digest. Any change to prompt, context, provider/model, route, token cap,
-source digest, derivative, or policy version invalidates the confirmation.
+The packet has a canonical SHA-256 digest. Any change to content, source state,
+derivative, route, provider/model, token sizing, policy version, or trigger state
+creates a new digest and invalidates any prior decision or ticket.
 
-Raw `S2`, raw `S3`, raw `S4`, effective `S2` derivatives, and `unknown` content must
-never be placed in an externally eligible packet. Logging uses digests and safe
-metadata only.
+Raw S2/S3/S4, unknown content, effective S2/S3 derivatives, and secret-bearing
+content must never be serialized into an externally eligible packet. Logs contain
+digests and safe metadata only.
 
 ## Egress decision
 
-Add an immutable `EgressDecision` containing at least:
+Add an immutable, server-owned `EgressDecision` containing at least:
 
-- `allowed`;
+- result (`allow`, `deny`, or `pause`);
 - deterministic reason code;
 - operation (`external_provider_call`; unsupported operations deny);
-- route class, provider id, and model id;
+- explicit route, concrete provider ID, and model ID;
 - prompt level, maximum context level, and final effective level;
 - packet digest;
-- included, withheld, and derivative source counts;
-- policy version;
-- confirmation requirement and confirmation/ticket id when present.
+- included, withheld, derivative, sanitizer-failed, and policy-capped counts;
+- policy/sanitizer/trigger versions;
+- confirmation requirement, trigger IDs, and ticket ID where present.
 
-The decision is server-owned. Request models must continue rejecting
-self-authorization fields.
+For every concrete network binding, including every fallback, `run_ai_task` must
+require both:
 
-For every concrete network binding, `run_ai_task` must require both:
+1. a current projected economic/provider/credential approval; and
+2. an allowed exact-packet egress decision for that concrete provider/model.
 
-1. the existing alpha/budget decision from spec 021; and
-2. an allowed 059 egress decision for the exact packet and concrete provider/model.
+Approval for one binding does not authorize another. Fallbacks are independently
+reconstructed and re-evaluated.
 
-Both checks run again for each fallback. Approval for provider A does not authorize
-provider B unless the ticket explicitly binds the fallback target and exact packet;
-the preferred implementation issues one ticket whose allowed target set is fixed
-at proposal time and checks each attempted binding against it.
+## Policy autopilot
 
-A non-network fixture binding remains offline, but local execution still receives
-the final sensitivity metadata and must never treat `S4` as ordinary model input.
+A packet whose included blocks are all effectively S0/S1 receives a silent
+server-owned `allow` when all other gates pass and no confirmation trigger fires.
+Silent allows still write decision and execution ledger rows; they create no
+confirmation ticket.
+
+The trigger list is configuration data, not scattered code constants:
+
+| ID | Trigger | Required behavior |
+| --- | --- | --- |
+| `t1` | first use of a provider/model pair | exact-packet confirmation |
+| `t2` | projected call crosses the daily spend soft threshold | exact-packet confirmation; monthly hard budget remains final |
+| `t3` | sanitization pipeline failure or deterministic S2/S3/S4 floor on sanitized output | pause and create review/resanitization work; no externally eligible packet exists until the final output is S0/S1 |
+| `t4` | unsupported or unknown egress operation | deny; confirmation cannot invent a runtime |
+| `t5` | explicit per-workspace `ask_me` flag | exact-packet confirmation for an otherwise eligible S0/S1 packet |
+
+Unknown, missing, or malformed trigger configuration fails closed. S4, monthly
+hard-budget exhaustion, missing credentials, stale provenance, final level above
+S1, and unsupported mechanics are non-confirmable denials or pauses.
 
 ## Confirmation and replay prevention
 
-Replace client-trusted proposal execution with a server-owned ticket lifecycle:
+A single-use confirmation ticket exists only when an otherwise eligible packet
+triggers `t1`, `t2`, or `t5` (or another future explicitly configured confirmable
+trigger approved by a later spec).
 
-1. Proposal creation stores an exact externally eligible packet, packet digest,
-   allowed route/provider targets, effective level, policy version, proposal AI job
-   id, and expiry.
-2. The client receives only safe proposal metadata plus ticket id and digest.
-3. Confirmation identifies the ticket; the server reloads it and validates status,
-   expiry, packet digest, current source/derivative digests, policy version, target,
-   and current budget/credential state.
-4. Confirmation creates or marks one `allow_once` authorization.
-5. The execution spine atomically consumes it before the adapter call. A failed
-   provider call still consumes the ticket; retry/fallback is allowed only within
-   the ticket's pre-bound target set during that execution.
-6. Replay, altered route, altered payload, expired ticket, revoked derivative, or
-   already-consumed ticket fails closed with zero adapter calls.
-7. Raw proposal payload is retained locally only for a bounded TTL and only when
-   its effective level is `S0`–`S2`. After consumption/expiry, payload content is
-   cleared while digest/audit metadata remains. SQLite deletion is not represented
-   as forensic secure erase.
+The lifecycle is:
 
-The legacy confirm request may be accepted temporarily for compatibility only if
-all client-supplied route/text/token fields are ignored and execution is rebuilt
-from a valid server ticket. Otherwise the legacy shape must be rejected.
+1. proposal creation stores the exact eligible packet, packet digest, fixed target
+   set, trigger IDs, source/derivative digests, policy versions, proposal AI job ID,
+   and expiry;
+2. the client receives only safe metadata, ticket ID, and packet digest;
+3. confirmation identifies the ticket; the server reloads all authoritative state;
+4. current source/derivative digests, policy, target, credential, and projected
+   budget state are revalidated;
+5. one `allow_once` authorization is atomically consumed immediately before the
+   adapter call;
+6. provider failure still consumes it;
+7. replay, mutation, expiry, revocation, staleness, target mismatch, or policy drift
+   yields zero adapter calls.
+
+The legacy confirmation request may remain temporarily only as an identifier
+carrier. Client-supplied text, route, provider, model, token, digest, and boolean
+confirmation fields are ignored or rejected.
 
 ## Ledger and provenance
 
-No prompt, source content, secret, or sanitized body is added to `ai_jobs`.
-The ledger records safe metadata:
+No prompt, source body, derivative body, credential, or authorization header is
+added to `ai_jobs` or events.
 
-- egress decision id and policy version;
-- packet digest;
+Safe metadata includes:
+
+- egress decision and ticket IDs;
+- packet and derivative digests;
 - effective level;
-- included/withheld/derivative counts;
-- ticket id and consumption state;
-- deterministic deny reason;
-- concrete provider/model and fallback attempt index.
+- source/manifests counts;
+- sanitizer, policy, sampling, and trigger versions;
+- deterministic allow/deny/pause reason;
+- concrete provider/model and fallback-attempt index;
+- bounded usage/cost fields.
 
-Sanitized derivatives and policy labels retain their own provenance records.
-A denied request writes a normal pre-provider ledger row and makes zero network
-adapter calls.
+A denied or paused request writes a normal pre-provider ledger row and makes zero
+network adapter calls.
 
 ## Delivery split
 
-059 is intentionally split into two implementation PRs after this definition PR.
+### 059a — sensitivity and context foundation
 
-### 059-A — sensitivity and context foundation
+Merged through PR #90. It owns labels, derivatives, deterministic floors,
+staleness, coherent context selection, read-only preview, and S0/S1-only external
+eligibility. This amendment does not modify that implementation.
 
-- additive schema migration for policy labels and sanitized derivatives;
-- services/models for digest-bound labels and approved derivatives;
-- deterministic sensitivity floors and stale-label handling;
-- sensitivity-aware context selection and preview manifests;
-- tests for legacy unknown defaults, digest staleness, withholding, derivative
-  provenance, and zero provider calls.
+### 059b — policy autopilot and execution enforcement
 
-059-A must not alter `adapter.complete(...)`, confirmation semantics, or provider
-execution.
+After this definition amendment is merged and its ADR is reconciled, 059b owns:
 
-### 059-B — packet, ticket, and execution enforcement
+- automatic sanitizer orchestration;
+- sampled human-audit queue and revocation behavior;
+- S2/S3/unknown-derived packet caps;
+- canonical packet and immutable decision;
+- silent S0/S1 allow;
+- configured trigger evaluation;
+- single-use tickets for confirmable triggers;
+- projected economic re-checks;
+- removal of client-trusted escalation data;
+- per-fallback spine enforcement;
+- safe ledger evidence and mutation-resistant tests.
 
-- canonical `EgressPacket` and immutable `EgressDecision`;
-- server-owned expiring single-use egress tickets;
-- ID/digest-bound escalation confirmation;
-- execution-spine and per-fallback enforcement immediately before adapters;
-- safe ledger metadata and replay prevention;
-- mutation-resistant integration tests proving zero adapter calls on every denial.
-
-059-B depends on merged 059-A.
+059b follows the normal backlog row → kernel/full-spec → implementation ladder.
 
 ## Files expected to change
 
-Verify paths against `master`; do not create parallel gateways or stores.
+Verify paths against current `master`; do not create parallel gateways or stores.
+Likely 059b surface:
 
-Likely 059-A surface:
-
-- `backend/app/core/schema.py`;
-- a bounded policy module under `backend/app/modules/ai/`;
-- `backend/app/modules/ai/context_builder.py`;
-- `backend/app/modules/ai/models.py` and `routes.py` only for label/derivative and
-  preview contracts;
-- Domain Foundation/MemoryStore read helpers only as needed for normalized
-  `<kind>:<id>` resolution;
-- focused tests and one implementation report.
-
-Likely 059-B surface:
-
-- the same bounded policy module;
+- one bounded egress-policy module under `backend/app/modules/ai/`;
+- the existing 059a sensitivity/derivative services only through public contracts;
 - `backend/app/modules/ai/execution.py`;
 - `backend/app/modules/ai/escalations.py`;
-- `backend/app/modules/ai/models.py` and `routes.py`;
-- `backend/app/modules/ai/routing/bridge.py` only for proposal metadata, never as
-  the authoritative final gate;
+- `backend/app/modules/ai/budget.py` for projected-call checks;
+- AI request/response models and routes for safe decision/ticket contracts;
+- `backend/app/modules/ai/routing/bridge.py` only for advisory proposal metadata;
 - focused tests and one implementation report.
 
-Provider adapters, BLUECAD product callers, frontend, corpus PRs, and unrelated
-runner/solver code should remain unchanged unless a concrete integration test
-proves a shared-spine defect.
+Provider adapters, BLUECAD product callers, frontend, conversation runtime, vector
+stores, worker infrastructure, and unrelated runner/solver code remain unchanged
+unless a concrete shared-spine defect requires a bounded correction.
 
-## Required tests
+## Required 059b tests
 
-### 059-A
-
-- legacy unlabeled records are `unknown` for external selection;
-- human initial classification is audited and digest-bound;
-- source mutation makes a label/derivative stale;
-- an `S2`/`S3`/`S4` source cannot be downgraded in place;
-- approved derivative preserves source refs/digests and passes secret scanning;
-- `S4` derivative cannot be approved above `S1`;
-- explicit ids do not bypass sensitivity withholding;
-- manual blocks cannot self-declare an external-safe level;
-- preview returns included and withheld manifests but no withheld content;
-- local preview/build behavior remains deterministic and makes zero provider calls.
-
-### 059-B
-
-- direct explicit external route without a ticket makes zero adapter calls;
-- unsupported egress operation, missing policy context, unknown level, raw `S2`,
-  raw `S3`, and raw `S4` fail closed;
-- approved derivative packet can be proposed but not executed before confirmation;
-- client mutation of text, route, target, tokens, or digest is ignored/rejected;
-- expired, revoked, stale, mismatched, and consumed tickets make zero adapter calls;
+- S0/S1 no-trigger packet silently allows and creates no ticket;
+- each trigger is configuration-driven and independently tested;
+- missing/malformed policy or trigger configuration fails closed;
+- raw S2/S3/unknown/S4 makes zero adapter calls;
+- final effective S2/S3 derivative makes zero adapter calls even after human
+  confirmation input;
+- automatic derivative preserves source digest and sanitizer provenance;
+- default weekly 5% sampling is deterministic and auditable;
+- sampled rejection revokes and blocks derivative reuse;
+- S2/S3/unknown-derived count and size caps apply before serialization;
+- client mutation of text, route, target, token, digest, or confirmation fails;
+- projected daily/monthly/provider limits are checked before every attempt;
+- monthly hard budget and S4 cannot be overridden;
+- expired, stale, revoked, mismatched, and consumed tickets make zero calls;
 - one confirmation is consumed exactly once, including after provider error;
-- fallback providers are independently checked against the ticket target set and
-  current alpha/budget state;
-- removal of the egress-gate call from the execution spine makes an integration
-  test fail;
-- local non-network fixtures remain testable and `S4` is not sent to a local model;
+- fallbacks receive independent packet, trigger, credential, and economic checks;
+- removing the egress hook from the shared spine makes an integration test fail;
 - ledger rows contain only safe metadata and deterministic reason codes;
-- all existing provider, Auto, context-pack, MemoryStore, BLUECAD, and full backend
-  tests remain green.
+- existing provider, Auto, context, MemoryStore, BLUECAD, Ruff, and full backend
+  suites remain green.
 
 ## Stop conditions
 
-Stop and amend this definition rather than weakening the boundary if:
+Stop and amend rather than weaken this definition if:
 
-- labels cannot be bound to a stable digest of the content actually retrieved;
-- sensitivity filtering can occur only after withheld content has already entered
-  the outbound prompt;
-- any network adapter can be called outside the shared execution spine;
-- fallback execution can reuse approval for an unbound provider/model;
-- confirmation requires trusting client-supplied outbound text or route data;
-- a ticket cannot be consumed atomically enough to prevent ordinary replay;
-- raw `S2`/`S3`/`S4`/`unknown` content must be persisted in an egress proposal to make
-  the flow work;
-- the implementation requires automatic semantic redaction or claims that a
-  deterministic secret scan proves IP removal;
-- legacy records must be silently labelled public/internal;
-- a model hint becomes final sensitivity or permission authority;
-- implementation requires a second provider gateway, second MemoryStore, external
-  tool runtime, conversation system, vector database, frontend, or provider SDK.
+- exact content cannot be digest-bound;
+- selection and eligibility cannot share a coherent authority snapshot;
+- raw S2/S3/S4/unknown or final effective S2/S3 derivatives must enter an external
+  packet;
+- sanitizer provenance cannot be preserved;
+- silent allow can occur above S1;
+- trigger, cap, or sampling policy must be scattered code constants;
+- a fallback can reuse an unbound decision;
+- client-supplied outbound text, route, provider, token, or confirmation must be
+  trusted;
+- a provider can bypass the shared execution spine;
+- S4 or monthly hard-budget denial must become confirmable;
+- the design requires a second gateway, MemoryStore, sensitivity store, vector
+  database, worker, streaming layer, DAG orchestrator, external-tool runtime, or
+  frontend redesign.
 
 ## Non-goals
 
-- No automatic semantic redaction or model-approved downgrade.
-- No vector retrieval, embeddings, LLM reranking, or conversation history runtime.
+- No modification or reopening of merged 059a runtime.
+- No claim that deterministic scans prove semantic IP removal.
+- No S4 or final-S2/S3 confirmation override.
+- No provider/model addition or live-provider test.
+- No vector retrieval, conversation runtime, worker process, SSE streaming, or DAG
+  orchestration.
 - No external-tool execution runtime.
-- No provider/model addition and no live provider calls in tests.
-- No frontend settings or proposal-review UI.
-- No encryption-at-rest claim or forensic secure-delete claim.
-- No automatic relabelling of the existing database.
-- No change to local CAD, mesh, FEM, runner, promotion, or engineering authority.
+- No automatic canonical record promotion.
+- No encryption-at-rest or forensic secure-delete claim.
+- No local CAD, mesh, FEM, runner, or engineering-authority change.
 
 ## Acceptance criteria
 
-1. The definition PR is docs/registry/report only and receives Codex review before
-   maintainer merge.
-2. 059-A and 059-B are separate implementation PRs.
-3. Each implementation PR has green focused tests, full backend Pytest, Ruff, and
-   any applicable existing BLUECAD proof.
-4. Each implementation PR receives a completed Codex review whose findings are
-   read and resolved or explicitly dispositioned before merge.
-5. No implementation PR is self-merged; human merge authority remains final.
-6. After 059-B, deleting or bypassing the egress check permits no green test suite.
-7. Real BlueRev IP/cloud dogfood remains blocked until both slices are merged.
+1. This amendment PR changes docs, registry, and report only.
+2. The maintainer's residual-risk acceptance and sampled-audit rationale are
+   explicit.
+3. Merged 059a remains unchanged and authoritative.
+4. Silent autopilot is restricted to exact effective S0/S1 packets.
+5. Confirmation cannot authorize S4, monthly hard-budget denial, unsupported
+   mechanics, stale authority, or a final level above S1.
+6. 059b follows the normal registry ladder before runtime work.
+7. 059b implementation requires executing green CI, focused tests, full backend
+   Pytest, Ruff, applicable BLUECAD proof, completed review, and human merge
+   authority.
+8. Real BlueRev external dogfood remains blocked until 059b is merged and active.
