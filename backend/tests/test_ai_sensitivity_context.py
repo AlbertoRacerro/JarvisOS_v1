@@ -18,7 +18,6 @@ from app.modules.ai.sensitivity import (
     create_sensitivity_label,
     deterministic_floor,
     get_current_sensitivity_label,
-    get_sanitized_derivative,
     preview_manual_context,
     revalidate_sanitized_derivative,
 )
