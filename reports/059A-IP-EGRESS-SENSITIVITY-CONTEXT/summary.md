@@ -21,9 +21,12 @@ spine; those remain owned by 059b.
 - S2-S4 source records are never modified to create an external-safe form;
 - sanitized derivatives preserve source refs, source digests, transformations,
   policy version, reviewer state, and their own content digest;
-- source and latest-label reads used for authorization share one SQLite read
-  transaction, and preview withholds an already-selected block when its digest no
-  longer matches the current source snapshot;
+- only effective `S0` and `S1` raw records or derivatives may enter external or
+  manual previews; approved `S2` derivatives remain internal review artifacts and
+  are withheld with an explicit reason;
+- source selection, current source state, and latest-label reads used for
+  authorization must share one SQLite read transaction, including status, query,
+  and evidence-verdict predicates;
 - approved derivatives are revalidated against source digests and current source
   levels, including S4 relabels without content changes;
 - external and manual previews compute staleness without mutating derivative or
@@ -36,6 +39,8 @@ spine; those remain owned by 059b.
   withheld, and budget-dropped manifests separately;
 - an approved derivative inherits the highest context priority of the source kinds
   it replaces instead of falling through to priority zero;
+- multi-source derivatives replace their complete source set atomically and
+  overlapping derivatives are not combined into an ambiguous packet;
 - manual blocks cannot self-declare a sensitivity level or impersonate a modified
   server-owned derivative;
 - both preview routes fail closed with HTTP 404 for a missing workspace.
@@ -49,20 +54,20 @@ The early Codex review of commit `db2748f58e` raised one P1 and three P2 finding
 3. schema migration truth still identified 0008 as current after adding 0009;
 4. the sensitivity import block failed Ruff ordering.
 
-Those findings were fixed before the senior review. Claude Code then reviewed head
-`5f4ea9f` and reproduced additional defects in the route contract, stale lifecycle,
-audit ledger, GET mutation, budget priority, and route-level test coverage. The
-current branch addresses those findings with focused regressions. The budget fix
-uses source-kind priority inheritance rather than assigning every derivative an
-arbitrary decision-level priority.
+Those findings were fixed before the senior review. Subsequent senior and Claude
+reviews identified route-status drift, read mutation, causally incorrect label
+ordering, policy-version drift, derivative overlap, stale source deletion, dead
+connection-opening wrappers, and selection occurring outside the authorization
+snapshot. The current correction batch treats those as code defects rather than
+documentation-only risks.
 
-The review also identified a broader duplicated-selection/private-helper risk. That
-is documented for a shared public selector before 059b; it is not expanded into a
-large context-builder refactor inside this bounded 059a correction.
+The S2 policy ambiguity is resolved conservatively: S2 remains a valid persisted
+classification and derivative review level, but external eligibility is restricted
+to S0/S1. This rule is now explicit in both parent spec 059 and slice 059a.
 
 ## Added regression evidence
 
-The review-hardening test module covers:
+The sensitivity regression modules cover:
 
 - missing-workspace 404 behavior for external and manual previews;
 - stale draft approval persisting state and an audit event;
@@ -70,7 +75,13 @@ The review-hardening test module covers:
 - source-priority inheritance under budget pressure;
 - parity with the existing raw context-pack output for an eligible S1 record;
 - zero AI gateway/provider invocation during preview;
-- route-level 409 and 422 mappings.
+- route-level 409 and 422 mappings;
+- S2 derivative withholding in automatic and manual previews;
+- causal latest-label ordering with adversarial timestamps;
+- policy-version invalidation;
+- coherent read-snapshot behavior for selection and eligibility;
+- multi-source atomic replacement and overlap rejection;
+- source deletion during preview failing closed without a server error.
 
 ## Known infrastructure blocker
 
