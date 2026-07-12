@@ -65,6 +65,11 @@ The S2 policy ambiguity is resolved conservatively: S2 remains a valid persisted
 classification and derivative review level, but external eligibility is restricted
 to S0/S1. This rule is now explicit in both parent spec 059 and slice 059a.
 
+A later senior audit found two regressions encoding opposite deletion semantics.
+The obsolete fail-closed test was removed: once selection has started inside the
+read transaction, a concurrent source deletion is intentionally observed only by a
+later preview. The current preview remains bound to its coherent old SQLite snapshot.
+
 ## Added regression evidence
 
 The sensitivity regression modules cover:
@@ -79,9 +84,9 @@ The sensitivity regression modules cover:
 - S2 derivative withholding in automatic and manual previews;
 - causal latest-label ordering with adversarial timestamps;
 - policy-version invalidation;
-- coherent read-snapshot behavior for selection and eligibility;
-- multi-source atomic replacement and overlap rejection;
-- source deletion during preview failing closed without a server error.
+- coherent read-snapshot behavior for selection and eligibility, including
+  concurrent predicate changes and source deletion;
+- multi-source atomic replacement and overlap rejection.
 
 ## Known infrastructure blocker
 
