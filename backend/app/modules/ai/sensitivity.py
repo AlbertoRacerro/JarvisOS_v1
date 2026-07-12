@@ -39,6 +39,7 @@ from app.modules.modeling.service import select_context_records
 
 POLICY_VERSION = "ip-egress-v1"
 _LEVEL_RANK = {"S0": 0, "S1": 1, "S2": 2, "S3": 3, "S4": 4}
+_EXTERNAL_ELIGIBLE_LEVELS = {"S0", "S1"}
 _ALLOWED_SOURCE_KINDS = {"decision", "assumption", "parameter", "requirement", "evidence"}
 _SOURCE_TABLES = {
     "decision": "decisions",
@@ -115,6 +116,10 @@ def deterministic_floor(content: str) -> str | None:
     return None
 
 
+def _is_external_eligible(level: str) -> bool:
+    return level in _EXTERNAL_ELIGIBLE_LEVELS
+
+
 def resolve_source_snapshot(workspace_id: str, subject_ref: str) -> SourceSnapshot:
     snapshot, _ = _resolve_source_snapshot_and_label(workspace_id, subject_ref)
     return snapshot
@@ -122,10 +127,10 @@ def resolve_source_snapshot(workspace_id: str, subject_ref: str) -> SourceSnapsh
 
 def create_sensitivity_label(payload: SensitivityLabelCreate) -> SensitivityLabelRead:
     kind, record_id = _parse_subject_ref(payload.subject_ref)
-    now = utc_now()
     label_id = str(uuid4())
     with open_sqlite_connection() as connection:
         connection.execute("BEGIN IMMEDIATE")
+        now = utc_now()
         _require_workspace(connection, payload.workspace_id)
         row = connection.execute(
             f"SELECT * FROM {_SOURCE_TABLES[kind]} WHERE id = ? AND workspace_id = ?",
@@ -142,7 +147,7 @@ def create_sensitivity_label(payload: SensitivityLabelCreate) -> SensitivityLabe
             """
             SELECT * FROM sensitivity_labels
             WHERE workspace_id = ? AND subject_ref = ?
-            ORDER BY created_at DESC, id DESC LIMIT 1
+            ORDER BY rowid DESC LIMIT 1
             """,
             (payload.workspace_id, snapshot.subject_ref),
         ).fetchone()
@@ -288,11 +293,7 @@ def create_sanitized_derivative(
             },
         )
         connection.commit()
-    return get_sanitized_derivative(
-        payload.workspace_id,
-        derivative_id,
-        refresh=False,
-    )
+    return get_sanitized_derivative(payload.workspace_id, derivative_id)
 
 
 def approve_sanitized_derivative(
@@ -301,10 +302,10 @@ def approve_sanitized_derivative(
     *,
     reviewer_notes: str | None = None,
 ) -> SanitizedDerivativeRead:
-    now = utc_now()
     stale_error: str | None = None
     with open_sqlite_connection() as connection:
         connection.execute("BEGIN IMMEDIATE")
+        now = utc_now()
         _require_workspace(connection, workspace_id)
         row = connection.execute(
             """
@@ -321,10 +322,7 @@ def approve_sanitized_derivative(
         if derivative.status != "draft":
             raise SensitivityPolicyError("Only a draft derivative can be approved.")
 
-        stale_reason = _derivative_stale_reason_in_connection(
-            connection,
-            derivative,
-        )
+        stale_reason = _derivative_stale_reason_in_connection(connection, derivative)
         if stale_reason is not None:
             _mark_derivative_stale_in_connection(
                 connection,
@@ -376,6 +374,11 @@ def approve_sanitized_derivative(
                     "effective_level": derivative.effective_level,
                     "policy_version": POLICY_VERSION,
                     "reviewer_notes_present": bool(reviewer_notes),
+                    "reviewer_notes_digest": (
+                        canonical_digest({"reviewer_notes": reviewer_notes})
+                        if reviewer_notes
+                        else None
+                    ),
                 },
             )
             connection.commit()
@@ -384,28 +387,21 @@ def approve_sanitized_derivative(
         raise SensitivityPolicyError(
             f"Derivative sources are stale: {stale_error}"
         )
-    return get_sanitized_derivative(
-        workspace_id,
-        derivative_id,
-        refresh=False,
-    )
+    return get_sanitized_derivative(workspace_id, derivative_id)
 
 
 def revoke_sanitized_derivative(
     workspace_id: str,
     derivative_id: str,
 ) -> SanitizedDerivativeRead:
-    derivative = get_sanitized_derivative(
-        workspace_id,
-        derivative_id,
-        refresh=False,
-    )
+    derivative = get_sanitized_derivative(workspace_id, derivative_id)
     if derivative.status not in {"draft", "approved"}:
         raise SensitivityPolicyError(
             "Only a draft or approved derivative can be revoked."
         )
-    now = utc_now()
     with open_sqlite_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        now = utc_now()
         cursor = connection.execute(
             """
             UPDATE sanitized_derivatives
@@ -429,25 +425,24 @@ def revoke_sanitized_derivative(
             payload={"content_digest": derivative.content_digest},
         )
         connection.commit()
-    return get_sanitized_derivative(
-        workspace_id,
-        derivative_id,
-        refresh=False,
-    )
+    return get_sanitized_derivative(workspace_id, derivative_id)
 
 
 def get_sanitized_derivative(
     workspace_id: str,
     derivative_id: str,
     *,
-    refresh: bool = True,
+    refresh: bool = False,
 ) -> SanitizedDerivativeRead:
-    """Read a derivative.
+    """Read a derivative without mutating lifecycle state.
 
-    ``refresh=True`` is retained for compatibility with existing internal callers.
-    HTTP GET routes must pass ``refresh=False``; lifecycle persistence belongs to
-    ``revalidate_sanitized_derivative``.
+    ``refresh=True`` is rejected so callers cannot accidentally turn a read into a
+    write. Use ``revalidate_sanitized_derivative`` for explicit persistence.
     """
+    if refresh:
+        raise SensitivityPolicyError(
+            "Derivative reads are non-mutating; use explicit revalidation."
+        )
     with open_sqlite_connection() as connection:
         _require_workspace(connection, workspace_id)
         row = connection.execute(
@@ -461,10 +456,7 @@ def get_sanitized_derivative(
         raise SensitivityNotFoundError(
             f"Sanitized derivative not found: {derivative_id}"
         )
-    derivative = _derivative_read(row)
-    if refresh and derivative.status == "approved":
-        return revalidate_sanitized_derivative(workspace_id, derivative_id)
-    return derivative
+    return _derivative_read(row)
 
 
 def revalidate_sanitized_derivative(
@@ -489,10 +481,7 @@ def revalidate_sanitized_derivative(
         if derivative.status != "approved":
             connection.commit()
             return derivative
-        stale_reason = _derivative_stale_reason_in_connection(
-            connection,
-            derivative,
-        )
+        stale_reason = _derivative_stale_reason_in_connection(connection, derivative)
         if stale_reason is None:
             connection.commit()
             return derivative
@@ -552,24 +541,29 @@ def build_external_context_preview(
     candidates: list[_CandidateBlock] = []
     withheld: list[dict[str, Any]] = []
     included_derivatives: set[str] = set()
-    for block in raw_blocks:
-        snapshot = _snapshot_from_block(workspace_id, block)
-        candidate, exclusion = _candidate_for_snapshot(
-            snapshot,
-            allowed_derivative_sources=selected_refs,
-        )
-        if candidate is None:
-            withheld.append(exclusion)
-            continue
-        derivative_id = candidate.manifest.get("derivative_id")
-        if (
-            derivative_id is not None
-            and derivative_id in included_derivatives
-        ):
-            continue
-        if derivative_id is not None:
-            included_derivatives.add(derivative_id)
-        candidates.append(candidate)
+
+    # Every eligibility decision for the returned packet is made against one
+    # coherent SQLite read snapshot. The initial selector output is treated only
+    # as a candidate list and is digest-checked again inside this transaction.
+    with open_sqlite_connection() as connection:
+        connection.execute("BEGIN")
+        _require_workspace(connection, workspace_id)
+        for block in raw_blocks:
+            snapshot = _snapshot_from_block(workspace_id, block)
+            candidate, exclusion = _candidate_for_snapshot_in_connection(
+                connection,
+                snapshot,
+                allowed_derivative_sources=selected_refs,
+            )
+            if candidate is None:
+                withheld.append(exclusion)
+                continue
+            derivative_id = candidate.manifest.get("derivative_id")
+            if derivative_id is not None and derivative_id in included_derivatives:
+                continue
+            if derivative_id is not None:
+                included_derivatives.add(derivative_id)
+            candidates.append(candidate)
     return _apply_budget(candidates, withheld, budget_chars)
 
 
@@ -578,78 +572,88 @@ def preview_manual_context(
     raw_blocks: list[dict[str, Any]],
     budget_chars: int,
 ) -> SensitivityContextPreviewResponse:
-    with open_sqlite_connection() as connection:
-        _require_workspace(connection, workspace_id)
     blocks = canonicalize_blocks(raw_blocks)
     candidates: list[_CandidateBlock] = []
     withheld: list[dict[str, Any]] = []
     seen_derivatives: set[str] = set()
-    for block in blocks:
-        derivative_id = block.get("id")
-        expected_source = (
-            None if derivative_id is None else f"derivative:{derivative_id}"
-        )
-        if (
-            not isinstance(derivative_id, str)
-            or block["source"] != expected_source
-        ):
-            withheld.append(
-                {
-                    "source_ref": block["source"],
-                    "effective_level": "unknown",
-                    "reason": "manual_block_not_server_derivative",
-                }
+    with open_sqlite_connection() as connection:
+        connection.execute("BEGIN")
+        _require_workspace(connection, workspace_id)
+        for block in blocks:
+            derivative_id = block.get("id")
+            expected_source = (
+                None if derivative_id is None else f"derivative:{derivative_id}"
             )
-            continue
-        try:
-            derivative = get_sanitized_derivative(
-                workspace_id,
-                derivative_id,
-                refresh=False,
-            )
-        except SensitivityNotFoundError:
-            withheld.append(
-                {
-                    "source_ref": block["source"],
-                    "effective_level": "unknown",
-                    "reason": "derivative_not_found",
-                }
-            )
-            continue
-        if derivative.status != "approved":
-            withheld.append(
-                {
-                    "source_ref": block["source"],
-                    "effective_level": derivative.effective_level,
-                    "reason": f"derivative_{derivative.status}",
-                }
-            )
-            continue
-        if _derivative_stale_reason(derivative) is not None:
-            withheld.append(
-                {
-                    "source_ref": block["source"],
-                    "effective_level": derivative.effective_level,
-                    "reason": "derivative_stale",
-                }
-            )
-            continue
-        if (
-            _derivative_content_digest(block["content"])
-            != derivative.content_digest
-        ):
-            withheld.append(
-                {
-                    "source_ref": block["source"],
-                    "effective_level": derivative.effective_level,
-                    "reason": "derivative_content_digest_mismatch",
-                }
-            )
-            continue
-        if derivative_id in seen_derivatives:
-            continue
-        seen_derivatives.add(derivative_id)
-        candidates.append(_candidate_from_derivative(derivative))
+            if (
+                not isinstance(derivative_id, str)
+                or block["source"] != expected_source
+            ):
+                withheld.append(
+                    {
+                        "source_ref": block["source"],
+                        "effective_level": "unknown",
+                        "reason": "manual_block_not_server_derivative",
+                    }
+                )
+                continue
+            row = connection.execute(
+                """
+                SELECT * FROM sanitized_derivatives
+                WHERE id = ? AND workspace_id = ?
+                """,
+                (derivative_id, workspace_id),
+            ).fetchone()
+            if row is None:
+                withheld.append(
+                    {
+                        "source_ref": block["source"],
+                        "effective_level": "unknown",
+                        "reason": "derivative_not_found",
+                    }
+                )
+                continue
+            derivative = _derivative_read(row)
+            if derivative.status != "approved":
+                withheld.append(
+                    {
+                        "source_ref": block["source"],
+                        "effective_level": derivative.effective_level,
+                        "reason": f"derivative_{derivative.status}",
+                    }
+                )
+                continue
+            if _derivative_stale_reason_in_connection(connection, derivative) is not None:
+                withheld.append(
+                    {
+                        "source_ref": block["source"],
+                        "effective_level": derivative.effective_level,
+                        "reason": "derivative_stale",
+                    }
+                )
+                continue
+            if not _is_external_eligible(derivative.effective_level):
+                withheld.append(
+                    {
+                        "source_ref": block["source"],
+                        "effective_level": derivative.effective_level,
+                        "derivative_id": derivative.id,
+                        "reason": "derivative_level_not_external_eligible",
+                    }
+                )
+                continue
+            if _derivative_content_digest(block["content"]) != derivative.content_digest:
+                withheld.append(
+                    {
+                        "source_ref": block["source"],
+                        "effective_level": derivative.effective_level,
+                        "reason": "derivative_content_digest_mismatch",
+                    }
+                )
+                continue
+            if derivative_id in seen_derivatives:
+                continue
+            seen_derivatives.add(derivative_id)
+            candidates.append(_candidate_from_derivative(derivative))
     return _apply_budget(candidates, withheld, budget_chars)
 
 
@@ -658,7 +662,23 @@ def _candidate_for_snapshot(
     *,
     allowed_derivative_sources: set[str],
 ) -> tuple[_CandidateBlock | None, dict[str, Any]]:
-    current_snapshot, label = _resolve_source_snapshot_and_label(
+    with open_sqlite_connection() as connection:
+        connection.execute("BEGIN")
+        return _candidate_for_snapshot_in_connection(
+            connection,
+            snapshot,
+            allowed_derivative_sources=allowed_derivative_sources,
+        )
+
+
+def _candidate_for_snapshot_in_connection(
+    connection: sqlite3.Connection,
+    snapshot: SourceSnapshot,
+    *,
+    allowed_derivative_sources: set[str],
+) -> tuple[_CandidateBlock | None, dict[str, Any]]:
+    current_snapshot, label = _resolve_source_snapshot_and_label_in_connection(
+        connection,
         snapshot.workspace_id,
         snapshot.subject_ref,
     )
@@ -677,13 +697,14 @@ def _candidate_for_snapshot(
         label is not None
         and label.current
         and label.content_digest == snapshot.content_digest
+        and label.policy_version == POLICY_VERSION
     )
     effective_level = (
         _max_level(label.level, floor)
         if label_current
         else "unknown"
     )
-    if label_current and effective_level in {"S0", "S1"}:
+    if label_current and _is_external_eligible(effective_level):
         return (
             _CandidateBlock(
                 block=snapshot.block,
@@ -700,13 +721,24 @@ def _candidate_for_snapshot(
             {},
         )
 
-    derivative = _approved_derivative_for_source(
+    derivative, ineligible_derivative = _approved_derivative_for_source_in_connection(
+        connection,
         snapshot.workspace_id,
         snapshot.subject_ref,
         allowed_source_refs=allowed_derivative_sources,
     )
     if derivative is not None:
         return _candidate_from_derivative(derivative), {}
+    if ineligible_derivative is not None:
+        return (
+            None,
+            {
+                "source_ref": snapshot.subject_ref,
+                "effective_level": ineligible_derivative.effective_level,
+                "derivative_id": ineligible_derivative.id,
+                "reason": "derivative_level_not_external_eligible",
+            },
+        )
     if label is None:
         reason = "missing_current_label"
     elif not label.current:
@@ -726,6 +758,10 @@ def _candidate_for_snapshot(
 def _candidate_from_derivative(
     derivative: SanitizedDerivativeRead,
 ) -> _CandidateBlock:
+    if not _is_external_eligible(derivative.effective_level):
+        raise SensitivityPolicyError(
+            "External preview candidate must be S0 or S1."
+        )
     return _CandidateBlock(
         block={
             "source": f"derivative:{derivative.id}",
@@ -758,8 +794,7 @@ def _apply_budget(
     dropped: list[dict[str, Any]] = []
     while kept and (
         len(kept) > MAX_CONTEXT_BLOCKS
-        or len(_serialize_blocks([item.block for item in kept]))
-        > budget_chars
+        or len(_serialize_blocks([item.block for item in kept])) > budget_chars
     ):
         drop_index = min(
             range(len(kept)),
@@ -795,28 +830,46 @@ def _approved_derivative_for_source(
 ) -> SanitizedDerivativeRead | None:
     with open_sqlite_connection() as connection:
         connection.execute("BEGIN")
-        _require_workspace(connection, workspace_id)
-        rows = connection.execute(
-            """
-            SELECT * FROM sanitized_derivatives
-            WHERE workspace_id = ? AND status = 'approved'
-            ORDER BY updated_at DESC, id ASC
-            """,
-            (workspace_id,),
-        ).fetchall()
-        for row in rows:
-            derivative = _derivative_read(row)
-            if subject_ref not in derivative.source_refs:
-                continue
-            if not set(derivative.source_refs).issubset(allowed_source_refs):
-                continue
-            if (
-                _derivative_stale_reason_in_connection(connection, derivative)
-                is not None
-            ):
-                continue
-            return derivative
-    return None
+        derivative, _ = _approved_derivative_for_source_in_connection(
+            connection,
+            workspace_id,
+            subject_ref,
+            allowed_source_refs=allowed_source_refs,
+        )
+        return derivative
+
+
+def _approved_derivative_for_source_in_connection(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    subject_ref: str,
+    *,
+    allowed_source_refs: set[str],
+) -> tuple[SanitizedDerivativeRead | None, SanitizedDerivativeRead | None]:
+    _require_workspace(connection, workspace_id)
+    rows = connection.execute(
+        """
+        SELECT * FROM sanitized_derivatives
+        WHERE workspace_id = ? AND status = 'approved'
+        ORDER BY updated_at DESC, id ASC
+        """,
+        (workspace_id,),
+    ).fetchall()
+    ineligible: SanitizedDerivativeRead | None = None
+    for row in rows:
+        derivative = _derivative_read(row)
+        if subject_ref not in derivative.source_refs:
+            continue
+        if not set(derivative.source_refs).issubset(allowed_source_refs):
+            continue
+        if _derivative_stale_reason_in_connection(connection, derivative) is not None:
+            continue
+        if not _is_external_eligible(derivative.effective_level):
+            if ineligible is None:
+                ineligible = derivative
+            continue
+        return derivative, ineligible
+    return None, ineligible
 
 
 def _effective_source_level(snapshot: SourceSnapshot) -> str:
@@ -873,6 +926,7 @@ def _effective_level_for_bound_snapshot(
         label is None
         or not label.current
         or label.content_digest != snapshot.content_digest
+        or label.policy_version != POLICY_VERSION
     ):
         return floor or "unknown"
     return _max_level(label.level, floor)
@@ -995,19 +1049,27 @@ def _resolve_source_snapshot_and_label_in_connection(
         """
         SELECT * FROM sensitivity_labels
         WHERE workspace_id = ? AND subject_ref = ?
-        ORDER BY created_at DESC, id DESC LIMIT 1
+        ORDER BY rowid DESC LIMIT 1
         """,
         (workspace_id, snapshot.subject_ref),
     ).fetchone()
     if label_row is None:
         return snapshot, None
-    current = label_row["content_digest"] == snapshot.content_digest
+    digest_matches = label_row["content_digest"] == snapshot.content_digest
+    policy_matches = label_row["policy_version"] == POLICY_VERSION
+    current = digest_matches and policy_matches
+    if current:
+        stale_reason = None
+    elif not digest_matches:
+        stale_reason = "content_digest_mismatch"
+    else:
+        stale_reason = "policy_version_mismatch"
     return (
         snapshot,
         _label_read(
             label_row,
             current=current,
-            stale_reason=None if current else "content_digest_mismatch",
+            stale_reason=stale_reason,
         ),
     )
 
@@ -1039,34 +1101,19 @@ def _snapshot_from_block(
 
 
 def _parse_subject_ref(subject_ref: str) -> tuple[str, str]:
-    if (
-        not isinstance(subject_ref, str)
-        or ":" not in subject_ref
-    ):
-        raise SensitivityPolicyError(
-            "subject_ref must use <kind>:<id>"
-        )
+    if not isinstance(subject_ref, str) or ":" not in subject_ref:
+        raise SensitivityPolicyError("subject_ref must use <kind>:<id>")
     kind, record_id = subject_ref.split(":", 1)
-    if (
-        kind not in _ALLOWED_SOURCE_KINDS
-        or not record_id.strip()
-    ):
-        raise SensitivityPolicyError(
-            "Unsupported or malformed subject_ref"
-        )
+    if kind not in _ALLOWED_SOURCE_KINDS or not record_id.strip():
+        raise SensitivityPolicyError("Unsupported or malformed subject_ref")
     return kind, record_id.strip()
 
 
 def _max_level(*levels: str | None) -> str:
-    concrete = [
-        level for level in levels if level is not None
-    ]
+    concrete = [level for level in levels if level is not None]
     if not concrete:
         return "S0"
-    return max(
-        concrete,
-        key=lambda level: _LEVEL_RANK[level],
-    )
+    return max(concrete, key=lambda level: _LEVEL_RANK[level])
 
 
 def _derivative_content_digest(content: str) -> str:
@@ -1109,15 +1156,11 @@ def _derivative_read(row: sqlite3.Row) -> SanitizedDerivativeRead:
         id=row["id"],
         workspace_id=row["workspace_id"],
         source_refs=json.loads(row["source_refs_json"]),
-        source_digests=json.loads(
-            row["source_digests_json"]
-        ),
+        source_digests=json.loads(row["source_digests_json"]),
         content=row["content"],
         content_digest=row["content_digest"],
         effective_level=row["effective_level"],
-        transformations=json.loads(
-            row["transformations_json"]
-        ),
+        transformations=json.loads(row["transformations_json"]),
         policy_version=row["policy_version"],
         status=row["status"],
         actor=row["actor"],
@@ -1138,6 +1181,4 @@ def _require_workspace(
         (workspace_id,),
     ).fetchone()
     if row is None:
-        raise SensitivityNotFoundError(
-            "Workspace not found."
-        )
+        raise SensitivityNotFoundError("Workspace not found.")
