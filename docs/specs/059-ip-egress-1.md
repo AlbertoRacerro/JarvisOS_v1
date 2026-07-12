@@ -1,24 +1,31 @@
 # 059 — IP-EGRESS-1: sensitivity, retrieval, and external-boundary enforcement
 
-Status: ready after maintainer amendment; `docs/specs/STATUS.md` is authoritative.
+Status: proposed maintainer amendment; blocked on ADR reconciliation; `docs/specs/STATUS.md` is authoritative.
 
 Depends on: 003, 015, 018, 021, 040, 042
 
-## Binding maintainer amendment — 2026-07-12
+## Binding maintainer direction — 2026-07-12
 
-This definition supersedes the earlier assumption that every external provider call
-requires human confirmation. JarvisOS will normally use external providers through
-a server-owned policy autopilot. Human confirmation is exceptional and occurs only
-when a configured trigger fires.
+This definition records the maintainer-approved target policy that external provider
+calls should normally use a server-owned policy autopilot and that human
+confirmation should be exceptional rather than required for every call.
+
+It does **not** supersede accepted ADR-057 by itself. ADR-057 remains the durable
+authority until ADR-059 is merged and explicitly reconciles its per-call
+confirmation language. Until that happens, 059b remains blocked and no autopilot
+runtime implementation may begin.
 
 The maintainer explicitly accepts the residual risk that an automatically sanitized
 S2/S3-derived representation may still retain some project-specific information.
 Prototype velocity takes priority over exhaustive IP protection. This accepted risk
-changes policy defaults and ceremony, not the execution-spine mechanics.
+changes target policy defaults and ceremony, not the execution-spine mechanics.
 
-The amendment does not weaken these invariants:
+The target amendment does not weaken these invariants:
 
-- every provider call passes through `run_ai_task` and writes an `ai_jobs` row;
+- every AI call, including a model-backed local sanitizer, passes through
+  `run_ai_task` and writes an `ai_jobs` row;
+- only a strictly deterministic non-model transformation may run without an AI
+  call;
 - models, frontend code, and request fields may recommend but never authorize a
   provider route, budget, permission, sensitivity downgrade, or state change;
 - exact packet construction, policy decisions, provider/model binding, and fallback
@@ -26,19 +33,20 @@ The amendment does not weaken these invariants:
 - safe defaults remain paid AI disabled, budget zero, and fake provider;
 - `route_class="auto"` remains local-only; policy autopilot resolves an explicit
   external route before execution;
-- S4 and secret-bearing content never leaves JarvisOS;
+- raw S4 and any final or derived content that remains secret-bearing never leaves
+  JarvisOS;
 - monthly hard-budget denial cannot be confirmed away.
 
-Spec 059a was merged through PR #90 and is the unchanged substrate for this
-amendment. In particular, external eligibility remains strictly effective S0/S1.
+Spec 059a was merged through PR #90 and is the unchanged substrate for this target
+policy. In particular, external eligibility remains strictly effective S0/S1.
 059b must build on that rule rather than reopening or bypassing it.
 
 ## Goal
 
-Add one fail-closed, server-owned boundary that decides whether the **exact outbound
-packet** for an external provider may leave JarvisOS.
+After ADR-059 reconciliation, add one fail-closed, server-owned boundary that decides
+whether the **exact outbound packet** for an external provider may leave JarvisOS.
 
-The normal path is:
+The intended normal path is:
 
 1. select the minimum necessary context;
 2. classify current sources using the merged 059a labels, derivatives, floors, and
@@ -56,7 +64,7 @@ or provider response cannot authorize egress or lower sensitivity.
 
 ## Current runtime facts that bind this definition
 
-1. `run_ai_task` is the shared provider execution spine.
+1. `run_ai_task` is the shared AI execution spine for local and external model calls.
 2. `evaluate_alpha_execution_gate(...)` governs provider, credential, usage, and
    cost state but does not own IP sensitivity, sanitization, exact-packet binding,
    or confirmation-ticket integrity.
@@ -67,24 +75,29 @@ or provider response cannot authorize egress or lower sensitivity.
    read-only included/withheld previews.
 5. 059a permits only effective S0/S1 records or derivatives in external previews.
    Approved S2 derivatives remain internal-only.
-6. Auto sensitivity classification remains advisory. Deterministic policy is
+6. 059a allows an S4-source derivative only when the derivative is effective S0/S1
+   and no secret-bearing content survives; the source label alone is not a permanent
+   ban on a properly sanitized derivative.
+7. Auto sensitivity classification remains advisory. Deterministic policy is
    authoritative.
-7. The legacy escalation-confirm path accepts client-supplied outbound text, route,
+8. The legacy escalation-confirm path accepts client-supplied outbound text, route,
    and token metadata. 059b must replace this trust with server-loaded packet state.
-8. Unsupported external-tool operations deny by default; 059 does not create an
+9. Unsupported external-tool operations deny by default; 059 does not create an
    external-tool runtime.
-9. Conversation history is not yet a separate authority or egress path. Future
-   history must enter through the same context and packet contracts.
+10. Conversation history is not yet a separate authority or egress path. Future
+    history must enter through the same context and packet contracts.
+11. ADR-057 still requires explicit confirmation for external calls until ADR-059
+    is merged; this definition alone does not activate autopilot.
 
 ## Canonical sensitivity taxonomy
 
 | Level | Existing meaning | Raw external rule |
 | --- | --- | --- |
-| `S0` | public | eligible for silent policy allow when all other gates pass and no trigger fires |
-| `S1` | internal/non-proprietary | eligible for silent policy allow when all other gates pass and no trigger fires |
+| `S0` | public | target policy permits silent allow when all other gates pass and no trigger fires |
+| `S1` | internal/non-proprietary | target policy permits silent allow when all other gates pass and no trigger fires |
 | `S2` | confidential/private project material | raw denied; derivative path only; final external representation must be S0/S1 |
 | `S3` | proprietary or sensitive IP | raw denied; derivative path only; final external representation must be S0/S1 |
-| `S4` | credentials, private keys, tokens, passwords, equivalent secret material | deny always; no confirmation override |
+| `S4` | credentials, private keys, tokens, passwords, equivalent secret material | raw denied; no surviving secret-bearing content may leave; an S4-source derivative is eligible only under the strict S0/S1 rule below |
 
 `unknown` is not a permissive sixth level. It is treated at least as restrictive as
 S3 for raw egress and enters the local sanitization/review path. It is never sent
@@ -101,6 +114,9 @@ raw.
   `unknown` for external use.
 - A source once classified S2/S3/S4 cannot be downgraded in place; a lower-level
   representation is a separate derivative with immutable provenance.
+- A derivative from an S4-labelled source may be externally eligible only when it
+  is current, provenance-bound, effective S0/S1, all deterministic checks show no
+  secret survives, and every other gate passes.
 - `STRICT_IP` retains fail-closed unknown handling.
 - `FAST_DEV` may retain the existing bounded S1 default only for ordinary prompt
   text with no attached project/manual context and no hard marker.
@@ -120,7 +136,9 @@ raw.
 - coherent SQLite read snapshots for selection and eligibility;
 - read-only preview and ordinary derivative reads;
 - explicit revalidation for persisted stale transitions;
-- effective S0/S1-only external preview eligibility.
+- effective S0/S1-only external preview eligibility;
+- S4-source derivatives only when the resulting derivative is effective S0/S1 and
+  no secret-bearing material survives.
 
 The derivative `reviewer` field is an actor/provenance field. A value such as
 `policy-sanitizer-vN` is valid for an automatically approved derivative and binds
@@ -133,24 +151,31 @@ provenance-preserving local pipeline:
 
 1. load current source content and 059a authority in one coherent read snapshot;
 2. apply deterministic floors and context minimization;
-3. locally rewrite, abstract, redact, or summarize;
+3. run either a strictly deterministic non-model transformation or a model-backed
+   rewrite/abstraction sanitizer through `run_ai_task` on an explicit local route,
+   producing its own `ai_jobs` row;
 4. run deterministic secret and IP scans before and after rewriting;
 5. recompute content digest and effective level;
 6. persist source digests, sanitizer/model/config version, transformations,
    `reviewer = policy-sanitizer-vN`, approval state, and policy version;
 7. fail closed on malformed output, stale source, missing provenance, scan failure,
-   S4 evidence, or any final level above S1.
+   surviving secret evidence, or any final level above S1.
 
-Raw S2/S3/unknown never enters an external packet. S4 does not use this external
-eligibility path.
+Raw S2/S3/unknown never enters an external packet. Raw S4 and any final or derived
+content that remains S4 or secret-bearing are denied with no override.
 
-An effectively S0/S1 derivative may be auto-approved and may follow silent
-policy autopilot. A result that remains S2/S3 is **not** externally eligible and
-cannot be made eligible by confirmation. It invokes trigger `t3`, which pauses for
-review, requires another sanitization pass, or remains local. This preserves the
-merged 059a contract while implementing the maintainer's sampled-review posture.
+An S4-source derivative is not denied merely because its source was S4. Consistent
+with merged 059a, it may become externally eligible only when current,
+provenance-bound, effective S0/S1, secret-free under deterministic checks, and
+allowed by every other gate.
 
-Deterministic scans are guardrails, not proof of semantic IP removal.
+An effectively S0/S1 derivative may be auto-approved and may follow the target
+silent policy autopilot. A result that remains S2/S3 is **not** externally eligible
+and cannot be made eligible by confirmation. It invokes trigger `t3`, which pauses
+for review, requires another sanitization pass, or remains local.
+
+Sanitizer model output and schema validity have no authority. Deterministic scans
+are guardrails, not proof of semantic IP removal.
 
 ## Sampled human audit
 
@@ -201,9 +226,10 @@ The packet has a canonical SHA-256 digest. Any change to content, source state,
 derivative, route, provider/model, token sizing, policy version, or trigger state
 creates a new digest and invalidates any prior decision or ticket.
 
-Raw S2/S3/S4, unknown content, effective S2/S3 derivatives, and secret-bearing
-content must never be serialized into an externally eligible packet. Logs contain
-digests and safe metadata only.
+Raw S2/S3/S4, unknown content, effective S2/S3 derivatives, and any surviving
+secret-bearing content must never be serialized into an externally eligible packet.
+A current secret-free effective S0/S1 derivative from an S4 source is not classified
+as raw S4 content. Logs contain digests and safe metadata only.
 
 ## Egress decision
 
@@ -219,21 +245,27 @@ Add an immutable, server-owned `EgressDecision` containing at least:
 - policy/sanitizer/trigger versions;
 - confirmation requirement, trigger IDs, and ticket ID where present.
 
-For every concrete network binding, including every fallback, `run_ai_task` must
-require both:
+For every concrete external network binding, including every fallback,
+`run_ai_task` must require both:
 
 1. a current projected economic/provider/credential approval; and
 2. an allowed exact-packet egress decision for that concrete provider/model.
 
 Approval for one binding does not authorize another. Fallbacks are independently
-reconstructed and re-evaluated.
+reconstructed and re-evaluated. A model-backed local sanitizer is a separate
+`run_ai_task` call with a local route and `ai_jobs` row; it does not receive external
+egress permission and cannot authorize its output.
 
-## Policy autopilot
+## Target policy autopilot
 
-A packet whose included blocks are all effectively S0/S1 receives a silent
-server-owned `allow` when all other gates pass and no confirmation trigger fires.
-Silent allows still write decision and execution ledger rows; they create no
-confirmation ticket.
+After ADR-059 supersedes the conflicting ADR-057 sentence, a packet whose included
+blocks are all effectively S0/S1 receives a silent server-owned `allow` when all
+other gates pass and no confirmation trigger fires. Silent allows still write
+decision and execution ledger rows; they create no confirmation ticket.
+
+Until ADR-059 is merged, this section is target policy only and does not authorize
+runtime implementation or external execution without the confirmation currently
+required by ADR-057.
 
 The trigger list is configuration data, not scattered code constants:
 
@@ -245,9 +277,10 @@ The trigger list is configuration data, not scattered code constants:
 | `t4` | unsupported or unknown egress operation | deny; confirmation cannot invent a runtime |
 | `t5` | explicit per-workspace `ask_me` flag | exact-packet confirmation for an otherwise eligible S0/S1 packet |
 
-Unknown, missing, or malformed trigger configuration fails closed. S4, monthly
-hard-budget exhaustion, missing credentials, stale provenance, final level above
-S1, and unsupported mechanics are non-confirmable denials or pauses.
+Unknown, missing, or malformed trigger configuration fails closed. Surviving S4 or
+secret-bearing content, monthly hard-budget exhaustion, missing credentials, stale
+provenance, final level above S1, and unsupported mechanics are non-confirmable
+denials or pauses.
 
 ## Confirmation and replay prevention
 
@@ -285,27 +318,30 @@ Safe metadata includes:
 - packet and derivative digests;
 - effective level;
 - source/manifests counts;
+- sanitizer task `ai_jobs` ID when a model-backed sanitizer is used;
 - sanitizer, policy, sampling, and trigger versions;
 - deterministic allow/deny/pause reason;
 - concrete provider/model and fallback-attempt index;
 - bounded usage/cost fields.
 
 A denied or paused request writes a normal pre-provider ledger row and makes zero
-network adapter calls.
+external network adapter calls.
 
 ## Delivery split
 
 ### 059a — sensitivity and context foundation
 
 Merged through PR #90. It owns labels, derivatives, deterministic floors,
-staleness, coherent context selection, read-only preview, and S0/S1-only external
-eligibility. This amendment does not modify that implementation.
+staleness, coherent context selection, read-only preview, S4-source derivative
+rules, and S0/S1-only external eligibility. This amendment does not modify that
+implementation.
 
 ### 059b — policy autopilot and execution enforcement
 
-After this definition amendment is merged and its ADR is reconciled, 059b owns:
+Only after this definition amendment and ADR-059 are merged and reconciled, 059b
+owns:
 
-- automatic sanitizer orchestration;
+- deterministic or AI-spine-routed automatic sanitizer orchestration;
 - sampled human-audit queue and revocation behavior;
 - S2/S3/unknown-derived packet caps;
 - canonical packet and immutable decision;
@@ -339,23 +375,32 @@ unless a concrete shared-spine defect requires a bounded correction.
 
 ## Required 059b tests
 
-- S0/S1 no-trigger packet silently allows and creates no ticket;
+- S0/S1 no-trigger packet silently allows and creates no ticket after ADR-059 is
+  authoritative;
 - each trigger is configuration-driven and independently tested;
 - missing/malformed policy or trigger configuration fails closed;
-- raw S2/S3/unknown/S4 makes zero adapter calls;
-- final effective S2/S3 derivative makes zero adapter calls even after human
-  confirmation input;
+- raw S2/S3/unknown/S4 and surviving secret-bearing content make zero external
+  adapter calls;
+- a current, secret-free effective S0/S1 derivative from an S4 source follows the
+  same eligibility rules as other effective S0/S1 derivatives;
+- final effective S2/S3 derivative makes zero external adapter calls even after
+  human confirmation input;
+- a model-backed sanitizer uses `run_ai_task`, an explicit local route, and its own
+  `ai_jobs` row; removing that spine call makes a test fail;
+- a strictly deterministic non-model sanitizer makes no AI call and records that
+  provenance explicitly;
 - automatic derivative preserves source digest and sanitizer provenance;
 - default weekly 5% sampling is deterministic and auditable;
 - sampled rejection revokes and blocks derivative reuse;
 - S2/S3/unknown-derived count and size caps apply before serialization;
 - client mutation of text, route, target, token, digest, or confirmation fails;
 - projected daily/monthly/provider limits are checked before every attempt;
-- monthly hard budget and S4 cannot be overridden;
+- monthly hard budget and surviving S4/secret content cannot be overridden;
 - expired, stale, revoked, mismatched, and consumed tickets make zero calls;
 - one confirmation is consumed exactly once, including after provider error;
 - fallbacks receive independent packet, trigger, credential, and economic checks;
-- removing the egress hook from the shared spine makes an integration test fail;
+- removing the external-egress hook from the shared spine makes an integration test
+  fail;
 - ledger rows contain only safe metadata and deterministic reason codes;
 - existing provider, Auto, context, MemoryStore, BLUECAD, Ruff, and full backend
   suites remain green.
@@ -364,10 +409,12 @@ unless a concrete shared-spine defect requires a bounded correction.
 
 Stop and amend rather than weaken this definition if:
 
+- ADR-057 and ADR-059 cannot be reconciled before runtime implementation;
 - exact content cannot be digest-bound;
 - selection and eligibility cannot share a coherent authority snapshot;
-- raw S2/S3/S4/unknown or final effective S2/S3 derivatives must enter an external
-  packet;
+- raw S2/S3/S4/unknown, surviving secret-bearing content, or final effective S2/S3
+  must enter an external packet;
+- a model-backed sanitizer can bypass `run_ai_task` or `ai_jobs`;
 - sanitizer provenance cannot be preserved;
 - silent allow can occur above S1;
 - trigger, cap, or sampling policy must be scattered code constants;
@@ -375,16 +422,17 @@ Stop and amend rather than weaken this definition if:
 - client-supplied outbound text, route, provider, token, or confirmation must be
   trusted;
 - a provider can bypass the shared execution spine;
-- S4 or monthly hard-budget denial must become confirmable;
-- the design requires a second gateway, MemoryStore, sensitivity store, vector
-  database, worker, streaming layer, DAG orchestrator, external-tool runtime, or
-  frontend redesign.
+- hard-budget or surviving-secret denial must become confirmable;
+- the design requires a second gateway, AI execution spine, MemoryStore,
+  sensitivity store, vector database, worker, streaming layer, DAG orchestrator,
+  external-tool runtime, or frontend redesign.
 
 ## Non-goals
 
 - No modification or reopening of merged 059a runtime.
+- No runtime autopilot implementation before ADR-059 reconciliation.
 - No claim that deterministic scans prove semantic IP removal.
-- No S4 or final-S2/S3 confirmation override.
+- No surviving-secret or final-S2/S3 confirmation override.
 - No provider/model addition or live-provider test.
 - No vector retrieval, conversation runtime, worker process, SSE streaming, or DAG
   orchestration.
@@ -398,12 +446,17 @@ Stop and amend rather than weaken this definition if:
 1. This amendment PR changes docs, registry, and report only.
 2. The maintainer's residual-risk acceptance and sampled-audit rationale are
    explicit.
-3. Merged 059a remains unchanged and authoritative.
-4. Silent autopilot is restricted to exact effective S0/S1 packets.
-5. Confirmation cannot authorize S4, monthly hard-budget denial, unsupported
-   mechanics, stale authority, or a final level above S1.
-6. 059b follows the normal registry ladder before runtime work.
-7. 059b implementation requires executing green CI, focused tests, full backend
+3. Merged 059a remains unchanged and authoritative, including S4-source derivative
+   semantics.
+4. Model-backed sanitizers cannot bypass `run_ai_task` or `ai_jobs`.
+5. Silent autopilot remains target policy until ADR-059 explicitly reconciles and
+   supersedes the conflicting ADR-057 sentence.
+6. Silent autopilot is restricted to exact effective S0/S1 packets.
+7. Confirmation cannot authorize surviving S4/secret content, monthly hard-budget
+   denial, unsupported mechanics, stale authority, or a final level above S1.
+8. 059b follows the normal registry ladder before runtime work.
+9. 059b implementation requires executing green CI, focused tests, full backend
    Pytest, Ruff, applicable BLUECAD proof, completed review, and human merge
    authority.
-8. Real BlueRev external dogfood remains blocked until 059b is merged and active.
+10. Real BlueRev external dogfood remains blocked until ADR-059 and 059b are merged
+    and active.
