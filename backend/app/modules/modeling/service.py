@@ -51,7 +51,6 @@ def _log_creation(
     )
 
 
-
 CONTEXT_RECORD_KINDS = ("decision", "assumption", "parameter", "requirement")
 _CONTEXT_STATUS_COLUMNS = {
     "decision": "status",
@@ -127,47 +126,65 @@ def select_context_records(
     ids: list[str] | None,
     query: str | None,
     max_items_per_kind: int,
+    connection: sqlite3.Connection | None = None,
 ) -> dict[str, list[object]]:
+    if connection is None:
+        with open_sqlite_connection() as owned_connection:
+            return select_context_records(
+                workspace_id,
+                kinds=kinds,
+                statuses_by_kind=statuses_by_kind,
+                ids=ids,
+                query=query,
+                max_items_per_kind=max_items_per_kind,
+                connection=owned_connection,
+            )
+
     selected_ids = set(ids or [])
     normalized_query = query.strip() if query else None
     results: dict[str, list[object]] = {}
-    with open_sqlite_connection() as connection:
-        _require_workspace(connection, workspace_id)
-        fts_available = bool(normalized_query) and sqlite_fts5_available(connection) and not _query_requires_literal_like(normalized_query)
-        for kind in kinds:
-            table = _CONTEXT_TABLES[kind]
-            status_column = _CONTEXT_STATUS_COLUMNS[kind]
-            values: list[object] = [workspace_id]
-            clauses = ["workspace_id = ?"]
-            if selected_ids:
-                placeholders = ", ".join("?" for _ in selected_ids)
-                clauses.append(f"id IN ({placeholders})")
-                values.extend(sorted(selected_ids))
-            else:
-                statuses = statuses_by_kind[kind]
-                if not statuses:
+    _require_workspace(connection, workspace_id)
+    fts_available = (
+        bool(normalized_query)
+        and sqlite_fts5_available(connection)
+        and not _query_requires_literal_like(normalized_query)
+    )
+    for kind in kinds:
+        table = _CONTEXT_TABLES[kind]
+        status_column = _CONTEXT_STATUS_COLUMNS[kind]
+        values: list[object] = [workspace_id]
+        clauses = ["workspace_id = ?"]
+        if selected_ids:
+            placeholders = ", ".join("?" for _ in selected_ids)
+            clauses.append(f"id IN ({placeholders})")
+            values.extend(sorted(selected_ids))
+        else:
+            statuses = statuses_by_kind[kind]
+            if not statuses:
+                results[kind] = []
+                continue
+            placeholders = ", ".join("?" for _ in statuses)
+            clauses.append(f"{status_column} IN ({placeholders})")
+            values.extend(statuses)
+        if normalized_query:
+            if fts_available:
+                matched_ids = _fts_ids(connection, workspace_id, kind, normalized_query)
+                if not matched_ids:
                     results[kind] = []
                     continue
-                placeholders = ", ".join("?" for _ in statuses)
-                clauses.append(f"{status_column} IN ({placeholders})")
-                values.extend(statuses)
-            if normalized_query:
-                if fts_available:
-                    matched_ids = _fts_ids(connection, workspace_id, kind, normalized_query)
-                    if not matched_ids:
-                        results[kind] = []
-                        continue
-                    placeholders = ", ".join("?" for _ in matched_ids)
-                    clauses.append(f"id IN ({placeholders})")
-                    values.extend(sorted(matched_ids))
-                else:
-                    clauses.append(_like_clause(kind, normalized_query, values))
-            rows = connection.execute(
-                f"SELECT * FROM {table} WHERE {' AND '.join(clauses)} ORDER BY updated_at DESC, id ASC LIMIT ?",
-                (*values, max_items_per_kind),
-            ).fetchall()
-            results[kind] = rows_to_models(rows, _CONTEXT_MODELS[kind])
+                placeholders = ", ".join("?" for _ in matched_ids)
+                clauses.append(f"id IN ({placeholders})")
+                values.extend(sorted(matched_ids))
+            else:
+                clauses.append(_like_clause(kind, normalized_query, values))
+        rows = connection.execute(
+            f"SELECT * FROM {table} WHERE {' AND '.join(clauses)} "
+            "ORDER BY updated_at DESC, id ASC LIMIT ?",
+            (*values, max_items_per_kind),
+        ).fetchall()
+        results[kind] = rows_to_models(rows, _CONTEXT_MODELS[kind])
     return results
+
 
 def create_model_spec(workspace_id: str, payload: ModelSpecCreate) -> ModelSpecRead:
     now = utc_now()
