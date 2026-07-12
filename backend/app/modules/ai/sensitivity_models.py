@@ -9,7 +9,9 @@ from app.modules.ai.models import ContextPackSelectionRequest
 
 SensitivityLevel = Literal["S0", "S1", "S2", "S3", "S4"]
 DerivativeLevel = Literal["S0", "S1", "S2"]
-_ALLOWED_SOURCE_KINDS = {"decision", "assumption", "parameter", "requirement", "evidence"}
+ALLOWED_SOURCE_KINDS = frozenset(
+    {"decision", "assumption", "parameter", "requirement", "evidence"}
+)
 
 
 def _normalize_source_ref(value: str) -> str:
@@ -17,7 +19,7 @@ def _normalize_source_ref(value: str) -> str:
     if ":" not in cleaned:
         raise ValueError("source reference must use <kind>:<id>")
     kind, record_id = cleaned.split(":", 1)
-    if kind not in _ALLOWED_SOURCE_KINDS or not record_id.strip():
+    if kind not in ALLOWED_SOURCE_KINDS or not record_id.strip():
         raise ValueError("source reference has an unsupported kind or empty id")
     return f"{kind}:{record_id.strip()}"
 
@@ -114,7 +116,7 @@ class SensitivityContextPreviewRequest(BaseModel):
         cls,
         value: ContextPackSelectionRequest,
     ) -> ContextPackSelectionRequest:
-        unsupported = sorted(set(value.kinds) - _ALLOWED_SOURCE_KINDS)
+        unsupported = sorted(set(value.kinds) - ALLOWED_SOURCE_KINDS)
         if unsupported:
             raise ValueError(f"unsupported context kinds: {unsupported}")
         return value
