@@ -18,6 +18,12 @@ provider call. Models may propose task kind, transformations, and route family;
 JarvisOS policy owns the final route, provider/model, budget, sensitivity, packet,
 ticket, and execution decision.
 
+Any model-backed sanitizer, including a sanitizer served by local Ollama, is an AI
+call. It must use `run_ai_task` with an explicit local route and write its own
+`ai_jobs` row. Only a strictly deterministic non-model transformation may run
+without an AI call. Sanitizer output remains advisory/untrusted and gains no
+permission authority from model or schema success.
+
 Merged 059a remains authoritative. In particular, only effective S0/S1 content may
 enter an external preview or packet. Confirmation cannot override that rule.
 
@@ -26,6 +32,8 @@ enter an external preview or packet. Confirmation cannot override that rule.
 059b owns only:
 
 - automatic sanitizer orchestration over merged 059a labels and derivatives;
+- model-backed sanitizer calls through `run_ai_task`/`ai_jobs`, or explicitly
+  deterministic non-model transformations;
 - deterministic pre/post scans and provenance/version binding;
 - sampled human-audit queue, defaulting to 5% weekly;
 - derivative revocation and sanitizer-failure evidence after sampled rejection;
@@ -40,9 +48,9 @@ enter an external preview or packet. Confirmation cannot override that rule.
 - safe egress/sanitizer/ticket ledger metadata;
 - mutation-resistant offline integration tests.
 
-It must not create a second gateway, MemoryStore, sensitivity store, provider
-adapter, external-tool runtime, conversation system, vector store, worker process,
-streaming transport, DAG orchestrator, or frontend redesign.
+It must not create a second AI execution spine, gateway, MemoryStore, sensitivity
+store, provider adapter, external-tool runtime, conversation system, vector store,
+worker process, streaming transport, DAG orchestrator, or frontend redesign.
 
 ## Automatic sanitizer contract
 
@@ -50,15 +58,24 @@ For S2, S3, or `unknown` source material:
 
 1. load current source and 059a authority in one coherent read snapshot;
 2. minimize selected context;
-3. run the configured local rewrite/abstraction sanitizer;
+3. run either a strictly deterministic non-model transformation or the configured
+   model-backed rewrite/abstraction sanitizer through `run_ai_task` on an explicit
+   local route, producing a separate `ai_jobs` record;
 4. run deterministic secret/IP scans before and after rewriting;
 5. recompute the content digest and effective level;
 6. store a derivative bound to source digests and sanitizer/model/config version;
 7. record `reviewer = policy-sanitizer-vN` for automatic approval;
-8. fail closed on stale source, malformed output, scan failure, S4 evidence, or a
-   final level above S1.
+8. fail closed on stale source, malformed output, scan failure, surviving secret
+   evidence, or a final level above S1.
 
-Raw S2/S3/unknown never enters an external packet. S4 is denied with no override.
+Raw S2/S3/unknown never enters an external packet. Raw S4 and any final or derived
+content that remains S4 or secret-bearing are denied with no override.
+
+A derivative originating from an S4-labelled source is not denied solely because
+of its source label. Consistent with merged 059a, it may become externally eligible
+only when it is current, provenance-bound, effective S0/S1, all deterministic scans
+confirm that no secret-bearing content survives, and every other gate passes.
+
 An effective S0/S1 derivative may follow silent autopilot. A result that remains
 S2/S3 invokes `t3` and is routed to review/resanitization or local execution; it
 cannot be confirmed into an external packet.
@@ -105,12 +122,14 @@ The immutable decision records allow/deny/pause, deterministic reason, operation
 concrete binding, effective sensitivity, packet digest, source counts, policy
 versions, trigger IDs, and ticket state where present.
 
-Every network adapter attempt requires both:
+Every external network adapter attempt requires both:
 
 1. current projected economic/provider/credential approval; and
 2. current exact-packet egress approval.
 
-Fallbacks are reconstructed and re-evaluated independently.
+Fallbacks are reconstructed and re-evaluated independently. Local model-backed
+sanitizer tasks are separately recorded through the same AI spine but do not receive
+external-egress permission and cannot authorize their own output.
 
 ## Trigger table
 
@@ -124,9 +143,10 @@ The trigger set is configuration, not scattered constants.
 | `t4` | unsupported/unknown egress operation | deny; confirmation cannot invent support |
 | `t5` | workspace `ask_me` flag | exact-packet confirmation for an otherwise eligible S0/S1 packet |
 
-Malformed or missing trigger configuration fails closed. S4, final effective level
-above S1, hard-budget exhaustion, missing credentials, stale provenance, and
-unsupported mechanics are non-confirmable denials or pauses.
+Malformed or missing trigger configuration fails closed. Surviving S4/secret
+content, final effective level above S1, hard-budget exhaustion, missing
+credentials, stale provenance, and unsupported mechanics are non-confirmable denials
+or pauses.
 
 ## Ticket lifecycle
 
@@ -165,6 +185,7 @@ Record safe metadata only:
 - egress decision/ticket IDs;
 - packet and derivative digests;
 - effective level and source/manifests counts;
+- sanitizer task `ai_jobs` ID when a model-backed sanitizer is used;
 - sanitizer, sampling, trigger, and policy versions;
 - deterministic result/reason codes;
 - concrete target and fallback-attempt index;
@@ -179,20 +200,27 @@ authorization headers in `ai_jobs` or events.
 - Silent allow creates no ticket or human-confirmation requirement.
 - Each trigger is configuration-driven and independently tested.
 - Missing/malformed policy config fails closed.
-- Raw S2/S3/unknown/S4 makes zero adapter calls.
+- Raw S2/S3/unknown/S4 and final secret-bearing content make zero external adapter
+  calls.
+- An S4-source derivative that is current, effective S0/S1, and secret-free follows
+  the same eligibility rules as other S0/S1 derivatives.
 - A final effective S2/S3 derivative makes zero adapter calls even when a user
   attempts confirmation.
+- A model-backed sanitizer uses `run_ai_task`, an explicit local route, and its own
+  `ai_jobs` row; removing that spine call makes a test fail.
+- A deterministic non-model sanitizer makes no AI call and is identified as such in
+  provenance.
 - Automatic derivative preserves exact source digests and sanitizer provenance.
 - Weekly 5% sample is deterministic and auditable.
 - Sample rejection revokes and blocks derivative reuse.
 - S2/S3/unknown-derived count/size caps apply before serialization.
 - Client mutation of prompt, route, target, token, digest, or confirmation fails.
 - Projected call cost/token usage cannot cross a hard limit through the last call.
-- Monthly hard budget and S4 cannot be overridden.
+- Monthly hard budget and surviving S4/secret content cannot be overridden.
 - Failed-before-network attempts do not masquerade as actual provider consumption.
 - Expired, stale, revoked, mismatched, and consumed tickets make zero calls.
 - Fallbacks receive independent packet, trigger, credential, and economic checks.
-- Removing the egress hook from the shared spine makes a test fail.
+- Removing the external-egress hook from the shared spine makes a test fail.
 - Existing provider, Auto, context, MemoryStore, BLUECAD, Ruff, and full backend
   suites remain green.
 
@@ -202,16 +230,19 @@ Stop and amend rather than weaken if:
 
 - exact content cannot be digest-bound;
 - selection and eligibility cannot share one coherent authority snapshot;
-- raw S2/S3/unknown/S4 or final effective S2/S3 must enter an external packet;
+- raw S2/S3/unknown/S4, surviving secret-bearing content, or final effective S2/S3
+  must enter an external packet;
+- a model-backed sanitizer can bypass `run_ai_task` or `ai_jobs`;
 - sanitizer provenance cannot be preserved;
 - silent allow can occur above S1;
 - trigger/cap/sampling policy must be scattered code constants;
 - policy must trust client fields;
 - a fallback can reuse an unbound decision;
-- budget/S4 denial must become confirmable;
+- hard-budget or surviving-secret denial must become confirmable;
 - any adapter can bypass the shared spine;
-- implementation requires a second gateway, MemoryStore, sensitivity store, vector
-  store, worker, streaming layer, DAG orchestrator, or frontend redesign.
+- implementation requires a second gateway, AI execution spine, MemoryStore,
+  sensitivity store, vector store, worker, streaming layer, DAG orchestrator, or
+  frontend redesign.
 
 ## Merge gate
 
@@ -220,7 +251,7 @@ An implementation PR must declare `**Spec gate:** implementation 059b`.
 059b may move to `ready` only after:
 
 - this amended definition is merged;
-- the associated ADR is merged;
+- ADR-059 is merged and explicitly reconciles the still-accepted ADR-057;
 - the full implementation spec is reconciled against current `master`;
 - 059a remains `merged`.
 
