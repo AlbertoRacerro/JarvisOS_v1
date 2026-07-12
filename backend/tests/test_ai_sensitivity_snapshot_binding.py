@@ -69,8 +69,22 @@ def _parameter() -> str:
 
 def _evidence() -> str:
     record_id = str(uuid4())
+    artifact_id = str(uuid4())
     now = utc_now()
     with open_sqlite_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO artifacts (
+                id, workspace_id, filename, stored_path, artifact_type, created_at
+            ) VALUES (?, ?, 'snapshot-evidence.json', ?, 'test_report', ?)
+            """,
+            (
+                artifact_id,
+                WORKSPACE_ID,
+                f"test-artifacts/{artifact_id}.json",
+                now,
+            ),
+        )
         connection.execute(
             """
             INSERT INTO evidence_records (
@@ -78,7 +92,7 @@ def _evidence() -> str:
                 candidate_id, attempt_id, report_artifact_id, created_at
             ) VALUES (?, ?, 'validation_v0', 'pass', '{}', NULL, NULL, NULL, ?, ?)
             """,
-            (record_id, WORKSPACE_ID, str(uuid4()), now),
+            (record_id, WORKSPACE_ID, artifact_id, now),
         )
         connection.commit()
     return record_id
