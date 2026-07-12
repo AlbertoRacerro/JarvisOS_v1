@@ -20,6 +20,7 @@ from app.modules.ai.sensitivity import (
     get_current_sensitivity_label,
     get_sanitized_derivative,
     preview_manual_context,
+    revalidate_sanitized_derivative,
 )
 from app.modules.ai.sensitivity_models import (
     SanitizedDerivativeCreate,
@@ -274,7 +275,7 @@ def test_source_mutation_marks_approved_derivative_stale() -> None:
     approve_sanitized_derivative(WORKSPACE_ID, derivative.id)
     _update_decision(record_id, "Changed BlueRev proprietary geometry decision")
 
-    refreshed = get_sanitized_derivative(WORKSPACE_ID, derivative.id)
+    refreshed = revalidate_sanitized_derivative(WORKSPACE_ID, derivative.id)
     preview = build_external_context_preview(
         WORKSPACE_ID, 32_000, _selection(record_id)
     )
@@ -411,7 +412,6 @@ def test_sensitivity_withholding_is_distinct_from_budget_dropping() -> None:
     assert preview.included_count + preview.dropped_count == 2
 
 
-
 def _derivative_db_state(derivative_id: str) -> tuple[str, str | None, int]:
     with open_sqlite_connection() as connection:
         row = connection.execute(
@@ -459,7 +459,7 @@ def test_external_preview_relabel_staleness_is_read_only() -> None:
     assert preview.blocks == []
     assert preview.withheld_sources_manifest[0]["reason"] == "raw_level_not_external_eligible"
     assert before == after
-    refreshed = get_sanitized_derivative(WORKSPACE_ID, derivative.id)
+    refreshed = revalidate_sanitized_derivative(WORKSPACE_ID, derivative.id)
     assert refreshed.status == "stale"
     assert refreshed.stale_reason == f"source_level_incompatible:{source_ref}:S4"
 
