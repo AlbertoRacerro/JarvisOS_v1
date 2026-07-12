@@ -9,6 +9,17 @@ from app.modules.ai.models import ContextPackSelectionRequest
 
 SensitivityLevel = Literal["S0", "S1", "S2", "S3", "S4"]
 DerivativeLevel = Literal["S0", "S1", "S2"]
+_ALLOWED_SOURCE_KINDS = {"decision", "assumption", "parameter", "requirement", "evidence"}
+
+
+def _normalize_source_ref(value: str) -> str:
+    cleaned = value.strip()
+    if ":" not in cleaned:
+        raise ValueError("source reference must use <kind>:<id>")
+    kind, record_id = cleaned.split(":", 1)
+    if kind not in _ALLOWED_SOURCE_KINDS or not record_id.strip():
+        raise ValueError("source reference has an unsupported kind or empty id")
+    return f"{kind}:{record_id.strip()}"
 
 
 class SensitivityLabelCreate(BaseModel):
@@ -17,6 +28,11 @@ class SensitivityLabelCreate(BaseModel):
     workspace_id: str = Field(min_length=1)
     subject_ref: str = Field(min_length=3)
     level: SensitivityLevel
+
+    @field_validator("subject_ref")
+    @classmethod
+    def validate_subject_ref(cls, value: str) -> str:
+        return _normalize_source_ref(value)
 
 
 class SensitivityLabelRead(BaseModel):
@@ -46,9 +62,7 @@ class SanitizedDerivativeCreate(BaseModel):
     @field_validator("source_refs")
     @classmethod
     def validate_source_refs(cls, value: list[str]) -> list[str]:
-        cleaned = [item.strip() for item in value]
-        if any(not item for item in cleaned):
-            raise ValueError("source_refs must contain non-empty references")
+        cleaned = [_normalize_source_ref(item) for item in value]
         if len(set(cleaned)) != len(cleaned):
             raise ValueError("source_refs must not contain duplicates")
         return cleaned
@@ -93,6 +107,17 @@ class SensitivityContextPreviewRequest(BaseModel):
     workspace_id: str = "bluerev"
     budget_chars: int = Field(default=DEFAULT_CONTEXT_BUDGET_CHARS, ge=1)
     selection: ContextPackSelectionRequest = Field(default_factory=ContextPackSelectionRequest)
+
+    @field_validator("selection")
+    @classmethod
+    def validate_selection_kinds(
+        cls,
+        value: ContextPackSelectionRequest,
+    ) -> ContextPackSelectionRequest:
+        unsupported = sorted(set(value.kinds) - _ALLOWED_SOURCE_KINDS)
+        if unsupported:
+            raise ValueError(f"unsupported context kinds: {unsupported}")
+        return value
 
 
 class ManualContextPreviewRequest(BaseModel):
