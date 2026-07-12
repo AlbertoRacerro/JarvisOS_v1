@@ -143,14 +143,11 @@ def create_sensitivity_label(payload: SensitivityLabelCreate) -> SensitivityLabe
             payload.workspace_id,
             _block_for_record(kind, model),
         )
-        prior = connection.execute(
-            """
-            SELECT * FROM sensitivity_labels
-            WHERE workspace_id = ? AND subject_ref = ?
-            ORDER BY rowid DESC LIMIT 1
-            """,
-            (payload.workspace_id, snapshot.subject_ref),
-        ).fetchone()
+        prior = _latest_label_row_in_connection(
+            connection,
+            payload.workspace_id,
+            snapshot.subject_ref,
+        )
         if prior is not None and _LEVEL_RANK[prior["level"]] >= _LEVEL_RANK["S2"]:
             if _LEVEL_RANK[payload.level] < _LEVEL_RANK[prior["level"]]:
                 raise SensitivityPolicyError(
@@ -434,15 +431,13 @@ def get_sanitized_derivative(
     *,
     refresh: bool = False,
 ) -> SanitizedDerivativeRead:
-    """Read a derivative without mutating lifecycle state.
+    """Read a derivative without mutation unless revalidation is explicit.
 
-    ``refresh=True`` is rejected so callers cannot accidentally turn a read into a
-    write. Use ``revalidate_sanitized_derivative`` for explicit persistence.
+    The default is read-only. ``refresh=True`` remains an explicit compatibility
+    path to ``revalidate_sanitized_derivative``.
     """
     if refresh:
-        raise SensitivityPolicyError(
-            "Derivative reads are non-mutating; use explicit revalidation."
-        )
+        return revalidate_sanitized_derivative(workspace_id, derivative_id)
     with open_sqlite_connection() as connection:
         _require_workspace(connection, workspace_id)
         row = connection.execute(
@@ -541,6 +536,7 @@ def build_external_context_preview(
     candidates: list[_CandidateBlock] = []
     withheld: list[dict[str, Any]] = []
     included_derivatives: set[str] = set()
+    covered_source_refs: set[str] = set()
 
     # Every eligibility decision for the returned packet is made against one
     # coherent SQLite read snapshot. The initial selector output is treated only
@@ -549,20 +545,44 @@ def build_external_context_preview(
         connection.execute("BEGIN")
         _require_workspace(connection, workspace_id)
         for block in raw_blocks:
+            source_ref = block["source"]
+            if source_ref in covered_source_refs:
+                continue
             snapshot = _snapshot_from_block(workspace_id, block)
-            candidate, exclusion = _candidate_for_snapshot_in_connection(
-                connection,
-                snapshot,
-                allowed_derivative_sources=selected_refs,
-            )
+            try:
+                candidate, exclusion = _candidate_for_snapshot_in_connection(
+                    connection,
+                    snapshot,
+                    allowed_derivative_sources=selected_refs,
+                    covered_derivative_sources=covered_source_refs,
+                )
+            except SensitivityNotFoundError:
+                withheld.append(
+                    {
+                        "source_ref": source_ref,
+                        "effective_level": "unknown",
+                        "reason": "source_missing_during_preview",
+                    }
+                )
+                continue
             if candidate is None:
                 withheld.append(exclusion)
                 continue
             derivative_id = candidate.manifest.get("derivative_id")
-            if derivative_id is not None and derivative_id in included_derivatives:
+            if derivative_id is None:
+                candidates.append(candidate)
                 continue
-            if derivative_id is not None:
-                included_derivatives.add(derivative_id)
+            if derivative_id in included_derivatives:
+                continue
+            derivative_sources = set(candidate.manifest["source_refs"])
+            candidates = [
+                item
+                for item in candidates
+                if item.manifest.get("derivative_id") is not None
+                or item.manifest.get("source_ref") not in derivative_sources
+            ]
+            included_derivatives.add(derivative_id)
+            covered_source_refs.update(derivative_sources)
             candidates.append(candidate)
     return _apply_budget(candidates, withheld, budget_chars)
 
@@ -576,6 +596,7 @@ def preview_manual_context(
     candidates: list[_CandidateBlock] = []
     withheld: list[dict[str, Any]] = []
     seen_derivatives: set[str] = set()
+    covered_source_refs: set[str] = set()
     with open_sqlite_connection() as connection:
         connection.execute("BEGIN")
         _require_workspace(connection, workspace_id)
@@ -652,7 +673,19 @@ def preview_manual_context(
                 continue
             if derivative_id in seen_derivatives:
                 continue
+            derivative_sources = set(derivative.source_refs)
+            if derivative_sources & covered_source_refs:
+                withheld.append(
+                    {
+                        "source_ref": block["source"],
+                        "effective_level": derivative.effective_level,
+                        "derivative_id": derivative.id,
+                        "reason": "derivative_source_overlap",
+                    }
+                )
+                continue
             seen_derivatives.add(derivative_id)
+            covered_source_refs.update(derivative_sources)
             candidates.append(_candidate_from_derivative(derivative))
     return _apply_budget(candidates, withheld, budget_chars)
 
@@ -676,6 +709,7 @@ def _candidate_for_snapshot_in_connection(
     snapshot: SourceSnapshot,
     *,
     allowed_derivative_sources: set[str],
+    covered_derivative_sources: set[str] | None = None,
 ) -> tuple[_CandidateBlock | None, dict[str, Any]]:
     current_snapshot, label = _resolve_source_snapshot_and_label_in_connection(
         connection,
@@ -726,6 +760,7 @@ def _candidate_for_snapshot_in_connection(
         snapshot.workspace_id,
         snapshot.subject_ref,
         allowed_source_refs=allowed_derivative_sources,
+        disallowed_source_refs=covered_derivative_sources or set(),
     )
     if derivative is not None:
         return _candidate_from_derivative(derivative), {}
@@ -835,6 +870,7 @@ def _approved_derivative_for_source(
             workspace_id,
             subject_ref,
             allowed_source_refs=allowed_source_refs,
+            disallowed_source_refs=set(),
         )
         return derivative
 
@@ -845,6 +881,7 @@ def _approved_derivative_for_source_in_connection(
     subject_ref: str,
     *,
     allowed_source_refs: set[str],
+    disallowed_source_refs: set[str],
 ) -> tuple[SanitizedDerivativeRead | None, SanitizedDerivativeRead | None]:
     _require_workspace(connection, workspace_id)
     rows = connection.execute(
@@ -860,7 +897,10 @@ def _approved_derivative_for_source_in_connection(
         derivative = _derivative_read(row)
         if subject_ref not in derivative.source_refs:
             continue
-        if not set(derivative.source_refs).issubset(allowed_source_refs):
+        derivative_sources = set(derivative.source_refs)
+        if not derivative_sources.issubset(allowed_source_refs):
+            continue
+        if derivative_sources & disallowed_source_refs:
             continue
         if _derivative_stale_reason_in_connection(connection, derivative) is not None:
             continue
@@ -1045,14 +1085,11 @@ def _resolve_source_snapshot_and_label_in_connection(
         workspace_id,
         _block_for_record(kind, model),
     )
-    label_row = connection.execute(
-        """
-        SELECT * FROM sensitivity_labels
-        WHERE workspace_id = ? AND subject_ref = ?
-        ORDER BY rowid DESC LIMIT 1
-        """,
-        (workspace_id, snapshot.subject_ref),
-    ).fetchone()
+    label_row = _latest_label_row_in_connection(
+        connection,
+        workspace_id,
+        snapshot.subject_ref,
+    )
     if label_row is None:
         return snapshot, None
     digest_matches = label_row["content_digest"] == snapshot.content_digest
@@ -1072,6 +1109,29 @@ def _resolve_source_snapshot_and_label_in_connection(
             stale_reason=stale_reason,
         ),
     )
+
+
+def _latest_label_row_in_connection(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    subject_ref: str,
+) -> sqlite3.Row | None:
+    return connection.execute(
+        """
+        SELECT label.*
+        FROM sensitivity_labels AS label
+        WHERE label.workspace_id = ?
+          AND label.subject_ref = ?
+          AND NOT EXISTS (
+              SELECT 1
+              FROM sensitivity_labels AS child
+              WHERE child.prior_label_id = label.id
+          )
+        ORDER BY label.rowid DESC
+        LIMIT 1
+        """,
+        (workspace_id, subject_ref),
+    ).fetchone()
 
 
 def _source_kind_priority(kind: str) -> int:
