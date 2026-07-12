@@ -130,14 +130,8 @@ def map_fem_static_evidence(
         if max_von_mises is not None:
             max_von_mises = _require_mapping(max_von_mises, "max_von_mises")
     else:
-        max_displacement = _require_mapping(
-            result_summary.get("max_displacement"),
-            "max_displacement",
-        )
-        max_von_mises = _require_mapping(
-            result_summary.get("max_von_mises"),
-            "max_von_mises",
-        )
+        max_displacement = _require_mapping(result_summary.get("max_displacement"), "max_displacement")
+        max_von_mises = _require_mapping(result_summary.get("max_von_mises"), "max_von_mises")
     errors = result_summary.get("errors", [])
     if not isinstance(errors, list):
         raise ValueError("FEM errors must be a list")
@@ -148,19 +142,11 @@ def map_fem_static_evidence(
     if result_summary.get("verdict") == "error" and errors and isinstance(errors[0], dict):
         solver_error_code = errors[0].get("code")
     metrics = {
-        "max_displacement_value": (
-            None if max_displacement is None else float(max_displacement["value"])
-        ),
-        "max_von_mises_value": (
-            None if max_von_mises is None else float(max_von_mises["value"])
-        ),
+        "max_displacement_value": None if max_displacement is None else float(max_displacement["value"]),
+        "max_von_mises_value": None if max_von_mises is None else float(max_von_mises["value"]),
         "solver_error_code": solver_error_code,
         "t3_checks_total": len(checks),
-        "t3_checks_failed": sum(
-            1
-            for check in checks
-            if not isinstance(check, dict) or check.get("status") != "pass"
-        ),
+        "t3_checks_failed": sum(1 for check in checks if not isinstance(check, dict) or check.get("status") != "pass"),
     }
     return EvidenceRecordCreate(
         workspace_id=workspace_id,
@@ -188,11 +174,7 @@ def map_validation_evidence(
     tiers = [int(check.get("tier", 0)) for check in checks if isinstance(check, dict)]
     metrics = {
         "checks_total": len(checks),
-        "checks_failed": sum(
-            1
-            for check in checks
-            if not isinstance(check, dict) or check.get("status") != "pass"
-        ),
+        "checks_failed": sum(1 for check in checks if not isinstance(check, dict) or check.get("status") != "pass"),
         "tier_max": max(tiers, default=0),
         "errors_total": len(errors),
     }
@@ -232,19 +214,13 @@ def create_evidence_record(payload: EvidenceRecordCreate) -> EvidenceRecord:
             ),
         )
         connection.commit()
-        row = connection.execute(
-            "SELECT * FROM evidence_records WHERE id = ?",
-            (record_id,),
-        ).fetchone()
+        row = connection.execute("SELECT * FROM evidence_records WHERE id = ?", (record_id,)).fetchone()
     return row_to_model(row, EvidenceRecord)
 
 
 def get_evidence_record(record_id: str) -> EvidenceRecord | None:
     with open_sqlite_connection() as connection:
-        row = connection.execute(
-            "SELECT * FROM evidence_records WHERE id = ?",
-            (record_id,),
-        ).fetchone()
+        row = connection.execute("SELECT * FROM evidence_records WHERE id = ?", (record_id,)).fetchone()
     return optional_row_to_model(row, EvidenceRecord)
 
 
@@ -284,23 +260,8 @@ def record_fem_static_evidence(
     ).id
 
 
-def record_validation_evidence(
-    workspace_id: str,
-    candidate_id: str,
-    attempt_id: str,
-    report: dict[str, Any],
-    *,
-    report_artifact_id: str,
-) -> str:
-    return create_evidence_record(
-        map_validation_evidence(
-            workspace_id,
-            candidate_id,
-            attempt_id,
-            report,
-            report_artifact_id=report_artifact_id,
-        )
-    ).id
+def record_validation_evidence(workspace_id: str, candidate_id: str, attempt_id: str, report: dict[str, Any], *, report_artifact_id: str) -> str:
+    return create_evidence_record(map_validation_evidence(workspace_id, candidate_id, attempt_id, report, report_artifact_id=report_artifact_id)).id
 
 
 def select_evidence_records(
@@ -338,20 +299,12 @@ def select_evidence_records(
         values.extend(statuses)
     normalized_query = query.strip().lower() if query else None
     if normalized_query:
-        clauses.append(
-            "(LOWER(kind) LIKE ? ESCAPE '\\' OR "
-            "LOWER(verdict) LIKE ? ESCAPE '\\')"
-        )
-        escaped_query = (
-            normalized_query.replace("\\", "\\\\")
-            .replace("%", "\\%")
-            .replace("_", "\\_")
-        )
+        clauses.append("(LOWER(kind) LIKE ? ESCAPE '\\' OR LOWER(verdict) LIKE ? ESCAPE '\\')")
+        escaped_query = normalized_query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         pattern = f"%{escaped_query}%"
         values.extend([pattern, pattern])
     rows = connection.execute(
-        f"SELECT * FROM evidence_records WHERE {' AND '.join(clauses)} "
-        "ORDER BY created_at DESC, id ASC LIMIT ?",
+        f"SELECT * FROM evidence_records WHERE {' AND '.join(clauses)} ORDER BY created_at DESC, id ASC LIMIT ?",
         (*values, max_items),
     ).fetchall()
     return rows_to_models(rows, EvidenceRecord)
@@ -363,11 +316,7 @@ def evidence_pack_line(record: EvidenceRecord) -> str:
         raise ValueError("metrics_json must decode to an object")
     prefix = f"evidence:{record.kind} id={record.id[:8]} verdict={record.verdict}"
     suffix = f"src={record.report_artifact_id[:8]}"
-    metric_parts = [
-        _metric_part(key, metrics[key])
-        for key in _ordered_metric_keys(record.kind, metrics)
-        if key in metrics
-    ]
+    metric_parts = [_metric_part(key, metrics[key]) for key in _ordered_metric_keys(record.kind, metrics) if key in metrics]
     return _fit_line(prefix, metric_parts, suffix)
 
 
