@@ -229,7 +229,11 @@ Required persistence:
   digest, prompt/context manifests, concrete binding, token limit, final level and
   policy/config digests;
 - `egress_decisions` — immutable allow/deny/pause result, reason, packet/binding,
-  trigger set, projected token/cost reservation and policy versions;
+  trigger set, projected token/cost upper bounds, optional reservation ID, and policy
+  versions;
+- `egress_budget_reservations` — mutable compare-and-swap lifecycle for projected
+  provider/model token and cost holds, linked to one immutable decision and later
+  reconciled to the corresponding attempt/`ai_jobs` evidence;
 - `egress_confirmation_tickets` — packet/decision binding, safe target metadata,
   expiry, state and atomic consumption timestamps;
 - `egress_attempts` — immutable link from decision/packet to the corresponding
@@ -276,7 +280,7 @@ The policy service creates one immutable decision per concrete attempt:
 - source/manifests counts;
 - trigger IDs and confirmation requirement;
 - projected input/output tokens and cost upper bound;
-- active reservation amount and expiry;
+- optional reservation ID; mutable reservation state is stored separately;
 - policy/config/sanitizer versions;
 - ticket ID when applicable.
 
