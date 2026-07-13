@@ -57,6 +57,8 @@ This line exists only to emit a pull-request synchronize event after installing
 the idempotent default-branch reconstruction workflow. Trigger base:
 `b4ae7896c46101a690db16e70d9bf1744928da21`.
 
+Synchronize retry requested after resuming the interrupted maintenance sequence.
+
 ## Merge gate
 
 Keep draft until:
