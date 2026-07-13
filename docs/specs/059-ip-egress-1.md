@@ -14,8 +14,10 @@ ADR-059 is accepted and explicitly supersedes only ADR-057's per-call confirmati
 sentence. It supplies durable authority for silent effective-S0/S1 allow when no
 configured trigger fires and for exact-packet confirmation when a configured trigger
 requires it. This definition remains planning-only: 059b stays blocked until its
-full specification is reconciled and promoted through the normal ladder, and no
-autopilot runtime implementation may begin before that implementation merges.
+full implementation specification is reconciled and explicitly promoted through
+the normal registry ladder. Implementation work may begin after promotion to
+`ready`; policy-autopilot runtime activation and real external execution remain
+blocked until the implementation PR is reviewed and merged.
 
 The maintainer explicitly accepts the residual risk that an automatically sanitized
 S2/S3-derived representation may still retain some project-specific information.
@@ -267,9 +269,10 @@ blocks are all effectively S0/S1 receives a silent server-owned `allow` when all
 other gates pass and no confirmation trigger fires. Silent allows still write
 decision and execution ledger rows; they create no confirmation ticket.
 
-ADR-059 supplies durable policy authority, but this section does not itself
-authorize runtime implementation. External autopilot execution remains blocked
-until 059b is reconciled, promoted, implemented, reviewed, and merged.
+ADR-059 supplies durable policy authority, but this section does not itself activate
+policy autopilot. After 059b is reconciled and promoted to `ready`, implementation
+work may begin; policy-autopilot runtime activation and real external execution
+remain blocked until the implementation PR is reviewed and merged.
 
 The trigger list is configuration data, not scattered code constants:
 
@@ -436,8 +439,8 @@ Stop and amend rather than weaken this definition if:
 ## Non-goals
 
 - No modification or reopening of merged 059a runtime.
-- No runtime autopilot implementation before 059b full-spec reconciliation,
-  promotion, review, and merge.
+- No policy-autopilot runtime activation or real external execution before the
+  promoted 059b implementation is reviewed and merged.
 - No claim that deterministic scans prove semantic IP removal.
 - No surviving-secret or final-S2/S3 confirmation override.
 - No provider/model addition or live-provider test.
