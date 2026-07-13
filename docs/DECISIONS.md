@@ -112,7 +112,7 @@ Scaleway smoke tests default to a `500000` monthly token cap and an `800000` har
 
 Status: Accepted
 
-Providers may recommend privacy or sensitivity classifications in future milestones, but they cannot authorize their own unrestricted access. JarvisOS uses local policy to decide whether content may be sent externally. In the current early-stage `FAST_DEV` mode, that policy protects structural secrets and provider credentials without broadly blocking normal public/internal technical prompts. Future `STRICT_IP` mode may block `sensitive_ip`, `confidential`, and `unknown` content more aggressively when real proprietary IP enters the system.
+Providers may recommend privacy or sensitivity classifications in future milestones, but they cannot authorize their own unrestricted access. JarvisOS uses local policy to decide whether content may be sent externally. In the current early-stage `FAST_DEV` mode, that policy protects structural secrets and provider credentials without broadly blocking normal public/internal technical prompts. Future `STRICT_IP` mode may block `sensitive_ip`, `confidential`, and `unknown` content more aggressively when real proprietary data enters the system.
 
 ## ADR-019: Smoke Tests Use Synthetic Data Only
 
@@ -154,7 +154,7 @@ Milestone 0E-D2 wraps the existing Scaleway live smoke-test implementation behin
 
 Status: Accepted
 
-JarvisOS currently contains mostly public physics, generic code, toy models, architecture notes, and non-proprietary design exploration. The default AI policy mode is therefore `FAST_DEV`: it allows ordinary public/internal technical prompts through approved AI paths while preserving budget, token, provider, credential, event-redaction, and no-plaintext-secret boundaries. Broad keyword blocking for terms such as `patent`, `geometry`, `BlueRev`, `Smart Joint`, or `confidential` is intentionally not used in `FAST_DEV`. `STRICT_IP` remains a future mode for stricter classification and deterministic AuthorityPolicy behavior once real proprietary data enters the system.
+JarvisOS currently contains mostly public physics, generic code, toy models, architecture notes, and non-proprietary design exploration. The default AI policy mode is therefore `FAST_DEV`: it allows ordinary public/internal technical prompts through approved AI paths while preserving budget, token, provider, credential, event-redaction, and no-plaintext-secret boundaries. Broad keyword blocking for terms such as `patent`, `geometry`, `BlueRev`, `Smart Joint`, or `confidential` is intentionally not used in `FAST_DEV`. `STRICT_IP` remains a future mode for stricter classification and deterministic AuthorityPolicy behavior once real proprietary IP is present.
 
 ## ADR-026: Add DeepSeek As One Strong Smoke-only Provider
 
