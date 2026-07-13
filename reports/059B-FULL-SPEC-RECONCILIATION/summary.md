@@ -23,12 +23,14 @@ schema, and 059a integration boundaries are mechanically implementable.
 6. The 059a derivative schema has no structured automatic-sanitizer job/config
    provenance or policy-approval source, and no prompt-derivative contract exists.
 7. Current schema migration is `0009_sensitivity_context_foundation`; packet,
-   decision, ticket, attempt, prompt-derivative, workspace-policy, and sampled-audit
-   tables do not exist.
+   decision, ticket, attempt, prompt-derivative, reservation, workspace-policy, and
+   sampled-audit tables do not exist.
+8. Existing user-facing cost estimation is route-based and cannot authorize a
+   concrete provider/model or fallback with potentially different pricing.
 
 ## Reconciled implementation boundary
 
-The full spec now binds:
+The full spec and binding clarification now require:
 
 - one per-network-attempt egress hook inside `run_ai_task`, after concrete binding
   resolution and immediately before request construction/adapter invocation;
@@ -40,10 +42,15 @@ The full spec now binds:
   attempt links, prompt derivatives, workspace overrides, and deterministic sampled
   audit evidence;
 - a versioned repository policy document for trigger/cap/sample defaults;
-- conservative projected token/cost calculation and an atomic reservation recorded
-  with the egress decision, reconciled against the eventual `ai_jobs` attempt;
-- a bounded additive 059b extension to derivative provenance while preserving all
-  existing 059a label, manual-review, staleness, and eligibility semantics;
+- a separate compare-and-swap `egress_budget_reservations` lifecycle: decisions stay
+  immutable and reference projections/reservation IDs, while active reservations are
+  atomically created only when network execution is authorized and later reconciled,
+  released, or expired;
+- concrete provider/model pricing identity and version for every attempted binding;
+  route-level estimates remain advisory and missing concrete pricing fails closed;
+- a bounded additive 059b compatibility extension for honest policy-sanitizer
+  provenance while preserving all existing 059a label, manual-review, staleness,
+  source-digest, S4-source, and eligibility semantics;
 - a ticket-ID-only confirmation path; legacy client fields are rejected or ignored;
 - exact fallback reconstruction and re-evaluation;
 - no provider-adapter authority, no second AI spine, no second sensitivity system,
@@ -53,14 +60,15 @@ The full spec now binds:
 
 After this reconciliation, `059b` is promoted from `blocked` to `ready` in the
 canonical registry. This authorizes an implementation branch only. External policy
-autopilot and real project-data egress remain inactive until the implementation PR
-is reviewed and merged.
+autopilot, Hermes external passthrough, and real project-data egress remain inactive
+until the implementation PR is reviewed and merged.
 
 ## Definition-PR scope
 
 Exactly:
 
 - `docs/specs/059b-ip-egress-enforcement.md`;
+- `docs/specs/059b-implementation-clarifications.md`;
 - `docs/specs/STATUS.md`;
 - this report.
 
@@ -69,6 +77,7 @@ merged 059a, Hermes runtime, or real external-call behavior changes.
 
 ## Merge gate
 
+- changed-file scope is exactly the four files above;
 - registry checker and self-test green;
 - `git diff --check` clean;
 - current-head CI green;
