@@ -196,9 +196,9 @@ derivative is approved; review remains an explicit operator action.
 
 ## Versioned policy configuration
 
-Trigger, cap, timeout, sampling, and confirmation defaults are loaded from one
-strictly validated repository configuration document, for example
-`config/ai_egress_policy.json`, with a canonical digest and explicit schema version.
+Trigger, cap, timeout, sampling, and confirmation defaults are loaded from the
+strictly validated repository configuration document
+`configs/ai_egress_policy.json`, with a canonical digest and explicit schema version.
 They are not scattered constants.
 
 The document contains at least:
@@ -315,7 +315,8 @@ No adapter or alternate endpoint may perform a network call outside this spine.
 059b closes the pre-call overshoot gap without replacing spec 021 or pre-implementing
 061 optimization.
 
-- Use the existing route/provider pricing and token estimators where available.
+- Resolve conservative pricing for the exact concrete provider/model from the
+  existing provider registry; route-level estimators remain advisory only.
 - Include exact serialized packet input plus the server-owned output-token ceiling.
 - Unknown price or inability to compute a conservative upper bound fails closed.
 - In the same transaction as the decision, compare actual `ai_jobs` usage plus
