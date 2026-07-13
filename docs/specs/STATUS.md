@@ -45,14 +45,24 @@ before Codex or another coding agent may act on them.
 
 ## Current priority and drafting order
 
-1. `059a` is merged through implementation PR [#90](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/90); preserve its digest-bound labels, derivatives, deterministic floors, coherent read snapshots, and S0/S1-only external eligibility.
-2. The 059 definition amendment merged through [#95](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/95), and ADR-059 merged through [#98](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/98); preserve their server-owned autopilot policy, automatic sanitization, sampled audit, trigger semantics, residual-risk acceptance, and reconciliation with merged 059a.
-3. Reconcile and promote `059b` through the normal kernel/full-spec ladder before implementing policy autopilot and exact-packet enforcement; no runtime is authorized by the merged docs alone.
-4. `061`–`064` remain planning kernels. After 059b, promote grading and token-flow work through full specs while preserving the productive 047–049 process-calculation sequence and bounded memory/CAD work.
-5. Trigger-gated rows remain `planned` until their stated evidence exists; do not start them merely because their number is lower.
+1. Preserve the merged 059 foundation: PR #90/059a, PR #95 definition amendment,
+   PR #98/ADR-059, and PR #101 lifecycle reconciliation.
+2. Reconcile and promote `059b` through the normal full-spec ladder before any
+   policy-autopilot runtime or real project-data external dogfood.
+3. Promote `062` GRADE-0 and `061` TOKEN-FLOW-0 as separate bounded slices;
+   grading supplies empirical evidence, while token flow owns projected economics
+   and bounded continuation.
+4. Build the productive engineering loop: `047` → `048` + `049`.
+5. Promote `063` CAPTURE-VAULT-0; `064` LIT-RAG-0 follows when the first bounded
+   public corpus is selected.
+6. Accelerate CAD exploration in order `012` → `033`: freedom in ephemeral
+   reviewed local-trusted proposals, deterministic/human contract at reusable
+   promotion, and no claim of hostile-code sandboxing before 045 evidence.
+7. Then develop `030` + `037`, followed by the remaining dependency-driven rows.
 
-Always check rows marked `in_review` before choosing any `ready` spec, and confirm
-that no open PR overlaps the target files or runtime boundary.
+Trigger-gated rows remain `planned` until their stated evidence exists. Always
+check rows marked `in_review` before choosing any `ready` spec and confirm no open
+PR overlaps the target files or runtime boundary.
 
 ## Registry
 
@@ -72,7 +82,7 @@ that no open PR overlaps the target files or runtime boundary.
 | 009 | merged | [#35](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/35) | BLUECAD CalculiX FEM adapter | 008 | Assemble deterministic static CalculiX decks, run the registered solver, parse result summaries, and evaluate Tier 3 criteria. |
 | 010 | merged | [#20](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/20), [#26](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/26), [#28](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/28) | BLUECAD AI loop v0 | 005 | Add the bounded candidate/attempt loop, safe-default parking, prompt/schema flow, validation, repair attempts, and traceable prompt versions. |
 | 011 | planned | — | Core Team review panel | 034 | Add advisory persona reviews over artifacts and evidence; personas are bounded configurations, not autonomous authorities or a fake swarm. |
-| 012 | planned | — | L2 ephemeral free-script proposals | 010, 016 | Let AI propose one-design-only BLUECAD scripts through the existing bounded runner and validators; first verify that current `bluecad_l2_v0` contracts are sufficient rather than inventing a second runner. |
+| 012 | planned | — | L2 ephemeral free-script proposals | 010, 016 | Accelerate one-design-only AI script proposals through the existing hashed/AST-checked `bluecad_l2_v0` path; scripts remain reviewed local-trusted code, not hostile-code sandbox input, and automatic untrusted execution requires 045 isolation evidence. |
 | 013 | planned | — | Tier 2 domain-validator plugin interface | 005, 010 | Define a narrow plugin boundary for BlueRev-specific engineering checks that emit deterministic validation evidence without letting plugins own routing, memory, or promotion. |
 | 014 | planned | — | OpenFOAM CFD case-bundle adapter v0 | 007, 008, 049 | Produce inspectable OpenFOAM case bundles and evidence only when process/light proxies leave a concrete decision unresolved; no generic CFD platform or automatic solver authority. |
 | 015 | merged | [#33](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/33) | PROVIDER-GW-1 | 003 | Replace hardcoded bindings with a validated provider registry and generic OpenAI-compatible adapter while preserving safe defaults. |
@@ -86,15 +96,15 @@ that no open PR overlaps the target files or runtime boundary.
 | 022 | merged | [#49](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/49) | Codex PR autopush without automerge | 017, 019 | Retain the bounded same-branch actuator for explicit maintainer-requested Codex work; no workflow dispatches it automatically. |
 | 023 | planned | — | Adversarial proposal corpus | 010 | Add bounded hostile and degenerate model-output fixtures; the loop must reject or park them without crashes, unbounded work, provider calls, or authority bypass. |
 | 024 | merged | [#77](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/77), [#79](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/79), [#84](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/84), [#85](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/85) | FEM verification battery | 008, 009, 021b | 024-A, 024-B, 024-C1, and 024-C2 are merged; the registry-bound C3D10 analytic verification battery and deterministic report are complete. |
-| 025 | planned | — | Semantic routing evaluation and promotion policy | 002, 010 | Use labeled real task/ledger outcomes only after enough dogfood data exists; promote a local classifier per task family only above explicit thresholds and preserve deterministic escalation. |
+| 025 | planned | — | Semantic routing evaluation and promotion policy | 002, 010, 062 | After enough representative graded dogfood, choose a deterministic route-per-task-kind table on cost per useful outcome with holdout/promotion/reversion thresholds; the local classifier remains advisory and never owns provider permission. |
 | 026 | planned | — | BoardSession stateful multi-persona sessions | 011, 034, 040 | Deferred post-alpha: add shared-state multi-persona sessions only after the advisory panel and memory/context spine prove useful in real work. |
 | 027 | planned | — | Modal and thermal analysis types | 009, 024 | Extend the verified static-FEM boundary only when a real BlueRev decision requires modal or thermal analysis; do not pre-build a broad solver matrix. |
 | 028 | planned | — | Additive migration discipline | — | Document and test the existing versioned, additive migration policy before schema growth makes drift costly; no migration framework rewrite. |
-| 029 | planned | — | Settings and secrets operator page | 015, 018 | Expose existing provider mode, budget, token-cap, and secret-entry endpoints safely; keys never enter localStorage, logs, repository files, or normal frontend state. |
+| 029 | planned | — | Settings and secrets operator page | 015, 018, 061 | Expose existing provider mode, budget, token-cap, secret-entry, and today/month token+spend counters per provider; reuse `/ai/status`, and keep keys out of localStorage, logs, repository files, and normal frontend state. |
 | 030 | planned | — | Conversation v0 | 037, 042 | Turn a workspace-bound multi-turn conversation into a drafted brief or GeometrySpec that the user explicitly approves before the existing deterministic loop runs. |
 | 031 | planned | — | Vocabulary-aware design conversation | 005, 030 | Give chat the live part-kind catalog and limits so it reports what is expressible, approximate, or unsupported instead of silently degrading requests. |
 | 032 | planned | — | Core Team critique inside design conversation | 011, 030, 034 | Add advisory persona critiques to the approved design-conversation flow without pretending independent agents or bypassing validation and promotion gates. |
-| 033 | planned | — | Human-gated reusable part-kind proposal | 011, 012, 031, 056 | Let AI draft a builder, parameter schema, and golden fixture for a new kind; property/conformance checks and explicit human code promotion are mandatory, and autonomous trusted-vocabulary mutation is forbidden. |
+| 033 | planned | — | Human-gated reusable part-kind proposal | 011, 012, 031, 056 | Promote exploration into reusable typed builders only through explicit human code promotion, protected property/conformance tests, parameter-schema review, and golden fixtures; no autonomous trusted-vocabulary mutation. |
 | 034 | planned | — | AGENT-CORE-1: personas as configuration | — | Freeze persona prompts, capabilities, context profiles, and advisory labels as configuration over the existing AI spine; no independent memory, permissions, or orchestration engine. |
 | 035 | planned | — | Domain Foundation navigator | 040, 050 | Add searchable/editable modeling-record navigation designed around provenance and future depends-on/feeds edges rather than a flat database list. |
 | 036 | planned | — | Honest multi-agent chat UI | 034, 058 | Present clearly labeled advisory persona calls in the unified workspace; do not claim a real swarm until orchestration evidence exists. |
@@ -119,7 +129,7 @@ that no open PR overlaps the target files or runtime boundary.
 | 055 | planned | — | Project view: Mark-1 as one navigable object | 035, 044, 050 | Assemble decisions, calculations, CAD, evidence, and flowsheet for one workspace without inventing a second store or duplicating canonical data; 3D/digital-twin rendering follows the ADR-058 contract (`scene_component_id` plus a typed binding manifest to `<kind>:<id>` records; no engineering values stored in the view). |
 | 056 | merged | [#88](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/88) | BLUECAD property-based geometry testing + determinism canary | 005 | Valid-domain property coverage, same-environment repeatability, and the canonical Linux full-manifest digest canary are merged. |
 | 057 | cancelled | — | SPEC-LEDGER-0 | — | Cancelled after [planning PR #64](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/64): a generated ledger script and parallel handoff file are unnecessary while this canonical registry is sufficient. |
-| 058 | planned | — | Unified workspace home layout | 006, 029, 037 | Replace page-first navigation with the BLUECAD workbench/3D surface, persistent right-side AI entry, compact status strip, and shared design tokens; historical roadmap references to workspace-home `057` now mean `058`. |
+| 058 | planned | — | Unified workspace home layout | 006, 029, 037, 061 | Replace page-first navigation with the BLUECAD workbench/3D surface, persistent right-side AI entry, compact status strip with today/month token+spend counters per provider from existing status APIs, and shared design tokens. |
 | 058b | planned | — | Workbench UX pass 2: variant comparison and design history | 006b, 058 | Add bounded side-by-side variant comparison and a parent-link history tree after parametric variants and the unified workspace exist. |
 | 058c | planned | — | Report-to-3D linking | 006, 044, 058 | Let a failed validation/evidence check highlight the affected named geometry in the viewer, reusing existing artifact/node identities. |
 | 059 | planned | — | IP-EGRESS-1 umbrella definition | 003, 015, 018, 021, 040, 042 | Definition merged in #89 and amended by docs PR #95 for external policy autopilot, automatic sanitization, sampled audit, and explicit maintainer residual-risk acceptance; this row remains definition-only. |
