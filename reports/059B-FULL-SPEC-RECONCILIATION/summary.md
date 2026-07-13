@@ -30,7 +30,7 @@ schema, and 059a integration boundaries are mechanically implementable.
 
 ## Reconciled implementation boundary
 
-The full spec and binding clarification now require:
+The full spec and binding companions now require:
 
 - one per-network-attempt egress hook inside `run_ai_task`, after concrete binding
   resolution and immediately before request construction/adapter invocation;
@@ -41,13 +41,18 @@ The full spec and binding clarification now require:
 - canonical persisted packets, immutable decisions, single-use tickets, immutable
   attempt links, prompt derivatives, workspace overrides, and deterministic sampled
   audit evidence;
-- a versioned repository policy document for trigger/cap/sample defaults;
+- exact policy ownership at `configs/ai_egress_policy.json`;
+- concrete provider/model pricing added to the existing
+  `configs/ai_providers.yaml` registry, with route-level estimates advisory only;
 - a separate compare-and-swap `egress_budget_reservations` lifecycle: decisions stay
   immutable and reference projections/reservation IDs, while active reservations are
-  atomically created only when network execution is authorized and later reconciled,
-  released, or expired;
-- concrete provider/model pricing identity and version for every attempted binding;
-  route-level estimates remain advisory and missing concrete pricing fails closed;
+  atomically created only when network execution is authorized and later moved
+  through in-flight and reconciliation/release/expiry states;
+- no outbound packet body before every included material item is current,
+  provenance-bound, secret-free, and effective S0/S1;
+- model-backed sanitizer binding/fallback closure restricted to local-only routes;
+- provider retries returned to the shared spine for a new decision rather than
+  hidden inside an adapter call;
 - a bounded additive 059b compatibility extension for honest policy-sanitizer
   provenance while preserving all existing 059a label, manual-review, staleness,
   source-digest, S4-source, and eligibility semantics;
@@ -69,6 +74,7 @@ Exactly:
 
 - `docs/specs/059b-ip-egress-enforcement.md`;
 - `docs/specs/059b-implementation-clarifications.md`;
+- `docs/specs/059b-config-ownership.md`;
 - `docs/specs/STATUS.md`;
 - this report.
 
@@ -77,7 +83,7 @@ merged 059a, Hermes runtime, or real external-call behavior changes.
 
 ## Merge gate
 
-- changed-file scope is exactly the four files above;
+- changed-file scope is exactly the five files above;
 - registry checker and self-test green;
 - `git diff --check` clean;
 - current-head CI green;
