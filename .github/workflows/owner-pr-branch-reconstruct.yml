@@ -1,10 +1,8 @@
 name: Owner-only PR branch reconstruction
 
 on:
-  issue_comment:
-    types: [created]
   pull_request_target:
-    types: [ready_for_review, reopened]
+    types: [ready_for_review, reopened, synchronize]
 
 permissions:
   contents: write
@@ -13,15 +11,9 @@ permissions:
 jobs:
   reconstruct-pr-100:
     if: >-
-      (github.event_name == 'pull_request_target' &&
-       github.event.pull_request.number == 100 &&
-       github.event.pull_request.head.ref == 'docs/wp6-hermes-adoption-adr' &&
-       github.event.pull_request.head.repo.full_name == github.repository) ||
-      (github.event_name == 'issue_comment' &&
-       github.event.issue.pull_request &&
-       github.event.issue.number == 100 &&
-       github.event.comment.user.login == 'AlbertoRacerro' &&
-       github.event.comment.body == '/reconstruct-adr060')
+      github.event.pull_request.number == 100 &&
+      github.event.pull_request.head.ref == 'docs/wp6-hermes-adoption-adr' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -40,6 +32,52 @@ jobs:
           SOURCE_SHA=$(git rev-parse HEAD)
           export SOURCE_SHA
 
+          git fetch origin master "$TARGET_BRANCH"
+          MASTER_SHA=$(git rev-parse origin/master)
+          export MASTER_SHA
+          PARENT_SHA=$(git rev-parse HEAD^ 2>/dev/null || true)
+
+          if [ "$PARENT_SHA" = "$MASTER_SHA" ]; then
+            mapfile -t current_changed < <(git diff --name-only "$MASTER_SHA"..HEAD | sort)
+            if [ "${#current_changed[@]}" -eq 2 ] && \
+               [ "${current_changed[0]}" = 'docs/DECISIONS.md' ] && \
+               [ "${current_changed[1]}" = 'reports/WP6-HERMES-ADOPTION-ADR/summary.md' ]; then
+              if python - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+
+          marker = '## ADR-060: Adopt pinned Hermes as the swappable operational orchestrator'
+          canonical = 'when real proprietary data enters the system'
+          drift = 'when real proprietary IP enters the system'
+          current = Path('docs/DECISIONS.md').read_text(encoding='utf-8')
+          master = subprocess.check_output(
+              ['git', 'show', 'origin/master:docs/DECISIONS.md'],
+              text=True,
+          )
+          report_path = Path('reports/WP6-HERMES-ADOPTION-ADR/summary.md')
+          if not report_path.is_file():
+              raise SystemExit(1)
+          report = report_path.read_text(encoding='utf-8')
+          start = current.find(marker)
+          if start < 0 or current.count('## ADR-060:') != 1:
+              raise SystemExit(1)
+          if current[:start].rstrip() != master.rstrip():
+              raise SystemExit(1)
+          if canonical not in current or drift in current:
+              raise SystemExit(1)
+          if f"`{os.environ['MASTER_SHA']}`" not in report:
+              raise SystemExit(1)
+          if 'Remaining correction' in report:
+              raise SystemExit(1)
+          PY
+              then
+                echo "PR #100 is already reconstructed on current master; no push required."
+                exit 0
+              fi
+            fi
+          fi
+
           python - <<'PY'
           from pathlib import Path
 
@@ -54,13 +92,11 @@ jobs:
           Path('/tmp/adr060.md').write_text(adr, encoding='utf-8')
           PY
 
-          git fetch origin master "$TARGET_BRANCH"
           git reset --hard origin/master
-          MASTER_SHA=$(git rev-parse origin/master)
-          export MASTER_SHA
 
           python - <<'PY'
           import os
+          import subprocess
           from pathlib import Path
 
           decisions_path = Path('docs/DECISIONS.md')
@@ -145,13 +181,21 @@ Keep draft until:
           report_path.write_text(report, encoding='utf-8')
 
           final = decisions_path.read_text(encoding='utf-8')
-          if final.count('## ADR-060:') != 1:
+          master = subprocess.check_output(
+              ['git', 'show', 'origin/master:docs/DECISIONS.md'],
+              text=True,
+          )
+          marker = '## ADR-060: Adopt pinned Hermes as the swappable operational orchestrator'
+          start = final.find(marker)
+          if start < 0 or final.count('## ADR-060:') != 1:
               raise SystemExit('Final ADR-060 multiplicity invalid')
+          if final[:start].rstrip() != master.rstrip():
+              raise SystemExit('Existing ADR-001–059 text changed')
           if drift in final or canonical not in final:
               raise SystemExit('ADR-018 canonical wording check failed')
           PY
 
-          mapfile -t changed < <(git status --short | sed -E 's/^.. //')
+          mapfile -t changed < <(git status --short | sed -E 's/^.. //' | sort)
           printf '%s\n' "${changed[@]}"
           test "${#changed[@]}" -eq 2
           test "${changed[0]}" = 'docs/DECISIONS.md'
