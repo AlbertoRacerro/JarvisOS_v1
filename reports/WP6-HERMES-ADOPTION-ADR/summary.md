@@ -53,9 +53,9 @@ Before merge, the unrelated ADR-018 wording drift must be reverted from
 
 ## Temporary reconstruction trigger
 
-This line exists only to create a new PR commit after fixing the producer's
-remote-tracking refspec. Corrected producer base:
-`b61c266a74ffa271fec7ea3195127edfc7363601`.
+This line exists only to emit a synchronize event for the isolated producer
+retargeted to PR #113. Producer revision:
+`bec12d78f17f424d37454166550357450140a05d`.
 
 ## Merge gate
 
