@@ -112,7 +112,7 @@ Scaleway smoke tests default to a `500000` monthly token cap and an `800000` har
 
 Status: Accepted
 
-Providers may recommend privacy or sensitivity classifications in future milestones, but they cannot authorize their own unrestricted access. JarvisOS uses local policy to decide whether content may be sent externally. In the current early-stage `FAST_DEV` mode, that policy protects structural secrets and provider credentials without broadly blocking normal public/internal technical prompts. Future `STRICT_IP` mode may block `sensitive_ip`, `confidential`, and `unknown` content more aggressively when real proprietary data enters the system.
+Providers may recommend privacy or sensitivity classifications in future milestones, but they cannot authorize their own unrestricted access. JarvisOS uses local policy to decide whether content may be sent externally. In the current early-stage `FAST_DEV` mode, that policy protects structural secrets and provider credentials without broadly blocking normal public/internal technical prompts. Future `STRICT_IP` mode may block `sensitive_ip`, `confidential`, and `unknown` content more aggressively when real proprietary IP enters the system.
 
 ## ADR-019: Smoke Tests Use Synthetic Data Only
 
@@ -154,7 +154,7 @@ Milestone 0E-D2 wraps the existing Scaleway live smoke-test implementation behin
 
 Status: Accepted
 
-JarvisOS currently contains mostly public physics, generic code, toy models, architecture notes, and non-proprietary design exploration. The default AI policy mode is therefore `FAST_DEV`: it allows ordinary public/internal technical prompts through approved AI paths while preserving budget, token, provider, credential, event-redaction, and no-plaintext-secret boundaries. Broad keyword blocking for terms such as `patent`, `geometry`, `BlueRev`, `Smart Joint`, or `confidential` is intentionally not used in `FAST_DEV`. `STRICT_IP` remains a future mode for stricter classification and deterministic AuthorityPolicy behavior once real proprietary IP is present.
+JarvisOS currently contains mostly public physics, generic code, toy models, architecture notes, and non-proprietary design exploration. The default AI policy mode is therefore `FAST_DEV`: it allows ordinary public/internal technical prompts through approved AI paths while preserving budget, token, provider, credential, event-redaction, and no-plaintext-secret boundaries. Broad keyword blocking for terms such as `patent`, `geometry`, `BlueRev`, `Smart Joint`, or `confidential` is intentionally not used in `FAST_DEV`. `STRICT_IP` remains a future mode for stricter classification and deterministic AuthorityPolicy behavior once real proprietary data enters the system.
 
 ## ADR-026: Add DeepSeek As One Strong Smoke-only Provider
 
@@ -545,3 +545,55 @@ the 047–049 process writers, which stay unaware of GLB structure:
 geometry↔record binding is owned by spec 052, the `<kind>:<id>` resolver by
 spec 050, and view assembly by spec 055. Walkable rendering remains
 trigger-gated on 047 producing real process data.
+
+## ADR-059: External policy autopilot with sampled sanitization audit
+
+Status: Accepted
+
+ADR-057's model-economy hierarchy remains the intended steady state: cheap
+external providers are the normal workhorse after deterministic server-owned
+gates, frontier models handle review and hard tasks, and local models remain
+the privacy fallback when safe sanitization is not possible.
+
+Hard invariant 1 remains unchanged: `route_class="auto"` is local-only and never
+executes an external provider. Policy autopilot applies only after server-owned
+policy resolves an explicit external route. Every external attempt, including
+each fallback, must use `run_ai_task`, write an `ai_jobs` row, and bind the exact
+outbound packet, concrete provider/model, current sensitivity and provenance,
+credential availability, projected economic decision, and applicable policy
+versions.
+
+An exact packet whose every block is currently effective S0/S1, provenance-bound,
+and deterministically secret-free may receive a silent server-owned allow when
+no configured confirmation trigger fires. Models, frontend state, and
+caller-supplied fields never authorize that allow.
+
+S2/S3/unknown sources may be minimized and sanitized locally. Every model-backed
+sanitizer, including local Ollama, must itself run through `run_ai_task` on an
+explicit local route and write its own `ai_jobs` row. Sanitizer output remains
+advisory: it cannot lower deterministic floors or authorize egress. Raw
+S2/S3/unknown content never enters an external packet. A result that remains
+above S1 pauses for review or resanitization, or remains local; human
+confirmation cannot make it externally eligible.
+
+Raw S4 and any final content that remains secret-bearing or effective S4 are
+denied with no override. Consistently with the merged 059a substrate, a current,
+provenance-bound, deterministically secret-free effective S0/S1 derivative
+originating from an S4-labelled source may remain eligible when all other gates
+pass.
+
+Auto-approved derivatives receive deterministic human sampling, defaulting to
+5% per calendar week. A sampled rejection revokes the derivative and records a
+sanitizer failure. Context minimization is mandatory, including fail-closed
+configured limits on both count and serialized size of
+S2/S3/unknown-derived blocks in each packet.
+
+Human confirmation is limited to configured trigger families. It cannot
+override the monthly hard budget, raw or final S4/secrets, missing credentials,
+stale provenance, unsupported mechanics, or a final effective level above S1.
+The maintainer explicitly accepts the residual risk of imperfect sanitization
+in exchange for prototype velocity.
+
+This ADR supersedes only ADR-057's sentence requiring explicit user confirmation
+for every external call. It preserves ADR-057's model-economy hierarchy and all
+server-owned execution, audit, safe-default, and model-advisory invariants.
