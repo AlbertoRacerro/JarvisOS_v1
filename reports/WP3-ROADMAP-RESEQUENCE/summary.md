@@ -38,8 +38,8 @@ interleaved without displacing the productive 047–049 loop or bypassing 059b,
 
 ## Reconstruction
 
-This branch is reconstructed directly from post-#96 master. Its final diff is
-exactly:
+This branch is reconstructed directly from post-#96 master commit
+`243c7b1e1a4fb5bb9002055b322a2d7543a44096`. Its final diff is exactly:
 
 - `docs/specs/STATUS.md`;
 - this report.
@@ -51,7 +51,7 @@ from `master`, not duplicated in this PR.
 
 Keep draft until:
 
-1. the branch consists of one commit directly on current `master`;
+1. the branch consists only of the bounded roadmap delta above current `master`;
 2. the diff contains exactly the two declared files;
 3. GitHub Actions execute and pass on the exact head;
 4. a current-head failure-mode-first review completes;
