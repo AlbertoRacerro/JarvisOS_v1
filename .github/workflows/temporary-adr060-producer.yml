@@ -29,7 +29,9 @@ jobs:
         run: |
           set -euo pipefail
           SOURCE_SHA=$(git rev-parse HEAD)
-          git fetch origin master "$TARGET_BRANCH"
+          git fetch origin \
+            master:refs/remotes/origin/master \
+            "$TARGET_BRANCH:refs/remotes/origin/$TARGET_BRANCH"
           MASTER_SHA=$(git rev-parse origin/master)
           export MASTER_SHA
 
