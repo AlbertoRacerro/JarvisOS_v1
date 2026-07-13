@@ -54,8 +54,8 @@ Before merge, the unrelated ADR-018 wording drift must be reverted from
 ## Temporary reconstruction trigger
 
 This line exists only to emit a pull-request synchronize event after installing
-the branch-local CI reconstruction job. The reconstruction resets to `master`, so
-this section and all temporary workflow changes must disappear from the final diff.
+the idempotent default-branch reconstruction workflow. Trigger base:
+`b4ae7896c46101a690db16e70d9bf1744928da21`.
 
 ## Merge gate
 
