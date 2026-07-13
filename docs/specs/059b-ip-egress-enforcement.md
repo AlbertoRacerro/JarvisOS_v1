@@ -227,10 +227,10 @@ Required persistence:
   level, transformations, sanitizer provenance, status and timestamps;
 - `egress_packets` — exact packet JSON/body in dedicated local storage, packet
   digest, prompt/context manifests, concrete binding, token limit, final level and
-  policy/config digests;
-- `egress_decisions` — immutable allow/deny/pause result, reason, packet/binding,
-  trigger set, projected token/cost upper bounds, optional reservation ID, and policy
-  versions;
+  policy/config digests; packet bodies are written only after eligibility succeeds;
+- `egress_decisions` — immutable allow/deny/pause result, reason, optional packet and
+  binding, safe input digests/levels for pre-packet outcomes, projected token/cost
+  upper bounds, optional reservation ID, and policy versions;
 - `egress_budget_reservations` — mutable compare-and-swap lifecycle for projected
   provider/model token and cost holds, linked to one immutable decision and later
   reconciled to the corresponding attempt/`ai_jobs` evidence;
@@ -252,7 +252,11 @@ or status APIs.
 
 ## Canonical packet
 
-For every concrete network binding, JarvisOS constructs one `EgressPacket` binding:
+An `EgressPacket` is persisted only after prompt and every included context block are
+current, provenance-bound, secret-free, and effective S0/S1. Pre-eligibility deny or
+pause outcomes persist safe decision metadata only and contain no outbound body.
+
+For every eligible concrete network binding, JarvisOS constructs one packet binding:
 
 - exact approved prompt or prompt derivative;
 - exact included context blocks;
@@ -276,7 +280,8 @@ The policy service creates one immutable decision per concrete attempt:
 - stable deterministic reason code;
 - operation: only `external_provider_call` in this spec;
 - route/provider/model and fallback index;
-- packet digest and final levels;
+- optional packet digest for post-eligibility outcomes;
+- safe input digests and final levels for pre-packet outcomes;
 - source/manifests counts;
 - trigger IDs and confirmation requirement;
 - projected input/output tokens and cost upper bound;
@@ -293,20 +298,29 @@ Inside `run_ai_task`, for each `ProviderBinding` where `requires_network` is tru
 
 1. resolve the exact adapter and server-owned output-token ceiling;
 2. build/reload prompt and context authority;
-3. construct the packet for that concrete provider/model and fallback index;
-4. open one policy transaction that revalidates source/derivative state, credentials,
-   current usage, active reservations, policy/config digests and triggers;
-5. write the packet and immutable decision;
-6. if denied/paused, write a pre-provider `ai_jobs` row and make zero adapter calls;
-7. if confirmation is required, return safe ticket metadata and make zero adapter
+3. evaluate deterministic floors, provenance, staleness, manual-block identity and
+   final effective levels;
+4. if pre-eligibility policy denies or pauses, write an immutable safe decision and
+   pre-provider `ai_jobs` row, persist no packet body, and make zero adapter calls;
+5. for eligible S0/S1 material, construct the packet for that concrete provider/model
+   and fallback index;
+6. open one policy transaction that revalidates source/derivative state, credentials,
+   current usage, unexpired active reservations, all in-flight reservations,
+   policy/config digests and triggers;
+7. write the packet and immutable decision;
+8. if denied/paused after packet creation, write a pre-provider `ai_jobs` row and make
+   zero adapter calls;
+9. if confirmation is required, return safe ticket metadata and make zero adapter
    calls;
-8. for silent allow, reserve projected cost and continue;
-9. for confirmed allow-once, atomically consume the ticket and reserve projected cost
-   immediately before adapter invocation;
-10. construct `AIRequest` only from the persisted/reloaded packet, never from mutable
+10. for silent allow, atomically create the active projected-cost reservation;
+11. for confirmed allow-once, atomically consume the ticket and create the active
+    reservation immediately before adapter invocation;
+12. construct `AIRequest` only from the persisted/reloaded packet, never from mutable
     caller fields;
-11. invoke the adapter once and write `ai_jobs` plus `egress_attempts` linkage;
-12. reconcile reservation versus reported usage/actual estimate.
+13. atomically move the reservation from `active` to `in_flight`, bind the attempt,
+    then invoke the adapter once;
+14. write `ai_jobs` plus immutable `egress_attempts` linkage and reconcile the
+    reservation versus reported usage/actual estimate.
 
 Local routes, including sanitizer routes, do not require external-egress permission,
 but still traverse `run_ai_task` and `ai_jobs`.
@@ -323,16 +337,19 @@ No adapter or alternate endpoint may perform a network call outside this spine.
   existing provider registry; route-level estimators remain advisory only.
 - Include exact serialized packet input plus the server-owned output-token ceiling.
 - Unknown price or inability to compute a conservative upper bound fails closed.
-- In the same transaction as the decision, compare actual `ai_jobs` usage plus
-  unexpired active reservations against global monthly, provider monthly, provider
-  token, and daily soft limits.
+- In the same transaction as the decision/reservation transition, compare actual
+  `ai_jobs` usage plus unexpired `active` reservations and all `in_flight`
+  reservations against global monthly, provider monthly, provider token, and daily
+  soft limits.
 - Monthly/global/provider hard limits are non-confirmable denials.
 - Crossing the daily soft threshold triggers `t2` for an otherwise eligible packet.
 - A reservation is bound to decision, packet, provider/model and expiry.
-- Provider failure still consumes a confirmation ticket, but the reservation is
-  reconciled to reported/estimated actual attempt cost rather than left active.
+- Provider failure still consumes a confirmation ticket, but the in-flight
+  reservation is reconciled to reported/estimated actual attempt cost rather than
+  left active.
 - Failed-before-network attempts record zero actual provider consumption and release
-  or expire the reservation deterministically.
+  the active reservation deterministically; only stale never-started active
+  reservations may expire.
 - Fallbacks repeat the full calculation independently.
 
 059b owns only safe upper-bound clamping and reservation. Task-kind optimization,
