@@ -21,7 +21,8 @@ No runtime, schema, provider, dependency, workflow, frontend, test, or merged
 ## Reconstruction
 
 The branch is reconstructed directly from post-#97 master commit
-`7358bd0c2f2d19585a76e0eaf97fa778f015a8b2`.
+`7358bd0c2f2d19585a76e0eaf97fa778f015a8b2` through a six-entry tree containing
+only the four kernels, canonical registry, and this report.
 
 Its final diff is exactly:
 
