@@ -1,7 +1,6 @@
 import sqlite3
 
 import pytest
-
 from app.core.database import (
     count_schema_migrations,
     get_current_schema_migration,
@@ -9,7 +8,6 @@ from app.core.database import (
     open_sqlite_connection,
 )
 from app.core.egress_schema import EGRESS_SCHEMA_MIGRATION_ID
-
 
 EXPECTED_EGRESS_TABLES = {
     "egress_prompt_derivatives",
