@@ -48,7 +48,7 @@ before Codex or another coding agent may act on them.
 1. `059a` is merged through implementation PR [#90](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/90); preserve its digest-bound labels, derivatives, deterministic floors, coherent read snapshots, and S0/S1-only external eligibility.
 2. The 059 definition amendment merged through [#95](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/95), and ADR-059 merged through [#98](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/98); preserve their server-owned autopilot policy, automatic sanitization, sampled audit, trigger semantics, residual-risk acceptance, and reconciliation with merged 059a.
 3. Reconcile and promote `059b` through the normal kernel/full-spec ladder before implementing policy autopilot and exact-packet enforcement; no runtime is authorized by the merged docs alone.
-4. Subsequent registry-only PRs define the maintained order for TOKEN-FLOW, grading, process calculations, memory, CAD, and conversation work.
+4. `061`–`064` remain planning kernels. After 059b, promote grading and token-flow work through full specs while preserving the productive 047–049 process-calculation sequence and bounded memory/CAD work.
 5. Trigger-gated rows remain `planned` until their stated evidence exists; do not start them merely because their number is lower.
 
 Always check rows marked `in_review` before choosing any `ready` spec, and confirm
@@ -126,6 +126,10 @@ that no open PR overlaps the target files or runtime boundary.
 | 059a | merged | [#90](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/90) | IP-EGRESS-1A: sensitivity and context foundation | 003, 015, 018, 021, 040, 042 | Digest-bound labels/derivatives, deterministic floors, stale handling, coherent read-snapshot selection, and S0/S1-only external preview merged in #90. |
 | 059b | blocked | — | IP-EGRESS-1B: policy autopilot and execution enforcement | 059a | ADR-059 and the amended definition are merged; reconcile and promote the full implementation spec before implementing automatic sanitization, sampled audit, packet caps, silent S0/S1 allow, configured triggers/tickets, projected economic checks, and exact per-binding spine enforcement. |
 | 060 | planned | — | AGENT-ORCH: bounded real orchestration | 011, 034, 040, 042 | Supersede historical orchestration references to `045`; trigger only after memory/context and the advisory panel survive sustained dogfood, then add auditable bounded steps rather than a second authority or manager stack. |
+| 061 | planned | — | TOKEN-FLOW-0 | 021, 059b | Size output tokens by task kind, clamp to provider/economic envelopes, allow at most two length-stop continuations by default, reconcile actual usage, and expose today/month provider counters without a second usage store. |
+| 062 | planned | — | GRADE-0 | 021, 059b | Add operator/API grades (`useful`, `partly`, `rework`, `failed`) plus bounded notes to `ai_jobs` as auditable evidence for empirical routing. |
+| 063 | planned | — | CAPTURE-VAULT-0 | 040, 042 | Add a local markdown vault and rebuildable local vector working layer, merged with canonical SQLite retrieval under explicit authority/conflict tags; no vectors over canonical records. |
+| 064 | planned | — | LIT-RAG-0 | 042, 063 | Add corpus-tagged public-literature retrieval to the local working layer with source locators and canonical-over-literature authority; boundary consolidation remains a separately unnumbered planning gap. |
 | 065 | planned | — | Provider-family diversification policy hook | 059b | After policy autopilot is proven, add a configurable hook that may separate families of S2/S3-derived content across provider accounts without weakening exact-packet, budget, sensitivity, or audit gates. |
 
 ## Superseded planning aliases and resolved collisions
