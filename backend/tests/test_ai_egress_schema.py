@@ -1,6 +1,7 @@
 import sqlite3
 
 import pytest
+
 from app.core.database import (
     count_schema_migrations,
     get_current_schema_migration,
