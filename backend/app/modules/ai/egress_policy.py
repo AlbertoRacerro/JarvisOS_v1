@@ -130,7 +130,7 @@ def _bounded_int(value: Any, field: str, minimum: int, maximum: int) -> int:
 
 
 def _nonnegative_float(value: Any, field: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if isinstance(value, bool) or not isinstance(value, int | float):
         raise ValueError(f"{field} must be numeric")
     parsed = float(value)
     if parsed < 0:
