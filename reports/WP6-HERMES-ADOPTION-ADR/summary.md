@@ -51,6 +51,12 @@ Before merge, the unrelated ADR-018 wording drift must be reverted from
 `real proprietary IP enters the system` to the master wording
 `real proprietary data enters the system`. No other existing ADR text may change.
 
+## Temporary reconstruction trigger
+
+This line exists only to emit a pull-request synchronize event after installing
+the branch-local CI reconstruction job. The reconstruction resets to `master`, so
+this section and all temporary workflow changes must disappear from the final diff.
+
 ## Merge gate
 
 Keep draft until:
