@@ -45,14 +45,11 @@ before Codex or another coding agent may act on them.
 
 ## Current priority and drafting order
 
-1. Complete `059a` through implementation PR [#90](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/90), preserving the digest-bound label, reviewed-derivative, stale-source, and pre-serialization withholding contracts. Do not merge until a completed Codex review on the final head has been read and resolved or explicitly dispositioned.
-2. After `059a` merges, move `059b` from `blocked` to `ready` and implement the exact-packet, single-use ticket, replay-prevention, and execution-spine boundary in a separate PR with its own Codex review.
-3. Then draft in small dependency batches:
-   `047` → `048` + `049` → `050` → `051` + `052` →
-   `029` + `037` → `030` + `058` → `054` + `035` + `055` →
-   `034` + `011` → `053`.
-4. Trigger-gated rows remain `planned` until their stated evidence exists; do not
-   start them merely because their number is lower.
+1. `059a` is merged through implementation PR [#90](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/90); preserve its digest-bound labels, derivatives, deterministic floors, coherent read snapshots, and S0/S1-only external eligibility.
+2. Review and merge definition-amendment PR [#95](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/95), including the server-owned autopilot policy, automatic sanitization, sampled audit, trigger semantics, residual-risk acceptance, and reconciliation with merged 059a.
+3. Merge the associated ADR, then promote `059b` through the normal kernel/full-spec ladder before implementing policy autopilot and exact-packet enforcement.
+4. Subsequent registry-only PRs define the maintained order for TOKEN-FLOW, grading, process calculations, memory, CAD, and conversation work.
+5. Trigger-gated rows remain `planned` until their stated evidence exists; do not start them merely because their number is lower.
 
 Always check rows marked `in_review` before choosing any `ready` spec, and confirm
 that no open PR overlaps the target files or runtime boundary.
@@ -103,7 +100,7 @@ that no open PR overlaps the target files or runtime boundary.
 | 036 | planned | — | Honest multi-agent chat UI | 034, 058 | Present clearly labeled advisory persona calls in the unified workspace; do not claim a real swarm until orchestration evidence exists. |
 | 037 | planned | — | Chat entry point to BLUECAD workbench | 010, 042 | Add the smallest chat on-ramp that creates or drafts a candidate in the existing workbench instead of introducing a second product surface. |
 | 038 | merged | [#65](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/65) | SIM-WIRE | 044 | Wire the existing mesh and static-FEM adapters into the BLUECAD attempt loop as an opt-in advisory stage with evidence records and no auto-promotion. |
-| 039 | planned | — | FRONTIER-1 provider route | 015, 018, 059b | Add the frontier provider adapter/route only behind the same budget, confirmation, sensitivity, redaction, provenance, and audit boundaries as every other external call. |
+| 039 | planned | — | FRONTIER-1 provider route | 015, 018, 059b | Add the frontier provider adapter/route only behind the same server-owned egress, projected-budget, sensitivity, sanitization, provenance, trigger, and audit boundaries as every other external call. |
 | 040 | merged | [#38](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/38) | MEMORYSTORE-0 | — | Add the single proposal/promotion boundary for AI- and calculation-originated engineering records with provenance and additive migration support. |
 | 041 | merged | [#50](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/50) | DECISION-CAPTURE-0 | 040 | Parse bounded `jarvis-records` blocks from approved AI task responses and create proposed records through MemoryStore without extra model calls. |
 | 042 | merged | [#56](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/56) | CONTEXT-PACK-1 | 040 | Add deterministic, budgeted, inspectable record selection with FTS/LIKE fallback and a side-effect-free preview endpoint. |
@@ -125,10 +122,11 @@ that no open PR overlaps the target files or runtime boundary.
 | 058 | planned | — | Unified workspace home layout | 006, 029, 037 | Replace page-first navigation with the BLUECAD workbench/3D surface, persistent right-side AI entry, compact status strip, and shared design tokens; historical roadmap references to workspace-home `057` now mean `058`. |
 | 058b | planned | — | Workbench UX pass 2: variant comparison and design history | 006b, 058 | Add bounded side-by-side variant comparison and a parent-link history tree after parametric variants and the unified workspace exist. |
 | 058c | planned | — | Report-to-3D linking | 006, 044, 058 | Let a failed validation/evidence check highlight the affected named geometry in the viewer, reusing existing artifact/node identities. |
-| 059 | planned | — | IP-EGRESS-1 umbrella definition | 003, 015, 018, 021, 040, 042 | Definition merged in [#89](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/89). This row is definition-only and must not receive an implementation PR; delivery is tracked by 059a and 059b. |
-| 059a | in_review | [#90](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/90) | IP-EGRESS-1A: sensitivity and context foundation | 003, 015, 018, 021, 040, 042 | Digest-bound labels, reviewed derivatives, deterministic floors, stale-source handling, and sensitivity-aware context preview are under review in #90. |
-| 059b | blocked | — | IP-EGRESS-1B: packet, ticket, and execution enforcement | 059a | Blocked until 059a is merged; then add exact egress packets/decisions, server-owned single-use confirmation tickets, replay prevention, and per-binding execution-spine enforcement. |
+| 059 | planned | — | IP-EGRESS-1 umbrella definition | 003, 015, 018, 021, 040, 042 | Definition merged in #89 and amended by docs PR #95 for external policy autopilot, automatic sanitization, sampled audit, and explicit maintainer residual-risk acceptance; this row remains definition-only. |
+| 059a | merged | [#90](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/90) | IP-EGRESS-1A: sensitivity and context foundation | 003, 015, 018, 021, 040, 042 | Digest-bound labels/derivatives, deterministic floors, stale handling, coherent read-snapshot selection, and S0/S1-only external preview merged in #90. |
+| 059b | blocked | — | IP-EGRESS-1B: policy autopilot and execution enforcement | 059a | Blocked until amendment PR #95 and the associated ADR merge; then reconcile the full spec before implementing automatic sanitization, sampled audit, packet caps, silent S0/S1 allow, configured triggers/tickets, projected economic checks, and exact per-binding spine enforcement. |
 | 060 | planned | — | AGENT-ORCH: bounded real orchestration | 011, 034, 040, 042 | Supersede historical orchestration references to `045`; trigger only after memory/context and the advisory panel survive sustained dogfood, then add auditable bounded steps rather than a second authority or manager stack. |
+| 065 | planned | — | Provider-family diversification policy hook | 059b | After policy autopilot is proven, add a configurable hook that may separate families of S2/S3-derived content across provider accounts without weakening exact-packet, budget, sensitivity, or audit gates. |
 
 ## Superseded planning aliases and resolved collisions
 
