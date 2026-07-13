@@ -42,8 +42,8 @@ implementing.
 
 ## Model economy (intended routing hierarchy)
 
-The target steady state, once redaction and confirm flows exist (see ADR-057 in
-`docs/DECISIONS.md`):
+The target steady state, once redaction and egress-policy flows exist (see
+ADR-057 and ADR-059 in `docs/DECISIONS.md`):
 
 - **Cheap external models** (e.g. GLM, Kimi, DeepSeek class) are the workhorse
   for the majority of compute.
@@ -52,9 +52,13 @@ The target steady state, once redaction and confirm flows exist (see ADR-057 in
 - **Local models** are the fallback for the rare cases where redaction is
   impossible or ambiguous (fail-closed) — this path must stay rare, not the norm.
 
-Do not read "local-first" as "prefer local models". The hard invariants above
-still apply unchanged: external execution is gated by explicit user confirmation
-and deterministic policy, regardless of how common it is.
+Do not read "local-first" as "prefer local models". Hard invariant 1 remains
+unchanged: `route_class="auto"` itself never executes an external provider. A
+separate server-owned egress policy may allow an explicit external route only
+after binding and validating the exact outbound packet through the shared
+execution spine. Human confirmation is required only when a configured policy
+trigger fires; models, frontend state, and caller-supplied flags never authorize
+external execution.
 
 ## How work is assigned: spec-driven slices
 
