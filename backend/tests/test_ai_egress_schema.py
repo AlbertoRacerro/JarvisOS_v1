@@ -1,0 +1,155 @@
+import sqlite3
+
+import pytest
+
+from app.core.database import (
+    count_schema_migrations,
+    get_current_schema_migration,
+    initialize_database,
+    open_sqlite_connection,
+)
+from app.core.egress_schema import EGRESS_SCHEMA_MIGRATION_ID
+
+
+EXPECTED_EGRESS_TABLES = {
+    "egress_prompt_derivatives",
+    "egress_packets",
+    "egress_decisions",
+    "egress_budget_reservations",
+    "egress_confirmation_tickets",
+    "egress_attempts",
+    "sanitizer_audit_items",
+    "workspace_egress_policy",
+}
+
+
+def test_egress_schema_initializes_idempotently_as_migration_0010():
+    first = initialize_database()
+    second = initialize_database()
+
+    assert first.ready is True
+    assert second.ready is True
+    assert get_current_schema_migration().migration_id == EGRESS_SCHEMA_MIGRATION_ID
+    assert count_schema_migrations() == 10
+
+    with open_sqlite_connection() as connection:
+        rows = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
+    tables = {row["name"] for row in rows}
+    assert EXPECTED_EGRESS_TABLES.issubset(tables)
+
+
+def test_packet_schema_rejects_noneligible_final_level():
+    initialize_database()
+    with open_sqlite_connection() as connection:
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO egress_packets (
+                    id, packet_digest, operation, task_kind, route_class,
+                    provider_id, model_id, fallback_index, prompt_digest,
+                    packet_json, included_manifest_json, withheld_manifest_json,
+                    sanitizer_failed_manifest_json, policy_capped_manifest_json,
+                    budget_dropped_manifest_json, final_level, max_output_tokens,
+                    policy_version, trigger_version, config_digest, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, '[]', '[]', '[]', '[]', '[]',
+                          'S2', 10, ?, ?, ?, ?)
+                """,
+                (
+                    "packet-1",
+                    "digest-1",
+                    "external_provider_call",
+                    "general",
+                    "external:cheap",
+                    "deepseek",
+                    "deepseek-v4-pro",
+                    "prompt-digest",
+                    "{}",
+                    "policy-v1",
+                    "triggers-v1",
+                    "config-digest",
+                    "2026-07-13T00:00:00Z",
+                ),
+            )
+
+
+def test_reservation_schema_has_unique_decision_and_bounded_state():
+    initialize_database()
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO egress_decisions (
+                id, created_at, result, reason_code, operation, fallback_index,
+                safe_input_digest, prompt_level, context_level, final_level,
+                trigger_ids_json, confirmation_required, policy_version,
+                trigger_version, config_digest
+            ) VALUES (?, ?, 'deny', 'test-deny', 'external_provider_call', 0,
+                      ?, 'S2', 'unknown', 'S2', '[]', 0, ?, ?, ?)
+            """,
+            (
+                "decision-1",
+                "2026-07-13T00:00:00Z",
+                "safe-input-digest",
+                "policy-v1",
+                "triggers-v1",
+                "config-digest",
+            ),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO egress_budget_reservations (
+                    id, decision_id, packet_digest, provider_id, model_id,
+                    projected_input_tokens, projected_output_tokens,
+                    projected_cost_upper_usd, state, created_at, expires_at
+                ) VALUES (?, ?, ?, ?, ?, 1, 1, 0.1, 'invalid', ?, ?)
+                """,
+                (
+                    "reservation-invalid",
+                    "decision-1",
+                    "packet-digest",
+                    "deepseek",
+                    "deepseek-v4-pro",
+                    "2026-07-13T00:00:00Z",
+                    "2026-07-13T00:05:00Z",
+                ),
+            )
+
+        connection.execute(
+            """
+            INSERT INTO egress_budget_reservations (
+                id, decision_id, packet_digest, provider_id, model_id,
+                projected_input_tokens, projected_output_tokens,
+                projected_cost_upper_usd, state, created_at, expires_at
+            ) VALUES (?, ?, ?, ?, ?, 1, 1, 0.1, 'active', ?, ?)
+            """,
+            (
+                "reservation-1",
+                "decision-1",
+                "packet-digest",
+                "deepseek",
+                "deepseek-v4-pro",
+                "2026-07-13T00:00:00Z",
+                "2026-07-13T00:05:00Z",
+            ),
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO egress_budget_reservations (
+                    id, decision_id, packet_digest, provider_id, model_id,
+                    projected_input_tokens, projected_output_tokens,
+                    projected_cost_upper_usd, state, created_at, expires_at
+                ) VALUES (?, ?, ?, ?, ?, 1, 1, 0.1, 'active', ?, ?)
+                """,
+                (
+                    "reservation-2",
+                    "decision-1",
+                    "packet-digest-2",
+                    "deepseek",
+                    "deepseek-v4-pro",
+                    "2026-07-13T00:00:01Z",
+                    "2026-07-13T00:05:01Z",
+                ),
+            )
