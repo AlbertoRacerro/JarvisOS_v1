@@ -1,0 +1,150 @@
+name: Temporary ADR-060 branch reconstruction
+
+on:
+  push:
+    branches:
+      - docs/wp6-hermes-adoption-adr
+
+permissions:
+  contents: write
+
+jobs:
+  reconstruct:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out triggering branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract ADR-060 from current branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          text = Path('docs/DECISIONS.md').read_text(encoding='utf-8')
+          marker = '## ADR-060: Adopt pinned Hermes as the swappable operational orchestrator'
+          start = text.find(marker)
+          if start < 0:
+              raise SystemExit('ADR-060 marker not found on source branch')
+          adr = text[start:].strip() + '\n'
+          if adr.count('## ADR-060:') != 1:
+              raise SystemExit('Unexpected ADR-060 multiplicity')
+          Path('/tmp/adr060.md').write_text(adr, encoding='utf-8')
+          PY
+
+      - name: Reconstruct from current master
+        shell: bash
+        env:
+          TARGET_BRANCH: docs/wp6-hermes-adoption-adr
+          TRIGGER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin master "$TARGET_BRANCH"
+          git reset --hard origin/master
+
+          python - <<'PY'
+          from pathlib import Path
+
+          decisions_path = Path('docs/DECISIONS.md')
+          decisions = decisions_path.read_text(encoding='utf-8')
+          adr = Path('/tmp/adr060.md').read_text(encoding='utf-8')
+
+          canonical = 'when real proprietary data enters the system'
+          drift = 'when real proprietary IP enters the system'
+          if canonical not in decisions:
+              raise SystemExit('Canonical ADR-018 wording missing from master')
+          if drift in decisions:
+              raise SystemExit('ADR-018 drift already present on master')
+          if '## ADR-060:' in decisions:
+              raise SystemExit('ADR-060 already exists on master')
+
+          decisions_path.write_text(
+              decisions.rstrip() + '\n\n' + adr.lstrip(),
+              encoding='utf-8',
+          )
+
+          report = '''# WP6 — Hermes adoption architecture decision
+
+Date: 2026-07-13
+
+## Scope
+
+Docs/report only. This slice appends ADR-060 after merged ADR-059 and records the
+durable buy-vs-build decision for Hermes Agent:
+
+- Hermes is the pinned, swappable operational agent-loop engine;
+- JarvisOS retains state, domain services, provider credentials, sensitivity,
+  route policy, budget, egress, ledger, proposal validation, and promotion;
+- integration uses only an OpenAI-compatible passthrough and MCP;
+- Hermes internals, memory, skills, and configuration are non-canonical;
+- external passthrough execution remains blocked until 059b is merged and active;
+- merged PR #90 / 059a remains unchanged.
+
+No runtime, schema, dependency, workflow, provider, frontend, test, specification,
+registry, secret, or Hermes installation/configuration change is included.
+
+## Reconstruction
+
+The branch is reconstructed as one commit directly from current `master`
+`33e7398f6c59fd641f86714ee0342673e6106c92`.
+
+The final master-relative delta is exactly:
+
+1. append ADR-060 to `docs/DECISIONS.md`;
+2. add this report.
+
+ADR-059 remains owned by merged PR #98 and is preserved unchanged. Existing
+ADR-001–059 text matches `master`, including the canonical ADR-018 wording.
+
+## Authority boundaries
+
+- keys and provider OAuth credentials remain only in JarvisOS;
+- every model call traverses `run_ai_task` and writes `ai_jobs` evidence;
+- Hermes never owns sensitivity, route permission, egress, budget, promotion, or
+  accepted engineering state;
+- canonical engineering truth enters SQLite only through JarvisOS proposal and
+  promotion paths;
+- host-level isolation is required; YAML deny rules are not represented as a
+  sandbox;
+- browser, web search, computer use, cron, proactive triggers, broad
+  terminal/filesystem access, MCP sampling, and unrelated MCP servers start
+  disabled;
+- model switching and subagents may choose only JarvisOS policy aliases.
+
+## Merge gate
+
+Keep draft until:
+
+1. the final diff contains exactly `docs/DECISIONS.md` and this report;
+2. GitHub Actions execute and pass on the final head;
+3. a current-head review completes and every finding is fixed or explicitly
+   dispositioned;
+4. the maintainer authorizes merge.
+'''
+          report_path = Path('reports/WP6-HERMES-ADOPTION-ADR/summary.md')
+          report_path.parent.mkdir(parents=True, exist_ok=True)
+          report_path.write_text(report, encoding='utf-8')
+
+          final = decisions_path.read_text(encoding='utf-8')
+          if final.count('## ADR-060:') != 1:
+              raise SystemExit('Final ADR-060 multiplicity invalid')
+          if drift in final or canonical not in final:
+              raise SystemExit('ADR-018 canonical wording check failed')
+          PY
+
+          mapfile -t changed < <(git status --short | sed -E 's/^.. //')
+          printf '%s\n' "${changed[@]}"
+          test "${#changed[@]}" -eq 2
+          test "${changed[0]}" = 'docs/DECISIONS.md'
+          test "${changed[1]}" = 'reports/WP6-HERMES-ADOPTION-ADR/summary.md'
+          git diff --check
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/DECISIONS.md reports/WP6-HERMES-ADOPTION-ADR/summary.md
+          git commit -m 'Record Hermes orchestrator adoption decision'
+          git push --force-with-lease="refs/heads/${TARGET_BRANCH}:${TRIGGER_SHA}" origin "HEAD:refs/heads/${TARGET_BRANCH}"
