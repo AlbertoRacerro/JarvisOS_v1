@@ -46,8 +46,8 @@ before Codex or another coding agent may act on them.
 ## Current priority and drafting order
 
 1. `059a` is merged through implementation PR [#90](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/90); preserve its digest-bound labels, derivatives, deterministic floors, coherent read snapshots, and S0/S1-only external eligibility.
-2. Review and merge definition-amendment PR [#95](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/95), including the server-owned autopilot policy, automatic sanitization, sampled audit, trigger semantics, residual-risk acceptance, and reconciliation with merged 059a.
-3. Merge the associated ADR, then promote `059b` through the normal kernel/full-spec ladder before implementing policy autopilot and exact-packet enforcement.
+2. The 059 definition amendment merged through [#95](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/95), and ADR-059 merged through [#98](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/98); preserve their server-owned autopilot policy, automatic sanitization, sampled audit, trigger semantics, residual-risk acceptance, and reconciliation with merged 059a.
+3. Reconcile and promote `059b` through the normal kernel/full-spec ladder before implementing policy autopilot and exact-packet enforcement; no runtime is authorized by the merged docs alone.
 4. Subsequent registry-only PRs define the maintained order for TOKEN-FLOW, grading, process calculations, memory, CAD, and conversation work.
 5. Trigger-gated rows remain `planned` until their stated evidence exists; do not start them merely because their number is lower.
 
@@ -124,7 +124,7 @@ that no open PR overlaps the target files or runtime boundary.
 | 058c | planned | — | Report-to-3D linking | 006, 044, 058 | Let a failed validation/evidence check highlight the affected named geometry in the viewer, reusing existing artifact/node identities. |
 | 059 | planned | — | IP-EGRESS-1 umbrella definition | 003, 015, 018, 021, 040, 042 | Definition merged in #89 and amended by docs PR #95 for external policy autopilot, automatic sanitization, sampled audit, and explicit maintainer residual-risk acceptance; this row remains definition-only. |
 | 059a | merged | [#90](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/90) | IP-EGRESS-1A: sensitivity and context foundation | 003, 015, 018, 021, 040, 042 | Digest-bound labels/derivatives, deterministic floors, stale handling, coherent read-snapshot selection, and S0/S1-only external preview merged in #90. |
-| 059b | blocked | — | IP-EGRESS-1B: policy autopilot and execution enforcement | 059a | Blocked until amendment PR #95 and the associated ADR merge; then reconcile the full spec before implementing automatic sanitization, sampled audit, packet caps, silent S0/S1 allow, configured triggers/tickets, projected economic checks, and exact per-binding spine enforcement. |
+| 059b | blocked | — | IP-EGRESS-1B: policy autopilot and execution enforcement | 059a | ADR-059 and the amended definition are merged; reconcile and promote the full implementation spec before implementing automatic sanitization, sampled audit, packet caps, silent S0/S1 allow, configured triggers/tickets, projected economic checks, and exact per-binding spine enforcement. |
 | 060 | planned | — | AGENT-ORCH: bounded real orchestration | 011, 034, 040, 042 | Supersede historical orchestration references to `045`; trigger only after memory/context and the advisory panel survive sustained dogfood, then add auditable bounded steps rather than a second authority or manager stack. |
 | 065 | planned | — | Provider-family diversification policy hook | 059b | After policy autopilot is proven, add a configurable hook that may separate families of S2/S3-derived content across provider accounts without weakening exact-packet, budget, sensitivity, or audit gates. |
 

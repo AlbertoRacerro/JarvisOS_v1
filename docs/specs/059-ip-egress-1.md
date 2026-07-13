@@ -1,6 +1,6 @@
 # 059 — IP-EGRESS-1: sensitivity, retrieval, and external-boundary enforcement
 
-Status: proposed maintainer amendment; blocked on ADR reconciliation; `docs/specs/STATUS.md` is authoritative.
+Status: proposed maintainer amendment reconciled with accepted ADR-059; runtime remains blocked behind 059b; `docs/specs/STATUS.md` is authoritative.
 
 Depends on: 003, 015, 018, 021, 040, 042
 
@@ -10,10 +10,12 @@ This definition records the maintainer-approved target policy that external prov
 calls should normally use a server-owned policy autopilot and that human
 confirmation should be exceptional rather than required for every call.
 
-It does **not** supersede accepted ADR-057 by itself. ADR-057 remains the durable
-authority until ADR-059 is merged and explicitly reconciles its per-call
-confirmation language. Until that happens, 059b remains blocked and no autopilot
-runtime implementation may begin.
+ADR-059 is accepted and explicitly supersedes only ADR-057's per-call confirmation
+sentence. It supplies durable authority for silent effective-S0/S1 allow when no
+configured trigger fires and for exact-packet confirmation when a configured trigger
+requires it. This definition remains planning-only: 059b stays blocked until its
+full specification is reconciled and promoted through the normal ladder, and no
+autopilot runtime implementation may begin before that implementation merges.
 
 The maintainer explicitly accepts the residual risk that an automatically sanitized
 S2/S3-derived representation may still retain some project-specific information.
@@ -43,8 +45,10 @@ policy. In particular, external eligibility remains strictly effective S0/S1.
 
 ## Goal
 
-After ADR-059 reconciliation, add one fail-closed, server-owned boundary that decides
+Under accepted ADR-059, define one fail-closed, server-owned boundary that decides
 whether the **exact outbound packet** for an external provider may leave JarvisOS.
+The boundary becomes runtime only through a reconciled, promoted, reviewed, and
+merged 059b implementation.
 
 The intended normal path is:
 
@@ -86,8 +90,8 @@ or provider response cannot authorize egress or lower sensitivity.
    external-tool runtime.
 10. Conversation history is not yet a separate authority or egress path. Future
     history must enter through the same context and packet contracts.
-11. ADR-057 still requires explicit confirmation for external calls until ADR-059
-    is merged; this definition alone does not activate autopilot.
+11. ADR-059 has superseded ADR-057's per-call confirmation sentence. This definition
+    records the aligned policy but does not itself activate autopilot runtime.
 
 ## Canonical sensitivity taxonomy
 
@@ -258,14 +262,14 @@ egress permission and cannot authorize its output.
 
 ## Target policy autopilot
 
-After ADR-059 supersedes the conflicting ADR-057 sentence, a packet whose included
+ADR-059 supersedes the conflicting ADR-057 sentence. A packet whose included
 blocks are all effectively S0/S1 receives a silent server-owned `allow` when all
 other gates pass and no confirmation trigger fires. Silent allows still write
 decision and execution ledger rows; they create no confirmation ticket.
 
-Until ADR-059 is merged, this section is target policy only and does not authorize
-runtime implementation or external execution without the confirmation currently
-required by ADR-057.
+ADR-059 supplies durable policy authority, but this section does not itself
+authorize runtime implementation. External autopilot execution remains blocked
+until 059b is reconciled, promoted, implemented, reviewed, and merged.
 
 The trigger list is configuration data, not scattered code constants:
 
@@ -338,8 +342,9 @@ implementation.
 
 ### 059b — policy autopilot and execution enforcement
 
-Only after this definition amendment and ADR-059 are merged and reconciled, 059b
-owns:
+With this definition amendment and ADR-059 merged and reconciled, 059b owns the
+following implementation scope after its full specification is reconciled and
+promoted through the normal ladder:
 
 - deterministic or AI-spine-routed automatic sanitizer orchestration;
 - sampled human-audit queue and revocation behavior;
@@ -375,8 +380,8 @@ unless a concrete shared-spine defect requires a bounded correction.
 
 ## Required 059b tests
 
-- S0/S1 no-trigger packet silently allows and creates no ticket after ADR-059 is
-  authoritative;
+- S0/S1 no-trigger packet silently allows and creates no ticket under ADR-059
+  authority;
 - each trigger is configuration-driven and independently tested;
 - missing/malformed policy or trigger configuration fails closed;
 - raw S2/S3/unknown/S4 and surviving secret-bearing content make zero external
@@ -409,7 +414,8 @@ unless a concrete shared-spine defect requires a bounded correction.
 
 Stop and amend rather than weaken this definition if:
 
-- ADR-057 and ADR-059 cannot be reconciled before runtime implementation;
+- the 059b implementation contract cannot remain consistent with accepted ADR-059
+  and merged 059a;
 - exact content cannot be digest-bound;
 - selection and eligibility cannot share a coherent authority snapshot;
 - raw S2/S3/S4/unknown, surviving secret-bearing content, or final effective S2/S3
@@ -430,7 +436,8 @@ Stop and amend rather than weaken this definition if:
 ## Non-goals
 
 - No modification or reopening of merged 059a runtime.
-- No runtime autopilot implementation before ADR-059 reconciliation.
+- No runtime autopilot implementation before 059b full-spec reconciliation,
+  promotion, review, and merge.
 - No claim that deterministic scans prove semantic IP removal.
 - No surviving-secret or final-S2/S3 confirmation override.
 - No provider/model addition or live-provider test.
@@ -449,8 +456,8 @@ Stop and amend rather than weaken this definition if:
 3. Merged 059a remains unchanged and authoritative, including S4-source derivative
    semantics.
 4. Model-backed sanitizers cannot bypass `run_ai_task` or `ai_jobs`.
-5. Silent autopilot remains target policy until ADR-059 explicitly reconciles and
-   supersedes the conflicting ADR-057 sentence.
+5. ADR-059 supplies durable policy authority; this docs amendment does not activate
+   runtime.
 6. Silent autopilot is restricted to exact effective S0/S1 packets.
 7. Confirmation cannot authorize surviving S4/secret content, monthly hard-budget
    denial, unsupported mechanics, stale authority, or a final level above S1.
@@ -458,5 +465,4 @@ Stop and amend rather than weaken this definition if:
 9. 059b implementation requires executing green CI, focused tests, full backend
    Pytest, Ruff, applicable BLUECAD proof, completed review, and human merge
    authority.
-10. Real BlueRev external dogfood remains blocked until ADR-059 and 059b are merged
-    and active.
+10. Real BlueRev external dogfood remains blocked until 059b is merged and active.
