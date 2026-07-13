@@ -4,8 +4,8 @@ Date: 2026-07-13
 
 ## Scope
 
-Docs/report only. This stack appends ADR-060 after ADR-059 and records the durable
-buy-vs-build decision for Hermes Agent:
+Docs/report only. This slice appends ADR-060 after merged ADR-059 and records the
+durable buy-vs-build decision for Hermes Agent:
 
 - Hermes is the pinned, swappable operational agent-loop engine;
 - JarvisOS retains state, domain services, provider credentials, sensitivity,
@@ -18,27 +18,17 @@ buy-vs-build decision for Hermes Agent:
 No runtime, schema, dependency, workflow, provider, frontend, test, specification,
 registry, secret, or Hermes installation/configuration change is included.
 
-## Stack
+## Reconstruction
 
-This branch is based on PR #98 head after ADR-059 was added. ADR-059 remains owned
-by PR #98; this stack adds ADR-060 only.
+The branch is reconstructed as one commit directly from post-#101 `master`
+`6340d6832fc0248a547e3a820843aefd85be911e`.
 
-## Known merge blocker
-
-The current branch comparison also contains one unrelated wording drift in
-ADR-018:
-
-- current base wording: `when real proprietary data enters the system`;
-- current branch wording: `when real proprietary IP enters the system`.
-
-That change is not required by the Hermes decision and must be reverted before
-merge. The intended final delta relative to PR #98 is exactly:
+The intended final master-relative delta is exactly:
 
 1. append ADR-060 to `docs/DECISIONS.md`;
 2. add this report.
 
-The PR must remain draft and must not be marked ready while that one-line drift is
-present.
+ADR-059 remains owned by merged PR #98 and is preserved unchanged.
 
 ## Authority boundaries
 
@@ -55,15 +45,19 @@ present.
   disabled;
 - model switching and subagents may choose only JarvisOS policy aliases.
 
+## Remaining correction
+
+Before merge, the unrelated ADR-018 wording drift must be reverted from
+`real proprietary IP enters the system` to the master wording
+`real proprietary data enters the system`. No other existing ADR text may change.
+
 ## Merge gate
 
 Keep draft until:
 
 1. the ADR-018 wording drift is removed;
-2. PR #98 is merged and this branch is retargeted/rebased to the resulting
-   `master`;
-3. the final diff contains exactly `docs/DECISIONS.md` and this report;
-4. GitHub Actions execute and pass on the final head;
-5. a current-head review completes and every finding is fixed or explicitly
+2. the final diff contains exactly `docs/DECISIONS.md` and this report;
+3. GitHub Actions execute and pass on the final head;
+4. a current-head review completes and every finding is fixed or explicitly
    dispositioned;
-6. the maintainer authorizes merge.
+5. the maintainer authorizes merge.
