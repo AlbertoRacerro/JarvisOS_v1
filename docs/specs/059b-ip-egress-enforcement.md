@@ -1,6 +1,6 @@
 # 059b — IP-EGRESS-1B: policy autopilot and execution enforcement
 
-Status: blocked until the amended 059 definition and ADR are merged; `docs/specs/STATUS.md` is authoritative.
+Status: blocked pending full-spec reconciliation and promotion; the amended 059 definition and ADR-059 are merged; `docs/specs/STATUS.md` is authoritative.
 
 Depends on: 059a
 
@@ -248,12 +248,12 @@ Stop and amend rather than weaken if:
 
 An implementation PR must declare `**Spec gate:** implementation 059b`.
 
-059b may move to `ready` only after:
+ADR-059 and the amended parent definition are merged. 059b remains blocked and may
+move to `ready` only after:
 
-- this amended definition is merged;
-- ADR-059 is merged and explicitly reconciles the still-accepted ADR-057;
-- the full implementation spec is reconciled against current `master`;
-- 059a remains `merged`.
+- the full implementation specification is reconciled against current `master`;
+- the registry row is explicitly promoted through maintainer review;
+- 059a remains `merged` and ADR-059 remains the controlling durable policy record.
 
 Implementation requires executing green CI, focused tests, full backend Pytest,
 Ruff, applicable BLUECAD proof, completed review, resolved/dispositioned findings,
