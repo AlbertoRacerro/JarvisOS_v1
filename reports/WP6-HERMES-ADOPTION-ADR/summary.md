@@ -53,11 +53,9 @@ Before merge, the unrelated ADR-018 wording drift must be reverted from
 
 ## Temporary reconstruction trigger
 
-This line exists only to emit a pull-request synchronize event after installing
-the idempotent default-branch reconstruction workflow. Trigger base:
-`b4ae7896c46101a690db16e70d9bf1744928da21`.
-
-Synchronize retry requested after resuming the interrupted maintenance sequence.
+This line exists only to create a new PR commit after fixing the producer's
+remote-tracking refspec. Corrected producer base:
+`b61c266a74ffa271fec7ea3195127edfc7363601`.
 
 ## Merge gate
 
