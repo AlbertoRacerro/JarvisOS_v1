@@ -112,7 +112,7 @@ Scaleway smoke tests default to a `500000` monthly token cap and an `800000` har
 
 Status: Accepted
 
-Providers may recommend privacy or sensitivity classifications in future milestones, but they cannot authorize their own unrestricted access. JarvisOS uses local policy to decide whether content may be sent externally. In the current early-stage `FAST_DEV` mode, that policy protects structural secrets and provider credentials without broadly blocking normal public/internal technical prompts. Future `STRICT_IP` mode may block `sensitive_ip`, `confidential`, and `unknown` content more aggressively when real proprietary data enters the system.
+Providers may recommend privacy or sensitivity classifications in future milestones, but they cannot authorize their own unrestricted access. JarvisOS uses local policy to decide whether content may be sent externally. In the current early-stage `FAST_DEV` mode, that policy protects structural secrets and provider credentials without broadly blocking normal public/internal technical prompts. Future `STRICT_IP` mode may block `sensitive_ip`, `confidential`, and `unknown` content more aggressively when real proprietary IP enters the system.
 
 ## ADR-019: Smoke Tests Use Synthetic Data Only
 
@@ -597,3 +597,87 @@ in exchange for prototype velocity.
 This ADR supersedes only ADR-057's sentence requiring explicit user confirmation
 for every external call. It preserves ADR-057's model-economy hierarchy and all
 server-owned execution, audit, safe-default, and model-advisory invariants.
+
+## ADR-060: Adopt pinned Hermes as the swappable operational orchestrator
+
+Status: Accepted
+
+JarvisOS adopts a pinned, fingerprinted build of NousResearch Hermes Agent as its
+operational agent-loop engine. The decision follows the principle:
+
+> buy the orchestrator; build the domain and the authority.
+
+Hermes owns the replaceable conversation loop, session surface, bounded subagent
+delegation, and tool orchestration. JarvisOS retains exclusive ownership of
+canonical state, domain services, sensitivity, route policy, provider
+credentials, projected and actual budget, egress decisions, execution ledger,
+proposal validation, promotion, and final authority.
+
+Integration is standards-only:
+
+1. Hermes reaches models through a local OpenAI-compatible JarvisOS passthrough
+   whose implementation remains inside `run_ai_task`.
+2. Hermes reaches JarvisOS domain operations through bounded MCP tools that call
+   existing services.
+3. JarvisOS does not import Hermes internals, write Hermes databases, depend on
+   private Python modules, or expose its repository, SQLite files, or data root to
+   Hermes.
+4. Hermes does not call JarvisOS adapters, storage, runners, or services except
+   through those documented interfaces.
+
+The standards-only boundary is a replacement and rollback requirement. A future
+orchestrator may replace Hermes if it satisfies the same tested API/MCP contracts.
+Hermes upgrades require a new immutable identity, fingerprint, effective-config
+preflight, compatibility evidence, and explicit maintainer decision.
+
+Hard authority lines:
+
+- Provider API keys and provider OAuth credentials exist only in JarvisOS.
+  Hermes receives at most scoped local credentials for the passthrough and MCP
+  endpoints.
+- Hermes' internal memory, skills, summaries, and session state are episodic and
+  disposable. Canonical engineering truth enters SQLite only through JarvisOS
+  proposal and promotion paths.
+- Hermes is never an authority for promotion, sensitivity, route permission,
+  egress, budget, or accepted engineering state.
+- Model switching, personas, and subagents may select only policy aliases offered
+  by the JarvisOS passthrough. They cannot create or widen provider permission.
+- Every AI provider attempt remains gated and ledgered by JarvisOS. Every domain
+  mutation remains a proposal or an existing bounded job.
+- The ten `AGENTS.md` invariants remain unchanged. The passthrough preserves the
+  invariant that all AI calls traverse `run_ai_task` and write `ai_jobs`.
+- Merged spec 059a remains unchanged. External passthrough execution is blocked
+  until 059b is merged and active.
+
+Security consequences:
+
+- A Hermes configuration file is not treated as a sandbox. The production profile
+  requires host-level workspace isolation, no direct provider egress, no inherited
+  provider credentials, and no access to the JarvisOS repository or data root.
+- Browser, web search, computer use, cron, proactive triggers, messaging, broad
+  terminal/filesystem access, MCP sampling, and unrelated MCP servers start
+  disabled.
+- Delegation receives explicit depth, concurrency, iteration, timeout, tool/model
+  call, and economic bounds. JarvisOS remains the enforcing economic authority.
+- MCP outputs retain server-verifiable provenance so model-visible text cannot
+  self-declare sensitivity or authority.
+
+Roadmap consequences:
+
+- Spec 060 is re-scoped as the definition-only Hermes integration umbrella.
+- `HERMES-PASSTHROUGH-0`, `JARVIS-MCP-0`, and `HERMES-CONFIG-0` are its
+  implementation-owning slices.
+- Specs 030, 031, 034, and 036 are superseded in part. Hermes supplies the
+  conversation engine, persona/subagent execution, and multi-agent interaction.
+  Thin JarvisOS residual contracts remain for proposal/approval handoff,
+  capability-vocabulary truth, policy-owned persona metadata, and honest
+  authority/status presentation.
+- The model-bench repository qualifies local models for privacy, offline, and
+  bounded background lanes. External-model orchestration is governed by the
+  JarvisOS passthrough and is not qualified by that benchmark.
+- `MEMORY-CONSOLIDATE-0` is the first Hermes dogfood job and remains
+  proposal-only.
+
+This ADR authorizes specification and compatibility work only. It does not
+activate Hermes, add runtime routes, enable external execution, modify 059a,
+install dependencies, expose MCP, or make any registry row implementation-ready.
