@@ -52,13 +52,16 @@ before Codex or another coding agent may act on them.
 3. Promote `062` GRADE-0 and `061` TOKEN-FLOW-0 as separate bounded slices;
    grading supplies empirical evidence, while token flow owns projected economics
    and bounded continuation.
-4. Build the productive engineering loop: `047` → `048` + `049`.
-5. Promote `063` CAPTURE-VAULT-0; `064` LIT-RAG-0 follows when the first bounded
-   public corpus is selected.
-6. Accelerate CAD exploration in order `012` → `033`: freedom in ephemeral
-   reviewed local-trusted proposals, deterministic/human contract at reusable
-   promotion, and no claim of hostile-code sandboxing before 045 evidence.
-7. Then develop `030` + `037`, followed by the remaining dependency-driven rows.
+4. Draft and promote `066` HERMES-PASSTHROUGH-0 and `067` JARVIS-MCP-0 only after
+   their contracts are reconciled with 059b, 061, and existing service boundaries.
+5. Draft and promote `068` HERMES-CONFIG-0 only after 066/067 are stable and a
+   concrete Windows-first host-isolation boundary is selected.
+6. Interleave the productive engineering loop `047` → `048` + `049`; Hermes work
+   must not indefinitely displace measurable BlueRev engineering progress.
+7. Run `069` MEMORY-CONSOLIDATE-0 as the first Hermes dogfood only after 066–068
+   are merged and the required local route is qualified.
+8. Continue `063`/`064`, `012` → `033`, and residual conversation/UI rows according
+   to dependencies and measured value.
 
 Trigger-gated rows remain `planned` until their stated evidence exists. Always
 check rows marked `in_review` before choosing any `ready` spec and confirm no open
@@ -101,13 +104,13 @@ PR overlaps the target files or runtime boundary.
 | 027 | planned | — | Modal and thermal analysis types | 009, 024 | Extend the verified static-FEM boundary only when a real BlueRev decision requires modal or thermal analysis; do not pre-build a broad solver matrix. |
 | 028 | planned | — | Additive migration discipline | — | Document and test the existing versioned, additive migration policy before schema growth makes drift costly; no migration framework rewrite. |
 | 029 | planned | — | Settings and secrets operator page | 015, 018, 061 | Expose existing provider mode, budget, token-cap, secret-entry, and today/month token+spend counters per provider; reuse `/ai/status`, and keep keys out of localStorage, logs, repository files, and normal frontend state. |
-| 030 | planned | — | Conversation v0 | 037, 042 | Turn a workspace-bound multi-turn conversation into a drafted brief or GeometrySpec that the user explicitly approves before the existing deterministic loop runs. |
-| 031 | planned | — | Vocabulary-aware design conversation | 005, 030 | Give chat the live part-kind catalog and limits so it reports what is expressible, approximate, or unsupported instead of silently degrading requests. |
+| 030 | planned | — | Conversation-to-proposal handoff | 037, 042, 060, 068 | Superseded in part by Hermes for the conversation loop. Retain only the JarvisOS-side contract that turns a workspace-scoped conversation result into a drafted brief, record proposal, or GeometrySpec with explicit approval before existing deterministic execution. |
+| 031 | planned | — | Policy-owned design vocabulary surface | 005, 030, 067 | Superseded in part by Hermes chat configuration. Retain the JarvisOS-owned capability/vocabulary contract exposed through bounded services/MCP so any orchestrator reports what is expressible, approximate, or unsupported. |
 | 032 | planned | — | Core Team critique inside design conversation | 011, 030, 034 | Add advisory persona critiques to the approved design-conversation flow without pretending independent agents or bypassing validation and promotion gates. |
 | 033 | planned | — | Human-gated reusable part-kind proposal | 011, 012, 031, 056 | Promote exploration into reusable typed builders only through explicit human code promotion, protected property/conformance tests, parameter-schema review, and golden fixtures; no autonomous trusted-vocabulary mutation. |
-| 034 | planned | — | AGENT-CORE-1: personas as configuration | — | Freeze persona prompts, capabilities, context profiles, and advisory labels as configuration over the existing AI spine; no independent memory, permissions, or orchestration engine. |
+| 034 | planned | — | Persona policy and capability metadata | 060, 068 | Superseded in part by Hermes personas/subagents. Retain only versioned JarvisOS policy metadata, capability labels, context profiles, and advisory/authority constraints; no independent memory, permissions, route ownership, or promotion. |
 | 035 | planned | — | Domain Foundation navigator | 040, 050 | Add searchable/editable modeling-record navigation designed around provenance and future depends-on/feeds edges rather than a flat database list. |
-| 036 | planned | — | Honest multi-agent chat UI | 034, 058 | Present clearly labeled advisory persona calls in the unified workspace; do not claim a real swarm until orchestration evidence exists. |
+| 036 | planned | — | Honest orchestrator status and authority UI | 034, 058, 060, 068 | Superseded in part by the Hermes interaction surface. Retain only thin JarvisOS UI contracts needed to show advisory identity, active route/policy status, proposal state, and human authority without claiming that personas or Hermes are independent authorities. |
 | 037 | planned | — | Chat entry point to BLUECAD workbench | 010, 042 | Add the smallest chat on-ramp that creates or drafts a candidate in the existing workbench instead of introducing a second product surface. |
 | 038 | merged | [#65](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/65) | SIM-WIRE | 044 | Wire the existing mesh and static-FEM adapters into the BLUECAD attempt loop as an opt-in advisory stage with evidence records and no auto-promotion. |
 | 039 | planned | — | FRONTIER-1 provider route | 015, 018, 059b | Add the frontier provider adapter/route only behind the same server-owned egress, projected-budget, sensitivity, sanitization, provenance, trigger, and audit boundaries as every other external call. |
@@ -132,15 +135,19 @@ PR overlaps the target files or runtime boundary.
 | 058 | planned | — | Unified workspace home layout | 006, 029, 037, 061 | Replace page-first navigation with the BLUECAD workbench/3D surface, persistent right-side AI entry, compact status strip with today/month token+spend counters per provider from existing status APIs, and shared design tokens. |
 | 058b | planned | — | Workbench UX pass 2: variant comparison and design history | 006b, 058 | Add bounded side-by-side variant comparison and a parent-link history tree after parametric variants and the unified workspace exist. |
 | 058c | planned | — | Report-to-3D linking | 006, 044, 058 | Let a failed validation/evidence check highlight the affected named geometry in the viewer, reusing existing artifact/node identities. |
-| 059 | planned | — | IP-EGRESS-1 umbrella definition | 003, 015, 018, 021, 040, 042 | Definition merged in #89 and amended by docs PR #95 for external policy autopilot, automatic sanitization, sampled audit, and explicit maintainer residual-risk acceptance; this row remains definition-only. |
+| 059 | planned | — | IP-EGRESS-1 umbrella definition | 003, 015, 018, 021, 040, 042 | Definition amended through PR #95 and reconciled with ADR-059 for external policy autopilot, automatic sanitization, sampled audit, and explicit maintainer residual-risk acceptance; this row remains definition-only. |
 | 059a | merged | [#90](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/90) | IP-EGRESS-1A: sensitivity and context foundation | 003, 015, 018, 021, 040, 042 | Digest-bound labels/derivatives, deterministic floors, stale handling, coherent read-snapshot selection, and S0/S1-only external preview merged in #90. |
 | 059b | blocked | — | IP-EGRESS-1B: policy autopilot and execution enforcement | 059a | ADR-059 and the amended definition are merged; reconcile and promote the full implementation spec before implementing automatic sanitization, sampled audit, packet caps, silent S0/S1 allow, configured triggers/tickets, projected economic checks, and exact per-binding spine enforcement. |
-| 060 | planned | — | AGENT-ORCH: bounded real orchestration | 011, 034, 040, 042 | Supersede historical orchestration references to `045`; trigger only after memory/context and the advisory panel survive sustained dogfood, then add auditable bounded steps rather than a second authority or manager stack. |
+| 060 | planned | — | AGENT-ORCH: Hermes integration umbrella | 040, 042, 059b | Definition-only umbrella for adopting pinned Hermes through standards-only boundaries; implementation is owned by slices 066–068, while JarvisOS retains state, policy, sensitivity, budget, egress, ledger, services, and promotion authority. |
 | 061 | planned | — | TOKEN-FLOW-0 | 021, 059b | Size output tokens by task kind, clamp to provider/economic envelopes, allow at most two length-stop continuations by default, reconcile actual usage, and expose today/month provider counters without a second usage store. |
 | 062 | planned | — | GRADE-0 | 021, 059b | Add operator/API grades (`useful`, `partly`, `rework`, `failed`) plus bounded notes to `ai_jobs` as auditable evidence for empirical routing. |
 | 063 | planned | — | CAPTURE-VAULT-0 | 040, 042 | Add a local markdown vault and rebuildable local vector working layer, merged with canonical SQLite retrieval under explicit authority/conflict tags; no vectors over canonical records. |
 | 064 | planned | — | LIT-RAG-0 | 042, 063 | Add corpus-tagged public-literature retrieval to the local working layer with source locators and canonical-over-literature authority; boundary consolidation remains a separately unnumbered planning gap. |
 | 065 | planned | — | Provider-family diversification policy hook | 059b | After policy autopilot is proven, add a configurable hook that may separate families of S2/S3-derived content across provider accounts without weakening exact-packet, budget, sensitivity, or audit gates. |
+| 066 | planned | — | HERMES-PASSTHROUGH-0 | 015, 018, 021, 059b, 061, 062 | Define the loopback OpenAI-compatible agent-loop subset over `run_ai_task`, policy aliases, exact per-attempt gating, retry/idempotency, provenance, and `ai_jobs` correlation; external execution remains blocked until 059b is merged and active. |
+| 067 | planned | — | JARVIS-MCP-0 | 005, 010, 040, 042, 043, 044, 059a | Expose bounded context, canonical search, MemoryStore proposal, `calc_v0`, BLUECAD candidate, and evidence tools through existing services; no direct storage/filesystem access, promotion, sampling, or authority. |
+| 068 | planned | — | HERMES-CONFIG-0 | 066, 067 | Freeze a pinned/fingerprinted Hermes profile with passthrough-only model paths, Jarvis MCP only, host-level workspace isolation, explicit tool allowlist, disabled browser/computer/cron/proactive paths, and bounded delegation. |
+| 069 | planned | — | MEMORY-CONSOLIDATE-0 | 040, 042, 061, 062, 066, 067, 068 | First Hermes dogfood: consolidate bounded accepted records/evidence into MemoryStore proposals with conflict preservation, provenance, grading, and cost evidence; never promote, overwrite, delete, or lower sensitivity. |
 
 ## Superseded planning aliases and resolved collisions
 
@@ -149,3 +156,7 @@ PR overlaps the target files or runtime boundary.
 - Historical `057 = Workspace home`, `057b`, and `057c` references are
   superseded by `058`, `058b`, and `058c`; `057` remains the cancelled
   SPEC-LEDGER-0 and must not be reused.
+- Specs 030, 031, 034, and 036 are superseded in part by the Hermes integration
+  umbrella 060 and config slice 068. Their residual JarvisOS-side contracts remain
+  live as described in the registry; they are not cancelled and do not authorize a
+  second conversation or orchestration engine.
