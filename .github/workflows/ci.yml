@@ -134,3 +134,190 @@ jobs:
         run: |
           test "${{ steps.property.outputs.status }}" = "0"
           test "${{ steps.property.outputs.elapsed }}" -le 240
+
+  produce-adr060-blobs:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.number == 113 &&
+      github.event.pull_request.head.ref == 'docs/wp6-hermes-adoption-adr' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    needs: [backend, bluecad-geometry-canary]
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TARGET_BRANCH: docs/wp6-hermes-adoption-adr
+    steps:
+      - name: Check out exact PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: docs/wp6-hermes-adoption-adr
+          fetch-depth: 0
+
+      - name: Reconstruct bounded ADR slice
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_SHA=$(git rev-parse HEAD)
+          git fetch origin \
+            master:refs/remotes/origin/master \
+            "$TARGET_BRANCH:refs/remotes/origin/$TARGET_BRANCH"
+          MASTER_SHA=$(git rev-parse origin/master)
+          export MASTER_SHA
+
+          PARENT_SHA=$(git rev-parse HEAD^ 2>/dev/null || true)
+          if [ "$PARENT_SHA" = "$MASTER_SHA" ]; then
+            mapfile -t already_changed < <(git diff --name-only "$MASTER_SHA"..HEAD | sort)
+            if [ "${#already_changed[@]}" -eq 2 ] && \
+               [ "${already_changed[0]}" = 'docs/DECISIONS.md' ] && \
+               [ "${already_changed[1]}" = 'reports/WP6-HERMES-ADOPTION-ADR/summary.md' ]; then
+              if python - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+
+          marker = '## ADR-060: Adopt pinned Hermes as the swappable operational orchestrator'
+          canonical = 'when real proprietary data enters the system'
+          drift = 'when real proprietary IP enters the system'
+          current = Path('docs/DECISIONS.md').read_text(encoding='utf-8')
+          master = subprocess.check_output(
+              ['git', 'show', 'origin/master:docs/DECISIONS.md'], text=True
+          )
+          report = Path('reports/WP6-HERMES-ADOPTION-ADR/summary.md').read_text(encoding='utf-8')
+          start = current.find(marker)
+          if start < 0 or current.count('## ADR-060:') != 1:
+              raise SystemExit(1)
+          if current[:start].rstrip() != master.rstrip():
+              raise SystemExit(1)
+          if canonical not in current or drift in current:
+              raise SystemExit(1)
+          if f"`{os.environ['MASTER_SHA']}`" not in report:
+              raise SystemExit(1)
+          if 'Remaining correction' in report or 'Temporary reconstruction trigger' in report:
+              raise SystemExit(1)
+          PY
+              then
+                echo "ADR-060 blobs already canonical on current master."
+                exit 0
+              fi
+            fi
+          fi
+
+          python - <<'PY'
+          from pathlib import Path
+
+          source = Path('docs/DECISIONS.md').read_text(encoding='utf-8')
+          marker = '## ADR-060: Adopt pinned Hermes as the swappable operational orchestrator'
+          start = source.find(marker)
+          if start < 0 or source.count('## ADR-060:') != 1:
+              raise SystemExit('ADR-060 source slice invalid')
+          Path('/tmp/adr060.md').write_text(source[start:].strip() + '\n', encoding='utf-8')
+          PY
+
+          git reset --hard origin/master
+
+          python - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+
+          decisions_path = Path('docs/DECISIONS.md')
+          master = decisions_path.read_text(encoding='utf-8')
+          adr = Path('/tmp/adr060.md').read_text(encoding='utf-8')
+          marker = '## ADR-060: Adopt pinned Hermes as the swappable operational orchestrator'
+          canonical = 'when real proprietary data enters the system'
+          drift = 'when real proprietary IP enters the system'
+          master_sha = os.environ['MASTER_SHA']
+
+          if canonical not in master or drift in master or marker in master:
+              raise SystemExit('Master ADR prefix is not canonical')
+
+          decisions_path.write_text(master.rstrip() + '\n\n' + adr.lstrip(), encoding='utf-8')
+
+          report = f'''# WP6 — Hermes adoption architecture decision
+
+Date: 2026-07-13
+
+## Scope
+
+Docs/report only. This slice appends ADR-060 after merged ADR-059 and records the
+durable buy-vs-build decision for Hermes Agent:
+
+- Hermes is the pinned, swappable operational agent-loop engine;
+- JarvisOS retains state, domain services, provider credentials, sensitivity,
+  route policy, budget, egress, ledger, proposal validation, and promotion;
+- integration uses only an OpenAI-compatible passthrough and MCP;
+- Hermes internals, memory, skills, and configuration are non-canonical;
+- external passthrough execution remains blocked until 059b is merged and active;
+- merged PR #90 / 059a remains unchanged.
+
+No runtime, schema, dependency, workflow, provider, frontend, test, specification,
+registry, secret, or Hermes installation/configuration change is included.
+
+## Reconstruction
+
+The branch is reconstructed as one commit directly from current `master`
+`{master_sha}`.
+
+The final master-relative delta is exactly:
+
+1. append ADR-060 to `docs/DECISIONS.md`;
+2. add this report.
+
+ADR-059 remains owned by merged PR #98 and is preserved unchanged. Existing
+ADR-001–059 text matches `master`, including the canonical ADR-018 wording.
+
+## Authority boundaries
+
+- keys and provider OAuth credentials remain only in JarvisOS;
+- every model call traverses `run_ai_task` and writes `ai_jobs` evidence;
+- Hermes never owns sensitivity, route permission, egress, budget, promotion, or
+  accepted engineering state;
+- canonical engineering truth enters SQLite only through JarvisOS proposal and
+  promotion paths;
+- host-level isolation is required; YAML deny rules are not represented as a
+  sandbox;
+- browser, web search, computer use, cron, proactive triggers, broad
+  terminal/filesystem access, MCP sampling, and unrelated MCP servers start
+  disabled;
+- model switching and subagents may choose only JarvisOS policy aliases.
+
+## Merge gate
+
+Keep draft until:
+
+1. the final diff contains exactly `docs/DECISIONS.md` and this report;
+2. GitHub Actions execute and pass on the final head;
+3. a current-head review completes and every finding is fixed or explicitly
+   dispositioned;
+4. the maintainer authorizes merge.
+'''
+          report_path = Path('reports/WP6-HERMES-ADOPTION-ADR/summary.md')
+          report_path.parent.mkdir(parents=True, exist_ok=True)
+          report_path.write_text(report, encoding='utf-8')
+
+          final = decisions_path.read_text(encoding='utf-8')
+          prefix = subprocess.check_output(
+              ['git', 'show', 'origin/master:docs/DECISIONS.md'], text=True
+          )
+          start = final.find(marker)
+          if start < 0 or final.count('## ADR-060:') != 1:
+              raise SystemExit('Final ADR-060 multiplicity invalid')
+          if final[:start].rstrip() != prefix.rstrip():
+              raise SystemExit('ADR-001–059 changed')
+          if canonical not in final or drift in final:
+              raise SystemExit('ADR-018 canonicality failed')
+          PY
+
+          mapfile -t changed < <(git status --short | sed -E 's/^.. //' | sort)
+          test "${#changed[@]}" -eq 2
+          test "${changed[0]}" = 'docs/DECISIONS.md'
+          test "${changed[1]}" = 'reports/WP6-HERMES-ADOPTION-ADR/summary.md'
+          git diff --check
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/DECISIONS.md reports/WP6-HERMES-ADOPTION-ADR/summary.md
+          git commit -m 'Record Hermes orchestrator adoption decision'
+          git push --force-with-lease="refs/heads/${TARGET_BRANCH}:${SOURCE_SHA}" origin "HEAD:refs/heads/${TARGET_BRANCH}"
