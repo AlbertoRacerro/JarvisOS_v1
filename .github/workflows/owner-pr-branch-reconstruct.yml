@@ -1,6 +1,8 @@
 name: Owner-only PR branch reconstruction
 
 on:
+  push:
+    branches: [master]
   issue_comment:
     types: [created]
 
@@ -11,10 +13,11 @@ permissions:
 jobs:
   reconstruct-pr-100:
     if: >-
-      github.event.issue.pull_request &&
-      github.event.issue.number == 100 &&
-      github.event.comment.user.login == 'AlbertoRacerro' &&
-      github.event.comment.body == '/reconstruct-adr060'
+      github.event_name == 'push' ||
+      (github.event.issue.pull_request &&
+       github.event.issue.number == 100 &&
+       github.event.comment.user.login == 'AlbertoRacerro' &&
+       github.event.comment.body == '/reconstruct-adr060')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
