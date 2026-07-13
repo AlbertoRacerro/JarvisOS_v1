@@ -4,7 +4,7 @@ on:
   issue_comment:
     types: [created]
   pull_request_target:
-    types: [ready_for_review, reopened, synchronize]
+    types: [ready_for_review, reopened]
 
 permissions:
   contents: write
