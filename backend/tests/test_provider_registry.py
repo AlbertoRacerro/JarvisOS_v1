@@ -2,7 +2,11 @@ import copy
 
 import pytest
 
-from app.modules.ai.provider_registry import load_provider_registry, parse_provider_registry
+from app.modules.ai.provider_registry import (
+    load_provider_registry,
+    parse_provider_registry,
+    resolve_model_pricing,
+)
 
 
 def test_default_provider_registry_loads_with_deepseek_glm_bindings(monkeypatch):
@@ -23,6 +27,12 @@ def test_default_provider_registry_loads_with_deepseek_glm_bindings(monkeypatch)
     assert registry.providers["deepseek"].api_key_ref == "env:DEEPSEEK_API_KEY"
     assert registry.providers["glm"].api_key_ref == "env:GLM_API_KEY"
     assert "external:kimi" not in registry.bindings
+
+    deepseek_price = resolve_model_pricing(registry, "deepseek", "deepseek-v4-pro")
+    assert deepseek_price.currency == "USD"
+    assert deepseek_price.input_usd_per_1m_tokens == 5.0
+    assert deepseek_price.output_usd_per_1m_tokens == 20.0
+    assert deepseek_price.pricing_version == "operator-conservative-v1"
 
 
 def test_registry_rejects_missing_required_fields():
@@ -51,32 +61,12 @@ def test_registry_rejects_inline_looking_secret_values():
         parse_provider_registry(raw)
 
 
-def _minimal_registry():
-    return copy.deepcopy(
-        {
-            "version": 1,
-            "providers": {
-                "fake": {
-                    "kind": "fake",
-                    "enabled": True,
-                    "requires_network": False,
-                    "models": {
-                        "m": {
-                            "provider_model_name": "m",
-                            "route_classes": ["local:fake"],
-                            "max_output_tokens": 1,
-                        }
-                    },
-                }
-            },
-            "fallback_chains": {"local:fake": ["fake/m"]},
-        }
-    )
-
-
 def test_registry_rejects_duplicate_routes_within_one_model():
     raw = _minimal_registry()
-    raw["providers"]["fake"]["models"]["m"]["route_classes"] = ["local:fake", "local:fake"]
+    raw["providers"]["fake"]["models"]["m"]["route_classes"] = [
+        "local:fake",
+        "local:fake",
+    ]
     with pytest.raises(ValueError, match="duplicate route_classes"):
         parse_provider_registry(raw)
 
@@ -100,7 +90,7 @@ def test_registry_rejects_fallback_first_entry_mismatch():
         parse_provider_registry(raw)
 
 
-def test_disabled_provider_yields_no_bindings_but_loads():
+def test_disabled_provider_yields_no_bindings_but_loads_without_pricing():
     raw = _minimal_registry()
     raw["providers"]["disabled"] = {
         "kind": "openai_compatible",
@@ -119,3 +109,93 @@ def test_disabled_provider_yields_no_bindings_but_loads():
     registry = parse_provider_registry(raw)
     assert "disabled" in registry.providers
     assert "external:disabled" not in registry.bindings
+    with pytest.raises(ValueError, match="missing concrete pricing"):
+        resolve_model_pricing(registry, "disabled", "disabled-model")
+
+
+def test_enabled_network_model_requires_concrete_pricing():
+    raw = _minimal_network_registry()
+    del raw["providers"]["network"]["models"]["model"]["pricing"]
+    with pytest.raises(ValueError, match="requires concrete pricing"):
+        parse_provider_registry(raw)
+
+
+def test_network_pricing_is_strict_and_timezone_aware():
+    raw = _minimal_network_registry()
+    pricing = raw["providers"]["network"]["models"]["model"]["pricing"]
+    pricing["currency"] = "EUR"
+    with pytest.raises(ValueError, match="currency must be USD"):
+        parse_provider_registry(raw)
+
+    raw = _minimal_network_registry()
+    pricing = raw["providers"]["network"]["models"]["model"]["pricing"]
+    pricing["pricing_effective_at"] = "2026-07-13T00:00:00"
+    with pytest.raises(ValueError, match="must include a timezone"):
+        parse_provider_registry(raw)
+
+    raw = _minimal_network_registry()
+    pricing = raw["providers"]["network"]["models"]["model"]["pricing"]
+    pricing["unexpected"] = 1
+    with pytest.raises(ValueError, match="unsupported keys"):
+        parse_provider_registry(raw)
+
+
+def test_resolve_model_pricing_fails_for_unknown_or_local_models():
+    registry = parse_provider_registry(_minimal_registry())
+    with pytest.raises(ValueError, match="unknown concrete model"):
+        resolve_model_pricing(registry, "fake", "missing")
+    with pytest.raises(ValueError, match="not a network binding"):
+        resolve_model_pricing(registry, "fake", "m")
+
+
+def _minimal_registry():
+    return copy.deepcopy(
+        {
+            "version": 1,
+            "providers": {
+                "fake": {
+                    "kind": "fake",
+                    "enabled": True,
+                    "requires_network": False,
+                    "models": {
+                        "m": {
+                            "provider_model_name": "m",
+                            "route_classes": ["local:fake"],
+                            "max_output_tokens": 1,
+                        }
+                    },
+                }
+            },
+            "fallback_chains": {"local:fake": ["fake/m"]},
+        }
+    )
+
+
+def _minimal_network_registry():
+    return {
+        "version": 1,
+        "providers": {
+            "network": {
+                "kind": "openai_compatible",
+                "enabled": True,
+                "requires_network": True,
+                "base_url": "https://example.test",
+                "api_key_ref": "env:NETWORK_API_KEY",
+                "models": {
+                    "model": {
+                        "provider_model_name": "model",
+                        "route_classes": ["external:test"],
+                        "max_output_tokens": 10,
+                        "pricing": {
+                            "currency": "USD",
+                            "input_usd_per_1m_tokens": 1.0,
+                            "output_usd_per_1m_tokens": 2.0,
+                            "pricing_version": "test-v1",
+                            "pricing_effective_at": "2026-07-13T00:00:00Z",
+                        },
+                    }
+                },
+            }
+        },
+        "fallback_chains": {"external:test": ["network/model"]},
+    }
