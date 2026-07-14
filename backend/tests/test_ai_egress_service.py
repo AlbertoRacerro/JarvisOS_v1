@@ -188,6 +188,41 @@ def test_sampling_is_deterministic_version_bound_and_thresholded():
     assert sanitizer_should_sample(**kwargs, sample_rate_bps=500) is (first < 500)
 
 
+def test_sampling_accepts_only_the_digest_format_owned_by_each_derivative_kind():
+    digest = sha256_text("approved derivative")
+    prompt_kwargs = {
+        "derivative_kind": "prompt",
+        "derivative_id": "prompt-derivative-1",
+        "derivative_digest": digest,
+        "iso_week": "2026-W29",
+        "policy_version": "egress-policy-v1",
+    }
+    canonical_kwargs = {
+        "derivative_kind": "canonical",
+        "derivative_id": "canonical-derivative-1",
+        "derivative_digest": f"sha256:{digest}",
+        "iso_week": "2026-W29",
+        "policy_version": "egress-policy-v1",
+    }
+
+    assert sanitizer_sample_value(**prompt_kwargs) == sanitizer_sample_value(
+        **prompt_kwargs
+    )
+    assert sanitizer_sample_value(**canonical_kwargs) == sanitizer_sample_value(
+        **canonical_kwargs
+    )
+    assert sanitizer_should_sample(**canonical_kwargs, sample_rate_bps=10_000) is True
+
+    with pytest.raises(EgressContractError, match="canonical lowercase SHA-256"):
+        sanitizer_sample_value(
+            **{**canonical_kwargs, "derivative_digest": digest}
+        )
+    with pytest.raises(EgressContractError, match="canonical lowercase SHA-256"):
+        sanitizer_sample_value(
+            **{**prompt_kwargs, "derivative_digest": f"sha256:{digest}"}
+        )
+
+
 def test_sampling_and_canonical_json_fail_closed_on_malformed_values():
     with pytest.raises(EgressContractError, match="lowercase SHA-256"):
         sanitizer_sample_value(
