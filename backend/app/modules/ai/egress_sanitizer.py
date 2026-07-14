@@ -867,9 +867,11 @@ def _validate_sanitizer_ai_job(
     if row is None:
         raise sensitivity.SensitivityPolicyError("Sanitizer ai_job was not found.")
     route_class = str(row["selected_route_class"] or "")
-    if row["status"] != "completed" or not route_class.startswith("local:"):
+    if row["status"] not in {"success", "completed"} or not route_class.startswith(
+        "local:"
+    ):
         raise sensitivity.SensitivityPolicyError(
-            "Sanitizer ai_job must be a completed local-route attempt."
+            "Sanitizer ai_job must be a successful local-route attempt."
         )
 
 
