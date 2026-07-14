@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -32,7 +30,7 @@ _ALLOWED_PREPACKET_REASONS = frozenset(
     }
 )
 _ALLOWED_LEVELS = frozenset({"S0", "S1", "S2", "S3", "S4", "unknown"})
-_LEVEL_RANK = {"S0": 0, "S1": 1, "S2": 2, "S3": 3, "S4": 4, "unknown": 5}
+_LEVEL_RANK = {"S0": 0, "S1": 1, "S2": 2, "S3": 3, "S4": 4}
 _ALLOWED_TERMINAL_JOB_STATUSES = frozenset(
     {
         "config_error",
@@ -44,6 +42,18 @@ _ALLOWED_TERMINAL_JOB_STATUSES = frozenset(
 )
 _HEX_DIGEST_LENGTH = 64
 _CANONICAL_DIGEST_PREFIX = "sha256:"
+_FORBIDDEN_METADATA_KEYS = frozenset(
+    {
+        "body",
+        "content",
+        "derivative_content",
+        "packet_json",
+        "prompt",
+        "raw_payload",
+        "secret",
+        "text",
+    }
+)
 
 
 class EgressSpineStateError(RuntimeError):
@@ -132,11 +142,11 @@ def record_prepacket_egress_decision(
     fallback_index = _non_negative_integer(fallback_index, "fallback_index")
     prompt_digest = _bare_digest(prompt_digest, "prompt_digest")
     if context_digest is not None:
-        context_digest = _canonical_digest(context_digest, "context_digest")
+        context_digest = _canonical_digest_text(context_digest, "context_digest")
     prompt_level = _level(prompt_level, "prompt_level")
     context_level = _level(context_level, "context_level")
     final_level = _level(final_level, "final_level")
-    expected_final = max((prompt_level, context_level), key=_LEVEL_RANK.__getitem__)
+    expected_final = _prepacket_final_level(prompt_level, context_level)
     if final_level != expected_final:
         raise EgressContractError("final_level must equal the maximum pre-packet level")
     source_count = _non_negative_integer(source_count, "source_count")
@@ -273,9 +283,9 @@ def create_queued_ai_job(
     if blocked_reason is not None:
         blocked_reason = _required_text(blocked_reason, "blocked_reason")
     if prompt_digest is not None:
-        prompt_digest = _canonical_digest(prompt_digest, "prompt_digest")
+        prompt_digest = _canonical_digest_text(prompt_digest, "prompt_digest")
     if context_digest is not None:
-        context_digest = _canonical_digest(context_digest, "context_digest")
+        context_digest = _canonical_digest_text(context_digest, "context_digest")
     context_sources_json = _safe_context_sources_json(context_sources)
     route_reason = {
         "blocked_reason": blocked_reason,
@@ -339,22 +349,40 @@ def finalize_queued_ai_job(
         error_type = _required_text(error_type, "error_type")
     if status == "success" and (response is None or response.text is None):
         raise EgressContractError("successful ai_job requires a text response")
-    if response is not None:
-        output_digest = (
-            canonical_digest({"text": response.text})
-            if response.text is not None
-            else None
-        )
-        input_tokens = response.usage.input_tokens
-        output_tokens = response.usage.output_tokens
-        cost_estimate = response.usage.provider_cost_estimate
-    else:
-        output_digest = None
-        input_tokens = None
-        output_tokens = None
-        cost_estimate = None
 
     with open_sqlite_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT status, provider_id, model_id
+            FROM ai_jobs WHERE id = ?
+            """,
+            (ai_job_id,),
+        ).fetchone()
+        if row is None or row["status"] != "queued":
+            raise EgressSpineStateError("ai_job is not queued or was already finalized")
+        if response is not None and (
+            response.provider_id,
+            response.model_id,
+        ) != (row["provider_id"], row["model_id"]):
+            raise EgressSpineStateError(
+                "ai_job response binding does not match the queued attempt"
+            )
+
+        if response is not None:
+            output_digest = (
+                canonical_digest({"text": response.text})
+                if response.text is not None
+                else None
+            )
+            input_tokens = response.usage.input_tokens
+            output_tokens = response.usage.output_tokens
+            cost_estimate = response.usage.provider_cost_estimate
+        else:
+            output_digest = None
+            input_tokens = None
+            output_tokens = None
+            cost_estimate = None
+
         updated = connection.execute(
             """
             UPDATE ai_jobs
@@ -375,7 +403,7 @@ def finalize_queued_ai_job(
         )
         if updated.rowcount != 1:
             connection.rollback()
-            raise EgressSpineStateError("ai_job is not queued or was already finalized")
+            raise EgressSpineStateError("ai_job finalization CAS conflict")
         connection.commit()
     return FinalizedAIJob(
         ai_job_id=ai_job_id,
@@ -407,16 +435,7 @@ def _validate_safe_metadata(value: object, *, path: str) -> None:
         for key, child in value.items():
             if not isinstance(key, str):
                 raise EgressContractError(f"{path} contains a non-text key")
-            if key.casefold() in {
-                "body",
-                "content",
-                "derivative_content",
-                "packet_json",
-                "prompt",
-                "raw_payload",
-                "secret",
-                "text",
-            }:
+            if key.casefold() in _FORBIDDEN_METADATA_KEYS:
                 raise EgressContractError(f"{path} contains forbidden body field {key}")
             _validate_safe_metadata(child, path=f"{path}.{key}")
     elif isinstance(value, list):
@@ -424,6 +443,14 @@ def _validate_safe_metadata(value: object, *, path: str) -> None:
             _validate_safe_metadata(child, path=f"{path}[{index}]")
     elif value is not None and not isinstance(value, (str, int, float, bool)):
         raise EgressContractError(f"{path} contains unsupported metadata")
+
+
+def _prepacket_final_level(prompt_level: str, context_level: str) -> str:
+    if "S4" in {prompt_level, context_level}:
+        return "S4"
+    if "unknown" in {prompt_level, context_level}:
+        return "unknown"
+    return max((prompt_level, context_level), key=_LEVEL_RANK.__getitem__)
 
 
 def _level(value: str, field_name: str) -> str:
@@ -442,7 +469,7 @@ def _bare_digest(value: str, field_name: str) -> str:
     return value
 
 
-def _canonical_digest(value: str, field_name: str) -> str:
+def _canonical_digest_text(value: str, field_name: str) -> str:
     value = _required_text(value, field_name)
     if not value.startswith(_CANONICAL_DIGEST_PREFIX):
         raise EgressContractError(f"{field_name} must use sha256:<64 lowercase hex>")
