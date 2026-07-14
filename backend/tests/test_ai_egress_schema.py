@@ -9,6 +9,8 @@ from app.core.database import (
     open_sqlite_connection,
 )
 from app.core.egress_schema import EGRESS_SCHEMA_MIGRATION_ID
+from app.core.schema import SCHEMA_STATEMENTS
+from app.core.sensitivity_schema import SENSITIVITY_SCHEMA_STATEMENTS
 
 EXPECTED_EGRESS_TABLES = {
     "egress_prompt_derivatives",
@@ -19,6 +21,14 @@ EXPECTED_EGRESS_TABLES = {
     "egress_attempts",
     "sanitizer_audit_items",
     "workspace_egress_policy",
+}
+EXPECTED_SANITIZER_PROVENANCE_COLUMNS = {
+    "sanitizer_kind",
+    "sanitizer_version",
+    "sanitizer_config_digest",
+    "sanitizer_ai_job_id",
+    "approval_source",
+    "auto_approved",
 }
 
 
@@ -37,6 +47,48 @@ def test_egress_schema_initializes_idempotently_as_migration_0010():
         ).fetchall()
     tables = {row["name"] for row in rows}
     assert EXPECTED_EGRESS_TABLES.issubset(tables)
+
+
+def test_sanitizer_provenance_columns_exist_on_fresh_database():
+    initialize_database()
+    initialize_database()
+
+    with open_sqlite_connection() as connection:
+        columns = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(sanitized_derivatives)"
+            ).fetchall()
+        }
+
+    assert EXPECTED_SANITIZER_PROVENANCE_COLUMNS.issubset(columns)
+
+
+def test_sanitizer_provenance_columns_upgrade_immediate_predecessor_database():
+    with open_sqlite_connection() as connection:
+        for statement in SCHEMA_STATEMENTS:
+            connection.execute(statement)
+        for statement in SENSITIVITY_SCHEMA_STATEMENTS:
+            connection.execute(statement)
+        before = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(sanitized_derivatives)"
+            ).fetchall()
+        }
+        connection.commit()
+    assert EXPECTED_SANITIZER_PROVENANCE_COLUMNS.isdisjoint(before)
+
+    initialize_database()
+
+    with open_sqlite_connection() as connection:
+        after = {
+            row["name"]
+            for row in connection.execute(
+                "PRAGMA table_info(sanitized_derivatives)"
+            ).fetchall()
+        }
+    assert EXPECTED_SANITIZER_PROVENANCE_COLUMNS.issubset(after)
 
 
 def test_packet_schema_rejects_noneligible_final_level():
