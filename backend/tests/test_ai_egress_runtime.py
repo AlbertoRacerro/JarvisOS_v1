@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
-import pytest
 from app.core.database import initialize_database, open_sqlite_connection
 from app.modules.ai.context_builder import canonical_digest
 from app.modules.ai.contracts import AIRequest, AIResponse, AITaskType, AIUsage
