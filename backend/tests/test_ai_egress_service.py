@@ -76,6 +76,21 @@ def test_projection_is_deterministic_and_binds_exact_attempt_metadata():
     assert material.prompt not in first.safe_input_digest
 
 
+def test_source_digest_representations_collapse_to_one_canonical_packet_binding():
+    digest = sha256_text("source-body")
+    bare = build_packet_projection(
+        _material(source_digests=(("decision:decision-1", digest),))
+    )
+    prefixed = build_packet_projection(
+        _material(source_digests=(("decision:decision-1", f"sha256:{digest}"),))
+    )
+
+    assert bare == prefixed
+    assert bare.source_digests_json == canonical_json(
+        {"decision:decision-1": f"sha256:{digest}"}
+    )
+
+
 def test_projection_digest_changes_with_binding_tokens_content_or_policy():
     base = _material()
     policy = load_default_egress_policy()
