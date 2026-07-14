@@ -199,6 +199,8 @@ def start_reserved_attempt(
     _required_identifier(ai_job_id, "ai_job_id")
     now_dt = persistence._normalized_now(now)
     now_iso = now_dt.isoformat()
+    expired = False
+    started: EgressStartedAttempt | None = None
     with persistence._immediate_transaction() as connection:
         row = _reservation_row(connection, reservation_id)
         if row is None:
@@ -219,37 +221,43 @@ def start_reserved_attempt(
             )
             if updated.rowcount != 1:
                 raise persistence.EgressStateError("reservation expiry CAS conflict")
-            raise persistence.EgressStateError("reservation expired before start")
-        _validate_ai_job_binding(connection, ai_job_id=ai_job_id, row=row)
-        updated = connection.execute(
-            """
-            UPDATE egress_budget_reservations
-            SET state = 'in_flight', version = version + 1,
-                attempt_started_at = ?, ai_job_id = ?
-            WHERE id = ? AND state = 'active' AND version = ?
-            """,
-            (
-                now_iso,
-                ai_job_id,
-                reservation_id,
-                int(row["reservation_version"]),
-            ),
-        )
-        if updated.rowcount != 1:
-            raise persistence.EgressStateError("reservation start CAS conflict")
-        return EgressStartedAttempt(
-            reservation_id=reservation_id,
-            decision_id=str(row["decision_id"]),
-            packet_id=str(row["packet_id"]),
-            packet_digest=str(row["packet_digest"]),
-            ai_job_id=ai_job_id,
-            provider_id=str(row["provider_id"]),
-            model_id=str(row["model_id"]),
-            route_class=str(row["route_class"]),
-            fallback_index=int(row["fallback_index"]),
-            max_output_tokens=int(row["max_output_tokens"]),
-            packet_json=str(row["packet_json"]),
-        )
+            expired = True
+        else:
+            _validate_ai_job_binding(connection, ai_job_id=ai_job_id, row=row)
+            updated = connection.execute(
+                """
+                UPDATE egress_budget_reservations
+                SET state = 'in_flight', version = version + 1,
+                    attempt_started_at = ?, ai_job_id = ?
+                WHERE id = ? AND state = 'active' AND version = ?
+                """,
+                (
+                    now_iso,
+                    ai_job_id,
+                    reservation_id,
+                    int(row["reservation_version"]),
+                ),
+            )
+            if updated.rowcount != 1:
+                raise persistence.EgressStateError("reservation start CAS conflict")
+            started = EgressStartedAttempt(
+                reservation_id=reservation_id,
+                decision_id=str(row["decision_id"]),
+                packet_id=str(row["packet_id"]),
+                packet_digest=str(row["packet_digest"]),
+                ai_job_id=ai_job_id,
+                provider_id=str(row["provider_id"]),
+                model_id=str(row["model_id"]),
+                route_class=str(row["route_class"]),
+                fallback_index=int(row["fallback_index"]),
+                max_output_tokens=int(row["max_output_tokens"]),
+                packet_json=str(row["packet_json"]),
+            )
+    if expired:
+        raise persistence.EgressStateError("reservation expired before start")
+    if started is None:
+        raise persistence.EgressStateError("reservation start produced no result")
+    return started
 
 
 def reconcile_reserved_attempt(
