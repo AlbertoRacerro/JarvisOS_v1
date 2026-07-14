@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from app.core.database import open_sqlite_connection
 from app.modules.ai import sensitivity
