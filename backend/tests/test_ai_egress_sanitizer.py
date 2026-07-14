@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 
 from app.core.database import initialize_database, open_sqlite_connection
+from app.modules.ai.context_builder import canonical_digest
 from app.modules.ai.egress_lifecycle import consume_confirmation_ticket
 from app.modules.ai.egress_persistence import prepare_egress_attempt
 from app.modules.ai.egress_policy import EXTERNAL_PROVIDER_OPERATION, load_default_egress_policy
@@ -80,7 +81,13 @@ def _decision(text: str) -> str:
     return record_id
 
 
-def _insert_ai_job(*, route: str, status: str = "completed") -> str:
+def _insert_ai_job(
+    *,
+    route: str,
+    output_text: str,
+    status: str = "success",
+    task_kind: str = "sanitizer",
+) -> str:
     ai_job_id = str(uuid4())
     provider_id = "local_ollama" if route.startswith("local:") else "deepseek"
     model_id = "qwen3:8b" if route.startswith("local:") else "deepseek-v4-pro"
@@ -89,10 +96,19 @@ def _insert_ai_job(*, route: str, status: str = "completed") -> str:
             """
             INSERT INTO ai_jobs (
                 id, created_at, status, task_kind, selected_route_class,
-                provider_id, model_id, route_reason_json
-            ) VALUES (?, ?, ?, 'general', ?, ?, ?, '{}')
+                provider_id, model_id, route_reason_json, output_digest
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?)
             """,
-            (ai_job_id, NOW.isoformat(), status, route, provider_id, model_id),
+            (
+                ai_job_id,
+                NOW.isoformat(),
+                status,
+                task_kind,
+                route,
+                provider_id,
+                model_id,
+                canonical_digest({"text": output_text}),
+            ),
         )
         connection.commit()
     return ai_job_id
@@ -179,14 +195,16 @@ def test_prompt_derivative_rejects_raw_secret_and_surviving_sensitive_output(mon
         )
 
 
-def test_model_backed_sanitizer_requires_completed_local_ai_job(monkeypatch):
+def test_model_backed_sanitizer_requires_exact_local_ai_job_provenance(monkeypatch):
     _bootstrap(monkeypatch)
-    local_job = _insert_ai_job(route="local:fast")
-    external_job = _insert_ai_job(route="external:cheap")
+    local_output = "Generic engineering question."
+    external_output = "Another generic engineering question."
+    local_job = _insert_ai_job(route="local:fast", output_text=local_output)
+    external_job = _insert_ai_job(route="external:cheap", output_text=external_output)
 
     approval = create_prompt_derivative(
         raw_prompt="private project question",
-        derivative_content="Generic engineering question.",
+        derivative_content=local_output,
         final_level="S1",
         transformations=["Local model removed project details"],
         sanitizer_kind="model_local",
@@ -197,10 +215,10 @@ def test_model_backed_sanitizer_requires_completed_local_ai_job(monkeypatch):
     )
     assert approval.sanitizer_ai_job_id == local_job
 
-    with pytest.raises(SensitivityPolicyError, match="successful local-route"):
+    with pytest.raises(SensitivityPolicyError, match="dedicated local-route"):
         create_prompt_derivative(
             raw_prompt="another private project question",
-            derivative_content="Another generic engineering question.",
+            derivative_content=external_output,
             final_level="S1",
             transformations=["Attempted external sanitizer"],
             sanitizer_kind="model_local",
@@ -209,6 +227,33 @@ def test_model_backed_sanitizer_requires_completed_local_ai_job(monkeypatch):
             sanitizer_ai_job_id=external_job,
             workspace_id=WORKSPACE_ID,
         )
+
+
+def test_model_backed_sanitizer_rejects_output_digest_mismatch(monkeypatch):
+    _bootstrap(monkeypatch)
+    ai_job_id = _insert_ai_job(
+        route="local:fast",
+        output_text="Different generic output.",
+    )
+
+    with pytest.raises(SensitivityPolicyError, match="matching output provenance"):
+        create_prompt_derivative(
+            raw_prompt="private project question",
+            derivative_content="Generic engineering question.",
+            final_level="S1",
+            transformations=["Claimed local rewrite"],
+            sanitizer_kind="model_local",
+            sanitizer_version="local-sanitizer-v1",
+            sanitizer_config_digest=CONFIG_DIGEST,
+            sanitizer_ai_job_id=ai_job_id,
+            workspace_id=WORKSPACE_ID,
+        )
+
+    with open_sqlite_connection() as connection:
+        count = connection.execute(
+            "SELECT COUNT(*) AS count FROM egress_prompt_derivatives"
+        ).fetchone()["count"]
+    assert count == 0
 
 
 def test_auto_canonical_derivative_persists_provenance_and_is_previewable(monkeypatch):
