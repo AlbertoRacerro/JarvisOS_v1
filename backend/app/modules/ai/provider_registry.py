@@ -175,7 +175,7 @@ def parse_provider_registry(raw: dict[str, Any]) -> ProviderRegistry:
 
 
 def registry_bindings() -> dict[str, ProviderBinding]:
-    return _bindings_with_env_overrides(load_default_provider_registry().bindings)
+    return _bindings_with_env_overrides(load_default_provider_registry())
 
 
 def resolve_model_pricing(
@@ -193,9 +193,9 @@ def resolve_model_pricing(
 
 
 def _bindings_with_env_overrides(
-    bindings: dict[str, ProviderBinding],
+    registry: ProviderRegistry,
 ) -> dict[str, ProviderBinding]:
-    result = dict(bindings)
+    result = dict(registry.bindings)
     overrides = {
         "local:fake": ("AI_ROUTE_FAKE_MODEL",),
         "local:fast": ("AI_ROUTE_LOCAL_FAST_MODEL",),
@@ -212,16 +212,55 @@ def _bindings_with_env_overrides(
             continue
         for name in names:
             value = os.getenv(name)
-            if value:
+            if not value:
+                continue
+            if binding.requires_network:
+                model = _resolve_external_override_model(
+                    registry=registry,
+                    binding=binding,
+                    route=route,
+                    configured_value=value,
+                )
+                result[route] = ProviderBinding(
+                    route,
+                    binding.provider_id,
+                    model.model_id,
+                    True,
+                    model.max_output_tokens,
+                )
+            else:
                 result[route] = ProviderBinding(
                     route,
                     binding.provider_id,
                     value,
-                    binding.requires_network,
+                    False,
                     binding.max_output_tokens,
                 )
-                break
+            break
     return result
+
+
+def _resolve_external_override_model(
+    *,
+    registry: ProviderRegistry,
+    binding: ProviderBinding,
+    route: str,
+    configured_value: str,
+) -> ModelConfig:
+    matches = [
+        model
+        for model in registry.models.values()
+        if model.provider_id == binding.provider_id
+        and configured_value in {model.model_id, model.provider_model_name}
+        and route in model.route_classes
+        and model.pricing is not None
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            f"external model override for {route} must resolve uniquely to a priced "
+            f"model configured for provider {binding.provider_id}"
+        )
+    return matches[0]
 
 
 def _parse_model_pricing(
