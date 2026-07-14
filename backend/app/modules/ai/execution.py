@@ -5,10 +5,9 @@ provider-neutral adapter interface (contracts.AIProviderAdapter), and writes one
 ai_jobs ledger row per attempt — success AND pre-provider failure (malformed
 route, unbound route, missing config/credentials).
 
-Deliberately NOT here (later slices): economic routing, LLM judge/grading,
-retrieval/domain-DB context injection, broad route catalog, provider SDKs beyond
-the existing Scaleway/fake paths. The ledger stores only digests + metadata,
-never prompt/output content or any secret.
+External network bindings additionally traverse the mandatory 059b egress boundary
+before request construction or adapter invocation. Local bindings preserve the original
+provider-neutral execution behavior.
 """
 
 from __future__ import annotations
@@ -63,6 +62,12 @@ class AiTaskOutcome:
     context_sources_count: int = 0
     records_parse_error: str | None = None
     proposed_record_ids: list[str] | None = None
+    egress_decision_id: str | None = None
+    egress_packet_digest: str | None = None
+    egress_ticket_id: str | None = None
+    egress_reservation_id: str | None = None
+    egress_reason_code: str | None = None
+    egress_trigger_ids: tuple[str, ...] = ()
 
 
 # task_kind -> default route. Cloud calls must be opted into explicitly through
@@ -98,6 +103,7 @@ def _default_bindings() -> dict[str, ProviderBinding]:
     from app.modules.ai.provider_registry import registry_bindings
 
     return registry_bindings()
+
 
 def _default_adapters() -> dict[str, AIProviderAdapter]:
     adapters: dict[str, AIProviderAdapter] = {
@@ -345,6 +351,65 @@ def _create_proposed_records_from_response(
     return proposed_ids, "; ".join(errors) if errors else None
 
 
+def _run_external_network_task(
+    *,
+    user_prompt: str,
+    task_kind: str,
+    requested_route_class: str | None,
+    selected_route_class: str,
+    context_blocks: list[dict[str, object]] | None,
+    max_output_tokens: int | None,
+    adapters: dict[str, AIProviderAdapter],
+    bindings: dict[str, ProviderBinding] | None,
+    external_blocked_reason: str | None,
+    context_build_error: str | None,
+    workspace_id: str | None,
+) -> AiTaskOutcome:
+    from app.modules.ai.egress_runtime import run_external_task
+
+    external = run_external_task(
+        user_prompt=user_prompt,
+        task_kind=task_kind,
+        selected_route_class=selected_route_class,
+        requested_route_class=requested_route_class,
+        context_blocks=context_blocks,
+        max_output_tokens=max_output_tokens,
+        adapters=adapters,
+        bindings=bindings,
+        workspace_id=workspace_id,
+        context_build_error=context_build_error,
+        external_blocked_reason=external_blocked_reason,
+        task_type_for=_ai_task_type_for,
+        task_prompt_for=_prompt_for_task,
+    )
+    outcome = AiTaskOutcome(
+        status=external.status,
+        ledger_id=external.ledger_id,
+        selected_route_class=external.selected_route_class,
+        decision=external.decision,
+        response=external.response,
+        error_type=external.error_type,
+        context_digest=external.context_digest,
+        context_sources_count=external.context_sources_count,
+        egress_decision_id=external.egress_decision_id,
+        egress_packet_digest=external.egress_packet_digest,
+        egress_ticket_id=external.egress_ticket_id,
+        egress_reservation_id=external.egress_reservation_id,
+        egress_reason_code=external.egress_reason_code,
+        egress_trigger_ids=external.egress_trigger_ids,
+    )
+    if external.status == "success" and external.response is not None:
+        proposed_record_ids, records_parse_error = _create_proposed_records_from_response(
+            task_kind=task_kind,
+            response=external.response,
+            ledger_id=external.ledger_id,
+            workspace_id=workspace_id,
+        )
+        outcome.proposed_record_ids = proposed_record_ids
+        outcome.records_parse_error = records_parse_error
+    return outcome
+
+
 def run_ai_task(
     *,
     user_prompt: str,
@@ -363,6 +428,22 @@ def run_ai_task(
     requested_route_class = route_class
     selected_route_class = route_class or TASK_KIND_DEFAULT_ROUTE.get(task_kind, "local:fake")
     prompt_digest = canonical_digest({"prompt": user_prompt})
+
+    early_binding, _early_decision = resolve_binding(selected_route_class, bindings)
+    if early_binding is not None and early_binding.requires_network:
+        return _run_external_network_task(
+            user_prompt=user_prompt,
+            task_kind=task_kind,
+            requested_route_class=requested_route_class,
+            selected_route_class=selected_route_class,
+            context_blocks=context_blocks,
+            max_output_tokens=max_output_tokens,
+            adapters=adapters,
+            bindings=bindings,
+            external_blocked_reason=external_blocked_reason,
+            context_build_error=context_build_error,
+            workspace_id=workspace_id,
+        )
 
     # Context assembly upstream (e.g. workspace builder) failed: fail closed before
     # any provider call and record it. No partial/uncontexted call is made.
