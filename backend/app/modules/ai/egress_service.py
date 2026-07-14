@@ -21,6 +21,7 @@ from app.modules.ai.provider_registry import (
 _SAFE_EXTERNAL_LEVELS = frozenset({"S0", "S1"})
 _LEVEL_RANK = {"S0": 0, "S1": 1}
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_CANONICAL_SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 _FORBIDDEN_SAFE_METADATA_KEYS = frozenset(
     {
         "authorization",
@@ -234,8 +235,13 @@ def sanitizer_sample_value(
         ("policy_version", policy_version),
     ):
         _required_text(value, field_name)
-    if not _SHA256_RE.fullmatch(derivative_digest):
-        raise EgressContractError("derivative_digest must be a lowercase SHA-256 digest")
+    digest_pattern = (
+        _CANONICAL_SHA256_RE if derivative_kind == "canonical" else _SHA256_RE
+    )
+    if not digest_pattern.fullmatch(derivative_digest):
+        raise EgressContractError(
+            f"{derivative_kind} derivative_digest must use its canonical lowercase SHA-256 format"
+        )
     payload = canonical_json(
         {
             "derivative_digest": derivative_digest,
