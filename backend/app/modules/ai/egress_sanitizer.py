@@ -757,7 +757,7 @@ def _ensure_audit_item(
         derivative_digest=derivative_digest,
         iso_week=iso_week,
         policy_version=policy.policy_version,
-        sample_rate_bps=policy.sanitizer_sample_rate_bps,
+        sample_rate_bps=policy.sample_rate_bps,
     ):
         return None
     selection_value = sanitizer_sample_value(
@@ -805,7 +805,7 @@ def _ensure_audit_item(
             iso_week,
             policy.policy_version,
             selection_value,
-            policy.sanitizer_sample_rate_bps,
+            policy.sample_rate_bps,
             now_dt.isoformat(),
         ),
     )
