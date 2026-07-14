@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
 from app.modules.ai import sensitivity
+from app.modules.ai.context_builder import canonical_digest
 from app.modules.ai.egress_policy import EgressPolicyConfig, load_default_egress_policy
 from app.modules.ai.egress_service import (
     EgressContractError,
@@ -132,6 +133,7 @@ def create_prompt_derivative(
             connection,
             sanitizer_kind=sanitizer_kind,
             sanitizer_ai_job_id=sanitizer_ai_job_id,
+            expected_output_digest=canonical_digest({"text": derivative_content}),
         )
         row = connection.execute(
             """
@@ -269,6 +271,7 @@ def auto_approve_canonical_derivative(
     sanitizer_version: str,
     sanitizer_config_digest: str,
     sanitizer_ai_job_id: str | None = None,
+    expected_source_digests: dict[str, str] | None = None,
     approval_source: str = "policy-sanitizer-v1",
     policy: EgressPolicyConfig | None = None,
     now: datetime | None = None,
@@ -295,6 +298,11 @@ def auto_approve_canonical_derivative(
             "sanitizer_ai_job_id",
         )
     _validate_sanitizer_kind(sanitizer_kind)
+    expected_source_digests = _validate_expected_source_digests(
+        expected_source_digests,
+        source_refs=source_refs_tuple,
+        required=sanitizer_kind == "model_local",
+    )
 
     derivative_digest = sensitivity._derivative_content_digest(derivative_content)
     source_refs_json = canonical_json(list(source_refs_tuple))
@@ -306,6 +314,7 @@ def auto_approve_canonical_derivative(
             connection,
             sanitizer_kind=sanitizer_kind,
             sanitizer_ai_job_id=sanitizer_ai_job_id,
+            expected_output_digest=canonical_digest({"text": derivative_content}),
         )
         resolved_sources = [
             sensitivity._resolve_source_snapshot_and_label_in_connection(
@@ -319,6 +328,10 @@ def auto_approve_canonical_derivative(
             snapshot.subject_ref: snapshot.content_digest
             for snapshot, _label in resolved_sources
         }
+        if expected_source_digests is not None and source_digests != expected_source_digests:
+            raise sensitivity.SensitivityPolicyError(
+                "Canonical sanitizer source snapshot changed before approval."
+            )
         source_digests_json = canonical_json(source_digests)
 
         row = connection.execute(
@@ -845,6 +858,7 @@ def _validate_sanitizer_ai_job(
     *,
     sanitizer_kind: str,
     sanitizer_ai_job_id: str | None,
+    expected_output_digest: str,
 ) -> None:
     if sanitizer_kind == "deterministic":
         if sanitizer_ai_job_id is not None:
@@ -858,7 +872,7 @@ def _validate_sanitizer_ai_job(
         )
     row = connection.execute(
         """
-        SELECT status, selected_route_class
+        SELECT status, task_kind, selected_route_class, output_digest
         FROM ai_jobs
         WHERE id = ?
         """,
@@ -867,12 +881,53 @@ def _validate_sanitizer_ai_job(
     if row is None:
         raise sensitivity.SensitivityPolicyError("Sanitizer ai_job was not found.")
     route_class = str(row["selected_route_class"] or "")
-    if row["status"] not in {"success", "completed"} or not route_class.startswith(
-        "local:"
+    if (
+        row["status"] != "success"
+        or row["task_kind"] != "sanitizer"
+        or not route_class.startswith("local:")
+        or row["output_digest"] != expected_output_digest
     ):
         raise sensitivity.SensitivityPolicyError(
-            "Sanitizer ai_job must be a successful local-route attempt."
+            "Sanitizer ai_job must be a successful dedicated local-route attempt "
+            "with matching output provenance."
         )
+
+
+def _validate_expected_source_digests(
+    values: dict[str, str] | None,
+    *,
+    source_refs: tuple[str, ...],
+    required: bool,
+) -> dict[str, str] | None:
+    if values is None:
+        if required:
+            raise sensitivity.SensitivityPolicyError(
+                "Model-backed canonical sanitizer requires pre-call source digests."
+            )
+        return None
+    if not isinstance(values, dict):
+        raise EgressContractError("expected_source_digests must be a mapping")
+    cleaned: dict[str, str] = {}
+    for raw_ref, raw_digest in values.items():
+        source_ref = _required_text(raw_ref, "expected_source_digest source_ref")
+        sensitivity._parse_subject_ref(source_ref)
+        digest = _required_text(raw_digest, "expected_source_digest")
+        if (
+            len(digest) != 71
+            or not digest.startswith("sha256:")
+            or any(char not in "0123456789abcdef" for char in digest[7:])
+        ):
+            raise EgressContractError(
+                "expected source digests must use canonical sha256:<64 lowercase hex>"
+            )
+        if source_ref in cleaned:
+            raise EgressContractError("expected_source_digests contains duplicates")
+        cleaned[source_ref] = digest
+    if set(cleaned) != set(source_refs):
+        raise sensitivity.SensitivityPolicyError(
+            "Expected canonical source digest set does not match source_refs."
+        )
+    return dict(sorted(cleaned.items()))
 
 
 def _validate_final_content(content: str, *, final_level: str) -> None:
