@@ -203,6 +203,15 @@ EGRESS_SCHEMA_STATEMENTS = [
     """,
 ]
 
+EGRESS_SCHEMA_MIGRATION_STATEMENTS = [
+    "ALTER TABLE sanitized_derivatives ADD COLUMN sanitizer_kind TEXT",
+    "ALTER TABLE sanitized_derivatives ADD COLUMN sanitizer_version TEXT",
+    "ALTER TABLE sanitized_derivatives ADD COLUMN sanitizer_config_digest TEXT",
+    "ALTER TABLE sanitized_derivatives ADD COLUMN sanitizer_ai_job_id TEXT",
+    "ALTER TABLE sanitized_derivatives ADD COLUMN approval_source TEXT",
+    "ALTER TABLE sanitized_derivatives ADD COLUMN auto_approved INTEGER NOT NULL DEFAULT 0",
+]
+
 EGRESS_SCHEMA_INDEX_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_egress_prompt_derivatives_workspace_status ON egress_prompt_derivatives(workspace_id, status, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_egress_packets_binding_created ON egress_packets(provider_id, model_id, created_at)",
