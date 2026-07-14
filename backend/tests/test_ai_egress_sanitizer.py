@@ -197,7 +197,7 @@ def test_model_backed_sanitizer_requires_completed_local_ai_job(monkeypatch):
     )
     assert approval.sanitizer_ai_job_id == local_job
 
-    with pytest.raises(SensitivityPolicyError, match="completed local-route"):
+    with pytest.raises(SensitivityPolicyError, match="successful local-route"):
         create_prompt_derivative(
             raw_prompt="another private project question",
             derivative_content="Another generic engineering question.",
