@@ -60,7 +60,7 @@ def _bootstrap(monkeypatch) -> None:
 
 
 def _policy_100_percent():
-    return replace(load_default_egress_policy(), sanitizer_sample_rate_bps=10_000)
+    return replace(load_default_egress_policy(), sample_rate_bps=10_000)
 
 
 def _decision(text: str) -> str:
