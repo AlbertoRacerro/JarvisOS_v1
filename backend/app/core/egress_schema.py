@@ -27,7 +27,7 @@ EGRESS_SCHEMA_STATEMENTS = [
         revocation_reason TEXT,
         FOREIGN KEY (workspace_id) REFERENCES workspaces(id),
         FOREIGN KEY (sanitizer_ai_job_id) REFERENCES ai_jobs(id),
-        UNIQUE(raw_prompt_digest, derivative_digest, policy_version)
+        UNIQUE(workspace_id, raw_prompt_digest, derivative_digest, policy_version)
     )
     """,
     """
