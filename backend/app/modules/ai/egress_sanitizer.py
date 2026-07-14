@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -85,12 +87,20 @@ def create_prompt_derivative(
     policy: EgressPolicyConfig | None = None,
     now: datetime | None = None,
 ) -> SanitizerApproval:
-    """Persist one immutable, auto-approved S0/S1 prompt derivative."""
+    """Persist one immutable, auto-approved S0/S1 prompt derivative.
+
+    Prompt and derivative digests bind the exact received strings. Validation may
+    reject blank or oversized strings but never trims or rewrites them.
+    """
 
     policy = policy or load_default_egress_policy()
     now_dt = _normalized_now(now)
-    raw_prompt = _bounded_text(raw_prompt, "raw_prompt", policy.max_prompt_chars)
-    derivative_content = _bounded_text(
+    raw_prompt = _bounded_exact_text(
+        raw_prompt,
+        "raw_prompt",
+        policy.max_prompt_chars,
+    )
+    derivative_content = _bounded_exact_text(
         derivative_content,
         "derivative_content",
         policy.max_prompt_chars,
@@ -100,13 +110,19 @@ def create_prompt_derivative(
         raise sensitivity.SensitivityPolicyError(
             "Raw prompt contains a deterministic secret marker and cannot be sanitized."
         )
+
     transformations_tuple = _transformations(transformations)
-    _validate_provenance(
-        sanitizer_kind=sanitizer_kind,
-        sanitizer_version=sanitizer_version,
-        sanitizer_config_digest=sanitizer_config_digest,
-        sanitizer_ai_job_id=sanitizer_ai_job_id,
-    )
+    sanitizer_version = _required_text(sanitizer_version, "sanitizer_version")
+    sanitizer_config_digest = _validate_config_digest(sanitizer_config_digest)
+    if sanitizer_ai_job_id is not None:
+        sanitizer_ai_job_id = _required_text(
+            sanitizer_ai_job_id,
+            "sanitizer_ai_job_id",
+        )
+    _validate_sanitizer_kind(sanitizer_kind)
+    if workspace_id is not None:
+        workspace_id = _required_text(workspace_id, "workspace_id")
+
     raw_digest = sha256_text(raw_prompt)
     derivative_digest = sha256_text(derivative_content)
 
@@ -117,17 +133,25 @@ def create_prompt_derivative(
             sanitizer_kind=sanitizer_kind,
             sanitizer_ai_job_id=sanitizer_ai_job_id,
         )
-        existing = connection.execute(
+        row = connection.execute(
             """
-            SELECT * FROM egress_prompt_derivatives
-            WHERE raw_prompt_digest = ? AND derivative_digest = ? AND policy_version = ?
+            SELECT *
+            FROM egress_prompt_derivatives
+            WHERE workspace_id IS ?
+              AND raw_prompt_digest = ?
+              AND derivative_digest = ?
+              AND policy_version = ?
             """,
-            (raw_digest, derivative_digest, policy.policy_version),
+            (
+                workspace_id,
+                raw_digest,
+                derivative_digest,
+                policy.policy_version,
+            ),
         ).fetchone()
-        if existing is not None:
+        if row is not None:
             _assert_prompt_derivative_match(
-                existing,
-                workspace_id=workspace_id,
+                row,
                 derivative_content=derivative_content,
                 final_level=final_level,
                 transformations=transformations_tuple,
@@ -136,22 +160,22 @@ def create_prompt_derivative(
                 sanitizer_config_digest=sanitizer_config_digest,
                 sanitizer_ai_job_id=sanitizer_ai_job_id,
             )
-            if existing["status"] != "approved":
+            if row["status"] != "approved":
                 raise sensitivity.SensitivityPolicyError(
                     "A revoked prompt derivative cannot be reused."
                 )
-            audit_id = _ensure_audit_item(
+            audit_item_id = _ensure_audit_item(
                 connection,
                 derivative_kind="prompt",
-                derivative_id=str(existing["id"]),
+                derivative_id=str(row["id"]),
                 derivative_digest=derivative_digest,
                 workspace_id=workspace_id,
                 policy=policy,
                 now_dt=now_dt,
             )
-            return SanitizerApproval(
+            return _approval(
                 derivative_kind="prompt",
-                derivative_id=str(existing["id"]),
+                derivative_id=str(row["id"]),
                 derivative_digest=derivative_digest,
                 workspace_id=workspace_id,
                 final_level=final_level,
@@ -159,8 +183,8 @@ def create_prompt_derivative(
                 sanitizer_version=sanitizer_version,
                 sanitizer_config_digest=sanitizer_config_digest,
                 sanitizer_ai_job_id=sanitizer_ai_job_id,
-                policy_version=policy.policy_version,
-                audit_item_id=audit_id,
+                policy=policy,
+                audit_item_id=audit_item_id,
                 reused=True,
             )
 
@@ -190,7 +214,7 @@ def create_prompt_derivative(
                 now_dt.isoformat(),
             ),
         )
-        audit_id = _ensure_audit_item(
+        audit_item_id = _ensure_audit_item(
             connection,
             derivative_kind="prompt",
             derivative_id=derivative_id,
@@ -215,10 +239,10 @@ def create_prompt_derivative(
                 "sanitizer_config_digest": sanitizer_config_digest,
                 "sanitizer_ai_job_id": sanitizer_ai_job_id,
                 "policy_version": policy.policy_version,
-                "audit_item_id": audit_id,
+                "audit_item_id": audit_item_id,
             },
         )
-        return SanitizerApproval(
+        return _approval(
             derivative_kind="prompt",
             derivative_id=derivative_id,
             derivative_digest=derivative_digest,
@@ -228,8 +252,8 @@ def create_prompt_derivative(
             sanitizer_version=sanitizer_version,
             sanitizer_config_digest=sanitizer_config_digest,
             sanitizer_ai_job_id=sanitizer_ai_job_id,
-            policy_version=policy.policy_version,
-            audit_item_id=audit_id,
+            policy=policy,
+            audit_item_id=audit_item_id,
             reused=False,
         )
 
@@ -249,27 +273,32 @@ def auto_approve_canonical_derivative(
     policy: EgressPolicyConfig | None = None,
     now: datetime | None = None,
 ) -> SanitizerApproval:
-    """Auto-approve one provenance-bound canonical derivative in one transaction."""
+    """Auto-approve one provenance-bound canonical derivative atomically."""
 
     policy = policy or load_default_egress_policy()
     now_dt = _normalized_now(now)
     workspace_id = _required_text(workspace_id, "workspace_id")
-    derivative_content = _bounded_text(
+    derivative_content = _bounded_exact_text(
         derivative_content,
         "derivative_content",
         policy.max_context_chars,
     )
     _validate_final_content(derivative_content, final_level=final_level)
-    transformations_tuple = _transformations(transformations)
     source_refs_tuple = _source_refs(source_refs)
+    transformations_tuple = _transformations(transformations)
+    sanitizer_version = _required_text(sanitizer_version, "sanitizer_version")
+    sanitizer_config_digest = _validate_config_digest(sanitizer_config_digest)
     approval_source = _required_text(approval_source, "approval_source")
-    _validate_provenance(
-        sanitizer_kind=sanitizer_kind,
-        sanitizer_version=sanitizer_version,
-        sanitizer_config_digest=sanitizer_config_digest,
-        sanitizer_ai_job_id=sanitizer_ai_job_id,
-    )
+    if sanitizer_ai_job_id is not None:
+        sanitizer_ai_job_id = _required_text(
+            sanitizer_ai_job_id,
+            "sanitizer_ai_job_id",
+        )
+    _validate_sanitizer_kind(sanitizer_kind)
+
     derivative_digest = sensitivity._derivative_content_digest(derivative_content)
+    source_refs_json = canonical_json(list(source_refs_tuple))
+    transformations_json = canonical_json(list(transformations_tuple))
 
     with _transaction() as connection:
         sensitivity._require_workspace(connection, workspace_id)
@@ -278,7 +307,7 @@ def auto_approve_canonical_derivative(
             sanitizer_kind=sanitizer_kind,
             sanitizer_ai_job_id=sanitizer_ai_job_id,
         )
-        resolved = [
+        resolved_sources = [
             sensitivity._resolve_source_snapshot_and_label_in_connection(
                 connection,
                 workspace_id,
@@ -287,51 +316,57 @@ def auto_approve_canonical_derivative(
             for source_ref in source_refs_tuple
         ]
         source_digests = {
-            snapshot.subject_ref: snapshot.content_digest for snapshot, _label in resolved
+            snapshot.subject_ref: snapshot.content_digest
+            for snapshot, _label in resolved_sources
         }
         source_digests_json = canonical_json(source_digests)
-        transformations_json = canonical_json(list(transformations_tuple))
-        existing = connection.execute(
+
+        row = connection.execute(
             """
-            SELECT * FROM sanitized_derivatives
-            WHERE workspace_id = ? AND source_digests_json = ?
-              AND content_digest = ? AND effective_level = ?
-              AND sanitizer_kind = ? AND sanitizer_version = ?
-              AND sanitizer_config_digest = ? AND approval_source = ?
+            SELECT *
+            FROM sanitized_derivatives
+            WHERE workspace_id = ?
+              AND source_refs_json = ?
+              AND source_digests_json = ?
+              AND content_digest = ?
+              AND effective_level = ?
+              AND transformations_json = ?
+              AND sanitizer_kind = ?
+              AND sanitizer_version = ?
+              AND sanitizer_config_digest = ?
+              AND approval_source = ?
               AND auto_approved = 1
             ORDER BY created_at DESC, id ASC
             LIMIT 1
             """,
             (
                 workspace_id,
+                source_refs_json,
                 source_digests_json,
                 derivative_digest,
                 final_level,
+                transformations_json,
                 sanitizer_kind,
                 sanitizer_version,
                 sanitizer_config_digest,
                 approval_source,
             ),
         ).fetchone()
-        if existing is not None:
-            if existing["status"] != "approved":
+        if row is not None:
+            if row["status"] != "approved":
                 raise sensitivity.SensitivityPolicyError(
                     "A rejected or stale auto-sanitized derivative cannot be reused."
                 )
-            if existing["content"] != derivative_content:
+            if row["content"] != derivative_content:
                 raise sensitivity.SensitivityPolicyError(
                     "Canonical derivative digest collision or immutable content mismatch."
                 )
-            if existing["transformations_json"] != transformations_json:
-                raise sensitivity.SensitivityPolicyError(
-                    "Canonical derivative provenance mismatch."
-                )
-            if existing["sanitizer_ai_job_id"] != sanitizer_ai_job_id:
+            if row["sanitizer_ai_job_id"] != sanitizer_ai_job_id:
                 raise sensitivity.SensitivityPolicyError(
                     "Canonical derivative sanitizer ai_job mismatch."
                 )
-            derivative_id = str(existing["id"])
-            audit_id = _ensure_audit_item(
+            derivative_id = str(row["id"])
+            audit_item_id = _ensure_audit_item(
                 connection,
                 derivative_kind="canonical",
                 derivative_id=derivative_id,
@@ -340,7 +375,7 @@ def auto_approve_canonical_derivative(
                 policy=policy,
                 now_dt=now_dt,
             )
-            return SanitizerApproval(
+            return _approval(
                 derivative_kind="canonical",
                 derivative_id=derivative_id,
                 derivative_digest=derivative_digest,
@@ -350,8 +385,8 @@ def auto_approve_canonical_derivative(
                 sanitizer_version=sanitizer_version,
                 sanitizer_config_digest=sanitizer_config_digest,
                 sanitizer_ai_job_id=sanitizer_ai_job_id,
-                policy_version=policy.policy_version,
-                audit_item_id=audit_id,
+                policy=policy,
+                audit_item_id=audit_item_id,
                 reused=True,
             )
 
@@ -372,7 +407,7 @@ def auto_approve_canonical_derivative(
             (
                 derivative_id,
                 workspace_id,
-                canonical_json(list(source_refs_tuple)),
+                source_refs_json,
                 source_digests_json,
                 derivative_content,
                 derivative_digest,
@@ -390,7 +425,7 @@ def auto_approve_canonical_derivative(
                 approval_source,
             ),
         )
-        audit_id = _ensure_audit_item(
+        audit_item_id = _ensure_audit_item(
             connection,
             derivative_kind="canonical",
             derivative_id=derivative_id,
@@ -418,10 +453,10 @@ def auto_approve_canonical_derivative(
                 "approval_source": approval_source,
                 "sensitivity_policy_version": sensitivity.POLICY_VERSION,
                 "egress_policy_version": policy.policy_version,
-                "audit_item_id": audit_id,
+                "audit_item_id": audit_item_id,
             },
         )
-        return SanitizerApproval(
+        return _approval(
             derivative_kind="canonical",
             derivative_id=derivative_id,
             derivative_digest=derivative_digest,
@@ -431,8 +466,8 @@ def auto_approve_canonical_derivative(
             sanitizer_version=sanitizer_version,
             sanitizer_config_digest=sanitizer_config_digest,
             sanitizer_ai_job_id=sanitizer_ai_job_id,
-            policy_version=policy.policy_version,
-            audit_item_id=audit_id,
+            policy=policy,
+            audit_item_id=audit_item_id,
             reused=False,
         )
 
@@ -443,10 +478,13 @@ def get_prompt_derivative(
     workspace_id: str | None = None,
 ) -> PromptDerivative:
     derivative_id = _required_text(derivative_id, "derivative_id")
+    if workspace_id is not None:
+        workspace_id = _required_text(workspace_id, "workspace_id")
     with open_sqlite_connection() as connection:
         row = connection.execute(
             """
-            SELECT * FROM egress_prompt_derivatives
+            SELECT *
+            FROM egress_prompt_derivatives
             WHERE id = ? AND workspace_id IS ?
             """,
             (derivative_id, workspace_id),
@@ -465,18 +503,27 @@ def resolve_approved_prompt_derivative(
     policy: EgressPolicyConfig | None = None,
 ) -> PromptDerivative | None:
     policy = policy or load_default_egress_policy()
-    raw_prompt = _bounded_text(raw_prompt, "raw_prompt", policy.max_prompt_chars)
+    raw_prompt = _bounded_exact_text(
+        raw_prompt,
+        "raw_prompt",
+        policy.max_prompt_chars,
+    )
+    if workspace_id is not None:
+        workspace_id = _required_text(workspace_id, "workspace_id")
     raw_digest = sha256_text(raw_prompt)
     with open_sqlite_connection() as connection:
         row = connection.execute(
             """
-            SELECT * FROM egress_prompt_derivatives
-            WHERE raw_prompt_digest = ? AND workspace_id IS ?
-              AND policy_version = ? AND status = 'approved'
+            SELECT *
+            FROM egress_prompt_derivatives
+            WHERE workspace_id IS ?
+              AND raw_prompt_digest = ?
+              AND policy_version = ?
+              AND status = 'approved'
             ORDER BY created_at DESC, id ASC
             LIMIT 1
             """,
-            (raw_digest, workspace_id, policy.policy_version),
+            (workspace_id, raw_digest, policy.policy_version),
         ).fetchone()
     if row is None:
         return None
@@ -500,14 +547,17 @@ def review_sanitizer_audit_item(
     notes: str | None = None,
     now: datetime | None = None,
 ) -> SanitizerAuditDisposition:
-    """Review one sampled derivative and revoke all unstarted dependent egress work."""
+    """Review one sampled derivative and invalidate dependent unstarted work."""
 
     audit_item_id = _required_text(audit_item_id, "audit_item_id")
     reviewer = _required_text(reviewer, "reviewer")
     if disposition not in _ALLOWED_AUDIT_DISPOSITIONS:
         raise EgressContractError("unsupported sanitizer audit disposition")
-    if notes is not None and len(notes) > 2000:
-        raise EgressContractError("audit notes exceed 2000 characters")
+    if notes is not None:
+        if not isinstance(notes, str):
+            raise EgressContractError("audit notes must be text")
+        if len(notes) > 2000:
+            raise EgressContractError("audit notes exceed 2000 characters")
     now_dt = _normalized_now(now)
     now_iso = now_dt.isoformat()
 
@@ -526,21 +576,24 @@ def review_sanitizer_audit_item(
             )
 
         packet_ids: set[str] = set()
-        invalidated_packet_count = 0
         revoked_ticket_count = 0
         released_reservation_count = 0
         if disposition == "rejected":
             if audit["derivative_kind"] == "prompt":
-                updated = connection.execute(
+                changed = connection.execute(
                     """
                     UPDATE egress_prompt_derivatives
                     SET status = 'revoked', revoked_at = ?,
                         revocation_reason = 'sanitizer_audit_rejected'
                     WHERE id = ? AND derivative_digest = ? AND status = 'approved'
                     """,
-                    (now_iso, audit["derivative_id"], audit["derivative_digest"]),
+                    (
+                        now_iso,
+                        audit["derivative_id"],
+                        audit["derivative_digest"],
+                    ),
                 )
-                if updated.rowcount != 1:
+                if changed.rowcount != 1:
                     raise sensitivity.SensitivityPolicyError(
                         "Prompt derivative changed before audit rejection."
                     )
@@ -551,18 +604,23 @@ def review_sanitizer_audit_item(
                         (audit["derivative_id"],),
                     ).fetchall()
                 }
-            else:
-                updated = connection.execute(
+            elif audit["derivative_kind"] == "canonical":
+                changed = connection.execute(
                     """
                     UPDATE sanitized_derivatives
-                    SET status = 'revoked', stale_reason = 'sanitizer_audit_rejected',
+                    SET status = 'revoked',
+                        stale_reason = 'sanitizer_audit_rejected',
                         updated_at = ?
-                    WHERE id = ? AND content_digest = ? AND status = 'approved'
-                      AND auto_approved = 1
+                    WHERE id = ? AND content_digest = ?
+                      AND status = 'approved' AND auto_approved = 1
                     """,
-                    (now_iso, audit["derivative_id"], audit["derivative_digest"]),
+                    (
+                        now_iso,
+                        audit["derivative_id"],
+                        audit["derivative_digest"],
+                    ),
                 )
-                if updated.rowcount != 1:
+                if changed.rowcount != 1:
                     raise sensitivity.SensitivityPolicyError(
                         "Canonical derivative changed before audit rejection."
                     )
@@ -570,18 +628,24 @@ def review_sanitizer_audit_item(
                     connection,
                     derivative_id=str(audit["derivative_id"]),
                 )
-            invalidated_packet_count = len(packet_ids)
+            else:
+                raise sensitivity.SensitivityPolicyError(
+                    "Unsupported derivative kind in audit row."
+                )
+
             if packet_ids:
-                placeholders = ", ".join("?" for _ in packet_ids)
-                packet_values = tuple(sorted(packet_ids))
+                placeholders = ",".join("?" for _ in packet_ids)
+                values = tuple(sorted(packet_ids))
                 tickets = connection.execute(
                     f"""
                     UPDATE egress_confirmation_tickets
                     SET state = 'revoked', version = version + 1,
-                        revoked_at = ?, revocation_reason = 'sanitizer_audit_rejected'
-                    WHERE state = 'pending' AND packet_id IN ({placeholders})
+                        revoked_at = ?,
+                        revocation_reason = 'sanitizer_audit_rejected'
+                    WHERE state = 'pending'
+                      AND packet_id IN ({placeholders})
                     """,
-                    (now_iso, *packet_values),
+                    (now_iso, *values),
                 )
                 revoked_ticket_count = tickets.rowcount
                 reservations = connection.execute(
@@ -589,17 +653,19 @@ def review_sanitizer_audit_item(
                     UPDATE egress_budget_reservations
                     SET state = 'released', version = version + 1,
                         reconciled_at = ?,
-                        reconciliation_status = 'sanitizer_audit_rejected_before_start'
-                    WHERE state = 'active' AND decision_id IN (
-                        SELECT id FROM egress_decisions
-                        WHERE packet_id IN ({placeholders})
-                    )
+                        reconciliation_status =
+                            'sanitizer_audit_rejected_before_start'
+                    WHERE state = 'active'
+                      AND decision_id IN (
+                          SELECT id FROM egress_decisions
+                          WHERE packet_id IN ({placeholders})
+                      )
                     """,
-                    (now_iso, *packet_values),
+                    (now_iso, *values),
                 )
                 released_reservation_count = reservations.rowcount
 
-        updated = connection.execute(
+        changed = connection.execute(
             """
             UPDATE sanitizer_audit_items
             SET state = ?, reviewed_at = ?, reviewer = ?, notes = ?
@@ -607,7 +673,7 @@ def review_sanitizer_audit_item(
             """,
             (disposition, now_iso, reviewer, notes, audit_item_id),
         )
-        if updated.rowcount != 1:
+        if changed.rowcount != 1:
             raise sensitivity.SensitivityPolicyError(
                 "Sanitizer audit item changed before review."
             )
@@ -625,7 +691,7 @@ def review_sanitizer_audit_item(
                 "disposition": disposition,
                 "notes_present": notes is not None,
                 "notes_digest": sha256_text(notes) if notes is not None else None,
-                "invalidated_packet_count": invalidated_packet_count,
+                "invalidated_packet_count": len(packet_ids),
                 "revoked_ticket_count": revoked_ticket_count,
                 "released_reservation_count": released_reservation_count,
             },
@@ -636,10 +702,41 @@ def review_sanitizer_audit_item(
             derivative_id=str(audit["derivative_id"]),
             derivative_digest=str(audit["derivative_digest"]),
             state=disposition,
-            invalidated_packet_count=invalidated_packet_count,
+            invalidated_packet_count=len(packet_ids),
             revoked_ticket_count=revoked_ticket_count,
             released_reservation_count=released_reservation_count,
         )
+
+
+def _approval(
+    *,
+    derivative_kind: str,
+    derivative_id: str,
+    derivative_digest: str,
+    workspace_id: str | None,
+    final_level: str,
+    sanitizer_kind: str,
+    sanitizer_version: str,
+    sanitizer_config_digest: str,
+    sanitizer_ai_job_id: str | None,
+    policy: EgressPolicyConfig,
+    audit_item_id: str | None,
+    reused: bool,
+) -> SanitizerApproval:
+    return SanitizerApproval(
+        derivative_kind=derivative_kind,
+        derivative_id=derivative_id,
+        derivative_digest=derivative_digest,
+        workspace_id=workspace_id,
+        final_level=final_level,
+        sanitizer_kind=sanitizer_kind,
+        sanitizer_version=sanitizer_version,
+        sanitizer_config_digest=sanitizer_config_digest,
+        sanitizer_ai_job_id=sanitizer_ai_job_id,
+        policy_version=policy.policy_version,
+        audit_item_id=audit_item_id,
+        reused=reused,
+    )
 
 
 def _ensure_audit_item(
@@ -652,7 +749,8 @@ def _ensure_audit_item(
     policy: EgressPolicyConfig,
     now_dt: datetime,
 ) -> str | None:
-    iso_week = f"{now_dt.isocalendar().year:04d}-W{now_dt.isocalendar().week:02d}"
+    iso_calendar = now_dt.isocalendar()
+    iso_week = f"{iso_calendar.year:04d}-W{iso_calendar.week:02d}"
     if not sanitizer_should_sample(
         derivative_kind=derivative_kind,
         derivative_id=derivative_id,
@@ -669,11 +767,15 @@ def _ensure_audit_item(
         iso_week=iso_week,
         policy_version=policy.policy_version,
     )
-    existing = connection.execute(
+    row = connection.execute(
         """
-        SELECT id FROM sanitizer_audit_items
-        WHERE derivative_kind = ? AND derivative_id = ?
-          AND derivative_digest = ? AND iso_week = ? AND policy_version = ?
+        SELECT id
+        FROM sanitizer_audit_items
+        WHERE derivative_kind = ?
+          AND derivative_id = ?
+          AND derivative_digest = ?
+          AND iso_week = ?
+          AND policy_version = ?
         """,
         (
             derivative_kind,
@@ -683,9 +785,9 @@ def _ensure_audit_item(
             policy.policy_version,
         ),
     ).fetchone()
-    if existing is not None:
-        return str(existing["id"])
-    audit_id = str(uuid4())
+    if row is not None:
+        return str(row["id"])
+    audit_item_id = str(uuid4())
     connection.execute(
         """
         INSERT INTO sanitizer_audit_items (
@@ -695,7 +797,7 @@ def _ensure_audit_item(
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
         """,
         (
-            audit_id,
+            audit_item_id,
             workspace_id,
             derivative_kind,
             derivative_id,
@@ -707,7 +809,7 @@ def _ensure_audit_item(
             now_dt.isoformat(),
         ),
     )
-    return audit_id
+    return audit_item_id
 
 
 def _canonical_derivative_packet_ids(
@@ -716,10 +818,20 @@ def _canonical_derivative_packet_ids(
     derivative_id: str,
 ) -> set[str]:
     packet_ids: set[str] = set()
-    for row in connection.execute(
+    rows = connection.execute(
         "SELECT id, included_manifest_json FROM egress_packets"
-    ).fetchall():
-        manifests = json.loads(row["included_manifest_json"])
+    ).fetchall()
+    for row in rows:
+        try:
+            manifests = json.loads(row["included_manifest_json"])
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise sensitivity.SensitivityPolicyError(
+                "Stored egress manifest is malformed."
+            ) from exc
+        if not isinstance(manifests, list):
+            raise sensitivity.SensitivityPolicyError(
+                "Stored egress manifest is not a list."
+            )
         if any(
             isinstance(item, dict) and item.get("derivative_id") == derivative_id
             for item in manifests
@@ -746,15 +858,16 @@ def _validate_sanitizer_ai_job(
         )
     row = connection.execute(
         """
-        SELECT status, selected_route_class, provider_id
-        FROM ai_jobs WHERE id = ?
+        SELECT status, selected_route_class
+        FROM ai_jobs
+        WHERE id = ?
         """,
         (sanitizer_ai_job_id,),
     ).fetchone()
     if row is None:
         raise sensitivity.SensitivityPolicyError("Sanitizer ai_job was not found.")
-    route = str(row["selected_route_class"] or "")
-    if row["status"] != "completed" or not route.startswith("local:"):
+    route_class = str(row["selected_route_class"] or "")
+    if row["status"] != "completed" or not route_class.startswith("local:"):
         raise sensitivity.SensitivityPolicyError(
             "Sanitizer ai_job must be a completed local-route attempt."
         )
@@ -772,31 +885,23 @@ def _validate_final_content(content: str, *, final_level: str) -> None:
         )
 
 
-def _validate_provenance(
-    *,
-    sanitizer_kind: str,
-    sanitizer_version: str,
-    sanitizer_config_digest: str,
-    sanitizer_ai_job_id: str | None,
-) -> None:
+def _validate_sanitizer_kind(sanitizer_kind: str) -> None:
     if sanitizer_kind not in _ALLOWED_SANITIZER_KINDS:
         raise EgressContractError("unsupported sanitizer_kind")
-    _required_text(sanitizer_version, "sanitizer_version")
-    _required_text(sanitizer_config_digest, "sanitizer_config_digest")
-    if len(sanitizer_config_digest) != 64 or any(
-        char not in "0123456789abcdef" for char in sanitizer_config_digest
-    ):
+
+
+def _validate_config_digest(value: str) -> str:
+    value = _required_text(value, "sanitizer_config_digest")
+    if len(value) != 64 or any(char not in "0123456789abcdef" for char in value):
         raise EgressContractError(
             "sanitizer_config_digest must be a lowercase SHA-256 digest"
         )
-    if sanitizer_ai_job_id is not None:
-        _required_text(sanitizer_ai_job_id, "sanitizer_ai_job_id")
+    return value
 
 
 def _assert_prompt_derivative_match(
     row: sqlite3.Row,
     *,
-    workspace_id: str | None,
     derivative_content: str,
     final_level: str,
     transformations: tuple[str, ...],
@@ -806,7 +911,6 @@ def _assert_prompt_derivative_match(
     sanitizer_ai_job_id: str | None,
 ) -> None:
     expected = {
-        "workspace_id": workspace_id,
         "derivative_content": derivative_content,
         "final_level": final_level,
         "transformations_json": canonical_json(list(transformations)),
@@ -843,6 +947,8 @@ def _prompt_derivative_read(row: sqlite3.Row) -> PromptDerivative:
 
 
 def _source_refs(values: list[str] | tuple[str, ...]) -> tuple[str, ...]:
+    if not isinstance(values, (list, tuple)):
+        raise EgressContractError("source_refs must be a list or tuple")
     cleaned = tuple(_required_text(value, "source_ref") for value in values)
     if not cleaned:
         raise EgressContractError("source_refs must not be empty")
@@ -856,6 +962,8 @@ def _source_refs(values: list[str] | tuple[str, ...]) -> tuple[str, ...]:
 
 
 def _transformations(values: list[str] | tuple[str, ...]) -> tuple[str, ...]:
+    if not isinstance(values, (list, tuple)):
+        raise EgressContractError("transformations must be a list or tuple")
     cleaned = tuple(_required_text(value, "transformation") for value in values)
     if not cleaned:
         raise EgressContractError("transformations must not be empty")
@@ -864,11 +972,12 @@ def _transformations(values: list[str] | tuple[str, ...]) -> tuple[str, ...]:
     return cleaned
 
 
-def _bounded_text(value: str, field_name: str, maximum: int) -> str:
-    cleaned = _required_text(value, field_name)
-    if len(cleaned) > maximum:
+def _bounded_exact_text(value: str, field_name: str, maximum: int) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise EgressContractError(f"{field_name} must be non-empty text")
+    if len(value) > maximum:
         raise EgressContractError(f"{field_name} exceeds configured character cap")
-    return cleaned
+    return value
 
 
 def _required_text(value: str, field_name: str) -> str:
@@ -892,19 +1001,14 @@ def _normalized_now(value: datetime | None) -> datetime:
     return result.astimezone(UTC)
 
 
-class _transaction:
-    def __enter__(self) -> sqlite3.Connection:
-        self._manager = open_sqlite_connection()
-        self._connection = self._manager.__enter__()
-        self._connection.execute("BEGIN IMMEDIATE")
-        return self._connection
-
-    def __exit__(self, exc_type, exc, traceback) -> bool:
+@contextmanager
+def _transaction() -> Iterator[sqlite3.Connection]:
+    with open_sqlite_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
         try:
-            if exc_type is None:
-                self._connection.commit()
-            else:
-                self._connection.rollback()
-        finally:
-            self._manager.__exit__(exc_type, exc, traceback)
-        return False
+            yield connection
+        except Exception:
+            connection.rollback()
+            raise
+        else:
+            connection.commit()
