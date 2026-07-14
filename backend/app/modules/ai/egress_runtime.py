@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from app.core.database import open_sqlite_connection
 from app.modules.ai import sensitivity
+from app.modules.ai.budget import evaluate_provider_budget_gate
 from app.modules.ai.context_builder import (
     ContextBlockError,
     assemble_prompt,
@@ -97,6 +98,8 @@ class _PrepacketStop(Exception):
         source_count: int,
         included_count: int,
         withheld_count: int,
+        detail_reason: str | None,
+        ai_error_type: str | None,
     ) -> None:
         super().__init__(reason_code)
         self.result = result
@@ -107,6 +110,8 @@ class _PrepacketStop(Exception):
         self.source_count = source_count
         self.included_count = included_count
         self.withheld_count = withheld_count
+        self.detail_reason = detail_reason
+        self.ai_error_type = ai_error_type
 
 
 def run_external_task(
@@ -158,7 +163,9 @@ def run_external_task(
             adapters=adapters,
             workspace_id=workspace_id,
             context_build_error=context_build_error,
-            external_blocked_reason=external_blocked_reason,
+            external_blocked_reason=(
+                external_blocked_reason if fallback_index == 0 else None
+            ),
             task_type_for=task_type_for,
             task_prompt_for=prompt_builder,
             binding=binding,
@@ -218,6 +225,16 @@ def _run_binding(
                 result="deny",
                 reason_code="egress_policy_error",
                 prompt_level=_prompt_floor_or_unknown(user_prompt),
+                detail_reason="network_binding_required",
+                ai_error_type="config_error",
+            )
+        if max_output_tokens is None:
+            raise _stop(
+                result="deny",
+                reason_code="max_output_tokens_required",
+                prompt_level=_prompt_floor_or_unknown(user_prompt),
+                detail_reason="max_output_tokens_required",
+                ai_error_type="config_error",
             )
         if context_build_error is not None:
             raise _stop(
@@ -225,12 +242,20 @@ def _run_binding(
                 reason_code="context_build_error",
                 prompt_level=_prompt_floor_or_unknown(user_prompt),
             )
-        if external_blocked_reason is not None:
-            route_metadata["legacy_blocked_reason"] = external_blocked_reason
+        gate_reason = external_blocked_reason
+        if gate_reason is None:
+            gate_reason = evaluate_provider_budget_gate(
+                get_ai_settings(),
+                binding.provider_id,
+            ).blocking_reason
+        if gate_reason is not None:
+            route_metadata["provider_gate_reason"] = gate_reason
             raise _stop(
                 result="deny",
-                reason_code="egress_policy_error",
+                reason_code="provider_gate_blocked",
                 prompt_level=_prompt_floor_or_unknown(user_prompt),
+                detail_reason=gate_reason,
+                ai_error_type="config_error",
             )
 
         context = _authorize_context(
@@ -268,13 +293,15 @@ def _run_binding(
     if adapter is None:
         stop = _stop(
             result="deny",
-            reason_code="egress_policy_error",
+            reason_code="adapter_unavailable",
             prompt_level=prompt.prompt_level or "unknown",
             context_level=context.level,
             context_digest=context.digest,
             source_count=len(context.source_digests),
             included_count=len(context.included_manifest),
             withheld_count=len(context.withheld_manifest),
+            detail_reason=f"adapter_unavailable:{binding.provider_id}",
+            ai_error_type="config_error",
         )
         return _persist_prepacket(
             stop=stop,
@@ -291,10 +318,7 @@ def _run_binding(
             policy=policy,
         )
 
-    attempt_max = min(
-        max_output_tokens if max_output_tokens is not None else binding.max_output_tokens,
-        binding.max_output_tokens,
-    )
+    attempt_max = min(max_output_tokens, binding.max_output_tokens)
     final_level = max(
         (prompt.prompt_level or "S1", context.level),
         key=_LEVEL_RANK.__getitem__,
@@ -325,7 +349,7 @@ def _run_binding(
             registry=registry,
             policy=policy,
         )
-    except ValueError:
+    except ValueError as exc:
         stop = _stop(
             result="deny",
             reason_code="egress_policy_error",
@@ -335,6 +359,8 @@ def _run_binding(
             source_count=len(context.source_digests),
             included_count=len(context.included_manifest),
             withheld_count=len(context.withheld_manifest),
+            detail_reason=type(exc).__name__,
+            ai_error_type="config_error",
         )
         return _persist_prepacket(
             stop=stop,
@@ -372,6 +398,8 @@ def _run_binding(
             status=status,
             error_type=preparation.reason_code,
             started_at=started_at,
+            decision_reason=f"egress:{preparation.reason_code}",
+            blocked_reason=preparation.reason_code,
         )
         return _outcome(
             status=status,
@@ -721,21 +749,24 @@ def _persist_prepacket(
         policy=policy,
     )
     status = "validation_error" if stop.result == "pause" else "config_error"
+    detail_reason = stop.detail_reason or stop.reason_code
+    error_type = stop.ai_error_type or stop.reason_code
+    context = _ContextView(
+        (),
+        stop.context_level,
+        stop.context_digest,
+        (),
+        (),
+        (),
+        (),
+    )
     ledger_id = _terminal_job(
         task_kind=task_kind,
         requested_route_class=requested_route_class,
         route_class=route_class,
         binding=binding,
         prompt_digest=ai_prompt_digest,
-        context=_ContextView(
-            (),
-            stop.context_level,
-            stop.context_digest,
-            (),
-            (),
-            (),
-            (),
-        ),
+        context=context,
         route_metadata={
             **route_metadata,
             "egress_decision_id": recorded.decision_id,
@@ -743,8 +774,10 @@ def _persist_prepacket(
             "egress_safe_input_digest": recorded.safe_input_digest,
         },
         status=status,
-        error_type=stop.reason_code,
+        error_type=error_type,
         started_at=started_at,
+        decision_reason=f"egress:{detail_reason}",
+        blocked_reason=detail_reason,
     )
     return _outcome(
         status=status,
@@ -752,16 +785,8 @@ def _persist_prepacket(
         route_class=route_class,
         binding=binding,
         response=None,
-        error_type=stop.reason_code,
-        context=_ContextView(
-            (),
-            stop.context_level,
-            stop.context_digest,
-            (),
-            (),
-            (),
-            (),
-        ),
+        error_type=error_type,
+        context=context,
         egress_decision_id=recorded.decision_id,
         packet_digest=None,
         ticket_id=None,
@@ -770,6 +795,8 @@ def _persist_prepacket(
         trigger_ids=(),
         blocked=True,
         context_sources_count=stop.source_count,
+        decision_reason_override=f"egress:{detail_reason}",
+        blocked_reason_override=detail_reason,
     )
 
 
@@ -785,6 +812,8 @@ def _terminal_job(
     status: str,
     error_type: str,
     started_at: float,
+    decision_reason: str,
+    blocked_reason: str | None,
 ) -> str:
     queued = create_queued_ai_job(
         task_kind=task_kind,
@@ -792,7 +821,8 @@ def _terminal_job(
         selected_route_class=route_class,
         provider_id=binding.provider_id,
         model_id=binding.model_id,
-        decision_reason=f"bound:{route_class}",
+        decision_reason=decision_reason,
+        blocked_reason=blocked_reason,
         prompt_digest=prompt_digest,
         context_digest=context.digest,
         context_sources=(
@@ -828,14 +858,22 @@ def _outcome(
     blocked: bool,
     retryable_error_code: str | None = None,
     context_sources_count: int | None = None,
+    decision_reason_override: str | None = None,
+    blocked_reason_override: str | None = None,
 ) -> ExternalTaskOutcome:
     decision = RoutingDecision(
         provider_id=binding.provider_id,
         model_id=binding.model_id,
         blocked=blocked,
-        blocked_reason=reason_code if blocked else None,
+        blocked_reason=(
+            blocked_reason_override
+            if blocked_reason_override is not None
+            else (reason_code if blocked else None)
+        ),
         decision_reason=(
-            f"egress:{reason_code}" if blocked else f"bound:{route_class}"
+            decision_reason_override
+            if decision_reason_override is not None
+            else (f"egress:{reason_code}" if blocked else f"bound:{route_class}")
         ),
     )
     return ExternalTaskOutcome(
@@ -965,6 +1003,8 @@ def _stop(
     source_count: int = 0,
     included_count: int = 0,
     withheld_count: int = 0,
+    detail_reason: str | None = None,
+    ai_error_type: str | None = None,
 ) -> _PrepacketStop:
     return _PrepacketStop(
         result=result,
@@ -975,6 +1015,8 @@ def _stop(
         source_count=source_count,
         included_count=included_count,
         withheld_count=withheld_count,
+        detail_reason=detail_reason,
+        ai_error_type=ai_error_type,
     )
 
 
