@@ -17,15 +17,18 @@ from app.modules.ai.egress_service import EgressContractError, canonical_json, s
 _ALLOWED_PREPACKET_RESULTS = frozenset({"deny", "pause"})
 _ALLOWED_PREPACKET_REASONS = frozenset(
     {
+        "adapter_unavailable",
         "canonical_context_not_authorized",
         "context_budget_exceeded",
         "context_build_error",
         "context_malformed",
         "egress_policy_error",
         "manual_context_not_authorized",
+        "max_output_tokens_required",
         "prompt_classification_required",
         "prompt_sanitization_required",
         "prompt_secret_detected",
+        "provider_gate_blocked",
         "unsupported_egress_operation",
     }
 )
@@ -360,12 +363,20 @@ def finalize_queued_ai_job(
         ).fetchone()
         if row is None or row["status"] != "queued":
             raise EgressSpineStateError("ai_job is not queued or was already finalized")
+        expected_binding = (row["provider_id"], row["model_id"])
         if response is not None and (
             response.provider_id,
             response.model_id,
-        ) != (row["provider_id"], row["model_id"]):
+        ) != expected_binding:
             raise EgressSpineStateError(
                 "ai_job response binding does not match the queued attempt"
+            )
+        if response is not None and (
+            response.usage.provider_id,
+            response.usage.model_id,
+        ) != expected_binding:
+            raise EgressSpineStateError(
+                "ai_job usage binding does not match the queued attempt"
             )
 
         if response is not None:
