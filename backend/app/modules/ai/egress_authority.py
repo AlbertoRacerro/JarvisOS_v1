@@ -425,8 +425,7 @@ def _resolve_local_sanitizer_binding(
     from app.modules.ai.execution import resolve_binding
 
     resolved_registry = registry or load_default_provider_registry()
-    binding_table = None if registry is None else registry.bindings
-    binding, decision = resolve_binding(route_class, binding_table)
+    binding, decision = resolve_binding(route_class, resolved_registry.bindings)
     if binding is None:
         raise sensitivity.SensitivityPolicyError(
             f"Local sanitizer route is unavailable: {decision.blocked_reason or 'unbound'}"
@@ -565,6 +564,11 @@ def _sanitizer_config_digest(
     version: str,
     registry: ProviderRegistry,
 ) -> str:
+    binding = registry.bindings.get(route_class)
+    if binding is None:
+        raise sensitivity.SensitivityPolicyError(
+            "Sanitizer config digest cannot resolve the primary binding."
+        )
     chain = registry.fallback_chains.get(route_class, ())
     return sha256_text(
         canonical_json(
@@ -574,6 +578,12 @@ def _sanitizer_config_digest(
                     {"provider_id": item.provider_id, "model_id": item.model_id}
                     for item in chain
                 ],
+                "primary_binding": {
+                    "provider_id": binding.provider_id,
+                    "model_id": binding.model_id,
+                    "requires_network": binding.requires_network,
+                    "max_output_tokens": binding.max_output_tokens,
+                },
                 "route_class": route_class,
                 "template": template,
                 "version": version,
