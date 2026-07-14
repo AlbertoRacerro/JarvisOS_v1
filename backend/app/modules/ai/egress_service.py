@@ -393,9 +393,13 @@ def _canonical_source_digests(items: tuple[tuple[str, str], ...]) -> dict[str, s
         _required_text(source_ref, "source_ref")
         if source_ref in result:
             raise EgressContractError("source_digests contains duplicate source_ref")
-        if not _SHA256_RE.fullmatch(digest):
+        if _CANONICAL_SHA256_RE.fullmatch(digest):
+            canonical_digest = digest
+        elif _SHA256_RE.fullmatch(digest):
+            canonical_digest = f"sha256:{digest}"
+        else:
             raise EgressContractError("source digest must be a lowercase SHA-256 digest")
-        result[source_ref] = digest
+        result[source_ref] = canonical_digest
     return result
 
 
