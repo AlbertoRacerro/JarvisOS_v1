@@ -13,7 +13,6 @@ from app.modules.ai.egress_sanitizer import (
     resolve_approved_prompt_derivative,
 )
 from app.modules.ai.egress_service import EgressContractError, canonical_json, sha256_text
-from app.modules.ai.execution import resolve_binding
 
 _AUTHORITY_RESULTS = frozenset({"eligible", "pause", "deny"})
 _LOCAL_SANITIZER_VERSION = "prompt-local-sanitizer-v1"
@@ -186,6 +185,8 @@ def sanitize_prompt_with_local_model(
             "Model-backed sanitizer route must be explicitly local."
         )
 
+    from app.modules.ai.execution import resolve_binding, run_ai_task
+
     binding, decision = resolve_binding(route_class)
     if binding is None:
         raise sensitivity.SensitivityPolicyError(
@@ -213,8 +214,6 @@ def sanitize_prompt_with_local_model(
             }
         )
     )
-
-    from app.modules.ai.execution import run_ai_task
 
     outcome = run_ai_task(
         user_prompt=sanitizer_input,
