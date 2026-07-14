@@ -5,6 +5,7 @@ import pytest
 from app.modules.ai.provider_registry import (
     load_provider_registry,
     parse_provider_registry,
+    registry_bindings,
     resolve_model_pricing,
 )
 
@@ -33,6 +34,47 @@ def test_default_provider_registry_loads_with_deepseek_glm_bindings(monkeypatch)
     assert deepseek_price.input_usd_per_1m_tokens == 5.0
     assert deepseek_price.output_usd_per_1m_tokens == 20.0
     assert deepseek_price.pricing_version == "operator-conservative-v1"
+
+
+def test_exact_external_model_override_uses_canonical_registry_metadata(monkeypatch):
+    monkeypatch.setenv("AI_ROUTE_CHEAP_MODEL", "deepseek-v4-pro")
+    monkeypatch.delenv("AI_ROUTE_REASONING_MODEL", raising=False)
+
+    binding = registry_bindings()["external:cheap"]
+
+    assert binding.provider_id == "deepseek"
+    assert binding.model_id == "deepseek-v4-pro"
+    assert binding.max_output_tokens == 512
+    assert binding.requires_network is True
+
+
+def test_external_model_override_rejects_provider_model_mismatch(monkeypatch):
+    monkeypatch.setenv("AI_ROUTE_CHEAP_MODEL", "glm-5.2")
+    monkeypatch.delenv("AI_ROUTE_REASONING_MODEL", raising=False)
+
+    with pytest.raises(ValueError, match="must resolve uniquely to a priced model"):
+        registry_bindings()
+
+
+def test_external_model_override_rejects_unknown_model(monkeypatch):
+    monkeypatch.setenv("AI_ROUTE_REASONING_MODEL", "unregistered-model")
+    monkeypatch.delenv("AI_ROUTE_CHEAP_MODEL", raising=False)
+
+    with pytest.raises(ValueError, match="must resolve uniquely to a priced model"):
+        registry_bindings()
+
+
+def test_local_model_override_retains_existing_behavior(monkeypatch):
+    monkeypatch.setenv("AI_ROUTE_FAKE_MODEL", "local-test-override")
+    monkeypatch.delenv("AI_ROUTE_CHEAP_MODEL", raising=False)
+    monkeypatch.delenv("AI_ROUTE_REASONING_MODEL", raising=False)
+
+    binding = registry_bindings()["local:fake"]
+
+    assert binding.provider_id == "fake"
+    assert binding.model_id == "local-test-override"
+    assert binding.max_output_tokens == 256
+    assert binding.requires_network is False
 
 
 def test_registry_rejects_missing_required_fields():
