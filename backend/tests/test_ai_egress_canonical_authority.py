@@ -224,9 +224,14 @@ def test_canonical_model_sanitizer_persists_exact_job_and_source_provenance():
     assert adapter.calls == 1
     assert derivative.content == output
     assert derivative.source_digests == {source_ref: before.content_digest}
-    assert derivative.sanitizer_kind == "model_local"
-    assert derivative.sanitizer_ai_job_id == approval.sanitizer_ai_job_id
     with open_sqlite_connection() as connection:
+        provenance = connection.execute(
+            """
+            SELECT sanitizer_kind, sanitizer_ai_job_id
+            FROM sanitized_derivatives WHERE id = ?
+            """,
+            (approval.derivative_id,),
+        ).fetchone()
         job = connection.execute(
             """
             SELECT status, task_kind, selected_route_class, provider_id, model_id,
@@ -235,6 +240,8 @@ def test_canonical_model_sanitizer_persists_exact_job_and_source_provenance():
             """,
             (approval.sanitizer_ai_job_id,),
         ).fetchone()
+    assert provenance["sanitizer_kind"] == "model_local"
+    assert provenance["sanitizer_ai_job_id"] == approval.sanitizer_ai_job_id
     assert job["status"] == "success"
     assert job["task_kind"] == "sanitizer"
     assert job["selected_route_class"] == "local:fake"
