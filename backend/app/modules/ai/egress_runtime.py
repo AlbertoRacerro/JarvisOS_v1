@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass
 from typing import Callable
 
+from app.core.database import open_sqlite_connection
 from app.modules.ai import sensitivity
 from app.modules.ai.context_builder import (
     ContextBlockError,
@@ -26,9 +27,18 @@ from app.modules.ai.egress_lifecycle import (
     start_reserved_attempt,
 )
 from app.modules.ai.egress_persistence import prepare_egress_attempt
-from app.modules.ai.egress_policy import EXTERNAL_PROVIDER_OPERATION
-from app.modules.ai.egress_service import EgressPacketMaterial, sha256_text
+from app.modules.ai.egress_policy import (
+    EXTERNAL_PROVIDER_OPERATION,
+    EgressPolicyConfig,
+    load_default_egress_policy,
+)
+from app.modules.ai.egress_service import (
+    EgressContractError,
+    EgressPacketMaterial,
+    sha256_text,
+)
 from app.modules.ai.egress_spine import (
+    EgressSpineStateError,
     create_queued_ai_job,
     finalize_queued_ai_job,
     record_prepacket_egress_decision,
@@ -42,6 +52,7 @@ from app.modules.ai.settings import get_ai_settings
 
 _LOCAL_SANITIZER_ROUTE = "local:fast"
 _LEVEL_RANK = {"S0": 0, "S1": 1}
+_TERMINAL_RESERVATION_STATES = frozenset({"expired", "reconciled", "released"})
 
 
 @dataclass(frozen=True)
@@ -63,6 +74,41 @@ class ExternalTaskOutcome:
     egress_trigger_ids: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class _ContextView:
+    blocks: tuple[dict, ...]
+    level: str
+    digest: str | None
+    included_manifest: tuple[dict, ...]
+    withheld_manifest: tuple[dict, ...]
+    budget_dropped_manifest: tuple[dict, ...]
+    source_digests: tuple[tuple[str, str], ...]
+
+
+class _PrepacketStop(Exception):
+    def __init__(
+        self,
+        *,
+        result: str,
+        reason_code: str,
+        prompt_level: str,
+        context_level: str,
+        context_digest: str | None,
+        source_count: int,
+        included_count: int,
+        withheld_count: int,
+    ) -> None:
+        super().__init__(reason_code)
+        self.result = result
+        self.reason_code = reason_code
+        self.prompt_level = prompt_level
+        self.context_level = context_level
+        self.context_digest = context_digest
+        self.source_count = source_count
+        self.included_count = included_count
+        self.withheld_count = withheld_count
+
+
 def run_external_task(
     *,
     user_prompt: str,
@@ -79,19 +125,21 @@ def run_external_task(
     task_type_for: Callable[[str], AITaskType],
     task_prompt_for: Callable[[str, list[dict], str], str] | None = None,
     registry: ProviderRegistry | None = None,
+    policy: EgressPolicyConfig | None = None,
 ) -> ExternalTaskOutcome:
-    """Execute one external route through the mandatory 059b per-binding boundary."""
+    """Execute an external route through the mandatory per-binding 059b boundary."""
 
     from app.modules.ai.execution import resolve_binding
 
+    policy = policy or load_default_egress_policy()
     registry = registry or load_default_provider_registry()
     binding_table = bindings if bindings is not None else registry.bindings
-    binding, route_decision = resolve_binding(selected_route_class, binding_table)
-    if binding is None:
-        raise ValueError("run_external_task requires a resolved external route")
+    primary, _decision = resolve_binding(selected_route_class, binding_table)
+    if primary is None:
+        raise EgressContractError("external runtime requires a resolved route")
     chain = _binding_chain(
         route_class=selected_route_class,
-        primary=binding,
+        primary=primary,
         bindings=bindings,
         registry=registry,
     )
@@ -99,8 +147,8 @@ def run_external_task(
     prior_retryable_error_code: str | None = None
     last_outcome: ExternalTaskOutcome | None = None
 
-    for fallback_index, attempt_binding in enumerate(chain):
-        outcome = _run_external_binding(
+    for fallback_index, binding in enumerate(chain):
+        outcome = _run_binding(
             user_prompt=user_prompt,
             task_kind=task_kind,
             selected_route_class=selected_route_class,
@@ -113,10 +161,11 @@ def run_external_task(
             external_blocked_reason=external_blocked_reason,
             task_type_for=task_type_for,
             task_prompt_for=prompt_builder,
-            attempt_binding=attempt_binding,
+            binding=binding,
             fallback_index=fallback_index,
             prior_retryable_error_code=prior_retryable_error_code,
             registry=registry,
+            policy=policy,
         )
         last_outcome = outcome
         if (
@@ -129,11 +178,11 @@ def run_external_task(
         return outcome
 
     if last_outcome is None:
-        raise RuntimeError("external binding chain was unexpectedly empty")
+        raise EgressSpineStateError("external binding chain was empty")
     return last_outcome
 
 
-def _run_external_binding(
+def _run_binding(
     *,
     user_prompt: str,
     task_kind: str,
@@ -147,336 +196,161 @@ def _run_external_binding(
     external_blocked_reason: str | None,
     task_type_for: Callable[[str], AITaskType],
     task_prompt_for: Callable[[str, list[dict], str], str],
-    attempt_binding: ProviderBinding,
+    binding: ProviderBinding,
     fallback_index: int,
     prior_retryable_error_code: str | None,
     registry: ProviderRegistry,
+    policy: EgressPolicyConfig,
 ) -> ExternalTaskOutcome:
     started_at = time.perf_counter()
-    prompt_digest = sha256_text(user_prompt)
+    raw_prompt_digest = sha256_text(user_prompt)
     ai_prompt_digest = canonical_digest({"prompt": user_prompt})
     route_metadata = _route_metadata(
-        selected_route_class=selected_route_class,
+        route_class=selected_route_class,
         fallback_index=fallback_index,
-        binding=attempt_binding,
+        binding=binding,
         prior_retryable_error_code=prior_retryable_error_code,
     )
 
-    if not attempt_binding.requires_network:
-        return _prepacket_outcome(
-            result="deny",
-            reason_code="egress_policy_error",
-            prompt_digest=prompt_digest,
-            ai_prompt_digest=ai_prompt_digest,
-            context_digest=None,
-            prompt_level=_prompt_floor_or_unknown(user_prompt),
-            context_level="unknown",
-            route_class=selected_route_class,
-            requested_route_class=requested_route_class,
-            task_kind=task_kind,
-            binding=attempt_binding,
-            fallback_index=fallback_index,
-            workspace_id=workspace_id,
-            source_count=0,
-            included_count=0,
-            withheld_count=0,
-            route_metadata=route_metadata,
-            started_at=started_at,
-        )
-
-    if context_build_error is not None:
-        return _prepacket_outcome(
-            result="pause",
-            reason_code="context_build_error",
-            prompt_digest=prompt_digest,
-            ai_prompt_digest=ai_prompt_digest,
-            context_digest=None,
-            prompt_level=_prompt_floor_or_unknown(user_prompt),
-            context_level="unknown",
-            route_class=selected_route_class,
-            requested_route_class=requested_route_class,
-            task_kind=task_kind,
-            binding=attempt_binding,
-            fallback_index=fallback_index,
-            workspace_id=workspace_id,
-            source_count=0,
-            included_count=0,
-            withheld_count=0,
-            route_metadata=route_metadata,
-            started_at=started_at,
-        )
-
-    if external_blocked_reason is not None:
-        return _prepacket_outcome(
-            result="deny",
-            reason_code="egress_policy_error",
-            prompt_digest=prompt_digest,
-            ai_prompt_digest=ai_prompt_digest,
-            context_digest=None,
-            prompt_level=_prompt_floor_or_unknown(user_prompt),
-            context_level="unknown",
-            route_class=selected_route_class,
-            requested_route_class=requested_route_class,
-            task_kind=task_kind,
-            binding=attempt_binding,
-            fallback_index=fallback_index,
-            workspace_id=workspace_id,
-            source_count=0,
-            included_count=0,
-            withheld_count=0,
-            route_metadata={**route_metadata, "legacy_blocked_reason": external_blocked_reason},
-            started_at=started_at,
-        )
-
     try:
-        blocks = canonicalize_blocks(context_blocks)
-    except ContextBlockError:
-        return _prepacket_outcome(
-            result="pause",
-            reason_code="context_malformed",
-            prompt_digest=prompt_digest,
-            ai_prompt_digest=ai_prompt_digest,
-            context_digest=None,
-            prompt_level=_prompt_floor_or_unknown(user_prompt),
-            context_level="unknown",
-            route_class=selected_route_class,
-            requested_route_class=requested_route_class,
-            task_kind=task_kind,
-            binding=attempt_binding,
-            fallback_index=fallback_index,
-            workspace_id=workspace_id,
-            source_count=0,
-            included_count=0,
-            withheld_count=0,
-            route_metadata=route_metadata,
-            started_at=started_at,
-        )
-
-    raw_context_digest = canonical_digest(blocks) if blocks else None
-    if blocks and workspace_id is None:
-        return _prepacket_outcome(
-            result="pause",
-            reason_code="manual_context_not_authorized",
-            prompt_digest=prompt_digest,
-            ai_prompt_digest=ai_prompt_digest,
-            context_digest=raw_context_digest,
-            prompt_level=_prompt_floor_or_unknown(user_prompt),
-            context_level="unknown",
-            route_class=selected_route_class,
-            requested_route_class=requested_route_class,
-            task_kind=task_kind,
-            binding=attempt_binding,
-            fallback_index=fallback_index,
-            workspace_id=None,
-            source_count=len(blocks),
-            included_count=0,
-            withheld_count=len(blocks),
-            route_metadata=route_metadata,
-            started_at=started_at,
-        )
-
-    context_authority = None
-    if blocks:
-        try:
-            context_authority = authorize_manual_context(
-                workspace_id=workspace_id or "",
-                raw_blocks=blocks,
-                budget_chars=load_default_provider_registry_context_budget(),
-            )
-        except Exception:
-            context_authority = None
-        if context_authority is None or context_authority.result != "eligible":
-            withheld_count = (
-                len(context_authority.withheld_manifest)
-                if context_authority is not None
-                else len(blocks)
-            )
-            return _prepacket_outcome(
-                result="pause",
-                reason_code="manual_context_not_authorized",
-                prompt_digest=prompt_digest,
-                ai_prompt_digest=ai_prompt_digest,
-                context_digest=raw_context_digest,
+        if not binding.requires_network:
+            raise _stop(
+                result="deny",
+                reason_code="egress_policy_error",
                 prompt_level=_prompt_floor_or_unknown(user_prompt),
-                context_level="unknown",
-                route_class=selected_route_class,
-                requested_route_class=requested_route_class,
-                task_kind=task_kind,
-                binding=attempt_binding,
-                fallback_index=fallback_index,
-                workspace_id=workspace_id,
-                source_count=len(blocks),
-                included_count=0,
-                withheld_count=withheld_count,
-                route_metadata=route_metadata,
-                started_at=started_at,
+            )
+        if context_build_error is not None:
+            raise _stop(
+                result="pause",
+                reason_code="context_build_error",
+                prompt_level=_prompt_floor_or_unknown(user_prompt),
+            )
+        if external_blocked_reason is not None:
+            route_metadata["legacy_blocked_reason"] = external_blocked_reason
+            raise _stop(
+                result="deny",
+                reason_code="egress_policy_error",
+                prompt_level=_prompt_floor_or_unknown(user_prompt),
             )
 
-    floor = sensitivity.deterministic_floor(user_prompt)
-    if blocks and floor is None:
-        return _prepacket_outcome(
-            result="pause",
-            reason_code="prompt_classification_required",
-            prompt_digest=prompt_digest,
-            ai_prompt_digest=ai_prompt_digest,
-            context_digest=(
-                context_authority.context_digest
-                if context_authority is not None
-                else raw_context_digest
-            ),
-            prompt_level="unknown",
-            context_level=(
-                context_authority.context_level
-                if context_authority is not None
-                else "unknown"
-            ),
-            route_class=selected_route_class,
-            requested_route_class=requested_route_class,
-            task_kind=task_kind,
-            binding=attempt_binding,
-            fallback_index=fallback_index,
+        context = _authorize_context(
+            context_blocks=context_blocks,
             workspace_id=workspace_id,
-            source_count=(
-                len(context_authority.source_digests)
-                if context_authority is not None
-                else len(blocks)
-            ),
-            included_count=(
-                len(context_authority.included_manifest)
-                if context_authority is not None
-                else 0
-            ),
-            withheld_count=0,
-            route_metadata=route_metadata,
-            started_at=started_at,
+            policy=policy,
+            prompt=user_prompt,
         )
-
-    try:
-        prompt_authority = authorize_prompt(
-            raw_prompt=user_prompt,
+        prompt = _authorize_prompt(
+            user_prompt=user_prompt,
             task_kind=task_kind,
-            policy_mode=get_ai_settings().policy_mode,
             workspace_id=workspace_id,
-            local_sanitizer_route=_LOCAL_SANITIZER_ROUTE,
+            has_context=bool(context.blocks),
+            context=context,
             adapters=adapters,
             registry=registry,
         )
-    except Exception:
-        prompt_authority = None
-    if prompt_authority is None:
-        return _prepacket_outcome(
-            result="pause",
-            reason_code="prompt_sanitization_required",
-            prompt_digest=prompt_digest,
+    except _PrepacketStop as stop:
+        return _persist_prepacket(
+            stop=stop,
+            raw_prompt_digest=raw_prompt_digest,
             ai_prompt_digest=ai_prompt_digest,
-            context_digest=(
-                context_authority.context_digest
-                if context_authority is not None
-                else raw_context_digest
-            ),
-            prompt_level=floor or "unknown",
-            context_level=(
-                context_authority.context_level
-                if context_authority is not None
-                else "S0"
-            ),
-            route_class=selected_route_class,
-            requested_route_class=requested_route_class,
             task_kind=task_kind,
-            binding=attempt_binding,
+            requested_route_class=requested_route_class,
+            route_class=selected_route_class,
+            binding=binding,
             fallback_index=fallback_index,
             workspace_id=workspace_id,
-            source_count=(
-                len(context_authority.source_digests)
-                if context_authority is not None
-                else 0
-            ),
-            included_count=(
-                len(context_authority.included_manifest)
-                if context_authority is not None
-                else 0
-            ),
-            withheld_count=0,
             route_metadata=route_metadata,
             started_at=started_at,
-        )
-    if prompt_authority.result != "eligible":
-        return _prepacket_outcome(
-            result="deny" if prompt_authority.result == "deny" else "pause",
-            reason_code=prompt_authority.reason_code,
-            prompt_digest=prompt_digest,
-            ai_prompt_digest=ai_prompt_digest,
-            context_digest=(
-                context_authority.context_digest
-                if context_authority is not None
-                else raw_context_digest
-            ),
-            prompt_level=prompt_authority.prompt_level or "unknown",
-            context_level=(
-                context_authority.context_level
-                if context_authority is not None
-                else "S0"
-            ),
-            route_class=selected_route_class,
-            requested_route_class=requested_route_class,
-            task_kind=task_kind,
-            binding=attempt_binding,
-            fallback_index=fallback_index,
-            workspace_id=workspace_id,
-            source_count=(
-                len(context_authority.source_digests)
-                if context_authority is not None
-                else 0
-            ),
-            included_count=(
-                len(context_authority.included_manifest)
-                if context_authority is not None
-                else 0
-            ),
-            withheld_count=0,
-            route_metadata=route_metadata,
-            started_at=started_at,
+            policy=policy,
         )
 
-    effective_blocks = list(context_authority.blocks) if context_authority is not None else []
-    context_level = context_authority.context_level if context_authority is not None else "S0"
-    final_level = max(
-        (prompt_authority.prompt_level or "S1", context_level),
-        key=_LEVEL_RANK.__getitem__,
-    )
+    adapter = adapters.get(binding.provider_id)
+    if adapter is None:
+        stop = _stop(
+            result="deny",
+            reason_code="egress_policy_error",
+            prompt_level=prompt.prompt_level or "unknown",
+            context_level=context.level,
+            context_digest=context.digest,
+            source_count=len(context.source_digests),
+            included_count=len(context.included_manifest),
+            withheld_count=len(context.withheld_manifest),
+        )
+        return _persist_prepacket(
+            stop=stop,
+            raw_prompt_digest=raw_prompt_digest,
+            ai_prompt_digest=ai_prompt_digest,
+            task_kind=task_kind,
+            requested_route_class=requested_route_class,
+            route_class=selected_route_class,
+            binding=binding,
+            fallback_index=fallback_index,
+            workspace_id=workspace_id,
+            route_metadata={**route_metadata, "adapter_unavailable": True},
+            started_at=started_at,
+            policy=policy,
+        )
+
     attempt_max = min(
-        max_output_tokens if max_output_tokens is not None else attempt_binding.max_output_tokens,
-        attempt_binding.max_output_tokens,
+        max_output_tokens if max_output_tokens is not None else binding.max_output_tokens,
+        binding.max_output_tokens,
+    )
+    final_level = max(
+        (prompt.prompt_level or "S1", context.level),
+        key=_LEVEL_RANK.__getitem__,
     )
     material = EgressPacketMaterial(
         operation=EXTERNAL_PROVIDER_OPERATION,
         task_kind=task_kind,
         route_class=selected_route_class,
-        provider_id=attempt_binding.provider_id,
-        model_id=attempt_binding.model_id,
+        provider_id=binding.provider_id,
+        model_id=binding.model_id,
         fallback_index=fallback_index,
-        prompt=prompt_authority.effective_prompt or "",
-        context_blocks=tuple(effective_blocks),
-        prompt_level=prompt_authority.prompt_level or "S1",
-        context_level=context_level,
+        prompt=prompt.effective_prompt or "",
+        context_blocks=context.blocks,
+        prompt_level=prompt.prompt_level or "S1",
+        context_level=context.level,
         final_level=final_level,
         max_output_tokens=attempt_max,
         workspace_id=workspace_id,
-        prompt_derivative_id=prompt_authority.prompt_derivative_id,
-        included_manifest=(
-            context_authority.included_manifest if context_authority is not None else ()
-        ),
-        withheld_manifest=(
-            context_authority.withheld_manifest if context_authority is not None else ()
-        ),
-        budget_dropped_manifest=(
-            context_authority.budget_dropped_manifest if context_authority is not None else ()
-        ),
-        source_digests=(
-            context_authority.source_digests if context_authority is not None else ()
-        ),
+        prompt_derivative_id=prompt.prompt_derivative_id,
+        included_manifest=context.included_manifest,
+        withheld_manifest=context.withheld_manifest,
+        budget_dropped_manifest=context.budget_dropped_manifest,
+        source_digests=context.source_digests,
     )
-    preparation = prepare_egress_attempt(material, registry=registry)
+    try:
+        preparation = prepare_egress_attempt(
+            material,
+            registry=registry,
+            policy=policy,
+        )
+    except ValueError:
+        stop = _stop(
+            result="deny",
+            reason_code="egress_policy_error",
+            prompt_level=prompt.prompt_level or "unknown",
+            context_level=context.level,
+            context_digest=context.digest,
+            source_count=len(context.source_digests),
+            included_count=len(context.included_manifest),
+            withheld_count=len(context.withheld_manifest),
+        )
+        return _persist_prepacket(
+            stop=stop,
+            raw_prompt_digest=raw_prompt_digest,
+            ai_prompt_digest=ai_prompt_digest,
+            task_kind=task_kind,
+            requested_route_class=requested_route_class,
+            route_class=selected_route_class,
+            binding=binding,
+            fallback_index=fallback_index,
+            workspace_id=workspace_id,
+            route_metadata=route_metadata,
+            started_at=started_at,
+            policy=policy,
+        )
+
     route_metadata = {
         **route_metadata,
         "egress_decision_id": preparation.decision_id,
@@ -485,136 +359,68 @@ def _run_external_binding(
         "egress_ticket_id": preparation.ticket_id,
         "egress_trigger_ids": list(preparation.trigger_ids),
     }
-
     if preparation.result != "allow":
-        terminal_status = "validation_error" if preparation.result == "pause" else "config_error"
-        ledger_id = _terminal_ai_job(
+        status = "validation_error" if preparation.result == "pause" else "config_error"
+        ledger_id = _terminal_job(
             task_kind=task_kind,
             requested_route_class=requested_route_class,
-            selected_route_class=selected_route_class,
-            binding=attempt_binding,
+            route_class=selected_route_class,
+            binding=binding,
             prompt_digest=ai_prompt_digest,
-            context_digest=(
-                context_authority.context_digest
-                if context_authority is not None
-                else None
-            ),
-            context_sources=(
-                context_sources_manifest(effective_blocks) if effective_blocks else None
-            ),
+            context=context,
             route_metadata=route_metadata,
-            status=terminal_status,
+            status=status,
             error_type=preparation.reason_code,
             started_at=started_at,
         )
-        decision = RoutingDecision(
-            provider_id=attempt_binding.provider_id,
-            model_id=attempt_binding.model_id,
-            blocked=True,
-            blocked_reason=preparation.reason_code,
-            decision_reason=f"egress:{preparation.reason_code}",
-        )
-        return ExternalTaskOutcome(
-            status=terminal_status,
+        return _outcome(
+            status=status,
             ledger_id=ledger_id,
-            selected_route_class=selected_route_class,
-            decision=decision,
+            route_class=selected_route_class,
+            binding=binding,
             response=None,
             error_type=preparation.reason_code,
-            context_digest=(
-                context_authority.context_digest
-                if context_authority is not None
-                else None
-            ),
-            context_sources_count=len(effective_blocks),
-            retryable_error_code=None,
+            context=context,
             egress_decision_id=preparation.decision_id,
-            egress_packet_digest=preparation.packet_digest,
-            egress_ticket_id=preparation.ticket_id,
-            egress_reservation_id=None,
-            egress_reason_code=preparation.reason_code,
-            egress_trigger_ids=preparation.trigger_ids,
-        )
-
-    adapter = adapters.get(attempt_binding.provider_id)
-    if adapter is None:
-        ledger_id = _terminal_ai_job(
-            task_kind=task_kind,
-            requested_route_class=requested_route_class,
-            selected_route_class=selected_route_class,
-            binding=attempt_binding,
-            prompt_digest=ai_prompt_digest,
-            context_digest=(
-                context_authority.context_digest
-                if context_authority is not None
-                else None
-            ),
-            context_sources=(
-                context_sources_manifest(effective_blocks) if effective_blocks else None
-            ),
-            route_metadata=route_metadata,
-            status="config_error",
-            error_type="adapter_unavailable",
-            started_at=started_at,
-        )
-        _release_before_network(
-            reservation_id=preparation.reservation_id,
-            ai_job_id=ledger_id,
-        )
-        decision = RoutingDecision(
-            provider_id=attempt_binding.provider_id,
-            model_id=attempt_binding.model_id,
+            packet_digest=preparation.packet_digest,
+            ticket_id=preparation.ticket_id,
+            reservation_id=None,
+            reason_code=preparation.reason_code,
+            trigger_ids=preparation.trigger_ids,
             blocked=True,
-            blocked_reason="adapter_unavailable",
-            decision_reason="egress:adapter_unavailable",
-        )
-        return ExternalTaskOutcome(
-            status="config_error",
-            ledger_id=ledger_id,
-            selected_route_class=selected_route_class,
-            decision=decision,
-            response=None,
-            error_type="adapter_unavailable",
-            context_digest=(
-                context_authority.context_digest
-                if context_authority is not None
-                else None
-            ),
-            context_sources_count=len(effective_blocks),
-            retryable_error_code=None,
-            egress_decision_id=preparation.decision_id,
-            egress_packet_digest=preparation.packet_digest,
-            egress_ticket_id=None,
-            egress_reservation_id=preparation.reservation_id,
-            egress_reason_code="adapter_unavailable",
-            egress_trigger_ids=(),
         )
 
+    reservation_id = preparation.reservation_id
+    if reservation_id is None:
+        raise EgressSpineStateError("silent allow did not create a reservation")
     queued = create_queued_ai_job(
         task_kind=task_kind,
         requested_route_class=requested_route_class,
         selected_route_class=selected_route_class,
-        provider_id=attempt_binding.provider_id,
-        model_id=attempt_binding.model_id,
+        provider_id=binding.provider_id,
+        model_id=binding.model_id,
         decision_reason=f"bound:{selected_route_class}",
         prompt_digest=ai_prompt_digest,
-        context_digest=(
-            context_authority.context_digest if context_authority is not None else None
-        ),
+        context_digest=context.digest,
         context_sources=(
-            context_sources_manifest(effective_blocks) if effective_blocks else None
+            context_sources_manifest(list(context.blocks)) if context.blocks else None
         ),
         route_metadata=route_metadata,
     )
+
     try:
         reserved = start_reserved_attempt(
-            preparation.reservation_id or "",
+            reservation_id,
             ai_job_id=queued.ai_job_id,
         )
-        packet = _load_persisted_packet(reserved.packet_json)
+        packet = _load_packet(reserved.packet_json)
         request = AIRequest(
             task_type=task_type_for(task_kind),
-            prompt=task_prompt_for(task_kind, packet["context_blocks"], packet["prompt"]),
+            prompt=task_prompt_for(
+                task_kind,
+                packet["context_blocks"],
+                packet["prompt"],
+            ),
             model_preference=reserved.model_id,
             max_output_tokens=reserved.max_output_tokens,
             metadata={
@@ -631,37 +437,25 @@ def _run_external_binding(
             latency_ms=_elapsed_ms(started_at),
             error_type=type(exc).__name__,
         )
-        _release_before_network(
-            reservation_id=preparation.reservation_id,
+        _release_before_network_strict(
+            reservation_id=reservation_id,
             ai_job_id=queued.ai_job_id,
         )
-        decision = RoutingDecision(
-            provider_id=attempt_binding.provider_id,
-            model_id=attempt_binding.model_id,
-            blocked=True,
-            blocked_reason="egress_start_failed",
-            decision_reason=f"egress_start_failed:{type(exc).__name__}",
-        )
-        return ExternalTaskOutcome(
+        return _outcome(
             status="config_error",
             ledger_id=queued.ai_job_id,
-            selected_route_class=selected_route_class,
-            decision=decision,
+            route_class=selected_route_class,
+            binding=binding,
             response=None,
             error_type=type(exc).__name__,
-            context_digest=(
-                context_authority.context_digest
-                if context_authority is not None
-                else None
-            ),
-            context_sources_count=len(effective_blocks),
-            retryable_error_code=None,
+            context=context,
             egress_decision_id=preparation.decision_id,
-            egress_packet_digest=preparation.packet_digest,
-            egress_ticket_id=None,
-            egress_reservation_id=preparation.reservation_id,
-            egress_reason_code="egress_start_failed",
-            egress_trigger_ids=(),
+            packet_digest=preparation.packet_digest,
+            ticket_id=None,
+            reservation_id=reservation_id,
+            reason_code="egress_start_failed",
+            trigger_ids=(),
+            blocked=True,
         )
 
     try:
@@ -675,37 +469,27 @@ def _run_external_binding(
             error_type=type(exc).__name__,
         )
         reconcile_reserved_attempt(
-            preparation.reservation_id or "",
+            reservation_id,
             ai_job_id=queued.ai_job_id,
             network_attempt=True,
             usage_source="estimated",
             registry=registry,
         )
-        decision = RoutingDecision(
-            provider_id=attempt_binding.provider_id,
-            model_id=attempt_binding.model_id,
-            decision_reason=f"bound:{selected_route_class}",
-        )
-        return ExternalTaskOutcome(
+        return _outcome(
             status="provider_error",
             ledger_id=queued.ai_job_id,
-            selected_route_class=selected_route_class,
-            decision=decision,
+            route_class=selected_route_class,
+            binding=binding,
             response=None,
             error_type=type(exc).__name__,
-            context_digest=(
-                context_authority.context_digest
-                if context_authority is not None
-                else None
-            ),
-            context_sources_count=len(effective_blocks),
-            retryable_error_code=None,
+            context=context,
             egress_decision_id=preparation.decision_id,
-            egress_packet_digest=preparation.packet_digest,
-            egress_ticket_id=None,
-            egress_reservation_id=preparation.reservation_id,
-            egress_reason_code=preparation.reason_code,
-            egress_trigger_ids=(),
+            packet_digest=preparation.packet_digest,
+            ticket_id=None,
+            reservation_id=reservation_id,
+            reason_code=preparation.reason_code,
+            trigger_ids=(),
+            blocked=False,
         )
 
     status, error_type = _response_status(response)
@@ -717,7 +501,7 @@ def _run_external_binding(
             latency_ms=_elapsed_ms(started_at),
             error_type=error_type,
         )
-    except Exception as exc:
+    except EgressSpineStateError as exc:
         finalize_queued_ai_job(
             queued.ai_job_id,
             status="provider_error",
@@ -726,41 +510,31 @@ def _run_external_binding(
             error_type=type(exc).__name__,
         )
         reconcile_reserved_attempt(
-            preparation.reservation_id or "",
+            reservation_id,
             ai_job_id=queued.ai_job_id,
             network_attempt=True,
             usage_source="estimated",
             registry=registry,
         )
-        decision = RoutingDecision(
-            provider_id=attempt_binding.provider_id,
-            model_id=attempt_binding.model_id,
-            decision_reason=f"bound:{selected_route_class}",
-        )
-        return ExternalTaskOutcome(
+        return _outcome(
             status="provider_error",
             ledger_id=queued.ai_job_id,
-            selected_route_class=selected_route_class,
-            decision=decision,
+            route_class=selected_route_class,
+            binding=binding,
             response=None,
             error_type=type(exc).__name__,
-            context_digest=(
-                context_authority.context_digest
-                if context_authority is not None
-                else None
-            ),
-            context_sources_count=len(effective_blocks),
-            retryable_error_code=None,
+            context=context,
             egress_decision_id=preparation.decision_id,
-            egress_packet_digest=preparation.packet_digest,
-            egress_ticket_id=None,
-            egress_reservation_id=preparation.reservation_id,
-            egress_reason_code="response_binding_mismatch",
-            egress_trigger_ids=(),
+            packet_digest=preparation.packet_digest,
+            ticket_id=None,
+            reservation_id=reservation_id,
+            reason_code="response_binding_mismatch",
+            trigger_ids=(),
+            blocked=False,
         )
 
     reconcile_reserved_attempt(
-        preparation.reservation_id or "",
+        reservation_id,
         ai_job_id=queued.ai_job_id,
         network_attempt=True,
         actual_input_tokens=response.usage.input_tokens,
@@ -768,131 +542,245 @@ def _run_external_binding(
         usage_source="actual",
         registry=registry,
     )
-    retryable_error_code = (
+    retryable = (
         response.error.code.value
         if response.error is not None and response.error.retryable
         else None
     )
-    decision = RoutingDecision(
-        provider_id=attempt_binding.provider_id,
-        model_id=attempt_binding.model_id,
-        decision_reason=f"bound:{selected_route_class}",
-    )
-    return ExternalTaskOutcome(
+    return _outcome(
         status=status,
         ledger_id=queued.ai_job_id,
-        selected_route_class=selected_route_class,
-        decision=decision,
+        route_class=selected_route_class,
+        binding=binding,
         response=response,
         error_type=error_type,
-        context_digest=(
-            context_authority.context_digest if context_authority is not None else None
-        ),
-        context_sources_count=len(effective_blocks),
-        retryable_error_code=retryable_error_code,
+        context=context,
         egress_decision_id=preparation.decision_id,
-        egress_packet_digest=preparation.packet_digest,
-        egress_ticket_id=None,
-        egress_reservation_id=preparation.reservation_id,
-        egress_reason_code=preparation.reason_code,
-        egress_trigger_ids=(),
+        packet_digest=preparation.packet_digest,
+        ticket_id=None,
+        reservation_id=reservation_id,
+        reason_code=preparation.reason_code,
+        trigger_ids=(),
+        blocked=False,
+        retryable_error_code=retryable,
     )
 
 
-def _prepacket_outcome(
+def _authorize_context(
     *,
-    result: str,
-    reason_code: str,
-    prompt_digest: str,
-    ai_prompt_digest: str,
-    context_digest: str | None,
-    prompt_level: str,
-    context_level: str,
-    route_class: str,
-    requested_route_class: str | None,
+    context_blocks: list[dict[str, object]] | None,
+    workspace_id: str | None,
+    policy: EgressPolicyConfig,
+    prompt: str,
+) -> _ContextView:
+    try:
+        blocks = canonicalize_blocks(context_blocks)
+    except ContextBlockError as exc:
+        raise _stop(
+            result="pause",
+            reason_code="context_malformed",
+            prompt_level=_prompt_floor_or_unknown(prompt),
+        ) from exc
+    if not blocks:
+        return _ContextView((), "S0", None, (), (), (), ())
+    raw_digest = canonical_digest(blocks)
+    if workspace_id is None:
+        raise _stop(
+            result="pause",
+            reason_code="manual_context_not_authorized",
+            prompt_level=_prompt_floor_or_unknown(prompt),
+            context_digest=raw_digest,
+            source_count=len(blocks),
+            withheld_count=len(blocks),
+        )
+    try:
+        authority = authorize_manual_context(
+            workspace_id=workspace_id,
+            raw_blocks=blocks,
+            budget_chars=policy.max_context_chars,
+        )
+    except ValueError as exc:
+        raise _stop(
+            result="pause",
+            reason_code="manual_context_not_authorized",
+            prompt_level=_prompt_floor_or_unknown(prompt),
+            context_digest=raw_digest,
+            source_count=len(blocks),
+            withheld_count=len(blocks),
+        ) from exc
+    if authority.result != "eligible":
+        raise _stop(
+            result="pause",
+            reason_code="manual_context_not_authorized",
+            prompt_level=_prompt_floor_or_unknown(prompt),
+            context_digest=raw_digest,
+            source_count=len(blocks),
+            included_count=len(authority.included_manifest),
+            withheld_count=len(authority.withheld_manifest),
+        )
+    return _ContextView(
+        blocks=authority.blocks,
+        level=authority.context_level or "S0",
+        digest=authority.context_digest,
+        included_manifest=authority.included_manifest,
+        withheld_manifest=authority.withheld_manifest,
+        budget_dropped_manifest=authority.budget_dropped_manifest,
+        source_digests=authority.source_digests,
+    )
+
+
+def _authorize_prompt(
+    *,
+    user_prompt: str,
     task_kind: str,
+    workspace_id: str | None,
+    has_context: bool,
+    context: _ContextView,
+    adapters: dict[str, AIProviderAdapter],
+    registry: ProviderRegistry,
+):
+    floor = sensitivity.deterministic_floor(user_prompt)
+    if has_context and floor is None:
+        raise _stop(
+            result="pause",
+            reason_code="prompt_classification_required",
+            prompt_level="unknown",
+            context_level=context.level,
+            context_digest=context.digest,
+            source_count=len(context.source_digests),
+            included_count=len(context.included_manifest),
+            withheld_count=len(context.withheld_manifest),
+        )
+    try:
+        authority = authorize_prompt(
+            raw_prompt=user_prompt,
+            task_kind=task_kind,
+            policy_mode=get_ai_settings().policy_mode,
+            workspace_id=workspace_id,
+            local_sanitizer_route=_LOCAL_SANITIZER_ROUTE,
+            adapters=adapters,
+            registry=registry,
+        )
+    except ValueError as exc:
+        raise _stop(
+            result="pause",
+            reason_code="prompt_sanitization_required",
+            prompt_level=floor or "unknown",
+            context_level=context.level,
+            context_digest=context.digest,
+            source_count=len(context.source_digests),
+            included_count=len(context.included_manifest),
+            withheld_count=len(context.withheld_manifest),
+        ) from exc
+    if authority.result != "eligible":
+        raise _stop(
+            result="deny" if authority.result == "deny" else "pause",
+            reason_code=authority.reason_code,
+            prompt_level=authority.prompt_level or "unknown",
+            context_level=context.level,
+            context_digest=context.digest,
+            source_count=len(context.source_digests),
+            included_count=len(context.included_manifest),
+            withheld_count=len(context.withheld_manifest),
+        )
+    return authority
+
+
+def _persist_prepacket(
+    *,
+    stop: _PrepacketStop,
+    raw_prompt_digest: str,
+    ai_prompt_digest: str,
+    task_kind: str,
+    requested_route_class: str | None,
+    route_class: str,
     binding: ProviderBinding,
     fallback_index: int,
     workspace_id: str | None,
-    source_count: int,
-    included_count: int,
-    withheld_count: int,
     route_metadata: dict[str, object],
     started_at: float,
+    policy: EgressPolicyConfig,
 ) -> ExternalTaskOutcome:
-    final_level = _prepacket_final_level(prompt_level, context_level)
+    final_level = _prepacket_final_level(stop.prompt_level, stop.context_level)
     recorded = record_prepacket_egress_decision(
-        result=result,
-        reason_code=reason_code,
+        result=stop.result,
+        reason_code=stop.reason_code,
         route_class=route_class,
         provider_id=binding.provider_id,
         model_id=binding.model_id,
         fallback_index=fallback_index,
-        prompt_digest=prompt_digest,
-        context_digest=context_digest,
-        prompt_level=prompt_level,
-        context_level=context_level,
+        prompt_digest=raw_prompt_digest,
+        context_digest=stop.context_digest,
+        prompt_level=stop.prompt_level,
+        context_level=stop.context_level,
         final_level=final_level,
-        source_count=source_count,
-        included_count=included_count,
-        withheld_count=withheld_count,
+        source_count=stop.source_count,
+        included_count=stop.included_count,
+        withheld_count=stop.withheld_count,
         workspace_id=workspace_id,
+        policy=policy,
     )
-    route_metadata = {
-        **route_metadata,
-        "egress_decision_id": recorded.decision_id,
-        "egress_reason_code": recorded.reason_code,
-        "egress_safe_input_digest": recorded.safe_input_digest,
-    }
-    terminal_status = "validation_error" if result == "pause" else "config_error"
-    ledger_id = _terminal_ai_job(
+    status = "validation_error" if stop.result == "pause" else "config_error"
+    ledger_id = _terminal_job(
         task_kind=task_kind,
         requested_route_class=requested_route_class,
-        selected_route_class=route_class,
+        route_class=route_class,
         binding=binding,
         prompt_digest=ai_prompt_digest,
-        context_digest=context_digest,
-        context_sources=None,
-        route_metadata=route_metadata,
-        status=terminal_status,
-        error_type=reason_code,
+        context=_ContextView(
+            (),
+            stop.context_level,
+            stop.context_digest,
+            (),
+            (),
+            (),
+            (),
+        ),
+        route_metadata={
+            **route_metadata,
+            "egress_decision_id": recorded.decision_id,
+            "egress_reason_code": recorded.reason_code,
+            "egress_safe_input_digest": recorded.safe_input_digest,
+        },
+        status=status,
+        error_type=stop.reason_code,
         started_at=started_at,
     )
-    decision = RoutingDecision(
-        provider_id=binding.provider_id,
-        model_id=binding.model_id,
-        blocked=True,
-        blocked_reason=reason_code,
-        decision_reason=f"egress:{reason_code}",
-    )
-    return ExternalTaskOutcome(
-        status=terminal_status,
+    return _outcome(
+        status=status,
         ledger_id=ledger_id,
-        selected_route_class=route_class,
-        decision=decision,
+        route_class=route_class,
+        binding=binding,
         response=None,
-        error_type=reason_code,
-        context_digest=context_digest,
-        context_sources_count=source_count,
-        retryable_error_code=None,
+        error_type=stop.reason_code,
+        context=_ContextView(
+            (),
+            stop.context_level,
+            stop.context_digest,
+            (),
+            (),
+            (),
+            (),
+        ),
         egress_decision_id=recorded.decision_id,
-        egress_packet_digest=None,
-        egress_ticket_id=None,
-        egress_reservation_id=None,
-        egress_reason_code=reason_code,
-        egress_trigger_ids=(),
+        packet_digest=None,
+        ticket_id=None,
+        reservation_id=None,
+        reason_code=recorded.reason_code,
+        trigger_ids=(),
+        blocked=True,
+        context_sources_count=stop.source_count,
     )
 
 
-def _terminal_ai_job(
+def _terminal_job(
     *,
     task_kind: str,
     requested_route_class: str | None,
-    selected_route_class: str,
+    route_class: str,
     binding: ProviderBinding,
     prompt_digest: str,
-    context_digest: str | None,
-    context_sources: list[dict[str, object]] | None,
+    context: _ContextView,
     route_metadata: dict[str, object],
     status: str,
     error_type: str,
@@ -901,13 +789,15 @@ def _terminal_ai_job(
     queued = create_queued_ai_job(
         task_kind=task_kind,
         requested_route_class=requested_route_class,
-        selected_route_class=selected_route_class,
+        selected_route_class=route_class,
         provider_id=binding.provider_id,
         model_id=binding.model_id,
-        decision_reason=f"bound:{selected_route_class}",
+        decision_reason=f"bound:{route_class}",
         prompt_digest=prompt_digest,
-        context_digest=context_digest,
-        context_sources=context_sources,
+        context_digest=context.digest,
+        context_sources=(
+            context_sources_manifest(list(context.blocks)) if context.blocks else None
+        ),
         route_metadata=route_metadata,
     )
     finalize_queued_ai_job(
@@ -920,32 +810,94 @@ def _terminal_ai_job(
     return queued.ai_job_id
 
 
-def _release_before_network(*, reservation_id: str | None, ai_job_id: str) -> None:
-    if reservation_id is None:
-        return
+def _outcome(
+    *,
+    status: str,
+    ledger_id: str,
+    route_class: str,
+    binding: ProviderBinding,
+    response: AIResponse | None,
+    error_type: str | None,
+    context: _ContextView,
+    egress_decision_id: str | None,
+    packet_digest: str | None,
+    ticket_id: str | None,
+    reservation_id: str | None,
+    reason_code: str | None,
+    trigger_ids: tuple[str, ...],
+    blocked: bool,
+    retryable_error_code: str | None = None,
+    context_sources_count: int | None = None,
+) -> ExternalTaskOutcome:
+    decision = RoutingDecision(
+        provider_id=binding.provider_id,
+        model_id=binding.model_id,
+        blocked=blocked,
+        blocked_reason=reason_code if blocked else None,
+        decision_reason=(
+            f"egress:{reason_code}" if blocked else f"bound:{route_class}"
+        ),
+    )
+    return ExternalTaskOutcome(
+        status=status,
+        ledger_id=ledger_id,
+        selected_route_class=route_class,
+        decision=decision,
+        response=response,
+        error_type=error_type,
+        context_digest=context.digest,
+        context_sources_count=(
+            context_sources_count
+            if context_sources_count is not None
+            else len(context.blocks)
+        ),
+        retryable_error_code=retryable_error_code,
+        egress_decision_id=egress_decision_id,
+        egress_packet_digest=packet_digest,
+        egress_ticket_id=ticket_id,
+        egress_reservation_id=reservation_id,
+        egress_reason_code=reason_code,
+        egress_trigger_ids=trigger_ids,
+    )
+
+
+def _release_before_network_strict(*, reservation_id: str, ai_job_id: str) -> None:
     try:
         reconcile_reserved_attempt(
             reservation_id,
             ai_job_id=ai_job_id,
             network_attempt=False,
         )
-    except Exception:
         return
+    except Exception as exc:
+        with open_sqlite_connection() as connection:
+            row = connection.execute(
+                "SELECT state FROM egress_budget_reservations WHERE id = ?",
+                (reservation_id,),
+            ).fetchone()
+        if row is not None and row["state"] in _TERMINAL_RESERVATION_STATES:
+            return
+        raise EgressSpineStateError(
+            "failed-before-network reservation was not released"
+        ) from exc
 
 
-def _load_persisted_packet(packet_json: str) -> dict[str, object]:
+def _load_packet(packet_json: str) -> dict[str, object]:
     try:
         packet = json.loads(packet_json)
     except json.JSONDecodeError as exc:
-        raise ValueError("persisted egress packet is malformed") from exc
+        raise EgressContractError("persisted egress packet is malformed") from exc
     if not isinstance(packet, dict) or set(packet) != {"prompt", "context_blocks"}:
-        raise ValueError("persisted egress packet has an unexpected shape")
-    if not isinstance(packet["prompt"], str) or not packet["prompt"].strip():
-        raise ValueError("persisted egress prompt is invalid")
+        raise EgressContractError("persisted egress packet has an unexpected shape")
+    prompt = packet["prompt"]
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise EgressContractError("persisted egress prompt is invalid")
     if not isinstance(packet["context_blocks"], list):
-        raise ValueError("persisted egress context is invalid")
-    blocks = canonicalize_blocks(packet["context_blocks"])
-    return {"prompt": packet["prompt"], "context_blocks": blocks}
+        raise EgressContractError("persisted egress context is invalid")
+    return {
+        "prompt": prompt,
+        "context_blocks": canonicalize_blocks(packet["context_blocks"]),
+    }
 
 
 def _binding_chain(
@@ -960,11 +912,11 @@ def _binding_chain(
     configured = registry.fallback_chains.get(route_class)
     if not configured:
         return [primary]
-    chain: list[ProviderBinding] = []
+    result: list[ProviderBinding] = []
     for item in configured:
         provider = registry.providers[item.provider_id]
         model = registry.models[(item.provider_id, item.model_id)]
-        chain.append(
+        result.append(
             ProviderBinding(
                 route_class=route_class,
                 provider_id=item.provider_id,
@@ -973,19 +925,19 @@ def _binding_chain(
                 max_output_tokens=model.max_output_tokens,
             )
         )
-    return chain
+    return result
 
 
 def _route_metadata(
     *,
-    selected_route_class: str,
+    route_class: str,
     fallback_index: int,
     binding: ProviderBinding,
     prior_retryable_error_code: str | None,
 ) -> dict[str, object]:
     result: dict[str, object] = {
         "fallback_attempt_index": fallback_index,
-        "fallback_chain_route": selected_route_class,
+        "fallback_chain_route": route_class,
         "fallback_model_id": binding.model_id,
         "fallback_provider_id": binding.provider_id,
     }
@@ -1000,6 +952,29 @@ def _response_status(response: AIResponse) -> tuple[str, str | None]:
     return (
         "provider_error",
         response.error.code.value if response.error is not None else "empty_response",
+    )
+
+
+def _stop(
+    *,
+    result: str,
+    reason_code: str,
+    prompt_level: str,
+    context_level: str = "unknown",
+    context_digest: str | None = None,
+    source_count: int = 0,
+    included_count: int = 0,
+    withheld_count: int = 0,
+) -> _PrepacketStop:
+    return _PrepacketStop(
+        result=result,
+        reason_code=reason_code,
+        prompt_level=prompt_level,
+        context_level=context_level,
+        context_digest=context_digest,
+        source_count=source_count,
+        included_count=included_count,
+        withheld_count=withheld_count,
     )
 
 
@@ -1022,9 +997,3 @@ def _default_task_prompt(task_kind: str, blocks: list[dict], prompt: str) -> str
 
 def _elapsed_ms(started_at: float) -> int:
     return int((time.perf_counter() - started_at) * 1000)
-
-
-def load_default_provider_registry_context_budget() -> int:
-    from app.modules.ai.egress_policy import load_default_egress_policy
-
-    return load_default_egress_policy().max_context_chars
