@@ -7,6 +7,7 @@ from pathlib import Path
 from app.core.egress_schema import (
     EGRESS_SCHEMA_INDEX_STATEMENTS,
     EGRESS_SCHEMA_MIGRATION_RECORD,
+    EGRESS_SCHEMA_MIGRATION_STATEMENTS,
     EGRESS_SCHEMA_STATEMENTS,
 )
 from app.core.paths import build_paths
@@ -77,7 +78,10 @@ def initialize_database() -> DatabaseInfo:
             connection.execute(statement)
         for statement in EGRESS_SCHEMA_STATEMENTS:
             connection.execute(statement)
-        for statement in SCHEMA_MIGRATION_STATEMENTS:
+        for statement in [
+            *SCHEMA_MIGRATION_STATEMENTS,
+            *EGRESS_SCHEMA_MIGRATION_STATEMENTS,
+        ]:
             try:
                 connection.execute(statement)
             except sqlite3.OperationalError as exc:
