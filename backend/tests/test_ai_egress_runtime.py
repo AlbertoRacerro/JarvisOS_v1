@@ -5,7 +5,13 @@ from uuid import uuid4
 
 from app.core.database import initialize_database, open_sqlite_connection
 from app.modules.ai.context_builder import canonical_digest
-from app.modules.ai.contracts import AIRequest, AIResponse, AITaskType, AIUsage
+from app.modules.ai.contracts import (
+    AIRequest,
+    AIResponse,
+    AITaskType,
+    AIUsage,
+    AIUsageSource,
+)
 from app.modules.ai.egress_lifecycle import (
     consume_confirmation_ticket,
     reconcile_reserved_attempt,
@@ -63,7 +69,9 @@ class CountingAdapter:
                 model_id=self.response_model_id,
                 input_tokens=11,
                 output_tokens=5,
-                provider_cost_estimate=0.001,
+                usage_source=AIUsageSource.actual,
+                provider_cost_estimate=(11 * 5.0 + 5 * 20.0) / 1_000_000,
+                currency="USD",
             ),
             finish_reason="stop",
             safety_status="allowed",
@@ -177,7 +185,9 @@ def _seed_prior_network_attempt() -> None:
             model_id="deepseek-v4-pro",
             input_tokens=1,
             output_tokens=1,
-            provider_cost_estimate=0.0,
+            usage_source=AIUsageSource.actual,
+            provider_cost_estimate=(1 * 5.0 + 1 * 20.0) / 1_000_000,
+            currency="USD",
         ),
         finish_reason="stop",
         safety_status="allowed",
