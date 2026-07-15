@@ -175,8 +175,7 @@ class ContextPackPreviewResponse(BaseModel):
 class EscalationConfirmRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    proposal: dict[str, Any]
-    task_kind: str = "general"
+    ticket_id: str = Field(min_length=1)
 
 
 class AITaskRunResponse(BaseModel):
@@ -199,12 +198,19 @@ class AITaskRunResponse(BaseModel):
     auto_metadata: dict[str, Any] | None = None
     confirmation_payload: dict[str, Any] | None = None
     escalation_proposal: dict[str, Any] | None = None
+    egress_decision_id: str | None = None
+    egress_packet_digest: str | None = None
+    egress_ticket_id: str | None = None
+    egress_reservation_id: str | None = None
+    egress_reason_code: str | None = None
+    egress_trigger_ids: list[str] = Field(default_factory=list)
 
 
 class EscalationConfirmResponse(BaseModel):
     status: str
-    proposal_ledger_id: str
+    ticket_id: str
     execution_ledger_id: str
+    reason_code: str | None = None
     task_response: AITaskRunResponse
 
 
