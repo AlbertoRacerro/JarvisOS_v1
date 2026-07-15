@@ -201,6 +201,58 @@ EGRESS_SCHEMA_STATEMENTS = [
         FOREIGN KEY (workspace_id) REFERENCES workspaces(id)
     )
     """,
+    """
+    CREATE TRIGGER IF NOT EXISTS trg_egress_attempt_sync_ai_job_usage
+    AFTER INSERT ON egress_attempts
+    BEGIN
+        UPDATE ai_jobs
+        SET input_tokens = COALESCE(NEW.actual_input_tokens, 0),
+            output_tokens = COALESCE(NEW.actual_output_tokens, 0),
+            cost_estimate = COALESCE(
+                NEW.actual_cost_usd,
+                NEW.projected_cost_upper_usd,
+                0
+            )
+        WHERE id = NEW.ai_job_id;
+    END
+    """,
+    """
+    UPDATE ai_jobs
+    SET input_tokens = COALESCE(
+            (
+                SELECT attempt.actual_input_tokens
+                FROM egress_attempts AS attempt
+                WHERE attempt.ai_job_id = ai_jobs.id
+            ),
+            0
+        ),
+        output_tokens = COALESCE(
+            (
+                SELECT attempt.actual_output_tokens
+                FROM egress_attempts AS attempt
+                WHERE attempt.ai_job_id = ai_jobs.id
+            ),
+            0
+        ),
+        cost_estimate = COALESCE(
+            (
+                SELECT attempt.actual_cost_usd
+                FROM egress_attempts AS attempt
+                WHERE attempt.ai_job_id = ai_jobs.id
+            ),
+            (
+                SELECT attempt.projected_cost_upper_usd
+                FROM egress_attempts AS attempt
+                WHERE attempt.ai_job_id = ai_jobs.id
+            ),
+            0
+        )
+    WHERE EXISTS (
+        SELECT 1
+        FROM egress_attempts AS attempt
+        WHERE attempt.ai_job_id = ai_jobs.id
+    )
+    """,
 ]
 
 EGRESS_SCHEMA_MIGRATION_STATEMENTS = [
