@@ -14,6 +14,7 @@ from app.modules.ai.egress_lifecycle import (
     reconcile_reserved_attempt,
     start_reserved_attempt,
 )
+from app.modules.ai.egress_persistence import EgressStateError
 from app.modules.ai.egress_policy import EgressPolicyConfig, load_default_egress_policy
 from app.modules.ai.egress_runtime import (
     _load_packet,
@@ -49,6 +50,12 @@ class _TicketMetadata:
     workspace_id: str | None
     source_count: int
     trigger_ids: tuple[str, ...]
+    packet_digest: str
+    provider_id: str
+    model_id: str
+    route_class: str
+    fallback_index: int
+    max_output_tokens: int
 
 
 def run_confirmation_ticket(
@@ -69,13 +76,32 @@ def run_confirmation_ticket(
     registry = registry or load_default_provider_registry()
     policy = policy or load_default_egress_policy()
     adapter_table = adapters if adapters is not None else _default_adapters()
+
+    # Read non-secret audit metadata before ticket consumption. If this row is missing
+    # or malformed, fail before the pending->consumed CAS so no orphan reservation can
+    # be created without a corresponding terminal ai_job.
+    metadata = _load_ticket_metadata(ticket_id)
     consumed = consume_confirmation_ticket(
         ticket_id,
         registry=registry,
         policy=policy,
     )
-    metadata = _load_ticket_metadata(consumed)
     base_route_metadata = _route_metadata(consumed, metadata)
+
+    if not _ticket_metadata_matches_consumption(metadata, consumed):
+        packet = _safe_load_consumed_packet(consumed)
+        outcome = _terminal_outcome(
+            consumed=consumed,
+            metadata=metadata,
+            route_metadata={**base_route_metadata, "ticket_metadata_drift": True},
+            status="config_error",
+            reason_code="ticket_metadata_drift",
+            error_type="config_error",
+            started_at=started_at,
+            reservation_id=consumed.reservation_id,
+            packet=packet,
+        )
+        return ConfirmedTicketExecution(ticket_id, metadata.workspace_id, outcome)
 
     if not consumed.authorized:
         outcome = _terminal_outcome(
@@ -311,7 +337,7 @@ def run_confirmation_ticket(
     return ConfirmedTicketExecution(ticket_id, metadata.workspace_id, outcome)
 
 
-def _load_ticket_metadata(consumed: EgressTicketConsumption) -> _TicketMetadata:
+def _load_ticket_metadata(ticket_id: str) -> _TicketMetadata:
     with open_sqlite_connection() as connection:
         row = connection.execute(
             """
@@ -324,35 +350,60 @@ def _load_ticket_metadata(consumed: EgressTicketConsumption) -> _TicketMetadata:
             JOIN egress_packets AS packet ON packet.id = ticket.packet_id
             WHERE ticket.id = ?
             """,
-            (consumed.ticket_id,),
+            (ticket_id,),
         ).fetchone()
     if row is None:
-        raise EgressSpineStateError("consumed confirmation ticket metadata was not found")
-    if (
-        row["packet_digest"],
-        row["provider_id"],
-        row["model_id"],
-        row["route_class"],
-        int(row["fallback_index"]),
-        int(row["max_output_tokens"]),
-    ) != (
+        raise EgressStateError("confirmation ticket metadata was not found")
+    try:
+        trigger_ids = json.loads(row["trigger_ids_json"])
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise EgressStateError("confirmation ticket trigger metadata is malformed") from exc
+    if not isinstance(trigger_ids, list) or not all(isinstance(value, str) for value in trigger_ids):
+        raise EgressStateError("confirmation ticket trigger metadata is malformed")
+    return _TicketMetadata(
+        task_kind=str(row["task_kind"]),
+        workspace_id=row["workspace_id"],
+        source_count=int(row["source_count"]),
+        trigger_ids=tuple(trigger_ids),
+        packet_digest=str(row["packet_digest"]),
+        provider_id=str(row["provider_id"]),
+        model_id=str(row["model_id"]),
+        route_class=str(row["route_class"]),
+        fallback_index=int(row["fallback_index"]),
+        max_output_tokens=int(row["max_output_tokens"]),
+    )
+
+
+def _ticket_metadata_matches_consumption(
+    metadata: _TicketMetadata,
+    consumed: EgressTicketConsumption,
+) -> bool:
+    return (
+        metadata.packet_digest,
+        metadata.provider_id,
+        metadata.model_id,
+        metadata.route_class,
+        metadata.fallback_index,
+        metadata.max_output_tokens,
+    ) == (
         consumed.packet_digest,
         consumed.provider_id,
         consumed.model_id,
         consumed.route_class,
         consumed.fallback_index,
         consumed.max_output_tokens,
-    ):
-        raise EgressSpineStateError("confirmation ticket metadata does not match consumption result")
-    trigger_ids = json.loads(row["trigger_ids_json"])
-    if not isinstance(trigger_ids, list) or not all(isinstance(value, str) for value in trigger_ids):
-        raise EgressSpineStateError("confirmation ticket trigger metadata is malformed")
-    return _TicketMetadata(
-        task_kind=str(row["task_kind"]),
-        workspace_id=row["workspace_id"],
-        source_count=int(row["source_count"]),
-        trigger_ids=tuple(trigger_ids),
     )
+
+
+def _safe_load_consumed_packet(
+    consumed: EgressTicketConsumption,
+) -> dict[str, object] | None:
+    if consumed.packet_json is None:
+        return None
+    try:
+        return _load_packet(consumed.packet_json)
+    except Exception:
+        return None
 
 
 def _create_confirmation_job(
