@@ -4,8 +4,6 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-import pytest
-
 from app.core.database import initialize_database, open_sqlite_connection
 from app.modules.ai import sensitivity
 from app.modules.ai.egress_lifecycle import consume_confirmation_ticket
