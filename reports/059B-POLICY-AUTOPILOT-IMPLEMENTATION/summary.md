@@ -4,8 +4,9 @@
 
 Implementation is complete on code checkpoint
 `0beb871fa17ec0f391729899e432e2d9a598c141` in draft PR #119.
-The PR remains `in_review` and must not activate real project-data external egress
-until maintainer review and merge.
+Subsequent commits on the branch update this evidence report only. The PR remains
+`in_review` and must not activate real project-data external egress until maintainer
+review and merge.
 
 The implementation started from merged definition commit
 `bd31dae42c43a2ec052ae614a5a07a0dbdd37d94`.
@@ -92,6 +93,11 @@ GitHub Actions BLUECAD Real Tool Proof run `29395748770` completed successfully:
 - strict full-chain real-tool proof;
 - final offline and strict proof gates.
 
+Report-only checkpoint `e8302d4ce4b6053358ef34916d8bdb111a36197d`
+also completed successfully in CI run `29396150595` and BLUECAD Real Tool Proof run
+`29396150561`. The current report-only head must retain the same green gates; GitHub
+Actions is the authoritative current-head check state.
+
 PR review state at this checkpoint:
 
 - no unresolved inline review threads;
@@ -144,5 +150,6 @@ PR review state at this checkpoint:
 - Spec registry: `059b = in_review`, implementation PR #119.
 - PR: open, draft, not merged.
 - Runtime activation: blocked until reviewed and merged.
-- Recommended next action: final report-only exact-head CI, followed by maintainer
-  review of the current head. Do not mark ready or merge automatically.
+- Next action: maintainer current-head review of transaction ordering, SQL constraints,
+  authority ownership, API compatibility, and residual-risk acceptance. Do not mark
+  ready or merge automatically.
