@@ -305,6 +305,7 @@ def reconcile_reserved_attempt(
         if row["ai_job_id"] is not None and row["ai_job_id"] != ai_job_id:
             raise persistence.EgressStateError("reservation is bound to a different ai_job")
         _validate_ai_job_binding(connection, ai_job_id=ai_job_id, row=row)
+        usage_verified = _ai_job_usage_is_verified(connection, ai_job_id=ai_job_id)
 
         input_tokens, output_tokens, actual_cost, reconciliation_status = _actual_usage(
             row,
@@ -312,6 +313,7 @@ def reconcile_reserved_attempt(
             actual_input_tokens=actual_input_tokens,
             actual_output_tokens=actual_output_tokens,
             usage_source=usage_source,
+            usage_verified=usage_verified,
             registry=registry,
         )
         attempt_id = str(uuid4())
@@ -608,6 +610,26 @@ def _validate_ai_job_binding(
         raise persistence.EgressStateError("ai_job binding does not match reservation packet")
 
 
+def _ai_job_usage_is_verified(
+    connection: sqlite3.Connection, *, ai_job_id: str
+) -> bool:
+    row = connection.execute(
+        """
+        SELECT status, input_tokens, output_tokens, cost_estimate
+        FROM ai_jobs WHERE id = ?
+        """,
+        (ai_job_id,),
+    ).fetchone()
+    if row is None:
+        raise persistence.EgressStateError("ai_job was not found during reconciliation")
+    return (
+        row["status"] != "queued"
+        and row["input_tokens"] is not None
+        and row["output_tokens"] is not None
+        and row["cost_estimate"] is not None
+    )
+
+
 def _actual_usage(
     row: sqlite3.Row,
     *,
@@ -615,6 +637,7 @@ def _actual_usage(
     actual_input_tokens: int | None,
     actual_output_tokens: int | None,
     usage_source: str,
+    usage_verified: bool,
     registry: ProviderRegistry,
 ) -> tuple[int, int, float, str]:
     if not network_attempt:
@@ -635,6 +658,14 @@ def _actual_usage(
     ):
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             raise EgressContractError(f"{field_name} must be a non-negative integer")
+
+    if usage_source != "actual" or not usage_verified:
+        return (
+            int(row["projected_input_tokens"]),
+            int(row["projected_output_tokens"]),
+            float(row["projected_cost_upper_usd"]),
+            "conservative_unverified_usage",
+        )
 
     try:
         pricing = resolve_model_pricing(
@@ -659,8 +690,7 @@ def _actual_usage(
         actual_input_tokens * pricing.input_usd_per_1m_tokens
         + actual_output_tokens * pricing.output_usd_per_1m_tokens
     ) / 1_000_000
-    status = "actual" if usage_source == "actual" else f"{usage_source}_usage"
-    return actual_input_tokens, actual_output_tokens, actual_cost, status
+    return actual_input_tokens, actual_output_tokens, actual_cost, "actual"
 
 
 def _required_identifier(value: str, field_name: str) -> None:
