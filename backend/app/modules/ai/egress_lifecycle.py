@@ -661,6 +661,20 @@ def _conservative_usage(
     return max(input_candidates), max(output_candidates), max(cost_candidates), status
 
 
+def _conservative_cost_only(
+    row: sqlite3.Row,
+    *,
+    status: str,
+    verified_usage: tuple[int, int, float],
+    expected_cost: float | None = None,
+) -> tuple[int, int, float, str]:
+    verified_input, verified_output, verified_cost = verified_usage
+    cost_candidates = [float(row["projected_cost_upper_usd"]), verified_cost]
+    if expected_cost is not None:
+        cost_candidates.append(expected_cost)
+    return verified_input, verified_output, max(cost_candidates), status
+
+
 def _actual_usage(
     row: sqlite3.Row,
     *,
@@ -721,12 +735,17 @@ def _actual_usage(
         pricing.pricing_effective_at,
     ) == (row["pricing_version"], row["pricing_effective_at"])
     if not pricing_matches:
-        return _conservative_usage(
+        current_pricing_cost = None
+        if pricing is not None:
+            current_pricing_cost = (
+                actual_input_tokens * pricing.input_usd_per_1m_tokens
+                + actual_output_tokens * pricing.output_usd_per_1m_tokens
+            ) / 1_000_000
+        return _conservative_cost_only(
             row,
             status="conservative_pricing_drift",
             verified_usage=verified_usage,
-            reported_input_tokens=actual_input_tokens,
-            reported_output_tokens=actual_output_tokens,
+            expected_cost=current_pricing_cost,
         )
 
     expected_cost = (
@@ -735,12 +754,10 @@ def _actual_usage(
     ) / 1_000_000
     tolerance = max(1e-12, expected_cost * 1e-9)
     if abs(verified_cost - expected_cost) > tolerance:
-        return _conservative_usage(
+        return _conservative_cost_only(
             row,
             status="conservative_cost_binding_mismatch",
             verified_usage=verified_usage,
-            reported_input_tokens=actual_input_tokens,
-            reported_output_tokens=actual_output_tokens,
             expected_cost=expected_cost,
         )
     return actual_input_tokens, actual_output_tokens, verified_cost, "actual"
