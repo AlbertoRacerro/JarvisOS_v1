@@ -96,6 +96,7 @@ def _success_response(provider_id: str = "deepseek", model_id: str = "deepseek-v
     return AIResponse(
         provider_id=provider_id,
         model_id=model_id,
+        request_id="test-request",
         text="confirmed answer",
         content="confirmed answer",
         usage=AIUsage(
@@ -209,6 +210,7 @@ def test_retryable_confirmed_error_does_not_open_fallback(monkeypatch) -> None:
     retryable = AIResponse(
         provider_id="deepseek",
         model_id="deepseek-v4-pro",
+        request_id="test-request",
         usage=AIUsage(provider_id="deepseek", model_id="deepseek-v4-pro"),
         safety_status="blocked",
         blocked_reason="provider_failed",
