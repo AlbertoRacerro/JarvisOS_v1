@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from uuid import uuid4
 
 from app.modules.ai.contracts import (
     AIRequest,
@@ -67,7 +68,12 @@ class _CaptureAdapter:
             request_id=request.request_id,
             text=text,
             content=text,
-            usage=AIUsage(provider_id="local_ollama", model_id=request.model_preference or "missing-model", input_tokens=1, output_tokens=1),
+            usage=AIUsage(
+                provider_id="local_ollama",
+                model_id=request.model_preference or "missing-model",
+                input_tokens=1,
+                output_tokens=1,
+            ),
             safety_status="allowed",
         )
 
@@ -87,13 +93,19 @@ def _stub_scaleway_adapter(captured_text: str = "stub cloud answer", provider_id
             return []
 
         def complete(self, request: AIRequest) -> AIResponse:
+            model_id = request.model_preference or "stub-model"
             return AIResponse(
                 provider_id=self.provider_id,
-                model_id=request.model_preference or "stub-model",
+                model_id=model_id,
                 request_id=request.request_id,
                 text=captured_text,
                 content=captured_text,
-                usage=AIUsage(provider_id=self.provider_id, model_id="stub-model", input_tokens=3, output_tokens=4),
+                usage=AIUsage(
+                    provider_id=self.provider_id,
+                    model_id=model_id,
+                    input_tokens=3,
+                    output_tokens=4,
+                ),
                 safety_status="allowed",
             )
 
@@ -226,10 +238,14 @@ def test_api_key_value_absent_from_ledger(monkeypatch, tmp_path) -> None:
     from app.modules.ai.settings import update_ai_settings
 
     update_ai_settings(AISettingsUpdate(paid_ai_enabled=True, monthly_api_budget_usd=10))
+    _seed_prior_network_attempt(
+        route_class="external:cheap",
+        provider_id="deepseek",
+        model_id="deepseek-v4-pro",
+        fallback_index=0,
+    )
     from app.modules.ai.execution import run_ai_task
 
-    # Stub external adapter so no real network; key is set in env but must never
-    # land in the ledger.
     outcome = run_ai_task(
         user_prompt="route through cloud binding",
         route_class="external:cheap",
@@ -238,9 +254,7 @@ def test_api_key_value_absent_from_ledger(monkeypatch, tmp_path) -> None:
     )
 
     assert outcome.status == "success"
-    rows = _all_ai_jobs()
-    assert len(rows) == 1
-    serialized = json.dumps(rows[0])
+    serialized = json.dumps(_all_ai_jobs())
     assert secret not in serialized
 
 
@@ -539,6 +553,85 @@ def _configure_external_allowed(monkeypatch):
     update_ai_settings(AISettingsUpdate(paid_ai_enabled=True, monthly_api_budget_usd=100))
 
 
+def _seed_prior_network_attempt(
+    *,
+    route_class: str,
+    provider_id: str,
+    model_id: str,
+    fallback_index: int,
+) -> None:
+    """Consume t1 through the real 059b lifecycle for one concrete binding."""
+
+    from app.modules.ai.context_builder import canonical_digest
+    from app.modules.ai.egress_lifecycle import (
+        consume_confirmation_ticket,
+        reconcile_reserved_attempt,
+        start_reserved_attempt,
+    )
+    from app.modules.ai.egress_persistence import prepare_egress_attempt
+    from app.modules.ai.egress_policy import EXTERNAL_PROVIDER_OPERATION
+    from app.modules.ai.egress_service import EgressPacketMaterial
+    from app.modules.ai.egress_spine import create_queued_ai_job, finalize_queued_ai_job
+
+    material = EgressPacketMaterial(
+        operation=EXTERNAL_PROVIDER_OPERATION,
+        task_kind="test",
+        route_class=route_class,
+        provider_id=provider_id,
+        model_id=model_id,
+        fallback_index=fallback_index,
+        prompt=f"Seed prior network attempt for {provider_id}/{model_id}.",
+        context_blocks=(),
+        prompt_level="S1",
+        context_level="S0",
+        final_level="S1",
+        max_output_tokens=16,
+    )
+    preparation = prepare_egress_attempt(material)
+    assert preparation.ticket_id is not None
+    consumed = consume_confirmation_ticket(preparation.ticket_id)
+    assert consumed.authorized is True
+    queued = create_queued_ai_job(
+        task_kind="test",
+        requested_route_class=route_class,
+        selected_route_class=route_class,
+        provider_id=provider_id,
+        model_id=model_id,
+        decision_reason="seed prior 059b attempt",
+        prompt_digest=canonical_digest({"prompt": material.prompt}),
+    )
+    start_reserved_attempt(consumed.reservation_id or "", ai_job_id=queued.ai_job_id)
+    response = AIResponse(
+        provider_id=provider_id,
+        model_id=model_id,
+        request_id=str(uuid4()),
+        text="seed",
+        content="seed",
+        usage=AIUsage(
+            provider_id=provider_id,
+            model_id=model_id,
+            input_tokens=1,
+            output_tokens=1,
+            provider_cost_estimate=0.0,
+        ),
+        safety_status="allowed",
+    )
+    finalize_queued_ai_job(
+        queued.ai_job_id,
+        status="success",
+        response=response,
+        latency_ms=1,
+    )
+    reconcile_reserved_attempt(
+        consumed.reservation_id or "",
+        ai_job_id=queued.ai_job_id,
+        network_attempt=True,
+        actual_input_tokens=1,
+        actual_output_tokens=1,
+        usage_source="actual",
+    )
+
+
 class _ErrorAdapter:
     def __init__(self, provider_id: str, code, *, retryable: bool) -> None:
         self.provider_id = provider_id
@@ -590,7 +683,12 @@ class _SuccessAdapter:
             request_id=request.request_id,
             text=self.text,
             content=self.text,
-            usage=AIUsage(provider_id=self.provider_id, model_id=request.model_preference or "missing-model", input_tokens=5, output_tokens=7),
+            usage=AIUsage(
+                provider_id=self.provider_id,
+                model_id=request.model_preference or "missing-model",
+                input_tokens=5,
+                output_tokens=7,
+            ),
             safety_status="allowed",
         )
 
@@ -639,8 +737,6 @@ def test_provider_cap_ignores_previous_months_usage(monkeypatch, tmp_path) -> No
     from app.core.database import open_sqlite_connection
     from app.modules.ai.execution import run_ai_task
 
-    # Enough lifetime usage to exhaust the cap many times over, but all of it
-    # in a past month: the month-to-date gate must not count it.
     with open_sqlite_connection() as connection:
         connection.execute(
             """
@@ -653,6 +749,12 @@ def test_provider_cap_ignores_previous_months_usage(monkeypatch, tmp_path) -> No
         )
         connection.commit()
 
+    _seed_prior_network_attempt(
+        route_class="external:cheap",
+        provider_id="deepseek",
+        model_id="deepseek-v4-pro",
+        fallback_index=0,
+    )
     adapter = _SuccessAdapter("deepseek")
     outcome = run_ai_task(
         user_prompt="not blocked by ancient usage",
@@ -674,9 +776,22 @@ def test_provider_zero_caps_are_unlimited(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
         budget,
         "_registry_provider",
-        lambda provider_id: ProviderConfig(provider_id, "openai_compatible", True, True, "https://example.test", "env:DEEPSEEK_API_KEY", 20, 0, 0),
+        lambda provider_id: ProviderConfig(
+            provider_id,
+            "openai_compatible",
+            True,
+            True,
+            "https://example.test",
+            "env:DEEPSEEK_API_KEY",
+            20,
+            0,
+            0,
+        ),
     )
-    gate = budget.evaluate_provider_budget_gate(__import__("app.modules.ai.settings", fromlist=["get_ai_settings"]).get_ai_settings(), "deepseek")
+    gate = budget.evaluate_provider_budget_gate(
+        __import__("app.modules.ai.settings", fromlist=["get_ai_settings"]).get_ai_settings(),
+        "deepseek",
+    )
 
     assert gate.allowed is True
 
@@ -684,11 +799,24 @@ def test_provider_zero_caps_are_unlimited(monkeypatch, tmp_path) -> None:
 def test_fallback_chain_retryable_error_advances_and_writes_attempt_rows(monkeypatch, tmp_path) -> None:
     _isolate_and_init(monkeypatch, tmp_path)
     _configure_external_allowed(monkeypatch)
+    _seed_prior_network_attempt(
+        route_class="external:cheap",
+        provider_id="deepseek",
+        model_id="deepseek-v4-pro",
+        fallback_index=0,
+    )
+    _seed_prior_network_attempt(
+        route_class="external:cheap",
+        provider_id="glm",
+        model_id="glm-5.2",
+        fallback_index=1,
+    )
     from app.modules.ai.contracts import AIProviderErrorCode
     from app.modules.ai.execution import run_ai_task
 
     first = _ErrorAdapter("deepseek", AIProviderErrorCode.provider_timeout, retryable=True)
     second = _SuccessAdapter("glm", text="fallback ok")
+    baseline = len(_all_ai_jobs())
     outcome = run_ai_task(
         user_prompt="try fallback",
         route_class="external:cheap",
@@ -700,7 +828,7 @@ def test_fallback_chain_retryable_error_advances_and_writes_attempt_rows(monkeyp
     assert outcome.response.provider_id == "glm"
     assert len(first.requests) == 1
     assert len(second.requests) == 1
-    rows = _all_ai_jobs()
+    rows = _all_ai_jobs()[baseline:]
     assert [row["provider_id"] for row in rows] == ["deepseek", "glm"]
     first_meta = json.loads(rows[0]["route_reason_json"])
     second_meta = json.loads(rows[1]["route_reason_json"])
@@ -712,11 +840,24 @@ def test_fallback_chain_retryable_error_advances_and_writes_attempt_rows(monkeyp
 def test_fallback_chain_non_retryable_error_does_not_advance(monkeypatch, tmp_path) -> None:
     _isolate_and_init(monkeypatch, tmp_path)
     _configure_external_allowed(monkeypatch)
+    _seed_prior_network_attempt(
+        route_class="external:cheap",
+        provider_id="deepseek",
+        model_id="deepseek-v4-pro",
+        fallback_index=0,
+    )
+    _seed_prior_network_attempt(
+        route_class="external:cheap",
+        provider_id="glm",
+        model_id="glm-5.2",
+        fallback_index=1,
+    )
     from app.modules.ai.contracts import AIProviderErrorCode
     from app.modules.ai.execution import run_ai_task
 
     first = _ErrorAdapter("deepseek", AIProviderErrorCode.provider_bad_request, retryable=False)
     second = _SuccessAdapter("glm")
+    baseline = len(_all_ai_jobs())
     outcome = run_ai_task(
         user_prompt="do not fallback",
         route_class="external:cheap",
@@ -727,7 +868,7 @@ def test_fallback_chain_non_retryable_error_does_not_advance(monkeypatch, tmp_pa
     assert outcome.status == "provider_error"
     assert len(first.requests) == 1
     assert second.requests == []
-    assert len(_all_ai_jobs()) == 1
+    assert len(_all_ai_jobs()[baseline:]) == 1
 
 
 def test_credential_block_does_not_fallback(monkeypatch, tmp_path) -> None:
@@ -754,6 +895,7 @@ def test_credential_block_does_not_fallback(monkeypatch, tmp_path) -> None:
     assert len(rows) == 1
     assert rows[0]["provider_id"] == "deepseek"
     assert "deepseek_api_key_missing" in json.loads(rows[0]["route_reason_json"])["decision_reason"]
+
 
 class _TextCaptureAdapter:
     provider_id = "fake"
