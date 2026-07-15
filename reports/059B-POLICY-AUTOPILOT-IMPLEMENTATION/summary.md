@@ -3,7 +3,7 @@
 ## Status
 
 Implementation is complete on code checkpoint
-`d3459e885bee1aabbfe4038e4e8836132d4679ea` in draft PR #119.
+`0beb871fa17ec0f391729899e432e2d9a598c141` in draft PR #119.
 The PR remains `in_review` and must not activate real project-data external egress
 until maintainer review and merge.
 
@@ -33,23 +33,29 @@ The implementation started from merged definition commit
    context, route, provider, model, fallback index, and token cap are reloaded from
    persisted server-owned rows. The exact authorized binding is called at most once
    and confirmation does not reopen the fallback chain.
-8. Atomic ticket consumption and projected-budget reservation. Pending-to-consumed,
+8. Confirmation audit metadata is loaded and validated before ticket consumption. A
+   missing or malformed ticket/decision/packet metadata join fails before the
+   pending-to-consumed CAS, leaving zero reservation and zero execution job. A binding
+   mismatch detected after consumption creates a terminal job and releases the
+   reservation before any adapter call.
+9. Atomic ticket consumption and projected-budget reservation. Pending-to-consumed,
    active-to-in-flight, and reconciliation transitions use explicit state/version
    checks; pre-network failures release zero provider consumption and post-network
    failures are conservatively reconciled.
-9. Mutable authority is revalidated inside the same `BEGIN IMMEDIATE` transaction as
-   ticket consumption. Prompt-derivative revocation, canonical-derivative revocation
-   or staleness, source deletion or mutation, label replacement or elevation, policy
-   drift, registry/binding drift, credential loss, and budget drift revoke or deny the
-   ticket before a reservation is created.
-10. Sampled sanitizer audit can revoke dependent pending tickets and release unstarted
+10. Mutable authority is revalidated inside the same `BEGIN IMMEDIATE` transaction as
+    ticket consumption. Prompt-derivative revocation, canonical-derivative revocation
+    or staleness, source deletion or mutation, label replacement or elevation, policy
+    drift, registry/binding drift, credential loss, and budget drift revoke or deny the
+    ticket before a reservation is created.
+11. Sampled sanitizer audit can revoke dependent pending tickets and release unstarted
     reservations without mutating immutable decisions or attempts.
 
 ## Failure modes explicitly covered
 
 - packet JSON, packet digest, policy/config, provider/model, pricing, and fallback-index
   tampering or drift;
-- expired, replayed, revoked, missing, or concurrently consumed confirmation tickets;
+- expired, replayed, revoked, missing, concurrently consumed, or metadata-corrupted
+  confirmation tickets;
 - client-owned replacement prompt, task kind, context, route, provider, model, or
   output cap submitted to the confirmation endpoint;
 - missing settings, disabled policy, paid-AI disabled, zero/exhausted budget, provider
@@ -60,24 +66,25 @@ The implementation started from merged definition commit
 - adapter absence, exception before network, provider exception after network,
   retryable provider failure without confirmed-ticket fallback, missing usage, and
   pricing drift during reconciliation;
-- duplicate reservation start/reconciliation and concurrent ticket consumption.
+- duplicate reservation start/reconciliation, orphan-reservation prevention, and
+  concurrent ticket consumption.
 
 ## Verification evidence
 
-Code checkpoint: `d3459e885bee1aabbfe4038e4e8836132d4679ea`.
+Code checkpoint: `0beb871fa17ec0f391729899e432e2d9a598c141`.
 
-GitHub Actions CI run `29394916154` completed successfully:
+GitHub Actions CI run `29395748755` completed successfully:
 
 - spec status registry gate;
 - manual-review tooling offline gate;
 - BLUECAD license-boundary import gate;
 - Ruff over the backend;
-- full backend Pytest suite, including ticket-only confirmation, authority-state
-  revalidation, concurrency, migration, sanitizer, fallback, budget, and regression
-  tests;
+- full backend Pytest suite, including ticket-only confirmation, malformed-metadata
+  pre-consumption failure, authority-state revalidation, concurrency, migration,
+  sanitizer, fallback, budget, and regression tests;
 - BLUECAD bounded property suite and canonical geometry canary.
 
-GitHub Actions BLUECAD Real Tool Proof run `29394916168` completed successfully:
+GitHub Actions BLUECAD Real Tool Proof run `29395748770` completed successfully:
 
 - offline regression suite;
 - distro-pinned Gmsh and CalculiX installation;
@@ -123,7 +130,12 @@ PR review state at this checkpoint:
    provide one-writer correctness for the current local architecture. A future
    multi-process or distributed worker design would require a separately specified
    transactional/idempotency boundary rather than assuming these semantics transfer.
-5. **Policy/config deployment discipline.** Changing provider registry or egress policy
+5. **Catastrophic persistence failure.** Normal pre-network failures create a terminal
+   `ai_jobs` row and release their reservation. A process or storage failure that makes
+   both job creation and reservation reconciliation unavailable is bounded by the
+   reservation TTL and requires operator diagnosis; it must not be converted into an
+   execution bypass.
+6. **Policy/config deployment discipline.** Changing provider registry or egress policy
    intentionally invalidates pending tickets. Operators must expect re-confirmation
    after such changes; bypassing drift checks is not an acceptable recovery path.
 
