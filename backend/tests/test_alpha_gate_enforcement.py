@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
@@ -42,6 +43,85 @@ def _all_ai_jobs() -> list[dict]:
     with open_sqlite_connection() as connection:
         rows = connection.execute("SELECT * FROM ai_jobs ORDER BY created_at ASC").fetchall()
     return [dict(row) for row in rows]
+
+
+def _seed_prior_network_attempt(
+    *,
+    route_class: str,
+    provider_id: str,
+    model_id: str,
+    fallback_index: int,
+) -> None:
+    """Consume t1 through the real 059b lifecycle for one concrete binding."""
+
+    from app.modules.ai.context_builder import canonical_digest
+    from app.modules.ai.egress_lifecycle import (
+        consume_confirmation_ticket,
+        reconcile_reserved_attempt,
+        start_reserved_attempt,
+    )
+    from app.modules.ai.egress_persistence import prepare_egress_attempt
+    from app.modules.ai.egress_policy import EXTERNAL_PROVIDER_OPERATION
+    from app.modules.ai.egress_service import EgressPacketMaterial
+    from app.modules.ai.egress_spine import create_queued_ai_job, finalize_queued_ai_job
+
+    material = EgressPacketMaterial(
+        operation=EXTERNAL_PROVIDER_OPERATION,
+        task_kind="test",
+        route_class=route_class,
+        provider_id=provider_id,
+        model_id=model_id,
+        fallback_index=fallback_index,
+        prompt=f"Seed prior network attempt for {provider_id}/{model_id}.",
+        context_blocks=(),
+        prompt_level="S1",
+        context_level="S0",
+        final_level="S1",
+        max_output_tokens=16,
+    )
+    preparation = prepare_egress_attempt(material)
+    assert preparation.ticket_id is not None
+    consumed = consume_confirmation_ticket(preparation.ticket_id)
+    assert consumed.authorized is True
+    queued = create_queued_ai_job(
+        task_kind="test",
+        requested_route_class=route_class,
+        selected_route_class=route_class,
+        provider_id=provider_id,
+        model_id=model_id,
+        decision_reason="seed prior 059b attempt",
+        prompt_digest=canonical_digest({"prompt": material.prompt}),
+    )
+    start_reserved_attempt(consumed.reservation_id or "", ai_job_id=queued.ai_job_id)
+    response = AIResponse(
+        provider_id=provider_id,
+        model_id=model_id,
+        request_id=str(uuid4()),
+        text="seed",
+        content="seed",
+        usage=AIUsage(
+            provider_id=provider_id,
+            model_id=model_id,
+            input_tokens=1,
+            output_tokens=1,
+            provider_cost_estimate=0.0,
+        ),
+        safety_status="allowed",
+    )
+    finalize_queued_ai_job(
+        queued.ai_job_id,
+        status="success",
+        response=response,
+        latency_ms=1,
+    )
+    reconcile_reserved_attempt(
+        consumed.reservation_id or "",
+        ai_job_id=queued.ai_job_id,
+        network_attempt=True,
+        actual_input_tokens=1,
+        actual_output_tokens=1,
+        usage_source="actual",
+    )
 
 
 class _SuccessAdapter:
@@ -210,6 +290,18 @@ def test_offline_fixture_binding_bypasses_only_external_gate(monkeypatch, tmp_pa
 def test_each_fallback_binding_is_gated_before_its_adapter(monkeypatch, tmp_path) -> None:
     _isolate_and_init(monkeypatch, tmp_path)
     _configure_external_allowed(monkeypatch)
+    _seed_prior_network_attempt(
+        route_class="external:cheap",
+        provider_id="deepseek",
+        model_id="deepseek-v4-pro",
+        fallback_index=0,
+    )
+    _seed_prior_network_attempt(
+        route_class="external:cheap",
+        provider_id="glm",
+        model_id="glm-5.2",
+        fallback_index=1,
+    )
     from app.modules.ai import budget
     from app.modules.ai.budget import AlphaGateDecision
     from app.modules.ai.execution import run_ai_task
@@ -226,6 +318,7 @@ def test_each_fallback_binding_is_gated_before_its_adapter(monkeypatch, tmp_path
     monkeypatch.setattr(budget, "evaluate_alpha_execution_gate", _gate)
     first = _RetryableAdapter("deepseek")
     second = _SuccessAdapter("glm")
+    baseline = len(_all_ai_jobs())
 
     outcome = run_ai_task(
         user_prompt="retry then deny fallback",
@@ -238,7 +331,7 @@ def test_each_fallback_binding_is_gated_before_its_adapter(monkeypatch, tmp_path
     assert len(first.requests) == 1
     assert second.requests == []
     assert calls == ["deepseek", "glm"]
-    rows = _all_ai_jobs()
+    rows = _all_ai_jobs()[baseline:]
     assert [row["provider_id"] for row in rows] == ["deepseek", "glm"]
     second_reason = json.loads(rows[-1]["route_reason_json"])["decision_reason"]
     assert "alpha_glm_denied" in second_reason
