@@ -104,6 +104,32 @@ def _insert_ai_job(
     return ai_job_id
 
 
+def _finalize_ai_job_usage(
+    ai_job_id: str,
+    *,
+    input_tokens: int = 10,
+    output_tokens: int = 20,
+    cost_estimate: float | None = None,
+) -> float:
+    cost = (
+        cost_estimate
+        if cost_estimate is not None
+        else (input_tokens * 5.0 + output_tokens * 20.0) / 1_000_000
+    )
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            """
+            UPDATE ai_jobs
+            SET status = 'success', input_tokens = ?, output_tokens = ?,
+                cost_estimate = ?, error_type = NULL
+            WHERE id = ? AND status = 'queued'
+            """,
+            (input_tokens, output_tokens, cost, ai_job_id),
+        )
+        connection.commit()
+    return cost
+
+
 def test_ticket_consumption_reloads_exact_packet_and_creates_one_reservation(monkeypatch):
     preparation = _pending_ticket(monkeypatch)
 
@@ -397,18 +423,7 @@ def test_stale_in_flight_preserves_finalized_verified_usage(monkeypatch):
         ai_job_id=ai_job_id,
         now=NOW + timedelta(seconds=2),
     )
-    verified_cost = (10 * 5.0 + 20 * 20.0) / 1_000_000
-    with open_sqlite_connection() as connection:
-        connection.execute(
-            """
-            UPDATE ai_jobs
-            SET status = 'success', input_tokens = 10, output_tokens = 20,
-                cost_estimate = ?, error_type = NULL
-            WHERE id = ?
-            """,
-            (verified_cost, ai_job_id),
-        )
-        connection.commit()
+    verified_cost = _finalize_ai_job_usage(ai_job_id)
 
     prepare_egress_attempt(
         _material(prompt="Evaluate a second generic pump note."),
@@ -480,6 +495,7 @@ def test_network_attempt_reconciles_actual_usage_and_cost_once(monkeypatch):
         ai_job_id=ai_job_id,
         now=NOW + timedelta(seconds=2),
     )
+    verified_cost = _finalize_ai_job_usage(ai_job_id)
 
     result = reconcile_reserved_attempt(
         consumed.reservation_id,
@@ -493,7 +509,7 @@ def test_network_attempt_reconciles_actual_usage_and_cost_once(monkeypatch):
 
     assert result.reservation_state == "reconciled"
     assert result.reconciliation_status == "actual"
-    assert result.actual_cost_usd == pytest.approx((10 * 5.0 + 20 * 20.0) / 1_000_000)
+    assert result.actual_cost_usd == pytest.approx(verified_cost)
     with pytest.raises(EgressStateError, match="cannot be reconciled"):
         reconcile_reserved_attempt(
             consumed.reservation_id,
@@ -537,6 +553,7 @@ def test_pricing_drift_uses_reserved_upper_bound(monkeypatch):
         ai_job_id=ai_job_id,
         now=NOW + timedelta(seconds=2),
     )
+    _finalize_ai_job_usage(ai_job_id)
     registry = load_default_provider_registry()
     models = dict(registry.models)
     key = ("deepseek", "deepseek-v4-pro")
