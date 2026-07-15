@@ -3,7 +3,10 @@ import sqlite3
 
 from fastapi import APIRouter, HTTPException
 
+from app.core.database import open_sqlite_connection
 from app.modules.ai.context_builder import ContextSelectionSpec, build_workspace_context_bundle
+from app.modules.ai.egress_persistence import EgressStateError
+from app.modules.ai.egress_service import EgressContractError
 from app.modules.ai.escalations import confirm_escalation
 from app.modules.ai.gateway import AIGateway
 from app.modules.ai.models import (
@@ -57,7 +60,7 @@ def create_modeling_draft(payload: ModelingDraftRequest) -> ModelingDraftRespons
 @router.post("/tasks/run", response_model=AITaskRunResponse)
 def run_ai_task_endpoint(payload: AITaskRunRequest) -> AITaskRunResponse:
     ensure_ai_settings()
-    return AIGateway().run_task(payload)
+    return _attach_egress_metadata(AIGateway().run_task(payload))
 
 
 @router.post("/context/packs/preview", response_model=ContextPackPreviewResponse)
@@ -87,7 +90,12 @@ def preview_context_pack(payload: ContextPackPreviewRequest) -> ContextPackPrevi
 @router.post("/tasks/escalations/confirm", response_model=EscalationConfirmResponse)
 def confirm_ai_task_escalation(payload: EscalationConfirmRequest) -> EscalationConfirmResponse:
     ensure_ai_settings()
-    return confirm_escalation(payload)
+    try:
+        return confirm_escalation(payload)
+    except EgressStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except EgressContractError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/smoke-tests/run", response_model=SmokeTestResponse)
@@ -112,3 +120,38 @@ def run_ai_provider_smoke(payload: ProviderSmokeRequest) -> ProviderSmokeRespons
 def run_ai_supervisor_public_test(payload: SupervisorPublicTestRequest) -> SupervisorPublicTestResponse:
     ensure_ai_settings()
     return AIGateway().run_supervisor_public_test(payload)
+
+
+def _attach_egress_metadata(response: AITaskRunResponse) -> AITaskRunResponse:
+    with open_sqlite_connection() as connection:
+        row = connection.execute(
+            "SELECT route_reason_json FROM ai_jobs WHERE id = ?",
+            (response.ledger_id,),
+        ).fetchone()
+    if row is None:
+        return response
+    try:
+        metadata = json.loads(row["route_reason_json"])
+    except (TypeError, json.JSONDecodeError):
+        return response
+    if not isinstance(metadata, dict):
+        return response
+    trigger_ids = metadata.get("egress_trigger_ids")
+    if not isinstance(trigger_ids, list) or not all(isinstance(value, str) for value in trigger_ids):
+        trigger_ids = []
+    ticket_id = metadata.get("egress_ticket_id")
+    update = {
+        "egress_decision_id": _optional_text(metadata.get("egress_decision_id")),
+        "egress_packet_digest": _optional_text(metadata.get("egress_packet_digest")),
+        "egress_ticket_id": _optional_text(ticket_id),
+        "egress_reservation_id": _optional_text(metadata.get("egress_reservation_id")),
+        "egress_reason_code": _optional_text(metadata.get("egress_reason_code")),
+        "egress_trigger_ids": trigger_ids,
+    }
+    if isinstance(ticket_id, str) and ticket_id:
+        update["confirmation_payload"] = {"ticket_id": ticket_id}
+    return response.model_copy(update=update)
+
+
+def _optional_text(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
