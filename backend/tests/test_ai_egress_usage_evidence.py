@@ -328,9 +328,15 @@ def test_unverified_usage_is_normalized_to_reserved_upper_bound(
         now=NOW + timedelta(seconds=4),
     )
 
+    expected_input_tokens = max(
+        preparation.projected_input_tokens, response.usage.input_tokens
+    )
+    expected_output_tokens = max(
+        preparation.projected_output_tokens, response.usage.output_tokens
+    )
     assert result.reconciliation_status == "conservative_unverified_usage"
-    assert result.actual_input_tokens == preparation.projected_input_tokens
-    assert result.actual_output_tokens == preparation.projected_output_tokens
+    assert result.actual_input_tokens == expected_input_tokens
+    assert result.actual_output_tokens == expected_output_tokens
     assert result.actual_cost_usd == pytest.approx(preparation.projected_cost_upper_usd)
     with open_sqlite_connection() as connection:
         attempt = connection.execute(
@@ -346,15 +352,17 @@ def test_unverified_usage_is_normalized_to_reserved_upper_bound(
             (ai_job_id,),
         ).fetchone()
     assert attempt["reconciliation_status"] == "conservative_unverified_usage"
-    assert attempt["actual_input_tokens"] == preparation.projected_input_tokens
-    assert attempt["actual_output_tokens"] == preparation.projected_output_tokens
+    assert attempt["actual_input_tokens"] == expected_input_tokens
+    assert attempt["actual_output_tokens"] == expected_output_tokens
     assert attempt["actual_cost_usd"] == pytest.approx(preparation.projected_cost_upper_usd)
     assert reservation["reconciliation_status"] == "conservative_unverified_usage"
+    assert reservation["actual_input_tokens"] == expected_input_tokens
+    assert reservation["actual_output_tokens"] == expected_output_tokens
     assert reservation["actual_cost_usd"] == pytest.approx(
         preparation.projected_cost_upper_usd
     )
-    assert job["input_tokens"] == preparation.projected_input_tokens
-    assert job["output_tokens"] == preparation.projected_output_tokens
+    assert job["input_tokens"] == expected_input_tokens
+    assert job["output_tokens"] == expected_output_tokens
     assert job["cost_estimate"] == pytest.approx(preparation.projected_cost_upper_usd)
 
 
