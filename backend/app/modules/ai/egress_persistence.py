@@ -617,9 +617,135 @@ def _budget_snapshot(
     )
 
 
+def _reconcile_stale_in_flight_reservations(
+    connection: sqlite3.Connection, *, now_iso: str
+) -> None:
+    rows = connection.execute(
+        """
+        SELECT
+            reservation.id AS reservation_id,
+            reservation.version AS reservation_version,
+            reservation.decision_id,
+            reservation.ai_job_id,
+            reservation.projected_input_tokens,
+            reservation.projected_output_tokens,
+            reservation.projected_cost_upper_usd,
+            packet.id AS packet_id,
+            packet.route_class,
+            packet.provider_id,
+            packet.model_id,
+            packet.fallback_index,
+            job.status AS ai_job_status,
+            job.input_tokens AS ai_job_input_tokens,
+            job.output_tokens AS ai_job_output_tokens,
+            job.cost_estimate AS ai_job_cost_estimate
+        FROM egress_budget_reservations AS reservation
+        JOIN egress_packets AS packet
+          ON packet.packet_digest = reservation.packet_digest
+        JOIN ai_jobs AS job ON job.id = reservation.ai_job_id
+        WHERE reservation.state = 'in_flight'
+          AND reservation.attempt_started_at IS NOT NULL
+          AND julianday(?) >= julianday(reservation.attempt_started_at)
+              + (julianday(reservation.expires_at) - julianday(reservation.created_at))
+        ORDER BY reservation.created_at, reservation.id
+        """,
+        (now_iso,),
+    ).fetchall()
+
+    for row in rows:
+        verified_usage = (
+            row["ai_job_status"] != "queued"
+            and row["ai_job_input_tokens"] is not None
+            and row["ai_job_output_tokens"] is not None
+            and row["ai_job_cost_estimate"] is not None
+        )
+        if verified_usage:
+            input_tokens = int(row["ai_job_input_tokens"])
+            output_tokens = int(row["ai_job_output_tokens"])
+            actual_cost_usd = float(row["ai_job_cost_estimate"])
+            reconciliation_status = "actual_recovered_after_timeout"
+        else:
+            input_tokens = int(row["projected_input_tokens"])
+            output_tokens = int(row["projected_output_tokens"])
+            actual_cost_usd = float(row["projected_cost_upper_usd"])
+            reconciliation_status = "conservative_in_flight_timeout"
+
+        attempt_id = str(uuid4())
+        connection.execute(
+            """
+            INSERT INTO egress_attempts (
+                id, decision_id, packet_id, ai_job_id, reservation_id,
+                route_class, provider_id, model_id, fallback_index,
+                network_attempt, reconciliation_status,
+                projected_input_tokens, projected_output_tokens,
+                projected_cost_upper_usd, actual_input_tokens,
+                actual_output_tokens, actual_cost_usd, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                attempt_id,
+                row["decision_id"],
+                row["packet_id"],
+                row["ai_job_id"],
+                row["reservation_id"],
+                row["route_class"],
+                row["provider_id"],
+                row["model_id"],
+                row["fallback_index"],
+                reconciliation_status,
+                row["projected_input_tokens"],
+                row["projected_output_tokens"],
+                row["projected_cost_upper_usd"],
+                input_tokens,
+                output_tokens,
+                actual_cost_usd,
+                now_iso,
+            ),
+        )
+        connection.execute(
+            """
+            UPDATE ai_jobs
+            SET status = CASE
+                    WHEN status = 'queued' THEN 'provider_error'
+                    ELSE status
+                END,
+                input_tokens = ?, output_tokens = ?, cost_estimate = ?,
+                error_type = CASE
+                    WHEN status = 'queued' THEN 'EgressInFlightTimeout'
+                    ELSE error_type
+                END
+            WHERE id = ?
+            """,
+            (input_tokens, output_tokens, actual_cost_usd, row["ai_job_id"]),
+        )
+        updated = connection.execute(
+            """
+            UPDATE egress_budget_reservations
+            SET state = 'reconciled', version = version + 1,
+                reconciled_at = ?, egress_attempt_id = ?,
+                actual_input_tokens = ?, actual_output_tokens = ?,
+                actual_cost_usd = ?, reconciliation_status = ?
+            WHERE id = ? AND state = 'in_flight' AND version = ?
+            """,
+            (
+                now_iso,
+                attempt_id,
+                input_tokens,
+                output_tokens,
+                actual_cost_usd,
+                reconciliation_status,
+                row["reservation_id"],
+                int(row["reservation_version"]),
+            ),
+        )
+        if updated.rowcount != 1:
+            raise EgressStateError("stale in-flight reservation CAS conflict")
+
+
 def _expire_stale_active_reservations(
     connection: sqlite3.Connection, *, now_iso: str
 ) -> None:
+    _reconcile_stale_in_flight_reservations(connection, now_iso=now_iso)
     connection.execute(
         """
         UPDATE egress_budget_reservations
