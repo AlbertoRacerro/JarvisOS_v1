@@ -24,8 +24,12 @@ jobs:
           set -euo pipefail
           test "$GITHUB_HEAD_REF" = "impl/spec-059b-policy-autopilot"
           git apply --check scripts/_one_shot_059b_usage_source.patch
+          git apply --check scripts/_one_shot_059b_usage_source_fixture.patch
           git apply scripts/_one_shot_059b_usage_source.patch
-          git rm scripts/_one_shot_059b_usage_source.patch
+          git apply scripts/_one_shot_059b_usage_source_fixture.patch
+          git rm \
+            scripts/_one_shot_059b_usage_source.patch \
+            scripts/_one_shot_059b_usage_source_fixture.patch
           git diff --check
 
       - uses: actions/setup-python@v5
@@ -126,7 +130,8 @@ jobs:
             backend/app/modules/ai/egress_confirmation.py \
             backend/tests/test_ai_egress_schema.py \
             backend/tests/test_ai_egress_usage_evidence.py \
-            backend/tests/test_ai_egress_lifecycle.py
+            backend/tests/test_ai_egress_lifecycle.py \
+            backend/tests/test_ai_egress_accounting_sync.py
           git commit -m "Bind provider usage source to egress accounting"
           git push origin HEAD:impl/spec-059b-policy-autopilot
 
