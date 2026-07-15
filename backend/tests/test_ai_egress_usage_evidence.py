@@ -208,6 +208,10 @@ def test_verified_usage_preserves_actual_reconciliation(monkeypatch) -> None:
         now=NOW + timedelta(seconds=4),
     )
 
+    assert result.reconciliation_status == "actual"
+    assert result.actual_input_tokens == 10
+    assert result.actual_output_tokens == 20
+    assert result.actual_cost_usd == pytest.approx(cost)
     with open_sqlite_connection() as connection:
         attempt = connection.execute(
             "SELECT * FROM egress_attempts WHERE id = ?",
@@ -252,6 +256,10 @@ def test_unverified_usage_is_normalized_to_reserved_upper_bound(monkeypatch) -> 
         now=NOW + timedelta(seconds=4),
     )
 
+    assert result.reconciliation_status == "conservative_unverified_usage"
+    assert result.actual_input_tokens == preparation.projected_input_tokens
+    assert result.actual_output_tokens == preparation.projected_output_tokens
+    assert result.actual_cost_usd == pytest.approx(preparation.projected_cost_upper_usd)
     with open_sqlite_connection() as connection:
         attempt = connection.execute(
             "SELECT * FROM egress_attempts WHERE id = ?",
@@ -296,6 +304,10 @@ def test_finalized_provider_error_without_usage_is_conservative(monkeypatch) -> 
         now=NOW + timedelta(seconds=4),
     )
 
+    assert result.reconciliation_status == "conservative_missing_usage"
+    assert result.actual_input_tokens == preparation.projected_input_tokens
+    assert result.actual_output_tokens == preparation.projected_output_tokens
+    assert result.actual_cost_usd == pytest.approx(preparation.projected_cost_upper_usd)
     with open_sqlite_connection() as connection:
         attempt = connection.execute(
             "SELECT * FROM egress_attempts WHERE id = ?",
