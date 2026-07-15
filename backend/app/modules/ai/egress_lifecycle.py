@@ -373,6 +373,16 @@ def reconcile_reserved_attempt(
         )
         if updated.rowcount != 1:
             raise persistence.EgressStateError("reservation reconcile CAS conflict")
+        persisted = connection.execute(
+            """
+            SELECT reconciliation_status, actual_input_tokens,
+                   actual_output_tokens, actual_cost_usd
+            FROM egress_attempts WHERE id = ?
+            """,
+            (attempt_id,),
+        ).fetchone()
+        if persisted is None:
+            raise persistence.EgressStateError("reconciled egress attempt was not found")
         return EgressReconciliation(
             egress_attempt_id=attempt_id,
             reservation_id=reservation_id,
@@ -381,10 +391,10 @@ def reconcile_reserved_attempt(
             ai_job_id=ai_job_id,
             network_attempt=network_attempt,
             reservation_state=terminal_state,
-            reconciliation_status=reconciliation_status,
-            actual_input_tokens=input_tokens,
-            actual_output_tokens=output_tokens,
-            actual_cost_usd=actual_cost,
+            reconciliation_status=str(persisted["reconciliation_status"]),
+            actual_input_tokens=int(persisted["actual_input_tokens"]),
+            actual_output_tokens=int(persisted["actual_output_tokens"]),
+            actual_cost_usd=float(persisted["actual_cost_usd"]),
         )
 
 
