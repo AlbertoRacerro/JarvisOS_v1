@@ -81,6 +81,24 @@ def _insert_ai_job() -> str:
     return ai_job_id
 
 
+def _finalize_ai_job_usage(
+    ai_job_id: str, *, input_tokens: int, output_tokens: int
+) -> float:
+    cost = (input_tokens * 5.0 + output_tokens * 20.0) / 1_000_000
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            """
+            UPDATE ai_jobs
+            SET status = 'success', input_tokens = ?, output_tokens = ?,
+                cost_estimate = ?, error_type = NULL
+            WHERE id = ? AND status = 'queued'
+            """,
+            (input_tokens, output_tokens, cost, ai_job_id),
+        )
+        connection.commit()
+    return cost
+
+
 def _consume_and_start(monkeypatch):
     _bootstrap(monkeypatch)
     material = _material()
@@ -102,6 +120,7 @@ def _consume_and_start(monkeypatch):
 
 def test_reconciled_actual_usage_becomes_ai_jobs_budget_authority(monkeypatch) -> None:
     material, preparation, consumed, ai_job_id = _consume_and_start(monkeypatch)
+    _finalize_ai_job_usage(ai_job_id, input_tokens=10, output_tokens=20)
 
     result = reconcile_reserved_attempt(
         consumed.reservation_id,
@@ -187,6 +206,7 @@ def test_missing_usage_conservative_upper_bound_remains_budgeted(monkeypatch) ->
 
 def test_initialize_database_backfills_existing_reconciled_usage(monkeypatch) -> None:
     _material_value, _preparation, consumed, ai_job_id = _consume_and_start(monkeypatch)
+    _finalize_ai_job_usage(ai_job_id, input_tokens=7, output_tokens=11)
     result = reconcile_reserved_attempt(
         consumed.reservation_id,
         ai_job_id=ai_job_id,
