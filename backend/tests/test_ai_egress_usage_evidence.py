@@ -298,8 +298,8 @@ def test_cost_binding_mismatch_is_conservative(monkeypatch) -> None:
     )
 
     assert result.reconciliation_status == "conservative_cost_binding_mismatch"
-    assert result.actual_input_tokens == max(preparation.projected_input_tokens, 10)
-    assert result.actual_output_tokens == max(preparation.projected_output_tokens, 20)
+    assert result.actual_input_tokens == 10
+    assert result.actual_output_tokens == 20
     assert result.actual_cost_usd == pytest.approx(
         max(preparation.projected_cost_upper_usd, mismatched_cost, expected_cost)
     )
