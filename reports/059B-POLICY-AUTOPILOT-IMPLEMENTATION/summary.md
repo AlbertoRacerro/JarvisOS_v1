@@ -2,37 +2,135 @@
 
 ## Status
 
-Implementation started from merged definition commit
+Implementation is complete on code checkpoint
+`d3459e885bee1aabbfe4038e4e8836132d4679ea` in draft PR #119.
+The PR remains `in_review` and must not activate real project-data external egress
+until maintainer review and merge.
+
+The implementation started from merged definition commit
 `bd31dae42c43a2ec052ae614a5a07a0dbdd37d94`.
 
-The branch remains fail-closed. No new external execution is authorized until the
-entire implementation contract is complete, reviewed, tested, and merged.
+## Implemented boundary
 
-## Delivery order
+1. Strict `configs/ai_egress_policy.json` loading with a canonical config digest,
+   bounded prompt/context sizes, confirmation TTL, reservation TTL, sampled-audit
+   rate, daily soft-spend threshold, and an explicit operation allowlist.
+2. Concrete provider/model execution authority and pricing in the existing provider
+   registry. Route-level pricing remains advisory and cannot authorize execution.
+3. Additive migration `0010_ip_egress_policy_autopilot` for prompt derivatives,
+   immutable packets and decisions, mutable CAS-controlled reservations and tickets,
+   immutable attempts, sanitizer audit items, and workspace egress policy.
+4. Deterministic S0/S1 packet projection with exact prompt/context, concrete binding,
+   fallback index, source manifests, source digests, token upper bounds, cost upper
+   bounds, pricing version, policy version, trigger version, and config digest.
+5. Prompt and manual-context authority with deterministic secret denial, local-only
+   sanitizer execution through the existing `run_ai_task`/`ai_jobs` spine, and
+   provenance-bound prompt and canonical derivatives.
+6. Mandatory per-binding execution hook for every network-capable binding, including
+   independent policy and budget evaluation for each fallback attempt. Sanitizer tasks
+   cannot open an external fallback path and adapters do not own hidden retries.
+7. Ticket-ID-only confirmation. The client may submit only `ticket_id`; prompt,
+   context, route, provider, model, fallback index, and token cap are reloaded from
+   persisted server-owned rows. The exact authorized binding is called at most once
+   and confirmation does not reopen the fallback chain.
+8. Atomic ticket consumption and projected-budget reservation. Pending-to-consumed,
+   active-to-in-flight, and reconciliation transitions use explicit state/version
+   checks; pre-network failures release zero provider consumption and post-network
+   failures are conservatively reconciled.
+9. Mutable authority is revalidated inside the same `BEGIN IMMEDIATE` transaction as
+   ticket consumption. Prompt-derivative revocation, canonical-derivative revocation
+   or staleness, source deletion or mutation, label replacement or elevation, policy
+   drift, registry/binding drift, credential loss, and budget drift revoke or deny the
+   ticket before a reservation is created.
+10. Sampled sanitizer audit can revoke dependent pending tickets and release unstarted
+    reservations without mutating immutable decisions or attempts.
 
-1. strict egress-policy configuration and concrete provider/model pricing;
-2. additive migration and typed persistence for prompt derivatives, packets,
-   decisions, reservations, tickets, attempts, audit items, and workspace policy;
-3. deterministic policy, digest, sampling, reservation, and ticket services;
-4. bounded 059a sanitizer-provenance extension;
-5. prompt/manual-context authority and local-only sanitizer orchestration;
-6. per-binding shared-spine enforcement and independent fallback evaluation;
-7. ticket-ID-only confirmation API and minimal compatibility UI wiring;
-8. adversarial, concurrency, migration, regression, and full-suite verification.
+## Failure modes explicitly covered
 
-## Hard constraints
+- packet JSON, packet digest, policy/config, provider/model, pricing, and fallback-index
+  tampering or drift;
+- expired, replayed, revoked, missing, or concurrently consumed confirmation tickets;
+- client-owned replacement prompt, task kind, context, route, provider, model, or
+  output cap submitted to the confirmation endpoint;
+- missing settings, disabled policy, paid-AI disabled, zero/exhausted budget, provider
+  token/cost caps, missing or invalid credentials, and post-ticket gate changes;
+- prompt secrets, external-ineligible prompt/context levels, stale labels, stale or
+  revoked derivatives, source mutation/deletion, source-label elevation, malformed
+  manifests, duplicate context sources, and response binding mismatch;
+- adapter absence, exception before network, provider exception after network,
+  retryable provider failure without confirmed-ticket fallback, missing usage, and
+  pricing drift during reconciliation;
+- duplicate reservation start/reconciliation and concurrent ticket consumption.
+
+## Verification evidence
+
+Code checkpoint: `d3459e885bee1aabbfe4038e4e8836132d4679ea`.
+
+GitHub Actions CI run `29394916154` completed successfully:
+
+- spec status registry gate;
+- manual-review tooling offline gate;
+- BLUECAD license-boundary import gate;
+- Ruff over the backend;
+- full backend Pytest suite, including ticket-only confirmation, authority-state
+  revalidation, concurrency, migration, sanitizer, fallback, budget, and regression
+  tests;
+- BLUECAD bounded property suite and canonical geometry canary.
+
+GitHub Actions BLUECAD Real Tool Proof run `29394916168` completed successfully:
+
+- offline regression suite;
+- distro-pinned Gmsh and CalculiX installation;
+- external hash-pinned tool-registry build and verification;
+- strict full-chain real-tool proof;
+- final offline and strict proof gates.
+
+PR review state at this checkpoint:
+
+- no unresolved inline review threads;
+- no submitted approval or change-request review;
+- PR remains draft and mergeable, but maintainer review has not occurred.
+
+## Hard constraints preserved
 
 - no packet body before effective S0/S1 eligibility;
 - no model-backed sanitizer outside local-only `run_ai_task` / `ai_jobs`;
 - no hidden adapter retries;
-- immutable decisions and attempts; mutable reservations only through CAS lifecycle;
-- concrete provider/model pricing from the existing provider registry;
+- no fallback after a concrete confirmation ticket is consumed;
+- immutable decisions and attempts; mutable reservations and tickets only through
+  bounded lifecycle transitions;
 - no second gateway, usage ledger, sensitivity authority, worker, vector store,
   conversation engine, or Hermes runtime;
+- no secret value stored in packets, ledgers, route metadata, reports, or tests;
 - merged 059a behavior remains backward compatible;
 - real project-data external dogfood remains disabled until merge.
 
-## Evidence
+## Residual risks and limitations
 
-This report will be updated with exact changed-file scope, migrations, focused tests,
-full backend results, BLUECAD proof, review findings, and final lifecycle state.
+1. **No real external-provider dogfood in this PR.** Network-capable adapters are
+   exercised through deterministic stubs in backend tests. Actual provider latency,
+   error payloads, rate limits, and usage-report fidelity remain operational evidence
+   to collect only after maintainer-approved activation.
+2. **Large security-sensitive diff.** PR #119 changes policy, schema, persistence,
+   routing, confirmation, and accounting boundaries. Green CI does not replace a
+   current-head maintainer review of transaction ordering, SQL constraints, authority
+   ownership, and response contracts.
+3. **Backend compatibility surface only.** This PR exposes the ticket in the task API
+   and accepts ticket-ID-only confirmation; it does not add a new frontend design.
+   Any operator UI must display only server-owned ticket metadata and must not recreate
+   proposal-owned execution fields.
+4. **Single-process SQLite authority.** `BEGIN IMMEDIATE` and versioned state changes
+   provide one-writer correctness for the current local architecture. A future
+   multi-process or distributed worker design would require a separately specified
+   transactional/idempotency boundary rather than assuming these semantics transfer.
+5. **Policy/config deployment discipline.** Changing provider registry or egress policy
+   intentionally invalidates pending tickets. Operators must expect re-confirmation
+   after such changes; bypassing drift checks is not an acceptable recovery path.
+
+## Final lifecycle state
+
+- Spec registry: `059b = in_review`, implementation PR #119.
+- PR: open, draft, not merged.
+- Runtime activation: blocked until reviewed and merged.
+- Recommended next action: final report-only exact-head CI, followed by maintainer
+  review of the current head. Do not mark ready or merge automatically.
