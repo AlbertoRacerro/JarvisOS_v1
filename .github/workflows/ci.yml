@@ -12,6 +12,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Export 059b review sources
+        uses: actions/upload-artifact@v4
+        with:
+          name: 059b-review-sources
+          path: |
+            backend/app/core/schema.py
+            backend/app/core/egress_schema.py
+            backend/app/modules/ai/egress_spine.py
+            backend/app/modules/ai/egress_lifecycle.py
+            backend/app/modules/ai/egress_persistence.py
+            backend/app/modules/ai/egress_runtime.py
+            backend/app/modules/ai/egress_confirmation.py
+            backend/tests/test_ai_egress_schema.py
+            backend/tests/test_ai_egress_usage_evidence.py
+            backend/tests/test_ai_egress_lifecycle.py
+            backend/tests/test_ai_egress_runtime.py
+            backend/tests/test_ai_egress_confirmation.py
+          retention-days: 1
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
