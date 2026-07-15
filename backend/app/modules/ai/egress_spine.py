@@ -102,6 +102,7 @@ class FinalizedAIJob:
     input_tokens: int | None
     output_tokens: int | None
     cost_estimate: float | None
+    usage_source: str | None
     error_type: str | None
 
 
@@ -388,17 +389,19 @@ def finalize_queued_ai_job(
             input_tokens = response.usage.input_tokens
             output_tokens = response.usage.output_tokens
             cost_estimate = response.usage.provider_cost_estimate
+            usage_source = response.usage.usage_source.value
         else:
             output_digest = None
             input_tokens = None
             output_tokens = None
             cost_estimate = None
+            usage_source = None
 
         updated = connection.execute(
             """
             UPDATE ai_jobs
             SET status = ?, output_digest = ?, input_tokens = ?, output_tokens = ?,
-                cost_estimate = ?, latency_ms = ?, error_type = ?
+                cost_estimate = ?, usage_source = ?, latency_ms = ?, error_type = ?
             WHERE id = ? AND status = 'queued'
             """,
             (
@@ -407,6 +410,7 @@ def finalize_queued_ai_job(
                 input_tokens,
                 output_tokens,
                 cost_estimate,
+                usage_source,
                 latency_ms,
                 error_type,
                 ai_job_id,
@@ -423,6 +427,7 @@ def finalize_queued_ai_job(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         cost_estimate=cost_estimate,
+        usage_source=usage_source,
         error_type=error_type,
     )
 

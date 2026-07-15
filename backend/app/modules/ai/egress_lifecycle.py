@@ -69,6 +69,9 @@ class EgressReconciliation:
     actual_cost_usd: float
 
 
+_VerifiedUsage = tuple[int, int, float, str]
+
+
 def consume_confirmation_ticket(
     ticket_id: str,
     *,
@@ -612,10 +615,10 @@ def _validate_ai_job_binding(
 
 def _verified_ai_job_usage(
     connection: sqlite3.Connection, *, ai_job_id: str
-) -> tuple[int, int, float] | None:
+) -> _VerifiedUsage | None:
     row = connection.execute(
         """
-        SELECT status, input_tokens, output_tokens, cost_estimate
+        SELECT status, input_tokens, output_tokens, cost_estimate, usage_source
         FROM ai_jobs WHERE id = ?
         """,
         (ai_job_id,),
@@ -627,12 +630,14 @@ def _verified_ai_job_usage(
         or row["input_tokens"] is None
         or row["output_tokens"] is None
         or row["cost_estimate"] is None
+        or row["usage_source"] not in {"actual", "estimated", "mixed"}
     ):
         return None
     return (
         int(row["input_tokens"]),
         int(row["output_tokens"]),
         float(row["cost_estimate"]),
+        str(row["usage_source"]),
     )
 
 
@@ -640,7 +645,7 @@ def _conservative_usage(
     row: sqlite3.Row,
     *,
     status: str,
-    verified_usage: tuple[int, int, float] | None = None,
+    verified_usage: _VerifiedUsage | None = None,
     reported_input_tokens: int | None = None,
     reported_output_tokens: int | None = None,
     expected_cost: float | None = None,
@@ -665,10 +670,10 @@ def _conservative_cost_only(
     row: sqlite3.Row,
     *,
     status: str,
-    verified_usage: tuple[int, int, float],
+    verified_usage: _VerifiedUsage,
     expected_cost: float | None = None,
 ) -> tuple[int, int, float, str]:
-    verified_input, verified_output, verified_cost = verified_usage
+    verified_input, verified_output, verified_cost, _ = verified_usage
     cost_candidates = [float(row["projected_cost_upper_usd"]), verified_cost]
     if expected_cost is not None:
         cost_candidates.append(expected_cost)
@@ -682,7 +687,7 @@ def _actual_usage(
     actual_input_tokens: int | None,
     actual_output_tokens: int | None,
     usage_source: str,
-    verified_usage: tuple[int, int, float] | None,
+    verified_usage: _VerifiedUsage | None,
     registry: ProviderRegistry,
 ) -> tuple[int, int, float, str]:
     if not network_attempt:
@@ -703,7 +708,11 @@ def _actual_usage(
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             raise EgressContractError(f"{field_name} must be a non-negative integer")
 
-    if usage_source != "actual" or verified_usage is None:
+    if (
+        usage_source != "actual"
+        or verified_usage is None
+        or verified_usage[3] != "actual"
+    ):
         return _conservative_usage(
             row,
             status="conservative_unverified_usage",
@@ -712,7 +721,7 @@ def _actual_usage(
             reported_output_tokens=actual_output_tokens,
         )
 
-    verified_input, verified_output, verified_cost = verified_usage
+    verified_input, verified_output, verified_cost, _ = verified_usage
     if (actual_input_tokens, actual_output_tokens) != (verified_input, verified_output):
         return _conservative_usage(
             row,

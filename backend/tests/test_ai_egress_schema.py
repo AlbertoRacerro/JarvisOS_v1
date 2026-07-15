@@ -22,6 +22,7 @@ EXPECTED_EGRESS_TABLES = {
     "sanitizer_audit_items",
     "workspace_egress_policy",
 }
+EXPECTED_AI_JOB_USAGE_SOURCE_COLUMN = "usage_source"
 EXPECTED_SANITIZER_PROVENANCE_COLUMNS = {
     "sanitizer_kind",
     "sanitizer_version",
@@ -47,6 +48,54 @@ def test_egress_schema_initializes_idempotently_as_migration_0010():
         ).fetchall()
     tables = {row["name"] for row in rows}
     assert EXPECTED_EGRESS_TABLES.issubset(tables)
+
+
+def test_ai_job_usage_source_column_exists_and_rejects_invalid_values():
+    initialize_database()
+    initialize_database()
+
+    with open_sqlite_connection() as connection:
+        columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(ai_jobs)").fetchall()
+        }
+        assert EXPECTED_AI_JOB_USAGE_SOURCE_COLUMN in columns
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                """
+                INSERT INTO ai_jobs (
+                    id, created_at, status, task_kind, route_reason_json, usage_source
+                ) VALUES ('invalid-usage-source', '2026-07-15T00:00:00Z',
+                          'success', 'general', '{}', 'invented')
+                """
+            )
+
+
+def test_ai_job_usage_source_column_upgrades_predecessor_table():
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            """
+            CREATE TABLE ai_jobs (
+                id TEXT PRIMARY KEY, created_at TEXT NOT NULL, status TEXT NOT NULL,
+                task_kind TEXT NOT NULL, requested_route_class TEXT,
+                selected_route_class TEXT, provider_id TEXT, model_id TEXT,
+                route_reason_json TEXT NOT NULL, prompt_digest TEXT,
+                context_digest TEXT, context_sources_json TEXT, output_digest TEXT,
+                input_tokens INTEGER, output_tokens INTEGER, cost_estimate REAL,
+                latency_ms INTEGER, error_type TEXT
+            )
+            """
+        )
+        connection.commit()
+
+    initialize_database()
+
+    with open_sqlite_connection() as connection:
+        columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(ai_jobs)").fetchall()
+        }
+    assert EXPECTED_AI_JOB_USAGE_SOURCE_COLUMN in columns
 
 
 def test_sanitizer_provenance_columns_exist_on_fresh_database():

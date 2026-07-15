@@ -90,7 +90,7 @@ def _finalize_ai_job_usage(
             """
             UPDATE ai_jobs
             SET status = 'success', input_tokens = ?, output_tokens = ?,
-                cost_estimate = ?, error_type = NULL
+                cost_estimate = ?, usage_source = 'actual', error_type = NULL
             WHERE id = ? AND status = 'queued'
             """,
             (input_tokens, output_tokens, cost, ai_job_id),

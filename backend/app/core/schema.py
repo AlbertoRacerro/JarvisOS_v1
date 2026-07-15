@@ -352,6 +352,7 @@ SCHEMA_STATEMENTS = [
         input_tokens INTEGER,
         output_tokens INTEGER,
         cost_estimate REAL,
+        usage_source TEXT CHECK (usage_source IN ('actual', 'estimated', 'mixed')),
         latency_ms INTEGER,
         error_type TEXT
     )

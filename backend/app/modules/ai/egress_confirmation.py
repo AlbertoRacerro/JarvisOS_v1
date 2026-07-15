@@ -311,7 +311,7 @@ def run_confirmation_ticket(
         network_attempt=True,
         actual_input_tokens=response.usage.input_tokens,
         actual_output_tokens=response.usage.output_tokens,
-        usage_source="actual",
+        usage_source=response.usage.usage_source.value,
         registry=registry,
     )
     outcome = _outcome(

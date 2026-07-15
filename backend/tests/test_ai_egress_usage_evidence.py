@@ -222,7 +222,8 @@ def test_verified_usage_preserves_actual_reconciliation(monkeypatch) -> None:
             (consumed.reservation_id,),
         ).fetchone()
         job = connection.execute(
-            "SELECT input_tokens, output_tokens, cost_estimate FROM ai_jobs WHERE id = ?",
+            "SELECT input_tokens, output_tokens, cost_estimate, usage_source "
+            "FROM ai_jobs WHERE id = ?",
             (ai_job_id,),
         ).fetchone()
     assert attempt["reconciliation_status"] == "actual"
@@ -233,6 +234,7 @@ def test_verified_usage_preserves_actual_reconciliation(monkeypatch) -> None:
     assert job["input_tokens"] == 10
     assert job["output_tokens"] == 20
     assert job["cost_estimate"] == pytest.approx(cost)
+    assert job["usage_source"] == "actual"
     assert preparation.projected_cost_upper_usd >= cost
 
 
@@ -348,7 +350,8 @@ def test_unverified_usage_is_normalized_to_reserved_upper_bound(
             (consumed.reservation_id,),
         ).fetchone()
         job = connection.execute(
-            "SELECT input_tokens, output_tokens, cost_estimate FROM ai_jobs WHERE id = ?",
+            "SELECT input_tokens, output_tokens, cost_estimate, usage_source "
+            "FROM ai_jobs WHERE id = ?",
             (ai_job_id,),
         ).fetchone()
     assert attempt["reconciliation_status"] == "conservative_unverified_usage"
@@ -363,6 +366,45 @@ def test_unverified_usage_is_normalized_to_reserved_upper_bound(
     )
     assert job["input_tokens"] == expected_input_tokens
     assert job["output_tokens"] == expected_output_tokens
+    assert job["cost_estimate"] == pytest.approx(preparation.projected_cost_upper_usd)
+    assert job["usage_source"] == "estimated"
+
+
+def test_estimated_source_with_populated_cost_cannot_be_promoted_to_actual(monkeypatch) -> None:
+    preparation, consumed, ai_job_id = _started_attempt(monkeypatch)
+    exact_cost = actual_registry_cost_usd(
+        provider_id="deepseek",
+        model_id="deepseek-v4-pro",
+        input_tokens=10,
+        output_tokens=20,
+    )
+    assert exact_cost is not None
+    response = _response(usage_source=AIUsageSource.estimated, cost=exact_cost)
+    finalize_queued_ai_job(
+        ai_job_id,
+        status="success",
+        response=response,
+        latency_ms=1,
+    )
+
+    result = reconcile_reserved_attempt(
+        consumed.reservation_id,
+        ai_job_id=ai_job_id,
+        network_attempt=True,
+        actual_input_tokens=10,
+        actual_output_tokens=20,
+        usage_source="actual",
+        now=NOW + timedelta(seconds=4),
+    )
+
+    assert result.reconciliation_status == "conservative_unverified_usage"
+    assert result.actual_cost_usd == pytest.approx(preparation.projected_cost_upper_usd)
+    with open_sqlite_connection() as connection:
+        job = connection.execute(
+            "SELECT usage_source, cost_estimate FROM ai_jobs WHERE id = ?",
+            (ai_job_id,),
+        ).fetchone()
+    assert job["usage_source"] == "estimated"
     assert job["cost_estimate"] == pytest.approx(preparation.projected_cost_upper_usd)
 
 

@@ -638,7 +638,8 @@ def _reconcile_stale_in_flight_reservations(
             job.status AS ai_job_status,
             job.input_tokens AS ai_job_input_tokens,
             job.output_tokens AS ai_job_output_tokens,
-            job.cost_estimate AS ai_job_cost_estimate
+            job.cost_estimate AS ai_job_cost_estimate,
+            job.usage_source AS ai_job_usage_source
         FROM egress_budget_reservations AS reservation
         JOIN egress_packets AS packet
           ON packet.packet_digest = reservation.packet_digest
@@ -658,17 +659,20 @@ def _reconcile_stale_in_flight_reservations(
             and row["ai_job_input_tokens"] is not None
             and row["ai_job_output_tokens"] is not None
             and row["ai_job_cost_estimate"] is not None
+            and row["ai_job_usage_source"] == "actual"
         )
         if verified_usage:
             input_tokens = int(row["ai_job_input_tokens"])
             output_tokens = int(row["ai_job_output_tokens"])
             actual_cost_usd = float(row["ai_job_cost_estimate"])
             reconciliation_status = "actual_recovered_after_timeout"
+            usage_source = "actual"
         else:
             input_tokens = int(row["projected_input_tokens"])
             output_tokens = int(row["projected_output_tokens"])
             actual_cost_usd = float(row["projected_cost_upper_usd"])
             reconciliation_status = "conservative_in_flight_timeout"
+            usage_source = "estimated"
 
         attempt_id = str(uuid4())
         connection.execute(
@@ -710,13 +714,19 @@ def _reconcile_stale_in_flight_reservations(
                     ELSE status
                 END,
                 input_tokens = ?, output_tokens = ?, cost_estimate = ?,
-                error_type = CASE
+                usage_source = ?, error_type = CASE
                     WHEN status = 'queued' THEN 'EgressInFlightTimeout'
                     ELSE error_type
                 END
             WHERE id = ?
             """,
-            (input_tokens, output_tokens, actual_cost_usd, row["ai_job_id"]),
+            (
+                input_tokens,
+                output_tokens,
+                actual_cost_usd,
+                usage_source,
+                row["ai_job_id"],
+            ),
         )
         updated = connection.execute(
             """

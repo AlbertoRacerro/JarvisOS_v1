@@ -110,6 +110,7 @@ def _finalize_ai_job_usage(
     input_tokens: int = 10,
     output_tokens: int = 20,
     cost_estimate: float | None = None,
+    usage_source: str = "actual",
 ) -> float:
     cost = (
         cost_estimate
@@ -121,10 +122,10 @@ def _finalize_ai_job_usage(
             """
             UPDATE ai_jobs
             SET status = 'success', input_tokens = ?, output_tokens = ?,
-                cost_estimate = ?, error_type = NULL
+                cost_estimate = ?, usage_source = ?, error_type = NULL
             WHERE id = ? AND status = 'queued'
             """,
-            (input_tokens, output_tokens, cost, ai_job_id),
+            (input_tokens, output_tokens, cost, usage_source, ai_job_id),
         )
         connection.commit()
     return cost
@@ -373,8 +374,8 @@ def test_stale_in_flight_reconciles_upper_bound_and_blocks_next_budget(monkeypat
             (consumed.reservation_id,),
         ).fetchone()
         job = connection.execute(
-            "SELECT status, input_tokens, output_tokens, cost_estimate, error_type "
-            "FROM ai_jobs WHERE id = ?",
+            "SELECT status, input_tokens, output_tokens, cost_estimate, "
+            "usage_source, error_type FROM ai_jobs WHERE id = ?",
             (ai_job_id,),
         ).fetchone()
     assert reservation["state"] == "reconciled"
@@ -440,8 +441,8 @@ def test_stale_in_flight_preserves_finalized_verified_usage(monkeypatch):
             (consumed.reservation_id,),
         ).fetchone()
         job = connection.execute(
-            "SELECT status, input_tokens, output_tokens, cost_estimate, error_type "
-            "FROM ai_jobs WHERE id = ?",
+            "SELECT status, input_tokens, output_tokens, cost_estimate, "
+            "usage_source, error_type FROM ai_jobs WHERE id = ?",
             (ai_job_id,),
         ).fetchone()
     assert reservation["state"] == "reconciled"
@@ -457,7 +458,45 @@ def test_stale_in_flight_preserves_finalized_verified_usage(monkeypatch):
     assert job["input_tokens"] == 10
     assert job["output_tokens"] == 20
     assert job["cost_estimate"] == pytest.approx(verified_cost)
+    assert job["usage_source"] == "actual"
     assert job["error_type"] is None
+
+
+def test_stale_in_flight_does_not_promote_estimated_usage_with_cost(monkeypatch):
+    preparation = _pending_ticket(monkeypatch)
+    consumed = consume_confirmation_ticket(
+        preparation.ticket_id, now=NOW + timedelta(seconds=1)
+    )
+    ai_job_id = _insert_ai_job()
+    start_reserved_attempt(
+        consumed.reservation_id,
+        ai_job_id=ai_job_id,
+        now=NOW + timedelta(seconds=2),
+    )
+    _finalize_ai_job_usage(ai_job_id, usage_source="estimated")
+
+    prepare_egress_attempt(
+        _material(prompt="Evaluate another generic pump note."),
+        now=NOW + timedelta(seconds=303),
+    )
+
+    with open_sqlite_connection() as connection:
+        reservation = connection.execute(
+            "SELECT * FROM egress_budget_reservations WHERE id = ?",
+            (consumed.reservation_id,),
+        ).fetchone()
+        job = connection.execute(
+            "SELECT usage_source, cost_estimate FROM ai_jobs WHERE id = ?",
+            (ai_job_id,),
+        ).fetchone()
+    assert reservation["reconciliation_status"] == "conservative_in_flight_timeout"
+    assert reservation["actual_input_tokens"] == preparation.projected_input_tokens
+    assert reservation["actual_output_tokens"] == preparation.projected_output_tokens
+    assert reservation["actual_cost_usd"] == pytest.approx(
+        preparation.projected_cost_upper_usd
+    )
+    assert job["usage_source"] == "estimated"
+    assert job["cost_estimate"] == pytest.approx(preparation.projected_cost_upper_usd)
 
 
 def test_pre_network_failure_releases_zero_provider_consumption(monkeypatch):

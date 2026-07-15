@@ -357,6 +357,8 @@ EGRESS_SCHEMA_MIGRATION_STATEMENTS = [
     "ALTER TABLE sanitized_derivatives ADD COLUMN sanitizer_ai_job_id TEXT",
     "ALTER TABLE sanitized_derivatives ADD COLUMN approval_source TEXT",
     "ALTER TABLE sanitized_derivatives ADD COLUMN auto_approved INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE ai_jobs ADD COLUMN usage_source TEXT "
+    "CHECK (usage_source IN ('actual', 'estimated', 'mixed'))",
 ]
 
 EGRESS_SCHEMA_INDEX_STATEMENTS = [
