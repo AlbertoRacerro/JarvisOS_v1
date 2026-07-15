@@ -12,6 +12,7 @@ from app.modules.ai.contracts import (
     AIRequest,
     AIResponse,
     AIUsage,
+    AIUsageSource,
 )
 from app.modules.ai.egress_confirmation import run_confirmation_ticket
 from app.modules.ai.egress_persistence import EgressStateError, prepare_egress_attempt
@@ -92,7 +93,9 @@ def _pending_ticket(monkeypatch, *, route_class: str = "external:cheap") -> str:
     return preparation.ticket_id
 
 
-def _success_response(provider_id: str = "deepseek", model_id: str = "deepseek-v4-pro") -> AIResponse:
+def _success_response(
+    provider_id: str = "deepseek", model_id: str = "deepseek-v4-pro"
+) -> AIResponse:
     return AIResponse(
         provider_id=provider_id,
         model_id=model_id,
@@ -104,7 +107,9 @@ def _success_response(provider_id: str = "deepseek", model_id: str = "deepseek-v
             model_id=model_id,
             input_tokens=11,
             output_tokens=7,
-            provider_cost_estimate=0.001,
+            usage_source=AIUsageSource.actual,
+            provider_cost_estimate=(11 * 5.0 + 7 * 20.0) / 1_000_000,
+            currency="USD",
         ),
         safety_status="allowed",
     )
@@ -160,7 +165,9 @@ def test_ticket_confirmation_executes_exact_binding_once(monkeypatch) -> None:
     assert reservation["state"] == "reconciled"
 
 
-def test_ticket_confirmation_is_one_shot_and_second_call_makes_no_provider_call(monkeypatch) -> None:
+def test_ticket_confirmation_is_one_shot_and_second_call_makes_no_provider_call(
+    monkeypatch,
+) -> None:
     ticket_id = _pending_ticket(monkeypatch)
     first = _Adapter("deepseek", response=_success_response())
     run_confirmation_ticket(ticket_id, adapters={"deepseek": first})
@@ -172,7 +179,9 @@ def test_ticket_confirmation_is_one_shot_and_second_call_makes_no_provider_call(
     assert len(first.requests) == 1
     assert second.requests == []
     with open_sqlite_connection() as connection:
-        attempts = connection.execute("SELECT COUNT(*) AS count FROM egress_attempts").fetchone()["count"]
+        attempts = connection.execute(
+            "SELECT COUNT(*) AS count FROM egress_attempts"
+        ).fetchone()["count"]
     assert attempts == 1
 
 
@@ -184,7 +193,9 @@ def test_gate_change_after_consumption_releases_without_network(monkeypatch) -> 
     monkeypatch.setattr(
         confirmation,
         "evaluate_provider_budget_gate",
-        lambda settings, provider_id: ProviderBudgetGate(False, "gate_closed_after_ticket", provider_id),
+        lambda settings, provider_id: ProviderBudgetGate(
+            False, "gate_closed_after_ticket", provider_id
+        ),
     )
     adapter = _Adapter("deepseek", response=_success_response())
 
@@ -234,7 +245,9 @@ def test_retryable_confirmed_error_does_not_open_fallback(monkeypatch) -> None:
     with open_sqlite_connection() as connection:
         providers = [
             row["provider_id"]
-            for row in connection.execute("SELECT provider_id FROM egress_attempts ORDER BY created_at")
+            for row in connection.execute(
+                "SELECT provider_id FROM egress_attempts ORDER BY created_at"
+            )
         ]
     assert providers == ["deepseek"]
 
