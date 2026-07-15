@@ -150,10 +150,10 @@ def _validate_direct_source_manifest(
             "ticket direct source has no workspace binding"
         )
     source_ref = str(manifest["source_ref"])
-    snapshot, label = sensitivity._resolve_source_snapshot_and_label_in_connection(
+    snapshot, label = _resolve_current_source(
         connection,
-        workspace_id,
-        source_ref,
+        workspace_id=workspace_id,
+        source_ref=source_ref,
     )
     if block is None or canonical_json(block) != canonical_json(snapshot.block):
         raise sensitivity.SensitivityPolicyError(
@@ -268,12 +268,30 @@ def _validate_source_digests(
             "ticket source digests have no workspace binding"
         )
     for source_ref, expected_digest in sorted(expected.items()):
-        snapshot, _label = sensitivity._resolve_source_snapshot_and_label_in_connection(
+        snapshot, _label = _resolve_current_source(
             connection,
-            material.workspace_id,
-            source_ref,
+            workspace_id=material.workspace_id,
+            source_ref=source_ref,
         )
         if snapshot.content_digest != expected_digest:
             raise sensitivity.SensitivityPolicyError(
                 f"ticket source digest changed: {source_ref}"
             )
+
+
+def _resolve_current_source(
+    connection: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    source_ref: str,
+):
+    try:
+        return sensitivity._resolve_source_snapshot_and_label_in_connection(
+            connection,
+            workspace_id,
+            source_ref,
+        )
+    except sensitivity.SensitivityNotFoundError as exc:
+        raise sensitivity.SensitivityPolicyError(
+            f"ticket source no longer exists: {source_ref}"
+        ) from exc
