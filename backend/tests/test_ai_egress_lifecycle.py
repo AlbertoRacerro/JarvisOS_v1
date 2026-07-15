@@ -12,7 +12,7 @@ from app.modules.ai.egress_lifecycle import (
 )
 from app.modules.ai.egress_persistence import EgressStateError, prepare_egress_attempt
 from app.modules.ai.egress_policy import EXTERNAL_PROVIDER_OPERATION, load_default_egress_policy
-from app.modules.ai.egress_service import EgressPacketMaterial, sha256_text
+from app.modules.ai.egress_service import EgressPacketMaterial
 from app.modules.ai.models import AISettingsUpdate
 from app.modules.ai.provider_registry import load_default_provider_registry
 from app.modules.ai.settings import ensure_ai_settings, update_ai_settings
@@ -56,27 +56,14 @@ def _material(**overrides) -> EgressPacketMaterial:
         "model_id": "deepseek-v4-pro",
         "fallback_index": 0,
         "prompt": "Summarize the approved generic pump note.",
-        "context_blocks": (
-            {
-                "source": "derivative:derivative-1",
-                "content": "Generic pump sizing note.",
-            },
-        ),
+        "context_blocks": (),
         "prompt_level": "S1",
-        "context_level": "S1",
+        "context_level": "S0",
         "final_level": "S1",
         "max_output_tokens": 128,
         "workspace_id": WORKSPACE_ID,
-        "included_manifest": (
-            {
-                "derivative_id": "derivative-1",
-                "effective_level": "S1",
-                "source_ref": "decision:decision-1",
-            },
-        ),
-        "source_digests": (
-            ("decision:decision-1", sha256_text("source-body")),
-        ),
+        "included_manifest": (),
+        "source_digests": (),
     }
     values.update(overrides)
     return EgressPacketMaterial(**values)
