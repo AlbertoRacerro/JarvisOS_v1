@@ -236,6 +236,75 @@ def test_verified_usage_preserves_actual_reconciliation(monkeypatch) -> None:
     assert preparation.projected_cost_upper_usd >= cost
 
 
+def test_token_binding_mismatch_is_conservative(monkeypatch) -> None:
+    preparation, consumed, ai_job_id = _started_attempt(monkeypatch)
+    cost = actual_registry_cost_usd(
+        provider_id="deepseek",
+        model_id="deepseek-v4-pro",
+        input_tokens=10,
+        output_tokens=20,
+    )
+    assert cost is not None
+    finalize_queued_ai_job(
+        ai_job_id,
+        status="success",
+        response=_response(usage_source=AIUsageSource.actual, cost=cost),
+        latency_ms=1,
+    )
+
+    result = reconcile_reserved_attempt(
+        consumed.reservation_id,
+        ai_job_id=ai_job_id,
+        network_attempt=True,
+        actual_input_tokens=1,
+        actual_output_tokens=1,
+        usage_source="actual",
+        now=NOW + timedelta(seconds=4),
+    )
+
+    assert result.reconciliation_status == "conservative_usage_binding_mismatch"
+    assert result.actual_input_tokens == max(preparation.projected_input_tokens, 10, 1)
+    assert result.actual_output_tokens == max(preparation.projected_output_tokens, 20, 1)
+    assert result.actual_cost_usd == pytest.approx(
+        max(preparation.projected_cost_upper_usd, cost)
+    )
+
+
+def test_cost_binding_mismatch_is_conservative(monkeypatch) -> None:
+    preparation, consumed, ai_job_id = _started_attempt(monkeypatch)
+    expected_cost = actual_registry_cost_usd(
+        provider_id="deepseek",
+        model_id="deepseek-v4-pro",
+        input_tokens=10,
+        output_tokens=20,
+    )
+    assert expected_cost is not None
+    mismatched_cost = 1.0
+    finalize_queued_ai_job(
+        ai_job_id,
+        status="success",
+        response=_response(usage_source=AIUsageSource.actual, cost=mismatched_cost),
+        latency_ms=1,
+    )
+
+    result = reconcile_reserved_attempt(
+        consumed.reservation_id,
+        ai_job_id=ai_job_id,
+        network_attempt=True,
+        actual_input_tokens=10,
+        actual_output_tokens=20,
+        usage_source="actual",
+        now=NOW + timedelta(seconds=4),
+    )
+
+    assert result.reconciliation_status == "conservative_cost_binding_mismatch"
+    assert result.actual_input_tokens == max(preparation.projected_input_tokens, 10)
+    assert result.actual_output_tokens == max(preparation.projected_output_tokens, 20)
+    assert result.actual_cost_usd == pytest.approx(
+        max(preparation.projected_cost_upper_usd, mismatched_cost, expected_cost)
+    )
+
+
 @pytest.mark.parametrize("reported_source", ["actual", "estimated", "mixed"])
 def test_unverified_usage_is_normalized_to_reserved_upper_bound(
     monkeypatch, reported_source: str
