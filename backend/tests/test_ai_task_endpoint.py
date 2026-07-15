@@ -185,8 +185,8 @@ def test_task_endpoint_external_route_requires_max_tokens_before_provider_call(
     assert body["selected_route_class"] == "external:cheap"
     assert body["provider_id"] == "deepseek"
     assert body["model_id"] == "deepseek-v4-pro"
-    assert body["blocked_reason"] == "config_error"
-    assert body["decision_reason"] == "max_output_tokens required for network route"
+    assert body["blocked_reason"] == "max_output_tokens_required"
+    assert "max_output_tokens_required" in body["decision_reason"]
     assert body["error_type"] == "config_error"
     assert body["response_text"] is None
 
@@ -222,9 +222,8 @@ def test_task_endpoint_external_route_respects_ai_settings_gate_before_provider_
     assert body["selected_route_class"] == "external:cheap"
     assert body["provider_id"] == "deepseek"
     assert body["model_id"] == "deepseek-v4-pro"
-    assert body["blocked_reason"] == "config_error"
+    assert body["blocked_reason"] == "paid_ai_disabled"
     assert body["error_type"] == "config_error"
-    assert "external provider execution disabled by settings/gate" in body["decision_reason"]
     assert "paid_ai_disabled" in body["decision_reason"]
     assert body["response_text"] is None
 
@@ -418,7 +417,9 @@ def _proposal() -> dict[str, object]:
     }
 
 
-def test_confirm_escalation_happy_path_uses_external_spine(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_confirm_escalation_first_use_returns_059b_ticket_without_provider_call(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("GLM_API_KEY", "test-only-key")
     client.put(
         "/ai/settings",
@@ -449,13 +450,15 @@ def test_confirm_escalation_happy_path_uses_external_spine(client: TestClient, m
 
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "success"
+    assert body["status"] == "validation_error"
     assert body["proposal_ledger_id"] == "proposal-1"
     assert body["task_response"]["selected_route_class"] == "external:reasoning"
-    assert seen == ["confirm raw prompt"]
+    assert body["task_response"]["blocked_reason"] == "confirmation_required"
+    assert "confirmation_required" in body["task_response"]["decision_reason"]
+    assert seen == []
     rows = _all_ai_jobs()
     assert len(rows) == 1
-    assert rows[0]["status"] == "success"
+    assert rows[0]["status"] == "validation_error"
     assert rows[0]["context_digest"] is None
 
 
