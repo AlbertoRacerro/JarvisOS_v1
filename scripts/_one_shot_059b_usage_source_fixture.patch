@@ -1,0 +1,11 @@
+--- a/backend/tests/test_ai_egress_accounting_sync.py
++++ b/backend/tests/test_ai_egress_accounting_sync.py
+@@ -92,7 +92,7 @@
+             """
+             UPDATE ai_jobs
+             SET status = 'success', input_tokens = ?, output_tokens = ?,
+-                cost_estimate = ?, error_type = NULL
++                cost_estimate = ?, usage_source = 'actual', error_type = NULL
+             WHERE id = ? AND status = 'queued'
+             """,
+             (input_tokens, output_tokens, cost, ai_job_id),
