@@ -283,22 +283,6 @@ EGRESS_SCHEMA_STATEMENTS = [
     END
     """,
     """
-    UPDATE egress_attempts
-    SET actual_input_tokens = projected_input_tokens,
-        actual_output_tokens = projected_output_tokens,
-        actual_cost_usd = projected_cost_upper_usd,
-        reconciliation_status = 'conservative_unverified_usage'
-    WHERE network_attempt = 1
-      AND reconciliation_status IN ('actual', 'mixed_usage', 'estimated_usage')
-      AND EXISTS (
-          SELECT 1
-          FROM ai_jobs
-          WHERE ai_jobs.id = egress_attempts.ai_job_id
-            AND ai_jobs.status <> 'queued'
-            AND ai_jobs.cost_estimate IS NULL
-      )
-    """,
-    """
     UPDATE egress_budget_reservations
     SET actual_input_tokens = (
             SELECT attempt.actual_input_tokens
