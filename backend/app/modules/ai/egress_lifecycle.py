@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from app.modules.ai import egress_persistence as persistence
 from app.modules.ai.egress_policy import EgressPolicyConfig, load_default_egress_policy
+from app.modules.ai.egress_revalidation import validate_ticket_authority_state
 from app.modules.ai.egress_service import (
     EgressContractError,
     EgressPacketMaterial,
@@ -108,12 +109,16 @@ def consume_confirmation_ticket(
                 reason="ticket_expired",
             )
             return _ticket_consumption(row, authorized=False, reason_code="ticket_expired")
-
         try:
             material, projection = _rebuild_ticket_projection(
                 row,
                 policy=policy,
                 registry=registry,
+            )
+            validate_ticket_authority_state(
+                connection,
+                material=material,
+                projection=projection,
             )
         except (EgressContractError, persistence.EgressStateError, ValueError):
             _transition_ticket(
