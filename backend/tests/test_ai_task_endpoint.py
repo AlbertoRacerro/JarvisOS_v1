@@ -405,137 +405,194 @@ def test_task_endpoint_invalid_workspace_fails_closed_before_provider(client: Te
     assert rows[0]["error_type"] == "context_build_error"
 
 
-def _proposal() -> dict[str, object]:
-    return {
-        "proposal_ledger_id": "proposal-1",
-        "proposed_route_class": "external:reasoning",
-        "provider_id": "scaleway",
-        "model_id": "qwen3-235b-a22b-instruct-2507",
-        "estimated_cost": {"max_output_tokens": 64, "estimated_cost_usd": 0.0001, "currency": "USD"},
-        "outbound_text": "confirm raw prompt",
-        "context_excluded": True,
-    }
-
-
-def test_confirm_escalation_first_use_returns_059b_ticket_without_provider_call(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("GLM_API_KEY", "test-only-key")
-    client.put(
+def _enable_external(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-only-key")
+    response = client.put(
         "/ai/settings",
         json={
-            "provider_mode": "scaleway",
-            "default_ai_provider": "scaleway",
+            "provider_mode": "deepseek",
+            "default_ai_provider": "deepseek",
             "paid_ai_enabled": True,
             "monthly_api_budget_usd": 1,
-            "scaleway_enabled": True,
-            "scaleway_smoke_test_enabled": True,
-            "scaleway_live_smoke_test_enabled": True,
             "use_fake_provider_when_budget_zero": False,
         },
     )
-    from app.modules.ai.contracts import AIRequest
-    from app.modules.ai.providers.fake_adapter import FakeProviderAdapter
-    from app.modules.ai.providers.openai_compat_adapter import OpenAICompatAdapter
+    assert response.status_code == 200
 
-    seen: list[str | None] = []
 
-    def fake_complete(self: OpenAICompatAdapter, request: AIRequest):
-        seen.append(request.prompt)
-        return FakeProviderAdapter().complete(request)
-
-    monkeypatch.setattr(OpenAICompatAdapter, "complete", fake_complete)
-
-    response = client.post("/ai/tasks/escalations/confirm", json={"proposal": _proposal(), "task_kind": "general"})
-
+def _request_ticket(client: TestClient) -> dict[str, object]:
+    response = client.post(
+        "/ai/tasks/run",
+        json={
+            "prompt": "Explain a generic pump sizing method.",
+            "route_class": "external:cheap",
+            "task_kind": "general",
+            "max_tokens": 64,
+        },
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "validation_error"
-    assert body["proposal_ledger_id"] == "proposal-1"
-    assert body["task_response"]["selected_route_class"] == "external:reasoning"
-    assert body["task_response"]["blocked_reason"] == "confirmation_required"
-    assert "confirmation_required" in body["task_response"]["decision_reason"]
+    assert body["blocked_reason"] == "confirmation_required"
+    assert body["egress_reason_code"] == "confirmation_required"
+    assert body["egress_ticket_id"]
+    assert body["confirmation_payload"] == {"ticket_id": body["egress_ticket_id"]}
+    assert body["egress_trigger_ids"] == ["t1"]
+    return body
+
+
+def test_confirm_escalation_consumes_ticket_and_executes_exact_packet(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_external(client, monkeypatch)
+    from app.modules.ai.contracts import AIRequest, AIResponse, AIUsage
+    from app.modules.ai.providers.openai_compat_adapter import OpenAICompatAdapter
+
+    seen: list[AIRequest] = []
+
+    def complete(self: OpenAICompatAdapter, request: AIRequest) -> AIResponse:
+        seen.append(request)
+        return AIResponse(
+            provider_id="deepseek",
+            model_id=request.model_preference or "deepseek-v4-pro",
+            request_id=request.request_id,
+            text="confirmed answer",
+            content="confirmed answer",
+            usage=AIUsage(
+                provider_id="deepseek",
+                model_id=request.model_preference or "deepseek-v4-pro",
+                input_tokens=5,
+                output_tokens=7,
+            ),
+            safety_status="allowed",
+        )
+
+    monkeypatch.setattr(OpenAICompatAdapter, "complete", complete)
+    ticket = _request_ticket(client)
     assert seen == []
+
+    response = client.post(
+        "/ai/tasks/escalations/confirm",
+        json={"ticket_id": ticket["egress_ticket_id"]},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert body["ticket_id"] == ticket["egress_ticket_id"]
+    assert body["reason_code"] == "ticket_consumed"
+    task = body["task_response"]
+    assert task["status"] == "success"
+    assert task["response_text"] == "confirmed answer"
+    assert task["egress_ticket_id"] == ticket["egress_ticket_id"]
+    assert task["egress_packet_digest"] == ticket["egress_packet_digest"]
+    assert task["egress_trigger_ids"] == ["t1"]
+    assert len(seen) == 1
+    assert seen[0].prompt == "Explain a generic pump sizing method."
+    assert seen[0].model_preference == "deepseek-v4-pro"
+    assert seen[0].max_output_tokens == 64
     rows = _all_ai_jobs()
-    assert len(rows) == 1
-    assert rows[0]["status"] == "validation_error"
-    assert rows[0]["context_digest"] is None
+    assert [row["status"] for row in rows] == ["validation_error", "success"]
 
 
-def test_confirm_escalation_paid_ai_disabled_fails_closed(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GLM_API_KEY", "test-only-key")
+def test_confirm_escalation_replay_returns_conflict_without_second_provider_call(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_external(client, monkeypatch)
+    from app.modules.ai.contracts import AIRequest, AIResponse, AIUsage
+    from app.modules.ai.providers.openai_compat_adapter import OpenAICompatAdapter
+
+    calls = 0
+
+    def complete(self: OpenAICompatAdapter, request: AIRequest) -> AIResponse:
+        nonlocal calls
+        calls += 1
+        return AIResponse(
+            provider_id="deepseek",
+            model_id=request.model_preference or "deepseek-v4-pro",
+            request_id=request.request_id,
+            text="ok",
+            content="ok",
+            usage=AIUsage(provider_id="deepseek", model_id="deepseek-v4-pro", input_tokens=1, output_tokens=1),
+            safety_status="allowed",
+        )
+
+    monkeypatch.setattr(OpenAICompatAdapter, "complete", complete)
+    ticket = _request_ticket(client)
+    payload = {"ticket_id": ticket["egress_ticket_id"]}
+    first = client.post("/ai/tasks/escalations/confirm", json=payload)
+    second = client.post("/ai/tasks/escalations/confirm", json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 409
+    assert "not pending: consumed" in second.json()["detail"]
+    assert calls == 1
+
+
+def test_confirm_escalation_rejects_legacy_client_owned_payload(client: TestClient) -> None:
+    response = client.post(
+        "/ai/tasks/escalations/confirm",
+        json={
+            "proposal": {
+                "proposal_ledger_id": "proposal-1",
+                "proposed_route_class": "external:reasoning",
+                "outbound_text": "client-owned replacement prompt",
+            },
+            "task_kind": "general",
+        },
+    )
+
+    assert response.status_code == 422
+    assert _all_ai_jobs() == []
+
+
+def test_confirm_escalation_gate_change_revokes_ticket_without_provider_call(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable_external(client, monkeypatch)
     from app.modules.ai.providers.openai_compat_adapter import OpenAICompatAdapter
 
     def fail(self, request):
-        raise AssertionError("provider must not be called")
+        raise AssertionError("provider must not be called after gate change")
 
     monkeypatch.setattr(OpenAICompatAdapter, "complete", fail)
-    client.put(
-        "/ai/settings",
-        json={
-            "provider_mode": "scaleway",
-            "default_ai_provider": "scaleway",
-            "paid_ai_enabled": False,
-            "monthly_api_budget_usd": 1,
-            "scaleway_enabled": True,
-            "scaleway_smoke_test_enabled": True,
-            "scaleway_live_smoke_test_enabled": True,
-            "use_fake_provider_when_budget_zero": False,
-        },
+    ticket = _request_ticket(client)
+    client.put("/ai/settings", json={"paid_ai_enabled": False})
+
+    response = client.post(
+        "/ai/tasks/escalations/confirm",
+        json={"ticket_id": ticket["egress_ticket_id"]},
     )
-    response = client.post("/ai/tasks/escalations/confirm", json={"proposal": _proposal()})
 
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "config_error"
-    assert "paid_ai_disabled" in body["task_response"]["decision_reason"]
+    assert body["reason_code"] == "paid_ai_disabled"
+    assert body["task_response"]["blocked_reason"] == "paid_ai_disabled"
+    rows = _all_ai_jobs()
+    assert [row["status"] for row in rows] == ["validation_error", "config_error"]
 
 
-def test_confirm_escalation_budget_zero_fails_closed(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SCALEWAY_API_KEY", "test-only-key")
-    client.put(
-        "/ai/settings",
-        json={
-            "provider_mode": "scaleway",
-            "default_ai_provider": "scaleway",
-            "paid_ai_enabled": True,
-            "monthly_api_budget_usd": 0,
-            "scaleway_enabled": True,
-            "scaleway_smoke_test_enabled": True,
-            "scaleway_live_smoke_test_enabled": True,
-            "use_fake_provider_when_budget_zero": False,
-        },
-    )
-    response = client.post("/ai/tasks/escalations/confirm", json={"proposal": _proposal()})
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["status"] == "config_error"
-    assert "monthly_budget_zero" in body["task_response"]["decision_reason"]
-
-
-def test_confirm_escalation_credentials_absent_fails_closed(
+def test_confirm_escalation_credential_removal_revokes_ticket_without_provider_call(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # Acceptance criterion 5, third fail-closed case: paid AI on and budget available,
-    # but no Scaleway credential present -> confirm must not execute.
-    monkeypatch.delenv("SCALEWAY_API_KEY", raising=False)
-    client.put(
-        "/ai/settings",
-        json={
-            "provider_mode": "scaleway",
-            "default_ai_provider": "scaleway",
-            "paid_ai_enabled": True,
-            "monthly_api_budget_usd": 1,
-            "scaleway_enabled": True,
-            "scaleway_smoke_test_enabled": True,
-            "scaleway_live_smoke_test_enabled": True,
-            "use_fake_provider_when_budget_zero": False,
-        },
+    _enable_external(client, monkeypatch)
+    from app.modules.ai.providers.openai_compat_adapter import OpenAICompatAdapter
+
+    def fail(self, request):
+        raise AssertionError("provider must not be called without credentials")
+
+    monkeypatch.setattr(OpenAICompatAdapter, "complete", fail)
+    ticket = _request_ticket(client)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+
+    response = client.post(
+        "/ai/tasks/escalations/confirm",
+        json={"ticket_id": ticket["egress_ticket_id"]},
     )
-    response = client.post("/ai/tasks/escalations/confirm", json={"proposal": _proposal()})
 
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "config_error"
-    assert "glm_api_key_missing" in body["task_response"]["decision_reason"]
+    assert body["reason_code"] == "provider_credentials_missing"
+    assert body["task_response"]["blocked_reason"] == "provider_credentials_missing"
