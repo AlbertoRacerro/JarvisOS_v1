@@ -282,6 +282,169 @@ def test_expired_reservation_start_records_expiry(monkeypatch):
     assert state == "expired"
 
 
+def test_in_flight_ttl_is_measured_from_attempt_start(monkeypatch):
+    preparation = _pending_ticket(monkeypatch)
+    consumed = consume_confirmation_ticket(preparation.ticket_id, now=NOW + timedelta(seconds=1))
+    ai_job_id = _insert_ai_job()
+    start_reserved_attempt(
+        consumed.reservation_id,
+        ai_job_id=ai_job_id,
+        now=NOW + timedelta(seconds=250),
+    )
+
+    prepare_egress_attempt(
+        _material(prompt="Evaluate a second generic pump note."),
+        now=NOW + timedelta(seconds=302),
+    )
+
+    with open_sqlite_connection() as connection:
+        reservation = connection.execute(
+            "SELECT state FROM egress_budget_reservations WHERE id = ?",
+            (consumed.reservation_id,),
+        ).fetchone()
+        attempt_count = connection.execute(
+            "SELECT COUNT(*) AS count FROM egress_attempts WHERE reservation_id = ?",
+            (consumed.reservation_id,),
+        ).fetchone()["count"]
+        job = connection.execute(
+            "SELECT status FROM ai_jobs WHERE id = ?",
+            (ai_job_id,),
+        ).fetchone()
+    assert reservation["state"] == "in_flight"
+    assert attempt_count == 0
+    assert job["status"] == "queued"
+
+
+def test_stale_in_flight_reconciles_upper_bound_and_blocks_next_budget(monkeypatch):
+    preparation = _pending_ticket(monkeypatch)
+    consumed = consume_confirmation_ticket(preparation.ticket_id, now=NOW + timedelta(seconds=1))
+    ai_job_id = _insert_ai_job()
+    start_reserved_attempt(
+        consumed.reservation_id,
+        ai_job_id=ai_job_id,
+        now=NOW + timedelta(seconds=2),
+    )
+    update_ai_settings(
+        AISettingsUpdate(
+            monthly_api_budget_usd=preparation.projected_cost_upper_usd * 1.5
+        )
+    )
+
+    next_result = prepare_egress_attempt(
+        _material(prompt="Evaluate a second generic pump note."),
+        now=NOW + timedelta(seconds=303),
+    )
+
+    assert next_result.result == "deny"
+    assert next_result.reason_code == "global_monthly_cost_cap_exceeded"
+    with open_sqlite_connection() as connection:
+        reservation = connection.execute(
+            "SELECT * FROM egress_budget_reservations WHERE id = ?",
+            (consumed.reservation_id,),
+        ).fetchone()
+        attempt = connection.execute(
+            "SELECT * FROM egress_attempts WHERE reservation_id = ?",
+            (consumed.reservation_id,),
+        ).fetchone()
+        job = connection.execute(
+            "SELECT status, input_tokens, output_tokens, cost_estimate, error_type "
+            "FROM ai_jobs WHERE id = ?",
+            (ai_job_id,),
+        ).fetchone()
+    assert reservation["state"] == "reconciled"
+    assert reservation["reconciliation_status"] == "conservative_in_flight_timeout"
+    assert reservation["actual_cost_usd"] == pytest.approx(
+        preparation.projected_cost_upper_usd
+    )
+    assert attempt["network_attempt"] == 1
+    assert attempt["reconciliation_status"] == "conservative_in_flight_timeout"
+    assert attempt["actual_input_tokens"] == preparation.projected_input_tokens
+    assert attempt["actual_output_tokens"] == preparation.projected_output_tokens
+    assert attempt["actual_cost_usd"] == pytest.approx(preparation.projected_cost_upper_usd)
+    assert job["status"] == "provider_error"
+    assert job["input_tokens"] == preparation.projected_input_tokens
+    assert job["output_tokens"] == preparation.projected_output_tokens
+    assert job["cost_estimate"] == pytest.approx(preparation.projected_cost_upper_usd)
+    assert job["error_type"] == "EgressInFlightTimeout"
+
+    prepare_egress_attempt(
+        _material(prompt="Evaluate a third generic pump note."),
+        now=NOW + timedelta(seconds=304),
+    )
+    with open_sqlite_connection() as connection:
+        attempt_count = connection.execute(
+            "SELECT COUNT(*) AS count FROM egress_attempts WHERE reservation_id = ?",
+            (consumed.reservation_id,),
+        ).fetchone()["count"]
+    assert attempt_count == 1
+    with pytest.raises(EgressStateError, match="cannot be reconciled"):
+        reconcile_reserved_attempt(
+            consumed.reservation_id,
+            ai_job_id=ai_job_id,
+            network_attempt=True,
+            actual_input_tokens=1,
+            actual_output_tokens=1,
+            now=NOW + timedelta(seconds=305),
+        )
+
+
+def test_stale_in_flight_preserves_finalized_verified_usage(monkeypatch):
+    preparation = _pending_ticket(monkeypatch)
+    consumed = consume_confirmation_ticket(preparation.ticket_id, now=NOW + timedelta(seconds=1))
+    ai_job_id = _insert_ai_job()
+    start_reserved_attempt(
+        consumed.reservation_id,
+        ai_job_id=ai_job_id,
+        now=NOW + timedelta(seconds=2),
+    )
+    verified_cost = (10 * 5.0 + 20 * 20.0) / 1_000_000
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            """
+            UPDATE ai_jobs
+            SET status = 'success', input_tokens = 10, output_tokens = 20,
+                cost_estimate = ?, error_type = NULL
+            WHERE id = ?
+            """,
+            (verified_cost, ai_job_id),
+        )
+        connection.commit()
+
+    prepare_egress_attempt(
+        _material(prompt="Evaluate a second generic pump note."),
+        now=NOW + timedelta(seconds=303),
+    )
+
+    with open_sqlite_connection() as connection:
+        reservation = connection.execute(
+            "SELECT * FROM egress_budget_reservations WHERE id = ?",
+            (consumed.reservation_id,),
+        ).fetchone()
+        attempt = connection.execute(
+            "SELECT * FROM egress_attempts WHERE reservation_id = ?",
+            (consumed.reservation_id,),
+        ).fetchone()
+        job = connection.execute(
+            "SELECT status, input_tokens, output_tokens, cost_estimate, error_type "
+            "FROM ai_jobs WHERE id = ?",
+            (ai_job_id,),
+        ).fetchone()
+    assert reservation["state"] == "reconciled"
+    assert reservation["reconciliation_status"] == "actual_recovered_after_timeout"
+    assert reservation["actual_input_tokens"] == 10
+    assert reservation["actual_output_tokens"] == 20
+    assert reservation["actual_cost_usd"] == pytest.approx(verified_cost)
+    assert attempt["reconciliation_status"] == "actual_recovered_after_timeout"
+    assert attempt["actual_input_tokens"] == 10
+    assert attempt["actual_output_tokens"] == 20
+    assert attempt["actual_cost_usd"] == pytest.approx(verified_cost)
+    assert job["status"] == "success"
+    assert job["input_tokens"] == 10
+    assert job["output_tokens"] == 20
+    assert job["cost_estimate"] == pytest.approx(verified_cost)
+    assert job["error_type"] is None
+
+
 def test_pre_network_failure_releases_zero_provider_consumption(monkeypatch):
     preparation = _pending_ticket(monkeypatch)
     consumed = consume_confirmation_ticket(preparation.ticket_id, now=NOW + timedelta(seconds=1))
