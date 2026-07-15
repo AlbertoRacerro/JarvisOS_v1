@@ -236,7 +236,10 @@ def test_verified_usage_preserves_actual_reconciliation(monkeypatch) -> None:
     assert preparation.projected_cost_upper_usd >= cost
 
 
-def test_unverified_usage_is_normalized_to_reserved_upper_bound(monkeypatch) -> None:
+@pytest.mark.parametrize("reported_source", ["actual", "estimated", "mixed"])
+def test_unverified_usage_is_normalized_to_reserved_upper_bound(
+    monkeypatch, reported_source: str
+) -> None:
     preparation, consumed, ai_job_id = _started_attempt(monkeypatch)
     response = _response(usage_source=AIUsageSource.estimated, cost=None)
     finalize_queued_ai_job(
@@ -252,7 +255,7 @@ def test_unverified_usage_is_normalized_to_reserved_upper_bound(monkeypatch) -> 
         network_attempt=True,
         actual_input_tokens=response.usage.input_tokens,
         actual_output_tokens=response.usage.output_tokens,
-        usage_source="actual",
+        usage_source=reported_source,
         now=NOW + timedelta(seconds=4),
     )
 
