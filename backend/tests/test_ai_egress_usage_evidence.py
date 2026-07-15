@@ -305,6 +305,6 @@ def test_finalized_provider_error_without_usage_is_conservative(monkeypatch) -> 
             "SELECT input_tokens, output_tokens, cost_estimate FROM ai_jobs WHERE id = ?",
             (ai_job_id,),
         ).fetchone()
-    assert attempt["reconciliation_status"] == "conservative_unverified_usage"
+    assert attempt["reconciliation_status"] == "conservative_missing_usage"
     assert attempt["actual_cost_usd"] == pytest.approx(preparation.projected_cost_upper_usd)
     assert job["cost_estimate"] == pytest.approx(preparation.projected_cost_upper_usd)
