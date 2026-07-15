@@ -2,14 +2,15 @@
 
 ## Status
 
-Implementation is complete on code checkpoint
-`0beb871fa17ec0f391729899e432e2d9a598c141` in draft PR #119.
-Subsequent commits on the branch update this evidence report only. The PR remains
-`in_review` and must not activate real project-data external egress until maintainer
-review and merge.
+Implementation is complete on runtime checkpoint
+`a360fdcc0584bc0697213961c2455f1e831c3416` in draft PR #119.
+The canonical-workflow verification checkpoint is
+`eb0a1b50022d686a11f8b863546c6cb34deeb9b3`.
 
 The implementation started from merged definition commit
 `bd31dae42c43a2ec052ae614a5a07a0dbdd37d94`.
+The PR remains `in_review`; real project-data external egress must remain disabled
+until an explicit maintainer ready/merge decision.
 
 ## Implemented boundary
 
@@ -20,7 +21,8 @@ The implementation started from merged definition commit
    registry. Route-level pricing remains advisory and cannot authorize execution.
 3. Additive migration `0010_ip_egress_policy_autopilot` for prompt derivatives,
    immutable packets and decisions, mutable CAS-controlled reservations and tickets,
-   immutable attempts, sanitizer audit items, and workspace egress policy.
+   immutable attempts, sanitizer audit items, workspace egress policy, and the
+   `ai_jobs.usage_source` evidence field.
 4. Deterministic S0/S1 packet projection with exact prompt/context, concrete binding,
    fallback index, source manifests, source digests, token upper bounds, cost upper
    bounds, pricing version, policy version, trigger version, and config digest.
@@ -50,6 +52,28 @@ The implementation started from merged definition commit
     ticket before a reservation is created.
 11. Sampled sanitizer audit can revoke dependent pending tickets and release unstarted
     reservations without mutating immutable decisions or attempts.
+12. Provider usage evidence is ledger-bound. `finalize_queued_ai_job` persists
+    `actual`, `estimated`, or `mixed`; runtime and confirmation propagate the adapter's
+    declared source; reconciliation accepts `actual` only when caller evidence and the
+    persisted job source both say `actual`. Historical or malformed rows fail closed.
+13. Stale `in_flight` recovery preserves finalized usage only when its persisted source
+    is `actual`. Estimated, mixed, missing, or malformed evidence is reconciled at the
+    reserved conservative upper bound.
+
+## Maintainer-review correction
+
+The current-head review found one accounting-authority blocker after the first green
+implementation checkpoint:
+
+- tokens and cost were persisted in `ai_jobs`, but their evidence source was not;
+- both network runtimes passed `usage_source="actual"` unconditionally;
+- a response marked `estimated` could therefore be promoted to actual accounting when
+  it happened to carry a populated cost, including after crash recovery.
+
+The correction at `a360fdcc0584bc0697213961c2455f1e831c3416` adds the constrained
+`usage_source` column, persists the adapter-declared source, requires persisted actual
+evidence for actual reconciliation, and makes stale recovery source-aware. Migration,
+direct reconciliation, legacy fixture, and crash-recovery tests cover this boundary.
 
 ## Failure modes explicitly covered
 
@@ -67,25 +91,29 @@ The implementation started from merged definition commit
 - adapter absence, exception before network, provider exception after network,
   retryable provider failure without confirmed-ticket fallback, missing usage, and
   pricing drift during reconciliation;
+- estimated or mixed usage carrying a populated/list-price-consistent cost;
+- caller attempts to claim actual usage when the persisted job source is not actual;
+- stale in-flight recovery with missing, estimated, mixed, or malformed usage evidence;
 - duplicate reservation start/reconciliation, orphan-reservation prevention, and
   concurrent ticket consumption.
 
 ## Verification evidence
 
-Code checkpoint: `0beb871fa17ec0f391729899e432e2d9a598c141`.
+Canonical-workflow checkpoint:
+`eb0a1b50022d686a11f8b863546c6cb34deeb9b3`.
 
-GitHub Actions CI run `29395748755` completed successfully:
+GitHub Actions CI run `29450032924` completed successfully:
 
 - spec status registry gate;
 - manual-review tooling offline gate;
 - BLUECAD license-boundary import gate;
 - Ruff over the backend;
-- full backend Pytest suite, including ticket-only confirmation, malformed-metadata
-  pre-consumption failure, authority-state revalidation, concurrency, migration,
-  sanitizer, fallback, budget, and regression tests;
+- full backend Pytest suite, including usage-source migration, estimated-to-actual
+  rejection, stale in-flight source-aware recovery, ticket-only confirmation,
+  authority-state revalidation, concurrency, fallback, budget, and regression tests;
 - BLUECAD bounded property suite and canonical geometry canary.
 
-GitHub Actions BLUECAD Real Tool Proof run `29395748770` completed successfully:
+GitHub Actions BLUECAD Real Tool Proof run `29450032925` completed successfully:
 
 - offline regression suite;
 - distro-pinned Gmsh and CalculiX installation;
@@ -93,16 +121,19 @@ GitHub Actions BLUECAD Real Tool Proof run `29395748770` completed successfully:
 - strict full-chain real-tool proof;
 - final offline and strict proof gates.
 
-Report-only checkpoint `e8302d4ce4b6053358ef34916d8bdb111a36197d`
-also completed successfully in CI run `29396150595` and BLUECAD Real Tool Proof run
-`29396150561`. The current report-only head must retain the same green gates; GitHub
-Actions is the authoritative current-head check state.
+The bounded actuator used to apply the reviewed patch also required Ruff and the full
+backend suite before it could create the runtime commit. Temporary patch files and the
+one-shot workflow were removed; `.github/workflows/ci.yml` is back to its canonical
+blob `9b8c76d334189e6d96f5a085491835e85753c0bb`.
 
 PR review state at this checkpoint:
 
-- no unresolved inline review threads;
-- no submitted approval or change-request review;
-- PR remains draft and mergeable, but maintainer review has not occurred.
+- PR remains open, draft, mergeable, and not merged;
+- no automatic ready transition, auto-merge, provider call, Hermes call, or real
+  BlueRev-data egress occurred;
+- current-head maintainer review found and corrected the usage-source blocker;
+- final residual-risk acceptance and merge readiness remain explicit maintainer
+  decisions.
 
 ## Hard constraints preserved
 
@@ -125,23 +156,26 @@ PR review state at this checkpoint:
    error payloads, rate limits, and usage-report fidelity remain operational evidence
    to collect only after maintainer-approved activation.
 2. **Large security-sensitive diff.** PR #119 changes policy, schema, persistence,
-   routing, confirmation, and accounting boundaries. Green CI does not replace a
-   current-head maintainer review of transaction ordering, SQL constraints, authority
-   ownership, and response contracts.
+   routing, confirmation, and accounting boundaries. Green CI and this review pass do
+   not eliminate the need for explicit maintainer acceptance before activation.
 3. **Backend compatibility surface only.** This PR exposes the ticket in the task API
    and accepts ticket-ID-only confirmation; it does not add a new frontend design.
    Any operator UI must display only server-owned ticket metadata and must not recreate
    proposal-owned execution fields.
 4. **Single-process SQLite authority.** `BEGIN IMMEDIATE` and versioned state changes
    provide one-writer correctness for the current local architecture. A future
-   multi-process or distributed worker design would require a separately specified
-   transactional/idempotency boundary rather than assuming these semantics transfer.
-5. **Catastrophic persistence failure.** Normal pre-network failures create a terminal
+   multi-process or distributed worker design requires a separately specified
+   transactional/idempotency boundary.
+5. **Lazy stale-in-flight recovery.** An orphaned `in_flight` reservation is recovered
+   at the next egress gate rather than by a background worker. It cannot permanently
+   bypass or free budget, but it may remain visibly in-flight while no subsequent gate
+   runs.
+6. **Catastrophic persistence failure.** Normal pre-network failures create a terminal
    `ai_jobs` row and release their reservation. A process or storage failure that makes
-   both job creation and reservation reconciliation unavailable is bounded by the
-   reservation TTL and requires operator diagnosis; it must not be converted into an
-   execution bypass.
-6. **Policy/config deployment discipline.** Changing provider registry or egress policy
+   both job finalization and reconciliation unavailable is conservatively bounded by
+   stale-in-flight recovery and requires operator diagnosis; it must not be converted
+   into an execution bypass.
+7. **Policy/config deployment discipline.** Changing provider registry or egress policy
    intentionally invalidates pending tickets. Operators must expect re-confirmation
    after such changes; bypassing drift checks is not an acceptable recovery path.
 
@@ -150,6 +184,5 @@ PR review state at this checkpoint:
 - Spec registry: `059b = in_review`, implementation PR #119.
 - PR: open, draft, not merged.
 - Runtime activation: blocked until reviewed and merged.
-- Next action: maintainer current-head review of transaction ordering, SQL constraints,
-  authority ownership, API compatibility, and residual-risk acceptance. Do not mark
-  ready or merge automatically.
+- Next action: explicit maintainer residual-risk acceptance and readiness decision.
+  Do not mark ready or merge automatically.
