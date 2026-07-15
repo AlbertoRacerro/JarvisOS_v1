@@ -217,6 +217,7 @@ EGRESS_SCHEMA_STATEMENTS = [
             reconciliation_status = 'conservative_unverified_usage'
         WHERE id = NEW.egress_attempt_id
           AND NEW.state = 'reconciled'
+          AND reconciliation_status IN ('actual', 'mixed_usage', 'estimated_usage')
           AND EXISTS (
               SELECT 1
               FROM ai_jobs
@@ -288,6 +289,7 @@ EGRESS_SCHEMA_STATEMENTS = [
         actual_cost_usd = projected_cost_upper_usd,
         reconciliation_status = 'conservative_unverified_usage'
     WHERE network_attempt = 1
+      AND reconciliation_status IN ('actual', 'mixed_usage', 'estimated_usage')
       AND EXISTS (
           SELECT 1
           FROM ai_jobs
