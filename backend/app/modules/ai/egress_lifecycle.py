@@ -305,7 +305,7 @@ def reconcile_reserved_attempt(
         if row["ai_job_id"] is not None and row["ai_job_id"] != ai_job_id:
             raise persistence.EgressStateError("reservation is bound to a different ai_job")
         _validate_ai_job_binding(connection, ai_job_id=ai_job_id, row=row)
-        usage_verified = _ai_job_usage_is_verified(connection, ai_job_id=ai_job_id)
+        verified_usage = _verified_ai_job_usage(connection, ai_job_id=ai_job_id)
 
         input_tokens, output_tokens, actual_cost, reconciliation_status = _actual_usage(
             row,
@@ -313,7 +313,7 @@ def reconcile_reserved_attempt(
             actual_input_tokens=actual_input_tokens,
             actual_output_tokens=actual_output_tokens,
             usage_source=usage_source,
-            usage_verified=usage_verified,
+            verified_usage=verified_usage,
             registry=registry,
         )
         attempt_id = str(uuid4())
@@ -610,9 +610,9 @@ def _validate_ai_job_binding(
         raise persistence.EgressStateError("ai_job binding does not match reservation packet")
 
 
-def _ai_job_usage_is_verified(
+def _verified_ai_job_usage(
     connection: sqlite3.Connection, *, ai_job_id: str
-) -> bool:
+) -> tuple[int, int, float] | None:
     row = connection.execute(
         """
         SELECT status, input_tokens, output_tokens, cost_estimate
@@ -622,12 +622,43 @@ def _ai_job_usage_is_verified(
     ).fetchone()
     if row is None:
         raise persistence.EgressStateError("ai_job was not found during reconciliation")
+    if (
+        row["status"] == "queued"
+        or row["input_tokens"] is None
+        or row["output_tokens"] is None
+        or row["cost_estimate"] is None
+    ):
+        return None
     return (
-        row["status"] != "queued"
-        and row["input_tokens"] is not None
-        and row["output_tokens"] is not None
-        and row["cost_estimate"] is not None
+        int(row["input_tokens"]),
+        int(row["output_tokens"]),
+        float(row["cost_estimate"]),
     )
+
+
+def _conservative_usage(
+    row: sqlite3.Row,
+    *,
+    status: str,
+    verified_usage: tuple[int, int, float] | None = None,
+    reported_input_tokens: int | None = None,
+    reported_output_tokens: int | None = None,
+    expected_cost: float | None = None,
+) -> tuple[int, int, float, str]:
+    input_candidates = [int(row["projected_input_tokens"])]
+    output_candidates = [int(row["projected_output_tokens"])]
+    cost_candidates = [float(row["projected_cost_upper_usd"])]
+    if verified_usage is not None:
+        input_candidates.append(verified_usage[0])
+        output_candidates.append(verified_usage[1])
+        cost_candidates.append(verified_usage[2])
+    if reported_input_tokens is not None:
+        input_candidates.append(reported_input_tokens)
+    if reported_output_tokens is not None:
+        output_candidates.append(reported_output_tokens)
+    if expected_cost is not None:
+        cost_candidates.append(expected_cost)
+    return max(input_candidates), max(output_candidates), max(cost_candidates), status
 
 
 def _actual_usage(
@@ -637,7 +668,7 @@ def _actual_usage(
     actual_input_tokens: int | None,
     actual_output_tokens: int | None,
     usage_source: str,
-    usage_verified: bool,
+    verified_usage: tuple[int, int, float] | None,
     registry: ProviderRegistry,
 ) -> tuple[int, int, float, str]:
     if not network_attempt:
@@ -646,11 +677,10 @@ def _actual_usage(
         return 0, 0, 0.0, "not_sent"
 
     if actual_input_tokens is None or actual_output_tokens is None:
-        return (
-            int(row["projected_input_tokens"]),
-            int(row["projected_output_tokens"]),
-            float(row["projected_cost_upper_usd"]),
-            "conservative_missing_usage",
+        return _conservative_usage(
+            row,
+            status="conservative_missing_usage",
+            verified_usage=verified_usage,
         )
     for value, field_name in (
         (actual_input_tokens, "actual_input_tokens"),
@@ -659,12 +689,23 @@ def _actual_usage(
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             raise EgressContractError(f"{field_name} must be a non-negative integer")
 
-    if usage_source != "actual" or not usage_verified:
-        return (
-            int(row["projected_input_tokens"]),
-            int(row["projected_output_tokens"]),
-            float(row["projected_cost_upper_usd"]),
-            "conservative_unverified_usage",
+    if usage_source != "actual" or verified_usage is None:
+        return _conservative_usage(
+            row,
+            status="conservative_unverified_usage",
+            verified_usage=verified_usage,
+            reported_input_tokens=actual_input_tokens,
+            reported_output_tokens=actual_output_tokens,
+        )
+
+    verified_input, verified_output, verified_cost = verified_usage
+    if (actual_input_tokens, actual_output_tokens) != (verified_input, verified_output):
+        return _conservative_usage(
+            row,
+            status="conservative_usage_binding_mismatch",
+            verified_usage=verified_usage,
+            reported_input_tokens=actual_input_tokens,
+            reported_output_tokens=actual_output_tokens,
         )
 
     try:
@@ -680,17 +721,29 @@ def _actual_usage(
         pricing.pricing_effective_at,
     ) == (row["pricing_version"], row["pricing_effective_at"])
     if not pricing_matches:
-        return (
-            actual_input_tokens,
-            actual_output_tokens,
-            float(row["projected_cost_upper_usd"]),
-            "conservative_pricing_drift",
+        return _conservative_usage(
+            row,
+            status="conservative_pricing_drift",
+            verified_usage=verified_usage,
+            reported_input_tokens=actual_input_tokens,
+            reported_output_tokens=actual_output_tokens,
         )
-    actual_cost = (
+
+    expected_cost = (
         actual_input_tokens * pricing.input_usd_per_1m_tokens
         + actual_output_tokens * pricing.output_usd_per_1m_tokens
     ) / 1_000_000
-    return actual_input_tokens, actual_output_tokens, actual_cost, "actual"
+    tolerance = max(1e-12, expected_cost * 1e-9)
+    if abs(verified_cost - expected_cost) > tolerance:
+        return _conservative_usage(
+            row,
+            status="conservative_cost_binding_mismatch",
+            verified_usage=verified_usage,
+            reported_input_tokens=actual_input_tokens,
+            reported_output_tokens=actual_output_tokens,
+            expected_cost=expected_cost,
+        )
+    return actual_input_tokens, actual_output_tokens, verified_cost, "actual"
 
 
 def _required_identifier(value: str, field_name: str) -> None:
