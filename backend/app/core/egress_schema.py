@@ -201,20 +201,129 @@ EGRESS_SCHEMA_STATEMENTS = [
         FOREIGN KEY (workspace_id) REFERENCES workspaces(id)
     )
     """,
+    "DROP TRIGGER IF EXISTS trg_egress_attempt_sync_ai_job_usage",
+    "DROP TRIGGER IF EXISTS trg_egress_reservation_finalize_usage",
     """
-    CREATE TRIGGER IF NOT EXISTS trg_egress_attempt_sync_ai_job_usage
-    AFTER INSERT ON egress_attempts
+    CREATE TRIGGER trg_egress_reservation_finalize_usage
+    AFTER UPDATE OF state ON egress_budget_reservations
+    WHEN NEW.state IN ('reconciled', 'released')
+      AND NEW.egress_attempt_id IS NOT NULL
+      AND NEW.ai_job_id IS NOT NULL
     BEGIN
+        UPDATE egress_attempts
+        SET actual_input_tokens = projected_input_tokens,
+            actual_output_tokens = projected_output_tokens,
+            actual_cost_usd = projected_cost_upper_usd,
+            reconciliation_status = 'conservative_unverified_usage'
+        WHERE id = NEW.egress_attempt_id
+          AND NEW.state = 'reconciled'
+          AND EXISTS (
+              SELECT 1
+              FROM ai_jobs
+              WHERE id = NEW.ai_job_id
+                AND status <> 'queued'
+                AND cost_estimate IS NULL
+          );
+
+        UPDATE egress_budget_reservations
+        SET actual_input_tokens = (
+                SELECT actual_input_tokens
+                FROM egress_attempts
+                WHERE id = NEW.egress_attempt_id
+            ),
+            actual_output_tokens = (
+                SELECT actual_output_tokens
+                FROM egress_attempts
+                WHERE id = NEW.egress_attempt_id
+            ),
+            actual_cost_usd = (
+                SELECT actual_cost_usd
+                FROM egress_attempts
+                WHERE id = NEW.egress_attempt_id
+            ),
+            reconciliation_status = (
+                SELECT reconciliation_status
+                FROM egress_attempts
+                WHERE id = NEW.egress_attempt_id
+            )
+        WHERE id = NEW.id;
+
         UPDATE ai_jobs
-        SET input_tokens = COALESCE(NEW.actual_input_tokens, 0),
-            output_tokens = COALESCE(NEW.actual_output_tokens, 0),
+        SET input_tokens = COALESCE(
+                (
+                    SELECT actual_input_tokens
+                    FROM egress_attempts
+                    WHERE id = NEW.egress_attempt_id
+                ),
+                0
+            ),
+            output_tokens = COALESCE(
+                (
+                    SELECT actual_output_tokens
+                    FROM egress_attempts
+                    WHERE id = NEW.egress_attempt_id
+                ),
+                0
+            ),
             cost_estimate = COALESCE(
-                NEW.actual_cost_usd,
-                NEW.projected_cost_upper_usd,
+                (
+                    SELECT actual_cost_usd
+                    FROM egress_attempts
+                    WHERE id = NEW.egress_attempt_id
+                ),
+                (
+                    SELECT projected_cost_upper_usd
+                    FROM egress_attempts
+                    WHERE id = NEW.egress_attempt_id
+                ),
                 0
             )
         WHERE id = NEW.ai_job_id;
     END
+    """,
+    """
+    UPDATE egress_attempts
+    SET actual_input_tokens = projected_input_tokens,
+        actual_output_tokens = projected_output_tokens,
+        actual_cost_usd = projected_cost_upper_usd,
+        reconciliation_status = 'conservative_unverified_usage'
+    WHERE network_attempt = 1
+      AND EXISTS (
+          SELECT 1
+          FROM ai_jobs
+          WHERE ai_jobs.id = egress_attempts.ai_job_id
+            AND ai_jobs.status <> 'queued'
+            AND ai_jobs.cost_estimate IS NULL
+      )
+    """,
+    """
+    UPDATE egress_budget_reservations
+    SET actual_input_tokens = (
+            SELECT attempt.actual_input_tokens
+            FROM egress_attempts AS attempt
+            WHERE attempt.id = egress_budget_reservations.egress_attempt_id
+        ),
+        actual_output_tokens = (
+            SELECT attempt.actual_output_tokens
+            FROM egress_attempts AS attempt
+            WHERE attempt.id = egress_budget_reservations.egress_attempt_id
+        ),
+        actual_cost_usd = (
+            SELECT attempt.actual_cost_usd
+            FROM egress_attempts AS attempt
+            WHERE attempt.id = egress_budget_reservations.egress_attempt_id
+        ),
+        reconciliation_status = (
+            SELECT attempt.reconciliation_status
+            FROM egress_attempts AS attempt
+            WHERE attempt.id = egress_budget_reservations.egress_attempt_id
+        )
+    WHERE egress_attempt_id IS NOT NULL
+      AND EXISTS (
+          SELECT 1
+          FROM egress_attempts AS attempt
+          WHERE attempt.id = egress_budget_reservations.egress_attempt_id
+      )
     """,
     """
     UPDATE ai_jobs
