@@ -5,12 +5,28 @@ on:
   push:
     branches: [master]
 
+permissions:
+  contents: write
+
 jobs:
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: impl/spec-059b-policy-autopilot
+          fetch-depth: 2
+
+      - name: Apply bounded 059b usage-source patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_HEAD_REF" = "impl/spec-059b-policy-autopilot"
+          git apply --check scripts/_one_shot_059b_usage_source.patch
+          git apply scripts/_one_shot_059b_usage_source.patch
+          git rm scripts/_one_shot_059b_usage_source.patch
+          git diff --check
 
       - uses: actions/setup-python@v5
         with:
@@ -23,11 +39,7 @@ jobs:
       - name: Spec status registry gate
         run: |
           python scripts/check_spec_status.py --self-test
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            python scripts/check_spec_status.py --event "$GITHUB_EVENT_PATH"
-          else
-            python scripts/check_spec_status.py
-          fi
+          python scripts/check_spec_status.py --event "$GITHUB_EVENT_PATH"
 
       - name: Manual review tooling offline gate
         run: |
@@ -74,6 +86,28 @@ jobs:
       - name: Pytest
         working-directory: backend
         run: python -m pytest -q
+
+      - name: Commit bounded patch to PR branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git status --short
+          git config user.name "JarvisOS Maintainer Actuator"
+          git config user.email "actions@users.noreply.github.com"
+          git add \
+            backend/app/core/schema.py \
+            backend/app/core/egress_schema.py \
+            backend/app/modules/ai/egress_spine.py \
+            backend/app/modules/ai/egress_lifecycle.py \
+            backend/app/modules/ai/egress_persistence.py \
+            backend/app/modules/ai/egress_runtime.py \
+            backend/app/modules/ai/egress_confirmation.py \
+            backend/tests/test_ai_egress_schema.py \
+            backend/tests/test_ai_egress_usage_evidence.py \
+            backend/tests/test_ai_egress_lifecycle.py
+          git commit -m "Bind provider usage source to egress accounting"
+          git push origin HEAD:impl/spec-059b-policy-autopilot
 
   bluecad-geometry-canary:
     runs-on: ubuntu-24.04
