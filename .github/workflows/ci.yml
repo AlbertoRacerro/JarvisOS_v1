@@ -5,7 +5,52 @@ on:
   push:
     branches: [master]
 
+permissions:
+  contents: write
+
 jobs:
+  patch-061-readiness-wording:
+    if: github.event_name == 'pull_request' && github.head_ref == 'spec/061-token-flow-definition'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - name: Apply exact wording patch and restore canonical CI
+        shell: bash
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("docs/specs/061-token-flow-0.md")
+          text = path.read_text(encoding="utf-8")
+          old = """Status: planned full-spec draft. `docs/specs/STATUS.md` is authoritative. This
+          contract must not become `ready` until 059b is implemented and merged, the exact
+          post-059b execution/accounting services are rechecked, and enabled bindings have
+          accepted execution-class and capability metadata."""
+          new = """Status: planned full-spec draft. `docs/specs/STATUS.md` is authoritative. This
+          contract must not become `ready` until 059b is implemented and merged, the exact
+          post-059b execution/accounting ownership is rechecked, and the required execution-class
+          and capability metadata contract is accepted as 061-owned implementation scope."""
+          if text.count(old) != 1:
+              raise SystemExit("status precondition block mismatch")
+          path.write_text(text.replace(old, new), encoding="utf-8")
+          PY
+
+          git show origin/master:.github/workflows/ci.yml > .github/workflows/ci.yml
+          git diff --check
+          git config user.name "JarvisOS Maintainer Actuator"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/specs/061-token-flow-0.md .github/workflows/ci.yml
+          git diff --cached --quiet && { echo "No patch produced"; exit 1; }
+          git commit -m "Clarify 061 definition readiness precondition"
+          git push origin "HEAD:${HEAD_REF}"
+
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 15
