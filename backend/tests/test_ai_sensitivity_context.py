@@ -4,11 +4,8 @@ from uuid import uuid4
 
 import pytest
 
-from app.core.database import (
-    get_current_schema_migration,
-    initialize_database,
-    open_sqlite_connection,
-)
+from app.core.database import initialize_database, open_sqlite_connection
+from app.core.schema import SCHEMA_SENSITIVITY_CONTEXT_MIGRATION_ID
 from app.modules.ai.context_builder import ContextBlockError, ContextSelectionSpec
 from app.modules.ai.sensitivity import (
     SensitivityPolicyError,
@@ -76,15 +73,19 @@ def _selection(record_id: str) -> ContextSelectionSpec:
 
 def test_schema_migration_creates_policy_sidecars() -> None:
     _bootstrap()
-    current = get_current_schema_migration()
-    assert current.migration_id == "0009_sensitivity_context_foundation"
     with open_sqlite_connection() as connection:
+        migration = connection.execute(
+            "SELECT status FROM schema_migrations WHERE migration_id = ?",
+            (SCHEMA_SENSITIVITY_CONTEXT_MIGRATION_ID,),
+        ).fetchone()
         tables = {
             row["name"]
             for row in connection.execute(
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             ).fetchall()
         }
+    assert migration is not None
+    assert migration["status"] == "applied"
     assert {"sensitivity_labels", "sanitized_derivatives"}.issubset(tables)
 
 

@@ -54,6 +54,13 @@ providers:
         provider_model_name: deepseek-v4-pro
         route_classes: [external:cheap]
         max_output_tokens: 512
+        # Conservative operator upper bound, not a live-provider price claim.
+        pricing:
+          currency: USD
+          input_usd_per_1m_tokens: 5.0
+          output_usd_per_1m_tokens: 20.0
+          pricing_version: operator-conservative-v1
+          pricing_effective_at: "2026-07-13T00:00:00Z"
   glm:
     kind: openai_compatible
     enabled: true
@@ -68,6 +75,13 @@ providers:
         provider_model_name: glm-5.2
         route_classes: [external:reasoning]
         max_output_tokens: 1024
+        # Conservative operator upper bound, not a live-provider price claim.
+        pricing:
+          currency: USD
+          input_usd_per_1m_tokens: 5.0
+          output_usd_per_1m_tokens: 20.0
+          pricing_version: operator-conservative-v1
+          pricing_effective_at: "2026-07-13T00:00:00Z"
   kimi:
     kind: openai_compatible
     enabled: false
@@ -79,7 +93,7 @@ providers:
     monthly_cost_cap_usd: 25
     models:
       kimi-placeholder:
-        # confirm model id and enable when a key exists
+        # confirm model id, reviewed pricing, and enable when a key exists
         provider_model_name: kimi-placeholder
         route_classes: [external:kimi]
         max_output_tokens: 1024

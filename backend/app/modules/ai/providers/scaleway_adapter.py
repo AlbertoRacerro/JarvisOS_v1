@@ -19,6 +19,7 @@ from app.modules.ai.contracts import (
 )
 from app.modules.ai.providers.scaleway import ScalewayChatResult, ScalewayProvider
 from app.modules.ai.token_guard import estimate_tokens
+from app.modules.ai.usage_cost import actual_registry_cost_usd
 
 SCALEWAY_PROVIDER_ID = "scaleway"
 SCALEWAY_ADAPTER_INTERFACE = "provider_neutral"
@@ -206,6 +207,16 @@ def _response_from_scaleway_result(
     input_tokens = reported_input if reported_input is not None else estimate_tokens(prompt)
     output_tokens = reported_output if reported_output is not None else estimated_output_tokens
     usage_source = _usage_source_for_reported_tokens(reported_input, reported_output)
+    provider_cost_estimate = (
+        actual_registry_cost_usd(
+            provider_id=SCALEWAY_PROVIDER_ID,
+            model_id=result.model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+        )
+        if usage_source == AIUsageSource.actual
+        else None
+    )
     metadata = {
         **_safe_scaleway_metadata(result.sanitized_metadata),
         "adapter_interface": SCALEWAY_ADAPTER_INTERFACE,
@@ -229,6 +240,8 @@ def _response_from_scaleway_result(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             usage_source=usage_source,
+            provider_cost_estimate=provider_cost_estimate,
+            currency="USD" if provider_cost_estimate is not None else None,
         ),
         finish_reason=_optional_string(result.sanitized_metadata.get("finish_reason")),
         safety_status="allowed",

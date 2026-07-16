@@ -4,6 +4,12 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.core.egress_schema import (
+    EGRESS_SCHEMA_INDEX_STATEMENTS,
+    EGRESS_SCHEMA_MIGRATION_RECORD,
+    EGRESS_SCHEMA_MIGRATION_STATEMENTS,
+    EGRESS_SCHEMA_STATEMENTS,
+)
 from app.core.paths import build_paths
 from app.core.schema import (
     CONTEXT_RECORDS_FTS_BACKFILL_STATEMENT,
@@ -70,7 +76,12 @@ def initialize_database() -> DatabaseInfo:
             connection.execute(statement)
         for statement in SENSITIVITY_SCHEMA_STATEMENTS:
             connection.execute(statement)
-        for statement in SCHEMA_MIGRATION_STATEMENTS:
+        for statement in EGRESS_SCHEMA_STATEMENTS:
+            connection.execute(statement)
+        for statement in [
+            *SCHEMA_MIGRATION_STATEMENTS,
+            *EGRESS_SCHEMA_MIGRATION_STATEMENTS,
+        ]:
             try:
                 connection.execute(statement)
             except sqlite3.OperationalError as exc:
@@ -79,6 +90,8 @@ def initialize_database() -> DatabaseInfo:
         for statement in SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         for statement in SENSITIVITY_SCHEMA_INDEX_STATEMENTS:
+            connection.execute(statement)
+        for statement in EGRESS_SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         if _sqlite_fts5_available(connection):
             for statement in SCHEMA_FTS_STATEMENTS:
@@ -111,9 +124,19 @@ def is_database_initialized() -> bool:
         "ai_settings",
         "sensitivity_labels",
         "sanitized_derivatives",
+        "egress_prompt_derivatives",
+        "egress_packets",
+        "egress_decisions",
+        "egress_budget_reservations",
+        "egress_confirmation_tickets",
+        "egress_attempts",
+        "sanitizer_audit_items",
+        "workspace_egress_policy",
     }
     with open_sqlite_connection() as connection:
-        rows = connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+        rows = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        ).fetchall()
     existing_tables = {row["name"] for row in rows}
     return required_tables.issubset(existing_tables)
 
@@ -121,7 +144,9 @@ def is_database_initialized() -> bool:
 def get_database_info() -> DatabaseInfo:
     database_path = get_database_path()
     initialized = is_database_initialized()
-    schema_current = get_current_schema_migration() if initialized else _empty_schema_migration()
+    schema_current = (
+        get_current_schema_migration() if initialized else _empty_schema_migration()
+    )
     applied_migration_count = count_schema_migrations() if initialized else 0
     return DatabaseInfo(
         engine="sqlite",
@@ -169,13 +194,16 @@ def count_schema_migrations() -> int:
         ).fetchone()
         if has_table is None:
             return 0
-        row = connection.execute("SELECT COUNT(*) AS count FROM schema_migrations").fetchone()
+        row = connection.execute(
+            "SELECT COUNT(*) AS count FROM schema_migrations"
+        ).fetchone()
     return int(row["count"])
 
 
 def _record_schema_migrations(connection: sqlite3.Connection) -> None:
     now = utc_now()
-    for record in SCHEMA_MIGRATION_RECORDS:
+    records = [*SCHEMA_MIGRATION_RECORDS, EGRESS_SCHEMA_MIGRATION_RECORD]
+    for record in records:
         connection.execute(
             """
             INSERT INTO schema_migrations (migration_id, name, applied_at, checksum, status)
@@ -201,7 +229,9 @@ def _empty_schema_migration() -> SchemaMigrationInfo:
 
 def _sqlite_fts5_available(connection: sqlite3.Connection) -> bool:
     try:
-        connection.execute("CREATE VIRTUAL TABLE IF NOT EXISTS temp.jarvisos_fts5_probe USING fts5(x)")
+        connection.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS temp.jarvisos_fts5_probe USING fts5(x)"
+        )
         connection.execute("DROP TABLE IF EXISTS temp.jarvisos_fts5_probe")
     except sqlite3.OperationalError:
         return False

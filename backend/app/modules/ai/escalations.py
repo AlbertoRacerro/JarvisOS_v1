@@ -1,38 +1,12 @@
 from __future__ import annotations
 
-import json
-
-from app.core.database import open_sqlite_connection
-from app.modules.ai.budget import evaluate_ai_status
-from app.modules.ai.execution import resolve_binding, run_ai_task
+from app.modules.ai.egress_confirmation import run_confirmation_ticket
 from app.modules.ai.models import AITaskRunResponse, EscalationConfirmRequest, EscalationConfirmResponse
-from app.modules.ai.settings import get_ai_settings
 
 
 def confirm_escalation(request: EscalationConfirmRequest) -> EscalationConfirmResponse:
-    proposal = request.proposal
-    proposal_ledger_id = str(proposal.get("proposal_ledger_id") or "")
-    route_class = str(proposal.get("proposed_route_class") or "external:reasoning")
-    outbound_text = str(proposal.get("outbound_text") or "")
-    max_tokens = None
-    estimated = proposal.get("estimated_cost")
-    if isinstance(estimated, dict) and estimated.get("max_output_tokens") is not None:
-        max_tokens = int(estimated["max_output_tokens"])
-
-    settings = get_ai_settings()
-    binding, _decision = resolve_binding(route_class)
-    provider_mode = binding.provider_id if binding is not None else route_class
-    status = evaluate_ai_status(settings, provider_mode)
-    external_blocked_reason = None if status.external_calls_allowed else status.blocking_reason or "external_calls_disabled"
-    outcome = run_ai_task(
-        user_prompt=outbound_text,
-        task_kind=request.task_kind,
-        route_class=route_class,
-        context_blocks=None,
-        max_output_tokens=max_tokens,
-        external_blocked_reason=external_blocked_reason,
-    )
-    _link_execution_job(outcome.ledger_id, proposal_ledger_id)
+    confirmed = run_confirmation_ticket(request.ticket_id)
+    outcome = confirmed.outcome
     response = outcome.response
     task_response = AITaskRunResponse(
         status=outcome.status,
@@ -45,28 +19,24 @@ def confirm_escalation(request: EscalationConfirmRequest) -> EscalationConfirmRe
         model_id=response.model_id if response is not None else outcome.decision.model_id,
         usage=response.usage if response is not None else None,
         error_type=outcome.error_type,
-        include_project_context=False,
-        workspace_id=None,
+        include_project_context=confirmed.workspace_id is not None,
+        workspace_id=confirmed.workspace_id,
         context_digest=outcome.context_digest,
         context_sources_count=outcome.context_sources_count,
+        records_parse_error=outcome.records_parse_error,
+        proposed_record_ids=outcome.proposed_record_ids or [],
+        confirmation_payload={"ticket_id": confirmed.ticket_id},
+        egress_decision_id=outcome.egress_decision_id,
+        egress_packet_digest=outcome.egress_packet_digest,
+        egress_ticket_id=outcome.egress_ticket_id,
+        egress_reservation_id=outcome.egress_reservation_id,
+        egress_reason_code=outcome.egress_reason_code,
+        egress_trigger_ids=list(outcome.egress_trigger_ids),
     )
     return EscalationConfirmResponse(
         status=outcome.status,
-        proposal_ledger_id=proposal_ledger_id,
+        ticket_id=confirmed.ticket_id,
         execution_ledger_id=outcome.ledger_id,
+        reason_code=outcome.egress_reason_code,
         task_response=task_response,
     )
-
-
-def _link_execution_job(execution_ledger_id: str, proposal_ledger_id: str) -> None:
-    with open_sqlite_connection() as connection:
-        row = connection.execute("SELECT route_reason_json FROM ai_jobs WHERE id = ?", (execution_ledger_id,)).fetchone()
-        if row is None:
-            return
-        route_reason = json.loads(row["route_reason_json"])
-        route_reason["escalation_proposal_ledger_id"] = proposal_ledger_id
-        connection.execute(
-            "UPDATE ai_jobs SET route_reason_json = ? WHERE id = ?",
-            (json.dumps(route_reason, sort_keys=True), execution_ledger_id),
-        )
-        connection.commit()

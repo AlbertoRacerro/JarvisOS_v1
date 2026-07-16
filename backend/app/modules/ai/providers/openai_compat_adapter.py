@@ -14,6 +14,7 @@ from app.modules.ai.contracts import (
     AIUsageSource,
 )
 from app.modules.ai.token_guard import estimate_tokens
+from app.modules.ai.usage_cost import actual_registry_cost_usd
 from app.modules.secrets.storage import resolve_secret_ref
 
 OPENAI_COMPAT_ADAPTER_INTERFACE = "provider_neutral_openai_compatible"
@@ -131,6 +132,21 @@ class OpenAICompatAdapter:
         completion_tokens = _optional_int(usage.get("completion_tokens"))
         input_tokens = prompt_tokens if prompt_tokens is not None else estimate_tokens(prompt)
         output_tokens = completion_tokens if completion_tokens is not None else estimated_output_tokens
+        usage_source = (
+            AIUsageSource.actual
+            if prompt_tokens is not None and completion_tokens is not None
+            else AIUsageSource.estimated
+        )
+        provider_cost_estimate = (
+            actual_registry_cost_usd(
+                provider_id=self.provider_id,
+                model_id=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+            if usage_source == AIUsageSource.actual
+            else None
+        )
         return AIResponse(
             provider_id=self.provider_id,
             model_id=model,
@@ -143,7 +159,9 @@ class OpenAICompatAdapter:
                 model_id=model,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
-                usage_source=AIUsageSource.actual if prompt_tokens is not None and completion_tokens is not None else AIUsageSource.estimated,
+                usage_source=usage_source,
+                provider_cost_estimate=provider_cost_estimate,
+                currency="USD" if provider_cost_estimate is not None else None,
             ),
             finish_reason=str(first.get("finish_reason")) if first.get("finish_reason") is not None else None,
             safety_status="allowed",

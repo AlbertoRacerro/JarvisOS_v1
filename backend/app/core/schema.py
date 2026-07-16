@@ -1,3 +1,8 @@
+from app.core.egress_schema import (
+    EGRESS_SCHEMA_MIGRATION_ID,
+    EGRESS_SCHEMA_MIGRATION_NAME,
+)
+
 SCHEMA_BASELINE_MIGRATION_ID = "0001_foundation_baseline"
 SCHEMA_BASELINE_MIGRATION_NAME = "Foundation schema through Python Runner V0"
 SCHEMA_DATA_INFRASTRUCTURE_MIGRATION_ID = "0002_data_infrastructure_hardening"
@@ -14,8 +19,10 @@ SCHEMA_CONTEXT_RECORDS_FTS_MIGRATION_ID = "0007_context_records_fts"
 SCHEMA_CONTEXT_RECORDS_FTS_MIGRATION_NAME = "Context pack FTS index and triggers"
 SCHEMA_EVIDENCE_RECORDS_MIGRATION_ID = "0008_evidence_records"
 SCHEMA_EVIDENCE_RECORDS_MIGRATION_NAME = "Evidence records for BLUECAD outcomes"
-CURRENT_SCHEMA_MIGRATION_ID = "0009_sensitivity_context_foundation"
-CURRENT_SCHEMA_MIGRATION_NAME = "IP egress sensitivity labels and sanitized derivatives"
+SCHEMA_SENSITIVITY_CONTEXT_MIGRATION_ID = "0009_sensitivity_context_foundation"
+SCHEMA_SENSITIVITY_CONTEXT_MIGRATION_NAME = "IP egress sensitivity labels and sanitized derivatives"
+CURRENT_SCHEMA_MIGRATION_ID = EGRESS_SCHEMA_MIGRATION_ID
+CURRENT_SCHEMA_MIGRATION_NAME = EGRESS_SCHEMA_MIGRATION_NAME
 
 SCHEMA_MIGRATION_RECORDS = [
     {
@@ -59,8 +66,8 @@ SCHEMA_MIGRATION_RECORDS = [
         "checksum": None,
     },
     {
-        "migration_id": CURRENT_SCHEMA_MIGRATION_ID,
-        "name": CURRENT_SCHEMA_MIGRATION_NAME,
+        "migration_id": SCHEMA_SENSITIVITY_CONTEXT_MIGRATION_ID,
+        "name": SCHEMA_SENSITIVITY_CONTEXT_MIGRATION_NAME,
         "checksum": None,
     },
 ]
@@ -345,6 +352,7 @@ SCHEMA_STATEMENTS = [
         input_tokens INTEGER,
         output_tokens INTEGER,
         cost_estimate REAL,
+        usage_source TEXT CHECK (usage_source IN ('actual', 'estimated', 'mixed')),
         latency_ms INTEGER,
         error_type TEXT
     )
