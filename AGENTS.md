@@ -1,5 +1,12 @@
 # AGENTS.md — Instructions for AI coding agents working on JarvisOS
 
+This file governs AI coding and review agents acting on the JarvisOS repository
+and delivery process. It does not directly govern models or agent processes running
+inside JarvisOS or Hermes at runtime; those actors are governed by JarvisOS runtime
+authority, sensitivity, routing, egress, budget, tool, and promotion policies. This
+scope distinction never permits runtime code or models to bypass the deterministic
+controls and hard invariants that repository changes must implement.
+
 JarvisOS is a single-user AI engineering workspace, local-first in state and
 policy: backend (FastAPI + SQLite) owns state, policy, execution, and audit.
 Frontend (React/Vite) is an operator interface. AI models propose; JarvisOS
@@ -216,7 +223,10 @@ wrong, stop and report rather than editing it to turn CI green.
 
 - No broad refactors, renames, or file moves unless the spec says so.
 - No new design docs, README rewrites, or roadmap edits.
-- No new frameworks, ORMs, agent libraries, or vector databases.
+- No new frameworks, ORMs, agent libraries, or vector databases unless an accepted
+  ADR and an implementation-ready spec explicitly authorize that repository change.
+  ADR-060 is direction-lock only; specs 066–068 must authorize any Hermes dependency
+  or integration, and ADR-060 alone does not activate Hermes or install dependencies.
 - No touching `backend/.venv`, `frontend/node_modules`, `reports/` history, or
   anything under the data root.
 - No expanding `tools/` or `agents/` skeletons, no MCP servers, no background
