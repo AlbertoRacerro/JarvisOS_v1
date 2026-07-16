@@ -2,8 +2,8 @@
 
 Status: planned full-spec draft. `docs/specs/STATUS.md` is authoritative. This
 contract must not become `ready` until 059b is implemented and merged, the exact
-post-059b execution/accounting services are rechecked, and enabled bindings have
-accepted execution-class and capability metadata.
+post-059b execution/accounting ownership is rechecked, and the required execution-class
+and capability metadata contract is accepted as 061-owned implementation scope.
 
 Depends on: 021, 059b
 
