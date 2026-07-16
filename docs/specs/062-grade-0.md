@@ -102,7 +102,8 @@ Create versioned `flow_outcome_digest` over at least:
 After gradeability the snapshot is immutable. Late reconciliation:
 
 - invalidates the old subject;
-- retains grade history for audit but excludes it from promotion cohorts;
+- retains the old grade history for audit but excludes that stale grade record, not the
+  finalized flow evidence, from promotion cohorts;
 - creates a corrected subject version/digest;
 - requires a new explicit human grade action.
 
@@ -296,17 +297,24 @@ Zero external spend does not mean zero total cost.
 Every terminal flow contributes deterministic evidence. Promotion eligibility is
 server-computed separately.
 
-Default exclusions:
+Default flow-level exclusions from empirical promotion cohorts:
 
 - any synthetic execution;
 - CI/smoke/test unless later benchmark contract includes them;
 - sanitizer/internal flows;
 - incomplete/non-finalized provenance/accounting;
-- withdrawn grades;
-- invalid/stale subjects;
 - ambiguous legacy execution/dispatch classification.
 
-Keep exclusions/audit with stable reasons.
+Grade-state treatment is separate from flow eligibility:
+
+- a withdrawn grade event is excluded as the current grade, but the finalized flow remains
+  in the cohort as ungraded unless a separate flow-level exclusion applies;
+- an invalid or stale subject's grade is excluded; when a corrected current subject exists,
+  the finalized flow remains in the cohort as ungraded until explicitly regraded;
+- withdrawal or subject invalidation never removes finalized 061 spend, attempts,
+  deterministic failures, or other flow evidence from denominators.
+
+Keep flow exclusions, grade-state transitions, and audit reasons explicit and stable.
 
 Every bounded cohort exposes:
 
@@ -375,12 +383,18 @@ treat unpriced local compute or unknown dispatch as free. Grade submission never
 - stale/mismatched/invalid/cross-flow fails;
 - client cannot replace execution/dispatch/accounting evidence;
 - late reconciliation or any finalized 061 flow/attempt accounting-digest change invalidates subject;
+- stale-subject invalidation excludes the old grade record while retaining the corrected
+  finalized flow as ungraded with all 061 evidence;
 - deterministic/model signals never auto-grade.
 
 ### Append-only/privacy/UI
 
 - idempotent replay no duplicate;
 - revisions/withdrawals append;
+- withdrawal removes only the current grade and keeps the finalized flow, spend, attempts,
+  and deterministic outcome in cohort denominators as ungraded;
+- withdrawal cannot improve failure rate, grade coverage, or provider spend per useful
+  outcome by deleting the parent flow from the cohort;
 - stale-head conflict;
 - notes bounded and absent from prompts/logs/status/tools/exports;
 - zero AI/provider/tool calls;
