@@ -285,7 +285,10 @@ accent, focus, warning, and danger pairs in both themes.
 This visual layer cannot reinterpret backend economics or execution evidence.
 Where cost is surfaced by later/current pages:
 
-- local compute with no model is rendered as `unpriced`, never `$0.00` or free;
+- an actual `local_compute` invocation without a local cost model is rendered as
+  `unpriced`, never `$0.00` or free;
+- no-execution, synthetic, and external-provider classes remain visually and
+  semantically distinct from local compute;
 - unavailable totals remain unavailable/null;
 - estimated/conservative external spend remains distinguishable from exact;
 - synthetic evidence cannot look like real provider consumption;
@@ -368,8 +371,8 @@ repository PR, even though backend runtime should be unchanged.
    supported viewport and 200% zoom.
 10. No dependency, font binary, CDN font, UI framework, Storybook, backend route,
     database field, secret storage, or economic calculation is added.
-11. Local compute is never visually represented as free or `$0.00` when its cost
-    is unavailable.
+11. Only a real local invocation lacking a cost model is shown as `unpriced`;
+    no-execution and synthetic evidence are never relabelled as local compute.
 12. The dependency-free foundation checker and `npm run build` pass; repository
     CI remains green.
 
