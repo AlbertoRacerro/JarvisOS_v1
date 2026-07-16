@@ -23,11 +23,11 @@ screening baseline.
 Use the smallest existing mechanism:
 
 - one reviewed repository script executed through `calc_v0`;
-- the existing runner registration, hash, timeout, artifact, and MemoryStore
+- the existing runner registration, hash, timeout, artifact, log, and MemoryStore
   proposal boundaries;
 - deterministic offline tests;
 - no new route, framework, generic equation engine, unit package, database table,
-  or frontend surface.
+  runner error type, or frontend surface.
 
 The source workbook is a requirements and regression artifact, not executable
 truth and not a runtime dependency.
@@ -81,10 +81,30 @@ Validation is deterministic and fail-closed:
 - `minor_loss_coefficient >= 0`;
 - `0 < pump_efficiency <= 1`.
 
-Invalid domain, missing input, extra authoritative input, wrong unit, NaN, or
-infinity fails before producing parameter proposals. Diagnostics may report
-bounded field names and error codes, but never caller data beyond the accepted
-numeric value and unit already present in the run artifact.
+The existing 043 envelope validation remains authoritative for malformed input
+objects, booleans, non-finite values, and missing/empty unit strings. These fail at
+job creation with existing `runner_input_invalid` semantics.
+
+Exact-name, exact-unit, and engineering-domain validation that is specific to 047
+occurs inside the reviewed script after the job is queued. A rejected script run:
+
+- raises `SystemExit` with one bounded message shaped
+  `bluerev_calc_error:<stable_reason>[:<field_name>]`;
+- includes no caller value in that message;
+- exits non-zero;
+- is reported by the unchanged 043 runtime as `runner_process_failed`;
+- stores the bounded message in the existing captured stderr log;
+- produces no successful `result.json` artifact and zero parameter proposals.
+
+Required stable reasons include at least:
+
+- `input_contract_invalid`;
+- `input_unit_invalid`;
+- `input_domain_invalid`;
+- `correlation_not_qualified`.
+
+These are script diagnostics, not new runner error codes. The implementation must
+not modify 043 merely to promote them into the runner response.
 
 ## Calculation contract
 
@@ -201,7 +221,7 @@ if Re < 2300:
 elif Re >= 4000 and Re <= 100000:
     f_D = 0.3164 * Re^(-0.25)
 else:
-    reject as correlation_not_qualified
+    raise SystemExit("bluerev_calc_error:correlation_not_qualified")
 ```
 
 Output:
@@ -242,10 +262,11 @@ can operate at the point. The result must carry diagnostics stating:
 - `transient_pressure_not_evaluated`;
 - `minor_loss_coefficient_provisional`.
 
-## Output and diagnostic contract
+## Successful output and diagnostic contract
 
-The script writes one canonical `result.json` through the existing 043 contract.
-Every numeric output above has a finite `value` and exact non-empty `unit`.
+On success, the script writes one canonical `result.json` through the existing 043
+contract. Every numeric output above has a finite `value` and exact non-empty
+`unit`.
 
 Required bounded diagnostics:
 
@@ -261,7 +282,8 @@ Required bounded diagnostics:
 - `workbook_runtime_dependency = false`.
 
 Diagnostics are advisory metadata. Numeric outputs remain the only parameter
-proposals created by the 043 MemoryStore facade.
+proposals created by the 043 MemoryStore facade. Failed runs follow the bounded
+stderr protocol above and never create a successful result artifact or proposals.
 
 ## Corrected baseline golden case
 
@@ -317,54 +339,65 @@ expand 047.
 2. Prove the stored artifact SHA-256 matches the reviewed repository file.
 3. Run through the real existing `create_runner_job` and `run_runner_job`
    service path using an isolated test data root.
-4. Prove one `result.json` artifact is registered and every declared output
-   creates one proposed parameter through the existing all-or-nothing 043
-   MemoryStore facade.
+4. On a successful case, prove one `result.json` artifact is registered and every
+   declared output creates one proposed parameter through the existing
+   all-or-nothing 043 MemoryStore facade.
 5. Prove no accepted/canonical parameter is created automatically.
 6. Prove identical script bytes and canonical input bytes produce
-   byte-identical `result.json` digests.
+   byte-identical successful `result.json` digests.
+7. On a rejected script case, prove `runner_process_failed`, the exact bounded
+   stderr diagnostic, no `result.json` artifact, and zero parameter proposals.
 
 ### Golden and independent calculations
 
-7. Reproduce the complete baseline table above.
-8. Independently calculate each golden value in the test without importing or
+8. Reproduce the complete baseline table above.
+9. Independently calculate each golden value in the test without importing or
    calling implementation helpers from the reviewed script.
-9. Assert the pressure-loss decomposition sums exactly within floating-point
-   tolerance.
-10. Assert hydraulic and electric power reconcile with pressure loss, flow, and
+10. Assert the pressure-loss decomposition sums exactly within floating-point
+    tolerance.
+11. Assert hydraulic and electric power reconcile with pressure loss, flow, and
     efficiency.
 
 ### Metamorphic dependency tests
 
-11. Change only `tube_outer_diameter`: external-area outputs change; hydraulic
+12. Change only `tube_outer_diameter`: external-area outputs change; hydraulic
     area, liquid inventory, flow, times, Reynolds, pressure loss, and power do
     not change.
-12. Change only `tube_inner_diameter`: external illuminated area remains fixed;
+13. Change only `tube_inner_diameter`: external illuminated area remains fixed;
     hydraulic area, tube volume, flow, Reynolds, losses, and power respond.
-13. Change only `reservoir_liquid_volume`: only total inventory and total
+14. Change only `reservoir_liquid_volume`: only total inventory and total
     inventory turnover change.
-14. Double `tube_length`: tube volume, both geometric areas, tube transit time,
+15. Double `tube_length`: tube volume, both geometric areas, tube transit time,
     and major pressure loss double; flow, Reynolds, minor loss, and tube area do
     not.
-15. Change only `minor_loss_coefficient`: only minor/total loss, head, and powers
+16. Change only `minor_loss_coefficient`: only minor/total loss, head, and powers
     change.
-16. Change only `pump_efficiency`: all hydraulic quantities remain fixed and
+17. Change only `pump_efficiency`: all hydraulic quantities remain fixed and
     only electric power changes inversely.
 
 ### Failure-mode tests
 
-17. Reject missing, extra, wrongly-unitized, boolean, NaN, and infinite inputs.
-18. Reject zero/negative length, inner diameter, velocity, density, viscosity,
-    or efficiency.
-19. Reject outer diameter below inner diameter, negative reservoir volume,
-    negative minor-loss coefficient, and efficiency above one.
-20. Construct a transitional-Reynolds input and prove deterministic rejection
-    with `correlation_not_qualified` and zero parameter proposals.
-21. Construct an above-range turbulent Reynolds input and prove the same bounded
+18. Prove malformed envelope values, booleans, NaN, infinity, and missing/empty
+    unit strings fail at job creation through existing `runner_input_invalid`.
+19. Prove missing or extra 047 names and exact-unit mismatches queue normally
+    through generic 043 validation, then fail at execution with
+    `runner_process_failed`, the expected bounded stderr reason, no result
+    artifact, and zero proposals.
+20. Reject zero/negative length, inner diameter, velocity, density, viscosity,
+    or efficiency through the same bounded script-failure protocol.
+21. Reject outer diameter below inner diameter, negative reservoir volume,
+    negative minor-loss coefficient, and efficiency above one through that
+    protocol.
+22. Construct a transitional-Reynolds input and prove `runner_process_failed`,
+    exact stderr `bluerev_calc_error:correlation_not_qualified`, no result
+    artifact, and zero parameter proposals.
+23. Construct an above-range turbulent Reynolds input and prove the same bounded
     failure rather than extrapolation.
-22. Prove the script cannot import non-043-allowed modules, access network,
+24. Prove the script cannot import non-043-allowed modules, access network,
     filesystem, environment, database, or ambient secrets; existing 043 policy
     remains authoritative.
+25. Prove no test expects a new runner error code or a change to 043 runtime
+    semantics.
 
 ## Acceptance criteria
 
@@ -375,16 +408,18 @@ expand 047.
    depends on `D_o`; tests prove no cross-wiring.
 4. The unqualified workbook label `residence time` is replaced by the two exact
    circulation-time definitions and no RTD claim is emitted.
-5. Darcy/Fanning convention cannot be confused, transitional or extrapolated
-   correlation use is rejected, and pressure-loss components reconcile.
+5. Darcy/Fanning convention cannot be confused; transitional or extrapolated
+   correlation use exits non-zero and is preserved as bounded stderr evidence
+   under existing `runner_process_failed` semantics.
 6. Pump electric power is explicitly a screening estimate; curve, NPSH,
    transient, and provisional-local-loss limitations are machine-visible.
-7. All outputs are finite, unit-bearing, deterministic proposed parameters with
-   traceable runner/script/input provenance and no automatic promotion.
+7. Successful outputs are finite, unit-bearing, deterministic proposed
+   parameters with traceable runner/script/input provenance and no automatic
+   promotion; failed runs create none.
 8. No workbook read, live provider, Ollama, network, external solver, or new
    dependency is needed in tests or runtime.
-9. Full backend pytest and Ruff gates pass; existing 043 and runner behavior is
-   unchanged.
+9. Full backend pytest and Ruff gates pass; existing 043 runner errors, service,
+   safety policy, and externally observable behavior remain unchanged.
 
 ## Non-goals
 
@@ -397,8 +432,8 @@ expand 047.
   water hammer, wave/transient loading, or control logic.
 - No unit parsing or conversion engine.
 - No uncertainty propagation or parameter estimation.
-- No new database schema, endpoint, frontend, background worker, or model
-  orchestration system.
+- No new database schema, endpoint, frontend, background worker, runner error
+  code, or model orchestration system.
 - No claim that the workbook, baseline, PMMA geometry, viscosity, local-loss
   coefficient, or pump efficiency is experimentally validated.
 - No automatic promotion of model outputs or BlueRev design decisions.
@@ -409,6 +444,8 @@ expand 047.
 
 - the current 043 runtime still supports the exact integration path stated here;
 - the reviewed script can remain a pure `calc_v0` artifact with no runner change;
+- the bounded script-failure protocol and unchanged `runner_process_failed`
+  semantics are accepted;
 - the golden values and intentional corrections are accepted by the maintainer;
 - no active PR overlaps the runner example/test files;
 - the source workbook remains available as external evidence but is not needed
