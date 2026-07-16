@@ -311,19 +311,20 @@ Expected bounded set:
 - `frontend/src/components/ui/*` for the approved primitives;
 - a small set of existing pages/components only where required for the bounded
   migration;
-- `frontend/package.json` only to add a dependency-free check script if needed;
-- `scripts/check_ui_foundation.py` or `frontend/scripts/check-ui-foundation.mjs`
-  only if a static contract check cannot fit existing tests;
+- `scripts/check_ui_foundation.py` (new, dependency-free static contract check);
 - `docs/specs/STATUS.md` for normal implementation lifecycle state;
 - this spec only for real implementation notes.
 
-No backend file is expected to change.
+`frontend/package.json` changes only if needed to expose a convenience alias for
+the required checker; the authoritative command remains the repository Python
+script. No backend file is expected to change.
 
 ## Deterministic verification
 
 The current frontend has no test framework. Do not add one solely for this slice.
-Use the existing TypeScript/Vite build plus one dependency-free static contract
-checker if needed.
+Add exactly one dependency-free static contract checker at:
+
+- `scripts/check_ui_foundation.py`.
 
 The checker must fail on at least:
 
@@ -334,14 +335,15 @@ The checker must fail on at least:
   file;
 - a shared primitive importing API clients, application services, or business
   modules;
-- the appearance storage key containing anything beyond the appearance enum
-  contract.
+- the appearance storage contract admitting anything beyond the three appearance
+  enum values.
 
 Do not claim this static check proves visual quality or contrast.
 
 Required verification:
 
 ```text
+python scripts/check_ui_foundation.py
 cd frontend
 npm run build
 ```
@@ -373,8 +375,8 @@ repository PR, even though backend runtime should be unchanged.
     database field, secret storage, or economic calculation is added.
 11. Only a real local invocation lacking a cost model is shown as `unpriced`;
     no-execution and synthetic evidence are never relabelled as local compute.
-12. The dependency-free foundation checker and `npm run build` pass; repository
-    CI remains green.
+12. The required dependency-free foundation checker, `npm run build`, and
+    repository CI pass.
 
 ## Non-goals
 
@@ -399,7 +401,7 @@ repository PR, even though backend runtime should be unchanged.
 
 1. its registry row and downstream dependency ordering are merged without
    conflicting with active 061/062 status work;
-2. the implementation diff can stay frontend-only except for an optional
+2. the implementation diff can stay frontend-only except for the required
    dependency-free static checker;
 3. the exact primitive set and bounded migration surfaces above still match the
    current frontend;
