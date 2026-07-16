@@ -47,12 +47,12 @@ before Codex or another coding agent may act on them.
 
 1. Preserve the merged 059 foundation: PR #90/059a, PR #95 definition amendment,
    PR #98/ADR-059, and PR #101 lifecycle reconciliation.
-2. `059b` has completed full-spec reconciliation and is the next implementation
-   slice; policy-autopilot runtime and real project-data external egress remain
-   inactive until its implementation PR is reviewed and merged.
-3. Promote `062` GRADE-0 and `061` TOKEN-FLOW-0 as separate bounded slices;
-   grading supplies empirical evidence, while token flow owns projected economics
-   and bounded continuation.
+2. `059b` implementation is merged in PR #119; preserve its server-owned sensitivity,
+   packet, trigger, ticket, reservation, accounting, audit, and fallback boundaries.
+3. Promote `061` TOKEN-FLOW-0 before `062` GRADE-0: 061 owns finalized flow,
+   execution-class, adapter/external-dispatch, external-provider-spend, and explicit
+   local-unpriced/synthetic evidence; 062 consumes that evidence for human outcome
+   grading without treating local compute as free.
 4. Draft and promote `066` HERMES-PASSTHROUGH-0 and `067` JARVIS-MCP-0 only after
    their contracts are reconciled with 059b, 061, and existing service boundaries.
 5. Draft and promote `068` HERMES-CONFIG-0 only after 066/067 are stable and a
@@ -138,9 +138,9 @@ PR overlaps the target files or runtime boundary.
 | 058c | planned | — | Report-to-3D linking | 006, 044, 058 | Let a failed validation/evidence check highlight the affected named geometry in the viewer, reusing existing artifact/node identities. |
 | 059 | planned | — | IP-EGRESS-1 umbrella definition | 003, 015, 018, 021, 040, 042 | Definition amended through PR #95 and reconciled with ADR-059 for external policy autopilot, automatic sanitization, sampled audit, and explicit maintainer residual-risk acceptance; this row remains definition-only. |
 | 059a | merged | [#90](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/90) | IP-EGRESS-1A: sensitivity and context foundation | 003, 015, 018, 021, 040, 042 | Digest-bound labels/derivatives, deterministic floors, stale handling, coherent read-snapshot selection, and S0/S1-only external preview merged in #90. |
-| 059b | in_review | [#119](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/119) | IP-EGRESS-1B: policy autopilot and execution enforcement | 059a | The full implementation contract and binding clarification are reconciled for prompt/manual-context authority, automatic sanitizer provenance, exact per-binding packets/decisions, ticket-ID confirmation, atomic projected-budget reservation, sampled audit, and fallback enforcement; implementation may start, but runtime activation remains blocked until the implementation PR is reviewed and merged. |
+| 059b | merged | [#119](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/119) | IP-EGRESS-1B: policy autopilot and execution enforcement | 059a | Prompt/manual-context authority, automatic sanitizer provenance, exact per-binding packets and decisions, ticket-ID confirmation, atomic projected-budget reservation, sampled audit, fallback enforcement, and usage-source-bound accounting are merged. |
 | 060 | planned | — | AGENT-ORCH: Hermes integration umbrella | 040, 042, 059b | Definition-only umbrella for adopting pinned Hermes through standards-only boundaries; implementation is owned by slices 066–068, while JarvisOS retains state, policy, sensitivity, budget, egress, ledger, services, and promotion authority. |
-| 061 | planned | — | TOKEN-FLOW-0 | 021, 059b | Size output tokens by task kind, clamp to provider/economic envelopes, allow at most two length-stop continuations by default, reconcile actual usage, and expose today/month provider counters without a second usage store. |
+| 061 | planned | — | TOKEN-FLOW-0 | 021, 059b | Correlate complete flows across no-execution, synthetic, local-compute, and external-provider attempts; separate adapter invocation from external egress, preserve restart-safe confirmation and bounded continuation, account only external provider spend in USD, and expose local compute as explicitly unpriced rather than free. |
 | 062 | planned | — | GRADE-0 | 021, 059b | Add operator/API grades (`useful`, `partly`, `rework`, `failed`) plus bounded notes to `ai_jobs` as auditable evidence for empirical routing. |
 | 063 | planned | — | CAPTURE-VAULT-0 | 040, 042 | Add a local markdown vault and rebuildable local vector working layer, merged with canonical SQLite retrieval under explicit authority/conflict tags; no vectors over canonical records. |
 | 064 | planned | — | LIT-RAG-0 | 042, 063 | Add corpus-tagged public-literature retrieval to the local working layer with source locators and canonical-over-literature authority; boundary consolidation remains a separately unnumbered planning gap. |
