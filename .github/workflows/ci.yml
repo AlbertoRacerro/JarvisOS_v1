@@ -11,6 +11,59 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: docs/reconcile-roadmap-061-067
+          fetch-depth: 2
+
+      - name: Sync post-merge 059b registry state
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("docs/specs/STATUS.md")
+          text = path.read_text(encoding="utf-8")
+          replacements = (
+              (
+                  """2. `059b` has completed full-spec reconciliation and is the next implementation
+   slice; policy-autopilot runtime and real project-data external egress remain
+   inactive until its implementation PR is reviewed and merged.""",
+                  """2. `059b` policy-autopilot and execution enforcement merged in PR #119. Keep
+   real project-data external egress disabled by default; any activation must use the
+   merged server-owned policy, sensitivity, sanitization, budget, confirmation, and
+   audit boundaries.""",
+                  "priority",
+              ),
+              (
+                  """| 059b | ready | — | IP-EGRESS-1B: policy autopilot and execution enforcement | 059a | The full implementation contract and binding clarification are reconciled for prompt/manual-context authority, automatic sanitizer provenance, exact per-binding packets/decisions, ticket-ID confirmation, atomic projected-budget reservation, sampled audit, and fallback enforcement; implementation may start, but runtime activation remains blocked until the implementation PR is reviewed and merged. |""",
+                  """| 059b | merged | [#119](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/119) | IP-EGRESS-1B: policy autopilot and execution enforcement | 059a | Prompt/manual-context authority, automatic sanitizer provenance, exact per-binding packets/decisions, ticket-ID confirmation, atomic projected-budget reservation, sampled audit, fallback enforcement, and usage-source-bound reconciliation merged in #119. |""",
+                  "registry row",
+              ),
+          )
+          for old, new, label in replacements:
+              old_count = text.count(old)
+              new_count = text.count(new)
+              if old_count == 1:
+                  text = text.replace(old, new)
+              elif old_count == 0 and new_count == 1:
+                  continue
+              else:
+                  raise SystemExit(
+                      f"unexpected {label} state: old={old_count}, new={new_count}"
+                  )
+          path.write_text(text, encoding="utf-8")
+          PY
+          if git diff --quiet -- docs/specs/STATUS.md; then
+            echo "059b registry state already synchronized"
+            exit 0
+          fi
+          git diff --check
+          git config user.name "JarvisOS Maintainer Actuator"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/specs/STATUS.md
+          git commit -m "Mark 059b merged in spec registry"
+          git push origin HEAD:docs/reconcile-roadmap-061-067
 
       - uses: actions/setup-python@v5
         with:
