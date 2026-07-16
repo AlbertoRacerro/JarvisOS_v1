@@ -223,9 +223,12 @@ Rules:
 - missing/altered/expired/digest-mismatched content produces honest terminal partial;
 - reuse existing protected result/session storage if available post-059b.
 
-A ticket binds exact flow, segment, attempt, policy, packet, and continuation-guard
-identity. Paused state changes only via server-owned ticket consumption/revalidation,
-expiry, cancellation, or deterministic failure.
+A ticket always binds exact flow, attempt, policy, packet, and continuation-guard
+identity. Segment and continuation identity are required only when accumulated
+continuation content exists. Initial or other pre-adapter confirmation tickets use
+null segment and continuation fields and never create dummy segments. Paused state
+changes only via server-owned ticket consumption/revalidation, expiry, cancellation,
+or deterministic failure.
 
 ## Per-attempt output ceiling and external budget
 
@@ -518,17 +521,31 @@ sub-agent orchestration, streaming, background worker, provider addition, automa
 route promotion, LLM judging, reward training, second attempt ledger, or frontend
 redesign.
 
-## Promotion gates
+## Definition promotion gates
 
-Before 061 may become `ready`:
+Before this definition may become `ready` for implementation:
 
-1. 059b is merged and per-binding `ai_jobs`, reservation, egress-attempt services stable.
-2. Registry accepts execution class and rejects contradictions.
-3. Real models have accepted capabilities; external models have pricing.
-4. Fake, local Ollama, and external fixtures prove class, invocation, dispatch, usage,
-   accounting, and ambiguous-failure behavior.
-5. External adapters expose reliable normalized dispatch evidence or conservative unknown.
-6. Protected storage supports restart-safe segments.
-7. Confirmation resume and settings control are proven.
-8. Migration ID assigned from implementation-time master.
-9. Exact-head CI and independent review have no unresolved blockers.
+1. 059b is merged and the current per-binding `ai_jobs`, reservation, egress-attempt,
+   ticket, and accounting ownership is rechecked against this contract.
+2. The implementation boundary explicitly assigns the registry, adapter-dispatch,
+   protected-segment, confirmation-resume, settings, migration, and fixture work to 061
+   without requiring those 061-owned changes to exist beforehand.
+3. The next additive migration is selected from implementation-time `master`, not frozen
+   by this definition PR.
+4. Exact-head CI and independent review have no unresolved blockers.
+
+## Implementation acceptance gates
+
+The 061 implementation is not complete until:
+
+1. the registry persists execution class, rejects contradictions, and binds accepted
+   real-model capabilities and external pricing;
+2. fake, local Ollama, and external fixtures prove class, invocation, dispatch, usage,
+   accounting, and ambiguous-failure behavior;
+3. external adapters expose reliable normalized dispatch evidence or conservative
+   `unknown`;
+4. protected storage supports restart-safe segments without exposing bodies through safe
+   ledgers or status surfaces;
+5. initial and continuation confirmation resume, expiry, and settings control are proven;
+6. the additive migration and all required regression, privacy, accounting, and BLUECAD
+   evidence pass on the implementation exact head.
