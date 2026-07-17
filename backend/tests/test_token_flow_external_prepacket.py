@@ -13,8 +13,10 @@ def _initialize(monkeypatch, tmp_path) -> None:
 
     get_settings.cache_clear()
     from app.core.database import initialize_database
+    from app.modules.ai.settings import ensure_ai_settings
 
     initialize_database()
+    ensure_ai_settings()
 
 
 def test_prepacket_external_stop_finalizes_with_zero_dispatch(monkeypatch, tmp_path) -> None:
