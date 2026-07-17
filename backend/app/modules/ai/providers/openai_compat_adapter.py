@@ -5,6 +5,7 @@ from typing import Any
 import httpx
 
 from app.modules.ai.contracts import (
+    AIExternalDispatchState,
     AIProviderError,
     AIProviderErrorCode,
     AIProviderHealth,
@@ -42,7 +43,11 @@ class OpenAICompatAdapter:
         self._client = client
 
     def health(self) -> AIProviderHealth:
-        return AIProviderHealth.healthy if resolve_secret_ref(self.api_key_ref).key_present else AIProviderHealth.unavailable
+        return (
+            AIProviderHealth.healthy
+            if resolve_secret_ref(self.api_key_ref).key_present
+            else AIProviderHealth.unavailable
+        )
 
     def list_models(self) -> list[Any]:
         return []
@@ -62,6 +67,7 @@ class OpenAICompatAdapter:
                 blocked_reason=f"{self.provider_id}_api_key_missing",
                 message="Provider API key is missing.",
                 retryable=False,
+                dispatch_state=AIExternalDispatchState.not_started,
             )
         payload = {
             "model": model,
@@ -70,12 +76,22 @@ class OpenAICompatAdapter:
             "max_tokens": max_tokens,
             "stream": False,
         }
+        dispatch_state = AIExternalDispatchState.unknown
         try:
             response = self._post(payload=payload, api_key=secret.value)
+            dispatch_state = AIExternalDispatchState.started
             response.raise_for_status()
             data = response.json()
-            return self._response_from_data(request, data, prompt=prompt, model=model, estimated_output_tokens=max_tokens)
+            return self._response_from_data(
+                request,
+                data,
+                prompt=prompt,
+                model=model,
+                estimated_output_tokens=max_tokens,
+            )
         except (httpx.HTTPError, ValueError, TypeError, KeyError, IndexError) as exc:
+            if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+                dispatch_state = AIExternalDispatchState.started
             return self._error_response(
                 request,
                 prompt=prompt,
@@ -85,8 +101,12 @@ class OpenAICompatAdapter:
                 blocked_reason=f"{self.provider_id}_live_call_failed",
                 message="OpenAI-compatible provider call failed.",
                 retryable=isinstance(exc, (httpx.TimeoutException, httpx.NetworkError))
-                or (isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in {429, 500, 502, 503, 504}),
+                or (
+                    isinstance(exc, httpx.HTTPStatusError)
+                    and exc.response.status_code in {429, 500, 502, 503, 504}
+                ),
                 error_type=type(exc).__name__,
+                dispatch_state=dispatch_state,
             )
 
     def stream(self, request: AIRequest) -> object:
@@ -96,14 +116,20 @@ class OpenAICompatAdapter:
         if self._client is not None:
             return self._client.post(
                 _chat_completions_url(self.base_url),
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
                 json=payload,
                 timeout=self.timeout_seconds,
             )
         with httpx.Client() as client:
             return client.post(
                 _chat_completions_url(self.base_url),
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
                 json=payload,
                 timeout=self.timeout_seconds,
             )
@@ -131,7 +157,11 @@ class OpenAICompatAdapter:
         prompt_tokens = _optional_int(usage.get("prompt_tokens"))
         completion_tokens = _optional_int(usage.get("completion_tokens"))
         input_tokens = prompt_tokens if prompt_tokens is not None else estimate_tokens(prompt)
-        output_tokens = completion_tokens if completion_tokens is not None else estimated_output_tokens
+        output_tokens = (
+            completion_tokens
+            if completion_tokens is not None
+            else estimated_output_tokens
+        )
         usage_source = (
             AIUsageSource.actual
             if prompt_tokens is not None and completion_tokens is not None
@@ -163,12 +193,18 @@ class OpenAICompatAdapter:
                 provider_cost_estimate=provider_cost_estimate,
                 currency="USD" if provider_cost_estimate is not None else None,
             ),
-            finish_reason=str(first.get("finish_reason")) if first.get("finish_reason") is not None else None,
+            finish_reason=(
+                str(first.get("finish_reason"))
+                if first.get("finish_reason") is not None
+                else None
+            ),
             safety_status="allowed",
+            external_dispatch_state=AIExternalDispatchState.started,
             raw_provider_metadata={
                 "adapter_interface": OPENAI_COMPAT_ADAPTER_INTERFACE,
                 "external_call_attempted": True,
                 "external_call_succeeded": True,
+                "external_dispatch_state": AIExternalDispatchState.started.value,
                 "usage_returned": bool(usage),
                 **{key: data[key] for key in _SAFE_METADATA_KEYS if key in data},
             },
@@ -185,12 +221,16 @@ class OpenAICompatAdapter:
         blocked_reason: str,
         message: str,
         retryable: bool,
+        dispatch_state: AIExternalDispatchState,
         error_type: str | None = None,
     ) -> AIResponse:
         metadata: dict[str, object] = {
             "adapter_interface": OPENAI_COMPAT_ADAPTER_INTERFACE,
-            "external_call_attempted": code is not AIProviderErrorCode.provider_auth_missing,
+            "external_call_attempted": (
+                dispatch_state is not AIExternalDispatchState.not_started
+            ),
             "external_call_succeeded": False,
+            "external_dispatch_state": dispatch_state.value,
         }
         if error_type:
             metadata["error_type"] = error_type
@@ -208,6 +248,7 @@ class OpenAICompatAdapter:
             ),
             safety_status="blocked",
             blocked_reason=blocked_reason,
+            external_dispatch_state=dispatch_state,
             raw_provider_metadata=metadata,
             error=AIProviderError(
                 code=code,
@@ -219,20 +260,35 @@ class OpenAICompatAdapter:
 
 
 def _chat_completions_url(base_url: str) -> str:
-    return base_url if base_url.endswith("/chat/completions") else f"{base_url}/chat/completions"
+    return (
+        base_url
+        if base_url.endswith("/chat/completions")
+        else f"{base_url}/chat/completions"
+    )
 
 
 def _prompt_from_request(request: AIRequest) -> str:
     if request.prompt is not None:
         return request.prompt
-    return "\n".join(f"{m.role}: {m.content}" for m in request.messages).strip()
+    return "\n".join(
+        f"{message.role}: {message.content}" for message in request.messages
+    ).strip()
 
 
 def _messages_from_request(request: AIRequest, prompt: str) -> list[dict[str, str]]:
     if request.messages:
-        return [{"role": m.role, "content": m.content} for m in request.messages]
+        return [
+            {"role": message.role, "content": message.content}
+            for message in request.messages
+        ]
     return [
-        {"role": "system", "content": "You are a precise engineering assistant. Answer concisely and usefully."},
+        {
+            "role": "system",
+            "content": (
+                "You are a precise engineering assistant. "
+                "Answer concisely and usefully."
+            ),
+        },
         {"role": "user", "content": prompt},
     ]
 
