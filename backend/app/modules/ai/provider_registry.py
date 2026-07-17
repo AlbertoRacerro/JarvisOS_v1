@@ -318,7 +318,8 @@ def _parse_model_pricing(
         raise ValueError(f"{owner} pricing currency must be USD")
     effective_at = _required_str(raw, "pricing_effective_at", f"{owner} pricing")
     _validate_aware_timestamp(effective_at, owner)
-    input_price = _nonnegative_float(
+    ordinary_price = _positive_float if provider.enabled else _nonnegative_float
+    input_price = ordinary_price(
         raw.get("input_usd_per_1m_tokens"),
         f"{owner} input_usd_per_1m_tokens",
     )
@@ -336,7 +337,7 @@ def _parse_model_pricing(
     return ModelPricing(
         currency=currency,
         input_usd_per_1m_tokens=input_price,
-        output_usd_per_1m_tokens=_nonnegative_float(
+        output_usd_per_1m_tokens=ordinary_price(
             raw.get("output_usd_per_1m_tokens"),
             f"{owner} output_usd_per_1m_tokens",
         ),

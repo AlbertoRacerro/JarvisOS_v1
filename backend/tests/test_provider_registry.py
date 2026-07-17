@@ -293,7 +293,26 @@ def test_external_pricing_is_strict_and_timezone_aware():
         parse_provider_registry(raw)
 
 
+@pytest.mark.parametrize(
+    "field",
+    ["input_usd_per_1m_tokens", "output_usd_per_1m_tokens"],
+)
+def test_enabled_external_ordinary_prices_must_be_positive(field: str):
+    raw = _minimal_network_registry()
+    raw["providers"]["network"]["models"]["model"]["pricing"][field] = 0
+
+    with pytest.raises(ValueError, match=rf"{field} must be positive"):
+        parse_provider_registry(raw)
+
+
 def test_cache_read_price_is_optional_bounded_external_metadata():
+    raw = _minimal_network_registry()
+    pricing = raw["providers"]["network"]["models"]["model"]["pricing"]
+    pricing["cache_read_input_usd_per_million"] = 0
+    registry = parse_provider_registry(raw)
+    resolved = resolve_model_pricing(registry, "network", "model")
+    assert resolved.cache_read_input_usd_per_million == 0
+
     raw = _minimal_network_registry()
     pricing = raw["providers"]["network"]["models"]["model"]["pricing"]
     pricing["cache_read_input_usd_per_million"] = 0.25
@@ -305,6 +324,35 @@ def test_cache_read_price_is_optional_bounded_external_metadata():
     pricing = raw["providers"]["network"]["models"]["model"]["pricing"]
     pricing["cache_read_input_usd_per_million"] = 1.5
     with pytest.raises(ValueError, match="cannot exceed ordinary input price"):
+        parse_provider_registry(raw)
+
+
+def test_disabled_external_models_preserve_nonnegative_price_metadata():
+    raw = _minimal_network_registry()
+    provider = raw["providers"]["network"]
+    provider["enabled"] = False
+    pricing = provider["models"]["model"]["pricing"]
+    pricing["input_usd_per_1m_tokens"] = 0
+    pricing["output_usd_per_1m_tokens"] = 0
+    raw["fallback_chains"] = {}
+
+    registry = parse_provider_registry(raw)
+
+    assert registry.bindings == {}
+    resolved = resolve_model_pricing(registry, "network", "model")
+    assert resolved.input_usd_per_1m_tokens == 0
+    assert resolved.output_usd_per_1m_tokens == 0
+
+
+def test_non_external_models_still_cannot_define_price_metadata():
+    raw = _minimal_registry()
+    raw["providers"]["fake"]["models"]["m"]["pricing"] = copy.deepcopy(
+        _minimal_network_registry()["providers"]["network"]["models"]["model"][
+            "pricing"
+        ]
+    )
+
+    with pytest.raises(ValueError, match="cannot define external-provider pricing"):
         parse_provider_registry(raw)
 
 
