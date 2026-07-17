@@ -23,6 +23,12 @@ from app.core.sensitivity_schema import (
     SENSITIVITY_SCHEMA_INDEX_STATEMENTS,
     SENSITIVITY_SCHEMA_STATEMENTS,
 )
+from app.core.token_flow_schema import (
+    TOKEN_FLOW_SCHEMA_INDEX_STATEMENTS,
+    TOKEN_FLOW_SCHEMA_MIGRATION_RECORD,
+    TOKEN_FLOW_SCHEMA_MIGRATION_STATEMENTS,
+    TOKEN_FLOW_SCHEMA_STATEMENTS,
+)
 from app.modules.events.service import utc_now
 
 
@@ -78,9 +84,12 @@ def initialize_database() -> DatabaseInfo:
             connection.execute(statement)
         for statement in EGRESS_SCHEMA_STATEMENTS:
             connection.execute(statement)
+        for statement in TOKEN_FLOW_SCHEMA_STATEMENTS:
+            connection.execute(statement)
         for statement in [
             *SCHEMA_MIGRATION_STATEMENTS,
             *EGRESS_SCHEMA_MIGRATION_STATEMENTS,
+            *TOKEN_FLOW_SCHEMA_MIGRATION_STATEMENTS,
         ]:
             try:
                 connection.execute(statement)
@@ -92,6 +101,8 @@ def initialize_database() -> DatabaseInfo:
         for statement in SENSITIVITY_SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         for statement in EGRESS_SCHEMA_INDEX_STATEMENTS:
+            connection.execute(statement)
+        for statement in TOKEN_FLOW_SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         if _sqlite_fts5_available(connection):
             for statement in SCHEMA_FTS_STATEMENTS:
@@ -121,7 +132,10 @@ def is_database_initialized() -> bool:
         "run_logs",
         "run_artifacts",
         "decisions",
+        "ai_jobs",
         "ai_settings",
+        "ai_flows",
+        "ai_flow_segments",
         "sensitivity_labels",
         "sanitized_derivatives",
         "egress_prompt_derivatives",
@@ -202,7 +216,11 @@ def count_schema_migrations() -> int:
 
 def _record_schema_migrations(connection: sqlite3.Connection) -> None:
     now = utc_now()
-    records = [*SCHEMA_MIGRATION_RECORDS, EGRESS_SCHEMA_MIGRATION_RECORD]
+    records = [
+        *SCHEMA_MIGRATION_RECORDS,
+        EGRESS_SCHEMA_MIGRATION_RECORD,
+        TOKEN_FLOW_SCHEMA_MIGRATION_RECORD,
+    ]
     for record in records:
         connection.execute(
             """
