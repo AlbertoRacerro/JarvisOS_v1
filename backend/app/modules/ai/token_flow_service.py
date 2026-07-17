@@ -124,10 +124,13 @@ def link_attempt_to_flow(*, flow_id: str, attempt_id: str) -> Flow:
             if flow["state"] != "running":
                 raise TokenFlowConflictError("only running flows can accept attempts")
             attempt = connection.execute(
-                "SELECT flow_id, flow_attempt_index FROM ai_jobs WHERE id = ?", (attempt_id,)
+                "SELECT flow_id, flow_attempt_index, task_kind FROM ai_jobs WHERE id = ?",
+                (attempt_id,),
             ).fetchone()
             if attempt is None:
                 raise TokenFlowNotFoundError(f"ai_job {attempt_id} does not exist")
+            if attempt["task_kind"] != flow["task_kind"]:
+                raise TokenFlowConflictError("ai_job task kind does not match flow")
             if attempt["flow_id"] == flow_id:
                 if attempt["flow_attempt_index"] is None:
                     raise TokenFlowConflictError("linked ai_job has no attempt index")
@@ -233,7 +236,7 @@ def recompute_flow_aggregates(flow_id: str) -> Flow:
 def _attempt_rows(connection: sqlite3.Connection, flow_id: str) -> list[sqlite3.Row]:
     return connection.execute(
         """
-        SELECT id, flow_attempt_index, continuation_index, execution_class,
+        SELECT id, task_kind, flow_attempt_index, continuation_index, execution_class,
                adapter_invoked, external_dispatch_state, input_tokens, output_tokens,
                cache_read_tokens, reasoning_tokens, normalized_usage_source, latency_ms,
                accounting_basis, accounted_provider_spend_usd_decimal, output_digest,
@@ -488,6 +491,8 @@ def _require_confirmation_attempt(connection: sqlite3.Connection, flow_id: str) 
             decision.trigger_version AS decision_trigger_version,
             decision.config_digest AS decision_config_digest,
             packet.id AS packet_id, packet.packet_digest,
+            packet.task_kind AS packet_task_kind,
+            packet.workspace_id AS packet_workspace_id,
             packet.route_class, packet.provider_id, packet.model_id,
             packet.fallback_index, packet.policy_version,
             packet.trigger_version, packet.config_digest
@@ -502,6 +507,13 @@ def _require_confirmation_attempt(connection: sqlite3.Connection, flow_id: str) 
         raise TokenFlowConflictError("confirmation ticket does not exist")
     if ticket["ticket_state"] != "pending" or not _unexpired(ticket["expires_at"]):
         raise TokenFlowConflictError("confirmation ticket is not pending and unexpired")
+    flow = _require_flow(connection, flow_id)
+    if (
+        ticket["packet_task_kind"] != attempt["task_kind"]
+        or ticket["packet_task_kind"] != flow["task_kind"]
+        or ticket["packet_workspace_id"] != flow["workspace_id"]
+    ):
+        raise TokenFlowConflictError("confirmation packet task or workspace does not match flow")
     expected_binding = (
         attempt["provider_id"],
         attempt["model_id"],

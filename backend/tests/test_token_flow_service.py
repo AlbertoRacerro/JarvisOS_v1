@@ -32,6 +32,7 @@ def initialized_database():
 def _insert_job(
     job_id: str,
     *,
+    task_kind: str = "synthesis",
     status: str = "success",
     selected_route_class: str | None = None,
     provider_id: str | None = None,
@@ -67,12 +68,13 @@ def _insert_job(
                 normalized_usage_source, latency_ms, accounting_basis,
                 accounted_provider_spend_usd_decimal, continuation_index,
                 output_digest, context_sources_json
-            ) VALUES (?, ?, ?, 'synthesis', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 job_id,
                 utc_now(),
                 status,
+                task_kind,
                 selected_route_class,
                 provider_id,
                 model_id,
@@ -97,7 +99,23 @@ def _insert_job(
         connection.commit()
 
 
-def _pending_confirmation_ticket(monkeypatch):
+def _insert_workspace(workspace_id: str) -> None:
+    from app.core.database import open_sqlite_connection
+    from app.modules.events.service import utc_now
+
+    with open_sqlite_connection() as connection:
+        now = utc_now()
+        connection.execute(
+            """
+            INSERT INTO workspaces (id, name, slug, status, created_at, updated_at)
+            VALUES (?, ?, ?, 'active', ?, ?)
+            """,
+            (workspace_id, workspace_id, workspace_id, now, now),
+        )
+        connection.commit()
+
+
+def _pending_confirmation_ticket(monkeypatch, *, workspace_id: str | None = None):
     from app.modules.ai.egress_persistence import prepare_egress_attempt
     from app.modules.ai.egress_policy import EXTERNAL_PROVIDER_OPERATION
     from app.modules.ai.egress_service import EgressPacketMaterial
@@ -113,6 +131,8 @@ def _pending_confirmation_ticket(monkeypatch):
         )
     )
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-only-secret")
+    if workspace_id is not None:
+        _insert_workspace(workspace_id)
     preparation = prepare_egress_attempt(
         EgressPacketMaterial(
             operation=EXTERNAL_PROVIDER_OPERATION,
@@ -127,7 +147,7 @@ def _pending_confirmation_ticket(monkeypatch):
             context_level="S0",
             final_level="S1",
             max_output_tokens=128,
-            workspace_id=None,
+            workspace_id=workspace_id,
             included_manifest=(),
             source_digests=(),
         ),
@@ -137,9 +157,9 @@ def _pending_confirmation_ticket(monkeypatch):
     return preparation
 
 
-def _link_confirmation_attempt(monkeypatch):
-    preparation = _pending_confirmation_ticket(monkeypatch)
-    flow = create_flow(task_kind="synthesis")
+def _link_confirmation_attempt(monkeypatch, *, workspace_id: str | None = None):
+    preparation = _pending_confirmation_ticket(monkeypatch, workspace_id=workspace_id)
+    flow = create_flow(task_kind="synthesis", workspace_id=workspace_id)
     _insert_job(
         "pause",
         status="validation_error",
@@ -225,6 +245,24 @@ def test_link_attempt_is_ordered_idempotent_and_conflict_safe(
     ]
 
 
+def test_link_attempt_rejects_cross_task_before_link_cas(initialized_database) -> None:
+    from app.core.database import open_sqlite_connection
+
+    flow = create_flow(task_kind="synthesis")
+    _insert_job("cross-task", task_kind="general")
+
+    with pytest.raises(TokenFlowConflictError, match="task kind"):
+        link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="cross-task")
+
+    with open_sqlite_connection() as connection:
+        job = connection.execute(
+            "SELECT flow_id, flow_attempt_index FROM ai_jobs WHERE id = 'cross-task'"
+        ).fetchone()
+    assert job["flow_id"] is None
+    assert job["flow_attempt_index"] is None
+    assert get_flow(str(flow["id"]))["ordered_attempt_ids"] == []
+
+
 def test_state_transitions_verify_terminal_attempt_and_freeze_terminal_state(
     initialized_database,
 ) -> None:
@@ -294,6 +332,62 @@ def test_confirmation_pause_requires_canonical_latest_attempt_and_blocks_linking
     with pytest.raises(TokenFlowConflictError, match="not allowed"):
         transition_flow_state(flow_id=str(flow["id"]), new_state="running")
     assert get_flow(str(flow["id"]))["state"] == "confirmation_required"
+
+
+@pytest.mark.parametrize("workspace_id", [None, "matching-workspace"])
+def test_confirmation_packet_identity_accepts_matching_nullable_workspace(
+    initialized_database,
+    monkeypatch,
+    workspace_id: str | None,
+) -> None:
+    flow, _preparation = _link_confirmation_attempt(
+        monkeypatch, workspace_id=workspace_id
+    )
+
+    paused = transition_flow_state(
+        flow_id=str(flow["id"]), new_state="confirmation_required"
+    )
+
+    assert paused["state"] == "confirmation_required"
+    assert paused["workspace_id"] == workspace_id
+
+
+@pytest.mark.parametrize(
+    ("flow_workspace", "field", "value"),
+    [
+        (None, "task_kind", "general"),
+        (None, "workspace_id", "packet-only-workspace"),
+        ("flow-workspace", "workspace_id", None),
+        ("flow-workspace", "workspace_id", "other-workspace"),
+    ],
+)
+def test_confirmation_pause_rejects_packet_task_or_workspace_mismatch(
+    initialized_database,
+    monkeypatch,
+    flow_workspace: str | None,
+    field: str,
+    value: str | None,
+) -> None:
+    from app.core.database import open_sqlite_connection
+
+    flow, preparation = _link_confirmation_attempt(
+        monkeypatch, workspace_id=flow_workspace
+    )
+    if field == "workspace_id" and value is not None and value != flow_workspace:
+        _insert_workspace(value)
+    with open_sqlite_connection() as connection:
+        updated = connection.execute(
+            f"UPDATE egress_packets SET {field} = ? WHERE id = ?",
+            (value, preparation.packet_id),
+        )
+        connection.commit()
+    assert updated.rowcount == 1
+
+    with pytest.raises(TokenFlowConflictError, match="packet task or workspace"):
+        transition_flow_state(
+            flow_id=str(flow["id"]), new_state="confirmation_required"
+        )
+    assert get_flow(str(flow["id"]))["state"] == "running"
 
 
 @pytest.mark.parametrize(
@@ -983,4 +1077,3 @@ def test_terminal_digest_recompute_rejects_post_terminal_ledger_drift(
     persisted = get_flow(str(flow["id"]))
     assert persisted["final_accounting_digest"] == terminal["final_accounting_digest"]
     assert persisted["final_output_digest"] == DIGEST_A
-
