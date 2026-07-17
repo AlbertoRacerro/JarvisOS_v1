@@ -38,9 +38,8 @@ class _RaisingLocalAdapter:
 
 def test_fake_execution_creates_complete_flow_with_synthetic_evidence(monkeypatch, tmp_path) -> None:
     _initialize(monkeypatch, tmp_path)
-    from app.modules.ai.token_flow_service import get_flow
-
     from app.modules.ai.execution import run_ai_task
+    from app.modules.ai.token_flow_service import get_flow
 
     outcome = run_ai_task(user_prompt="deterministic", route_class="local:fake")
 
@@ -66,10 +65,9 @@ def test_fake_execution_creates_complete_flow_with_synthetic_evidence(monkeypatc
 
 def test_local_adapter_exception_is_linked_and_terminalized_as_unpriced(monkeypatch, tmp_path) -> None:
     _initialize(monkeypatch, tmp_path)
+    from app.modules.ai.execution import run_ai_task
     from app.modules.ai.execution_types import ProviderBinding
     from app.modules.ai.token_flow_service import get_flow
-
-    from app.modules.ai.execution import run_ai_task
 
     binding = ProviderBinding(
         route_class="local:test",
@@ -105,9 +103,8 @@ def test_local_adapter_exception_is_linked_and_terminalized_as_unpriced(monkeypa
 
 def test_unbound_route_records_no_execution_inside_failed_flow(monkeypatch, tmp_path) -> None:
     _initialize(monkeypatch, tmp_path)
-    from app.modules.ai.token_flow_service import get_flow
-
     from app.modules.ai.execution import run_ai_task
+    from app.modules.ai.token_flow_service import get_flow
 
     outcome = run_ai_task(
         user_prompt="no binding",
