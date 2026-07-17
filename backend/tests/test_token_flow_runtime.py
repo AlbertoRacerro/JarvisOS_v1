@@ -7,9 +7,9 @@ from app.modules.ai.contracts import (
     AIProviderErrorCode,
     AIRequest,
     AIResponse,
+    AITaskType,
     AIUsage,
     AIUsageSource,
-    AITaskType,
 )
 from app.modules.ai.execution_types import ProviderBinding
 from app.modules.ai.token_flow_runtime import (
