@@ -19,8 +19,9 @@ jobs:
         env:
           TARGET_BRANCH: spec/061-token-flow-implementation
         run: |
-          git fetch origin "$TARGET_BRANCH"
-          git checkout -B "$TARGET_BRANCH" "origin/$TARGET_BRANCH"
+          set -euxo pipefail
+          git fetch origin "refs/heads/$TARGET_BRANCH:refs/remotes/origin/$TARGET_BRANCH"
+          git checkout -B "$TARGET_BRANCH" "refs/remotes/origin/$TARGET_BRANCH"
           python scripts/apply_token_flow_local_wiring.py
           git config user.name "JarvisOS automation"
           git config user.email "actions@users.noreply.github.com"
