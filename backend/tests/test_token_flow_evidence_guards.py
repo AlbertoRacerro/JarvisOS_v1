@@ -76,6 +76,21 @@ def _synthetic(**overrides) -> AttemptEvidence:
     return AttemptEvidence(**values)
 
 
+def _none(**overrides) -> AttemptEvidence:
+    values = {
+        "execution_class": "none",
+        "adapter_invoked": False,
+        "external_dispatch_state": "not_applicable",
+        "normalized_usage_source": "none",
+        "accounting_basis": "no_execution",
+        "accounted_provider_spend_usd_decimal": "0",
+        "outcome_reason": "policy_denied",
+        "accounting_version": "token-flow-v0",
+    }
+    values.update(overrides)
+    return AttemptEvidence(**values)
+
+
 def _flow_id(job_id: str) -> str | None:
     from app.core.database import open_sqlite_connection
 
@@ -196,18 +211,94 @@ def test_none_pre_adapter_evidence_has_no_binding_or_usage(initialized_database)
     record_attempt_evidence(
         flow_id=str(flow["id"]),
         attempt_id="denied",
-        evidence=AttemptEvidence(
-            execution_class="none",
-            adapter_invoked=False,
-            external_dispatch_state="not_applicable",
-            normalized_usage_source="none",
-            accounting_basis="no_execution",
-            accounted_provider_spend_usd_decimal="0",
-            outcome_reason="policy_denied",
-            accounting_version="token-flow-v0",
-        ),
+        evidence=_none(),
     )
     assert _flow_id("denied") == flow["id"]
+
+
+def test_none_evidence_can_preserve_route_without_concrete_binding(
+    initialized_database,
+) -> None:
+    flow = create_flow(task_kind="synthesis")
+    _insert_job(
+        "unbound",
+        selected_route_class="local:missing",
+        provider_id=None,
+        model_id=None,
+        fallback_index=None,
+        input_tokens=None,
+        output_tokens=None,
+        output_digest=None,
+    )
+
+    record_attempt_evidence(
+        flow_id=str(flow["id"]),
+        attempt_id="unbound",
+        evidence=_none(selected_route_class="local:missing"),
+    )
+    assert _flow_id("unbound") == flow["id"]
+
+
+def test_none_evidence_can_preserve_selected_but_unexecutable_binding(
+    initialized_database,
+) -> None:
+    flow = create_flow(task_kind="synthesis")
+    _insert_job(
+        "adapter-missing",
+        selected_route_class="local:general",
+        provider_id="local_ollama",
+        model_id="gemma4-12b",
+        fallback_index=0,
+        input_tokens=None,
+        output_tokens=None,
+        output_digest=None,
+    )
+
+    record_attempt_evidence(
+        flow_id=str(flow["id"]),
+        attempt_id="adapter-missing",
+        evidence=_none(
+            provider_id="local_ollama",
+            model_id="gemma4-12b",
+            selected_route_class="local:general",
+            fallback_index=0,
+            outcome_reason="adapter_unavailable",
+        ),
+    )
+    assert _flow_id("adapter-missing") == flow["id"]
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    [
+        _none(provider_id="local_ollama", selected_route_class="local:general"),
+        _none(model_id="gemma4-12b", selected_route_class="local:general"),
+        _none(provider_id="local_ollama", model_id="gemma4-12b"),
+        _none(selected_route_class="local:general", capability_version="registry-v1"),
+        _none(selected_route_class="external:cheap", pricing_version="pricing-v1"),
+    ],
+)
+def test_none_evidence_rejects_half_binding_or_executable_versions(
+    initialized_database,
+    evidence: AttemptEvidence,
+) -> None:
+    flow = create_flow(task_kind="synthesis")
+    _insert_job(
+        "invalid-none",
+        selected_route_class=evidence.selected_route_class,
+        provider_id=evidence.provider_id,
+        model_id=evidence.model_id,
+        fallback_index=evidence.fallback_index,
+        input_tokens=None,
+        output_tokens=None,
+        output_digest=None,
+    )
+
+    with pytest.raises(TokenFlowError):
+        record_attempt_evidence(
+            flow_id=str(flow["id"]), attempt_id="invalid-none", evidence=evidence
+        )
+    assert _flow_id("invalid-none") is None
 
 
 def test_output_and_subset_evidence_is_fail_closed(initialized_database) -> None:
