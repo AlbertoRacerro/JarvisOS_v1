@@ -3,11 +3,27 @@ import copy
 import pytest
 
 from app.modules.ai.provider_registry import (
+    ModelConfig,
     load_provider_registry,
     parse_provider_registry,
     registry_bindings,
     resolve_model_pricing,
 )
+
+
+def test_model_config_direct_constructor_preserves_legacy_signature():
+    model = ModelConfig(
+        "fake",
+        "legacy-model",
+        "legacy-model",
+        ("local:fake",),
+        128,
+        None,
+    )
+
+    assert model.max_output_tokens == 128
+    assert model.pricing is None
+    assert model.context_window_tokens is None
 
 
 def test_default_provider_registry_loads_with_complete_execution_metadata(monkeypatch):

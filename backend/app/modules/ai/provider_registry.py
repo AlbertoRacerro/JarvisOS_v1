@@ -61,9 +61,9 @@ class ModelConfig:
     model_id: str
     provider_model_name: str
     route_classes: tuple[str, ...]
-    context_window_tokens: int
     max_output_tokens: int
     pricing: ModelPricing | None
+    context_window_tokens: int | None = None
 
 
 @dataclass(frozen=True)

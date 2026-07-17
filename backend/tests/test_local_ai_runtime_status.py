@@ -420,19 +420,40 @@ def test_status_and_adapter_support_base_url_endpoint_env(monkeypatch) -> None:
     assert captured["endpoint"] == "http://127.0.0.1:11434/api/generate"
 
 
-def test_runtime_status_reflects_route_model_env_overrides(monkeypatch) -> None:
+def test_runtime_status_reflects_registered_route_model_env_overrides(monkeypatch) -> None:
     _clear_env(monkeypatch)
-    monkeypatch.setenv("AI_ROUTE_LOCAL_FAST_MODEL", "fast:override")
-    monkeypatch.setenv("AI_ROUTE_LOCAL_GENERAL_MODEL", "general:override")
-    monkeypatch.setenv("AI_ROUTE_LOCAL_CODER_MODEL", "coder:override")
-    monkeypatch.setenv("AI_ROUTE_LOCAL_CODER_HEAVY_MODEL", "heavy:override")
+    monkeypatch.setenv("AI_ROUTE_LOCAL_FAST_MODEL", "qwen3:8b")
+    monkeypatch.setenv("AI_ROUTE_LOCAL_GENERAL_MODEL", "gemma4:12b-it-qat")
+    monkeypatch.setenv("AI_ROUTE_LOCAL_CODER_MODEL", "deepseek-coder-v2:16b")
+    monkeypatch.setenv("AI_ROUTE_LOCAL_CODER_HEAVY_MODEL", "qwen3-coder:30b")
 
-    status = get_local_ai_runtime_status(client=_FakeClient({"/api/version": {"version": "0.9.6"}, "/api/tags": {"models": []}, "/api/ps": {"models": []}}))
+    status = get_local_ai_runtime_status(
+        client=_FakeClient(
+            {
+                "/api/version": {"version": "0.9.6"},
+                "/api/tags": {"models": []},
+                "/api/ps": {"models": []},
+            }
+        )
+    )
 
     assert status["configured_route_models"] == {
-        "local:fast": "fast:override",
-        "local:general": "general:override",
-        "local:gemma": "general:override",
-        "local:coder": "coder:override",
-        "local:coder_heavy": "heavy:override",
+        "local:fast": "qwen3:8b",
+        "local:general": "gemma4:12b-it-qat",
+        "local:gemma": "gemma4:12b-it-qat",
+        "local:coder": "deepseek-coder-v2:16b",
+        "local:coder_heavy": "qwen3-coder:30b",
     }
+
+
+def test_runtime_status_rejects_unregistered_route_override_before_http(
+    monkeypatch,
+) -> None:
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("AI_ROUTE_LOCAL_FAST_MODEL", "unregistered-model")
+    client = _FakeClient({})
+
+    with pytest.raises(ValueError, match="must resolve uniquely to a registered model"):
+        get_local_ai_runtime_status(client=client)
+
+    assert client.calls == []

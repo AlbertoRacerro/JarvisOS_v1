@@ -961,6 +961,8 @@ def _binding_chain(
                 model_id=item.model_id,
                 requires_network=provider.requires_network,
                 max_output_tokens=model.max_output_tokens,
+                execution_class=provider.execution_class,
+                context_window_tokens=model.context_window_tokens,
             )
         )
     return result
