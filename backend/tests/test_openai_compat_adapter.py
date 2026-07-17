@@ -1,6 +1,11 @@
 import httpx
 
-from app.modules.ai.contracts import AIProviderErrorCode, AIRequest, AITaskType
+from app.modules.ai.contracts import (
+    AIExternalDispatchState,
+    AIProviderErrorCode,
+    AIRequest,
+    AITaskType,
+)
 from app.modules.ai.providers.openai_compat_adapter import OpenAICompatAdapter
 
 
@@ -10,11 +15,15 @@ class _Client:
         self.requests = []
 
     def post(self, url, *, headers, json, timeout):
-        self.requests.append({"url": url, "headers": headers, "json": json, "timeout": timeout})
+        self.requests.append(
+            {"url": url, "headers": headers, "json": json, "timeout": timeout}
+        )
         return self.handler(url, headers, json, timeout)
 
 
-def test_openai_compat_adapter_success_parses_usage_and_sanitizes_metadata(monkeypatch):
+def test_openai_compat_adapter_success_parses_usage_and_sanitizes_metadata(
+    monkeypatch,
+):
     monkeypatch.setenv("GLM_API_KEY", "secret-value")
 
     def handler(url, headers, payload, timeout):
@@ -24,8 +33,14 @@ def test_openai_compat_adapter_success_parses_usage_and_sanitizes_metadata(monke
             request=httpx.Request("POST", url),
             json={
                 "id": "safe-id",
-                "choices": [{"message": {"content": "hello"}, "finish_reason": "stop"}],
-                "usage": {"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7},
+                "choices": [
+                    {"message": {"content": "hello"}, "finish_reason": "stop"}
+                ],
+                "usage": {
+                    "prompt_tokens": 3,
+                    "completion_tokens": 4,
+                    "total_tokens": 7,
+                },
             },
         )
 
@@ -37,12 +52,16 @@ def test_openai_compat_adapter_success_parses_usage_and_sanitizes_metadata(monke
         api_key_ref="env:GLM_API_KEY",
         client=client,
     )
-    response = adapter.complete(AIRequest(task_type=AITaskType.synthesis, prompt="hi", max_output_tokens=9))
+    response = adapter.complete(
+        AIRequest(task_type=AITaskType.synthesis, prompt="hi", max_output_tokens=9)
+    )
 
     assert response.error is None
     assert response.text == "hello"
     assert response.usage.input_tokens == 3
     assert response.usage.output_tokens == 4
+    assert response.external_dispatch_state == AIExternalDispatchState.started
+    assert response.raw_provider_metadata["external_dispatch_state"] == "started"
     assert "secret-value" not in str(response.raw_provider_metadata)
     assert "secret-value" not in str(response.model_dump())
 
@@ -61,17 +80,21 @@ def test_openai_compat_adapter_missing_secret_does_not_call_client(monkeypatch):
     response = adapter.complete(AIRequest(task_type=AITaskType.synthesis, prompt="hi"))
 
     assert response.error.code == AIProviderErrorCode.provider_auth_missing
+    assert response.external_dispatch_state == AIExternalDispatchState.not_started
     assert response.raw_provider_metadata["external_call_attempted"] is False
+    assert response.raw_provider_metadata["external_dispatch_state"] == "not_started"
     assert client.requests == []
 
 
-def test_openai_compat_adapter_http_error_is_safe(monkeypatch):
+def test_openai_compat_adapter_http_error_has_started_dispatch(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "secret-value")
 
     def handler(url, headers, payload, timeout):
         request = httpx.Request("POST", url)
         response = httpx.Response(429, request=request)
-        raise httpx.HTTPStatusError("rate limited", request=request, response=response)
+        raise httpx.HTTPStatusError(
+            "rate limited", request=request, response=response
+        )
 
     adapter = OpenAICompatAdapter(
         provider_id="deepseek",
@@ -85,25 +108,33 @@ def test_openai_compat_adapter_http_error_is_safe(monkeypatch):
 
     assert response.error.code == AIProviderErrorCode.provider_rate_limited
     assert response.error.retryable is True
+    assert response.external_dispatch_state == AIExternalDispatchState.started
     assert "secret-value" not in str(response.model_dump())
 
 
-def test_openai_compat_adapter_malformed_response_is_provider_response_invalid(monkeypatch):
+def test_openai_compat_adapter_malformed_response_keeps_started_dispatch(monkeypatch):
     monkeypatch.setenv("SCALEWAY_API_KEY", "secret-value")
     adapter = OpenAICompatAdapter(
         provider_id="scaleway",
         model_id="m",
         base_url="https://example.test/v1",
         api_key_ref="env:SCALEWAY_API_KEY",
-        client=_Client(lambda url, *_: httpx.Response(200, request=httpx.Request("POST", url), json={"choices": []})),
+        client=_Client(
+            lambda url, *_: httpx.Response(
+                200,
+                request=httpx.Request("POST", url),
+                json={"choices": []},
+            )
+        ),
     )
 
     response = adapter.complete(AIRequest(task_type=AITaskType.synthesis, prompt="hi"))
 
     assert response.error.code == AIProviderErrorCode.provider_response_invalid
+    assert response.external_dispatch_state == AIExternalDispatchState.started
 
 
-def test_openai_compat_adapter_timeout_is_retryable(monkeypatch):
+def test_openai_compat_adapter_timeout_is_unknown_dispatch(monkeypatch):
     monkeypatch.setenv("GLM_API_KEY", "secret-value")
 
     def handler(url, headers, payload, timeout):
@@ -122,3 +153,5 @@ def test_openai_compat_adapter_timeout_is_retryable(monkeypatch):
 
     assert response.error.code == AIProviderErrorCode.provider_timeout
     assert response.error.retryable is True
+    assert response.external_dispatch_state == AIExternalDispatchState.unknown
+    assert response.raw_provider_metadata["external_dispatch_state"] == "unknown"
