@@ -31,6 +31,7 @@ def initialized_database():
 def _insert_job(
     job_id: str,
     *,
+    status: str = "success",
     execution_class: str | None = "none",
     adapter_invoked: int | None = 0,
     dispatch: str | None = "not_applicable",
@@ -59,11 +60,12 @@ def _insert_job(
                 normalized_usage_source, latency_ms, accounting_basis,
                 accounted_provider_spend_usd_decimal, continuation_index,
                 output_digest, context_sources_json
-            ) VALUES (?, ?, 'success', 'synthesis', '{}', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, 'synthesis', '{}', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 job_id,
                 utc_now(),
+                status,
                 execution_class,
                 adapter_invoked,
                 dispatch,
@@ -141,8 +143,22 @@ def test_state_transitions_verify_terminal_attempt_and_freeze_terminal_state(
 ) -> None:
     flow = create_flow(task_kind="synthesis")
     other_flow = create_flow(task_kind="synthesis")
-    _insert_job("terminal-job", output_digest=DIGEST_A)
-    _insert_job("other-job", output_digest=DIGEST_B)
+    _insert_job(
+        "terminal-job",
+        execution_class="synthetic",
+        adapter_invoked=1,
+        usage_source="estimated",
+        accounting_basis="synthetic_not_economic",
+        output_digest=DIGEST_A,
+    )
+    _insert_job(
+        "other-job",
+        execution_class="synthetic",
+        adapter_invoked=1,
+        usage_source="estimated",
+        accounting_basis="synthetic_not_economic",
+        output_digest=DIGEST_B,
+    )
     link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="terminal-job")
     link_attempt_to_flow(flow_id=str(other_flow["id"]), attempt_id="other-job")
 
@@ -236,8 +252,22 @@ def test_cancelled_flow_may_be_terminal_before_first_attempt(initialized_databas
 
 def test_terminal_attempt_must_be_the_final_ordered_attempt(initialized_database) -> None:
     flow = create_flow(task_kind="synthesis")
-    _insert_job("first", output_digest=DIGEST_A)
-    _insert_job("last", output_digest=DIGEST_B)
+    _insert_job(
+        "first",
+        execution_class="synthetic",
+        adapter_invoked=1,
+        usage_source="estimated",
+        accounting_basis="synthetic_not_economic",
+        output_digest=DIGEST_A,
+    )
+    _insert_job(
+        "last",
+        execution_class="synthetic",
+        adapter_invoked=1,
+        usage_source="estimated",
+        accounting_basis="synthetic_not_economic",
+        output_digest=DIGEST_B,
+    )
     link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="first")
     link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="last")
 
@@ -260,7 +290,14 @@ def test_terminal_attempt_must_be_the_final_ordered_attempt(initialized_database
 
 def test_complete_requires_canonical_terminal_output_digest(initialized_database) -> None:
     flow = create_flow(task_kind="synthesis")
-    _insert_job("bad-digest", output_digest="sha256:short")
+    _insert_job(
+        "bad-digest",
+        execution_class="synthetic",
+        adapter_invoked=1,
+        usage_source="estimated",
+        accounting_basis="synthetic_not_economic",
+        output_digest="sha256:short",
+    )
     link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="bad-digest")
 
     with pytest.raises(TokenFlowError, match="canonical sha256"):
@@ -274,9 +311,126 @@ def test_complete_requires_canonical_terminal_output_digest(initialized_database
     assert get_flow(str(flow["id"]))["state"] == "running"
 
 
+@pytest.mark.parametrize(
+    ("execution_class", "adapter_invoked", "dispatch", "accounting_basis"),
+    [
+        ("none", 0, "not_applicable", "no_execution"),
+        ("external_provider", 0, "not_started", "external_not_sent"),
+    ],
+)
+def test_non_executed_attempt_cannot_carry_output_digest(
+    initialized_database,
+    execution_class: str,
+    adapter_invoked: int,
+    dispatch: str,
+    accounting_basis: str,
+) -> None:
+    flow = create_flow(task_kind="synthesis")
+    _insert_job(
+        "false-output",
+        execution_class=execution_class,
+        adapter_invoked=adapter_invoked,
+        dispatch=dispatch,
+        accounting_basis=accounting_basis,
+        output_digest=DIGEST_A,
+    )
+    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="false-output")
+
+    with pytest.raises(TokenFlowError, match="cannot carry output_digest"):
+        recompute_flow_aggregates(str(flow["id"]))
+
+
+@pytest.mark.parametrize("status", ["success", "provider_error"])
+def test_partial_terminal_accepts_success_or_error_with_output(
+    initialized_database,
+    status: str,
+) -> None:
+    flow = create_flow(task_kind="synthesis")
+    _insert_job(
+        "partial",
+        status=status,
+        execution_class="synthetic",
+        adapter_invoked=1,
+        usage_source="estimated",
+        accounting_basis="synthetic_not_economic",
+        output_digest=DIGEST_A,
+    )
+    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="partial")
+
+    partial = transition_flow_state(
+        flow_id=str(flow["id"]),
+        new_state="partial_terminal",
+        terminal_reason="partial_output",
+        terminal_attempt_id="partial",
+    )
+
+    assert partial["state"] == "partial_terminal"
+    assert partial["final_output_digest"] == DIGEST_A
+
+
+def test_partial_terminal_requires_output_digest(initialized_database) -> None:
+    flow = create_flow(task_kind="synthesis")
+    _insert_job(
+        "partial-no-output",
+        execution_class="synthetic",
+        adapter_invoked=1,
+        usage_source="estimated",
+        accounting_basis="synthetic_not_economic",
+    )
+    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="partial-no-output")
+
+    with pytest.raises(TokenFlowError, match="canonical sha256"):
+        transition_flow_state(
+            flow_id=str(flow["id"]),
+            new_state="partial_terminal",
+            terminal_reason="partial_output",
+            terminal_attempt_id="partial-no-output",
+        )
+
+
+@pytest.mark.parametrize(
+    ("terminal_state", "status", "message"),
+    [
+        ("complete", "provider_error", "successful ai_job"),
+        ("failed_terminal", "success", "non-success ai_job"),
+        ("complete", "queued", "queued ai_job"),
+        ("partial_terminal", "queued", "queued ai_job"),
+        ("failed_terminal", "queued", "queued ai_job"),
+        ("cancelled_terminal", "queued", "queued ai_job"),
+    ],
+)
+def test_terminal_state_rejects_incompatible_job_status(
+    initialized_database,
+    terminal_state: str,
+    status: str,
+    message: str,
+) -> None:
+    flow = create_flow(task_kind="synthesis")
+    _insert_job(
+        "bad-status",
+        status=status,
+        execution_class="synthetic",
+        adapter_invoked=1,
+        usage_source="estimated",
+        accounting_basis="synthetic_not_economic",
+        output_digest=DIGEST_A,
+    )
+    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="bad-status")
+
+    with pytest.raises(TokenFlowConflictError, match=message):
+        transition_flow_state(
+            flow_id=str(flow["id"]),
+            new_state=terminal_state,  # type: ignore[arg-type]
+            terminal_reason="invalid_status",
+            terminal_attempt_id="bad-status",
+        )
+
+    assert get_flow(str(flow["id"]))["state"] == "running"
+
+
 def test_failed_terminal_may_have_no_output_digest(initialized_database) -> None:
     flow = create_flow(task_kind="synthesis")
-    _insert_job("failed-no-output")
+    _insert_job("failed-no-output", status="provider_error")
     link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="failed-no-output")
 
     failed = transition_flow_state(

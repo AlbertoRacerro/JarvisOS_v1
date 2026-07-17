@@ -180,6 +180,7 @@ def transition_flow_state(
                 if terminal_attempt_id is not None:
                     terminal_attempt_id = _safe(terminal_attempt_id, ID_RE, "terminal_attempt_id")
                     attempt = _require_latest_attempt(connection, flow_id, terminal_attempt_id)
+                    _validate_terminal_status(new_state, attempt["status"])
                     if attempt["output_digest"] is not None:
                         _output_digest(attempt["output_digest"])
                     if new_state in {"complete", "partial_terminal"}:
@@ -234,7 +235,7 @@ def _attempt_rows(connection: sqlite3.Connection, flow_id: str) -> list[sqlite3.
         SELECT id, flow_attempt_index, continuation_index, execution_class,
                adapter_invoked, external_dispatch_state, input_tokens, output_tokens,
                cache_read_tokens, reasoning_tokens, normalized_usage_source, latency_ms,
-               accounting_basis, accounted_provider_spend_usd_decimal
+               accounting_basis, accounted_provider_spend_usd_decimal, output_digest
         FROM ai_jobs WHERE flow_id = ? ORDER BY flow_attempt_index
         """,
         (flow_id,),
@@ -314,9 +315,12 @@ def _recompute(connection: sqlite3.Connection, flow_id: str) -> Flow:
             totals[key] += value
         totals["total_tokens"] += values["input_tokens"] + values["output_tokens"]
         row_spend = _spend(row["accounted_provider_spend_usd_decimal"])
+        output_digest = row["output_digest"]
+        if output_digest is not None:
+            output_digest = _output_digest(output_digest)
         _validate_evidence(
             execution_class, int(row["adapter_invoked"]), dispatch_state,
-            usage_source, accounting_basis, row_spend,
+            usage_source, accounting_basis, row_spend, output_digest,
         )
         if row_spend and execution_class != "external_provider":
             raise TokenFlowError("non-external execution cannot have provider spend")
@@ -344,9 +348,11 @@ def _recompute(connection: sqlite3.Connection, flow_id: str) -> Flow:
         flow = _require_flow(connection, flow_id)
         output_digest = None
         if flow["terminal_attempt_id"] is not None:
-            output_digest = _require_latest_attempt(
+            terminal_attempt = _require_latest_attempt(
                 connection, flow_id, str(flow["terminal_attempt_id"])
-            )["output_digest"]
+            )
+            _validate_terminal_status(str(flow["state"]), terminal_attempt["status"])
+            output_digest = terminal_attempt["output_digest"]
             if output_digest is not None:
                 output_digest = _output_digest(output_digest)
         if flow["state"] in {"complete", "partial_terminal"}:
@@ -377,7 +383,13 @@ def _recompute(connection: sqlite3.Connection, flow_id: str) -> Flow:
 
 
 def _validate_evidence(
-    execution: str, invoked: int, dispatch: str, usage: str, accounting: str, spend: Decimal
+    execution: str,
+    invoked: int,
+    dispatch: str,
+    usage: str,
+    accounting: str,
+    spend: Decimal,
+    output_digest: str | None,
 ) -> None:
     if execution != "external_provider" and dispatch != "not_applicable":
         raise TokenFlowError("non-external execution requires not_applicable dispatch")
@@ -401,8 +413,12 @@ def _validate_evidence(
         raise TokenFlowError(f"{execution} execution requires adapter invocation")
     if execution == "none" and invoked:
         raise TokenFlowError("none execution cannot invoke an adapter")
+    if execution == "none" and output_digest is not None:
+        raise TokenFlowError("none execution cannot carry output_digest")
     if execution != "external_provider":
         return
+    if (not invoked or dispatch == "not_started") and output_digest is not None:
+        raise TokenFlowError("non-invoked external execution cannot carry output_digest")
     if dispatch == "not_started":
         if usage != "none" or accounting != "external_not_sent" or spend:
             raise TokenFlowError("external not_started evidence is inconsistent")
@@ -432,6 +448,7 @@ def _require_confirmation_attempt(connection: sqlite3.Connection, flow_id: str) 
         or attempt["normalized_usage_source"] != "none"
         or attempt["accounting_basis"] != "external_not_sent"
         or _spend(attempt["accounted_provider_spend_usd_decimal"]) != 0
+        or attempt["output_digest"] is not None
     ):
         raise TokenFlowConflictError("latest attempt is not a canonical confirmation pause")
 
@@ -447,12 +464,23 @@ def _require_attempt(
     connection: sqlite3.Connection, flow_id: str, attempt_id: str
 ) -> sqlite3.Row:
     row = connection.execute(
-        "SELECT id, output_digest FROM ai_jobs WHERE id = ? AND flow_id = ?",
+        "SELECT id, status, output_digest FROM ai_jobs WHERE id = ? AND flow_id = ?",
         (attempt_id, flow_id),
     ).fetchone()
     if row is None:
         raise TokenFlowConflictError("terminal_attempt_id must belong to the flow")
     return row
+
+
+def _validate_terminal_status(state: str, value: object) -> None:
+    if not isinstance(value, str) or not TASK_RE.fullmatch(value):
+        raise TokenFlowError("terminal ai_job status is malformed")
+    if value == "queued":
+        raise TokenFlowConflictError("queued ai_job cannot terminalize a flow")
+    if state == "complete" and value != "success":
+        raise TokenFlowConflictError("complete flow requires a successful ai_job")
+    if state == "failed_terminal" and value == "success":
+        raise TokenFlowConflictError("failed_terminal flow requires a non-success ai_job")
 
 
 def _require_latest_attempt(
