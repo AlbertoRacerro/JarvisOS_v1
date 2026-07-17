@@ -12,6 +12,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Upload runtime source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: token-flow-runtime-sources
+          path: |
+            backend/app/modules/ai/execution.py
+            backend/app/modules/ai/egress_runtime.py
+            backend/app/modules/ai/egress_spine.py
+            backend/tests/test_ai_execution_spine.py
+          if-no-files-found: error
+          retention-days: 1
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
