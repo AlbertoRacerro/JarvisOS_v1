@@ -274,6 +274,8 @@ def test_offline_fixture_binding_bypasses_only_external_gate(monkeypatch, tmp_pa
         "scripted",
         False,
         128,
+        execution_class="synthetic",
+        context_window_tokens=4096,
     )
 
     outcome = run_ai_task(

@@ -200,8 +200,8 @@ def _write_ai_job(
     output_tokens_override: int | None = None,
 ) -> str:
     job_id = str(uuid4())
-    provider_id = response.provider_id if response is not None else decision.provider_id
-    model_id = response.model_id if response is not None else decision.model_id
+    provider_id = decision.provider_id or (response.provider_id if response is not None else None)
+    model_id = decision.model_id or (response.model_id if response is not None else None)
     output_digest = (
         canonical_digest({"text": response.text}) if response is not None and response.text is not None else None
     )
@@ -456,6 +456,17 @@ def _flow_requested_route(route_class: str | None) -> str | None:
     return None
 
 
+def _flow_workspace_id(workspace_id: str | None) -> str | None:
+    if workspace_id is None:
+        return None
+    with open_sqlite_connection() as connection:
+        row = connection.execute(
+            "SELECT 1 FROM workspaces WHERE id = ?",
+            (workspace_id,),
+        ).fetchone()
+    return workspace_id if row is not None else None
+
+
 def _create_local_flow(
     *,
     task_kind: str,
@@ -468,7 +479,7 @@ def _create_local_flow(
     flow = create_flow(
         task_kind=task_kind,
         requested_route_class=_flow_requested_route(requested_route_class),
-        workspace_id=workspace_id,
+        workspace_id=_flow_workspace_id(workspace_id),
     )
     return str(flow["id"])
 
