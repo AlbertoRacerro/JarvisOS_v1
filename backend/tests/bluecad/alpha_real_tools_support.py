@@ -31,7 +31,15 @@ def analysis_spec(*, element_order: int | None = None) -> dict[str, Any]:
 
 def offline_bindings() -> dict[str, ProviderBinding]:
     return {
-        route: ProviderBinding(route, "scaleway", "scripted-alpha-proof", False, 4000)
+        route: ProviderBinding(
+            route,
+            "scaleway",
+            "scripted-alpha-proof",
+            False,
+            4000,
+            execution_class="synthetic",
+            context_window_tokens=8192,
+        )
         for route in ("external:cheap", "external:reasoning")
     }
 
