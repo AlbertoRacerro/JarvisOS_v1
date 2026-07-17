@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Literal
 from uuid import uuid4
@@ -26,7 +27,7 @@ TERMINAL = frozenset(
 )
 TRANSITIONS = {
     "running": frozenset({"confirmation_required", *TERMINAL}),
-    "confirmation_required": frozenset({"running", *TERMINAL}),
+    "confirmation_required": TERMINAL,
 }
 EXECUTION_CLASSES = frozenset(
     {"none", "synthetic", "local_compute", "external_provider", "legacy_unknown"}
@@ -235,7 +236,9 @@ def _attempt_rows(connection: sqlite3.Connection, flow_id: str) -> list[sqlite3.
         SELECT id, flow_attempt_index, continuation_index, execution_class,
                adapter_invoked, external_dispatch_state, input_tokens, output_tokens,
                cache_read_tokens, reasoning_tokens, normalized_usage_source, latency_ms,
-               accounting_basis, accounted_provider_spend_usd_decimal, output_digest
+               accounting_basis, accounted_provider_spend_usd_decimal, output_digest,
+               status, selected_route_class, provider_id, model_id, fallback_index,
+               route_reason_json
         FROM ai_jobs WHERE flow_id = ? ORDER BY flow_attempt_index
         """,
         (flow_id,),
@@ -425,6 +428,8 @@ def _validate_evidence(
     elif dispatch == "unknown":
         if usage != "estimated" or accounting != "conservative_estimated_usage":
             raise TokenFlowError("external unknown dispatch requires estimated conservative evidence")
+        if spend <= 0:
+            raise TokenFlowError("external unknown dispatch requires positive provider spend")
     elif dispatch == "started":
         if usage not in {"actual", "mixed", "estimated"}:
             raise TokenFlowError("external started usage cannot be none")
@@ -455,6 +460,92 @@ def _require_confirmation_attempt(connection: sqlite3.Connection, flow_id: str) 
         or attempt["output_digest"] is not None
     ):
         raise TokenFlowConflictError("latest attempt is not a canonical confirmation pause")
+    metadata = _route_reason(attempt["route_reason_json"])
+    ticket_id = _metadata_text(metadata, "egress_ticket_id")
+    decision_id = _metadata_text(metadata, "egress_decision_id")
+    packet_digest = _metadata_text(metadata, "egress_packet_digest")
+    trigger_ids = _metadata_text_list(metadata, "egress_trigger_ids")
+    if metadata.get("egress_reason_code") != "confirmation_required":
+        raise TokenFlowConflictError("confirmation attempt reason is not canonical")
+    ticket = connection.execute(
+        """
+        SELECT
+            ticket.state AS ticket_state, ticket.expires_at,
+            ticket.packet_digest AS ticket_packet_digest,
+            ticket.provider_id AS ticket_provider_id,
+            ticket.model_id AS ticket_model_id,
+            ticket.trigger_ids_json AS ticket_trigger_ids_json,
+            ticket.policy_version AS ticket_policy_version,
+            ticket.config_digest AS ticket_config_digest,
+            decision.id AS decision_id, decision.result AS decision_result,
+            decision.reason_code AS decision_reason_code,
+            decision.packet_id AS decision_packet_id,
+            decision.packet_digest AS decision_packet_digest,
+            decision.ticket_id AS decision_ticket_id,
+            decision.trigger_ids_json AS decision_trigger_ids_json,
+            decision.confirmation_required, decision.reservation_id,
+            decision.policy_version AS decision_policy_version,
+            decision.trigger_version AS decision_trigger_version,
+            decision.config_digest AS decision_config_digest,
+            packet.id AS packet_id, packet.packet_digest,
+            packet.route_class, packet.provider_id, packet.model_id,
+            packet.fallback_index, packet.policy_version,
+            packet.trigger_version, packet.config_digest
+        FROM egress_confirmation_tickets AS ticket
+        JOIN egress_decisions AS decision ON decision.id = ticket.decision_id
+        JOIN egress_packets AS packet ON packet.id = ticket.packet_id
+        WHERE ticket.id = ?
+        """,
+        (ticket_id,),
+    ).fetchone()
+    if ticket is None:
+        raise TokenFlowConflictError("confirmation ticket does not exist")
+    if ticket["ticket_state"] != "pending" or not _unexpired(ticket["expires_at"]):
+        raise TokenFlowConflictError("confirmation ticket is not pending and unexpired")
+    expected_binding = (
+        attempt["provider_id"],
+        attempt["model_id"],
+        attempt["selected_route_class"],
+        attempt["fallback_index"],
+    )
+    persisted_binding = (
+        ticket["provider_id"],
+        ticket["model_id"],
+        ticket["route_class"],
+        ticket["fallback_index"],
+    )
+    metadata_binding = (
+        metadata.get("fallback_provider_id"),
+        metadata.get("fallback_model_id"),
+        metadata.get("fallback_chain_route"),
+        metadata.get("fallback_attempt_index"),
+    )
+    if expected_binding != persisted_binding or metadata_binding != persisted_binding:
+        raise TokenFlowConflictError("confirmation ticket binding does not match attempt")
+    ticket_triggers = _stored_text_list(ticket["ticket_trigger_ids_json"])
+    decision_triggers = _stored_text_list(ticket["decision_trigger_ids_json"])
+    if trigger_ids != ticket_triggers or trigger_ids != decision_triggers:
+        raise TokenFlowConflictError("confirmation ticket trigger binding changed")
+    if (
+        decision_id != ticket["decision_id"]
+        or packet_digest != ticket["packet_digest"]
+        or ticket_id != ticket["decision_ticket_id"]
+        or ticket["decision_result"] != "pause"
+        or ticket["decision_reason_code"] != "confirmation_required"
+        or ticket["confirmation_required"] != 1
+        or ticket["reservation_id"] is not None
+        or ticket["decision_packet_id"] != ticket["packet_id"]
+        or ticket["decision_packet_digest"] != ticket["packet_digest"]
+        or ticket["ticket_packet_digest"] != ticket["packet_digest"]
+        or ticket["ticket_provider_id"] != ticket["provider_id"]
+        or ticket["ticket_model_id"] != ticket["model_id"]
+        or ticket["ticket_policy_version"] != ticket["policy_version"]
+        or ticket["decision_policy_version"] != ticket["policy_version"]
+        or ticket["ticket_config_digest"] != ticket["config_digest"]
+        or ticket["decision_config_digest"] != ticket["config_digest"]
+        or ticket["decision_trigger_version"] != ticket["trigger_version"]
+    ):
+        raise TokenFlowConflictError("confirmation ticket authority binding changed")
 
 
 def _require_flow(connection: sqlite3.Connection, flow_id: str) -> sqlite3.Row:
@@ -485,6 +576,64 @@ def _validate_terminal_status(state: str, value: object) -> None:
         raise TokenFlowConflictError("complete flow requires a successful ai_job")
     if state == "failed_terminal" and value == "success":
         raise TokenFlowConflictError("failed_terminal flow requires a non-success ai_job")
+
+
+def _route_reason(value: object) -> dict[str, object]:
+    if not isinstance(value, str):
+        raise TokenFlowConflictError("confirmation attempt route metadata is malformed")
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise TokenFlowConflictError(
+            "confirmation attempt route metadata is malformed"
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise TokenFlowConflictError("confirmation attempt route metadata is malformed")
+    return parsed
+
+
+def _metadata_text(metadata: dict[str, object], field: str) -> str:
+    value = metadata.get(field)
+    if not isinstance(value, str) or not value:
+        raise TokenFlowConflictError(f"confirmation attempt {field} is malformed")
+    return value
+
+
+def _metadata_text_list(metadata: dict[str, object], field: str) -> list[str]:
+    return _text_list(metadata.get(field), f"confirmation attempt {field}")
+
+
+def _stored_text_list(value: object) -> list[str]:
+    if not isinstance(value, str):
+        raise TokenFlowConflictError("confirmation ticket trigger evidence is malformed")
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise TokenFlowConflictError(
+            "confirmation ticket trigger evidence is malformed"
+        ) from exc
+    return _text_list(parsed, "confirmation ticket trigger evidence")
+
+
+def _text_list(value: object, field: str) -> list[str]:
+    if (
+        not isinstance(value, list)
+        or not value
+        or any(not isinstance(item, str) or not item for item in value)
+        or len(set(value)) != len(value)
+    ):
+        raise TokenFlowConflictError(f"{field} is malformed")
+    return value
+
+
+def _unexpired(value: object) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        expires_at = datetime.fromisoformat(value)
+    except ValueError:
+        return False
+    return expires_at.tzinfo is not None and expires_at > datetime.now(UTC)
 
 
 def _require_latest_attempt(
@@ -566,3 +715,4 @@ def _output_digest(value: object) -> str:
 
 def _json(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
