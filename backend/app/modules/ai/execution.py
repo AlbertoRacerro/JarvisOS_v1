@@ -36,6 +36,13 @@ from app.modules.ai.contracts import (
     RoutingDecision,
 )
 from app.modules.ai.execution_types import ProviderBinding
+from app.modules.ai.providers.fake_adapter import FAKE_PROVIDER_ID, FakeProviderAdapter
+from app.modules.ai.providers.local_ollama_adapter import (
+    LOCAL_OLLAMA_PROVIDER_ID,
+    LocalOllamaAdapter,
+)
+from app.modules.ai.providers.openai_compat_adapter import OpenAICompatAdapter
+from app.modules.ai.providers.scaleway_adapter import SCALEWAY_PROVIDER_ID, ScalewayProviderAdapter
 from app.modules.ai.token_flow_evidence import AttemptEvidence
 from app.modules.ai.token_flow_runtime import (
     local_exception_evidence,
@@ -45,13 +52,6 @@ from app.modules.ai.token_flow_runtime import (
 )
 from app.modules.ai.token_flow_service import create_flow, transition_flow_state
 from app.modules.ai.token_flow_transaction import record_attempt_evidence_in_transaction
-from app.modules.ai.providers.fake_adapter import FAKE_PROVIDER_ID, FakeProviderAdapter
-from app.modules.ai.providers.local_ollama_adapter import (
-    LOCAL_OLLAMA_PROVIDER_ID,
-    LocalOllamaAdapter,
-)
-from app.modules.ai.providers.openai_compat_adapter import OpenAICompatAdapter
-from app.modules.ai.providers.scaleway_adapter import SCALEWAY_PROVIDER_ID, ScalewayProviderAdapter
 from app.modules.events.service import utc_now
 from app.modules.memory.models import MemoryProposalCreate
 from app.modules.memory.service import create_proposal
