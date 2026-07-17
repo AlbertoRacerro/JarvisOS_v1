@@ -5,49 +5,12 @@ on:
   push:
     branches: [master]
 
-permissions:
-  contents: write
-
 jobs:
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-
-      - name: Apply local token-flow writer patch
-        id: actuator
-        env:
-          TARGET_BRANCH: spec/061-token-flow-implementation
-        run: |
-          set -o pipefail
-          set +e
-          (
-            set -euxo pipefail
-            git fetch origin "refs/heads/$TARGET_BRANCH:refs/remotes/origin/$TARGET_BRANCH"
-            git checkout -B "$TARGET_BRANCH" "refs/remotes/origin/$TARGET_BRANCH"
-            python scripts/run_token_flow_local_wiring.py
-            git config user.name "JarvisOS automation"
-            git config user.email "actions@users.noreply.github.com"
-            git add -A
-            git commit -m "Wire local attempts into token flows"
-            git push origin "HEAD:$TARGET_BRANCH"
-          ) 2>&1 | tee "$RUNNER_TEMP/token-flow-actuator.log"
-          status=${PIPESTATUS[0]}
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit 0
-
-      - name: Upload actuator diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: token-flow-actuator-log
-          path: ${{ runner.temp }}/token-flow-actuator.log
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Enforce actuator
-        run: test "${{ steps.actuator.outputs.status }}" = "0"
 
       - uses: actions/setup-python@v5
         with:

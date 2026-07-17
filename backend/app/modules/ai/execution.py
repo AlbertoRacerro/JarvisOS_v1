@@ -36,6 +36,15 @@ from app.modules.ai.contracts import (
     RoutingDecision,
 )
 from app.modules.ai.execution_types import ProviderBinding
+from app.modules.ai.token_flow_evidence import AttemptEvidence
+from app.modules.ai.token_flow_runtime import (
+    local_exception_evidence,
+    local_response_evidence,
+    no_execution_evidence,
+    normalize_outcome_reason,
+)
+from app.modules.ai.token_flow_service import create_flow, transition_flow_state
+from app.modules.ai.token_flow_transaction import record_attempt_evidence_in_transaction
 from app.modules.ai.providers.fake_adapter import FAKE_PROVIDER_ID, FakeProviderAdapter
 from app.modules.ai.providers.local_ollama_adapter import (
     LOCAL_OLLAMA_PROVIDER_ID,
@@ -68,6 +77,7 @@ class AiTaskOutcome:
     egress_reservation_id: str | None = None
     egress_reason_code: str | None = None
     egress_trigger_ids: tuple[str, ...] = ()
+    flow_id: str | None = None
 
 
 # task_kind -> default route. Cloud calls must be opted into explicitly through
@@ -183,6 +193,11 @@ def _write_ai_job(
     latency_ms: int,
     error_type: str | None,
     route_metadata: dict[str, object] | None = None,
+    fallback_index: int | None = None,
+    flow_id: str | None = None,
+    evidence: AttemptEvidence | None = None,
+    input_tokens_override: int | None = None,
+    output_tokens_override: int | None = None,
 ) -> str:
     job_id = str(uuid4())
     provider_id = response.provider_id if response is not None else decision.provider_id
@@ -190,46 +205,69 @@ def _write_ai_job(
     output_digest = (
         canonical_digest({"text": response.text}) if response is not None and response.text is not None else None
     )
-    input_tokens = response.usage.input_tokens if response is not None else None
-    output_tokens = response.usage.output_tokens if response is not None else None
+    input_tokens = (
+        input_tokens_override
+        if input_tokens_override is not None
+        else response.usage.input_tokens if response is not None else None
+    )
+    output_tokens = (
+        output_tokens_override
+        if output_tokens_override is not None
+        else response.usage.output_tokens if response is not None else None
+    )
     cost_estimate = response.usage.provider_cost_estimate if response is not None else None
     route_reason = {"decision_reason": decision.decision_reason, "blocked_reason": decision.blocked_reason}
     if route_metadata:
         route_reason.update(route_metadata)
     route_reason_json = json.dumps(route_reason, sort_keys=True)
     context_sources_json = json.dumps(context_sources) if context_sources else None
+    if (flow_id is None) != (evidence is None):
+        raise ValueError("flow_id and attempt evidence must be supplied together")
     with open_sqlite_connection() as connection:
-        connection.execute(
-            """
-            INSERT INTO ai_jobs (
-                id, created_at, status, task_kind, requested_route_class, selected_route_class,
-                provider_id, model_id, route_reason_json, prompt_digest, context_digest,
-                context_sources_json, output_digest, input_tokens, output_tokens, cost_estimate,
-                latency_ms, error_type
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                job_id,
-                utc_now(),
-                status,
-                task_kind,
-                requested_route_class,
-                selected_route_class,
-                provider_id,
-                model_id,
-                route_reason_json,
-                prompt_digest,
-                context_digest,
-                context_sources_json,
-                output_digest,
-                input_tokens,
-                output_tokens,
-                cost_estimate,
-                latency_ms,
-                error_type,
-            ),
-        )
-        connection.commit()
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            connection.execute(
+                """
+                INSERT INTO ai_jobs (
+                    id, created_at, status, task_kind, requested_route_class, selected_route_class,
+                    provider_id, model_id, route_reason_json, prompt_digest, context_digest,
+                    context_sources_json, output_digest, input_tokens, output_tokens, cost_estimate,
+                    latency_ms, error_type, fallback_index
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    job_id,
+                    utc_now(),
+                    status,
+                    task_kind,
+                    requested_route_class,
+                    selected_route_class,
+                    provider_id,
+                    model_id,
+                    route_reason_json,
+                    prompt_digest,
+                    context_digest,
+                    context_sources_json,
+                    output_digest,
+                    input_tokens,
+                    output_tokens,
+                    cost_estimate,
+                    latency_ms,
+                    error_type,
+                    fallback_index,
+                ),
+            )
+            if flow_id is not None and evidence is not None:
+                record_attempt_evidence_in_transaction(
+                    connection,
+                    flow_id=flow_id,
+                    attempt_id=job_id,
+                    evidence=evidence,
+                )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
     return job_id
 
 
@@ -412,6 +450,55 @@ def _run_external_network_task(
     return outcome
 
 
+def _flow_requested_route(route_class: str | None) -> str | None:
+    if route_class is None or ROUTE_CLASS_RE.fullmatch(route_class):
+        return route_class
+    return None
+
+
+def _create_local_flow(
+    *,
+    task_kind: str,
+    requested_route_class: str | None,
+    workspace_id: str | None,
+) -> str:
+    from app.modules.ai.settings import ensure_ai_settings
+
+    ensure_ai_settings()
+    flow = create_flow(
+        task_kind=task_kind,
+        requested_route_class=_flow_requested_route(requested_route_class),
+        workspace_id=workspace_id,
+    )
+    return str(flow["id"])
+
+
+def _terminalize_local_flow(
+    *,
+    flow_id: str,
+    status: str,
+    attempt_id: str,
+    reason: str | None,
+) -> None:
+    if status == "success":
+        state = "complete"
+        terminal_reason = "completed"
+    else:
+        state = "failed_terminal"
+        terminal_reason = normalize_outcome_reason(reason or status)
+    transition_flow_state(
+        flow_id=flow_id,
+        new_state=state,
+        terminal_reason=terminal_reason,
+        terminal_attempt_id=attempt_id,
+    )
+
+
+def _outcome_with_flow(outcome: AiTaskOutcome, flow_id: str) -> AiTaskOutcome:
+    outcome.flow_id = flow_id
+    return outcome
+
+
 def run_ai_task(
     *,
     user_prompt: str,
@@ -447,17 +534,35 @@ def run_ai_task(
             workspace_id=workspace_id,
         )
 
-    # Context assembly upstream (e.g. workspace builder) failed: fail closed before
-    # any provider call and record it. No partial/uncontexted call is made.
+    flow_id = _create_local_flow(
+        task_kind=task_kind,
+        requested_route_class=requested_route_class,
+        workspace_id=workspace_id,
+    )
+
     if context_build_error is not None:
         bad = RoutingDecision(
-            blocked=True, blocked_reason="context_build_error", decision_reason=context_build_error
+            provider_id=early_binding.provider_id if early_binding is not None else None,
+            model_id=early_binding.model_id if early_binding is not None else None,
+            blocked=True,
+            blocked_reason="context_build_error",
+            decision_reason=context_build_error,
+        )
+        fallback_index = 0 if early_binding is not None else None
+        persisted_route = selected_route_class if ROUTE_CLASS_RE.fullmatch(selected_route_class) else None
+        evidence = no_execution_evidence(
+            selected_route_class=persisted_route,
+            binding=early_binding,
+            outcome_reason="context_build_error",
+            requested_output_ceiling=max_output_tokens,
+            effective_output_ceiling=None,
+            fallback_index=fallback_index,
         )
         ledger_id = _write_ai_job(
             status="config_error",
             task_kind=task_kind,
             requested_route_class=requested_route_class,
-            selected_route_class=selected_route_class,
+            selected_route_class=persisted_route,
             decision=bad,
             prompt_digest=prompt_digest,
             context_digest=None,
@@ -465,20 +570,52 @@ def run_ai_task(
             response=None,
             latency_ms=_elapsed_ms(started),
             error_type="context_build_error",
+            fallback_index=fallback_index,
+            flow_id=flow_id,
+            evidence=evidence,
         )
-        return AiTaskOutcome("config_error", ledger_id, selected_route_class, bad, error_type="context_build_error")
+        _terminalize_local_flow(
+            flow_id=flow_id,
+            status="config_error",
+            attempt_id=ledger_id,
+            reason="context_build_error",
+        )
+        return _outcome_with_flow(
+            AiTaskOutcome(
+                "config_error",
+                ledger_id,
+                selected_route_class,
+                bad,
+                error_type="context_build_error",
+            ),
+            flow_id,
+        )
 
-    # Normalize + budget context in the spine (not only the HTTP layer) so direct
-    # and script callers cannot bypass it. Fail closed before any provider call.
     try:
         blocks = canonicalize_blocks(context_blocks)
     except ContextBlockError as exc:
-        bad = RoutingDecision(blocked=True, blocked_reason="context_malformed", decision_reason=str(exc))
+        bad = RoutingDecision(
+            provider_id=early_binding.provider_id if early_binding is not None else None,
+            model_id=early_binding.model_id if early_binding is not None else None,
+            blocked=True,
+            blocked_reason="context_malformed",
+            decision_reason=str(exc),
+        )
+        fallback_index = 0 if early_binding is not None else None
+        persisted_route = selected_route_class if ROUTE_CLASS_RE.fullmatch(selected_route_class) else None
+        evidence = no_execution_evidence(
+            selected_route_class=persisted_route,
+            binding=early_binding,
+            outcome_reason="context_malformed",
+            requested_output_ceiling=max_output_tokens,
+            effective_output_ceiling=None,
+            fallback_index=fallback_index,
+        )
         ledger_id = _write_ai_job(
             status="validation_error",
             task_kind=task_kind,
             requested_route_class=requested_route_class,
-            selected_route_class=selected_route_class,
+            selected_route_class=persisted_route,
             decision=bad,
             prompt_digest=prompt_digest,
             context_digest=None,
@@ -486,17 +623,46 @@ def run_ai_task(
             response=None,
             latency_ms=_elapsed_ms(started),
             error_type="context_malformed",
+            fallback_index=fallback_index,
+            flow_id=flow_id,
+            evidence=evidence,
         )
-        return AiTaskOutcome("validation_error", ledger_id, selected_route_class, bad, error_type="context_malformed")
+        _terminalize_local_flow(
+            flow_id=flow_id,
+            status="validation_error",
+            attempt_id=ledger_id,
+            reason="context_malformed",
+        )
+        return _outcome_with_flow(
+            AiTaskOutcome(
+                "validation_error",
+                ledger_id,
+                selected_route_class,
+                bad,
+                error_type="context_malformed",
+            ),
+            flow_id,
+        )
 
     serialized_context_len = (
         len(json.dumps(blocks, sort_keys=True, separators=(",", ":"), ensure_ascii=False)) if blocks else 0
     )
     if serialized_context_len > DEFAULT_CONTEXT_BUDGET_CHARS:
         bad = RoutingDecision(
+            provider_id=early_binding.provider_id if early_binding is not None else None,
+            model_id=early_binding.model_id if early_binding is not None else None,
             blocked=True,
             blocked_reason="context_budget_exceeded",
             decision_reason=f"context {serialized_context_len} chars exceeds budget {DEFAULT_CONTEXT_BUDGET_CHARS}",
+        )
+        fallback_index = 0 if early_binding is not None else None
+        evidence = no_execution_evidence(
+            selected_route_class=selected_route_class,
+            binding=early_binding,
+            outcome_reason="context_budget_exceeded",
+            requested_output_ceiling=max_output_tokens,
+            effective_output_ceiling=None,
+            fallback_index=fallback_index,
         )
         ledger_id = _write_ai_job(
             status="validation_error",
@@ -510,9 +676,25 @@ def run_ai_task(
             response=None,
             latency_ms=_elapsed_ms(started),
             error_type="context_budget_exceeded",
+            fallback_index=fallback_index,
+            flow_id=flow_id,
+            evidence=evidence,
         )
-        return AiTaskOutcome(
-            "validation_error", ledger_id, selected_route_class, bad, error_type="context_budget_exceeded"
+        _terminalize_local_flow(
+            flow_id=flow_id,
+            status="validation_error",
+            attempt_id=ledger_id,
+            reason="context_budget_exceeded",
+        )
+        return _outcome_with_flow(
+            AiTaskOutcome(
+                "validation_error",
+                ledger_id,
+                selected_route_class,
+                bad,
+                error_type="context_budget_exceeded",
+            ),
+            flow_id,
         )
 
     context_digest = canonical_digest(blocks) if blocks else None
@@ -522,11 +704,19 @@ def run_ai_task(
     binding, decision = resolve_binding(selected_route_class, bindings)
     if binding is None:
         status = "validation_error" if decision.blocked_reason == "route_class_malformed" else "route_unavailable"
+        persisted_route = selected_route_class if ROUTE_CLASS_RE.fullmatch(selected_route_class) else None
+        evidence = no_execution_evidence(
+            selected_route_class=persisted_route,
+            binding=None,
+            outcome_reason=status,
+            requested_output_ceiling=max_output_tokens,
+            effective_output_ceiling=None,
+        )
         ledger_id = _write_ai_job(
             status=status,
             task_kind=task_kind,
             requested_route_class=requested_route_class,
-            selected_route_class=selected_route_class,
+            selected_route_class=persisted_route,
             decision=decision,
             prompt_digest=prompt_digest,
             context_digest=context_digest,
@@ -534,80 +724,21 @@ def run_ai_task(
             response=None,
             latency_ms=_elapsed_ms(started),
             error_type=status,
+            flow_id=flow_id,
+            evidence=evidence,
         )
-        return AiTaskOutcome(
-            status,
-            ledger_id,
-            selected_route_class,
-            decision,
-            error_type=status,
-            context_digest=context_digest,
-            context_sources_count=context_sources_count,
-        )
-
-    effective_max = max_output_tokens if max_output_tokens is not None else None
-    if not binding.requires_network and effective_max is None:
-        effective_max = binding.max_output_tokens
-    if binding.requires_network and effective_max is None:
-        config_decision = RoutingDecision(
-            provider_id=binding.provider_id,
-            model_id=binding.model_id,
-            blocked=True,
-            blocked_reason="config_error",
-            decision_reason="max_output_tokens required for network route",
-        )
-        ledger_id = _write_ai_job(
-            status="config_error",
-            task_kind=task_kind,
-            requested_route_class=requested_route_class,
-            selected_route_class=selected_route_class,
-            decision=config_decision,
-            prompt_digest=prompt_digest,
-            context_digest=context_digest,
-            context_sources=context_sources,
-            response=None,
-            latency_ms=_elapsed_ms(started),
-            error_type="config_error",
-        )
-        return AiTaskOutcome(
-            "config_error",
-            ledger_id,
-            selected_route_class,
-            config_decision,
-            error_type="config_error",
-            context_digest=context_digest,
-            context_sources_count=context_sources_count,
-        )
-
-    if binding.requires_network and external_blocked_reason is not None:
-        config_decision = RoutingDecision(
-            provider_id=binding.provider_id,
-            model_id=binding.model_id,
-            blocked=True,
-            blocked_reason="config_error",
-            decision_reason=f"external provider execution disabled by settings/gate: {external_blocked_reason}",
-        )
-        ledger_id = _write_ai_job(
-            status="config_error",
-            task_kind=task_kind,
-            requested_route_class=requested_route_class,
-            selected_route_class=selected_route_class,
-            decision=config_decision,
-            prompt_digest=prompt_digest,
-            context_digest=context_digest,
-            context_sources=context_sources,
-            response=None,
-            latency_ms=_elapsed_ms(started),
-            error_type="config_error",
-        )
-        return AiTaskOutcome(
-            "config_error",
-            ledger_id,
-            selected_route_class,
-            config_decision,
-            error_type="config_error",
-            context_digest=context_digest,
-            context_sources_count=context_sources_count,
+        _terminalize_local_flow(flow_id=flow_id, status=status, attempt_id=ledger_id, reason=status)
+        return _outcome_with_flow(
+            AiTaskOutcome(
+                status,
+                ledger_id,
+                selected_route_class,
+                decision,
+                error_type=status,
+                context_digest=context_digest,
+                context_sources_count=context_sources_count,
+            ),
+            flow_id,
         )
 
     chain_bindings = [binding] if bindings is not None else _registry_fallback_bindings(selected_route_class, binding)
@@ -625,6 +756,14 @@ def run_ai_task(
                 blocked_reason="config_error",
                 decision_reason=f"external provider execution disabled by settings/gate: {gate_reason}",
             )
+            evidence = no_execution_evidence(
+                selected_route_class=selected_route_class,
+                binding=attempt_binding,
+                outcome_reason="config_error",
+                requested_output_ceiling=max_output_tokens,
+                effective_output_ceiling=attempt_max,
+                fallback_index=attempt_index,
+            )
             ledger_id = _write_ai_job(
                 status="config_error",
                 task_kind=task_kind,
@@ -643,15 +782,27 @@ def run_ai_task(
                     binding=attempt_binding,
                     prior_retryable_error_code=prior_retryable_error_code,
                 ),
+                fallback_index=attempt_index,
+                flow_id=flow_id,
+                evidence=evidence,
             )
-            return AiTaskOutcome(
-                "config_error",
-                ledger_id,
-                selected_route_class,
-                config_decision,
-                error_type="config_error",
-                context_digest=context_digest,
-                context_sources_count=context_sources_count,
+            _terminalize_local_flow(
+                flow_id=flow_id,
+                status="config_error",
+                attempt_id=ledger_id,
+                reason="config_error",
+            )
+            return _outcome_with_flow(
+                AiTaskOutcome(
+                    "config_error",
+                    ledger_id,
+                    selected_route_class,
+                    config_decision,
+                    error_type="config_error",
+                    context_digest=context_digest,
+                    context_sources_count=context_sources_count,
+                ),
+                flow_id,
             )
 
         if adapter is None:
@@ -662,6 +813,14 @@ def run_ai_task(
                 blocked_reason="config_error",
                 decision_reason=_config_reason(adapter, attempt_binding, attempt_max),
             )
+            evidence = no_execution_evidence(
+                selected_route_class=selected_route_class,
+                binding=attempt_binding,
+                outcome_reason="adapter_unavailable",
+                requested_output_ceiling=max_output_tokens,
+                effective_output_ceiling=attempt_max,
+                fallback_index=attempt_index,
+            )
             ledger_id = _write_ai_job(
                 status="config_error",
                 task_kind=task_kind,
@@ -680,15 +839,27 @@ def run_ai_task(
                     binding=attempt_binding,
                     prior_retryable_error_code=prior_retryable_error_code,
                 ),
+                fallback_index=attempt_index,
+                flow_id=flow_id,
+                evidence=evidence,
             )
-            return AiTaskOutcome(
-                "config_error",
-                ledger_id,
-                selected_route_class,
-                config_decision,
-                error_type="config_error",
-                context_digest=context_digest,
-                context_sources_count=context_sources_count,
+            _terminalize_local_flow(
+                flow_id=flow_id,
+                status="config_error",
+                attempt_id=ledger_id,
+                reason="adapter_unavailable",
+            )
+            return _outcome_with_flow(
+                AiTaskOutcome(
+                    "config_error",
+                    ledger_id,
+                    selected_route_class,
+                    config_decision,
+                    error_type="config_error",
+                    context_digest=context_digest,
+                    context_sources_count=context_sources_count,
+                ),
+                flow_id,
             )
 
         attempt_decision = RoutingDecision(
@@ -706,6 +877,14 @@ def run_ai_task(
         try:
             response = adapter.complete(request)
         except Exception as exc:
+            evidence, usage = local_exception_evidence(
+                binding=attempt_binding,
+                prompt=request.prompt or "",
+                selected_route_class=selected_route_class,
+                requested_output_ceiling=max_output_tokens,
+                effective_output_ceiling=attempt_max,
+                fallback_index=attempt_index,
+            )
             ledger_id = _write_ai_job(
                 status="provider_error",
                 task_kind=task_kind,
@@ -724,18 +903,41 @@ def run_ai_task(
                     binding=attempt_binding,
                     prior_retryable_error_code=prior_retryable_error_code,
                 ),
+                fallback_index=attempt_index,
+                flow_id=flow_id,
+                evidence=evidence,
+                input_tokens_override=usage.input_tokens,
+                output_tokens_override=usage.output_tokens,
             )
-            return AiTaskOutcome(
-                "provider_error",
-                ledger_id,
-                selected_route_class,
-                attempt_decision,
-                error_type=type(exc).__name__,
-                context_digest=context_digest,
-                context_sources_count=context_sources_count,
+            _terminalize_local_flow(
+                flow_id=flow_id,
+                status="provider_error",
+                attempt_id=ledger_id,
+                reason=type(exc).__name__,
+            )
+            return _outcome_with_flow(
+                AiTaskOutcome(
+                    "provider_error",
+                    ledger_id,
+                    selected_route_class,
+                    attempt_decision,
+                    error_type=type(exc).__name__,
+                    context_digest=context_digest,
+                    context_sources_count=context_sources_count,
+                ),
+                flow_id,
             )
 
         status, error_type = _response_status(response)
+        evidence = local_response_evidence(
+            binding=attempt_binding,
+            response=response,
+            selected_route_class=selected_route_class,
+            outcome_reason=error_type or status,
+            requested_output_ceiling=max_output_tokens,
+            effective_output_ceiling=attempt_max,
+            fallback_index=attempt_index,
+        )
         ledger_id = _write_ai_job(
             status=status,
             task_kind=task_kind,
@@ -754,16 +956,33 @@ def run_ai_task(
                 binding=attempt_binding,
                 prior_retryable_error_code=prior_retryable_error_code,
             ),
+            fallback_index=attempt_index,
+            flow_id=flow_id,
+            evidence=evidence,
         )
-        last_outcome = AiTaskOutcome(
-            status,
-            ledger_id,
-            selected_route_class,
-            attempt_decision,
-            response,
-            error_type=error_type,
-            context_digest=context_digest,
-            context_sources_count=context_sources_count,
+        last_outcome = _outcome_with_flow(
+            AiTaskOutcome(
+                status,
+                ledger_id,
+                selected_route_class,
+                attempt_decision,
+                response,
+                error_type=error_type,
+                context_digest=context_digest,
+                context_sources_count=context_sources_count,
+            ),
+            flow_id,
+        )
+        retryable_error_code = _retryable_error_code(response)
+        if status == "provider_error" and retryable_error_code and attempt_index + 1 < len(chain_bindings):
+            prior_retryable_error_code = retryable_error_code
+            continue
+
+        _terminalize_local_flow(
+            flow_id=flow_id,
+            status=status,
+            attempt_id=ledger_id,
+            reason=error_type,
         )
         if status == "success":
             proposed_record_ids, records_parse_error = _create_proposed_records_from_response(
@@ -774,12 +993,9 @@ def run_ai_task(
             )
             last_outcome.proposed_record_ids = proposed_record_ids
             last_outcome.records_parse_error = records_parse_error
-        retryable_error_code = _retryable_error_code(response)
-        if status == "provider_error" and retryable_error_code and attempt_index + 1 < len(chain_bindings):
-            prior_retryable_error_code = retryable_error_code
-            continue
         return last_outcome
 
     if last_outcome is not None:
         return last_outcome
     raise RuntimeError("provider execution reached unreachable empty chain")
+
