@@ -26,22 +26,7 @@ jobs:
             set -euxo pipefail
             git fetch origin "refs/heads/$TARGET_BRANCH:refs/remotes/origin/$TARGET_BRANCH"
             git checkout -B "$TARGET_BRANCH" "refs/remotes/origin/$TARGET_BRANCH"
-            python - <<'PY'
-            from pathlib import Path
-
-            path = Path("scripts/apply_token_flow_local_wiring.py")
-            source = path.read_text(encoding="utf-8")
-            old = '    (ROOT / ".github/workflows/ci.yml").write_bytes(_decode(CI_B64))'
-            new = (
-                '    template = ROOT / "scripts/token_flow_ci_clean.yml"\n'
-                '    (ROOT / ".github/workflows/ci.yml").write_bytes(template.read_bytes())\n'
-                '    template.unlink()'
-            )
-            if source.count(old) != 1:
-                raise SystemExit("clean workflow replacement point is not unique")
-            path.write_text(source.replace(old, new), encoding="utf-8")
-            PY
-            python scripts/apply_token_flow_local_wiring.py
+            python scripts/run_token_flow_local_wiring.py
             git config user.name "JarvisOS automation"
             git config user.email "actions@users.noreply.github.com"
             git add -A
