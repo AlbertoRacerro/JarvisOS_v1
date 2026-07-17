@@ -8,7 +8,11 @@ from app.modules.ai.contracts import (
     AIRequest,
     AITaskType,
 )
-from app.modules.ai.providers.scaleway import ScalewayChatResult, ScalewayProviderStatus
+from app.modules.ai.providers.scaleway import (
+    ScalewayChatResult,
+    ScalewayNotConfiguredError,
+    ScalewayProviderStatus,
+)
 from app.modules.ai.providers.scaleway_adapter import ScalewayProviderAdapter
 
 
@@ -33,6 +37,8 @@ class _Provider:
 
     def create_work_completion(self, *, prompt: str, estimated_output_tokens: int):
         self.calls += 1
+        if not self.configured:
+            raise ScalewayNotConfiguredError("missing before transport")
         if self.error is not None:
             raise self.error
         return self.result
@@ -52,7 +58,7 @@ def test_scaleway_missing_credentials_is_not_started() -> None:
     assert response.error.code == AIProviderErrorCode.provider_auth_missing
     assert response.external_dispatch_state == AIExternalDispatchState.not_started
     assert response.raw_provider_metadata["external_dispatch_state"] == "not_started"
-    assert provider.calls == 0
+    assert provider.calls == 1
 
 
 def test_scaleway_unsupported_task_is_not_started() -> None:
