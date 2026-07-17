@@ -49,6 +49,8 @@ TASK_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 ROUTE_RE = re.compile(r"^(?:auto|[a-z][a-z0-9_]*:[a-z][a-z0-9_]*)$")
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 REASON_RE = re.compile(r"^[a-z][a-z0-9_]{0,127}$")
+SPEND_RE = re.compile(r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")
+OUTPUT_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 class TokenFlowError(ValueError):
@@ -118,8 +120,8 @@ def link_attempt_to_flow(*, flow_id: str, attempt_id: str) -> Flow:
         connection.execute("BEGIN IMMEDIATE")
         try:
             flow = _require_flow(connection, flow_id)
-            if flow["state"] in TERMINAL:
-                raise TokenFlowConflictError("terminal flows cannot accept attempts")
+            if flow["state"] != "running":
+                raise TokenFlowConflictError("only running flows can accept attempts")
             attempt = connection.execute(
                 "SELECT flow_id, flow_attempt_index FROM ai_jobs WHERE id = ?", (attempt_id,)
             ).fetchone()
@@ -177,9 +179,16 @@ def transition_flow_state(
                     raise TokenFlowError(f"{new_state} flow requires terminal_attempt_id")
                 if terminal_attempt_id is not None:
                     terminal_attempt_id = _safe(terminal_attempt_id, ID_RE, "terminal_attempt_id")
-                    _require_attempt(connection, flow_id, terminal_attempt_id)
-            elif terminal_reason is not None or terminal_attempt_id is not None:
-                raise TokenFlowError("nonterminal transition cannot set terminal metadata")
+                    attempt = _require_latest_attempt(connection, flow_id, terminal_attempt_id)
+                    if attempt["output_digest"] is not None:
+                        _output_digest(attempt["output_digest"])
+                    if new_state in {"complete", "partial_terminal"}:
+                        _output_digest(attempt["output_digest"])
+            else:
+                if terminal_reason is not None or terminal_attempt_id is not None:
+                    raise TokenFlowError("nonterminal transition cannot set terminal metadata")
+                if new_state == "confirmation_required":
+                    _require_confirmation_attempt(connection, flow_id)
             now = utc_now()
             connection.execute(
                 """
@@ -335,9 +344,13 @@ def _recompute(connection: sqlite3.Connection, flow_id: str) -> Flow:
         flow = _require_flow(connection, flow_id)
         output_digest = None
         if flow["terminal_attempt_id"] is not None:
-            output_digest = _require_attempt(
+            output_digest = _require_latest_attempt(
                 connection, flow_id, str(flow["terminal_attempt_id"])
             )["output_digest"]
+            if output_digest is not None:
+                output_digest = _output_digest(output_digest)
+        if flow["state"] in {"complete", "partial_terminal"}:
+            output_digest = _output_digest(output_digest)
         accounting_payload = {
             "accounting_basis_counts": accounting,
             "execution_class_counts": execution,
@@ -350,14 +363,15 @@ def _recompute(connection: sqlite3.Connection, flow_id: str) -> Flow:
             "synthetic_evidence_present": "synthetic" in execution,
             "usage_totals": usage_totals,
         }
-        output_payload = {
-            "flow_id": flow_id, "schema": "token-flow-v0", "state": flow["state"],
-            "terminal_attempt_id": flow["terminal_attempt_id"],
-            "terminal_output_digest": output_digest, "terminal_reason": flow["terminal_reason"],
-        }
+        accounting_digest = canonical_digest(accounting_payload)
+        if flow["final_accounting_digest"] is not None and (
+            flow["final_accounting_digest"] != accounting_digest
+            or flow["final_output_digest"] != output_digest
+        ):
+            raise TokenFlowConflictError("terminal flow digest evidence changed")
         connection.execute(
             "UPDATE ai_flows SET final_accounting_digest = ?, final_output_digest = ? WHERE id = ?",
-            (canonical_digest(accounting_payload), canonical_digest(output_payload), flow_id),
+            (accounting_digest, output_digest, flow_id),
         )
     return _decode_flow(_require_flow(connection, flow_id))
 
@@ -379,6 +393,10 @@ def _validate_evidence(
     }
     if execution in expected and accounting != expected[execution]:
         raise TokenFlowError(f"{execution} execution has invalid accounting basis")
+    if execution == "synthetic" and usage != "estimated":
+        raise TokenFlowError("synthetic execution requires estimated usage")
+    if execution == "local_compute" and usage not in {"actual", "estimated"}:
+        raise TokenFlowError("local_compute usage must be actual or estimated")
     if execution in {"synthetic", "local_compute"} and not invoked:
         raise TokenFlowError(f"{execution} execution requires adapter invocation")
     if execution == "none" and invoked:
@@ -388,12 +406,34 @@ def _validate_evidence(
     if dispatch == "not_started":
         if usage != "none" or accounting != "external_not_sent" or spend:
             raise TokenFlowError("external not_started evidence is inconsistent")
-    elif dispatch == "unknown" and accounting != "conservative_estimated_usage":
-        raise TokenFlowError("external unknown dispatch requires conservative accounting")
-    elif dispatch == "started" and accounting not in {
-        "provider_exact", "conservative_standard_input", "conservative_estimated_usage"
-    }:
-        raise TokenFlowError("external started accounting basis is invalid")
+    elif dispatch == "unknown":
+        if usage != "estimated" or accounting != "conservative_estimated_usage":
+            raise TokenFlowError("external unknown dispatch requires estimated conservative evidence")
+    elif dispatch == "started":
+        if usage not in {"actual", "mixed", "estimated"}:
+            raise TokenFlowError("external started usage cannot be none")
+        if accounting not in {
+            "provider_exact", "conservative_standard_input", "conservative_estimated_usage"
+        }:
+            raise TokenFlowError("external started accounting basis is invalid")
+        if accounting in {"provider_exact", "conservative_standard_input"} and usage != "actual":
+            raise TokenFlowError("exact or standard-input accounting requires actual usage")
+
+
+def _require_confirmation_attempt(connection: sqlite3.Connection, flow_id: str) -> None:
+    attempts = _attempt_rows(connection, flow_id)
+    if not attempts:
+        raise TokenFlowConflictError("confirmation_required needs a canonical pause attempt")
+    attempt = attempts[-1]
+    if (
+        attempt["execution_class"] != "external_provider"
+        or attempt["adapter_invoked"] != 0
+        or attempt["external_dispatch_state"] != "not_started"
+        or attempt["normalized_usage_source"] != "none"
+        or attempt["accounting_basis"] != "external_not_sent"
+        or _spend(attempt["accounted_provider_spend_usd_decimal"]) != 0
+    ):
+        raise TokenFlowConflictError("latest attempt is not a canonical confirmation pause")
 
 
 def _require_flow(connection: sqlite3.Connection, flow_id: str) -> sqlite3.Row:
@@ -412,6 +452,19 @@ def _require_attempt(
     ).fetchone()
     if row is None:
         raise TokenFlowConflictError("terminal_attempt_id must belong to the flow")
+    return row
+
+
+def _require_latest_attempt(
+    connection: sqlite3.Connection, flow_id: str, attempt_id: str
+) -> sqlite3.Row:
+    row = _require_attempt(connection, flow_id, attempt_id)
+    latest = connection.execute(
+        "SELECT id FROM ai_jobs WHERE flow_id = ? ORDER BY flow_attempt_index DESC LIMIT 1",
+        (flow_id,),
+    ).fetchone()
+    if latest is None or latest["id"] != attempt_id:
+        raise TokenFlowConflictError("terminal_attempt_id must be the final ordered attempt")
     return row
 
 
@@ -453,7 +506,12 @@ def _optional_count(value: object, field: str) -> int:
 
 
 def _spend(value: object) -> Decimal:
-    if not isinstance(value, str) or not value:
+    if (
+        not isinstance(value, str)
+        or not value
+        or len(value) > 64
+        or not SPEND_RE.fullmatch(value)
+    ):
         raise TokenFlowError("accounted provider spend is missing or not decimal text")
     try:
         parsed = Decimal(value)
@@ -466,6 +524,12 @@ def _spend(value: object) -> Decimal:
 
 def _decimal_text(value: Decimal) -> str:
     return "0" if value == 0 else format(value.normalize(), "f")
+
+
+def _output_digest(value: object) -> str:
+    if not isinstance(value, str) or not OUTPUT_DIGEST_RE.fullmatch(value):
+        raise TokenFlowError("terminal output_digest must be canonical sha256")
+    return value
 
 
 def _json(value: object) -> str:

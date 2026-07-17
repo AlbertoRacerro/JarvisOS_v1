@@ -14,6 +14,10 @@ from app.modules.ai.token_flow_service import (
     transition_flow_state,
 )
 
+DIGEST_A = "sha256:" + "a" * 64
+DIGEST_B = "sha256:" + "b" * 64
+DIGEST_C = "sha256:" + "c" * 64
+
 
 @pytest.fixture
 def initialized_database():
@@ -137,15 +141,11 @@ def test_state_transitions_verify_terminal_attempt_and_freeze_terminal_state(
 ) -> None:
     flow = create_flow(task_kind="synthesis")
     other_flow = create_flow(task_kind="synthesis")
-    _insert_job("terminal-job", output_digest="sha256:terminal")
-    _insert_job("other-job", output_digest="sha256:other")
+    _insert_job("terminal-job", output_digest=DIGEST_A)
+    _insert_job("other-job", output_digest=DIGEST_B)
     link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="terminal-job")
     link_attempt_to_flow(flow_id=str(other_flow["id"]), attempt_id="other-job")
 
-    paused = transition_flow_state(flow_id=str(flow["id"]), new_state="confirmation_required")
-    assert paused["state"] == "confirmation_required"
-    resumed = transition_flow_state(flow_id=str(flow["id"]), new_state="running")
-    assert resumed["state"] == "running"
     with pytest.raises(TokenFlowConflictError, match="must belong"):
         transition_flow_state(
             flow_id=str(flow["id"]),
@@ -167,8 +167,39 @@ def test_state_transitions_verify_terminal_attempt_and_freeze_terminal_state(
     assert complete["final_output_digest"] is not None
     with pytest.raises(TokenFlowConflictError, match="immutable"):
         transition_flow_state(flow_id=str(flow["id"]), new_state="running")
-    with pytest.raises(TokenFlowConflictError, match="cannot accept"):
+    with pytest.raises(TokenFlowConflictError, match="only running"):
         link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="other-job")
+
+
+def test_confirmation_pause_requires_canonical_latest_attempt_and_blocks_linking(
+    initialized_database,
+) -> None:
+    flow = create_flow(task_kind="synthesis")
+    with pytest.raises(TokenFlowConflictError, match="canonical pause attempt"):
+        transition_flow_state(flow_id=str(flow["id"]), new_state="confirmation_required")
+
+    _insert_job(
+        "pause",
+        execution_class="external_provider",
+        adapter_invoked=0,
+        dispatch="not_started",
+        usage_source="none",
+        accounting_basis="external_not_sent",
+        spend="0",
+    )
+    _insert_job("after-pause")
+    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="pause")
+
+    paused = transition_flow_state(
+        flow_id=str(flow["id"]), new_state="confirmation_required"
+    )
+    assert paused["state"] == "confirmation_required"
+    with pytest.raises(TokenFlowConflictError, match="only running"):
+        link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="after-pause")
+
+    transition_flow_state(flow_id=str(flow["id"]), new_state="running")
+    linked = link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="after-pause")
+    assert linked["ordered_attempt_ids"] == ["pause", "after-pause"]
 
 
 @pytest.mark.parametrize("terminal_state", ["complete", "partial_terminal", "failed_terminal"])
@@ -200,6 +231,62 @@ def test_cancelled_flow_may_be_terminal_before_first_attempt(initialized_databas
     assert cancelled["state"] == "cancelled_terminal"
     assert cancelled["terminal_attempt_id"] is None
     assert cancelled["cancelled_at"] is not None
+    assert cancelled["final_output_digest"] is None
+
+
+def test_terminal_attempt_must_be_the_final_ordered_attempt(initialized_database) -> None:
+    flow = create_flow(task_kind="synthesis")
+    _insert_job("first", output_digest=DIGEST_A)
+    _insert_job("last", output_digest=DIGEST_B)
+    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="first")
+    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="last")
+
+    with pytest.raises(TokenFlowConflictError, match="final ordered attempt"):
+        transition_flow_state(
+            flow_id=str(flow["id"]),
+            new_state="complete",
+            terminal_reason="completed",
+            terminal_attempt_id="first",
+        )
+
+    complete = transition_flow_state(
+        flow_id=str(flow["id"]),
+        new_state="complete",
+        terminal_reason="completed",
+        terminal_attempt_id="last",
+    )
+    assert complete["final_output_digest"] == DIGEST_B
+
+
+def test_complete_requires_canonical_terminal_output_digest(initialized_database) -> None:
+    flow = create_flow(task_kind="synthesis")
+    _insert_job("bad-digest", output_digest="sha256:short")
+    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="bad-digest")
+
+    with pytest.raises(TokenFlowError, match="canonical sha256"):
+        transition_flow_state(
+            flow_id=str(flow["id"]),
+            new_state="complete",
+            terminal_reason="completed",
+            terminal_attempt_id="bad-digest",
+        )
+
+    assert get_flow(str(flow["id"]))["state"] == "running"
+
+
+def test_failed_terminal_may_have_no_output_digest(initialized_database) -> None:
+    flow = create_flow(task_kind="synthesis")
+    _insert_job("failed-no-output")
+    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="failed-no-output")
+
+    failed = transition_flow_state(
+        flow_id=str(flow["id"]),
+        new_state="failed_terminal",
+        terminal_reason="provider_failed",
+        terminal_attempt_id="failed-no-output",
+    )
+
+    assert failed["final_output_digest"] is None
 
 
 def test_recompute_mixed_aggregates_uses_exact_decimal_without_double_count(
@@ -294,7 +381,41 @@ def test_recompute_mixed_aggregates_uses_exact_decimal_without_double_count(
     assert aggregate["synthetic_evidence_present"] is True
 
 
-@pytest.mark.parametrize("spend", ["invalid", "NaN", "Infinity", "-0.01"])
+@pytest.mark.parametrize(
+    ("execution_class", "adapter_invoked", "dispatch", "usage_source", "accounting"),
+    [
+        ("synthetic", 1, "not_applicable", "actual", "synthetic_not_economic"),
+        ("local_compute", 1, "not_applicable", "mixed", "local_compute_unpriced"),
+        ("external_provider", 1, "started", "none", "conservative_estimated_usage"),
+        ("external_provider", 1, "unknown", "actual", "conservative_estimated_usage"),
+    ],
+)
+def test_execution_class_usage_matrix_fails_closed(
+    initialized_database,
+    execution_class: str,
+    adapter_invoked: int,
+    dispatch: str,
+    usage_source: str,
+    accounting: str,
+) -> None:
+    flow = create_flow(task_kind="synthesis")
+    _insert_job(
+        "invalid-usage",
+        execution_class=execution_class,
+        adapter_invoked=adapter_invoked,
+        dispatch=dispatch,
+        usage_source=usage_source,
+        accounting_basis=accounting,
+    )
+    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="invalid-usage")
+
+    with pytest.raises(TokenFlowError):
+        recompute_flow_aggregates(str(flow["id"]))
+
+
+@pytest.mark.parametrize(
+    "spend", ["invalid", "NaN", "Infinity", "-0.01", "1e2", "0" * 65]
+)
 def test_invalid_external_decimal_evidence_fails_recompute_closed(
     initialized_database,
     spend: str,
@@ -346,7 +467,7 @@ def test_null_current_attempt_evidence_is_not_reinterpreted_as_legacy(
     from app.core.database import open_sqlite_connection
 
     flow = create_flow(task_kind="synthesis")
-    _insert_job("missing-evidence", output_digest="sha256:missing")
+    _insert_job("missing-evidence", output_digest=DIGEST_A)
     with open_sqlite_connection() as connection:
         connection.execute(
             "UPDATE ai_jobs SET execution_class = NULL WHERE id = 'missing-evidence'"
@@ -382,7 +503,7 @@ def test_terminal_digests_are_deterministic_and_exclude_unsafe_ledger_fields(
         usage_source="estimated",
         accounting_basis="synthetic_not_economic",
         spend="0",
-        output_digest="sha256:safe-output-digest",
+        output_digest=DIGEST_A,
         context_sources_json=json.dumps({"unsafe_body": secret}),
     )
     link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="terminal")
@@ -397,5 +518,41 @@ def test_terminal_digests_are_deterministic_and_exclude_unsafe_ledger_fields(
     assert replayed["final_accounting_digest"] == terminal["final_accounting_digest"]
     assert replayed["final_output_digest"] == terminal["final_output_digest"]
     assert str(terminal["final_accounting_digest"]).startswith("sha256:")
-    assert str(terminal["final_output_digest"]).startswith("sha256:")
+    assert terminal["final_output_digest"] == DIGEST_A
     assert secret not in json.dumps(terminal, sort_keys=True)
+
+
+def test_terminal_digest_recompute_rejects_post_terminal_ledger_drift(
+    initialized_database,
+) -> None:
+    from app.core.database import open_sqlite_connection
+
+    flow = create_flow(task_kind="synthesis")
+    _insert_job(
+        "terminal-drift",
+        execution_class="synthetic",
+        adapter_invoked=1,
+        usage_source="estimated",
+        accounting_basis="synthetic_not_economic",
+        output_digest=DIGEST_A,
+    )
+    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="terminal-drift")
+    terminal = transition_flow_state(
+        flow_id=str(flow["id"]),
+        new_state="complete",
+        terminal_reason="completed",
+        terminal_attempt_id="terminal-drift",
+    )
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            "UPDATE ai_jobs SET output_digest = ? WHERE id = 'terminal-drift'",
+            (DIGEST_C,),
+        )
+        connection.commit()
+
+    with pytest.raises(TokenFlowConflictError, match="digest evidence changed"):
+        recompute_flow_aggregates(str(flow["id"]))
+
+    persisted = get_flow(str(flow["id"]))
+    assert persisted["final_accounting_digest"] == terminal["final_accounting_digest"]
+    assert persisted["final_output_digest"] == DIGEST_A
