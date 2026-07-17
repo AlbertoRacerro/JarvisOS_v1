@@ -8,7 +8,7 @@ from app.modules.ai.token_flow_evidence import (
     _require_attempt_for_evidence,
     _require_exact_replay,
     _require_unwritten_evidence,
-    _update_values,
+    _update_values as _service_update_values,
     _validate_binding,
     _validate_parent_and_continuation,
     _validate_usage_and_result,
@@ -103,22 +103,14 @@ def record_attempt_evidence_in_transaction(
         "FROM ai_jobs WHERE flow_id = ?",
         (flow_id,),
     ).fetchone()["n"]
+    values = _service_update_values(normalized)
+    if len(values) != len(_COLUMNS):
+        raise TokenFlowConflictError("token-flow evidence column contract changed")
     updated = connection.execute(
         _UPDATE,
-        (flow_id, int(next_index), *_update_values(normalized), attempt_id),
+        (flow_id, int(next_index), *values, attempt_id),
     )
     if updated.rowcount != 1:
         raise TokenFlowConflictError("ai_job evidence changed concurrently")
     _refresh_identity(connection, flow_id)
     return _decode_flow(_require_flow(connection, flow_id))
-
-
-def _update_values(evidence: dict[str, object]) -> tuple[object, ...]:
-    values = _update_values_from_service(evidence)
-    if len(values) != len(_COLUMNS):
-        raise TokenFlowConflictError("token-flow evidence column contract changed")
-    return values
-
-
-def _update_values_from_service(evidence: dict[str, object]) -> tuple[object, ...]:
-    return _update_values(evidence)
