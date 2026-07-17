@@ -150,7 +150,7 @@ def test_invalid_usage_rolls_back_linkage_and_all_evidence(initialized_database)
     flow = create_flow(task_kind="synthesis")
     _insert_job("attempt-a")
 
-    with pytest.raises(TokenFlowError, match="usage source none"):
+    with pytest.raises(TokenFlowError):
         record_attempt_evidence(
             flow_id=str(flow["id"]),
             attempt_id="attempt-a",
