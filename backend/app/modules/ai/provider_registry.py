@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import re
 from dataclasses import dataclass
@@ -458,6 +459,8 @@ def _positive_float(value: Any, field: str, *, allow_zero: bool = False) -> floa
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise ValueError(f"{field} must be numeric")
     parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError(f"{field} must be finite")
     if parsed < 0 or (parsed == 0 and not allow_zero):
         qualifier = "non-negative" if allow_zero else "positive"
         raise ValueError(f"{field} must be {qualifier}")

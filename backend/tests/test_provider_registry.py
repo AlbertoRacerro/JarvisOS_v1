@@ -305,6 +305,25 @@ def test_enabled_external_ordinary_prices_must_be_positive(field: str):
         parse_provider_registry(raw)
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        (field, value)
+        for field in ("input_usd_per_1m_tokens", "output_usd_per_1m_tokens")
+        for value in (float("nan"), float("inf"), float("-inf"))
+    ],
+)
+def test_enabled_external_ordinary_prices_must_be_finite(
+    field: str,
+    value: float,
+):
+    raw = _minimal_network_registry()
+    raw["providers"]["network"]["models"]["model"]["pricing"][field] = value
+
+    with pytest.raises(ValueError, match=rf"{field} must be finite"):
+        parse_provider_registry(raw)
+
+
 def test_cache_read_price_is_optional_bounded_external_metadata():
     raw = _minimal_network_registry()
     pricing = raw["providers"]["network"]["models"]["model"]["pricing"]
@@ -325,6 +344,44 @@ def test_cache_read_price_is_optional_bounded_external_metadata():
     pricing["cache_read_input_usd_per_million"] = 1.5
     with pytest.raises(ValueError, match="cannot exceed ordinary input price"):
         parse_provider_registry(raw)
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_cache_read_price_must_be_finite(value: float):
+    raw = _minimal_network_registry()
+    pricing = raw["providers"]["network"]["models"]["model"]["pricing"]
+    pricing["cache_read_input_usd_per_million"] = value
+
+    with pytest.raises(ValueError, match="cache_read_input_usd_per_million must be finite"):
+        parse_provider_registry(raw)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("timeout_seconds", float("nan")),
+        ("monthly_cost_cap_usd", float("inf")),
+        ("monthly_cost_cap_usd", float("-inf")),
+    ],
+)
+def test_generic_provider_numeric_fields_must_be_finite(field: str, value: float):
+    raw = _minimal_network_registry()
+    raw["providers"]["network"][field] = value
+
+    with pytest.raises(ValueError, match=rf"{field} must be finite"):
+        parse_provider_registry(raw)
+
+
+def test_generic_provider_numeric_zero_semantics_are_preserved():
+    raw = _minimal_network_registry()
+    provider = raw["providers"]["network"]
+    provider["timeout_seconds"] = 0
+    provider["monthly_cost_cap_usd"] = 0
+
+    registry = parse_provider_registry(raw)
+
+    assert registry.providers["network"].timeout_seconds == 0
+    assert registry.providers["network"].monthly_cost_cap_usd == 0
 
 
 def test_disabled_external_models_preserve_nonnegative_price_metadata():
