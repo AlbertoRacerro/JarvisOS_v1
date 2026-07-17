@@ -18,7 +18,11 @@ from app.modules.ai.contracts import (
     ModelRegistryEntry,
     ProviderRegistryEntry,
 )
-from app.modules.ai.providers.scaleway import ScalewayChatResult, ScalewayProvider
+from app.modules.ai.providers.scaleway import (
+    ScalewayChatResult,
+    ScalewayNotConfiguredError,
+    ScalewayProvider,
+)
 from app.modules.ai.token_guard import estimate_tokens
 from app.modules.ai.usage_cost import actual_registry_cost_usd
 
@@ -76,7 +80,12 @@ class ScalewayProviderAdapter:
                 dispatch_state=AIExternalDispatchState.not_started,
             )
 
-        if not self.provider.status().configured:
+        try:
+            result = live_call(
+                prompt=prompt,
+                estimated_output_tokens=estimated_output_tokens,
+            )
+        except ScalewayNotConfiguredError as exc:
             return self._error_response(
                 request,
                 prompt=prompt,
@@ -85,13 +94,8 @@ class ScalewayProviderAdapter:
                 blocked_reason="scaleway_api_key_missing",
                 message="Scaleway API key is missing.",
                 retryable=False,
+                error_type=type(exc).__name__,
                 dispatch_state=AIExternalDispatchState.not_started,
-            )
-
-        try:
-            result = live_call(
-                prompt=prompt,
-                estimated_output_tokens=estimated_output_tokens,
             )
         except (RuntimeError, httpx.HTTPError, ValueError, TypeError) as exc:
             return self._error_response(
@@ -315,8 +319,6 @@ def _safe_scaleway_metadata(metadata: dict[str, object]) -> dict[str, object]:
 
 
 def _error_code_for_exception(exc: Exception) -> AIProviderErrorCode:
-    if isinstance(exc, RuntimeError) and "SCALEWAY_API_KEY" in str(exc):
-        return AIProviderErrorCode.provider_auth_missing
     if isinstance(exc, httpx.TimeoutException):
         return AIProviderErrorCode.provider_timeout
     if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in {401, 403}:
