@@ -8,10 +8,12 @@ from app.modules.ai.token_flow_evidence import (
     _require_attempt_for_evidence,
     _require_exact_replay,
     _require_unwritten_evidence,
-    _update_values as _service_update_values,
     _validate_binding,
     _validate_parent_and_continuation,
     _validate_usage_and_result,
+)
+from app.modules.ai.token_flow_evidence import (
+    _update_values as _service_update_values,
 )
 from app.modules.ai.token_flow_service import (
     ID_RE,
