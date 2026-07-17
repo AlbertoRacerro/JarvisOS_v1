@@ -35,7 +35,6 @@ _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 class ProviderConfig:
     provider_id: str
     kind: str
-    execution_class: ExecutionClass
     enabled: bool
     requires_network: bool
     base_url: str | None
@@ -43,6 +42,7 @@ class ProviderConfig:
     timeout_seconds: float
     monthly_token_cap: int
     monthly_cost_cap_usd: float
+    execution_class: ExecutionClass | None = None
 
 
 @dataclass(frozen=True)
@@ -117,7 +117,6 @@ def parse_provider_registry(raw: dict[str, Any]) -> ProviderRegistry:
         provider = ProviderConfig(
             provider_id=provider_id,
             kind=_required_str(provider_raw, "kind", f"provider {provider_id}"),
-            execution_class=_parse_execution_class(provider_raw, provider_id),
             enabled=bool(provider_raw.get("enabled", False)),
             requires_network=bool(provider_raw.get("requires_network", False)),
             base_url=_optional_url(provider_raw.get("base_url"), provider_id),
@@ -135,6 +134,7 @@ def parse_provider_registry(raw: dict[str, Any]) -> ProviderRegistry:
                 provider_raw.get("monthly_cost_cap_usd", 0),
                 f"provider {provider_id} monthly_cost_cap_usd",
             ),
+            execution_class=_parse_execution_class(provider_raw, provider_id),
         )
         _validate_provider_execution_contract(provider)
         providers[provider_id] = provider
