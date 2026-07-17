@@ -222,8 +222,10 @@ def _normalize_evidence(evidence: AttemptEvidence) -> dict[str, object]:
     )
 
     if execution_class == "none":
-        if any(value is not None for value in (provider_id, model_id, selected_route_class)):
-            raise TokenFlowError("none execution cannot carry concrete binding identity")
+        if (provider_id is None) != (model_id is None):
+            raise TokenFlowError("none execution binding requires both provider_id and model_id")
+        if provider_id is not None and selected_route_class is None:
+            raise TokenFlowError("none execution concrete binding requires selected_route_class")
         if capability_version is not None or pricing_version is not None:
             raise TokenFlowError("none execution cannot carry capability or pricing version")
     else:
