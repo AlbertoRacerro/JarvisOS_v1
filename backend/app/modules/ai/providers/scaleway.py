@@ -6,6 +6,10 @@ import httpx
 from app.modules.secrets.storage import get_effective_scaleway_api_key
 
 
+class ScalewayNotConfiguredError(RuntimeError):
+    """Raised before any transport handoff when the Scaleway secret is absent."""
+
+
 @dataclass(frozen=True)
 class ScalewayProviderStatus:
     provider: str
@@ -45,7 +49,10 @@ class ScalewayProvider:
         )
 
     def classify_smoke_case(self, text: str) -> str:
-        raise RuntimeError("Scaleway direct classification is not supported; use the guarded live smoke completion path.")
+        raise RuntimeError(
+            "Scaleway direct classification is not supported; "
+            "use the guarded live smoke completion path."
+        )
 
     def base_url(self) -> str:
         return os.getenv("SCALEWAY_BASE_URL", self.default_base_url).rstrip("/")
@@ -59,27 +66,44 @@ class ScalewayProvider:
             return base_url
         return f"{base_url}/chat/completions"
 
-    def create_live_smoke_completion(self, *, prompt: str, estimated_output_tokens: int) -> ScalewayChatResult:
+    def create_live_smoke_completion(
+        self, *, prompt: str, estimated_output_tokens: int
+    ) -> ScalewayChatResult:
         return self._create_chat_completion(
             prompt=prompt,
             estimated_output_tokens=estimated_output_tokens,
-            system_prompt="Classify the harmless synthetic text as public, internal, confidential, sensitive_ip, secret, or unknown. Reply with one short sentence.",
+            system_prompt=(
+                "Classify the harmless synthetic text as public, internal, "
+                "confidential, sensitive_ip, secret, or unknown. "
+                "Reply with one short sentence."
+            ),
             mode="live",
         )
 
-    def create_live_console_completion(self, *, prompt: str, estimated_output_tokens: int) -> ScalewayChatResult:
+    def create_live_console_completion(
+        self, *, prompt: str, estimated_output_tokens: int
+    ) -> ScalewayChatResult:
         return self._create_chat_completion(
             prompt=prompt,
             estimated_output_tokens=estimated_output_tokens,
-            system_prompt="Reply to this harmless provider smoke-test prompt in one short sentence. Do not request or process secrets, code, files, proprietary material, or private strategy.",
+            system_prompt=(
+                "Reply to this harmless provider smoke-test prompt in one short "
+                "sentence. Do not request or process secrets, code, files, "
+                "proprietary material, or private strategy."
+            ),
             mode="live_smoke_console",
         )
 
-    def create_work_completion(self, *, prompt: str, estimated_output_tokens: int) -> ScalewayChatResult:
+    def create_work_completion(
+        self, *, prompt: str, estimated_output_tokens: int
+    ) -> ScalewayChatResult:
         return self._create_chat_completion(
             prompt=prompt,
             estimated_output_tokens=estimated_output_tokens,
-            system_prompt="You are a precise engineering assistant. Answer the user's request concisely and usefully.",
+            system_prompt=(
+                "You are a precise engineering assistant. "
+                "Answer the user's request concisely and usefully."
+            ),
             mode="work",
         )
 
@@ -93,16 +117,15 @@ class ScalewayProvider:
     ) -> ScalewayChatResult:
         secret = get_effective_scaleway_api_key()
         if not secret.value:
-            raise RuntimeError("SCALEWAY_API_KEY is required for live Scaleway smoke calls.")
+            raise ScalewayNotConfiguredError(
+                "Scaleway credentials are unavailable before transport handoff."
+            )
 
         model = self.model()
         payload = {
             "model": model,
             "messages": [
-                {
-                    "role": "system",
-                    "content": system_prompt,
-                },
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0,
