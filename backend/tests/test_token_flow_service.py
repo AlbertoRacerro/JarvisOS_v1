@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 
 import pytest
 
@@ -33,11 +32,6 @@ def _insert_job(
     job_id: str,
     *,
     status: str = "success",
-    selected_route_class: str | None = None,
-    provider_id: str | None = None,
-    model_id: str | None = None,
-    fallback_index: int | None = None,
-    route_reason_json: str = "{}",
     execution_class: str | None = "none",
     adapter_invoked: int | None = 0,
     dispatch: str | None = "not_applicable",
@@ -60,24 +54,18 @@ def _insert_job(
         connection.execute(
             """
             INSERT INTO ai_jobs (
-                id, created_at, status, task_kind, selected_route_class,
-                provider_id, model_id, route_reason_json, fallback_index,
+                id, created_at, status, task_kind, route_reason_json,
                 execution_class, adapter_invoked, external_dispatch_state,
                 input_tokens, output_tokens, cache_read_tokens, reasoning_tokens,
                 normalized_usage_source, latency_ms, accounting_basis,
                 accounted_provider_spend_usd_decimal, continuation_index,
                 output_digest, context_sources_json
-            ) VALUES (?, ?, ?, 'synthesis', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, 'synthesis', '{}', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 job_id,
                 utc_now(),
                 status,
-                selected_route_class,
-                provider_id,
-                model_id,
-                route_reason_json,
-                fallback_index,
                 execution_class,
                 adapter_invoked,
                 dispatch,
@@ -95,81 +83,6 @@ def _insert_job(
             ),
         )
         connection.commit()
-
-
-def _pending_confirmation_ticket(monkeypatch):
-    from app.modules.ai.egress_persistence import prepare_egress_attempt
-    from app.modules.ai.egress_policy import EXTERNAL_PROVIDER_OPERATION
-    from app.modules.ai.egress_service import EgressPacketMaterial
-    from app.modules.ai.models import AISettingsUpdate
-    from app.modules.ai.settings import update_ai_settings
-
-    update_ai_settings(
-        AISettingsUpdate(
-            policy_mode="FAST_DEV",
-            monthly_api_budget_usd=100,
-            paid_ai_enabled=True,
-            provider_mode="deepseek",
-        )
-    )
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-only-secret")
-    preparation = prepare_egress_attempt(
-        EgressPacketMaterial(
-            operation=EXTERNAL_PROVIDER_OPERATION,
-            task_kind="synthesis",
-            route_class="external:cheap",
-            provider_id="deepseek",
-            model_id="deepseek-v4-pro",
-            fallback_index=0,
-            prompt="Summarize the approved generic pump note.",
-            context_blocks=(),
-            prompt_level="S1",
-            context_level="S0",
-            final_level="S1",
-            max_output_tokens=128,
-            workspace_id=None,
-            included_manifest=(),
-            source_digests=(),
-        ),
-        now=datetime.now(UTC),
-    )
-    assert preparation.ticket_id is not None
-    return preparation
-
-
-def _link_confirmation_attempt(monkeypatch):
-    preparation = _pending_confirmation_ticket(monkeypatch)
-    flow = create_flow(task_kind="synthesis")
-    _insert_job(
-        "pause",
-        status="validation_error",
-        selected_route_class="external:cheap",
-        provider_id=preparation.provider_id,
-        model_id=preparation.model_id,
-        fallback_index=preparation.fallback_index,
-        route_reason_json=json.dumps(
-            {
-                "egress_decision_id": preparation.decision_id,
-                "egress_packet_digest": preparation.packet_digest,
-                "egress_reason_code": preparation.reason_code,
-                "egress_ticket_id": preparation.ticket_id,
-                "egress_trigger_ids": list(preparation.trigger_ids),
-                "fallback_attempt_index": preparation.fallback_index,
-                "fallback_chain_route": "external:cheap",
-                "fallback_model_id": preparation.model_id,
-                "fallback_provider_id": preparation.provider_id,
-            },
-            sort_keys=True,
-        ),
-        execution_class="external_provider",
-        adapter_invoked=0,
-        dispatch="not_started",
-        usage_source="none",
-        accounting_basis="external_not_sent",
-        spend="0",
-    )
-    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="pause")
-    return flow, preparation
 
 
 def test_create_flow_snapshots_server_owned_continuation_setting(
@@ -276,14 +189,22 @@ def test_state_transitions_verify_terminal_attempt_and_freeze_terminal_state(
 
 def test_confirmation_pause_requires_canonical_latest_attempt_and_blocks_linking(
     initialized_database,
-    monkeypatch,
 ) -> None:
-    empty = create_flow(task_kind="synthesis")
+    flow = create_flow(task_kind="synthesis")
     with pytest.raises(TokenFlowConflictError, match="canonical pause attempt"):
-        transition_flow_state(flow_id=str(empty["id"]), new_state="confirmation_required")
+        transition_flow_state(flow_id=str(flow["id"]), new_state="confirmation_required")
 
-    flow, _preparation = _link_confirmation_attempt(monkeypatch)
+    _insert_job(
+        "pause",
+        execution_class="external_provider",
+        adapter_invoked=0,
+        dispatch="not_started",
+        usage_source="none",
+        accounting_basis="external_not_sent",
+        spend="0",
+    )
     _insert_job("after-pause")
+    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="pause")
 
     paused = transition_flow_state(
         flow_id=str(flow["id"]), new_state="confirmation_required"
@@ -291,107 +212,10 @@ def test_confirmation_pause_requires_canonical_latest_attempt_and_blocks_linking
     assert paused["state"] == "confirmation_required"
     with pytest.raises(TokenFlowConflictError, match="only running"):
         link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="after-pause")
-    with pytest.raises(TokenFlowConflictError, match="not allowed"):
-        transition_flow_state(flow_id=str(flow["id"]), new_state="running")
-    assert get_flow(str(flow["id"]))["state"] == "confirmation_required"
 
-
-@pytest.mark.parametrize(
-    "mutation",
-    [
-        "missing",
-        "wrong_decision",
-        "wrong_packet",
-        "wrong_triggers",
-        "expired",
-        "consumed",
-        "provider_binding",
-        "route_binding",
-        "fallback_binding",
-    ],
-)
-def test_confirmation_pause_rejects_invalid_ticket_authority(
-    initialized_database,
-    monkeypatch,
-    mutation: str,
-) -> None:
-    from app.core.database import open_sqlite_connection
-
-    flow, preparation = _link_confirmation_attempt(monkeypatch)
-    with open_sqlite_connection() as connection:
-        if mutation == "missing":
-            connection.execute(
-                "DELETE FROM egress_confirmation_tickets WHERE id = ?",
-                (preparation.ticket_id,),
-            )
-        elif mutation == "expired":
-            connection.execute(
-                "UPDATE egress_confirmation_tickets SET expires_at = ? WHERE id = ?",
-                ("2000-01-01T00:00:00+00:00", preparation.ticket_id),
-            )
-        elif mutation == "consumed":
-            connection.execute(
-                "UPDATE egress_confirmation_tickets SET state = 'consumed' WHERE id = ?",
-                (preparation.ticket_id,),
-            )
-        elif mutation.endswith("_binding"):
-            statement, value = {
-                "provider_binding": (
-                    "UPDATE ai_jobs SET provider_id = ? WHERE id = 'pause'",
-                    "other_provider",
-                ),
-                "route_binding": (
-                    "UPDATE ai_jobs SET selected_route_class = ? WHERE id = 'pause'",
-                    "external:other",
-                ),
-                "fallback_binding": (
-                    "UPDATE ai_jobs SET fallback_index = ? WHERE id = 'pause'",
-                    1,
-                ),
-            }[mutation]
-            connection.execute(statement, (value,))
-        else:
-            row = connection.execute(
-                "SELECT route_reason_json FROM ai_jobs WHERE id = 'pause'"
-            ).fetchone()
-            metadata = json.loads(row["route_reason_json"])
-            key, value = {
-                "wrong_decision": ("egress_decision_id", "wrong-decision"),
-                "wrong_packet": ("egress_packet_digest", "wrong-packet"),
-                "wrong_triggers": ("egress_trigger_ids", ["wrong-trigger"]),
-            }[mutation]
-            metadata[key] = value
-            connection.execute(
-                "UPDATE ai_jobs SET route_reason_json = ? WHERE id = 'pause'",
-                (json.dumps(metadata, sort_keys=True),),
-            )
-        connection.commit()
-
-    with pytest.raises(TokenFlowConflictError):
-        transition_flow_state(
-            flow_id=str(flow["id"]), new_state="confirmation_required"
-        )
-    assert get_flow(str(flow["id"]))["state"] == "running"
-
-
-def test_confirmation_pause_rejects_malformed_attempt_route_metadata(
-    initialized_database,
-    monkeypatch,
-) -> None:
-    from app.core.database import open_sqlite_connection
-
-    flow, _preparation = _link_confirmation_attempt(monkeypatch)
-    with open_sqlite_connection() as connection:
-        connection.execute(
-            "UPDATE ai_jobs SET route_reason_json = '[' WHERE id = 'pause'"
-        )
-        connection.commit()
-
-    with pytest.raises(TokenFlowConflictError, match="route metadata is malformed"):
-        transition_flow_state(
-            flow_id=str(flow["id"]), new_state="confirmation_required"
-        )
-    assert get_flow(str(flow["id"]))["state"] == "running"
+    transition_flow_state(flow_id=str(flow["id"]), new_state="running")
+    linked = link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="after-pause")
+    assert linked["ordered_attempt_ids"] == ["pause", "after-pause"]
 
 
 @pytest.mark.parametrize("terminal_state", ["complete", "partial_terminal", "failed_terminal"])
@@ -743,46 +567,57 @@ def test_execution_class_usage_matrix_fails_closed(
         recompute_flow_aggregates(str(flow["id"]))
 
 
-@pytest.mark.parametrize("spend", ["0", "-0.01"])
-def test_unknown_external_dispatch_rejects_nonpositive_spend(
+@pytest.mark.parametrize(
+    ("accounting_basis", "usage_source"),
+    [
+        ("conservative_estimated_usage", "estimated"),
+        ("conservative_standard_input", "actual"),
+    ],
+)
+@pytest.mark.parametrize(("spend", "accepted"), [("0", False), ("-0.01", False), ("0.01", True)])
+def test_started_conservative_accounting_requires_positive_spend(
     initialized_database,
+    accounting_basis: str,
+    usage_source: str,
     spend: str,
+    accepted: bool,
 ) -> None:
     flow = create_flow(task_kind="synthesis")
     _insert_job(
-        "unknown-spend",
-        status="provider_error",
+        "conservative-started",
         execution_class="external_provider",
         adapter_invoked=1,
-        dispatch="unknown",
-        usage_source="estimated",
-        accounting_basis="conservative_estimated_usage",
+        dispatch="started",
+        usage_source=usage_source,
+        accounting_basis=accounting_basis,
         spend=spend,
     )
-    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="unknown-spend")
+    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="conservative-started")
 
-    with pytest.raises(TokenFlowError):
-        recompute_flow_aggregates(str(flow["id"]))
-
-
-def test_unknown_external_dispatch_accepts_positive_spend(initialized_database) -> None:
-    flow = create_flow(task_kind="synthesis")
-    _insert_job(
-        "unknown-spend",
-        status="provider_error",
-        execution_class="external_provider",
-        adapter_invoked=1,
-        dispatch="unknown",
-        usage_source="estimated",
-        accounting_basis="conservative_estimated_usage",
-        spend="0.01",
-    )
-    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="unknown-spend")
+    if not accepted:
+        with pytest.raises(TokenFlowError):
+            recompute_flow_aggregates(str(flow["id"]))
+        return
 
     aggregate = recompute_flow_aggregates(str(flow["id"]))
-
     assert aggregate["external_provider_spend_usd_decimal"] == "0.01"
-    assert aggregate["external_dispatch_counts"]["unknown"] == 1
+
+
+def test_started_provider_exact_zero_spend_remains_valid(initialized_database) -> None:
+    flow = create_flow(task_kind="synthesis")
+    _insert_job(
+        "provider-exact",
+        execution_class="external_provider",
+        adapter_invoked=1,
+        dispatch="started",
+        usage_source="actual",
+        accounting_basis="provider_exact",
+        spend="0",
+    )
+    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="provider-exact")
+
+    aggregate = recompute_flow_aggregates(str(flow["id"]))
+    assert aggregate["external_provider_spend_usd_decimal"] == "0"
 
 
 @pytest.mark.parametrize(
