@@ -1,0 +1,401 @@
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from app.modules.ai.token_flow_service import (
+    TokenFlowConflictError,
+    TokenFlowError,
+    create_flow,
+    get_flow,
+    link_attempt_to_flow,
+    recompute_flow_aggregates,
+    transition_flow_state,
+)
+
+
+@pytest.fixture
+def initialized_database():
+    from app.core.database import initialize_database
+    from app.modules.ai.settings import ensure_ai_settings
+
+    initialize_database()
+    ensure_ai_settings()
+
+
+def _insert_job(
+    job_id: str,
+    *,
+    execution_class: str | None = "none",
+    adapter_invoked: int | None = 0,
+    dispatch: str | None = "not_applicable",
+    input_tokens: int | None = 0,
+    output_tokens: int | None = 0,
+    cache_read_tokens: int | None = 0,
+    reasoning_tokens: int | None = 0,
+    usage_source: str | None = "none",
+    latency_ms: int | None = 0,
+    accounting_basis: str | None = "no_execution",
+    spend: str | None = "0",
+    continuation_index: int | None = None,
+    output_digest: str | None = None,
+    context_sources_json: str | None = None,
+) -> None:
+    from app.core.database import open_sqlite_connection
+    from app.modules.events.service import utc_now
+
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO ai_jobs (
+                id, created_at, status, task_kind, route_reason_json,
+                execution_class, adapter_invoked, external_dispatch_state,
+                input_tokens, output_tokens, cache_read_tokens, reasoning_tokens,
+                normalized_usage_source, latency_ms, accounting_basis,
+                accounted_provider_spend_usd_decimal, continuation_index,
+                output_digest, context_sources_json
+            ) VALUES (?, ?, 'success', 'synthesis', '{}', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                job_id,
+                utc_now(),
+                execution_class,
+                adapter_invoked,
+                dispatch,
+                input_tokens,
+                output_tokens,
+                cache_read_tokens,
+                reasoning_tokens,
+                usage_source,
+                latency_ms,
+                accounting_basis,
+                spend,
+                continuation_index,
+                output_digest,
+                context_sources_json,
+            ),
+        )
+        connection.commit()
+
+
+def test_create_flow_snapshots_server_owned_continuation_setting(
+    initialized_database,
+) -> None:
+    from app.core.database import open_sqlite_connection
+
+    first = create_flow(task_kind="synthesis", requested_route_class="local:fake")
+
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            "UPDATE ai_settings SET max_direct_continuations = 3 WHERE id = 'default'"
+        )
+        connection.commit()
+
+    second = create_flow(task_kind="synthesis", requested_route_class="auto")
+
+    assert first["id"] != second["id"]
+    assert first["max_direct_continuations_snapshot"] == 8
+    assert get_flow(str(first["id"]))["max_direct_continuations_snapshot"] == 8
+    assert second["max_direct_continuations_snapshot"] == 3
+    with pytest.raises(TypeError):
+        create_flow(task_kind="synthesis", max_direct_continuations_snapshot=16)  # type: ignore[call-arg]
+
+
+def test_link_attempt_is_ordered_idempotent_and_conflict_safe(
+    initialized_database,
+) -> None:
+    from app.core.database import open_sqlite_connection
+
+    first_flow = create_flow(task_kind="synthesis")
+    second_flow = create_flow(task_kind="synthesis")
+    _insert_job("job-a")
+    _insert_job("job-b")
+
+    link_attempt_to_flow(flow_id=str(first_flow["id"]), attempt_id="job-a")
+    linked = link_attempt_to_flow(flow_id=str(first_flow["id"]), attempt_id="job-b")
+    replayed = link_attempt_to_flow(flow_id=str(first_flow["id"]), attempt_id="job-a")
+
+    assert linked["ordered_attempt_ids"] == ["job-a", "job-b"]
+    assert replayed["ordered_attempt_ids"] == ["job-a", "job-b"]
+    assert replayed["attempt_count"] == 2
+    with pytest.raises(TokenFlowConflictError):
+        link_attempt_to_flow(flow_id=str(second_flow["id"]), attempt_id="job-a")
+
+    with open_sqlite_connection() as connection:
+        rows = connection.execute(
+            "SELECT id, flow_attempt_index FROM ai_jobs ORDER BY id"
+        ).fetchall()
+    assert [(row["id"], row["flow_attempt_index"]) for row in rows] == [
+        ("job-a", 0),
+        ("job-b", 1),
+    ]
+
+
+def test_state_transitions_verify_terminal_attempt_and_freeze_terminal_state(
+    initialized_database,
+) -> None:
+    flow = create_flow(task_kind="synthesis")
+    other_flow = create_flow(task_kind="synthesis")
+    _insert_job("terminal-job", output_digest="sha256:terminal")
+    _insert_job("other-job", output_digest="sha256:other")
+    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="terminal-job")
+    link_attempt_to_flow(flow_id=str(other_flow["id"]), attempt_id="other-job")
+
+    paused = transition_flow_state(flow_id=str(flow["id"]), new_state="confirmation_required")
+    assert paused["state"] == "confirmation_required"
+    resumed = transition_flow_state(flow_id=str(flow["id"]), new_state="running")
+    assert resumed["state"] == "running"
+    with pytest.raises(TokenFlowConflictError, match="must belong"):
+        transition_flow_state(
+            flow_id=str(flow["id"]),
+            new_state="complete",
+            terminal_reason="completed",
+            terminal_attempt_id="other-job",
+        )
+
+    complete = transition_flow_state(
+        flow_id=str(flow["id"]),
+        new_state="complete",
+        terminal_reason="completed",
+        terminal_attempt_id="terminal-job",
+    )
+
+    assert complete["state"] == "complete"
+    assert complete["completed_at"] is not None
+    assert complete["final_accounting_digest"] is not None
+    assert complete["final_output_digest"] is not None
+    with pytest.raises(TokenFlowConflictError, match="immutable"):
+        transition_flow_state(flow_id=str(flow["id"]), new_state="running")
+    with pytest.raises(TokenFlowConflictError, match="cannot accept"):
+        link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="other-job")
+
+
+@pytest.mark.parametrize("terminal_state", ["complete", "partial_terminal", "failed_terminal"])
+def test_non_cancelled_terminal_states_require_a_flow_attempt(
+    initialized_database,
+    terminal_state: str,
+) -> None:
+    flow = create_flow(task_kind="synthesis")
+
+    with pytest.raises(TokenFlowError, match="requires terminal_attempt_id"):
+        transition_flow_state(
+            flow_id=str(flow["id"]),
+            new_state=terminal_state,  # type: ignore[arg-type]
+            terminal_reason="no_attempt",
+        )
+
+    assert get_flow(str(flow["id"]))["state"] == "running"
+
+
+def test_cancelled_flow_may_be_terminal_before_first_attempt(initialized_database) -> None:
+    flow = create_flow(task_kind="synthesis")
+
+    cancelled = transition_flow_state(
+        flow_id=str(flow["id"]),
+        new_state="cancelled_terminal",
+        terminal_reason="operator_cancelled",
+    )
+
+    assert cancelled["state"] == "cancelled_terminal"
+    assert cancelled["terminal_attempt_id"] is None
+    assert cancelled["cancelled_at"] is not None
+
+
+def test_recompute_mixed_aggregates_uses_exact_decimal_without_double_count(
+    initialized_database,
+) -> None:
+    flow = create_flow(task_kind="synthesis")
+    _insert_job(
+        "synthetic",
+        execution_class="synthetic",
+        adapter_invoked=1,
+        dispatch="not_applicable",
+        input_tokens=10,
+        output_tokens=2,
+        usage_source="estimated",
+        latency_ms=1,
+        accounting_basis="synthetic_not_economic",
+        spend="0",
+        continuation_index=0,
+    )
+    _insert_job(
+        "local",
+        execution_class="local_compute",
+        adapter_invoked=1,
+        dispatch="not_applicable",
+        input_tokens=20,
+        output_tokens=5,
+        cache_read_tokens=2,
+        reasoning_tokens=1,
+        usage_source="actual",
+        latency_ms=3,
+        accounting_basis="local_compute_unpriced",
+        spend="0",
+        continuation_index=1,
+    )
+    _insert_job(
+        "external-a",
+        execution_class="external_provider",
+        adapter_invoked=1,
+        dispatch="started",
+        input_tokens=30,
+        output_tokens=10,
+        usage_source="actual",
+        latency_ms=5,
+        accounting_basis="provider_exact",
+        spend="0.10",
+        continuation_index=1,
+    )
+    _insert_job(
+        "external-b",
+        execution_class="external_provider",
+        adapter_invoked=1,
+        dispatch="unknown",
+        input_tokens=40,
+        output_tokens=8,
+        usage_source="estimated",
+        latency_ms=7,
+        accounting_basis="conservative_estimated_usage",
+        spend="0.20",
+        continuation_index=2,
+    )
+    for job_id in ("synthetic", "local", "external-a", "external-b"):
+        link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id=job_id)
+
+    aggregate = recompute_flow_aggregates(str(flow["id"]))
+    replayed = recompute_flow_aggregates(str(flow["id"]))
+
+    assert aggregate["ordered_attempt_ids"] == [
+        "synthetic",
+        "local",
+        "external-a",
+        "external-b",
+    ]
+    assert aggregate["attempt_count"] == 4
+    assert aggregate["continuation_count"] == 2
+    assert aggregate["execution_class_counts"] == {
+        "external_provider": 2,
+        "local_compute": 1,
+        "synthetic": 1,
+    }
+    assert aggregate["external_dispatch_counts"] == {
+        "not_applicable": 2,
+        "started": 1,
+        "unknown": 1,
+    }
+    assert aggregate["accounting_basis_counts"]["provider_exact"] == 1
+    assert aggregate["usage_totals"]["input_tokens"] == 100
+    assert aggregate["usage_totals"]["output_tokens"] == 25
+    assert aggregate["usage_totals"]["total_tokens"] == 125
+    assert aggregate["external_provider_spend_usd_decimal"] == "0.3"
+    assert replayed["external_provider_spend_usd_decimal"] == "0.3"
+    assert aggregate["local_compute_cost_unpriced"] is True
+    assert aggregate["synthetic_evidence_present"] is True
+
+
+@pytest.mark.parametrize("spend", ["invalid", "NaN", "Infinity", "-0.01"])
+def test_invalid_external_decimal_evidence_fails_recompute_closed(
+    initialized_database,
+    spend: str,
+) -> None:
+    flow = create_flow(task_kind="synthesis")
+    _insert_job(
+        "bad-external",
+        execution_class="external_provider",
+        adapter_invoked=1,
+        dispatch="started",
+        usage_source="estimated",
+        accounting_basis="conservative_estimated_usage",
+        spend=spend,
+    )
+
+    linked = link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="bad-external")
+    assert linked["attempt_count"] == 1
+
+    with pytest.raises(TokenFlowError):
+        recompute_flow_aggregates(str(flow["id"]))
+
+    assert get_flow(str(flow["id"]))["external_provider_spend_usd_decimal"] == "0"
+
+
+def test_non_external_spend_is_rejected_and_link_rolls_back(
+    initialized_database,
+) -> None:
+    flow = create_flow(task_kind="synthesis")
+    _insert_job(
+        "bad-local",
+        execution_class="local_compute",
+        adapter_invoked=1,
+        usage_source="estimated",
+        accounting_basis="local_compute_unpriced",
+        spend="0.01",
+    )
+
+    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="bad-local")
+
+    with pytest.raises(TokenFlowError, match="non-external"):
+        recompute_flow_aggregates(str(flow["id"]))
+
+    assert get_flow(str(flow["id"]))["ordered_attempt_ids"] == ["bad-local"]
+
+
+def test_null_current_attempt_evidence_is_not_reinterpreted_as_legacy(
+    initialized_database,
+) -> None:
+    from app.core.database import open_sqlite_connection
+
+    flow = create_flow(task_kind="synthesis")
+    _insert_job("missing-evidence", output_digest="sha256:missing")
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            "UPDATE ai_jobs SET execution_class = NULL WHERE id = 'missing-evidence'"
+        )
+        connection.commit()
+    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="missing-evidence")
+
+    with pytest.raises(TokenFlowError, match="execution_class is missing"):
+        recompute_flow_aggregates(str(flow["id"]))
+    with pytest.raises(TokenFlowError, match="execution_class is missing"):
+        transition_flow_state(
+            flow_id=str(flow["id"]),
+            new_state="complete",
+            terminal_reason="completed",
+            terminal_attempt_id="missing-evidence",
+        )
+
+    persisted = get_flow(str(flow["id"]))
+    assert persisted["state"] == "running"
+    assert persisted["execution_class_counts"] == {}
+
+
+def test_terminal_digests_are_deterministic_and_exclude_unsafe_ledger_fields(
+    initialized_database,
+) -> None:
+    secret = "prompt-body-must-not-enter-flow"
+    flow = create_flow(task_kind="synthesis", requested_route_class="local:fake")
+    _insert_job(
+        "terminal",
+        execution_class="synthetic",
+        adapter_invoked=1,
+        dispatch="not_applicable",
+        usage_source="estimated",
+        accounting_basis="synthetic_not_economic",
+        spend="0",
+        output_digest="sha256:safe-output-digest",
+        context_sources_json=json.dumps({"unsafe_body": secret}),
+    )
+    link_attempt_to_flow(flow_id=str(flow["id"]), attempt_id="terminal")
+    terminal = transition_flow_state(
+        flow_id=str(flow["id"]),
+        new_state="complete",
+        terminal_reason="completed",
+        terminal_attempt_id="terminal",
+    )
+    replayed = recompute_flow_aggregates(str(flow["id"]))
+
+    assert replayed["final_accounting_digest"] == terminal["final_accounting_digest"]
+    assert replayed["final_output_digest"] == terminal["final_output_digest"]
+    assert str(terminal["final_accounting_digest"]).startswith("sha256:")
+    assert str(terminal["final_output_digest"]).startswith("sha256:")
+    assert secret not in json.dumps(terminal, sort_keys=True)
