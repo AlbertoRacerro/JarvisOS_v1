@@ -1,0 +1,30 @@
+name: Apply Continuation Settings Legacy Fix
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply legacy-safe settings fix
+        env:
+          TARGET_BRANCH: spec/061-token-flow-implementation
+        run: |
+          set -euxo pipefail
+          git fetch --depth=20 origin "refs/heads/$TARGET_BRANCH:refs/remotes/origin/$TARGET_BRANCH"
+          git checkout -B "$TARGET_BRANCH" "refs/remotes/origin/$TARGET_BRANCH"
+          python scripts/fix_continuation_settings_legacy_aliases.py
+          rm scripts/fix_continuation_settings_legacy_aliases.py
+          rm .github/workflows/pytest-diagnostic.yml
+          rm .github/workflows/apply-continuation-settings-legacy-fix.yml
+          git config user.name "JarvisOS automation"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -m "Preserve legacy AI settings aliases"
+          git push origin "HEAD:$TARGET_BRANCH"
