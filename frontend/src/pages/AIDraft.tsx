@@ -640,7 +640,7 @@ function AIDraft() {
                 <input name="scaleway_hard_stop_token_cap" type="number" min="0" defaultValue={settings?.scaleway_hard_stop_token_cap ?? 800000} />
               </label>
               <label>
-                Direct continuation limit
+                Reserved continuation limit (available after 061b)
                 <input
                   name="max_direct_continuations"
                   type="number"
@@ -650,7 +650,7 @@ function AIDraft() {
                   defaultValue={settings?.max_direct_continuations ?? 8}
                 />
                 <span>
-                  Server-owned per-flow snapshot · {settings?.direct_continuation_policy_version ?? "token-flow-v0"}
+                  Configuration substrate only; runtime remains disabled in 061a · {settings?.direct_continuation_policy_version ?? "token-flow-v0"}
                 </span>
               </label>
               <label className="checkbox-line">
