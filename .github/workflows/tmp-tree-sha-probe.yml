@@ -1,0 +1,26 @@
+name: Temporary tree SHA probe
+
+on:
+  push:
+    branches:
+      - tmp/tree-sha-probe
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 35761ec2467ac044a01b9feb8c80244ca92283c8
+          fetch-depth: 1
+      - name: Record exact tree SHA
+        run: git rev-parse 'HEAD^{tree}' | tee /tmp/tree-sha.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-tree-sha
+          path: /tmp/tree-sha.txt
+          retention-days: 1
+          if-no-files-found: error
