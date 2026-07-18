@@ -16,17 +16,78 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: tmp/wp1-source-export
-      - name: Reconstruct remote patch
-        run: |
-          set -euo pipefail
-          wc -c .github/wp1-patch/part*.b64
-          sha256sum .github/wp1-patch/part*.b64
-          cat .github/wp1-patch/part*.b64 | tr -d '\n\r' | base64 -d > /tmp/wp1-remote.patch
-          wc -c /tmp/wp1-remote.patch
-          sha256sum /tmp/wp1-remote.patch
-      - uses: actions/upload-artifact@v4
+          path: control
+      - uses: actions/checkout@v4
         with:
-          name: wp1-remote-reconstructed-patch
-          path: /tmp/wp1-remote.patch
+          ref: e8afe90ed10523c2adc775bdaa1b8ae559f69254
+          path: target
+      - name: Diagnose exact patch
+        shell: bash
+        run: |
+          set +e
+          REPORT=/tmp/wp1-diagnostic.txt
+          : > "$REPORT"
+          {
+            echo '== PARTS =='
+            ls -1 control/.github/wp1-patch/part*.b64
+            wc -c control/.github/wp1-patch/part*.b64
+            sha256sum control/.github/wp1-patch/part*.b64
+            echo '== BASE =='
+            git -C target rev-parse HEAD
+            git -C target rev-parse HEAD^{tree}
+          } >> "$REPORT" 2>&1
+          cat control/.github/wp1-patch/part*.b64 | tr -d '\n\r' | base64 -d > /tmp/wp1-before.patch 2>> "$REPORT"
+          {
+            echo '== BEFORE =='
+            wc -c /tmp/wp1-before.patch
+            sha256sum /tmp/wp1-before.patch
+          } >> "$REPORT" 2>&1
+          python - <<'PY' >> "$REPORT" 2>&1
+          from pathlib import Path
+          import hashlib
+
+          source = Path('/tmp/wp1-before.patch')
+          target = Path('/tmp/wp1-after.patch')
+          data = source.read_bytes()
+          replacements = [
+              (
+                  b'@@ -440,6 +497,9 @@ def _terminal_outcome(\n',
+                  b'@@ -440,6 +497,9 @@ def _create_confirmation_job(\n \n def _terminal_outcome(\n',
+              ),
+              (b'persisted_tickket_id', b'persisted_ticket_id'),
+              (
+                  b'+        (persisted_ticket_id,),\n    ).fetchone()\n',
+                  b'+        (persisted_ticket_id,),\n     ).fetchone()\n',
+              ),
+          ]
+          for index, (old, new) in enumerate(replacements, start=1):
+              count = data.count(old)
+              print(f'replacement_{index}_count={count}')
+              if count == 1:
+                  data = data.replace(old, new, 1)
+          target.write_bytes(data)
+          print(f'after_size={len(data)}')
+          print(f'after_sha256={hashlib.sha256(data).hexdigest()}')
+          PY
+          {
+            echo '== APPLY =='
+            git -C target apply --check /tmp/wp1-after.patch
+            echo "apply_rc=$?"
+            git -C target apply /tmp/wp1-after.patch
+            echo "apply_real_rc=$?"
+            git -C target diff --check
+            echo "diff_check_rc=$?"
+            git -C target diff --name-only | sort
+          } >> "$REPORT" 2>&1
+          cat "$REPORT"
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wp1-patch-diagnostic
+          path: |
+            /tmp/wp1-diagnostic.txt
+            /tmp/wp1-before.patch
+            /tmp/wp1-after.patch
           retention-days: 1
-          if-no-files-found: error
+          if-no-files-found: warn
