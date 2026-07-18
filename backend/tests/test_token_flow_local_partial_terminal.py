@@ -64,7 +64,7 @@ def test_local_length_response_terminalizes_flow_as_partial(monkeypatch, tmp_pat
     )
 
     assert outcome.status == "success"
-    assert outcome.proposed_record_ids == []
+    assert outcome.proposed_record_ids is None
     with open_sqlite_connection() as connection:
         flow = connection.execute(
             "SELECT state, terminal_reason, terminal_attempt_id FROM ai_flows WHERE id = ?",
