@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 
 from app.modules.ai.contracts import (
+    AIExternalDispatchState,
     AIRequest,
     AIResponse,
     AIUsage,
@@ -109,6 +110,7 @@ def _stub_scaleway_adapter(captured_text: str = "stub cloud answer", provider_id
                     output_tokens=4,
                 ),
                 safety_status="allowed",
+                external_dispatch_state=AIExternalDispatchState.started,
             )
 
         def stream(self, request: AIRequest):  # pragma: no cover - not used
@@ -729,6 +731,7 @@ class _ErrorAdapter:
             safety_status="blocked",
             blocked_reason="provider_failed",
             error=AIProviderError(code=self.code, message="provider failed", retryable=self.retryable),
+            external_dispatch_state=AIExternalDispatchState.started,
         )
 
     def stream(self, request: AIRequest):  # pragma: no cover - not used
@@ -762,6 +765,7 @@ class _SuccessAdapter:
                 output_tokens=7,
             ),
             safety_status="allowed",
+            external_dispatch_state=AIExternalDispatchState.started,
         )
 
     def stream(self, request: AIRequest):  # pragma: no cover - not used

@@ -72,31 +72,8 @@ jobs:
           ../scripts/cheap_review.py ../scripts/manual_review.py
 
       - name: Pytest
-        id: pytest
         working-directory: backend
-        shell: bash
-        run: |
-          set -o pipefail
-          set +e
-          python -m pytest -q --junitxml="$RUNNER_TEMP/backend-pytest.xml" \
-            2>&1 | tee "$RUNNER_TEMP/backend-pytest.log"
-          status=${PIPESTATUS[0]}
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit 0
-
-      - name: Upload pytest diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-pytest-diagnostics
-          path: |
-            ${{ runner.temp }}/backend-pytest.log
-            ${{ runner.temp }}/backend-pytest.xml
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Enforce pytest
-        run: test "${{ steps.pytest.outputs.status }}" = "0"
+        run: python -m pytest -q
 
   bluecad-geometry-canary:
     runs-on: ubuntu-24.04

@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.modules.ai.contracts import (
+    AIExternalDispatchState,
     AIProviderError,
     AIProviderErrorCode,
     AIRequest,
@@ -150,6 +151,7 @@ class _SuccessAdapter:
                 output_tokens=1,
             ),
             safety_status="allowed",
+            external_dispatch_state=AIExternalDispatchState.started,
         )
 
     def stream(self, request: AIRequest):  # pragma: no cover - not used
@@ -174,6 +176,7 @@ class _RetryableAdapter(_SuccessAdapter):
                 message="retryable timeout",
                 retryable=True,
             ),
+            external_dispatch_state=AIExternalDispatchState.started,
         )
 
 
@@ -233,26 +236,28 @@ def test_network_binding_gate_denial_prevents_adapter_call(monkeypatch, tmp_path
         return AlphaGateDecision(False, "alpha_test_denied", operation, provider_id)
 
     monkeypatch.setattr(budget, "evaluate_alpha_execution_gate", _deny)
-    adapter = _SuccessAdapter("test_provider")
+    adapter = _SuccessAdapter("deepseek")
     binding = ProviderBinding(
         "external:test",
-        "test_provider",
-        "test-model",
+        "deepseek",
+        "deepseek-v4-pro",
         True,
         128,
+        execution_class="external_provider",
+        context_window_tokens=8192,
     )
 
     outcome = run_ai_task(
         user_prompt="must not execute",
         route_class="external:test",
         max_output_tokens=64,
-        adapters={"test_provider": adapter},
+        adapters={"deepseek": adapter},
         bindings={"external:test": binding},
     )
 
     assert outcome.status == "config_error"
     assert adapter.requests == []
-    assert calls == [("test_provider", budget.ALPHA_EXTERNAL_PROVIDER_CALL)]
+    assert calls == [("deepseek", budget.ALPHA_EXTERNAL_PROVIDER_CALL)]
     row = _all_ai_jobs()[-1]
     reason = json.loads(row["route_reason_json"])["decision_reason"]
     assert "alpha_test_denied" in reason
