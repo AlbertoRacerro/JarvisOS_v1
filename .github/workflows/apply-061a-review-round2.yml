@@ -1,13 +1,10 @@
-name: Apply 061a Review Round 2
+name: Diagnose 061a Review Round 2
 
 on:
   pull_request:
 
-permissions:
-  contents: write
-
 jobs:
-  apply:
+  diagnose:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -19,29 +16,39 @@ jobs:
           cache-dependency-path: |
             backend/requirements.txt
             backend/requirements-dev.txt
-      - name: Apply and verify final review fixes
+      - name: Diagnose final review fixes
+        id: diagnose
         env:
           TARGET_BRANCH: spec/061-token-flow-implementation
+        shell: bash
         run: |
-          set -euxo pipefail
-          git fetch --depth=20 origin "refs/heads/$TARGET_BRANCH:refs/remotes/origin/$TARGET_BRANCH"
-          git checkout -B "$TARGET_BRANCH" "refs/remotes/origin/$TARGET_BRANCH"
-          python scripts/fix_061a_review_round2.py
-          python -m pip install -r backend/requirements.txt -r backend/requirements-dev.txt
-          cd backend
-          python -m ruff check \
-            app/modules/ai/execution.py \
-            tests/test_token_flow_review_round2.py
-          python -m pytest -q \
-            tests/test_token_flow_review_round2.py \
-            tests/test_token_flow_local_partial_terminal.py \
-            tests/test_ai_execution_spine.py \
-            tests/test_ai_egress_runtime.py
-          cd ..
-          rm scripts/fix_061a_review_round2.py
-          rm .github/workflows/apply-061a-review-round2.yml
-          git config user.name "JarvisOS automation"
-          git config user.email "actions@users.noreply.github.com"
-          git add -A
-          git commit -m "Fix final 061a review findings"
-          git push origin "HEAD:$TARGET_BRANCH"
+          set -o pipefail
+          set +e
+          (
+            set -euxo pipefail
+            git fetch --depth=20 origin "refs/heads/$TARGET_BRANCH:refs/remotes/origin/$TARGET_BRANCH"
+            git checkout -B "$TARGET_BRANCH" "refs/remotes/origin/$TARGET_BRANCH"
+            python scripts/fix_061a_review_round2.py
+            python -m pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+            cd backend
+            python -m ruff check \
+              app/modules/ai/execution.py \
+              tests/test_token_flow_review_round2.py
+            python -m pytest -q \
+              tests/test_token_flow_review_round2.py \
+              tests/test_token_flow_local_partial_terminal.py \
+              tests/test_ai_execution_spine.py \
+              tests/test_ai_egress_runtime.py
+          ) 2>&1 | tee "$RUNNER_TEMP/review-round2-diagnostic.log"
+          status=${PIPESTATUS[0]}
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: review-round2-diagnostic
+          path: ${{ runner.temp }}/review-round2-diagnostic.log
+          if-no-files-found: error
+          retention-days: 1
+      - name: Enforce diagnostic
+        run: test "${{ steps.diagnose.outputs.status }}" = "0"
