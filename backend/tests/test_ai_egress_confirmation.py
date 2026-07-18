@@ -457,3 +457,107 @@ def test_policy_drift_revokes_ticket_and_terminalizes_paused_flow(monkeypatch) -
         "ticket_binding_or_policy_drift",
         outcome.ledger_id,
     )
+
+
+def _assert_registry_drift_terminalized(
+    ticket_id: str, outcome, adapter: _Adapter
+) -> None:
+    assert outcome.status == "config_error"
+    assert outcome.egress_reason_code == "ticket_binding_or_policy_drift"
+    assert outcome.flow_id is not None
+    assert adapter.requests == []
+    with open_sqlite_connection() as connection:
+        ticket = connection.execute(
+            "SELECT state, revocation_reason "
+            "FROM egress_confirmation_tickets WHERE id = ?",
+            (ticket_id,),
+        ).fetchone()
+        decision = connection.execute(
+            "SELECT decision.pricing_version "
+            "FROM egress_confirmation_tickets AS ticket "
+            "JOIN egress_decisions AS decision ON decision.id = ticket.decision_id "
+            "WHERE ticket.id = ?",
+            (ticket_id,),
+        ).fetchone()
+        job = connection.execute(
+            "SELECT flow_id, execution_class, adapter_invoked, "
+            "external_dispatch_state, accounting_basis, "
+            "accounted_provider_spend_usd_decimal, pricing_version "
+            "FROM ai_jobs WHERE id = ?",
+            (outcome.ledger_id,),
+        ).fetchone()
+        flow = connection.execute(
+            "SELECT state, terminal_reason, terminal_attempt_id, "
+            "external_provider_spend_usd_decimal "
+            "FROM ai_flows WHERE id = ?",
+            (outcome.flow_id,),
+        ).fetchone()
+    assert tuple(ticket) == ("revoked", "ticket_binding_or_policy_drift")
+    assert job["flow_id"] == outcome.flow_id
+    assert job["execution_class"] == "external_provider"
+    assert job["adapter_invoked"] == 0
+    assert job["external_dispatch_state"] == "not_started"
+    assert job["accounting_basis"] == "external_not_sent"
+    assert job["accounted_provider_spend_usd_decimal"] == "0"
+    assert job["pricing_version"] == decision["pricing_version"]
+    assert tuple(flow) == (
+        "failed_terminal",
+        "ticket_binding_or_policy_drift",
+        outcome.ledger_id,
+        "0",
+    )
+
+
+def test_disabled_provider_revokes_ticket_and_terminalizes_paused_flow(
+    monkeypatch,
+) -> None:
+    ticket_id = _pending_ticket(monkeypatch)
+    registry = load_default_provider_registry()
+    providers = dict(registry.providers)
+    providers["deepseek"] = replace(providers["deepseek"], enabled=False)
+    drifted_registry = replace(
+        registry,
+        providers=providers,
+        bindings={
+            route: binding
+            for route, binding in registry.bindings.items()
+            if binding.provider_id != "deepseek"
+        },
+    )
+    adapter = _Adapter("deepseek", response=_success_response())
+
+    outcome = run_confirmation_ticket(
+        ticket_id,
+        adapters={"deepseek": adapter},
+        registry=drifted_registry,
+    ).outcome
+
+    _assert_registry_drift_terminalized(ticket_id, outcome, adapter)
+
+
+def test_removed_model_revokes_ticket_and_terminalizes_paused_flow(
+    monkeypatch,
+) -> None:
+    ticket_id = _pending_ticket(monkeypatch)
+    registry = load_default_provider_registry()
+    models = dict(registry.models)
+    models.pop(("deepseek", "deepseek-v4-pro"))
+    drifted_registry = replace(
+        registry,
+        models=models,
+        bindings={
+            route: binding
+            for route, binding in registry.bindings.items()
+            if (binding.provider_id, binding.model_id)
+            != ("deepseek", "deepseek-v4-pro")
+        },
+    )
+    adapter = _Adapter("deepseek", response=_success_response())
+
+    outcome = run_confirmation_ticket(
+        ticket_id,
+        adapters={"deepseek": adapter},
+        registry=drifted_registry,
+    ).outcome
+
+    _assert_registry_drift_terminalized(ticket_id, outcome, adapter)

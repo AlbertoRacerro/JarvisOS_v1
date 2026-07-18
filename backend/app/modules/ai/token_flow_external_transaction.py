@@ -68,6 +68,7 @@ def finalize_external_attempt(
     outcome_reason: str,
     reservation_id: str | None = None,
     registry: ProviderRegistry | None = None,
+    persisted_pricing_version: str | None = None,
     now: datetime | None = None,
 ) -> ExternalAttemptFinalization:
     """Finalize one external attempt, 059b accounting, and 061 evidence atomically."""
@@ -89,7 +90,29 @@ def finalize_external_attempt(
         raise EgressContractError("adapter invocation requires a 059b reservation")
 
     registry = registry or load_default_provider_registry()
-    pricing = resolve_model_pricing(registry, binding.provider_id, binding.model_id)
+    if persisted_pricing_version is not None:
+        if (
+            reservation_id is not None
+            or adapter_invoked
+            or dispatch_state is not AIExternalDispatchState.not_started
+            or response is not None
+        ):
+            raise EgressContractError(
+                "persisted pricing version is only valid for a non-dispatched "
+                "attempt without a reservation"
+            )
+        if (
+            not isinstance(persisted_pricing_version, str)
+            or not persisted_pricing_version.strip()
+        ):
+            raise EgressContractError(
+                "persisted pricing version must be non-empty text"
+            )
+        pricing_version = persisted_pricing_version.strip()
+    else:
+        pricing_version = resolve_model_pricing(
+            registry, binding.provider_id, binding.model_id
+        ).pricing_version
     with persistence._immediate_transaction() as connection:
         _bind_attempt_identity(
             connection,
@@ -135,7 +158,7 @@ def finalize_external_attempt(
         if reconciliation is None:
             evidence = external_not_started_evidence(
                 binding=binding,
-                pricing_version=pricing.pricing_version,
+                pricing_version=pricing_version,
                 outcome_reason=outcome_reason,
                 requested_output_ceiling=requested_output_ceiling,
                 effective_output_ceiling=effective_output_ceiling,
@@ -149,7 +172,7 @@ def finalize_external_attempt(
         elif dispatch_state is AIExternalDispatchState.not_started:
             evidence = external_not_started_evidence(
                 binding=binding,
-                pricing_version=pricing.pricing_version,
+                pricing_version=pricing_version,
                 outcome_reason=outcome_reason,
                 requested_output_ceiling=requested_output_ceiling,
                 effective_output_ceiling=effective_output_ceiling,
@@ -164,7 +187,7 @@ def finalize_external_attempt(
         else:
             evidence = external_reconciled_evidence(
                 binding=binding,
-                pricing_version=pricing.pricing_version,
+                pricing_version=pricing_version,
                 dispatch_state=dispatch_state,
                 reconciliation_status=reconciliation.reconciliation_status,
                 reconciled_cost_usd=reconciliation.actual_cost_usd,

@@ -13,7 +13,7 @@ from app.modules.ai.contracts import (
 from app.modules.ai.egress_lifecycle import consume_confirmation_ticket, start_reserved_attempt
 from app.modules.ai.egress_persistence import prepare_egress_attempt
 from app.modules.ai.egress_policy import EXTERNAL_PROVIDER_OPERATION
-from app.modules.ai.egress_service import EgressPacketMaterial
+from app.modules.ai.egress_service import EgressContractError, EgressPacketMaterial
 from app.modules.ai.egress_spine import create_queued_ai_job
 from app.modules.ai.provider_registry import load_default_provider_registry
 from app.modules.ai.token_flow_external_transaction import finalize_external_attempt
@@ -188,3 +188,31 @@ def test_flow_link_failure_rolls_back_job_and_reconciliation(monkeypatch, tmp_pa
     assert job["fallback_index"] is None
     assert reservation["state"] == "in_flight"
     assert attempt_count == 0
+
+
+def test_persisted_pricing_version_is_rejected_for_dispatched_attempt(
+    monkeypatch, tmp_path
+) -> None:
+    _initialize(monkeypatch, tmp_path)
+    binding, registry, reservation_id, job_id = _started_reservation()
+    flow = create_flow(task_kind="synthesis", requested_route_class="external:cheap")
+
+    with pytest.raises(EgressContractError, match="persisted pricing version"):
+        finalize_external_attempt(
+            flow_id=str(flow["id"]),
+            ai_job_id=job_id,
+            binding=binding,
+            fallback_index=0,
+            status="success",
+            response=_response(),
+            latency_ms=2,
+            error_type=None,
+            adapter_invoked=True,
+            dispatch_state=AIExternalDispatchState.started,
+            requested_output_ceiling=32,
+            effective_output_ceiling=32,
+            outcome_reason="success",
+            reservation_id=reservation_id,
+            registry=registry,
+            persisted_pricing_version="ticket-snapshot",
+        )

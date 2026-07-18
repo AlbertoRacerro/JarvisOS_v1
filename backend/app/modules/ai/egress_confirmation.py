@@ -66,6 +66,7 @@ class _TicketMetadata:
     route_class: str
     fallback_index: int
     max_output_tokens: int
+    pricing_version: str
 
 
 def run_confirmation_ticket(
@@ -87,12 +88,16 @@ def run_confirmation_ticket(
         raise EgressStateError(f"confirmation ticket is not pending: {metadata.ticket_state}")
     flow = get_confirmation_flow_for_ticket(ticket_id)
     flow_id = str(flow["id"])
-    binding = _binding_from_ticket(metadata, registry)
 
     consumed = consume_confirmation_ticket(
         ticket_id,
         registry=registry,
         policy=policy,
+    )
+    binding = (
+        _binding_from_ticket(metadata, registry)
+        if consumed.authorized
+        else _persisted_external_binding(metadata)
     )
     activate_confirmation_flow(flow_id=flow_id, ticket_id=ticket_id)
     base_route_metadata = _route_metadata(consumed, metadata)
@@ -404,7 +409,7 @@ def _load_ticket_metadata(ticket_id: str) -> _TicketMetadata:
         row = connection.execute(
             """
             SELECT ticket.state AS ticket_state, packet.task_kind, packet.workspace_id,
-                   decision.source_count,
+                   decision.source_count, decision.pricing_version,
                    ticket.trigger_ids_json, ticket.packet_digest,
                    packet.provider_id, packet.model_id, packet.route_class,
                    packet.fallback_index, packet.max_output_tokens
@@ -435,6 +440,7 @@ def _load_ticket_metadata(ticket_id: str) -> _TicketMetadata:
         route_class=str(row["route_class"]),
         fallback_index=int(row["fallback_index"]),
         max_output_tokens=int(row["max_output_tokens"]),
+        pricing_version=str(row["pricing_version"]),
     )
 
 
@@ -532,6 +538,9 @@ def _terminal_outcome(
         outcome_reason=reason_code,
         reservation_id=reservation_id,
         registry=registry,
+        persisted_pricing_version=(
+            metadata.pricing_version if reservation_id is None else None
+        ),
     )
     outcome = _outcome(
         flow_id=flow_id,
@@ -635,6 +644,20 @@ def _binding_from_ticket(metadata: _TicketMetadata, registry: ProviderRegistry) 
         max_output_tokens=model.max_output_tokens,
         execution_class=provider.execution_class,
         context_window_tokens=model.context_window_tokens,
+    )
+
+
+def _persisted_external_binding(metadata: _TicketMetadata) -> ProviderBinding:
+    """Rebuild non-dispatched identity from the server-owned ticket snapshot."""
+
+    return ProviderBinding(
+        route_class=metadata.route_class,
+        provider_id=metadata.provider_id,
+        model_id=metadata.model_id,
+        requires_network=True,
+        max_output_tokens=metadata.max_output_tokens,
+        execution_class="external_provider",
+        context_window_tokens=None,
     )
 
 
