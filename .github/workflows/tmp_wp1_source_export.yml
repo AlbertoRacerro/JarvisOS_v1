@@ -90,13 +90,21 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Governance and status gates
+      - name: Spec status self-test
         working-directory: target
-        run: |
-          python scripts/check_spec_status.py --self-test
-          python scripts/check_spec_status.py
-          python scripts/cheap_review.py --self-test
-          python scripts/manual_review.py --self-test
+        run: python scripts/check_spec_status.py --self-test
+
+      - name: STATUS authority gate
+        working-directory: target
+        run: python scripts/check_spec_status.py
+
+      - name: Cheap review self-test
+        working-directory: target
+        run: python scripts/cheap_review.py --self-test
+
+      - name: Manual review self-test
+        working-directory: target
+        run: python scripts/manual_review.py --self-test
 
       - name: Ruff
         working-directory: target/backend
