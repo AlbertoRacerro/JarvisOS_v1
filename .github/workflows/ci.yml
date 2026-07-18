@@ -25,7 +25,7 @@ jobs:
           set +e
           (
             set -euxo pipefail
-            git fetch --depth=2 origin "refs/heads/$TARGET_BRANCH:refs/remotes/origin/$TARGET_BRANCH"
+            git fetch --depth=20 origin "refs/heads/$TARGET_BRANCH:refs/remotes/origin/$TARGET_BRANCH"
             git checkout -B "$TARGET_BRANCH" "refs/remotes/origin/$TARGET_BRANCH"
             python scripts/fix_external_wiring_stager.py
             python scripts/apply_token_flow_external_wiring.py
