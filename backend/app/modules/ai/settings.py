@@ -48,6 +48,8 @@ def _row_to_settings(row: sqlite3.Row) -> AISettingsRead:
         scaleway_output_tokens_month_to_date=output_tokens,
         usage_total_tokens=input_tokens + output_tokens,
         smoke_test_mode_enabled=_to_bool(data["smoke_test_mode_enabled"]),
+        max_direct_continuations=int(data["max_direct_continuations"]),
+        direct_continuation_policy_version=str(data["direct_continuation_policy_version"]),
         updated_at=data["updated_at"],
     )
 
@@ -101,7 +103,7 @@ def update_ai_settings(payload: AISettingsUpdate) -> AISettingsRead:
                 scaleway_monthly_token_cap = ?, scaleway_hard_stop_token_cap = ?,
                 scaleway_input_tokens_month_to_date = ?,
                 scaleway_output_tokens_month_to_date = ?,
-                smoke_test_mode_enabled = ?, updated_at = ?
+                smoke_test_mode_enabled = ?, max_direct_continuations = ?, updated_at = ?
             WHERE id = ?
             """,
             (
@@ -120,6 +122,7 @@ def update_ai_settings(payload: AISettingsUpdate) -> AISettingsRead:
                 int(values["scaleway_input_tokens_month_to_date"]),
                 int(values["scaleway_output_tokens_month_to_date"]),
                 int(bool(values["smoke_test_mode_enabled"])),
+                int(values["max_direct_continuations"]),
                 now,
                 SETTINGS_ID,
             ),
