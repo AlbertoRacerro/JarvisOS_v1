@@ -5,12 +5,6 @@ TEST = Path("backend/tests/test_token_flow_review_round2.py")
 
 text = EXECUTION.read_text(encoding="utf-8")
 
-old_import = """    no_execution_evidence,\n    normalize_outcome_reason,\n)\n"""
-new_import = """    no_execution_evidence,\n    normalize_finish_reason,\n    normalize_outcome_reason,\n)\n"""
-if text.count(old_import) != 1:
-    raise SystemExit("unexpected token-flow runtime import block")
-text = text.replace(old_import, new_import, 1)
-
 old_capture = """    if external.status == \"success\" and external.response is not None:\n        proposed_record_ids, records_parse_error = _create_proposed_records_from_response(\n"""
 new_capture = """    if (\n        external.status == \"success\"\n        and external.response is not None\n        and normalize_finish_reason(\n            external.response.finish_reason, failed=external.response.error is not None\n        )\n        != \"length\"\n    ):\n        proposed_record_ids, records_parse_error = _create_proposed_records_from_response(\n"""
 if text.count(old_capture) != 1:
