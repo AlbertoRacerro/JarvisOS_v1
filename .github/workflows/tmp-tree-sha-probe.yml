@@ -1,15 +1,16 @@
 name: Temporary tree SHA probe
 
 on:
-  push:
+  pull_request:
     branches:
-      - tmp/tree-sha-probe
+      - master
 
 permissions:
   contents: read
 
 jobs:
   probe:
+    if: github.event.pull_request.head.ref == 'tmp/tree-sha-probe'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
