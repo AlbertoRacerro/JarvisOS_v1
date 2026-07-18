@@ -14,9 +14,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: e8afe90ed10523c2adc775bdaa1b8ae559f69254
           fetch-depth: 1
       - name: Record exact source identity
         run: |
+          test "$(git rev-parse HEAD)" = "e8afe90ed10523c2adc775bdaa1b8ae559f69254"
           git rev-parse HEAD > .source-commit-sha
           git rev-parse HEAD^{tree} > .source-tree-sha
       - name: Package source
