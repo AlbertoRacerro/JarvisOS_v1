@@ -267,52 +267,81 @@ class SmokeTestResponse(BaseModel):
 
 
 class SmokeConsoleRequest(BaseModel):
-    prompt: str = Field(min_length=1)
-    local_privacy_class: str
-    max_tokens: int | None = None
-    timeout_seconds: float | None = None
-    provider_mode: str | None = None
+    workspace_id: str | None = None
+    prompt: str = ""
+    max_output_tokens: int | None = Field(default=None, ge=1)
 
 
 class SmokeConsoleResponse(BaseModel):
-    status: str
-    blocked_reason: str | None = None
     response_text: str | None = None
-    provider_mode: str
     provider: str
-    usage: AIUsage | None = None
+    model: str
+    mode: str = "live_smoke_console"
+    privacy_class: str
+    blocked_reason: str | None = None
+    external_call_attempted: bool
+    external_call_succeeded: bool
     estimated_input_tokens: int
     estimated_output_tokens: int
-    estimated_cost_usd: float | None = None
+    actual_input_tokens: int | None = None
+    actual_output_tokens: int | None = None
+    usage_source: str
+    current_month_input_tokens: int
+    current_month_output_tokens: int
+    current_month_total_tokens: int
+    configured_monthly_token_cap: int
+    token_threshold: int = 500000
+    token_threshold_percent: float
+    remaining_tokens_to_threshold: int
 
 
 class ProviderSmokeRequest(BaseModel):
-    prompt: str = Field(min_length=1)
-    max_tokens: int = Field(default=32, ge=1, le=512)
-    provider_mode: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_id: str | None = None
+    prompt: str = ""
+    max_output_tokens: int | None = Field(default=None, ge=1)
 
 
 class ProviderSmokeResponse(BaseModel):
-    status: str
-    provider_mode: str
+    response_text: str | None = None
     provider: str
     model: str
-    response_text: str | None = None
-    error_type: str | None = None
-    usage: AIUsage | None = None
+    mode: str = "strong_provider_smoke"
+    privacy_class: str
+    blocked_reason: str | None = None
+    external_call_attempted: bool
+    external_call_succeeded: bool
+    estimated_input_tokens: int
+    estimated_output_tokens: int
+    actual_input_tokens: int | None = None
+    actual_output_tokens: int | None = None
+    usage_source: str
+    provider_metadata: dict[str, object] | None = None
 
 
 class SupervisorPublicTestRequest(BaseModel):
-    prompt: str = Field(min_length=1)
-    max_tokens: int = Field(default=64, ge=1, le=512)
-    provider_mode: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    prompt: str = ""
+    task_type: AITaskType | None = None
+    workspace_id: str | None = None
+    max_output_tokens: int | None = Field(default=None, ge=1)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class SupervisorPublicTestResponse(BaseModel):
-    status: str
-    provider_mode: str
-    provider: str
-    model: str
-    response_text: str | None = None
-    error_type: str | None = None
+    answer: str | None = None
+    task_type: AITaskType
+    policy_mode: AIPolicyMode
+    provider_id: str | None
+    model_id: str | None
     usage: AIUsage | None = None
+    safety_status: str
+    blocked_reason: str | None = None
+    event_id: str | None = None
+    request_id: str
+    correlation_id: str | None = None
+    external_call_attempted: bool
+    external_call_succeeded: bool
+    limitations: list[str] = Field(default_factory=list)
