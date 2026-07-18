@@ -114,6 +114,96 @@ def get_flow(flow_id: str) -> Flow:
     return _decode_flow(row)
 
 
+def get_confirmation_flow_for_ticket(ticket_id: str) -> Flow:
+    """Recover the one canonical paused flow bound to a pending 059b ticket.
+
+    This lookup deliberately accepts a ticket that has expired by wall clock while its
+    persisted state is still ``pending``. ``consume_confirmation_ticket`` remains the
+    authority that atomically marks it expired or revoked on access.
+    """
+
+    ticket_id = _safe(ticket_id, ID_RE, "ticket_id")
+    with open_sqlite_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT flow.id AS flow_id
+            FROM ai_flows AS flow
+            JOIN ai_jobs AS attempt ON attempt.flow_id = flow.id
+            WHERE flow.state = 'confirmation_required'
+              AND attempt.flow_attempt_index = (
+                  SELECT MAX(candidate.flow_attempt_index)
+                  FROM ai_jobs AS candidate
+                  WHERE candidate.flow_id = flow.id
+              )
+              AND json_valid(attempt.route_reason_json)
+              AND json_extract(attempt.route_reason_json, '$.egress_ticket_id') = ?
+            ORDER BY flow.id
+            """,
+            (ticket_id,),
+        ).fetchall()
+        matches: list[Flow] = []
+        for row in rows:
+            flow_id = str(row["flow_id"])
+            _require_confirmation_ticket_binding(
+                connection,
+                flow_id,
+                ticket_id=ticket_id,
+                allowed_ticket_states=frozenset({"pending"}),
+                require_unexpired=False,
+            )
+            matches.append(_decode_flow(_require_flow(connection, flow_id)))
+    if len(matches) != 1:
+        raise TokenFlowConflictError(
+            "confirmation ticket must resolve to exactly one canonical paused flow"
+        )
+    return matches[0]
+
+
+def activate_confirmation_flow(*, flow_id: str, ticket_id: str) -> Flow:
+    """Open one paused flow only after its exact ticket leaves ``pending``.
+
+    This is a bounded 061a bridge for the single confirmed attempt. It does not expose
+    a generic confirmation-required -> running transition and does not implement 061b
+    continuation, segment, assembly, or restart recovery semantics.
+    """
+
+    flow_id = _safe(flow_id, ID_RE, "flow_id")
+    ticket_id = _safe(ticket_id, ID_RE, "ticket_id")
+    with open_sqlite_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            flow = _require_flow(connection, flow_id)
+            if flow["state"] != "confirmation_required":
+                raise TokenFlowConflictError(
+                    "only confirmation_required flows can accept a confirmed attempt"
+                )
+            _require_confirmation_ticket_binding(
+                connection,
+                flow_id,
+                ticket_id=ticket_id,
+                allowed_ticket_states=frozenset({"consumed", "expired", "revoked"}),
+                require_unexpired=False,
+            )
+            updated = connection.execute(
+                """
+                UPDATE ai_flows
+                SET state = 'running', updated_at = ?
+                WHERE id = ? AND state = 'confirmation_required'
+                """,
+                (utc_now(), flow_id),
+            )
+            if updated.rowcount != 1:
+                raise TokenFlowConflictError(
+                    "confirmation flow activation changed concurrently"
+                )
+            result = _recompute(connection, flow_id)
+            connection.commit()
+            return result
+        except Exception:
+            connection.rollback()
+            raise
+
+
 def link_attempt_to_flow(*, flow_id: str, attempt_id: str) -> Flow:
     flow_id = _safe(flow_id, ID_RE, "flow_id")
     attempt_id = _safe(attempt_id, ID_RE, "attempt_id")
@@ -449,6 +539,23 @@ def _validate_evidence(
 
 
 def _require_confirmation_attempt(connection: sqlite3.Connection, flow_id: str) -> None:
+    _require_confirmation_ticket_binding(
+        connection,
+        flow_id,
+        ticket_id=None,
+        allowed_ticket_states=frozenset({"pending"}),
+        require_unexpired=True,
+    )
+
+
+def _require_confirmation_ticket_binding(
+    connection: sqlite3.Connection,
+    flow_id: str,
+    *,
+    ticket_id: str | None,
+    allowed_ticket_states: frozenset[str],
+    require_unexpired: bool,
+) -> None:
     attempts = _attempt_rows(connection, flow_id)
     if not attempts:
         raise TokenFlowConflictError("confirmation_required needs a canonical pause attempt")
@@ -464,7 +571,9 @@ def _require_confirmation_attempt(connection: sqlite3.Connection, flow_id: str) 
     ):
         raise TokenFlowConflictError("latest attempt is not a canonical confirmation pause")
     metadata = _route_reason(attempt["route_reason_json"])
-    ticket_id = _metadata_text(metadata, "egress_ticket_id")
+    persisted_ticket_id = _metadata_text(metadata, "egress_ticket_id")
+    if ticket_id is not None and persisted_ticket_id != ticket_id:
+        raise TokenFlowConflictError("confirmation ticket does not match paused flow")
     decision_id = _metadata_text(metadata, "egress_decision_id")
     packet_digest = _metadata_text(metadata, "egress_packet_digest")
     trigger_ids = _metadata_text_list(metadata, "egress_trigger_ids")
@@ -501,11 +610,15 @@ def _require_confirmation_attempt(connection: sqlite3.Connection, flow_id: str) 
         JOIN egress_packets AS packet ON packet.id = ticket.packet_id
         WHERE ticket.id = ?
         """,
-        (ticket_id,),
+        (persisted_ticket_id,),
     ).fetchone()
     if ticket is None:
         raise TokenFlowConflictError("confirmation ticket does not exist")
-    if ticket["ticket_state"] != "pending" or not _unexpired(ticket["expires_at"]):
+    if ticket["ticket_state"] not in allowed_ticket_states:
+        raise TokenFlowConflictError(
+            "confirmation ticket state is not valid for this flow operation"
+        )
+    if require_unexpired and not _unexpired(ticket["expires_at"]):
         raise TokenFlowConflictError("confirmation ticket is not pending and unexpired")
     flow = _require_flow(connection, flow_id)
     if (
@@ -541,7 +654,7 @@ def _require_confirmation_attempt(connection: sqlite3.Connection, flow_id: str) 
     if (
         decision_id != ticket["decision_id"]
         or packet_digest != ticket["packet_digest"]
-        or ticket_id != ticket["decision_ticket_id"]
+        or persisted_ticket_id != ticket["decision_ticket_id"]
         or ticket["decision_result"] != "pause"
         or ticket["decision_reason_code"] != "confirmation_required"
         or ticket["confirmation_required"] != 1

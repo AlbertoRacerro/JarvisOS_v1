@@ -445,7 +445,7 @@ def test_confirm_escalation_consumes_ticket_and_executes_exact_packet(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _enable_external(client, monkeypatch)
-    from app.modules.ai.contracts import AIRequest, AIResponse, AIUsage
+    from app.modules.ai.contracts import AIExternalDispatchState, AIRequest, AIResponse, AIUsage
     from app.modules.ai.providers.openai_compat_adapter import OpenAICompatAdapter
 
     seen: list[AIRequest] = []
@@ -465,6 +465,7 @@ def test_confirm_escalation_consumes_ticket_and_executes_exact_packet(
                 output_tokens=7,
             ),
             safety_status="allowed",
+            external_dispatch_state=AIExternalDispatchState.started,
         )
 
     monkeypatch.setattr(OpenAICompatAdapter, "complete", complete)
@@ -499,7 +500,7 @@ def test_confirm_escalation_replay_returns_conflict_without_second_provider_call
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _enable_external(client, monkeypatch)
-    from app.modules.ai.contracts import AIRequest, AIResponse, AIUsage
+    from app.modules.ai.contracts import AIExternalDispatchState, AIRequest, AIResponse, AIUsage
     from app.modules.ai.providers.openai_compat_adapter import OpenAICompatAdapter
 
     calls = 0
@@ -515,6 +516,7 @@ def test_confirm_escalation_replay_returns_conflict_without_second_provider_call
             content="ok",
             usage=AIUsage(provider_id="deepseek", model_id="deepseek-v4-pro", input_tokens=1, output_tokens=1),
             safety_status="allowed",
+            external_dispatch_state=AIExternalDispatchState.started,
         )
 
     monkeypatch.setattr(OpenAICompatAdapter, "complete", complete)
@@ -599,9 +601,7 @@ def test_confirm_escalation_credential_removal_revokes_ticket_without_provider_c
 
 
 @pytest.mark.parametrize("task_kind", ["code-review", "CODE_REVIEW"])
-def test_task_endpoint_accepts_safe_task_kind_variants(
-    client: TestClient, task_kind: str
-) -> None:
+def test_task_endpoint_accepts_safe_task_kind_variants(client: TestClient, task_kind: str) -> None:
     response = client.post(
         "/ai/tasks/run",
         json={

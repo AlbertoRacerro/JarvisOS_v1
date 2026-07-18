@@ -17,7 +17,7 @@ Create one canonical, restart-safe flow record that correlates every existing AI
 - `ai_flows` as an aggregate and lifecycle record; `ai_jobs` remains the only attempt ledger;
 - ordered attempt identity and deterministic flow aggregation;
 - explicit server-owned execution classes: `none`, `synthetic`, `local_compute`, and `external_provider`;
-- separate `adapter_invoked` and external dispatch evidence (`not_started`, `started`, `unknown`);
+- separate `adapter_invoked` and external dispatch evidence (`not_applicable`, `not_started`, `started`, `unknown`);
 - normalized usage and finish-reason evidence;
 - exact external-provider spend aggregation using canonical decimal text;
 - explicit `local_compute_unpriced` and `synthetic_not_economic` accounting;
@@ -46,7 +46,9 @@ The core lifecycle is:
 
 Terminalization must bind the final ordered attempt and deterministic accounting/output digests. A terminal flow cannot accept additional attempt evidence.
 
-061a does not resume a paused flow or automatically create continuation attempts.
+The exact 059b confirmation ticket is a bounded exception to the generic transition table: after server-owned ticket consumption, the one canonical `confirmation_required` flow is opened only for its exact confirmed external attempt, finalized through the shared 059b/061 transaction, and immediately terminalized. Success produces `complete`, `finish_reason=length` produces `partial_terminal`, and failure produces `failed_terminal`. A ticket marked expired or revoked during access records a canonical external `not_started` attempt and failed-terminalizes the paused flow.
+
+This bridge is not restart-safe confirmation resume and does not create continuation attempts, segments, or assembled output. Those recovery and continuation semantics remain 061b work.
 
 ## Continuation substrate boundary
 
@@ -54,7 +56,7 @@ The migration may reserve continuation lineage, protected-segment storage, and a
 
 - no code may automatically continue after `finish_reason=length`;
 - no protected segment body may be read, written, exposed, or treated as active runtime state;
-- no confirmation ticket may be resumed into a new continuation attempt;
+- no confirmation ticket may create a continuation attempt, protected segment, or assembled output;
 - no UI wording may imply that automatic continuation is active;
 - the substrate must not alter existing task execution behavior.
 
@@ -77,7 +79,7 @@ The implementation must prove offline that:
 
 - automatic direct continuation;
 - protected segment service or retention worker;
-- confirmation resume;
+- generic or restart-safe confirmation resume beyond the bounded exact-ticket terminal attempt;
 - streaming or background execution;
 - assembled-output record capture;
 - grading, routing optimization, Hermes, MCP, provider additions, or frontend redesign;
