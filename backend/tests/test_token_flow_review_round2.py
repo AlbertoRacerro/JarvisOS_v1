@@ -1,25 +1,4 @@
-from pathlib import Path
-
-EXECUTION = Path("backend/app/modules/ai/execution.py")
-TEST = Path("backend/tests/test_token_flow_review_round2.py")
-
-text = EXECUTION.read_text(encoding="utf-8")
-
-old_capture = """    if external.status == \"success\" and external.response is not None:\n        proposed_record_ids, records_parse_error = _create_proposed_records_from_response(\n"""
-new_capture = """    if (\n        external.status == \"success\"\n        and external.response is not None\n        and normalize_finish_reason(\n            external.response.finish_reason, failed=external.response.error is not None\n        )\n        != \"length\"\n    ):\n        proposed_record_ids, records_parse_error = _create_proposed_records_from_response(\n"""
-if text.count(old_capture) != 1:
-    raise SystemExit("unexpected external record-capture gate")
-text = text.replace(old_capture, new_capture, 1)
-
-old_budget = """        fallback_index = 0 if early_binding is not None else None\n        evidence = no_execution_evidence(\n            selected_route_class=selected_route_class,\n            binding=early_binding,\n            outcome_reason=\"context_budget_exceeded\",\n            requested_output_ceiling=max_output_tokens,\n            effective_output_ceiling=None,\n            fallback_index=fallback_index,\n        )\n        ledger_id = _write_ai_job(\n            status=\"validation_error\",\n            task_kind=task_kind,\n            requested_route_class=requested_route_class,\n            selected_route_class=selected_route_class,\n"""
-new_budget = """        fallback_index = 0 if early_binding is not None else None\n        persisted_route = _flow_requested_route(selected_route_class)\n        evidence = no_execution_evidence(\n            selected_route_class=persisted_route,\n            binding=early_binding,\n            outcome_reason=\"context_budget_exceeded\",\n            requested_output_ceiling=max_output_tokens,\n            effective_output_ceiling=None,\n            fallback_index=fallback_index,\n        )\n        ledger_id = _write_ai_job(\n            status=\"validation_error\",\n            task_kind=task_kind,\n            requested_route_class=requested_route_class,\n            selected_route_class=persisted_route,\n"""
-if text.count(old_budget) != 1:
-    raise SystemExit("unexpected context-budget branch")
-text = text.replace(old_budget, new_budget, 1)
-EXECUTION.write_text(text, encoding="utf-8")
-
-TEST.write_text(
-    '''from __future__ import annotations
+from __future__ import annotations
 
 import pytest
 
@@ -144,6 +123,3 @@ def test_malformed_route_budget_failure_records_terminal_flow(monkeypatch, tmp_p
     assert flow["state"] == "failed_terminal"
     assert flow["terminal_reason"] == "context_budget_exceeded"
     assert flow["terminal_attempt_id"] == outcome.ledger_id
-''',
-    encoding="utf-8",
-)

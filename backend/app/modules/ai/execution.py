@@ -440,7 +440,14 @@ def _run_external_network_task(
         egress_trigger_ids=external.egress_trigger_ids,
         flow_id=external.flow_id,
     )
-    if external.status == "success" and external.response is not None:
+    if (
+        external.status == "success"
+        and external.response is not None
+        and normalize_finish_reason(
+            external.response.finish_reason, failed=external.response.error is not None
+        )
+        != "length"
+    ):
         proposed_record_ids, records_parse_error = _create_proposed_records_from_response(
             task_kind=task_kind,
             response=external.response,
@@ -674,8 +681,9 @@ def run_ai_task(
             decision_reason=f"context {serialized_context_len} chars exceeds budget {DEFAULT_CONTEXT_BUDGET_CHARS}",
         )
         fallback_index = 0 if early_binding is not None else None
+        persisted_route = _flow_requested_route(selected_route_class)
         evidence = no_execution_evidence(
-            selected_route_class=selected_route_class,
+            selected_route_class=persisted_route,
             binding=early_binding,
             outcome_reason="context_budget_exceeded",
             requested_output_ceiling=max_output_tokens,
@@ -686,7 +694,7 @@ def run_ai_task(
             status="validation_error",
             task_kind=task_kind,
             requested_route_class=requested_route_class,
-            selected_route_class=selected_route_class,
+            selected_route_class=persisted_route,
             decision=bad,
             prompt_digest=prompt_digest,
             context_digest=None,
