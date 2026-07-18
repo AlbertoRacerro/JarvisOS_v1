@@ -46,7 +46,7 @@ ACCOUNTING_BASES = frozenset(
     }
 )
 USAGE_SOURCES = frozenset({"actual", "mixed", "estimated", "none"})
-TASK_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+TASK_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
 ROUTE_RE = re.compile(r"^(?:auto|[a-z][a-z0-9_]*:[a-z][a-z0-9_]*)$")
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 REASON_RE = re.compile(r"^[a-z][a-z0-9_]{0,127}$")

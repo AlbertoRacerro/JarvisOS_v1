@@ -133,7 +133,9 @@ class AITaskRunRequest(BaseModel):
 
     prompt: str = Field(min_length=1)
     route_class: str | None = None
-    task_kind: str = "general"
+    task_kind: str = Field(
+        default="general", pattern=r"^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+    )
     max_tokens: int | None = Field(default=None, ge=1)
     context_blocks: list[dict[str, Any]] | None = None
     include_project_context: bool = False

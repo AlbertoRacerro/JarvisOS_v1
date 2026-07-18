@@ -35,6 +35,7 @@ from app.modules.ai.execution import (
 )
 from app.modules.ai.provider_registry import ProviderRegistry, load_default_provider_registry
 from app.modules.ai.settings import get_ai_settings
+from app.modules.ai.token_flow_runtime import normalize_finish_reason
 
 
 @dataclass(frozen=True)
@@ -325,7 +326,9 @@ def run_confirmation_ticket(
         context_digest=context_digest,
         blocked=False,
     )
-    if status == "success":
+    if status == "success" and normalize_finish_reason(
+        response.finish_reason, failed=response.error is not None
+    ) != "length":
         proposed_ids, parse_error = _create_proposed_records_from_response(
             task_kind=metadata.task_kind,
             response=response,

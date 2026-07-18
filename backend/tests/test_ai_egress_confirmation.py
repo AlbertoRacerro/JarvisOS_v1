@@ -273,3 +273,27 @@ def test_response_binding_mismatch_is_reconciled_as_network_attempt(monkeypatch)
     assert job["error_type"] == "EgressSpineStateError"
     assert attempt["network_attempt"] == 1
     assert attempt["reconciliation_status"] == "conservative_missing_usage"
+
+
+def test_length_stopped_confirmed_ticket_skips_record_capture(monkeypatch) -> None:
+    ticket_id = _pending_ticket(monkeypatch)
+    response = _success_response().model_copy(update={"finish_reason": "length"})
+    adapter = _Adapter("deepseek", response=response)
+    import app.modules.ai.egress_confirmation as confirmation
+
+    def fail_capture(**_kwargs):
+        pytest.fail("truncated confirmed output must not create proposed records")
+
+    monkeypatch.setattr(
+        confirmation, "_create_proposed_records_from_response", fail_capture
+    )
+
+    outcome = run_confirmation_ticket(
+        ticket_id, adapters={"deepseek": adapter}
+    ).outcome
+
+    assert outcome.status == "success"
+    assert outcome.response is not None
+    assert outcome.response.finish_reason == "length"
+    assert outcome.proposed_record_ids is None
+    assert outcome.records_parse_error is None
