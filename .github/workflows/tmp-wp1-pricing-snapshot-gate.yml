@@ -33,7 +33,29 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git -C target rev-parse HEAD)" = '7a29dec974c23e0508ea28e07620dcc3c390b07c'
-          python control/.github/tmp_apply_wp1_pricing_snapshot.py target
+          python - <<'PY'
+          from pathlib import Path
+
+          source = Path('control/.github/tmp_apply_wp1_pricing_snapshot.py')
+          text = source.read_text(encoding='utf-8')
+          replacements = [
+              (
+                  '"SELECT task_kind, decision_reason, route_reason_json "',
+                  '"SELECT task_kind, route_reason_json "',
+              ),
+              (
+                  'if job["decision_reason"] != f"confirmed_ticket:{ticket_id}":',
+                  'if route_metadata.get("decision_reason") != f"confirmed_ticket:{ticket_id}":',
+              ),
+          ]
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected one script repair match, found {count}: {old}')
+              text = text.replace(old, new, 1)
+          Path('/tmp/apply-pricing-snapshot.py').write_text(text, encoding='utf-8')
+          PY
+          python /tmp/apply-pricing-snapshot.py target
           git -C target diff --check
           (
             git -C target diff --name-only
@@ -125,4 +147,16 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'Bind confirmation pricing to decision snapshot'
           git push origin HEAD:spec/061-token-flow-implementation
-          git rev-parse HEAD
+          git rev-parse HEAD | tee "$RUNNER_TEMP/wp1-new-head.txt"
+          git rev-parse 'HEAD^{tree}' | tee "$RUNNER_TEMP/wp1-tree-sha.txt"
+
+      - name: Upload push evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wp1-pricing-push-evidence
+          path: |
+            ${{ runner.temp }}/wp1-new-head.txt
+            ${{ runner.temp }}/wp1-tree-sha.txt
+          retention-days: 1
+          if-no-files-found: warn
