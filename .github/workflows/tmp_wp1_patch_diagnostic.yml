@@ -1,0 +1,32 @@
+name: Temporary WP1 patch diagnostic
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  reconstruct:
+    if: github.event.pull_request.head.ref == 'tmp/wp1-source-export'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: tmp/wp1-source-export
+      - name: Reconstruct remote patch
+        run: |
+          set -euo pipefail
+          wc -c .github/wp1-patch/part*.b64
+          sha256sum .github/wp1-patch/part*.b64
+          cat .github/wp1-patch/part*.b64 | tr -d '\n\r' | base64 -d > /tmp/wp1-remote.patch
+          wc -c /tmp/wp1-remote.patch
+          sha256sum /tmp/wp1-remote.patch
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wp1-remote-reconstructed-patch
+          path: /tmp/wp1-remote.patch
+          retention-days: 1
+          if-no-files-found: error
