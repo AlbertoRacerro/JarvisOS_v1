@@ -64,7 +64,7 @@ jobs:
           git apply --check /tmp/wp1.patch
           git apply /tmp/wp1.patch
           git diff --check
-          git diff --name-only | sort > /tmp/actual-paths
+          (git diff --name-only; git ls-files --others --exclude-standard) | sort > /tmp/actual-paths
           cat > /tmp/expected-paths <<'EOF'
           backend/app/modules/ai/egress_confirmation.py
           backend/app/modules/ai/token_flow_service.py
