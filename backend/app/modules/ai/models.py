@@ -8,6 +8,8 @@ from app.modules.ai.contracts import AIPolicyMode, AITaskType, AIUsage
 
 
 class AISettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     policy_mode: AIPolicyMode | None = None
     monthly_api_budget_usd: float | None = Field(default=None, ge=0)
     paid_ai_enabled: bool | None = None
@@ -23,6 +25,7 @@ class AISettingsUpdate(BaseModel):
     scaleway_input_tokens_month_to_date: int | None = Field(default=None, ge=0)
     scaleway_output_tokens_month_to_date: int | None = Field(default=None, ge=0)
     smoke_test_mode_enabled: bool | None = None
+    max_direct_continuations: int | None = Field(default=None, ge=0, le=16, strict=True)
 
 
 class AISettingsRead(BaseModel):
@@ -44,6 +47,10 @@ class AISettingsRead(BaseModel):
     scaleway_output_tokens_month_to_date: int
     usage_total_tokens: int
     smoke_test_mode_enabled: bool
+    max_direct_continuations: int
+    max_direct_continuations_min: int = 0
+    max_direct_continuations_max: int = 16
+    direct_continuation_policy_version: str
     updated_at: str
 
 
@@ -260,81 +267,52 @@ class SmokeTestResponse(BaseModel):
 
 
 class SmokeConsoleRequest(BaseModel):
-    workspace_id: str | None = None
-    prompt: str = ""
-    max_output_tokens: int | None = Field(default=None, ge=1)
+    prompt: str = Field(min_length=1)
+    local_privacy_class: str
+    max_tokens: int | None = None
+    timeout_seconds: float | None = None
+    provider_mode: str | None = None
 
 
 class SmokeConsoleResponse(BaseModel):
-    response_text: str | None = None
-    provider: str
-    model: str
-    mode: str = "live_smoke_console"
-    privacy_class: str
+    status: str
     blocked_reason: str | None = None
-    external_call_attempted: bool
-    external_call_succeeded: bool
+    response_text: str | None = None
+    provider_mode: str
+    provider: str
+    usage: AIUsage | None = None
     estimated_input_tokens: int
     estimated_output_tokens: int
-    actual_input_tokens: int | None = None
-    actual_output_tokens: int | None = None
-    usage_source: str
-    current_month_input_tokens: int
-    current_month_output_tokens: int
-    current_month_total_tokens: int
-    configured_monthly_token_cap: int
-    token_threshold: int = 500000
-    token_threshold_percent: float
-    remaining_tokens_to_threshold: int
+    estimated_cost_usd: float | None = None
 
 
 class ProviderSmokeRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    workspace_id: str | None = None
-    prompt: str = ""
-    max_output_tokens: int | None = Field(default=None, ge=1)
+    prompt: str = Field(min_length=1)
+    max_tokens: int = Field(default=32, ge=1, le=512)
+    provider_mode: str | None = None
 
 
 class ProviderSmokeResponse(BaseModel):
-    response_text: str | None = None
+    status: str
+    provider_mode: str
     provider: str
     model: str
-    mode: str = "strong_provider_smoke"
-    privacy_class: str
-    blocked_reason: str | None = None
-    external_call_attempted: bool
-    external_call_succeeded: bool
-    estimated_input_tokens: int
-    estimated_output_tokens: int
-    actual_input_tokens: int | None = None
-    actual_output_tokens: int | None = None
-    usage_source: str
-    provider_metadata: dict[str, object] | None = None
+    response_text: str | None = None
+    error_type: str | None = None
+    usage: AIUsage | None = None
 
 
 class SupervisorPublicTestRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    prompt: str = ""
-    task_type: AITaskType | None = None
-    workspace_id: str | None = None
-    max_output_tokens: int | None = Field(default=None, ge=1)
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    prompt: str = Field(min_length=1)
+    max_tokens: int = Field(default=64, ge=1, le=512)
+    provider_mode: str | None = None
 
 
 class SupervisorPublicTestResponse(BaseModel):
-    answer: str | None = None
-    task_type: AITaskType
-    policy_mode: AIPolicyMode
-    provider_id: str | None
-    model_id: str | None
+    status: str
+    provider_mode: str
+    provider: str
+    model: str
+    response_text: str | None = None
+    error_type: str | None = None
     usage: AIUsage | None = None
-    safety_status: str
-    blocked_reason: str | None = None
-    event_id: str | None = None
-    request_id: str
-    correlation_id: str | None = None
-    external_call_attempted: bool
-    external_call_succeeded: bool
-    limitations: list[str] = Field(default_factory=list)
