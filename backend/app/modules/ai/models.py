@@ -20,6 +20,9 @@ class AISettingsUpdate(BaseModel):
     scaleway_enabled: bool | None = None
     scaleway_smoke_test_enabled: bool | None = None
     scaleway_live_smoke_test_enabled: bool | None = None
+    # Recognized legacy write-only aliases. The settings service intentionally ignores them.
+    scaleway_token_cap: int | None = Field(default=None, ge=0)
+    scaleway_tokens_month_to_date: int | None = Field(default=None, ge=0)
     scaleway_monthly_token_cap: int | None = Field(default=None, ge=0)
     scaleway_hard_stop_token_cap: int | None = Field(default=None, ge=0)
     scaleway_input_tokens_month_to_date: int | None = Field(default=None, ge=0)
