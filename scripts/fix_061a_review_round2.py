@@ -34,6 +34,7 @@ def test_external_length_response_skips_record_capture(monkeypatch) -> None:
     response = AIResponse(
         provider_id="fake",
         model_id="fake-modeling-draft-v1",
+        request_id="req-1",
         text="Truncated external answer.",
         content="Truncated external answer.",
         finish_reason="length",
