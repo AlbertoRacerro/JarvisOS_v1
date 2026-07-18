@@ -1,30 +1,4 @@
-from pathlib import Path
-
-RUNTIME = Path("backend/app/modules/ai/egress_runtime.py")
-TEST = Path("backend/tests/test_token_flow_external_failure_reason.py")
-
-text = RUNTIME.read_text(encoding="utf-8")
-old = '''    else:
-        state = "failed_terminal"
-        reason = normalize_outcome_reason(
-            outcome.egress_reason_code or outcome.error_type or outcome.status
-        )
-'''
-new = '''    else:
-        state = "failed_terminal"
-        failure_reason = outcome.egress_reason_code
-        if failure_reason in {"silent_allow", "ticket_consumed"}:
-            failure_reason = None
-        reason = normalize_outcome_reason(
-            failure_reason or outcome.error_type or outcome.status
-        )
-'''
-if text.count(old) != 1:
-    raise SystemExit("unexpected external terminal-reason block")
-RUNTIME.write_text(text.replace(old, new, 1), encoding="utf-8")
-
-TEST.write_text(
-    '''from __future__ import annotations
+from __future__ import annotations
 
 from app.modules.ai.contracts import RoutingDecision
 from app.modules.ai.egress_runtime import ExternalTaskOutcome, _terminalize_external_flow
@@ -89,6 +63,3 @@ def test_specific_failure_reason_still_wins_over_generic_error_type(monkeypatch)
 
     assert captured["new_state"] == "failed_terminal"
     assert captured["terminal_reason"] == "response_binding_mismatch"
-''',
-    encoding="utf-8",
-)

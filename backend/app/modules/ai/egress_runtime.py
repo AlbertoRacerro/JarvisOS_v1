@@ -176,8 +176,11 @@ def _terminalize_external_flow(flow_id: str, outcome: ExternalTaskOutcome) -> No
         reason = "completed"
     else:
         state = "failed_terminal"
+        failure_reason = outcome.egress_reason_code
+        if failure_reason in {"silent_allow", "ticket_consumed"}:
+            failure_reason = None
         reason = normalize_outcome_reason(
-            outcome.egress_reason_code or outcome.error_type or outcome.status
+            failure_reason or outcome.error_type or outcome.status
         )
     transition_flow_state(
         flow_id=flow_id,
