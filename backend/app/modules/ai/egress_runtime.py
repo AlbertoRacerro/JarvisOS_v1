@@ -16,6 +16,7 @@ from app.modules.ai.context_builder import (
     context_sources_manifest,
 )
 from app.modules.ai.contracts import (
+    AIExternalDispatchState,
     AIProviderAdapter,
     AIRequest,
     AIResponse,
@@ -41,7 +42,6 @@ from app.modules.ai.egress_service import (
 from app.modules.ai.egress_spine import (
     EgressSpineStateError,
     create_queued_ai_job,
-    finalize_queued_ai_job,
     record_prepacket_egress_decision,
 )
 from app.modules.ai.execution_types import ProviderBinding
@@ -49,7 +49,10 @@ from app.modules.ai.provider_registry import (
     ProviderRegistry,
     load_default_provider_registry,
 )
-from app.modules.ai.settings import get_ai_settings
+from app.modules.ai.settings import ensure_ai_settings, get_ai_settings
+from app.modules.ai.token_flow_external_transaction import finalize_external_attempt
+from app.modules.ai.token_flow_runtime import normalize_outcome_reason
+from app.modules.ai.token_flow_service import create_flow, transition_flow_state
 
 _LOCAL_SANITIZER_ROUTE = "local:fast"
 _LEVEL_RANK = {"S0": 0, "S1": 1}
@@ -73,6 +76,7 @@ class ExternalTaskOutcome:
     egress_reservation_id: str | None
     egress_reason_code: str | None
     egress_trigger_ids: tuple[str, ...]
+    flow_id: str
 
 
 @dataclass(frozen=True)
@@ -114,6 +118,56 @@ class _PrepacketStop(Exception):
         self.ai_error_type = ai_error_type
 
 
+def _flow_workspace_id(workspace_id: str | None) -> str | None:
+    if workspace_id is None:
+        return None
+    with open_sqlite_connection() as connection:
+        row = connection.execute(
+            "SELECT 1 FROM workspaces WHERE id = ?",
+            (workspace_id,),
+        ).fetchone()
+    return workspace_id if row is not None else None
+
+
+def _create_external_flow(
+    *,
+    task_kind: str,
+    requested_route_class: str | None,
+    workspace_id: str | None,
+) -> str:
+    ensure_ai_settings()
+    flow = create_flow(
+        task_kind=task_kind,
+        requested_route_class=requested_route_class,
+        workspace_id=_flow_workspace_id(workspace_id),
+    )
+    return str(flow["id"])
+
+
+def _terminalize_external_flow(flow_id: str, outcome: ExternalTaskOutcome) -> None:
+    if (
+        outcome.status == "validation_error"
+        and outcome.egress_reason_code == "confirmation_required"
+        and outcome.egress_ticket_id is not None
+    ):
+        transition_flow_state(flow_id=flow_id, new_state="confirmation_required")
+        return
+    if outcome.status == "success":
+        state = "complete"
+        reason = "completed"
+    else:
+        state = "failed_terminal"
+        reason = normalize_outcome_reason(
+            outcome.egress_reason_code or outcome.error_type or outcome.status
+        )
+    transition_flow_state(
+        flow_id=flow_id,
+        new_state=state,
+        terminal_reason=reason,
+        terminal_attempt_id=outcome.ledger_id,
+    )
+
+
 def run_external_task(
     *,
     user_prompt: str,
@@ -142,6 +196,11 @@ def run_external_task(
     primary, _decision = resolve_binding(selected_route_class, binding_table)
     if primary is None:
         raise EgressContractError("external runtime requires a resolved route")
+    flow_id = _create_external_flow(
+        task_kind=task_kind,
+        requested_route_class=requested_route_class,
+        workspace_id=workspace_id,
+    )
     chain = _binding_chain(
         route_class=selected_route_class,
         primary=primary,
@@ -173,6 +232,7 @@ def run_external_task(
             prior_retryable_error_code=prior_retryable_error_code,
             registry=registry,
             policy=policy,
+            flow_id=flow_id,
         )
         last_outcome = outcome
         if (
@@ -182,10 +242,12 @@ def run_external_task(
         ):
             prior_retryable_error_code = outcome.retryable_error_code
             continue
+        _terminalize_external_flow(flow_id, outcome)
         return outcome
 
     if last_outcome is None:
         raise EgressSpineStateError("external binding chain was empty")
+    _terminalize_external_flow(flow_id, last_outcome)
     return last_outcome
 
 
@@ -208,6 +270,7 @@ def _run_binding(
     prior_retryable_error_code: str | None,
     registry: ProviderRegistry,
     policy: EgressPolicyConfig,
+    flow_id: str,
 ) -> ExternalTaskOutcome:
     started_at = time.perf_counter()
     raw_prompt_digest = sha256_text(user_prompt)
@@ -287,6 +350,9 @@ def _run_binding(
             route_metadata=route_metadata,
             started_at=started_at,
             policy=policy,
+            requested_output_ceiling=max_output_tokens,
+            registry=registry,
+            flow_id=flow_id,
         )
 
     adapter = adapters.get(binding.provider_id)
@@ -316,6 +382,9 @@ def _run_binding(
             route_metadata={**route_metadata, "adapter_unavailable": True},
             started_at=started_at,
             policy=policy,
+            requested_output_ceiling=max_output_tokens,
+            registry=registry,
+            flow_id=flow_id,
         )
 
     attempt_max = min(max_output_tokens, binding.max_output_tokens)
@@ -375,6 +444,9 @@ def _run_binding(
             route_metadata=route_metadata,
             started_at=started_at,
             policy=policy,
+            requested_output_ceiling=max_output_tokens,
+            registry=registry,
+            flow_id=flow_id,
         )
 
     route_metadata = {
@@ -388,6 +460,7 @@ def _run_binding(
     if preparation.result != "allow":
         status = "validation_error" if preparation.result == "pause" else "config_error"
         ledger_id = _terminal_job(
+            flow_id=flow_id,
             task_kind=task_kind,
             requested_route_class=requested_route_class,
             route_class=selected_route_class,
@@ -400,10 +473,15 @@ def _run_binding(
             started_at=started_at,
             decision_reason=f"egress:{preparation.reason_code}",
             blocked_reason=preparation.reason_code,
+            fallback_index=fallback_index,
+            requested_output_ceiling=max_output_tokens,
+            effective_output_ceiling=attempt_max,
+            registry=registry,
         )
         return _outcome(
             status=status,
             ledger_id=ledger_id,
+            flow_id=flow_id,
             route_class=selected_route_class,
             binding=binding,
             response=None,
@@ -458,20 +536,27 @@ def _run_binding(
             },
         )
     except Exception as exc:
-        finalize_queued_ai_job(
-            queued.ai_job_id,
+        finalize_external_attempt(
+            flow_id=flow_id,
+            ai_job_id=queued.ai_job_id,
+            binding=binding,
+            fallback_index=fallback_index,
             status="config_error",
             response=None,
             latency_ms=_elapsed_ms(started_at),
             error_type=type(exc).__name__,
-        )
-        _release_before_network_strict(
+            adapter_invoked=False,
+            dispatch_state=AIExternalDispatchState.not_started,
+            requested_output_ceiling=max_output_tokens,
+            effective_output_ceiling=attempt_max,
+            outcome_reason="egress_start_failed",
             reservation_id=reservation_id,
-            ai_job_id=queued.ai_job_id,
+            registry=registry,
         )
         return _outcome(
             status="config_error",
             ledger_id=queued.ai_job_id,
+            flow_id=flow_id,
             route_class=selected_route_class,
             binding=binding,
             response=None,
@@ -489,23 +574,27 @@ def _run_binding(
     try:
         response = adapter.complete(request)
     except Exception as exc:
-        finalize_queued_ai_job(
-            queued.ai_job_id,
+        finalize_external_attempt(
+            flow_id=flow_id,
+            ai_job_id=queued.ai_job_id,
+            binding=binding,
+            fallback_index=fallback_index,
             status="provider_error",
             response=None,
             latency_ms=_elapsed_ms(started_at),
             error_type=type(exc).__name__,
-        )
-        reconcile_reserved_attempt(
-            reservation_id,
-            ai_job_id=queued.ai_job_id,
-            network_attempt=True,
-            usage_source="estimated",
+            adapter_invoked=True,
+            dispatch_state=AIExternalDispatchState.unknown,
+            requested_output_ceiling=max_output_tokens,
+            effective_output_ceiling=reserved.max_output_tokens,
+            outcome_reason=type(exc).__name__,
+            reservation_id=reservation_id,
             registry=registry,
         )
         return _outcome(
             status="provider_error",
             ledger_id=queued.ai_job_id,
+            flow_id=flow_id,
             route_class=selected_route_class,
             binding=binding,
             response=None,
@@ -521,53 +610,75 @@ def _run_binding(
         )
 
     status, error_type = _response_status(response)
-    try:
-        finalize_queued_ai_job(
-            queued.ai_job_id,
-            status=status,
-            response=response,
-            latency_ms=_elapsed_ms(started_at),
-            error_type=error_type,
+    binding_mismatch = (
+        (response.provider_id, response.model_id)
+        != (binding.provider_id, binding.model_id)
+        or (response.usage.provider_id, response.usage.model_id)
+        != (binding.provider_id, binding.model_id)
+    )
+    dispatch_invalid = response.external_dispatch_state not in {
+        AIExternalDispatchState.not_started,
+        AIExternalDispatchState.started,
+        AIExternalDispatchState.unknown,
+    } or (
+        status == "success"
+        and response.external_dispatch_state is AIExternalDispatchState.not_started
+    )
+    if binding_mismatch or dispatch_invalid:
+        reason_code = (
+            "response_binding_mismatch" if binding_mismatch else "response_dispatch_invalid"
         )
-    except EgressSpineStateError as exc:
-        finalize_queued_ai_job(
-            queued.ai_job_id,
+        error_name = "EgressSpineStateError" if binding_mismatch else "EgressContractError"
+        finalize_external_attempt(
+            flow_id=flow_id,
+            ai_job_id=queued.ai_job_id,
+            binding=binding,
+            fallback_index=fallback_index,
             status="provider_error",
             response=None,
             latency_ms=_elapsed_ms(started_at),
-            error_type=type(exc).__name__,
-        )
-        reconcile_reserved_attempt(
-            reservation_id,
-            ai_job_id=queued.ai_job_id,
-            network_attempt=True,
-            usage_source="estimated",
+            error_type=error_name,
+            adapter_invoked=True,
+            dispatch_state=AIExternalDispatchState.unknown,
+            requested_output_ceiling=max_output_tokens,
+            effective_output_ceiling=reserved.max_output_tokens,
+            outcome_reason=reason_code,
+            reservation_id=reservation_id,
             registry=registry,
         )
         return _outcome(
             status="provider_error",
             ledger_id=queued.ai_job_id,
+            flow_id=flow_id,
             route_class=selected_route_class,
             binding=binding,
             response=None,
-            error_type=type(exc).__name__,
+            error_type=error_name,
             context=context,
             egress_decision_id=preparation.decision_id,
             packet_digest=preparation.packet_digest,
             ticket_id=None,
             reservation_id=reservation_id,
-            reason_code="response_binding_mismatch",
+            reason_code=reason_code,
             trigger_ids=(),
             blocked=False,
         )
 
-    reconcile_reserved_attempt(
-        reservation_id,
+    finalize_external_attempt(
+        flow_id=flow_id,
         ai_job_id=queued.ai_job_id,
-        network_attempt=True,
-        actual_input_tokens=response.usage.input_tokens,
-        actual_output_tokens=response.usage.output_tokens,
-        usage_source=response.usage.usage_source.value,
+        binding=binding,
+        fallback_index=fallback_index,
+        status=status,
+        response=response,
+        latency_ms=_elapsed_ms(started_at),
+        error_type=error_type,
+        adapter_invoked=True,
+        dispatch_state=response.external_dispatch_state,
+        requested_output_ceiling=max_output_tokens,
+        effective_output_ceiling=reserved.max_output_tokens,
+        outcome_reason=error_type or status,
+        reservation_id=reservation_id,
         registry=registry,
     )
     retryable = (
@@ -578,6 +689,7 @@ def _run_binding(
     return _outcome(
         status=status,
         ledger_id=queued.ai_job_id,
+        flow_id=flow_id,
         route_class=selected_route_class,
         binding=binding,
         response=response,
@@ -728,6 +840,9 @@ def _persist_prepacket(
     route_metadata: dict[str, object],
     started_at: float,
     policy: EgressPolicyConfig,
+    requested_output_ceiling: int | None,
+    registry: ProviderRegistry,
+    flow_id: str,
 ) -> ExternalTaskOutcome:
     final_level = _prepacket_final_level(stop.prompt_level, stop.context_level)
     recorded = record_prepacket_egress_decision(
@@ -761,6 +876,7 @@ def _persist_prepacket(
         (),
     )
     ledger_id = _terminal_job(
+        flow_id=flow_id,
         task_kind=task_kind,
         requested_route_class=requested_route_class,
         route_class=route_class,
@@ -778,10 +894,15 @@ def _persist_prepacket(
         started_at=started_at,
         decision_reason=f"egress:{detail_reason}",
         blocked_reason=detail_reason,
+        fallback_index=fallback_index,
+        requested_output_ceiling=requested_output_ceiling,
+        effective_output_ceiling=None,
+        registry=registry,
     )
     return _outcome(
         status=status,
         ledger_id=ledger_id,
+            flow_id=flow_id,
         route_class=route_class,
         binding=binding,
         response=None,
@@ -802,6 +923,7 @@ def _persist_prepacket(
 
 def _terminal_job(
     *,
+    flow_id: str,
     task_kind: str,
     requested_route_class: str | None,
     route_class: str,
@@ -814,6 +936,10 @@ def _terminal_job(
     started_at: float,
     decision_reason: str,
     blocked_reason: str | None,
+    fallback_index: int,
+    requested_output_ceiling: int | None,
+    effective_output_ceiling: int | None,
+    registry: ProviderRegistry,
 ) -> str:
     queued = create_queued_ai_job(
         task_kind=task_kind,
@@ -830,20 +956,31 @@ def _terminal_job(
         ),
         route_metadata=route_metadata,
     )
-    finalize_queued_ai_job(
-        queued.ai_job_id,
+    finalize_external_attempt(
+        flow_id=flow_id,
+        ai_job_id=queued.ai_job_id,
+        binding=binding,
+        fallback_index=fallback_index,
         status=status,
         response=None,
         latency_ms=_elapsed_ms(started_at),
         error_type=error_type,
+        adapter_invoked=False,
+        dispatch_state=AIExternalDispatchState.not_started,
+        requested_output_ceiling=requested_output_ceiling,
+        effective_output_ceiling=effective_output_ceiling,
+        outcome_reason=blocked_reason or error_type,
+        registry=registry,
     )
     return queued.ai_job_id
+
 
 
 def _outcome(
     *,
     status: str,
     ledger_id: str,
+    flow_id: str,
     route_class: str,
     binding: ProviderBinding,
     response: AIResponse | None,
@@ -896,6 +1033,7 @@ def _outcome(
         egress_reservation_id=reservation_id,
         egress_reason_code=reason_code,
         egress_trigger_ids=trigger_ids,
+        flow_id=flow_id,
     )
 
 

@@ -437,6 +437,7 @@ def _run_external_network_task(
         egress_reservation_id=external.egress_reservation_id,
         egress_reason_code=external.egress_reason_code,
         egress_trigger_ids=external.egress_trigger_ids,
+        flow_id=external.flow_id,
     )
     if external.status == "success" and external.response is not None:
         proposed_record_ids, records_parse_error = _create_proposed_records_from_response(
