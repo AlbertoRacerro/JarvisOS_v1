@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
@@ -68,7 +69,7 @@ def finalize_external_attempt(
     outcome_reason: str,
     reservation_id: str | None = None,
     registry: ProviderRegistry | None = None,
-    persisted_pricing_version: str | None = None,
+    use_confirmation_pricing_snapshot: bool = False,
     now: datetime | None = None,
 ) -> ExternalAttemptFinalization:
     """Finalize one external attempt, 059b accounting, and 061 evidence atomically."""
@@ -89,36 +90,40 @@ def finalize_external_attempt(
     if reservation_id is None and adapter_invoked:
         raise EgressContractError("adapter invocation requires a 059b reservation")
 
+    if not isinstance(use_confirmation_pricing_snapshot, bool):
+        raise EgressContractError(
+            "use_confirmation_pricing_snapshot must be boolean"
+        )
+    if use_confirmation_pricing_snapshot and (
+        reservation_id is not None
+        or adapter_invoked
+        or dispatch_state is not AIExternalDispatchState.not_started
+        or response is not None
+    ):
+        raise EgressContractError(
+            "confirmation pricing snapshot is only valid for a non-dispatched "
+            "attempt without a reservation"
+        )
+
     registry = registry or load_default_provider_registry()
-    if persisted_pricing_version is not None:
-        if (
-            reservation_id is not None
-            or adapter_invoked
-            or dispatch_state is not AIExternalDispatchState.not_started
-            or response is not None
-        ):
-            raise EgressContractError(
-                "persisted pricing version is only valid for a non-dispatched "
-                "attempt without a reservation"
-            )
-        if (
-            not isinstance(persisted_pricing_version, str)
-            or not persisted_pricing_version.strip()
-        ):
-            raise EgressContractError(
-                "persisted pricing version must be non-empty text"
-            )
-        pricing_version = persisted_pricing_version.strip()
-    else:
-        pricing_version = resolve_model_pricing(
-            registry, binding.provider_id, binding.model_id
-        ).pricing_version
     with persistence._immediate_transaction() as connection:
         _bind_attempt_identity(
             connection,
             ai_job_id=ai_job_id,
             binding=binding,
             fallback_index=fallback_index,
+        )
+        pricing_version = (
+            _confirmation_pricing_version(
+                connection,
+                ai_job_id=ai_job_id,
+                binding=binding,
+                fallback_index=fallback_index,
+            )
+            if use_confirmation_pricing_snapshot
+            else resolve_model_pricing(
+                registry, binding.provider_id, binding.model_id
+            ).pricing_version
         )
         _finalize_ai_job_in_transaction(
             connection,
@@ -226,6 +231,137 @@ def finalize_external_attempt(
             output_tokens=output_tokens,
             accounted_provider_spend_usd_decimal=evidence.accounted_provider_spend_usd_decimal,
         )
+
+
+def _confirmation_pricing_version(
+    connection: sqlite3.Connection,
+    *,
+    ai_job_id: str,
+    binding: ProviderBinding,
+    fallback_index: int,
+) -> str:
+    job = connection.execute(
+        "SELECT task_kind, route_reason_json "
+        "FROM ai_jobs WHERE id = ?",
+        (ai_job_id,),
+    ).fetchone()
+    if job is None:
+        raise persistence.EgressStateError("ai_job was not found")
+    try:
+        route_metadata = json.loads(job["route_reason_json"])
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise EgressContractError(
+            "confirmation pricing snapshot metadata is malformed"
+        ) from exc
+    if not isinstance(route_metadata, dict):
+        raise EgressContractError(
+            "confirmation pricing snapshot metadata is malformed"
+        )
+    ticket_id = route_metadata.get("egress_confirmation_ticket_id")
+    if not isinstance(ticket_id, str) or not ticket_id.strip():
+        raise EgressContractError(
+            "confirmation pricing snapshot ticket is missing"
+        )
+    ticket_id = ticket_id.strip()
+
+    snapshot = connection.execute(
+        """
+        SELECT ticket.state AS ticket_state,
+               ticket.decision_id AS ticket_decision_id,
+               ticket.packet_id AS ticket_packet_id,
+               ticket.packet_digest AS ticket_packet_digest,
+               ticket.provider_id AS ticket_provider_id,
+               ticket.model_id AS ticket_model_id,
+               decision.packet_id AS decision_packet_id,
+               decision.packet_digest AS decision_packet_digest,
+               decision.pricing_version AS pricing_version,
+               decision.reservation_id AS decision_reservation_id,
+               packet.packet_digest AS packet_digest,
+               packet.task_kind AS packet_task_kind,
+               packet.route_class AS packet_route_class,
+               packet.provider_id AS packet_provider_id,
+               packet.model_id AS packet_model_id,
+               packet.fallback_index AS packet_fallback_index
+        FROM egress_confirmation_tickets AS ticket
+        JOIN egress_decisions AS decision ON decision.id = ticket.decision_id
+        JOIN egress_packets AS packet ON packet.id = ticket.packet_id
+        WHERE ticket.id = ?
+        """,
+        (ticket_id,),
+    ).fetchone()
+    if snapshot is None:
+        raise EgressContractError(
+            "confirmation pricing snapshot ticket was not found"
+        )
+    if snapshot["ticket_state"] not in {"expired", "revoked"}:
+        raise EgressContractError(
+            "confirmation pricing snapshot requires an expired or revoked ticket"
+        )
+    if snapshot["decision_reservation_id"] is not None:
+        raise EgressContractError(
+            "confirmation pricing snapshot cannot reference a reserved decision"
+        )
+
+    expected_metadata = {
+        "egress_confirmation_ticket_id": ticket_id,
+        "egress_decision_id": snapshot["ticket_decision_id"],
+        "egress_packet_digest": snapshot["ticket_packet_digest"],
+        "fallback_attempt_index": fallback_index,
+        "fallback_chain_route": binding.route_class,
+        "fallback_model_id": binding.model_id,
+        "fallback_provider_id": binding.provider_id,
+    }
+    for key, expected in expected_metadata.items():
+        if route_metadata.get(key) != expected:
+            raise EgressContractError(
+                f"confirmation pricing snapshot metadata mismatch: {key}"
+            )
+    if route_metadata.get("decision_reason") != f"confirmed_ticket:{ticket_id}":
+        raise EgressContractError(
+            "confirmation pricing snapshot job is not ticket-bound"
+        )
+
+    packet_identity = (
+        snapshot["packet_route_class"],
+        snapshot["packet_provider_id"],
+        snapshot["packet_model_id"],
+        int(snapshot["packet_fallback_index"]),
+    )
+    binding_identity = (
+        binding.route_class,
+        binding.provider_id,
+        binding.model_id,
+        fallback_index,
+    )
+    if packet_identity != binding_identity:
+        raise EgressContractError(
+            "confirmation pricing snapshot binding does not match the packet"
+        )
+    if (
+        snapshot["ticket_provider_id"],
+        snapshot["ticket_model_id"],
+    ) != (binding.provider_id, binding.model_id):
+        raise EgressContractError(
+            "confirmation pricing snapshot binding does not match the ticket"
+        )
+    if (
+        snapshot["ticket_packet_id"] != snapshot["decision_packet_id"]
+        or snapshot["ticket_packet_digest"] != snapshot["decision_packet_digest"]
+        or snapshot["ticket_packet_digest"] != snapshot["packet_digest"]
+    ):
+        raise EgressContractError(
+            "confirmation pricing snapshot packet identity is inconsistent"
+        )
+    if job["task_kind"] != snapshot["packet_task_kind"]:
+        raise EgressContractError(
+            "confirmation pricing snapshot task kind does not match"
+        )
+    pricing_version = snapshot["pricing_version"]
+    if not isinstance(pricing_version, str) or not pricing_version.strip():
+        raise EgressContractError(
+            "confirmation pricing snapshot version is missing"
+        )
+    return pricing_version.strip()
 
 
 def _bind_attempt_identity(

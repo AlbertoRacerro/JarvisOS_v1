@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from app.modules.ai.contracts import (
@@ -190,14 +192,14 @@ def test_flow_link_failure_rolls_back_job_and_reconciliation(monkeypatch, tmp_pa
     assert attempt_count == 0
 
 
-def test_persisted_pricing_version_is_rejected_for_dispatched_attempt(
+def test_confirmation_pricing_snapshot_is_rejected_for_dispatched_attempt(
     monkeypatch, tmp_path
 ) -> None:
     _initialize(monkeypatch, tmp_path)
     binding, registry, reservation_id, job_id = _started_reservation()
     flow = create_flow(task_kind="synthesis", requested_route_class="external:cheap")
 
-    with pytest.raises(EgressContractError, match="persisted pricing version"):
+    with pytest.raises(EgressContractError, match="confirmation pricing snapshot"):
         finalize_external_attempt(
             flow_id=str(flow["id"]),
             ai_job_id=job_id,
@@ -214,5 +216,141 @@ def test_persisted_pricing_version_is_rejected_for_dispatched_attempt(
             outcome_reason="success",
             reservation_id=reservation_id,
             registry=registry,
-            persisted_pricing_version="ticket-snapshot",
+            use_confirmation_pricing_snapshot=True,
         )
+
+
+def test_generic_queued_job_cannot_use_confirmation_pricing_snapshot(
+    monkeypatch, tmp_path
+) -> None:
+    _initialize(monkeypatch, tmp_path)
+    registry = load_default_provider_registry()
+    binding = registry.bindings["external:cheap"]
+    job_id = create_queued_ai_job(
+        task_kind="synthesis",
+        requested_route_class="external:cheap",
+        selected_route_class="external:cheap",
+        provider_id="deepseek",
+        model_id="deepseek-v4-pro",
+        decision_reason="ordinary-external-job",
+        prompt_digest="sha256:" + "c" * 64,
+        context_digest=None,
+        context_sources=None,
+        route_metadata={"fallback_attempt_index": 0},
+    ).ai_job_id
+    flow = create_flow(task_kind="synthesis", requested_route_class="external:cheap")
+
+    with pytest.raises(EgressContractError, match="snapshot ticket is missing"):
+        finalize_external_attempt(
+            flow_id=str(flow["id"]),
+            ai_job_id=job_id,
+            binding=binding,
+            fallback_index=0,
+            status="config_error",
+            response=None,
+            latency_ms=1,
+            error_type="config_error",
+            adapter_invoked=False,
+            dispatch_state=AIExternalDispatchState.not_started,
+            requested_output_ceiling=32,
+            effective_output_ceiling=32,
+            outcome_reason="external_not_sent",
+            registry=registry,
+            use_confirmation_pricing_snapshot=True,
+        )
+
+    from app.core.database import open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        job = connection.execute(
+            "SELECT status, flow_id, fallback_index FROM ai_jobs WHERE id = ?",
+            (job_id,),
+        ).fetchone()
+        linked = connection.execute(
+            "SELECT COUNT(*) AS n FROM ai_jobs WHERE flow_id = ?",
+            (flow["id"],),
+        ).fetchone()["n"]
+    assert tuple(job) == ("queued", None, None)
+    assert linked == 0
+
+
+def test_mismatched_confirmation_snapshot_metadata_rolls_back(
+    monkeypatch, tmp_path
+) -> None:
+    _initialize(monkeypatch, tmp_path)
+    registry = load_default_provider_registry()
+    binding = registry.bindings["external:cheap"]
+    preparation = prepare_egress_attempt(_material(), registry=registry)
+    assert preparation.ticket_id is not None
+
+    providers = dict(registry.providers)
+    providers["deepseek"] = replace(providers["deepseek"], enabled=False)
+    revoked_registry = replace(
+        registry,
+        providers=providers,
+        bindings={
+            route: candidate
+            for route, candidate in registry.bindings.items()
+            if candidate.provider_id != "deepseek"
+        },
+    )
+    consumed = consume_confirmation_ticket(
+        preparation.ticket_id, registry=revoked_registry
+    )
+    assert consumed.authorized is False
+    assert consumed.reason_code == "ticket_binding_or_policy_drift"
+
+    job_id = create_queued_ai_job(
+        task_kind="synthesis",
+        requested_route_class="external:cheap",
+        selected_route_class="external:cheap",
+        provider_id="deepseek",
+        model_id="deepseek-v4-pro",
+        decision_reason=f"confirmed_ticket:{consumed.ticket_id}",
+        prompt_digest="sha256:" + "d" * 64,
+        context_digest=None,
+        context_sources=None,
+        route_metadata={
+            "egress_confirmation_ticket_id": consumed.ticket_id,
+            "egress_decision_id": "forged-decision",
+            "egress_packet_digest": consumed.packet_digest,
+            "fallback_attempt_index": consumed.fallback_index,
+            "fallback_chain_route": consumed.route_class,
+            "fallback_model_id": consumed.model_id,
+            "fallback_provider_id": consumed.provider_id,
+        },
+    ).ai_job_id
+    flow = create_flow(task_kind="synthesis", requested_route_class="external:cheap")
+
+    with pytest.raises(EgressContractError, match="metadata mismatch"):
+        finalize_external_attempt(
+            flow_id=str(flow["id"]),
+            ai_job_id=job_id,
+            binding=binding,
+            fallback_index=0,
+            status="config_error",
+            response=None,
+            latency_ms=1,
+            error_type="config_error",
+            adapter_invoked=False,
+            dispatch_state=AIExternalDispatchState.not_started,
+            requested_output_ceiling=32,
+            effective_output_ceiling=32,
+            outcome_reason="ticket_binding_or_policy_drift",
+            registry=revoked_registry,
+            use_confirmation_pricing_snapshot=True,
+        )
+
+    from app.core.database import open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        job = connection.execute(
+            "SELECT status, flow_id, fallback_index FROM ai_jobs WHERE id = ?",
+            (job_id,),
+        ).fetchone()
+        linked = connection.execute(
+            "SELECT COUNT(*) AS n FROM ai_jobs WHERE flow_id = ?",
+            (flow["id"],),
+        ).fetchone()["n"]
+    assert tuple(job) == ("queued", None, None)
+    assert linked == 0

@@ -66,7 +66,6 @@ class _TicketMetadata:
     route_class: str
     fallback_index: int
     max_output_tokens: int
-    pricing_version: str
 
 
 def run_confirmation_ticket(
@@ -409,7 +408,7 @@ def _load_ticket_metadata(ticket_id: str) -> _TicketMetadata:
         row = connection.execute(
             """
             SELECT ticket.state AS ticket_state, packet.task_kind, packet.workspace_id,
-                   decision.source_count, decision.pricing_version,
+                   decision.source_count,
                    ticket.trigger_ids_json, ticket.packet_digest,
                    packet.provider_id, packet.model_id, packet.route_class,
                    packet.fallback_index, packet.max_output_tokens
@@ -440,7 +439,6 @@ def _load_ticket_metadata(ticket_id: str) -> _TicketMetadata:
         route_class=str(row["route_class"]),
         fallback_index=int(row["fallback_index"]),
         max_output_tokens=int(row["max_output_tokens"]),
-        pricing_version=str(row["pricing_version"]),
     )
 
 
@@ -538,9 +536,7 @@ def _terminal_outcome(
         outcome_reason=reason_code,
         reservation_id=reservation_id,
         registry=registry,
-        persisted_pricing_version=(
-            metadata.pricing_version if reservation_id is None else None
-        ),
+        use_confirmation_pricing_snapshot=not consumed.authorized,
     )
     outcome = _outcome(
         flow_id=flow_id,
