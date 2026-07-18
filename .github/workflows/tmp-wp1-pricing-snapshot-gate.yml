@@ -1,0 +1,116 @@
+name: Temporary WP1 pricing snapshot gate
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-push:
+    if: github.event.pull_request.head.ref == 'tmp/wp1-pricing-snapshot-fix'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - name: Checkout control branch
+        uses: actions/checkout@v4
+        with:
+          ref: tmp/wp1-pricing-snapshot-fix
+          path: control
+          fetch-depth: 1
+
+      - name: Checkout exact PR 134 head
+        uses: actions/checkout@v4
+        with:
+          ref: 7a29dec974c23e0508ea28e07620dcc3c390b07c
+          path: target
+          fetch-depth: 1
+
+      - name: Apply bounded P2 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C target rev-parse HEAD)" = '7a29dec974c23e0508ea28e07620dcc3c390b07c'
+          python control/.github/tmp_apply_wp1_pricing_snapshot.py target
+          git -C target diff --check
+          (
+            git -C target diff --name-only
+            git -C target ls-files --others --exclude-standard
+          ) | sort > /tmp/actual-paths
+          cat > /tmp/expected-paths <<'EOF'
+          backend/app/modules/ai/egress_confirmation.py
+          backend/app/modules/ai/token_flow_external_transaction.py
+          backend/tests/test_token_flow_external_reserved_transaction.py
+          EOF
+          diff -u /tmp/expected-paths /tmp/actual-paths
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            target/backend/requirements.txt
+            target/backend/requirements-dev.txt
+
+      - name: Install backend dependencies
+        working-directory: target/backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Static and governance gates
+        working-directory: target
+        run: |
+          python scripts/check_spec_status.py --self-test
+          python scripts/check_spec_status.py
+          GITHUB_WORKSPACE="$PWD" python scripts/cheap_review.py --self-test
+          GITHUB_WORKSPACE="$PWD" python scripts/manual_review.py --self-test
+
+      - name: Ruff
+        working-directory: target/backend
+        run: >-
+          python -m ruff check app tests ../scripts/check_spec_status.py
+          ../scripts/cheap_review.py ../scripts/manual_review.py
+
+      - name: Focused pricing snapshot tests
+        working-directory: target/backend
+        run: |
+          python -m pytest -q \
+            tests/test_ai_egress_confirmation.py \
+            tests/test_token_flow_external_reserved_transaction.py
+
+      - name: Full backend pytest
+        working-directory: target/backend
+        run: python -m pytest -q
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: target/frontend/package-lock.json
+
+      - name: Frontend production build
+        working-directory: target/frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Commit and fast-forward PR 134 branch
+        working-directory: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin spec/061-token-flow-implementation
+          test "$(git rev-parse FETCH_HEAD)" = '7a29dec974c23e0508ea28e07620dcc3c390b07c'
+          git add \
+            backend/app/modules/ai/egress_confirmation.py \
+            backend/app/modules/ai/token_flow_external_transaction.py \
+            backend/tests/test_token_flow_external_reserved_transaction.py
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Bind confirmation pricing to decision snapshot'
+          git push origin HEAD:spec/061-token-flow-implementation
+          git rev-parse HEAD
