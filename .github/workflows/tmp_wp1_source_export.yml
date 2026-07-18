@@ -1,0 +1,29 @@
+name: Temporary WP1 source export
+
+on:
+  push:
+    branches:
+      - tmp/wp1-source-export
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Record exact source identity
+        run: |
+          git rev-parse HEAD > .source-commit-sha
+          git rev-parse HEAD^{tree} > .source-tree-sha
+      - name: Package source
+        run: tar --exclude=.git -czf /tmp/jarvisos-wp1-source.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jarvisos-wp1-source
+          path: /tmp/jarvisos-wp1-source.tar.gz
+          retention-days: 1
+          if-no-files-found: error
