@@ -210,3 +210,36 @@ def test_partial_preexisting_evidence_is_not_completed_opportunistically(
     assert row["flow_id"] is None
     assert row["execution_class"] == "synthetic"
     assert row["accounting_basis"] is None
+
+
+def test_exact_replay_is_idempotent_after_flow_terminalization(
+    initialized_database,
+) -> None:
+    from app.modules.ai.token_flow_service import transition_flow_state
+
+    flow = create_flow(task_kind="synthesis")
+    _insert_job("terminal-replay")
+    evidence = _synthetic_evidence()
+    record_attempt_evidence(
+        flow_id=str(flow["id"]),
+        attempt_id="terminal-replay",
+        evidence=evidence,
+    )
+    terminal = transition_flow_state(
+        flow_id=str(flow["id"]),
+        new_state="complete",
+        terminal_reason="completed",
+        terminal_attempt_id="terminal-replay",
+    )
+
+    replay = record_attempt_evidence(
+        flow_id=str(flow["id"]),
+        attempt_id="terminal-replay",
+        evidence=evidence,
+    )
+
+    assert replay["state"] == "complete"
+    assert replay["terminal_attempt_id"] == "terminal-replay"
+    assert replay["final_accounting_digest"] == terminal["final_accounting_digest"]
+    assert replay["final_output_digest"] == terminal["final_output_digest"]
+    assert replay["ordered_attempt_ids"] == ["terminal-replay"]

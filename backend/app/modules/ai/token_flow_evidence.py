@@ -99,9 +99,6 @@ def record_attempt_evidence(
         connection.execute("BEGIN IMMEDIATE")
         try:
             flow = _require_flow(connection, flow_id)
-            if flow["state"] != "running":
-                raise TokenFlowConflictError("only running flows can accept attempt evidence")
-
             attempt = _require_attempt_for_evidence(connection, attempt_id)
             if attempt["task_kind"] != flow["task_kind"]:
                 raise TokenFlowConflictError("ai_job task kind does not match flow")
@@ -115,6 +112,8 @@ def record_attempt_evidence(
                 connection.commit()
                 return _decode_flow(_require_flow(connection, flow_id))
 
+            if flow["state"] != "running":
+                raise TokenFlowConflictError("only running flows can accept attempt evidence")
             _require_unwritten_evidence(attempt)
             next_index = connection.execute(
                 "SELECT COALESCE(MAX(flow_attempt_index), -1) + 1 AS n "
