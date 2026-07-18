@@ -1,9 +1,9 @@
 name: Temporary WP1 source export
 
 on:
-  push:
+  pull_request:
     branches:
-      - tmp/wp1-source-export
+      - master
 
 permissions:
   contents: read
