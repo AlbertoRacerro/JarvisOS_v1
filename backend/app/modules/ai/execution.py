@@ -48,6 +48,7 @@ from app.modules.ai.token_flow_runtime import (
     local_exception_evidence,
     local_response_evidence,
     no_execution_evidence,
+    normalize_finish_reason,
     normalize_outcome_reason,
 )
 from app.modules.ai.token_flow_service import create_flow, transition_flow_state
@@ -491,8 +492,13 @@ def _terminalize_local_flow(
     status: str,
     attempt_id: str,
     reason: str | None,
+    finish_reason: str | None = None,
 ) -> None:
-    if status == "success":
+    normalized_finish = normalize_finish_reason(finish_reason, failed=False)
+    if status == "success" and normalized_finish == "length":
+        state = "partial_terminal"
+        terminal_reason = "output_length_limit"
+    elif status == "success":
         state = "complete"
         terminal_reason = "completed"
     else:
@@ -995,8 +1001,11 @@ def run_ai_task(
             status=status,
             attempt_id=ledger_id,
             reason=error_type,
+            finish_reason=response.finish_reason,
         )
-        if status == "success":
+        if status == "success" and normalize_finish_reason(
+            response.finish_reason, failed=False
+        ) != "length":
             proposed_record_ids, records_parse_error = _create_proposed_records_from_response(
                 task_kind=task_kind,
                 response=response,

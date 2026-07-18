@@ -51,7 +51,7 @@ from app.modules.ai.provider_registry import (
 )
 from app.modules.ai.settings import ensure_ai_settings, get_ai_settings
 from app.modules.ai.token_flow_external_transaction import finalize_external_attempt
-from app.modules.ai.token_flow_runtime import normalize_outcome_reason
+from app.modules.ai.token_flow_runtime import normalize_finish_reason, normalize_outcome_reason
 from app.modules.ai.token_flow_service import create_flow, transition_flow_state
 
 _LOCAL_SANITIZER_ROUTE = "local:fast"
@@ -129,6 +129,17 @@ def _flow_workspace_id(workspace_id: str | None) -> str | None:
     return workspace_id if row is not None else None
 
 
+def _reconcilable_start_failure_reservation(reservation_id: str) -> str | None:
+    with open_sqlite_connection() as connection:
+        row = connection.execute(
+            "SELECT state FROM egress_budget_reservations WHERE id = ?",
+            (reservation_id,),
+        ).fetchone()
+    if row is None or row["state"] in _TERMINAL_RESERVATION_STATES:
+        return None
+    return reservation_id
+
+
 def _create_external_flow(
     *,
     task_kind: str,
@@ -152,7 +163,15 @@ def _terminalize_external_flow(flow_id: str, outcome: ExternalTaskOutcome) -> No
     ):
         transition_flow_state(flow_id=flow_id, new_state="confirmation_required")
         return
-    if outcome.status == "success":
+    finish_reason = (
+        normalize_finish_reason(outcome.response.finish_reason, failed=False)
+        if outcome.status == "success" and outcome.response is not None
+        else None
+    )
+    if outcome.status == "success" and finish_reason == "length":
+        state = "partial_terminal"
+        reason = "output_length_limit"
+    elif outcome.status == "success":
         state = "complete"
         reason = "completed"
     else:
@@ -550,7 +569,7 @@ def _run_binding(
             requested_output_ceiling=max_output_tokens,
             effective_output_ceiling=attempt_max,
             outcome_reason="egress_start_failed",
-            reservation_id=reservation_id,
+            reservation_id=_reconcilable_start_failure_reservation(reservation_id),
             registry=registry,
         )
         return _outcome(

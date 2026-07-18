@@ -411,3 +411,80 @@ def test_response_binding_mismatch_is_recorded_and_reconciled_conservatively(mon
     assert reservation["reconciliation_status"] == "conservative_missing_usage"
     assert reservation["actual_input_tokens"] == reservation["projected_input_tokens"]
     assert reservation["actual_output_tokens"] == reservation["projected_output_tokens"]
+
+
+
+def test_length_response_is_recorded_as_partial_terminal(monkeypatch):
+    _bootstrap(monkeypatch)
+    _seed_prior_network_attempt()
+
+    class LengthAdapter(CountingAdapter):
+        def complete(self, request: AIRequest) -> AIResponse:
+            response = super().complete(request)
+            return response.model_copy(update={"finish_reason": "length"})
+
+    adapter = LengthAdapter(text="Truncated provider answer.")
+    outcome = _run(adapter)
+
+    assert outcome.status == "success"
+    assert adapter.calls == 1
+    with open_sqlite_connection() as connection:
+        flow = connection.execute(
+            "SELECT state, terminal_reason, terminal_attempt_id FROM ai_flows WHERE id = ?",
+            (outcome.flow_id,),
+        ).fetchone()
+    assert flow["state"] == "partial_terminal"
+    assert flow["terminal_reason"] == "output_length_limit"
+    assert flow["terminal_attempt_id"] == outcome.ledger_id
+
+
+def test_expired_reservation_start_failure_finalizes_job_and_flow(monkeypatch):
+    _bootstrap(monkeypatch)
+    _seed_prior_network_attempt()
+    from app.modules.ai import egress_runtime
+
+    real_start = egress_runtime.start_reserved_attempt
+
+    def expire_before_start(reservation_id: str, *, ai_job_id: str):
+        return real_start(
+            reservation_id,
+            ai_job_id=ai_job_id,
+            now=datetime(2100, 1, 1, tzinfo=UTC),
+        )
+
+    monkeypatch.setattr(egress_runtime, "start_reserved_attempt", expire_before_start)
+    adapter = CountingAdapter()
+    outcome = _run(adapter)
+
+    assert outcome.status == "config_error"
+    assert outcome.egress_reason_code == "egress_start_failed"
+    assert adapter.calls == 0
+    with open_sqlite_connection() as connection:
+        reservation = connection.execute(
+            "SELECT state, reconciliation_status FROM egress_budget_reservations WHERE id = ?",
+            (outcome.egress_reservation_id,),
+        ).fetchone()
+        job = connection.execute(
+            """
+            SELECT status, flow_id, execution_class, adapter_invoked,
+                   external_dispatch_state, normalized_usage_source, accounting_basis
+            FROM ai_jobs WHERE id = ?
+            """,
+            (outcome.ledger_id,),
+        ).fetchone()
+        flow = connection.execute(
+            "SELECT state, terminal_reason, terminal_attempt_id FROM ai_flows WHERE id = ?",
+            (outcome.flow_id,),
+        ).fetchone()
+    assert reservation["state"] == "expired"
+    assert reservation["reconciliation_status"] == "expired_before_start"
+    assert job["status"] == "config_error"
+    assert job["flow_id"] == outcome.flow_id
+    assert job["execution_class"] == "external_provider"
+    assert job["adapter_invoked"] == 0
+    assert job["external_dispatch_state"] == "not_started"
+    assert job["normalized_usage_source"] == "none"
+    assert job["accounting_basis"] == "external_not_sent"
+    assert flow["state"] == "failed_terminal"
+    assert flow["terminal_reason"] == "egress_start_failed"
+    assert flow["terminal_attempt_id"] == outcome.ledger_id
