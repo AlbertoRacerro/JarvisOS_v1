@@ -1,0 +1,116 @@
+name: Fix 071 legacy expectations once
+
+on:
+  push:
+    branches:
+      - impl/071-model-scenario-dof
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: impl/071-model-scenario-dof
+          fetch-depth: 0
+      - name: Update additive migration expectations
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("backend/tests/test_ai_egress_schema.py")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace(
+              "from app.core.schema import SCHEMA_STATEMENTS",
+              "from app.core.schema import (\n    SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID,\n    SCHEMA_STATEMENTS,\n)",
+          )
+          text = text.replace(
+              "assert get_current_schema_migration().migration_id == TOKEN_FLOW_SCHEMA_MIGRATION_ID\n    assert count_schema_migrations() == 11",
+              "assert (\n        get_current_schema_migration().migration_id\n        == SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID\n    )\n    assert count_schema_migrations() == 12",
+          )
+          text = text.replace(
+              "        egress_migration = connection.execute(",
+              "        token_flow_migration = connection.execute(\n            \"SELECT status FROM schema_migrations WHERE migration_id = ?\",\n            (TOKEN_FLOW_SCHEMA_MIGRATION_ID,),\n        ).fetchone()\n        egress_migration = connection.execute(",
+          )
+          text = text.replace(
+              "    assert egress_migration is not None\n    assert egress_migration[\"status\"] == \"applied\"",
+              "    assert token_flow_migration is not None\n    assert token_flow_migration[\"status\"] == \"applied\"\n    assert egress_migration is not None\n    assert egress_migration[\"status\"] == \"applied\"",
+          )
+          path.write_text(text, encoding="utf-8")
+
+          path = Path("backend/tests/test_data_infrastructure.py")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace(
+              "from app.core.schema import CURRENT_SCHEMA_MIGRATION_ID, SCHEMA_BASELINE_MIGRATION_ID",
+              "from app.core.schema import (\n        CURRENT_SCHEMA_MIGRATION_ID,\n        SCHEMA_BASELINE_MIGRATION_ID,\n        SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID,\n    )",
+          )
+          text = text.replace(
+              "assert CURRENT_SCHEMA_MIGRATION_ID == TOKEN_FLOW_SCHEMA_MIGRATION_ID",
+              "assert CURRENT_SCHEMA_MIGRATION_ID == SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID",
+          )
+          text = text.replace(
+              "    assert EGRESS_SCHEMA_MIGRATION_ID in migrations",
+              "    assert EGRESS_SCHEMA_MIGRATION_ID in migrations\n    assert TOKEN_FLOW_SCHEMA_MIGRATION_ID in migrations",
+          )
+          text = text.replace(
+              "    assert migrations[EGRESS_SCHEMA_MIGRATION_ID][\"status\"] == \"applied\"",
+              "    assert migrations[EGRESS_SCHEMA_MIGRATION_ID][\"status\"] == \"applied\"\n    assert migrations[TOKEN_FLOW_SCHEMA_MIGRATION_ID][\"status\"] == \"applied\"",
+          )
+          path.write_text(text, encoding="utf-8")
+
+          path = Path("backend/tests/test_token_flow_schema.py")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace(
+              "from app.core.schema import SCHEMA_MIGRATION_STATEMENTS, SCHEMA_STATEMENTS",
+              "from app.core.schema import (\n    SCHEMA_MIGRATION_STATEMENTS,\n    SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID,\n    SCHEMA_STATEMENTS,\n)",
+          )
+          text = text.replace(
+              "assert get_current_schema_migration().migration_id == TOKEN_FLOW_SCHEMA_MIGRATION_ID",
+              "assert (\n        get_current_schema_migration().migration_id\n        == SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID\n    )",
+          )
+          text = text.replace(
+              "        settings_columns = {",
+              "        token_flow_migration = connection.execute(\n            \"SELECT status FROM schema_migrations WHERE migration_id = ?\",\n            (TOKEN_FLOW_SCHEMA_MIGRATION_ID,),\n        ).fetchone()\n        settings_columns = {",
+          )
+          text = text.replace(
+              "    assert {\"ai_flows\", \"ai_flow_segments\"}.issubset(tables)",
+              "    assert token_flow_migration is not None\n    assert token_flow_migration[\"status\"] == \"applied\"\n    assert {\"ai_flows\", \"ai_flow_segments\"}.issubset(tables)",
+          )
+          path.write_text(text, encoding="utf-8")
+
+          path = Path("backend/tests/test_python_runner.py")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace(
+              '        "implementation_artifact_id",\n        "status",',
+              '        "implementation_artifact_id",\n        "input_contract",\n        "input_contract_sha256",\n        "status",',
+              1,
+          )
+          text = text.replace(
+              "    assert set(implementation) == expected_keys\n    assert script_path.name",
+              "    assert set(implementation) == expected_keys\n    assert implementation[\"input_contract\"] is None\n    assert implementation[\"input_contract_sha256\"] is None\n    assert script_path.name",
+              1,
+          )
+          path.write_text(text, encoding="utf-8")
+          PY
+
+          rm -f reports-071-postfix.txt reports-071-full-tail.txt .trigger-071-full-diagnostic
+          rm .github/workflows/fix-071-legacy-expectations-once.yml
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate style and focused regressions
+        run: |
+          python -m pip install -q ruff
+          python -m ruff check --fix backend/tests/test_ai_egress_schema.py backend/tests/test_data_infrastructure.py backend/tests/test_token_flow_schema.py backend/tests/test_python_runner.py
+          python -m ruff format backend/tests/test_ai_egress_schema.py backend/tests/test_data_infrastructure.py backend/tests/test_token_flow_schema.py backend/tests/test_python_runner.py
+      - name: Commit compatibility updates
+        run: |
+          git config user.name "jarvisos-implementation-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add backend/tests/test_ai_egress_schema.py backend/tests/test_data_infrastructure.py backend/tests/test_token_flow_schema.py backend/tests/test_python_runner.py reports-071-postfix.txt reports-071-full-tail.txt .trigger-071-full-diagnostic .github/workflows/fix-071-legacy-expectations-once.yml
+          git commit -m "Reconcile tests with additive 071 migration"
+          git push origin HEAD:impl/071-model-scenario-dof
