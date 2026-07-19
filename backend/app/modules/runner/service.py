@@ -132,8 +132,9 @@ def create_model_implementation(workspace_id: str, payload: ModelImplementationC
             """
             INSERT INTO model_versions (
                 id, workspace_id, model_spec_id, version_label,
-                implementation_artifact_id, implementation_kind, status, changelog, created_at, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                implementation_artifact_id, implementation_kind, status, changelog,
+                input_contract_payload, input_contract_sha256, created_at, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 model_version_id,
@@ -144,6 +145,8 @@ def create_model_implementation(workspace_id: str, payload: ModelImplementationC
                 payload.implementation_kind,
                 "ready",
                 changelog,
+                input_contract_payload,
+                input_contract_sha256,
                 now,
                 payload.notes,
             ),
