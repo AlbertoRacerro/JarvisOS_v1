@@ -53,7 +53,9 @@ RUNNER_TYPE = "python_local"
 IMPLEMENTATION_KIND = "batch_growth_v0"
 BLUECAD_L2_IMPLEMENTATION_KIND = "bluecad_l2_v0"
 CALC_V0_IMPLEMENTATION_KIND = "calc_v0"
-SUPPORTED_IMPLEMENTATION_KINDS = frozenset({IMPLEMENTATION_KIND, BLUECAD_L2_IMPLEMENTATION_KIND, CALC_V0_IMPLEMENTATION_KIND})
+SUPPORTED_IMPLEMENTATION_KINDS = frozenset(
+    {IMPLEMENTATION_KIND, BLUECAD_L2_IMPLEMENTATION_KIND, CALC_V0_IMPLEMENTATION_KIND}
+)
 
 
 def create_model_implementation(workspace_id: str, payload: ModelImplementationCreate) -> ModelImplementationRead:
@@ -62,15 +64,16 @@ def create_model_implementation(workspace_id: str, payload: ModelImplementationC
             "runner_implementation_kind_unsupported",
             "Only batch_growth_v0, bluecad_l2_v0, and calc_v0 are supported.",
         )
-    if payload.implementation_kind in {BLUECAD_L2_IMPLEMENTATION_KIND, CALC_V0_IMPLEMENTATION_KIND} and not payload.script_text:
+    if (
+        payload.implementation_kind in {BLUECAD_L2_IMPLEMENTATION_KIND, CALC_V0_IMPLEMENTATION_KIND}
+        and not payload.script_text
+    ):
         raise RunnerSafetyError("runner_script_text_required", f"{payload.implementation_kind} requires script_text.")
 
     input_contract_payload: str | None = None
     input_contract_sha256: str | None = None
     if payload.input_contract is not None:
-        input_contract_payload, input_contract_sha256, _ = canonicalize_input_contract(
-            payload.input_contract
-        )
+        input_contract_payload, input_contract_sha256, _ = canonicalize_input_contract(payload.input_contract)
 
     now = utc_now()
     model_version_id = str(uuid4())
@@ -358,7 +361,10 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
             ast_import_allowlist=implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND,
         )
     except RunnerSafetyError as exc:
-        if implementation_kind in {BLUECAD_L2_IMPLEMENTATION_KIND, CALC_V0_IMPLEMENTATION_KIND} and exc.code == "SANDBOX_VIOLATION":
+        if (
+            implementation_kind in {BLUECAD_L2_IMPLEMENTATION_KIND, CALC_V0_IMPLEMENTATION_KIND}
+            and exc.code == "SANDBOX_VIOLATION"
+        ):
             return _finish_failed(
                 runner_job_id,
                 workspace_id,
@@ -428,9 +434,7 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
         output = _load_result_json(output_dir, int(job["max_output_json_bytes"]))
         declared_artifacts = output.get("artifacts") or []
         if not isinstance(declared_artifacts, list):
-            raise RunnerSafetyError(
-                "runner_result_invalid_json", "Artifacts declaration must be a list."
-            )
+            raise RunnerSafetyError("runner_result_invalid_json", "Artifacts declaration must be a list.")
         if implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND:
             _validate_bluecad_l2_output(output_dir, declared_artifacts)
         calc_outputs: dict[str, dict[str, object]] | None = None
@@ -592,9 +596,7 @@ def list_run_artifacts(workspace_id: str, simulation_run_id: str) -> list[RunArt
     return [_run_artifact_from_row(row) for row in rows]
 
 
-def _claim_and_mark_running(
-    runner_job_id: str, workspace_id: str, simulation_run_id: str, started_at: str
-) -> bool:
+def _claim_and_mark_running(runner_job_id: str, workspace_id: str, simulation_run_id: str, started_at: str) -> bool:
     """Atomically transition a queued job to running.
 
     The ``WHERE status = 'queued'`` clause is the concurrency guard: SQLite
@@ -787,7 +789,9 @@ def _canonical_result_json(output: dict[str, object]) -> str:
     try:
         return canonical_json(output)
     except RunnerSafetyError as exc:
-        raise RunnerSafetyError("runner_result_invalid_json", "Runner result JSON must be finite canonical JSON.") from exc
+        raise RunnerSafetyError(
+            "runner_result_invalid_json", "Runner result JSON must be finite canonical JSON."
+        ) from exc
 
 
 def _validate_calc_v0_output(output: dict[str, object]) -> dict[str, dict[str, object]]:
@@ -806,7 +810,9 @@ def _validate_calc_v0_output(output: dict[str, object]) -> dict[str, dict[str, o
         try:
             number = float(value)
         except (OverflowError, TypeError, ValueError) as exc:
-            raise RunnerSafetyError("runner_result_invalid_json", f"calc_v0 output {name} value must be numeric.") from exc
+            raise RunnerSafetyError(
+                "runner_result_invalid_json", f"calc_v0 output {name} value must be numeric."
+            ) from exc
         if not isfinite(number):
             raise RunnerSafetyError("runner_result_invalid_json", f"calc_v0 output {name} value must be finite.")
         if not isinstance(item.get("unit"), str) or not str(item.get("unit")).strip():
@@ -970,7 +976,9 @@ def _require_workspace(connection, workspace_id: str) -> None:
         raise RunnerSafetyError("runner_workspace_not_found", "Workspace not found.")
 
 
-def _log_event(connection, *, event_type: str, target_type: str, target_id: str, workspace_id: str, payload: dict[str, object]) -> None:
+def _log_event(
+    connection, *, event_type: str, target_type: str, target_id: str, workspace_id: str, payload: dict[str, object]
+) -> None:
     log_event(
         connection,
         event_type=event_type,

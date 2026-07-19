@@ -1,8 +1,3 @@
-from app.core.token_flow_schema import (
-    TOKEN_FLOW_SCHEMA_MIGRATION_ID,
-    TOKEN_FLOW_SCHEMA_MIGRATION_NAME,
-)
-
 SCHEMA_BASELINE_MIGRATION_ID = "0001_foundation_baseline"
 SCHEMA_BASELINE_MIGRATION_NAME = "Foundation schema through Python Runner V0"
 SCHEMA_DATA_INFRASTRUCTURE_MIGRATION_ID = "0002_data_infrastructure_hardening"
@@ -196,7 +191,6 @@ SCHEMA_STATEMENTS = [
         FOREIGN KEY (workspace_id) REFERENCES workspaces(id)
     )
     """,
-
     """
     CREATE TABLE IF NOT EXISTS requirements (
         id TEXT PRIMARY KEY,
@@ -366,7 +360,6 @@ SCHEMA_STATEMENTS = [
         error_type TEXT
     )
     """,
-
     """
     CREATE TABLE IF NOT EXISTS bluecad_candidates (
         id TEXT PRIMARY KEY,

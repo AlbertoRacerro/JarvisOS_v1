@@ -1,6 +1,5 @@
 import hashlib
 import json
-import math
 from collections.abc import Iterator
 from pathlib import Path
 

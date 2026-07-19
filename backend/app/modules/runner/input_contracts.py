@@ -3,8 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Callable
 from math import isfinite
-from typing import Any, Callable, Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
@@ -38,7 +39,7 @@ class NumericDomain(BaseModel):
         return float(value)
 
     @model_validator(mode="after")
-    def validate_bounds(self) -> "NumericDomain":
+    def validate_bounds(self) -> NumericDomain:
         if self.min is not None and self.exclusive_min is not None:
             raise ValueError("lower bound cannot be both inclusive and exclusive")
         if self.max is not None and self.exclusive_max is not None:
@@ -84,7 +85,7 @@ class ModelInputContract(BaseModel):
     variables: list[InputVariable] = Field(min_length=1, max_length=64)
 
     @model_validator(mode="after")
-    def unique_names(self) -> "ModelInputContract":
+    def unique_names(self) -> ModelInputContract:
         names = [variable.name for variable in self.variables]
         if len(names) != len(set(names)):
             raise ValueError("variable names must be unique")
@@ -149,10 +150,7 @@ def build_binding_preview(
 ) -> BindingPreviewResponse:
     contract, digest = parse_stored_input_contract(contract_payload, contract_sha256)
     contract_names = {variable.name for variable in contract.variables}
-    global_errors = [
-        f"binding_unknown_variable:{name}"
-        for name in sorted(set(bindings) - contract_names)
-    ]
+    global_errors = [f"binding_unknown_variable:{name}" for name in sorted(set(bindings) - contract_names)]
     invalid_count = len(global_errors)
     bound_required = 0
     normalized: dict[str, dict[str, object]] = {}
