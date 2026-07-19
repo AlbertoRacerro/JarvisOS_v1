@@ -553,3 +553,99 @@ export async function getBluecadArtifactJson<T>(workspaceId: string, artifactId:
   }
   return response.json() as Promise<T>;
 }
+
+export type ModelInputVariable = {
+  name: string;
+  label: string;
+  unit: string;
+  required: boolean;
+  category: "design" | "operating" | "property" | "model_parameter" | "equipment";
+  description: string;
+  domain?: Record<string, number> | null;
+};
+
+export type ModelInputContract = {
+  schema_version: 1;
+  evaluation_mode: "forward";
+  variables: ModelInputVariable[];
+};
+
+export type ModelImplementation = {
+  id: string;
+  workspace_id: string;
+  model_spec_id: string;
+  version_label: string;
+  implementation_artifact_id: string;
+  status: string;
+  script_sha256: string;
+  script_path: string;
+  created_at: string;
+  notes?: string | null;
+  input_contract?: ModelInputContract | null;
+  input_contract_sha256?: string | null;
+};
+
+export type BindingVariablePreview = ModelInputVariable & {
+  binding_state: "missing" | "manual" | "parameter" | "invalid";
+  value?: number | null;
+  source_parameter_id?: string | null;
+  errors: string[];
+};
+
+export type BindingPreviewResponse = {
+  model_version_id: string;
+  contract_sha256: string;
+  evaluation_mode: "forward";
+  structural_input_dof: number;
+  bound_input_dof: number;
+  unresolved_input_dof: number;
+  invalid_binding_count: number;
+  state: "incomplete" | "ready" | "invalid";
+  variables: BindingVariablePreview[];
+  errors: string[];
+  normalized_input_set?: Record<string, Record<string, unknown>> | null;
+};
+
+export type RunnerJobCreateResponse = {
+  runner_job: { id: string; status: string };
+  simulation_run: SimulationRun & { input_payload?: string | null };
+};
+
+export type RunnerJobRunResponse = {
+  runner_job: { id: string; status: string };
+  simulation_run: SimulationRun & {
+    output_payload?: string | null;
+    completed_at?: string | null;
+  };
+  output?: {
+    outputs?: Record<string, { value: unknown; unit: string }>;
+    diagnostics?: Record<string, unknown>;
+  } | null;
+  error?: { code: string; message: string } | null;
+};
+
+export function listModelImplementations(workspaceId: string): Promise<ModelImplementation[]> {
+  return getJson<ModelImplementation[]>(`/workspaces/${workspaceId}/model-implementations`);
+}
+
+export function previewModelBindings(
+  workspaceId: string,
+  modelVersionId: string,
+  bindings: Record<string, Record<string, unknown>>
+): Promise<BindingPreviewResponse> {
+  return postJson<BindingPreviewResponse>(
+    `/workspaces/${workspaceId}/model-implementations/${modelVersionId}/binding-preview`,
+    { bindings }
+  );
+}
+
+export function createRunnerJob(
+  workspaceId: string,
+  payload: Record<string, unknown>
+): Promise<RunnerJobCreateResponse> {
+  return postJson<RunnerJobCreateResponse>(`/workspaces/${workspaceId}/runner-jobs`, payload);
+}
+
+export function runRunnerJob(runnerJobId: string): Promise<RunnerJobRunResponse> {
+  return postJson<RunnerJobRunResponse>(`/runner-jobs/${runnerJobId}/run`);
+}
