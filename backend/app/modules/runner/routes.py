@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException
 
 from app.modules.runner.models import (
+    BindingPreviewRequest,
+    BindingPreviewResponse,
     ModelImplementationCreate,
     ModelImplementationRead,
     RunArtifactRead,
@@ -18,6 +20,7 @@ from app.modules.runner.service import (
     list_model_implementations,
     list_run_artifacts,
     list_run_logs,
+    preview_model_bindings,
     run_runner_job,
 )
 
@@ -56,6 +59,21 @@ def create_model_implementation_endpoint(
 def list_model_implementations_endpoint(workspace_id: str) -> list[ModelImplementationRead]:
     try:
         return list_model_implementations(workspace_id)
+    except RunnerSafetyError as exc:
+        raise _runner_error(exc) from exc
+
+
+@router.post(
+    "/workspaces/{workspace_id}/model-implementations/{model_version_id}/binding-preview",
+    response_model=BindingPreviewResponse,
+)
+def preview_model_bindings_endpoint(
+    workspace_id: str,
+    model_version_id: str,
+    payload: BindingPreviewRequest,
+) -> BindingPreviewResponse:
+    try:
+        return preview_model_bindings(workspace_id, model_version_id, payload)
     except RunnerSafetyError as exc:
         raise _runner_error(exc) from exc
 

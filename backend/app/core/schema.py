@@ -21,8 +21,10 @@ SCHEMA_EVIDENCE_RECORDS_MIGRATION_ID = "0008_evidence_records"
 SCHEMA_EVIDENCE_RECORDS_MIGRATION_NAME = "Evidence records for BLUECAD outcomes"
 SCHEMA_SENSITIVITY_CONTEXT_MIGRATION_ID = "0009_sensitivity_context_foundation"
 SCHEMA_SENSITIVITY_CONTEXT_MIGRATION_NAME = "IP egress sensitivity labels and sanitized derivatives"
-CURRENT_SCHEMA_MIGRATION_ID = TOKEN_FLOW_SCHEMA_MIGRATION_ID
-CURRENT_SCHEMA_MIGRATION_NAME = TOKEN_FLOW_SCHEMA_MIGRATION_NAME
+SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID = "0012_model_input_contract"
+SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_NAME = "Model-version input contracts and scenario DOF metadata"
+CURRENT_SCHEMA_MIGRATION_ID = SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID
+CURRENT_SCHEMA_MIGRATION_NAME = SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_NAME
 
 SCHEMA_MIGRATION_RECORDS = [
     {
@@ -68,6 +70,11 @@ SCHEMA_MIGRATION_RECORDS = [
     {
         "migration_id": SCHEMA_SENSITIVITY_CONTEXT_MIGRATION_ID,
         "name": SCHEMA_SENSITIVITY_CONTEXT_MIGRATION_NAME,
+        "checksum": None,
+    },
+    {
+        "migration_id": SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID,
+        "name": SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_NAME,
         "checksum": None,
     },
 ]
@@ -237,6 +244,8 @@ SCHEMA_STATEMENTS = [
         implementation_kind TEXT NOT NULL DEFAULT 'batch_growth_v0',
         status TEXT NOT NULL DEFAULT 'draft',
         changelog TEXT,
+        input_contract_payload TEXT,
+        input_contract_sha256 TEXT,
         created_at TEXT NOT NULL,
         notes TEXT,
         FOREIGN KEY (workspace_id) REFERENCES workspaces(id),
@@ -491,6 +500,8 @@ SCHEMA_MIGRATION_STATEMENTS = [
     # RUNNER-EXT-1 (spec 016): dispatch key for the scoped bluecad_l2_v0 runner kind.
     "ALTER TABLE model_versions ADD COLUMN implementation_kind TEXT NOT NULL DEFAULT 'batch_growth_v0'",
     "ALTER TABLE runner_jobs ADD COLUMN implementation_kind TEXT NOT NULL DEFAULT 'batch_growth_v0'",
+    "ALTER TABLE model_versions ADD COLUMN input_contract_payload TEXT",
+    "ALTER TABLE model_versions ADD COLUMN input_contract_sha256 TEXT",
 ]
 
 SCHEMA_FTS_STATEMENTS = [

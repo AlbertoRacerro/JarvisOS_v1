@@ -1,8 +1,10 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 RunStatus = Literal["draft", "queued", "running", "succeeded", "failed", "cancelled", "timed_out"]
+BindingState = Literal["missing", "manual", "parameter", "invalid"]
+PreviewState = Literal["incomplete", "ready", "invalid"]
 
 
 class ModelImplementationCreate(BaseModel):
@@ -11,6 +13,7 @@ class ModelImplementationCreate(BaseModel):
     implementation_kind: str = "batch_growth_v0"
     notes: str | None = None
     script_text: str | None = None
+    input_contract: dict[str, Any] | None = None
 
 
 class ModelImplementationRead(BaseModel):
@@ -24,6 +27,41 @@ class ModelImplementationRead(BaseModel):
     script_path: str
     created_at: str
     notes: str | None = None
+    input_contract: dict[str, Any] | None = None
+    input_contract_sha256: str | None = None
+
+
+class BindingPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bindings: dict[str, Any] = Field(default_factory=dict)
+
+
+class BindingVariablePreview(BaseModel):
+    name: str
+    label: str
+    unit: str
+    category: str
+    description: str
+    required: bool
+    binding_state: BindingState
+    value: float | None = None
+    source_parameter_id: str | None = None
+    errors: list[str] = Field(default_factory=list)
+
+
+class BindingPreviewResponse(BaseModel):
+    model_version_id: str
+    contract_sha256: str
+    evaluation_mode: Literal["forward"]
+    structural_input_dof: int
+    bound_input_dof: int
+    unresolved_input_dof: int
+    invalid_binding_count: int
+    state: PreviewState
+    variables: list[BindingVariablePreview]
+    errors: list[str] = Field(default_factory=list)
+    normalized_input_set: dict[str, dict[str, object]] | None = None
 
 
 class RunnerJobCreate(BaseModel):

@@ -10,8 +10,14 @@ from app.core.paths import build_paths
 from app.modules.events.service import log_event, utc_now
 from app.modules.memory.models import CalcParameterProposalCreate
 from app.modules.memory.service import create_calc_parameter_proposals
+from app.modules.runner.input_contracts import (
+    build_binding_preview,
+    canonicalize_input_contract,
+)
 from app.modules.runner.local_python import LocalPythonResult, execute_python_script
 from app.modules.runner.models import (
+    BindingPreviewRequest,
+    BindingPreviewResponse,
     ModelImplementationCreate,
     ModelImplementationRead,
     RunArtifactRead,
@@ -58,6 +64,13 @@ def create_model_implementation(workspace_id: str, payload: ModelImplementationC
         )
     if payload.implementation_kind in {BLUECAD_L2_IMPLEMENTATION_KIND, CALC_V0_IMPLEMENTATION_KIND} and not payload.script_text:
         raise RunnerSafetyError("runner_script_text_required", f"{payload.implementation_kind} requires script_text.")
+
+    input_contract_payload: str | None = None
+    input_contract_sha256: str | None = None
+    if payload.input_contract is not None:
+        input_contract_payload, input_contract_sha256, _ = canonicalize_input_contract(
+            payload.input_contract
+        )
 
     now = utc_now()
     model_version_id = str(uuid4())
@@ -179,6 +192,39 @@ def get_model_implementation(workspace_id: str, model_version_id: str) -> ModelI
     if row is None:
         raise RunnerSafetyError("runner_model_version_not_found", "Model implementation not found.")
     return _model_implementation_from_row(row)
+
+
+def preview_model_bindings(
+    workspace_id: str,
+    model_version_id: str,
+    payload: BindingPreviewRequest,
+) -> BindingPreviewResponse:
+    with open_sqlite_connection() as connection:
+        _require_workspace(connection, workspace_id)
+        model_version = connection.execute(
+            "SELECT * FROM model_versions WHERE id = ? AND workspace_id = ?",
+            (model_version_id, workspace_id),
+        ).fetchone()
+        if model_version is None:
+            raise RunnerSafetyError(
+                "runner_model_version_not_found",
+                "Model implementation not found.",
+            )
+
+        def load_parameter(parameter_id: str) -> dict[str, object] | None:
+            row = connection.execute(
+                "SELECT id, workspace_id, value, unit FROM parameters WHERE id = ? AND workspace_id = ?",
+                (parameter_id, workspace_id),
+            ).fetchone()
+            return dict(row) if row is not None else None
+
+        return build_binding_preview(
+            model_version_id=model_version_id,
+            contract_payload=model_version["input_contract_payload"],
+            contract_sha256=model_version["input_contract_sha256"],
+            bindings=payload.bindings,
+            load_parameter=load_parameter,
+        )
 
 
 def create_runner_job(workspace_id: str, payload: RunnerJobCreate) -> RunnerJobCreateResponse:
@@ -871,6 +917,8 @@ def _model_implementation_from_row(row) -> ModelImplementationRead:
         script_path=data["script_path"],
         created_at=data["created_at"],
         notes=data["notes"],
+        input_contract=_json_or_none(data.get("input_contract_payload")),
+        input_contract_sha256=data.get("input_contract_sha256"),
     )
 
 
