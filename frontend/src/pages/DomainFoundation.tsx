@@ -1,6 +1,7 @@
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 
 import {
+  API_BASE_URL,
   createAssumption,
   createDecision,
   createModelSpec,
@@ -34,6 +35,23 @@ type ScenarioBinding = {
   value: string;
   parameterId: string;
 };
+
+async function registerBundledBlueRevProcess0(workspaceId: string): Promise<ModelImplementation> {
+  const response = await fetch(
+    `${API_BASE_URL}/workspaces/${workspaceId}/bundled-models/bluerev-geometry-hydraulics-v0/register`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Request failed with ${response.status}`);
+  }
+
+  return response.json() as Promise<ModelImplementation>;
+}
 
 function DomainFoundation() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -128,6 +146,20 @@ function DomainFoundation() {
         return refreshWorkspaces();
       })
       .catch((error: Error) => setMessage(error.message));
+  };
+
+  const onRegisterBundledModel = () => {
+    setScenarioBusy(true);
+    setMessage(null);
+    registerBundledBlueRevProcess0(workspaceId)
+      .then((implementation) =>
+        refreshWorkspaceRecords(workspaceId).then(() => {
+          setImplementationId(implementation.id);
+          setMessage("Bundled BlueRev 047 model registered.");
+        })
+      )
+      .catch((error: Error) => setMessage(error.message))
+      .finally(() => setScenarioBusy(false));
   };
 
   const onModelSpecSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -308,6 +340,7 @@ function DomainFoundation() {
         runLabel={runLabel}
         onRunLabelChange={setRunLabel}
         onRun={onRunScenario}
+        onRegisterBundled={onRegisterBundledModel}
         result={scenarioResult}
         busy={scenarioBusy}
       />
@@ -375,6 +408,7 @@ function ScenarioPanel({
   runLabel,
   onRunLabelChange,
   onRun,
+  onRegisterBundled,
   result,
   busy
 }: {
@@ -391,6 +425,7 @@ function ScenarioPanel({
   runLabel: string;
   onRunLabelChange: (value: string) => void;
   onRun: () => void;
+  onRegisterBundled: () => void;
   result: RunnerJobRunResponse | null;
   busy: boolean;
 }) {
@@ -403,7 +438,12 @@ function ScenarioPanel({
         Bind editable project values, inspect forward degrees of freedom, then create an immutable simulation run.
       </p>
       {implementations.length === 0 ? (
-        <p>No reviewed model implementation exposes an input contract yet.</p>
+        <div className="scenario-empty">
+          <p>No reviewed model implementation exposes an input contract yet.</p>
+          <button type="button" className="secondary-button" disabled={busy} onClick={onRegisterBundled}>
+            Register bundled BlueRev 047 model
+          </button>
+        </div>
       ) : (
         <>
           <label className="scenario-model-select">
@@ -420,7 +460,10 @@ function ScenarioPanel({
             {variables.map((variable) => {
               const binding = bindings[variable.name] ?? { value: "", parameterId: "" };
               const compatible = parameters.filter(
-                (parameter) => parameter.unit === variable.unit && parameter.value != null && Number.isFinite(Number(parameter.value))
+                (parameter) =>
+                  parameter.unit === variable.unit &&
+                  parameter.value != null &&
+                  Number.isFinite(Number(parameter.value))
               );
               const variablePreview = preview?.variables.find((item) => item.name === variable.name);
               return (
@@ -490,12 +533,18 @@ function ScenarioPanel({
             <div className="scenario-result">
               <h4>Run {result.simulation_run.run_label ?? result.simulation_run.id}</h4>
               <p>Status: {result.runner_job.status}</p>
-              {result.error && <div className="error-banner">{result.error.code}: {result.error.message}</div>}
+              {result.error && (
+                <div className="error-banner">
+                  {result.error.code}: {result.error.message}
+                </div>
+              )}
               <dl className="scenario-output-list">
                 {Object.entries(outputs).map(([name, output]) => (
                   <div key={name}>
                     <dt>{name}</dt>
-                    <dd>{String(output.value)} {output.unit}</dd>
+                    <dd>
+                      {String(output.value)} {output.unit}
+                    </dd>
                   </div>
                 ))}
               </dl>
