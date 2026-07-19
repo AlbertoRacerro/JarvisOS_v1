@@ -1,0 +1,826 @@
+name: Apply 071 frontend once
+
+on:
+  push:
+    branches:
+      - impl/071-model-scenario-dof
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: impl/071-model-scenario-dof
+          fetch-depth: 0
+
+      - name: Extend API client
+        run: |
+          cat >> frontend/src/api/client.ts <<'TS'
+
+          export type ModelInputVariable = {
+            name: string;
+            label: string;
+            unit: string;
+            required: boolean;
+            category: "design" | "operating" | "property" | "model_parameter" | "equipment";
+            description: string;
+            domain?: Record<string, number> | null;
+          };
+
+          export type ModelInputContract = {
+            schema_version: 1;
+            evaluation_mode: "forward";
+            variables: ModelInputVariable[];
+          };
+
+          export type ModelImplementation = {
+            id: string;
+            workspace_id: string;
+            model_spec_id: string;
+            version_label: string;
+            implementation_artifact_id: string;
+            status: string;
+            script_sha256: string;
+            script_path: string;
+            created_at: string;
+            notes?: string | null;
+            input_contract?: ModelInputContract | null;
+            input_contract_sha256?: string | null;
+          };
+
+          export type BindingVariablePreview = ModelInputVariable & {
+            binding_state: "missing" | "manual" | "parameter" | "invalid";
+            value?: number | null;
+            source_parameter_id?: string | null;
+            errors: string[];
+          };
+
+          export type BindingPreviewResponse = {
+            model_version_id: string;
+            contract_sha256: string;
+            evaluation_mode: "forward";
+            structural_input_dof: number;
+            bound_input_dof: number;
+            unresolved_input_dof: number;
+            invalid_binding_count: number;
+            state: "incomplete" | "ready" | "invalid";
+            variables: BindingVariablePreview[];
+            errors: string[];
+            normalized_input_set?: Record<string, Record<string, unknown>> | null;
+          };
+
+          export type RunnerJobCreateResponse = {
+            runner_job: { id: string; status: string };
+            simulation_run: SimulationRun & { input_payload?: string | null };
+          };
+
+          export type RunnerJobRunResponse = {
+            runner_job: { id: string; status: string };
+            simulation_run: SimulationRun & {
+              output_payload?: string | null;
+              completed_at?: string | null;
+            };
+            output?: {
+              outputs?: Record<string, { value: unknown; unit: string }>;
+              diagnostics?: Record<string, unknown>;
+            } | null;
+            error?: { code: string; message: string } | null;
+          };
+
+          export function listModelImplementations(workspaceId: string): Promise<ModelImplementation[]> {
+            return getJson<ModelImplementation[]>(`/workspaces/${workspaceId}/model-implementations`);
+          }
+
+          export function previewModelBindings(
+            workspaceId: string,
+            modelVersionId: string,
+            bindings: Record<string, Record<string, unknown>>
+          ): Promise<BindingPreviewResponse> {
+            return postJson<BindingPreviewResponse>(
+              `/workspaces/${workspaceId}/model-implementations/${modelVersionId}/binding-preview`,
+              { bindings }
+            );
+          }
+
+          export function createRunnerJob(
+            workspaceId: string,
+            payload: Record<string, unknown>
+          ): Promise<RunnerJobCreateResponse> {
+            return postJson<RunnerJobCreateResponse>(`/workspaces/${workspaceId}/runner-jobs`, payload);
+          }
+
+          export function runRunnerJob(runnerJobId: string): Promise<RunnerJobRunResponse> {
+            return postJson<RunnerJobRunResponse>(`/runner-jobs/${runnerJobId}/run`);
+          }
+          TS
+
+      - name: Replace Domain Foundation with scenario panel
+        run: |
+          cat > frontend/src/pages/DomainFoundation.tsx <<'TSX'
+          import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+
+          import {
+            createAssumption,
+            createDecision,
+            createModelSpec,
+            createParameter,
+            createRunnerJob,
+            createSimulationRun,
+            createWorkspace,
+            initializeSystem,
+            listAssumptions,
+            listDecisions,
+            listModelImplementations,
+            listModelSpecs,
+            listParameters,
+            listSimulationRuns,
+            listWorkspaces,
+            previewModelBindings,
+            runRunnerJob,
+            type Assumption,
+            type BindingPreviewResponse,
+            type Decision,
+            type ModelImplementation,
+            type ModelInputVariable,
+            type ModelSpec,
+            type Parameter,
+            type RunnerJobRunResponse,
+            type SimulationRun,
+            type Workspace
+          } from "../api/client";
+
+          type ScenarioBinding = {
+            value: string;
+            parameterId: string;
+          };
+
+          function DomainFoundation() {
+            const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+            const [workspaceId, setWorkspaceId] = useState("bluerev");
+            const [modelSpecs, setModelSpecs] = useState<ModelSpec[]>([]);
+            const [implementations, setImplementations] = useState<ModelImplementation[]>([]);
+            const [assumptions, setAssumptions] = useState<Assumption[]>([]);
+            const [parameters, setParameters] = useState<Parameter[]>([]);
+            const [runs, setRuns] = useState<SimulationRun[]>([]);
+            const [decisions, setDecisions] = useState<Decision[]>([]);
+            const [message, setMessage] = useState<string | null>(null);
+            const [implementationId, setImplementationId] = useState("");
+            const [scenarioBindings, setScenarioBindings] = useState<Record<string, ScenarioBinding>>({});
+            const [preview, setPreview] = useState<BindingPreviewResponse | null>(null);
+            const [runLabel, setRunLabel] = useState("");
+            const [scenarioResult, setScenarioResult] = useState<RunnerJobRunResponse | null>(null);
+            const [scenarioBusy, setScenarioBusy] = useState(false);
+
+            const eligibleImplementations = useMemo(
+              () => implementations.filter((item) => item.input_contract?.variables.length),
+              [implementations]
+            );
+            const selectedImplementation = useMemo(
+              () => eligibleImplementations.find((item) => item.id === implementationId) ?? null,
+              [eligibleImplementations, implementationId]
+            );
+
+            const refreshWorkspaces = () =>
+              listWorkspaces().then((items) => {
+                setWorkspaces(items);
+                if (items.length > 0 && !items.some((item) => item.id === workspaceId)) {
+                  setWorkspaceId(items[0].id);
+                }
+              });
+
+            const refreshWorkspaceRecords = (id: string) =>
+              Promise.all([
+                listModelSpecs(id).then(setModelSpecs),
+                listModelImplementations(id).then(setImplementations),
+                listAssumptions(id).then(setAssumptions),
+                listParameters(id).then(setParameters),
+                listSimulationRuns(id).then(setRuns),
+                listDecisions(id).then(setDecisions)
+              ]);
+
+            useEffect(() => {
+              refreshWorkspaces().catch((error: Error) => setMessage(`Storage may need initialization: ${error.message}`));
+            }, []);
+
+            useEffect(() => {
+              if (workspaceId) {
+                refreshWorkspaceRecords(workspaceId).catch((error: Error) => setMessage(error.message));
+              }
+            }, [workspaceId]);
+
+            useEffect(() => {
+              if (!eligibleImplementations.some((item) => item.id === implementationId)) {
+                setImplementationId(eligibleImplementations[0]?.id ?? "");
+              }
+            }, [eligibleImplementations, implementationId]);
+
+            useEffect(() => {
+              const variables = selectedImplementation?.input_contract?.variables ?? [];
+              setScenarioBindings(
+                Object.fromEntries(variables.map((variable) => [variable.name, { value: "", parameterId: "" }]))
+              );
+              setPreview(null);
+              setScenarioResult(null);
+              setRunLabel("");
+            }, [selectedImplementation?.id]);
+
+            const onWorkspaceSubmit = (event: FormEvent<HTMLFormElement>) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
+              createWorkspace({
+                name: String(form.get("name") ?? ""),
+                slug: String(form.get("slug") ?? ""),
+                description: String(form.get("description") ?? "")
+              })
+                .then((workspace) => {
+                  event.currentTarget.reset();
+                  setWorkspaceId(workspace.id);
+                  return refreshWorkspaces();
+                })
+                .catch((error: Error) => setMessage(error.message));
+            };
+
+            const onInitializeClick = () => {
+              initializeSystem()
+                .then(() => {
+                  setMessage("Storage initialized and BlueRev workspace is available.");
+                  return refreshWorkspaces();
+                })
+                .catch((error: Error) => setMessage(error.message));
+            };
+
+            const onModelSpecSubmit = (event: FormEvent<HTMLFormElement>) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
+              createModelSpec(workspaceId, {
+                title: String(form.get("title") ?? ""),
+                engineering_question: String(form.get("engineering_question") ?? ""),
+                scope: String(form.get("scope") ?? "")
+              })
+                .then(() => {
+                  event.currentTarget.reset();
+                  return refreshWorkspaceRecords(workspaceId);
+                })
+                .catch((error: Error) => setMessage(error.message));
+            };
+
+            const onAssumptionSubmit = (event: FormEvent<HTMLFormElement>) => {
+              event.preventDefault();
+              const statement = String(new FormData(event.currentTarget).get("statement") ?? "");
+              createAssumption(workspaceId, { statement })
+                .then(() => {
+                  event.currentTarget.reset();
+                  return refreshWorkspaceRecords(workspaceId);
+                })
+                .catch((error: Error) => setMessage(error.message));
+            };
+
+            const onParameterSubmit = (event: FormEvent<HTMLFormElement>) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
+              createParameter(workspaceId, {
+                name: String(form.get("name") ?? ""),
+                symbol: String(form.get("symbol") ?? ""),
+                value: String(form.get("value") ?? ""),
+                unit: String(form.get("unit") ?? "")
+              })
+                .then(() => {
+                  event.currentTarget.reset();
+                  return refreshWorkspaceRecords(workspaceId);
+                })
+                .catch((error: Error) => setMessage(error.message));
+            };
+
+            const onRunSubmit = (event: FormEvent<HTMLFormElement>) => {
+              event.preventDefault();
+              const runLabelValue = String(new FormData(event.currentTarget).get("run_label") ?? "");
+              createSimulationRun(workspaceId, { run_label: runLabelValue, status: "planned" })
+                .then(() => {
+                  event.currentTarget.reset();
+                  return refreshWorkspaceRecords(workspaceId);
+                })
+                .catch((error: Error) => setMessage(error.message));
+            };
+
+            const onDecisionSubmit = (event: FormEvent<HTMLFormElement>) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
+              createDecision(workspaceId, {
+                title: String(form.get("title") ?? ""),
+                decision_text: String(form.get("decision_text") ?? "")
+              })
+                .then(() => {
+                  event.currentTarget.reset();
+                  return refreshWorkspaceRecords(workspaceId);
+                })
+                .catch((error: Error) => setMessage(error.message));
+            };
+
+            const updateScenarioBinding = (name: string, next: ScenarioBinding) => {
+              setScenarioBindings((current) => ({ ...current, [name]: next }));
+              setPreview(null);
+              setScenarioResult(null);
+            };
+
+            const onParameterBindingChange = (variable: ModelInputVariable, parameterId: string) => {
+              const parameter = parameters.find((item) => item.id === parameterId);
+              updateScenarioBinding(variable.name, {
+                parameterId,
+                value: parameter?.value ?? scenarioBindings[variable.name]?.value ?? ""
+              });
+            };
+
+            const buildBindingPayload = () => {
+              const variables = selectedImplementation?.input_contract?.variables ?? [];
+              return Object.fromEntries(
+                variables.flatMap((variable) => {
+                  const binding = scenarioBindings[variable.name];
+                  if (!binding || binding.value.trim() === "") {
+                    return [];
+                  }
+                  const item: Record<string, unknown> = {
+                    value: Number(binding.value),
+                    unit: variable.unit
+                  };
+                  if (binding.parameterId) {
+                    item.source_parameter_id = binding.parameterId;
+                  }
+                  return [[variable.name, item]];
+                })
+              );
+            };
+
+            const onPreviewScenario = () => {
+              if (!selectedImplementation) {
+                return;
+              }
+              setScenarioBusy(true);
+              setMessage(null);
+              previewModelBindings(workspaceId, selectedImplementation.id, buildBindingPayload())
+                .then(setPreview)
+                .catch((error: Error) => setMessage(error.message))
+                .finally(() => setScenarioBusy(false));
+            };
+
+            const onRunScenario = () => {
+              if (!selectedImplementation || preview?.state !== "ready" || !preview.normalized_input_set || !runLabel.trim()) {
+                return;
+              }
+              setScenarioBusy(true);
+              setMessage(null);
+              createRunnerJob(workspaceId, {
+                model_version_id: selectedImplementation.id,
+                run_label: runLabel.trim(),
+                input_set: preview.normalized_input_set
+              })
+                .then((created) => runRunnerJob(created.runner_job.id))
+                .then((result) => {
+                  setScenarioResult(result);
+                  return refreshWorkspaceRecords(workspaceId);
+                })
+                .catch((error: Error) => setMessage(error.message))
+                .finally(() => setScenarioBusy(false));
+            };
+
+            return (
+              <section className="page">
+                <div className="page-header">
+                  <p className="eyebrow">Persistent Core</p>
+                  <h2>Domain Foundation</h2>
+                </div>
+
+                {message && <div className="error-banner">{message}</div>}
+
+                <section className="panel">
+                  <h3>Workspace</h3>
+                  <div className="foundation-toolbar">
+                    <button type="button" onClick={onInitializeClick}>
+                      Initialize Storage
+                    </button>
+                    <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
+                      {workspaces.map((workspace) => (
+                        <option key={workspace.id} value={workspace.id}>
+                          {workspace.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <form className="compact-form" onSubmit={onWorkspaceSubmit}>
+                    <input name="name" placeholder="Workspace name" required />
+                    <input name="slug" placeholder="slug" required />
+                    <input name="description" placeholder="description" />
+                    <button type="submit">Create</button>
+                  </form>
+                </section>
+
+                <ScenarioPanel
+                  implementations={eligibleImplementations}
+                  selected={selectedImplementation}
+                  implementationId={implementationId}
+                  onImplementationChange={setImplementationId}
+                  parameters={parameters}
+                  bindings={scenarioBindings}
+                  onBindingChange={updateScenarioBinding}
+                  onParameterChange={onParameterBindingChange}
+                  preview={preview}
+                  onPreview={onPreviewScenario}
+                  runLabel={runLabel}
+                  onRunLabelChange={setRunLabel}
+                  onRun={onRunScenario}
+                  result={scenarioResult}
+                  busy={scenarioBusy}
+                />
+
+                <section className="foundation-grid">
+                  <RecordPanel title="Model Specs" items={modelSpecs.map((item) => item.title)}>
+                    <form className="compact-form" onSubmit={onModelSpecSubmit}>
+                      <input name="title" placeholder="Title" required />
+                      <input name="engineering_question" placeholder="Engineering question" required />
+                      <input name="scope" placeholder="Scope" />
+                      <button type="submit">Create</button>
+                    </form>
+                  </RecordPanel>
+
+                  <RecordPanel title="Assumptions" items={assumptions.map((item) => item.statement)}>
+                    <form className="compact-form" onSubmit={onAssumptionSubmit}>
+                      <input name="statement" placeholder="Assumption statement" required />
+                      <button type="submit">Create</button>
+                    </form>
+                  </RecordPanel>
+
+                  <RecordPanel
+                    title="Parameters"
+                    items={parameters.map((item) => `${item.symbol ?? item.name}: ${item.value ?? ""} ${item.unit ?? ""}`)}
+                  >
+                    <form className="compact-form" onSubmit={onParameterSubmit}>
+                      <input name="name" placeholder="Name" required />
+                      <input name="symbol" placeholder="Symbol" />
+                      <input name="value" placeholder="Value" />
+                      <input name="unit" placeholder="Unit" />
+                      <button type="submit">Create</button>
+                    </form>
+                  </RecordPanel>
+
+                  <RecordPanel title="Simulation Runs" items={runs.map((item) => item.run_label ?? item.id)}>
+                    <form className="compact-form" onSubmit={onRunSubmit}>
+                      <input name="run_label" placeholder="Run label" />
+                      <button type="submit">Create</button>
+                    </form>
+                  </RecordPanel>
+
+                  <RecordPanel title="Decisions" items={decisions.map((item) => item.title)}>
+                    <form className="compact-form" onSubmit={onDecisionSubmit}>
+                      <input name="title" placeholder="Title" required />
+                      <input name="decision_text" placeholder="Decision" required />
+                      <button type="submit">Create</button>
+                    </form>
+                  </RecordPanel>
+                </section>
+              </section>
+            );
+          }
+
+          function ScenarioPanel({
+            implementations,
+            selected,
+            implementationId,
+            onImplementationChange,
+            parameters,
+            bindings,
+            onBindingChange,
+            onParameterChange,
+            preview,
+            onPreview,
+            runLabel,
+            onRunLabelChange,
+            onRun,
+            result,
+            busy
+          }: {
+            implementations: ModelImplementation[];
+            selected: ModelImplementation | null;
+            implementationId: string;
+            onImplementationChange: (value: string) => void;
+            parameters: Parameter[];
+            bindings: Record<string, ScenarioBinding>;
+            onBindingChange: (name: string, value: ScenarioBinding) => void;
+            onParameterChange: (variable: ModelInputVariable, parameterId: string) => void;
+            preview: BindingPreviewResponse | null;
+            onPreview: () => void;
+            runLabel: string;
+            onRunLabelChange: (value: string) => void;
+            onRun: () => void;
+            result: RunnerJobRunResponse | null;
+            busy: boolean;
+          }) {
+            const variables = selected?.input_contract?.variables ?? [];
+            const outputs = result?.output?.outputs ?? {};
+            return (
+              <section className="panel scenario-panel">
+                <h3>Model scenario</h3>
+                <p className="panel-subtitle">
+                  Bind editable project values, inspect forward degrees of freedom, then create an immutable simulation run.
+                </p>
+                {implementations.length === 0 ? (
+                  <p>No reviewed model implementation exposes an input contract yet.</p>
+                ) : (
+                  <>
+                    <label className="scenario-model-select">
+                      Model implementation
+                      <select value={implementationId} onChange={(event) => onImplementationChange(event.target.value)}>
+                        {implementations.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.version_label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="scenario-variable-list">
+                      {variables.map((variable) => {
+                        const binding = bindings[variable.name] ?? { value: "", parameterId: "" };
+                        const compatible = parameters.filter(
+                          (parameter) => parameter.unit === variable.unit && parameter.value != null && Number.isFinite(Number(parameter.value))
+                        );
+                        const variablePreview = preview?.variables.find((item) => item.name === variable.name);
+                        return (
+                          <div className="scenario-variable" key={variable.name}>
+                            <div>
+                              <strong>{variable.label}</strong>
+                              <span>{variable.category}</span>
+                              <small>{variable.description}</small>
+                            </div>
+                            <label>
+                              Value [{variable.unit}]
+                              <input
+                                type="number"
+                                step="any"
+                                value={binding.value}
+                                onChange={(event) =>
+                                  onBindingChange(variable.name, { ...binding, value: event.target.value })
+                                }
+                              />
+                            </label>
+                            <label>
+                              Source
+                              <select
+                                value={binding.parameterId}
+                                onChange={(event) => onParameterChange(variable, event.target.value)}
+                              >
+                                <option value="">Manual scenario override</option>
+                                {compatible.map((parameter) => (
+                                  <option key={parameter.id} value={parameter.id}>
+                                    {parameter.name}: {parameter.value} {parameter.unit}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <div className={`binding-state ${variablePreview?.binding_state ?? "missing"}`}>
+                              {variablePreview?.binding_state ?? "not previewed"}
+                              {variablePreview?.errors.map((error) => <span key={error}>{error}</span>)}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="scenario-actions">
+                      <button type="button" className="secondary-button" disabled={busy} onClick={onPreview}>
+                        Preview bindings
+                      </button>
+                      <label>
+                        Run label
+                        <input value={runLabel} onChange={(event) => onRunLabelChange(event.target.value)} />
+                      </label>
+                      <button
+                        type="button"
+                        disabled={busy || preview?.state !== "ready" || !runLabel.trim()}
+                        onClick={onRun}
+                      >
+                        Run scenario
+                      </button>
+                    </div>
+                    <div className="dof-strip" aria-label="Degree of freedom summary">
+                      <span>Structural: {preview?.structural_input_dof ?? variables.filter((item) => item.required).length}</span>
+                      <span>Bound: {preview?.bound_input_dof ?? 0}</span>
+                      <span>Unresolved: {preview?.unresolved_input_dof ?? variables.filter((item) => item.required).length}</span>
+                      <span>Invalid: {preview?.invalid_binding_count ?? 0}</span>
+                      <strong>State: {preview?.state ?? "not previewed"}</strong>
+                    </div>
+                    {result && (
+                      <div className="scenario-result">
+                        <h4>Run {result.simulation_run.run_label ?? result.simulation_run.id}</h4>
+                        <p>Status: {result.runner_job.status}</p>
+                        {result.error && <div className="error-banner">{result.error.code}: {result.error.message}</div>}
+                        <dl className="scenario-output-list">
+                          {Object.entries(outputs).map(([name, output]) => (
+                            <div key={name}>
+                              <dt>{name}</dt>
+                              <dd>{String(output.value)} {output.unit}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </div>
+                    )}
+                  </>
+                )}
+              </section>
+            );
+          }
+
+          function RecordPanel({ title, items, children }: { title: string; items: string[]; children: ReactNode }) {
+            return (
+              <section className="panel record-panel">
+                <h3>{title}</h3>
+                {children}
+                <ul className="record-list">
+                  {items.length === 0 && <li>No records yet.</li>}
+                  {items.map((item, index) => (
+                    <li key={`${item}-${index}`}>{item}</li>
+                  ))}
+                </ul>
+              </section>
+            );
+          }
+
+          export default DomainFoundation;
+          TSX
+
+      - name: Add bounded scenario styles
+        run: |
+          cat >> frontend/src/styles/global.css <<'CSS'
+
+          .scenario-panel {
+            display: grid;
+            gap: 16px;
+          }
+
+          .scenario-model-select,
+          .scenario-actions label,
+          .scenario-variable label {
+            display: grid;
+            gap: 6px;
+            color: #52616b;
+            font-size: 13px;
+          }
+
+          .scenario-model-select select,
+          .scenario-actions input,
+          .scenario-variable input,
+          .scenario-variable select {
+            min-height: 38px;
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background: #ffffff;
+            color: #1f2933;
+            font: inherit;
+          }
+
+          .scenario-variable-list {
+            display: grid;
+            gap: 10px;
+          }
+
+          .scenario-variable {
+            display: grid;
+            grid-template-columns: minmax(220px, 1.4fr) minmax(150px, 0.7fr) minmax(220px, 1fr) minmax(120px, auto);
+            gap: 12px;
+            align-items: end;
+            padding: 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            background: #f8fafc;
+          }
+
+          .scenario-variable > div:first-child {
+            display: grid;
+            gap: 4px;
+          }
+
+          .scenario-variable > div:first-child span,
+          .scenario-variable small {
+            color: #52616b;
+          }
+
+          .binding-state {
+            display: grid;
+            gap: 3px;
+            min-height: 38px;
+            align-content: center;
+            padding: 7px 9px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background: #ffffff;
+            overflow-wrap: anywhere;
+            font-size: 12px;
+          }
+
+          .binding-state.invalid {
+            border-color: #fca5a5;
+            color: #991b1b;
+          }
+
+          .binding-state.manual,
+          .binding-state.parameter {
+            border-color: #86efac;
+            color: #166534;
+          }
+
+          .scenario-actions {
+            display: grid;
+            grid-template-columns: auto minmax(220px, 1fr) auto;
+            gap: 12px;
+            align-items: end;
+          }
+
+          .scenario-actions button:not(.secondary-button) {
+            min-height: 38px;
+            padding: 8px 14px;
+            border: 1px solid #1d4ed8;
+            border-radius: 6px;
+            background: #1d4ed8;
+            color: #ffffff;
+            cursor: pointer;
+          }
+
+          .scenario-actions button:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+          }
+
+          .dof-strip {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+          }
+
+          .dof-strip span,
+          .dof-strip strong {
+            padding: 7px 9px;
+            border: 1px solid #d8dee9;
+            border-radius: 6px;
+            background: #f8fafc;
+            font-size: 13px;
+          }
+
+          .scenario-result {
+            display: grid;
+            gap: 10px;
+            padding-top: 6px;
+            border-top: 1px solid #e5e7eb;
+          }
+
+          .scenario-result h4,
+          .scenario-result p {
+            margin: 0;
+          }
+
+          .scenario-output-list {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+            margin: 0;
+          }
+
+          .scenario-output-list div {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
+            padding: 8px 10px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+          }
+
+          .scenario-output-list dd {
+            margin: 0;
+            font-family: "Cascadia Mono", Consolas, monospace;
+          }
+
+          @media (max-width: 900px) {
+            .scenario-variable,
+            .scenario-actions,
+            .scenario-output-list {
+              grid-template-columns: 1fr;
+            }
+          }
+          CSS
+
+          rm .github/workflows/apply-071-frontend-once.yml
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Commit frontend slice
+        run: |
+          git config user.name "jarvisos-implementation-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add frontend/src/api/client.ts frontend/src/pages/DomainFoundation.tsx frontend/src/styles/global.css .github/workflows/apply-071-frontend-once.yml
+          git commit -m "Add 071 model scenario workbench panel"
+          git push origin HEAD:impl/071-model-scenario-dof
