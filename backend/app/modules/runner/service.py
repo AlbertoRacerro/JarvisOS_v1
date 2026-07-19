@@ -10,8 +10,16 @@ from app.core.paths import build_paths
 from app.modules.events.service import log_event, utc_now
 from app.modules.memory.models import CalcParameterProposalCreate
 from app.modules.memory.service import create_calc_parameter_proposals
+from app.modules.modeling.models import ModelSpecCreate
+from app.modules.modeling.service import create_model_spec
+from app.modules.runner.input_contracts import (
+    build_binding_preview,
+    canonicalize_input_contract,
+)
 from app.modules.runner.local_python import LocalPythonResult, execute_python_script
 from app.modules.runner.models import (
+    BindingPreviewRequest,
+    BindingPreviewResponse,
     ModelImplementationCreate,
     ModelImplementationRead,
     RunArtifactRead,
@@ -47,7 +55,11 @@ RUNNER_TYPE = "python_local"
 IMPLEMENTATION_KIND = "batch_growth_v0"
 BLUECAD_L2_IMPLEMENTATION_KIND = "bluecad_l2_v0"
 CALC_V0_IMPLEMENTATION_KIND = "calc_v0"
-SUPPORTED_IMPLEMENTATION_KINDS = frozenset({IMPLEMENTATION_KIND, BLUECAD_L2_IMPLEMENTATION_KIND, CALC_V0_IMPLEMENTATION_KIND})
+BUNDLED_BLUEREV_PROCESS0_LABEL = "bluerev-geometry-hydraulics-v0-bundled"
+BUNDLED_BLUEREV_PROCESS0_TITLE = "BlueRev geometry and hydraulics bundled V0"
+SUPPORTED_IMPLEMENTATION_KINDS = frozenset(
+    {IMPLEMENTATION_KIND, BLUECAD_L2_IMPLEMENTATION_KIND, CALC_V0_IMPLEMENTATION_KIND}
+)
 
 
 def create_model_implementation(workspace_id: str, payload: ModelImplementationCreate) -> ModelImplementationRead:
@@ -56,8 +68,16 @@ def create_model_implementation(workspace_id: str, payload: ModelImplementationC
             "runner_implementation_kind_unsupported",
             "Only batch_growth_v0, bluecad_l2_v0, and calc_v0 are supported.",
         )
-    if payload.implementation_kind in {BLUECAD_L2_IMPLEMENTATION_KIND, CALC_V0_IMPLEMENTATION_KIND} and not payload.script_text:
+    if (
+        payload.implementation_kind in {BLUECAD_L2_IMPLEMENTATION_KIND, CALC_V0_IMPLEMENTATION_KIND}
+        and not payload.script_text
+    ):
         raise RunnerSafetyError("runner_script_text_required", f"{payload.implementation_kind} requires script_text.")
+
+    input_contract_payload: str | None = None
+    input_contract_sha256: str | None = None
+    if payload.input_contract is not None:
+        input_contract_payload, input_contract_sha256, _ = canonicalize_input_contract(payload.input_contract)
 
     now = utc_now()
     model_version_id = str(uuid4())
@@ -116,8 +136,9 @@ def create_model_implementation(workspace_id: str, payload: ModelImplementationC
             """
             INSERT INTO model_versions (
                 id, workspace_id, model_spec_id, version_label,
-                implementation_artifact_id, implementation_kind, status, changelog, created_at, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                implementation_artifact_id, implementation_kind, status, changelog,
+                input_contract_payload, input_contract_sha256, created_at, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 model_version_id,
@@ -128,6 +149,8 @@ def create_model_implementation(workspace_id: str, payload: ModelImplementationC
                 payload.implementation_kind,
                 "ready",
                 changelog,
+                input_contract_payload,
+                input_contract_sha256,
                 now,
                 payload.notes,
             ),
@@ -165,6 +188,75 @@ def list_model_implementations(workspace_id: str) -> list[ModelImplementationRea
     return [_model_implementation_from_row(row) for row in rows]
 
 
+def register_bundled_bluerev_process0(workspace_id: str) -> ModelImplementationRead:
+    script_path = _bluerev_process0_script_path()
+    contract_path = _bluerev_process0_contract_path()
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    _, contract_sha256, _ = canonicalize_input_contract(contract)
+    script_sha256 = sha256_file(script_path)
+
+    with open_sqlite_connection() as connection:
+        _require_workspace(connection, workspace_id)
+        existing = connection.execute(
+            """
+            SELECT mv.*, a.sha256 AS script_sha256, a.stored_path AS script_path
+            FROM model_versions mv
+            JOIN artifacts a ON a.id = mv.implementation_artifact_id
+            WHERE mv.workspace_id = ?
+              AND mv.version_label = ?
+              AND mv.input_contract_sha256 = ?
+              AND a.sha256 = ?
+            ORDER BY mv.created_at ASC
+            LIMIT 1
+            """,
+            (
+                workspace_id,
+                BUNDLED_BLUEREV_PROCESS0_LABEL,
+                contract_sha256,
+                script_sha256,
+            ),
+        ).fetchone()
+        if existing is not None:
+            return _model_implementation_from_row(existing)
+        model_spec = connection.execute(
+            """
+            SELECT id FROM model_specs
+            WHERE workspace_id = ? AND title = ?
+            ORDER BY created_at ASC
+            LIMIT 1
+            """,
+            (workspace_id, BUNDLED_BLUEREV_PROCESS0_TITLE),
+        ).fetchone()
+
+    if model_spec is None:
+        created_spec = create_model_spec(
+            workspace_id,
+            ModelSpecCreate(
+                title=BUNDLED_BLUEREV_PROCESS0_TITLE,
+                engineering_question=(
+                    "Evaluate caller-selected tubular-loop geometry, hydraulics, "
+                    "turnover, and pump power without product defaults."
+                ),
+                scope=("Reviewed 047 forward model; all nine project and operating values are supplied per scenario."),
+            ),
+        )
+        model_spec_id = created_spec.id
+    else:
+        model_spec_id = str(model_spec["id"])
+
+    return create_model_implementation(
+        workspace_id,
+        ModelImplementationCreate(
+            model_spec_id=model_spec_id,
+            version_label=BUNDLED_BLUEREV_PROCESS0_LABEL,
+            implementation_kind=CALC_V0_IMPLEMENTATION_KIND,
+            notes="Bundled reviewed 047 forward model with a value-free input contract.",
+            script_text=script_path.read_text(encoding="utf-8"),
+            input_contract=contract,
+        ),
+    )
+
+
 def get_model_implementation(workspace_id: str, model_version_id: str) -> ModelImplementationRead:
     with open_sqlite_connection() as connection:
         row = connection.execute(
@@ -179,6 +271,39 @@ def get_model_implementation(workspace_id: str, model_version_id: str) -> ModelI
     if row is None:
         raise RunnerSafetyError("runner_model_version_not_found", "Model implementation not found.")
     return _model_implementation_from_row(row)
+
+
+def preview_model_bindings(
+    workspace_id: str,
+    model_version_id: str,
+    payload: BindingPreviewRequest,
+) -> BindingPreviewResponse:
+    with open_sqlite_connection() as connection:
+        _require_workspace(connection, workspace_id)
+        model_version = connection.execute(
+            "SELECT * FROM model_versions WHERE id = ? AND workspace_id = ?",
+            (model_version_id, workspace_id),
+        ).fetchone()
+        if model_version is None:
+            raise RunnerSafetyError(
+                "runner_model_version_not_found",
+                "Model implementation not found.",
+            )
+
+        def load_parameter(parameter_id: str) -> dict[str, object] | None:
+            row = connection.execute(
+                "SELECT id, workspace_id, value, unit FROM parameters WHERE id = ? AND workspace_id = ?",
+                (parameter_id, workspace_id),
+            ).fetchone()
+            return dict(row) if row is not None else None
+
+        return build_binding_preview(
+            model_version_id=model_version_id,
+            contract_payload=model_version["input_contract_payload"],
+            contract_sha256=model_version["input_contract_sha256"],
+            bindings=payload.bindings,
+            load_parameter=load_parameter,
+        )
 
 
 def create_runner_job(workspace_id: str, payload: RunnerJobCreate) -> RunnerJobCreateResponse:
@@ -312,7 +437,10 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
             ast_import_allowlist=implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND,
         )
     except RunnerSafetyError as exc:
-        if implementation_kind in {BLUECAD_L2_IMPLEMENTATION_KIND, CALC_V0_IMPLEMENTATION_KIND} and exc.code == "SANDBOX_VIOLATION":
+        if (
+            implementation_kind in {BLUECAD_L2_IMPLEMENTATION_KIND, CALC_V0_IMPLEMENTATION_KIND}
+            and exc.code == "SANDBOX_VIOLATION"
+        ):
             return _finish_failed(
                 runner_job_id,
                 workspace_id,
@@ -382,9 +510,7 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
         output = _load_result_json(output_dir, int(job["max_output_json_bytes"]))
         declared_artifacts = output.get("artifacts") or []
         if not isinstance(declared_artifacts, list):
-            raise RunnerSafetyError(
-                "runner_result_invalid_json", "Artifacts declaration must be a list."
-            )
+            raise RunnerSafetyError("runner_result_invalid_json", "Artifacts declaration must be a list.")
         if implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND:
             _validate_bluecad_l2_output(output_dir, declared_artifacts)
         calc_outputs: dict[str, dict[str, object]] | None = None
@@ -546,9 +672,7 @@ def list_run_artifacts(workspace_id: str, simulation_run_id: str) -> list[RunArt
     return [_run_artifact_from_row(row) for row in rows]
 
 
-def _claim_and_mark_running(
-    runner_job_id: str, workspace_id: str, simulation_run_id: str, started_at: str
-) -> bool:
+def _claim_and_mark_running(runner_job_id: str, workspace_id: str, simulation_run_id: str, started_at: str) -> bool:
     """Atomically transition a queued job to running.
 
     The ``WHERE status = 'queued'`` clause is the concurrency guard: SQLite
@@ -741,7 +865,9 @@ def _canonical_result_json(output: dict[str, object]) -> str:
     try:
         return canonical_json(output)
     except RunnerSafetyError as exc:
-        raise RunnerSafetyError("runner_result_invalid_json", "Runner result JSON must be finite canonical JSON.") from exc
+        raise RunnerSafetyError(
+            "runner_result_invalid_json", "Runner result JSON must be finite canonical JSON."
+        ) from exc
 
 
 def _validate_calc_v0_output(output: dict[str, object]) -> dict[str, dict[str, object]]:
@@ -760,7 +886,9 @@ def _validate_calc_v0_output(output: dict[str, object]) -> dict[str, dict[str, o
         try:
             number = float(value)
         except (OverflowError, TypeError, ValueError) as exc:
-            raise RunnerSafetyError("runner_result_invalid_json", f"calc_v0 output {name} value must be numeric.") from exc
+            raise RunnerSafetyError(
+                "runner_result_invalid_json", f"calc_v0 output {name} value must be numeric."
+            ) from exc
         if not isfinite(number):
             raise RunnerSafetyError("runner_result_invalid_json", f"calc_v0 output {name} value must be finite.")
         if not isinstance(item.get("unit"), str) or not str(item.get("unit")).strip():
@@ -871,6 +999,8 @@ def _model_implementation_from_row(row) -> ModelImplementationRead:
         script_path=data["script_path"],
         created_at=data["created_at"],
         notes=data["notes"],
+        input_contract=_json_or_none(data.get("input_contract_payload")),
+        input_contract_sha256=data.get("input_contract_sha256"),
     )
 
 
@@ -922,7 +1052,9 @@ def _require_workspace(connection, workspace_id: str) -> None:
         raise RunnerSafetyError("runner_workspace_not_found", "Workspace not found.")
 
 
-def _log_event(connection, *, event_type: str, target_type: str, target_id: str, workspace_id: str, payload: dict[str, object]) -> None:
+def _log_event(
+    connection, *, event_type: str, target_type: str, target_id: str, workspace_id: str, payload: dict[str, object]
+) -> None:
     log_event(
         connection,
         event_type=event_type,
@@ -936,6 +1068,14 @@ def _log_event(connection, *, event_type: str, target_type: str, target_id: str,
 
 def _example_script_path() -> Path:
     return Path(__file__).resolve().parent / "examples" / "batch_growth.py"
+
+
+def _bluerev_process0_script_path() -> Path:
+    return Path(__file__).resolve().parent / "examples" / "bluerev_geometry_hydraulics_v0.py"
+
+
+def _bluerev_process0_contract_path() -> Path:
+    return Path(__file__).resolve().parent / "examples" / "bluerev_geometry_hydraulics_v0.contract.json"
 
 
 def _pretty_json(canonical_payload: str) -> str:

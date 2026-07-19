@@ -43,7 +43,11 @@ def uninitialized_client(tmp_path, monkeypatch) -> Iterator[TestClient]:
 def test_schema_migration_table_records_baseline_and_current_version(client: TestClient) -> None:
     from app.core.database import open_sqlite_connection
     from app.core.egress_schema import EGRESS_SCHEMA_MIGRATION_ID
-    from app.core.schema import CURRENT_SCHEMA_MIGRATION_ID, SCHEMA_BASELINE_MIGRATION_ID
+    from app.core.schema import (
+        CURRENT_SCHEMA_MIGRATION_ID,
+        SCHEMA_BASELINE_MIGRATION_ID,
+        SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID,
+    )
     from app.core.token_flow_schema import TOKEN_FLOW_SCHEMA_MIGRATION_ID
 
     with open_sqlite_connection() as connection:
@@ -52,10 +56,12 @@ def test_schema_migration_table_records_baseline_and_current_version(client: Tes
         ).fetchall()
 
     migrations = {row["migration_id"]: dict(row) for row in rows}
-    assert CURRENT_SCHEMA_MIGRATION_ID == TOKEN_FLOW_SCHEMA_MIGRATION_ID
+    assert CURRENT_SCHEMA_MIGRATION_ID == SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID
     assert SCHEMA_BASELINE_MIGRATION_ID in migrations
     assert EGRESS_SCHEMA_MIGRATION_ID in migrations
+    assert TOKEN_FLOW_SCHEMA_MIGRATION_ID in migrations
     assert migrations[EGRESS_SCHEMA_MIGRATION_ID]["status"] == "applied"
+    assert migrations[TOKEN_FLOW_SCHEMA_MIGRATION_ID]["status"] == "applied"
     assert CURRENT_SCHEMA_MIGRATION_ID in migrations
     assert migrations[CURRENT_SCHEMA_MIGRATION_ID]["status"] == "applied"
 
@@ -154,9 +160,7 @@ def test_event_persistence_applies_redaction(client: TestClient) -> None:
             payload={"message": "api key is secret-value-123", "token_usage_month_to_date": 7},
         )
         connection.commit()
-        row = connection.execute(
-            "SELECT payload FROM events WHERE event_type = 'RedactionSmoke'"
-        ).fetchone()
+        row = connection.execute("SELECT payload FROM events WHERE event_type = 'RedactionSmoke'").fetchone()
 
     payload = json.loads(row["payload"])
     payload_text = json.dumps(payload)

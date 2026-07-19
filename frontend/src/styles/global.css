@@ -1195,3 +1195,159 @@ button {
   color: #1d4ed8;
   font-weight: 700;
 }
+
+.scenario-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.scenario-model-select,
+.scenario-actions label,
+.scenario-variable label {
+  display: grid;
+  gap: 6px;
+  color: #52616b;
+  font-size: 13px;
+}
+
+.scenario-model-select select,
+.scenario-actions input,
+.scenario-variable input,
+.scenario-variable select {
+  min-height: 38px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1f2933;
+  font: inherit;
+}
+
+.scenario-variable-list {
+  display: grid;
+  gap: 10px;
+}
+
+.scenario-variable {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(150px, 0.7fr) minmax(220px, 1fr) minmax(120px, auto);
+  gap: 12px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.scenario-variable > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.scenario-variable > div:first-child span,
+.scenario-variable small {
+  color: #52616b;
+}
+
+.binding-state {
+  display: grid;
+  gap: 3px;
+  min-height: 38px;
+  align-content: center;
+  padding: 7px 9px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.binding-state.invalid {
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+.binding-state.manual,
+.binding-state.parameter {
+  border-color: #86efac;
+  color: #166534;
+}
+
+.scenario-actions {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.scenario-actions button:not(.secondary-button) {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid #1d4ed8;
+  border-radius: 6px;
+  background: #1d4ed8;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.scenario-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.dof-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dof-strip span,
+.dof-strip strong {
+  padding: 7px 9px;
+  border: 1px solid #d8dee9;
+  border-radius: 6px;
+  background: #f8fafc;
+  font-size: 13px;
+}
+
+.scenario-result {
+  display: grid;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.scenario-result h4,
+.scenario-result p {
+  margin: 0;
+}
+
+.scenario-output-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.scenario-output-list div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+
+.scenario-output-list dd {
+  margin: 0;
+  font-family: "Cascadia Mono", Consolas, monospace;
+}
+
+@media (max-width: 900px) {
+  .scenario-variable,
+  .scenario-actions,
+  .scenario-output-list {
+    grid-template-columns: 1fr;
+  }
+}
