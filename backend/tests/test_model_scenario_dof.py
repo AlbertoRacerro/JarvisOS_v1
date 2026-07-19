@@ -257,3 +257,24 @@ def test_contract_ready_can_still_fail_script_correlation(client: TestClient) ->
     assert result.status_code == 200
     assert result.json()["runner_job"]["status"] == "failed"
     assert result.json()["output"] is None
+
+
+def test_bundled_047_registration_is_explicit_idempotent_and_value_free(
+    client: TestClient,
+) -> None:
+    before = client.get("/workspaces/bluerev/model-implementations").json()
+    assert before == []
+
+    endpoint = "/workspaces/bluerev/bundled-models/bluerev-geometry-hydraulics-v0/register"
+    first = client.post(endpoint)
+    second = client.post(endpoint)
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert second.json()["id"] == first.json()["id"]
+    assert first.json()["version_label"] == "bluerev-geometry-hydraulics-v0-bundled"
+    assert len(first.json()["input_contract"]["variables"]) == 9
+    forbidden = {"value", "default", "recommended_value", "initial_guess"}
+    assert all(not forbidden.intersection(variable) for variable in first.json()["input_contract"]["variables"])
+
+    implementations = client.get("/workspaces/bluerev/model-implementations").json()
+    assert [item["id"] for item in implementations] == [first.json()["id"]]
