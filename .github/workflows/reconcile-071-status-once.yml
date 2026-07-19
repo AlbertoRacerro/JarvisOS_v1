@@ -1,0 +1,50 @@
+name: Reconcile 071 status once
+
+on:
+  push:
+    branches:
+      - docs/071-merged-status
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/071-merged-status
+
+      - name: Reconcile exact registry row
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("docs/specs/STATUS.md")
+          text = path.read_text(encoding="utf-8")
+          old = "| 071 | in_review | [#147](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/147) |"
+          new = "| 071 | merged | [#147](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/147) |"
+          if text.count(old) != 1:
+              raise SystemExit(f"Expected exactly one 071 in_review row, found {text.count(old)}")
+          updated = text.replace(old, new, 1)
+          if updated.count(new) != 1:
+              raise SystemExit("Merged 071 row verification failed")
+          path.write_text(updated, encoding="utf-8")
+          PY
+
+      - name: Validate bounded diff
+        run: |
+          python scripts/check_spec_status.py
+          git diff --check
+          test "$(git diff --numstat docs/specs/STATUS.md)" = $'1\t1\tdocs/specs/STATUS.md'
+          test "$(git diff --name-only | wc -l)" -eq 1
+
+      - name: Remove workflow and publish
+        run: |
+          rm .github/workflows/reconcile-071-status-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Mark spec 071 merged"
+          git push origin HEAD:docs/071-merged-status
