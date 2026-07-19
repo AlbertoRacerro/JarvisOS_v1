@@ -1,0 +1,81 @@
+name: Fix 071 contract persistence once
+
+on:
+  push:
+    branches:
+      - impl/071-model-scenario-dof
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: impl/071-model-scenario-dof
+          fetch-depth: 0
+      - name: Fix exact model version insert
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("backend/app/modules/runner/service.py")
+          text = path.read_text(encoding="utf-8")
+          old = '''            INSERT INTO model_versions (
+                          id, workspace_id, model_spec_id, version_label,
+                          implementation_artifact_id, implementation_kind, status, changelog, created_at, notes
+                      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      """,
+                      (
+                          model_version_id,
+                          workspace_id,
+                          payload.model_spec_id,
+                          payload.version_label,
+                          artifact_id,
+                          payload.implementation_kind,
+                          "ready",
+                          changelog,
+                          now,
+                          payload.notes,
+                      ),'''
+          new = '''            INSERT INTO model_versions (
+                          id, workspace_id, model_spec_id, version_label,
+                          implementation_artifact_id, implementation_kind, status, changelog,
+                          input_contract_payload, input_contract_sha256, created_at, notes
+                      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                      """,
+                      (
+                          model_version_id,
+                          workspace_id,
+                          payload.model_spec_id,
+                          payload.version_label,
+                          artifact_id,
+                          payload.implementation_kind,
+                          "ready",
+                          changelog,
+                          input_contract_payload,
+                          input_contract_sha256,
+                          now,
+                          payload.notes,
+                      ),'''
+          if text.count(old) != 1:
+              raise SystemExit("unexpected model_versions insert")
+          text = text.replace(old, new)
+          text = text.replace(
+              '"script_sha256": script_sha,\n                },',
+              '"script_sha256": script_sha,\n                    "input_contract_sha256": input_contract_sha256,\n                },',
+              1,
+          )
+          path.write_text(text, encoding="utf-8")
+          PY
+          rm -f reports-071-targeted.txt .trigger-071-diagnostic
+          rm .github/workflows/fix-071-contract-insert-once.yml
+      - name: Commit fix
+        run: |
+          git config user.name "jarvisos-implementation-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add backend/app/modules/runner/service.py reports-071-targeted.txt .trigger-071-diagnostic .github/workflows/fix-071-contract-insert-once.yml
+          git commit -m "Persist 071 input contracts on model versions"
+          git push origin HEAD:impl/071-model-scenario-dof
