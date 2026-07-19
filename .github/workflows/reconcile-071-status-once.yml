@@ -1,0 +1,88 @@
+name: Reconcile 071 registry once
+
+on:
+  push:
+    branches:
+      - spec/071-model-scenario-dof-definition
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: spec/071-model-scenario-dof-definition
+          fetch-depth: 0
+
+      - name: Apply exact registry reconciliation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          from pathlib import Path
+
+          path = Path("docs/specs/STATUS.md")
+          data = path.read_bytes()
+          git_blob = hashlib.sha1(
+              b"blob " + str(len(data)).encode("ascii") + b"\0" + data
+          ).hexdigest()
+          expected = "6fd25cbf2fb18d5c38e687490461af3ff61e30ae"
+          if git_blob != expected:
+              raise SystemExit(f"unexpected STATUS blob: {git_blob}")
+
+          text = data.decode("utf-8")
+          replacements = [
+              (
+                  "6. Interleave the productive engineering loop `047` → `048` + `049`; Hermes work\n"
+                  "   must not indefinitely displace measurable BlueRev engineering progress.",
+                  "6. Complete the merged `047` model through `071` editable bindings, scenario runs,\n"
+                  "   and honest forward DOF inspection before expanding to `048` + `049`; Hermes work\n"
+                  "   must not indefinitely displace measurable BlueRev engineering progress.",
+              ),
+              (
+                  "| 047 | in_review | [#143](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/143) | BLUEREV-PROCESS-0: geometry, hydraulics, and pumping | 043 | Port workbook ranks 1–7 into unit-bearing `calc_v0` nodes, correct hydraulic-vs-illuminated area and residence-vs-loop-turnover definitions, and ship deterministic/literature verification cases. |",
+                  "| 047 | merged | [#143](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/143) | BLUEREV-PROCESS-0: geometry, hydraulics, and pumping | 043 | Ship the caller-parameterized forward `calc_v0` model for geometry, hydraulics, residence/turnover, and pumping; formulas, units, correlations, and validity domains are versioned, while all nine project/operating values remain editable bindings and numerical fixtures validate equations only. |",
+              ),
+              (
+                  "| 069 | planned | — | MEMORY-CONSOLIDATE-0 | 040, 042, 061a, 061b, 062, 066, 067, 068 | First Hermes dogfood: consolidate bounded accepted records/evidence into MemoryStore proposals with conflict preservation, provenance, grading, and cost evidence; never promote, overwrite, delete, or lower sensitivity. |",
+                  "| 069 | planned | — | MEMORY-CONSOLIDATE-0 | 040, 042, 061a, 061b, 062, 066, 067, 068 | First Hermes dogfood: consolidate bounded accepted records/evidence into MemoryStore proposals with conflict preservation, provenance, grading, and cost evidence; never promote, overwrite, delete, or lower sensitivity. |\n"
+                  "| 071 | ready | — | MODEL-SCENARIO-DOF-0: editable bindings, scenario runs, and degree-of-freedom inspection | 040, 043, 047 | Expose immutable value-free model input contracts, side-effect-free forward binding/DOF preview, parameter-backed or manual scenario bindings, existing-runner execution, and one bounded Domain Foundation panel; no inverse solver, targets, optimizer, automatic promotion, or embedded design defaults. |",
+              ),
+          ]
+
+          for old, new in replacements:
+              if text.count(old) != 1:
+                  raise SystemExit(f"expected exactly one match: {old[:80]!r}")
+              text = text.replace(old, new)
+
+          result = text.encode("utf-8")
+          result_blob = hashlib.sha1(
+              b"blob " + str(len(result)).encode("ascii") + b"\0" + result
+          ).hexdigest()
+          expected_result = "6b12b73cd2be6402c1b99b00244aaf0f25cc16d3"
+          if result_blob != expected_result:
+              raise SystemExit(f"unexpected result blob: {result_blob}")
+          path.write_bytes(result)
+          PY
+
+          rm .github/workflows/reconcile-071-status-once.yml
+
+          changed="$(git status --short)"
+          printf '%s\n' "$changed"
+          test "$(printf '%s\n' "$changed" | wc -l)" -eq 2
+          printf '%s\n' "$changed" | grep -F ' M docs/specs/STATUS.md'
+          printf '%s\n' "$changed" | grep -F ' D .github/workflows/reconcile-071-status-once.yml'
+
+      - name: Commit verified reconciliation
+        shell: bash
+        run: |
+          git config user.name "jarvisos-registry-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/specs/STATUS.md .github/workflows/reconcile-071-status-once.yml
+          git commit -m "Register ready spec 071 and close 047 status"
+          git push origin HEAD:spec/071-model-scenario-dof-definition
