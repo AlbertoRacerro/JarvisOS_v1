@@ -56,7 +56,8 @@ before Codex or another coding agent may act on them.
    their contracts are reconciled with 059b, 061a/061b, and existing service boundaries.
 5. Draft and promote `068` HERMES-CONFIG-0 only after 066/067 are stable and a
    concrete Windows-first host-isolation boundary is selected.
-6. Interleave the productive engineering loop `047` → `048` + `049`; Hermes work
+6. Complete the merged `047` model through `071` editable bindings, scenario runs,
+   and honest forward DOF inspection before expanding to `048` + `049`; Hermes work
    must not indefinitely displace measurable BlueRev engineering progress.
 7. Run `069` MEMORY-CONSOLIDATE-0 as the first Hermes dogfood only after 066–068
    are merged and the required local route is qualified.
@@ -121,7 +122,7 @@ PR overlaps the target files or runtime boundary.
 | 044 | merged | [#62](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/62) | EVIDENCE-BRIDGE-1 | 042 | Add typed validation/mesh/FEM evidence records and deterministic bounded evidence lines for context packs. |
 | 045 | planned | — | Runner hardening boundary | 043 | Define the next measured isolation step and prevent policy-guarded local Python execution from being represented as an OS-level hostile-code sandbox. |
 | 046 | planned | — | Alternative design loop | 006b, 011, 038 | Trigger only after the review panel proves useful: explain a failed FEM result, propose a bounded alternative, build it, and compare variants without auto-promotion. |
-| 047 | in_review | [#143](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/143) | BLUEREV-PROCESS-0: geometry, hydraulics, and pumping | 043 | Port workbook ranks 1–7 into unit-bearing `calc_v0` nodes, correct hydraulic-vs-illuminated area and residence-vs-loop-turnover definitions, and ship deterministic/literature verification cases. |
+| 047 | merged | [#143](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/143) | BLUEREV-PROCESS-0: geometry, hydraulics, and pumping | 043 | Ship the caller-parameterized forward `calc_v0` model for geometry, hydraulics, residence/turnover, and pumping; formulas, units, correlations, and validity domains are versioned, while all nine project/operating values remain editable bindings and numerical fixtures validate equations only. |
 | 048 | planned | — | BLUEREV-PROCESS-1: biomass, nutrients, gas, harvest, and energy/cost KPIs | 043, 047 | Port ranks 8–18 while correcting productive-volume, recovery-balance, and pump-only-vs-total KPI errors; include a `preliminary_economic_evaluation_v0` output family (`variable_opex_rate`, `specific_variable_cost`, `gross_margin_proxy`) with explicit `economic_boundary` and `economic_basis` fields and per-input uncertainty/provenance, so design alternatives are economically comparable without implying a full TEA; `gross_margin_proxy` must support an explicit `not_computable` outcome when price, recovery, or time basis is unavailable rather than silently substituting zero or emitting a partial value; every claim carries units, assumptions, provenance, and verification cases. |
 | 049 | planned | — | BLUEREV-PROCESS-2: buoyancy and light/transmittance proxies | 043, 047 | Add hardware mass and safety factor to buoyancy; require explicit optical path length; label proxies honestly and expose the measurements that would promote real light models. |
 | 050 | planned | — | FLOWSHEET-1 dependency DAG | 047, 048, 049 | Materialize an inspectable graph from existing provenance without a recompute engine; normalize legacy FK/source forms at read time and own the shared `<kind>:<id>` resolver. |
@@ -150,6 +151,7 @@ PR overlaps the target files or runtime boundary.
 | 067 | planned | — | JARVIS-MCP-0 | 005, 010, 040, 042, 043, 044, 059a | Expose bounded context, canonical search, MemoryStore proposal, `calc_v0`, BLUECAD candidate, and evidence tools through existing services; no direct storage/filesystem access, promotion, sampling, or authority. |
 | 068 | planned | — | HERMES-CONFIG-0 | 066, 067 | Freeze a pinned/fingerprinted Hermes profile with passthrough-only model paths, Jarvis MCP only, host-level workspace isolation, explicit tool allowlist, disabled browser/computer/cron/proactive paths, and bounded delegation. |
 | 069 | planned | — | MEMORY-CONSOLIDATE-0 | 040, 042, 061a, 061b, 062, 066, 067, 068 | First Hermes dogfood: consolidate bounded accepted records/evidence into MemoryStore proposals with conflict preservation, provenance, grading, and cost evidence; never promote, overwrite, delete, or lower sensitivity. |
+| 071 | ready | — | MODEL-SCENARIO-DOF-0: editable bindings, scenario runs, and degree-of-freedom inspection | 040, 043, 047 | Expose immutable value-free model input contracts, side-effect-free forward binding/DOF preview, parameter-backed or manual scenario bindings, existing-runner execution, and one bounded Domain Foundation panel; no inverse solver, targets, optimizer, automatic promotion, or embedded design defaults. |
 
 ## Superseded planning aliases and resolved collisions
 
