@@ -1,0 +1,161 @@
+name: Complete 071 UI once
+
+on:
+  push:
+    branches:
+      - impl/071-model-scenario-dof
+
+permissions:
+  contents: write
+
+jobs:
+  complete:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: impl/071-model-scenario-dof
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Wire bundled 047 registration into the scenario panel
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: Path, old: str, new: str) -> None:
+              text = path.read_text(encoding="utf-8")
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one replacement anchor, found {count}")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          client = Path("frontend/src/api/client.ts")
+          list_function = '''export function listModelImplementations(workspaceId: string): Promise<ModelImplementation[]> {
+            return getJson<ModelImplementation[]>(`/workspaces/${workspaceId}/model-implementations`);
+          }
+          '''
+          register_function = list_function + '''
+          export function registerBundledBlueRevProcess0(workspaceId: string): Promise<ModelImplementation> {
+            return postJson<ModelImplementation>(
+              `/workspaces/${workspaceId}/bundled-models/bluerev-geometry-hydraulics-v0/register`
+            );
+          }
+          '''
+          replace_once(client, list_function, register_function)
+
+          page = Path("frontend/src/pages/DomainFoundation.tsx")
+          replace_once(
+              page,
+              '''  previewModelBindings,
+            runRunnerJob,''',
+              '''  previewModelBindings,
+            registerBundledBlueRevProcess0,
+            runRunnerJob,''',
+          )
+          initialize_block = '''  const onInitializeClick = () => {
+            initializeSystem()
+              .then(() => {
+                setMessage("Storage initialized and BlueRev workspace is available.");
+                return refreshWorkspaces();
+              })
+              .catch((error: Error) => setMessage(error.message));
+          };
+          '''
+          register_handler = initialize_block + '''
+          const onRegisterBundledModel = () => {
+            setScenarioBusy(true);
+            setMessage(null);
+            registerBundledBlueRevProcess0(workspaceId)
+              .then((implementation) =>
+                refreshWorkspaceRecords(workspaceId).then(() => {
+                  setImplementationId(implementation.id);
+                  setMessage("Bundled BlueRev 047 model registered.");
+                })
+              )
+              .catch((error: Error) => setMessage(error.message))
+              .finally(() => setScenarioBusy(false));
+          };
+          '''
+          replace_once(page, initialize_block, register_handler)
+          replace_once(
+              page,
+              '''        onRun={onRunScenario}
+                result={scenarioResult}
+                busy={scenarioBusy}
+          ''',
+              '''        onRun={onRunScenario}
+                onRegisterBundled={onRegisterBundledModel}
+                result={scenarioResult}
+                busy={scenarioBusy}
+          ''',
+          )
+          replace_once(
+              page,
+              '''  onRun,
+            result,
+            busy
+          ''',
+              '''  onRun,
+            onRegisterBundled,
+            result,
+            busy
+          ''',
+          )
+          replace_once(
+              page,
+              '''  onRun: () => void;
+            result: RunnerJobRunResponse | null;
+          ''',
+              '''  onRun: () => void;
+            onRegisterBundled: () => void;
+            result: RunnerJobRunResponse | null;
+          ''',
+          )
+          replace_once(
+              page,
+              '''      {implementations.length === 0 ? (
+                <p>No reviewed model implementation exposes an input contract yet.</p>
+              ) : (
+          ''',
+              '''      {implementations.length === 0 ? (
+                <div className="scenario-empty">
+                  <p>No reviewed model implementation exposes an input contract yet.</p>
+                  <button type="button" className="secondary-button" disabled={busy} onClick={onRegisterBundled}>
+                    Register bundled BlueRev 047 model
+                  </button>
+                </div>
+              ) : (
+          ''',
+          )
+          PY
+
+      - name: Remove one-shot files
+        run: |
+          rm -f .trigger-071-bundled-backend .trigger-071-ui
+          rm -f .github/workflows/complete-071-ui-once.yml
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Verify and publish bounded diff
+        run: |
+          git diff --check
+          test ! -e .trigger-071-bundled-backend
+          test ! -e .trigger-071-ui
+          test ! -e .github/workflows/complete-071-ui-once.yml
+          grep -q "registerBundledBlueRevProcess0" frontend/src/api/client.ts
+          grep -q "Register bundled BlueRev 047 model" frontend/src/pages/DomainFoundation.tsx
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Complete 071 bundled model registration UI"
+          git push origin HEAD:impl/071-model-scenario-dof
