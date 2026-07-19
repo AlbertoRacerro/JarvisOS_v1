@@ -77,6 +77,12 @@ class AIUsageSource(StrEnum):
     mixed = "mixed"
 
 
+class AIExternalDispatchState(StrEnum):
+    not_started = "not_started"
+    started = "started"
+    unknown = "unknown"
+
+
 class AIPolicyMode(StrEnum):
     FAST_DEV = "FAST_DEV"
     STRICT_IP = "STRICT_IP"
@@ -153,6 +159,7 @@ class AIResponse(BaseModel):
     finish_reason: str | None = None
     safety_status: str = "not_evaluated"
     blocked_reason: str | None = None
+    external_dispatch_state: AIExternalDispatchState | None = None
     raw_provider_metadata: dict[str, Any] = Field(default_factory=dict)
     error: AIProviderError | None = None
 

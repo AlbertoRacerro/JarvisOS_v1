@@ -2,6 +2,7 @@ version: 1
 providers:
   fake:
     kind: fake
+    execution_class: synthetic
     enabled: true
     requires_network: false
     base_url: null
@@ -13,9 +14,12 @@ providers:
       fake-deterministic-v1:
         provider_model_name: fake-deterministic-v1
         route_classes: [local:fake]
+        # Bounded fixture limit, not real-model capability evidence.
+        context_window_tokens: 4096
         max_output_tokens: 256
   local_ollama:
     kind: local
+    execution_class: local_compute
     enabled: true
     requires_network: false
     base_url: null
@@ -27,21 +31,27 @@ providers:
       qwen3:8b:
         provider_model_name: qwen3:8b
         route_classes: [local:fast]
+        # Conservative JarvisOS operating bound, not a vendor maximum claim.
+        context_window_tokens: 8192
         max_output_tokens: 512
       gemma4:12b-it-qat:
         provider_model_name: gemma4:12b-it-qat
         route_classes: [local:general, local:gemma]
+        context_window_tokens: 8192
         max_output_tokens: 512
       deepseek-coder-v2:16b:
         provider_model_name: deepseek-coder-v2:16b
         route_classes: [local:coder]
+        context_window_tokens: 8192
         max_output_tokens: 512
       qwen3-coder:30b:
         provider_model_name: qwen3-coder:30b
         route_classes: [local:coder_heavy]
+        context_window_tokens: 8192
         max_output_tokens: 512
   deepseek:
     kind: openai_compatible
+    execution_class: external_provider
     enabled: true
     requires_network: true
     base_url: https://api.deepseek.com
@@ -53,6 +63,8 @@ providers:
       deepseek-v4-pro:
         provider_model_name: deepseek-v4-pro
         route_classes: [external:cheap]
+        # Conservative accepted JarvisOS bound, not a live-provider capability claim.
+        context_window_tokens: 8192
         max_output_tokens: 512
         # Conservative operator upper bound, not a live-provider price claim.
         pricing:
@@ -63,6 +75,7 @@ providers:
           pricing_effective_at: "2026-07-13T00:00:00Z"
   glm:
     kind: openai_compatible
+    execution_class: external_provider
     enabled: true
     requires_network: true
     base_url: https://api.z.ai/api/paas/v4
@@ -74,6 +87,8 @@ providers:
       glm-5.2:
         provider_model_name: glm-5.2
         route_classes: [external:reasoning]
+        # Conservative accepted JarvisOS bound, not a live-provider capability claim.
+        context_window_tokens: 8192
         max_output_tokens: 1024
         # Conservative operator upper bound, not a live-provider price claim.
         pricing:
@@ -84,6 +99,7 @@ providers:
           pricing_effective_at: "2026-07-13T00:00:00Z"
   kimi:
     kind: openai_compatible
+    execution_class: external_provider
     enabled: false
     requires_network: true
     base_url: https://api.moonshot.ai/v1
@@ -93,9 +109,10 @@ providers:
     monthly_cost_cap_usd: 25
     models:
       kimi-placeholder:
-        # confirm model id, reviewed pricing, and enable when a key exists
+        # Confirm model id, reviewed pricing, and capability before enabling.
         provider_model_name: kimi-placeholder
         route_classes: [external:kimi]
+        context_window_tokens: 8192
         max_output_tokens: 1024
 fallback_chains:
   external:cheap: [deepseek/deepseek-v4-pro, glm/glm-5.2]

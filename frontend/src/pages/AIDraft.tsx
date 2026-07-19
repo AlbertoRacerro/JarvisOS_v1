@@ -145,6 +145,7 @@ function AIDraft() {
       scaleway_live_smoke_test_enabled: form.get("scaleway_live_smoke_test_enabled") === "on",
       scaleway_monthly_token_cap: Number(form.get("scaleway_monthly_token_cap") ?? 500000),
       scaleway_hard_stop_token_cap: Number(form.get("scaleway_hard_stop_token_cap") ?? 800000),
+      max_direct_continuations: Number(form.get("max_direct_continuations") ?? 8),
       use_fake_provider_when_budget_zero: form.get("use_fake_provider_when_budget_zero") === "on"
     })
       .then(() => refresh())
@@ -637,6 +638,20 @@ function AIDraft() {
               <label>
                 Scaleway hard stop cap
                 <input name="scaleway_hard_stop_token_cap" type="number" min="0" defaultValue={settings?.scaleway_hard_stop_token_cap ?? 800000} />
+              </label>
+              <label>
+                Reserved continuation limit (available after 061b)
+                <input
+                  name="max_direct_continuations"
+                  type="number"
+                  min={settings?.max_direct_continuations_min ?? 0}
+                  max={settings?.max_direct_continuations_max ?? 16}
+                  step="1"
+                  defaultValue={settings?.max_direct_continuations ?? 8}
+                />
+                <span>
+                  Configuration substrate only; runtime remains disabled in 061a · {settings?.direct_continuation_policy_version ?? "token-flow-v0"}
+                </span>
               </label>
               <label className="checkbox-line">
                 <input name="paid_ai_enabled" type="checkbox" defaultChecked={settings?.paid_ai_enabled ?? false} />

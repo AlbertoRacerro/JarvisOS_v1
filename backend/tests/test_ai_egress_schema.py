@@ -11,6 +11,7 @@ from app.core.database import (
 from app.core.egress_schema import EGRESS_SCHEMA_MIGRATION_ID
 from app.core.schema import SCHEMA_STATEMENTS
 from app.core.sensitivity_schema import SENSITIVITY_SCHEMA_STATEMENTS
+from app.core.token_flow_schema import TOKEN_FLOW_SCHEMA_MIGRATION_ID
 
 EXPECTED_EGRESS_TABLES = {
     "egress_prompt_derivatives",
@@ -33,21 +34,29 @@ EXPECTED_SANITIZER_PROVENANCE_COLUMNS = {
 }
 
 
-def test_egress_schema_initializes_idempotently_as_migration_0010():
+def test_egress_schema_remains_recorded_after_token_flow_migration():
     first = initialize_database()
     second = initialize_database()
 
     assert first.ready is True
     assert second.ready is True
-    assert get_current_schema_migration().migration_id == EGRESS_SCHEMA_MIGRATION_ID
-    assert count_schema_migrations() == 10
+    assert get_current_schema_migration().migration_id == TOKEN_FLOW_SCHEMA_MIGRATION_ID
+    assert count_schema_migrations() == 11
 
     with open_sqlite_connection() as connection:
         rows = connection.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table'"
         ).fetchall()
+        egress_migration = connection.execute(
+            """
+            SELECT status FROM schema_migrations WHERE migration_id = ?
+            """,
+            (EGRESS_SCHEMA_MIGRATION_ID,),
+        ).fetchone()
     tables = {row["name"] for row in rows}
     assert EXPECTED_EGRESS_TABLES.issubset(tables)
+    assert egress_migration is not None
+    assert egress_migration["status"] == "applied"
 
 
 def test_ai_job_usage_source_column_exists_and_rejects_invalid_values():

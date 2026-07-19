@@ -6,6 +6,7 @@ from uuid import uuid4
 from app.core.database import initialize_database, open_sqlite_connection
 from app.modules.ai.context_builder import canonical_digest
 from app.modules.ai.contracts import (
+    AIExternalDispatchState,
     AIRequest,
     AIResponse,
     AITaskType,
@@ -75,6 +76,7 @@ class CountingAdapter:
             ),
             finish_reason="stop",
             safety_status="allowed",
+            external_dispatch_state=AIExternalDispatchState.started,
         )
 
     def health(self):  # pragma: no cover - protocol method unused here
@@ -191,6 +193,7 @@ def _seed_prior_network_attempt() -> None:
         ),
         finish_reason="stop",
         safety_status="allowed",
+        external_dispatch_state=AIExternalDispatchState.started,
     )
     finalize_queued_ai_job(
         queued.ai_job_id,
@@ -219,6 +222,7 @@ def test_first_external_use_returns_ticket_and_makes_zero_adapter_calls(monkeypa
     assert outcome.egress_reason_code == "confirmation_required"
     assert outcome.egress_ticket_id is not None
     assert outcome.egress_packet_digest is not None
+    assert outcome.flow_id is not None
     assert adapter.calls == 0
     with open_sqlite_connection() as connection:
         counts = {
@@ -233,7 +237,14 @@ def test_first_external_use_returns_ticket_and_makes_zero_adapter_calls(monkeypa
                 "egress_budget_reservations",
             )
         }
-        job = connection.execute("SELECT status FROM ai_jobs").fetchone()
+        job = connection.execute(
+            "SELECT status, flow_id, execution_class, adapter_invoked, "
+            "external_dispatch_state, accounting_basis FROM ai_jobs"
+        ).fetchone()
+        flow = connection.execute(
+            "SELECT state, terminal_attempt_id FROM ai_flows WHERE id = ?",
+            (outcome.flow_id,),
+        ).fetchone()
     assert counts == {
         "ai_jobs": 1,
         "egress_packets": 1,
@@ -242,6 +253,13 @@ def test_first_external_use_returns_ticket_and_makes_zero_adapter_calls(monkeypa
         "egress_budget_reservations": 0,
     }
     assert job["status"] == "validation_error"
+    assert job["flow_id"] == outcome.flow_id
+    assert job["execution_class"] == "external_provider"
+    assert job["adapter_invoked"] == 0
+    assert job["external_dispatch_state"] == "not_started"
+    assert job["accounting_basis"] == "external_not_sent"
+    assert flow["state"] == "confirmation_required"
+    assert flow["terminal_attempt_id"] is None
 
 
 def test_secret_prompt_is_denied_prepacket_with_zero_adapter_calls(monkeypatch):
@@ -304,12 +322,15 @@ def test_silent_allow_uses_persisted_packet_and_reconciles_one_call(monkeypatch)
     assert outcome.status == "success"
     assert outcome.egress_reason_code == "silent_allow"
     assert outcome.egress_reservation_id is not None
+    assert outcome.flow_id is not None
     assert adapter.calls == 1
     assert adapter.requests[0].prompt == prompt
     assert adapter.requests[0].metadata["egress_packet_digest"] == outcome.egress_packet_digest
     with open_sqlite_connection() as connection:
         job = connection.execute(
-            "SELECT status, output_digest FROM ai_jobs WHERE id = ?",
+            "SELECT status, output_digest, flow_id, execution_class, adapter_invoked, "
+            "external_dispatch_state, normalized_usage_source, accounting_basis, "
+            "accounted_provider_spend_usd_decimal FROM ai_jobs WHERE id = ?",
             (outcome.ledger_id,),
         ).fetchone()
         reservation = connection.execute(
@@ -328,8 +349,21 @@ def test_silent_allow_uses_persisted_packet_and_reconciles_one_call(monkeypatch)
             "SELECT packet_json FROM egress_packets WHERE packet_digest = ?",
             (outcome.egress_packet_digest,),
         ).fetchone()
+        flow = connection.execute(
+            "SELECT state, terminal_attempt_id FROM ai_flows WHERE id = ?",
+            (outcome.flow_id,),
+        ).fetchone()
     assert job["status"] == "success"
     assert job["output_digest"] == canonical_digest({"text": "Bound generic answer."})
+    assert job["flow_id"] == outcome.flow_id
+    assert job["execution_class"] == "external_provider"
+    assert job["adapter_invoked"] == 1
+    assert job["external_dispatch_state"] == "started"
+    assert job["normalized_usage_source"] == "actual"
+    assert job["accounting_basis"] == "provider_exact"
+    assert float(job["accounted_provider_spend_usd_decimal"]) > 0
+    assert flow["state"] == "complete"
+    assert flow["terminal_attempt_id"] == outcome.ledger_id
     assert reservation["state"] == "reconciled"
     assert reservation["reconciliation_status"] == "actual"
     assert reservation["actual_input_tokens"] == 11
@@ -351,7 +385,9 @@ def test_response_binding_mismatch_is_recorded_and_reconciled_conservatively(mon
     assert adapter.calls == 1
     with open_sqlite_connection() as connection:
         job = connection.execute(
-            "SELECT status, output_digest, error_type FROM ai_jobs WHERE id = ?",
+            "SELECT status, output_digest, error_type, flow_id, external_dispatch_state, "
+            "normalized_usage_source, accounting_basis, "
+            "accounted_provider_spend_usd_decimal FROM ai_jobs WHERE id = ?",
             (outcome.ledger_id,),
         ).fetchone()
         reservation = connection.execute(
@@ -366,7 +402,89 @@ def test_response_binding_mismatch_is_recorded_and_reconciled_conservatively(mon
     assert job["status"] == "provider_error"
     assert job["output_digest"] is None
     assert job["error_type"] == "EgressSpineStateError"
+    assert job["flow_id"] == outcome.flow_id
+    assert job["external_dispatch_state"] == "unknown"
+    assert job["normalized_usage_source"] == "estimated"
+    assert job["accounting_basis"] == "conservative_estimated_usage"
+    assert float(job["accounted_provider_spend_usd_decimal"]) > 0
     assert reservation["state"] == "reconciled"
     assert reservation["reconciliation_status"] == "conservative_missing_usage"
     assert reservation["actual_input_tokens"] == reservation["projected_input_tokens"]
     assert reservation["actual_output_tokens"] == reservation["projected_output_tokens"]
+
+
+
+def test_length_response_is_recorded_as_partial_terminal(monkeypatch):
+    _bootstrap(monkeypatch)
+    _seed_prior_network_attempt()
+
+    class LengthAdapter(CountingAdapter):
+        def complete(self, request: AIRequest) -> AIResponse:
+            response = super().complete(request)
+            return response.model_copy(update={"finish_reason": "length"})
+
+    adapter = LengthAdapter(text="Truncated provider answer.")
+    outcome = _run(adapter)
+
+    assert outcome.status == "success"
+    assert adapter.calls == 1
+    with open_sqlite_connection() as connection:
+        flow = connection.execute(
+            "SELECT state, terminal_reason, terminal_attempt_id FROM ai_flows WHERE id = ?",
+            (outcome.flow_id,),
+        ).fetchone()
+    assert flow["state"] == "partial_terminal"
+    assert flow["terminal_reason"] == "output_length_limit"
+    assert flow["terminal_attempt_id"] == outcome.ledger_id
+
+
+def test_expired_reservation_start_failure_finalizes_job_and_flow(monkeypatch):
+    _bootstrap(monkeypatch)
+    _seed_prior_network_attempt()
+    from app.modules.ai import egress_runtime
+
+    real_start = egress_runtime.start_reserved_attempt
+
+    def expire_before_start(reservation_id: str, *, ai_job_id: str):
+        return real_start(
+            reservation_id,
+            ai_job_id=ai_job_id,
+            now=datetime(2100, 1, 1, tzinfo=UTC),
+        )
+
+    monkeypatch.setattr(egress_runtime, "start_reserved_attempt", expire_before_start)
+    adapter = CountingAdapter()
+    outcome = _run(adapter)
+
+    assert outcome.status == "config_error"
+    assert outcome.egress_reason_code == "egress_start_failed"
+    assert adapter.calls == 0
+    with open_sqlite_connection() as connection:
+        reservation = connection.execute(
+            "SELECT state, reconciliation_status FROM egress_budget_reservations WHERE id = ?",
+            (outcome.egress_reservation_id,),
+        ).fetchone()
+        job = connection.execute(
+            """
+            SELECT status, flow_id, execution_class, adapter_invoked,
+                   external_dispatch_state, normalized_usage_source, accounting_basis
+            FROM ai_jobs WHERE id = ?
+            """,
+            (outcome.ledger_id,),
+        ).fetchone()
+        flow = connection.execute(
+            "SELECT state, terminal_reason, terminal_attempt_id FROM ai_flows WHERE id = ?",
+            (outcome.flow_id,),
+        ).fetchone()
+    assert reservation["state"] == "expired"
+    assert reservation["reconciliation_status"] == "expired_before_start"
+    assert job["status"] == "config_error"
+    assert job["flow_id"] == outcome.flow_id
+    assert job["execution_class"] == "external_provider"
+    assert job["adapter_invoked"] == 0
+    assert job["external_dispatch_state"] == "not_started"
+    assert job["normalized_usage_source"] == "none"
+    assert job["accounting_basis"] == "external_not_sent"
+    assert flow["state"] == "failed_terminal"
+    assert flow["terminal_reason"] == "egress_start_failed"
+    assert flow["terminal_attempt_id"] == outcome.ledger_id

@@ -445,7 +445,7 @@ def test_confirm_escalation_consumes_ticket_and_executes_exact_packet(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _enable_external(client, monkeypatch)
-    from app.modules.ai.contracts import AIRequest, AIResponse, AIUsage
+    from app.modules.ai.contracts import AIExternalDispatchState, AIRequest, AIResponse, AIUsage
     from app.modules.ai.providers.openai_compat_adapter import OpenAICompatAdapter
 
     seen: list[AIRequest] = []
@@ -465,6 +465,7 @@ def test_confirm_escalation_consumes_ticket_and_executes_exact_packet(
                 output_tokens=7,
             ),
             safety_status="allowed",
+            external_dispatch_state=AIExternalDispatchState.started,
         )
 
     monkeypatch.setattr(OpenAICompatAdapter, "complete", complete)
@@ -499,7 +500,7 @@ def test_confirm_escalation_replay_returns_conflict_without_second_provider_call
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _enable_external(client, monkeypatch)
-    from app.modules.ai.contracts import AIRequest, AIResponse, AIUsage
+    from app.modules.ai.contracts import AIExternalDispatchState, AIRequest, AIResponse, AIUsage
     from app.modules.ai.providers.openai_compat_adapter import OpenAICompatAdapter
 
     calls = 0
@@ -515,6 +516,7 @@ def test_confirm_escalation_replay_returns_conflict_without_second_provider_call
             content="ok",
             usage=AIUsage(provider_id="deepseek", model_id="deepseek-v4-pro", input_tokens=1, output_tokens=1),
             safety_status="allowed",
+            external_dispatch_state=AIExternalDispatchState.started,
         )
 
     monkeypatch.setattr(OpenAICompatAdapter, "complete", complete)
@@ -596,3 +598,45 @@ def test_confirm_escalation_credential_removal_revokes_ticket_without_provider_c
     assert body["status"] == "config_error"
     assert body["reason_code"] == "provider_credentials_missing"
     assert body["task_response"]["blocked_reason"] == "provider_credentials_missing"
+
+
+@pytest.mark.parametrize("task_kind", ["code-review", "CODE_REVIEW"])
+def test_task_endpoint_accepts_safe_task_kind_variants(client: TestClient, task_kind: str) -> None:
+    response = client.post(
+        "/ai/tasks/run",
+        json={
+            "prompt": "Validate task kind compatibility.",
+            "route_class": "local:fake",
+            "task_kind": task_kind,
+            "max_tokens": 32,
+        },
+    )
+
+    assert response.status_code == 200
+    jobs = _all_ai_jobs()
+    assert len(jobs) == 1
+    assert jobs[0]["task_kind"] == task_kind
+    assert jobs[0]["flow_id"] is not None
+
+
+def test_task_endpoint_rejects_malformed_task_kind_before_execution(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import app.modules.ai.execution as execution
+
+    def fail_execution(**_kwargs):
+        pytest.fail("malformed task_kind must be rejected before execution")
+
+    monkeypatch.setattr(execution, "run_ai_task", fail_execution)
+    response = client.post(
+        "/ai/tasks/run",
+        json={
+            "prompt": "Reject malformed task kind.",
+            "route_class": "local:fake",
+            "task_kind": "bad kind!",
+            "max_tokens": 32,
+        },
+    )
+
+    assert response.status_code == 422
+    assert _all_ai_jobs() == []

@@ -231,6 +231,10 @@ export type AISettings = {
   scaleway_output_tokens_month_to_date: number;
   usage_total_tokens: number;
   smoke_test_mode_enabled: boolean;
+  max_direct_continuations: number;
+  max_direct_continuations_min: number;
+  max_direct_continuations_max: number;
+  direct_continuation_policy_version: string;
   updated_at: string;
 };
 

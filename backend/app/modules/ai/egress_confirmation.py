@@ -7,25 +7,26 @@ from dataclasses import dataclass
 from app.core.database import open_sqlite_connection
 from app.modules.ai.budget import evaluate_provider_budget_gate
 from app.modules.ai.context_builder import canonical_digest, context_sources_manifest
-from app.modules.ai.contracts import AIProviderAdapter, AIRequest, AIResponse, RoutingDecision
+from app.modules.ai.contracts import (
+    AIExternalDispatchState,
+    AIProviderAdapter,
+    AIRequest,
+    AIResponse,
+    RoutingDecision,
+)
 from app.modules.ai.egress_lifecycle import (
     EgressTicketConsumption,
     consume_confirmation_ticket,
-    reconcile_reserved_attempt,
     start_reserved_attempt,
 )
 from app.modules.ai.egress_persistence import EgressStateError
 from app.modules.ai.egress_policy import EgressPolicyConfig, load_default_egress_policy
 from app.modules.ai.egress_runtime import (
     _load_packet,
-    _release_before_network_strict,
+    _reconcilable_start_failure_reservation,
     _response_status,
 )
-from app.modules.ai.egress_spine import (
-    EgressSpineStateError,
-    create_queued_ai_job,
-    finalize_queued_ai_job,
-)
+from app.modules.ai.egress_spine import EgressSpineStateError, create_queued_ai_job
 from app.modules.ai.execution import (
     AiTaskOutcome,
     _ai_task_type_for,
@@ -33,8 +34,16 @@ from app.modules.ai.execution import (
     _default_adapters,
     _prompt_for_task,
 )
+from app.modules.ai.execution_types import ProviderBinding
 from app.modules.ai.provider_registry import ProviderRegistry, load_default_provider_registry
 from app.modules.ai.settings import get_ai_settings
+from app.modules.ai.token_flow_external_transaction import finalize_external_attempt
+from app.modules.ai.token_flow_runtime import normalize_finish_reason, normalize_outcome_reason
+from app.modules.ai.token_flow_service import (
+    activate_confirmation_flow,
+    get_confirmation_flow_for_ticket,
+    transition_flow_state,
+)
 
 
 @dataclass(frozen=True)
@@ -46,6 +55,7 @@ class ConfirmedTicketExecution:
 
 @dataclass(frozen=True)
 class _TicketMetadata:
+    ticket_state: str
     task_kind: str
     workspace_id: str | None
     source_count: int
@@ -65,32 +75,38 @@ def run_confirmation_ticket(
     registry: ProviderRegistry | None = None,
     policy: EgressPolicyConfig | None = None,
 ) -> ConfirmedTicketExecution:
-    """Consume and execute exactly one server-owned 059b confirmation ticket.
-
-    The caller supplies only ``ticket_id``. Prompt, context, route, provider, model,
-    fallback index, and output cap are reloaded from persisted rows. A confirmed ticket
-    never opens a fallback chain: it authorizes only its exact concrete binding.
-    """
+    """Consume and execute the exact external attempt bound to one 059b ticket."""
 
     started_at = time.perf_counter()
     registry = registry or load_default_provider_registry()
     policy = policy or load_default_egress_policy()
     adapter_table = adapters if adapters is not None else _default_adapters()
 
-    # Read non-secret audit metadata before ticket consumption. If this row is missing
-    # or malformed, fail before the pending->consumed CAS so no orphan reservation can
-    # be created without a corresponding terminal ai_job.
     metadata = _load_ticket_metadata(ticket_id)
+    if metadata.ticket_state != "pending":
+        raise EgressStateError(f"confirmation ticket is not pending: {metadata.ticket_state}")
+    flow = get_confirmation_flow_for_ticket(ticket_id)
+    flow_id = str(flow["id"])
+
     consumed = consume_confirmation_ticket(
         ticket_id,
         registry=registry,
         policy=policy,
     )
+    binding = (
+        _binding_from_ticket(metadata, registry)
+        if consumed.authorized
+        else _persisted_external_binding(metadata)
+    )
+    activate_confirmation_flow(flow_id=flow_id, ticket_id=ticket_id)
     base_route_metadata = _route_metadata(consumed, metadata)
 
     if not _ticket_metadata_matches_consumption(metadata, consumed):
         packet = _safe_load_consumed_packet(consumed)
         outcome = _terminal_outcome(
+            flow_id=flow_id,
+            binding=binding,
+            registry=registry,
             consumed=consumed,
             metadata=metadata,
             route_metadata={**base_route_metadata, "ticket_metadata_drift": True},
@@ -105,6 +121,9 @@ def run_confirmation_ticket(
 
     if not consumed.authorized:
         outcome = _terminal_outcome(
+            flow_id=flow_id,
+            binding=binding,
+            registry=registry,
             consumed=consumed,
             metadata=metadata,
             route_metadata=base_route_metadata,
@@ -125,6 +144,9 @@ def run_confirmation_ticket(
         packet = _load_packet(consumed.packet_json)
     except Exception as exc:
         outcome = _terminal_outcome(
+            flow_id=flow_id,
+            binding=binding,
+            registry=registry,
             consumed=consumed,
             metadata=metadata,
             route_metadata=base_route_metadata,
@@ -140,9 +162,15 @@ def run_confirmation_ticket(
     gate = evaluate_provider_budget_gate(get_ai_settings(), consumed.provider_id)
     if not gate.allowed:
         outcome = _terminal_outcome(
+            flow_id=flow_id,
+            binding=binding,
+            registry=registry,
             consumed=consumed,
             metadata=metadata,
-            route_metadata={**base_route_metadata, "provider_gate_reason": gate.blocking_reason},
+            route_metadata={
+                **base_route_metadata,
+                "provider_gate_reason": gate.blocking_reason,
+            },
             status="config_error",
             reason_code=gate.blocking_reason or "provider_gate_blocked",
             error_type="config_error",
@@ -155,6 +183,9 @@ def run_confirmation_ticket(
     adapter = adapter_table.get(consumed.provider_id)
     if adapter is None:
         outcome = _terminal_outcome(
+            flow_id=flow_id,
+            binding=binding,
+            registry=registry,
             consumed=consumed,
             metadata=metadata,
             route_metadata={**base_route_metadata, "adapter_unavailable": True},
@@ -214,18 +245,25 @@ def run_confirmation_ticket(
             },
         )
     except Exception as exc:
-        finalize_queued_ai_job(
-            queued.ai_job_id,
+        finalize_external_attempt(
+            flow_id=flow_id,
+            ai_job_id=queued.ai_job_id,
+            binding=binding,
+            fallback_index=consumed.fallback_index,
             status="config_error",
             response=None,
             latency_ms=_elapsed_ms(started_at),
             error_type=type(exc).__name__,
-        )
-        _release_before_network_strict(
-            reservation_id=reservation_id,
-            ai_job_id=queued.ai_job_id,
+            adapter_invoked=False,
+            dispatch_state=AIExternalDispatchState.not_started,
+            requested_output_ceiling=metadata.max_output_tokens,
+            effective_output_ceiling=metadata.max_output_tokens,
+            outcome_reason="egress_start_failed",
+            reservation_id=_reconcilable_start_failure_reservation(reservation_id),
+            registry=registry,
         )
         outcome = _outcome(
+            flow_id=flow_id,
             consumed=consumed,
             metadata=metadata,
             ledger_id=queued.ai_job_id,
@@ -236,26 +274,31 @@ def run_confirmation_ticket(
             context_digest=context_digest,
             blocked=True,
         )
+        _terminalize_confirmation_flow(flow_id, outcome)
         return ConfirmedTicketExecution(ticket_id, metadata.workspace_id, outcome)
 
     try:
         response = adapter.complete(request)
     except Exception as exc:
-        finalize_queued_ai_job(
-            queued.ai_job_id,
+        finalize_external_attempt(
+            flow_id=flow_id,
+            ai_job_id=queued.ai_job_id,
+            binding=binding,
+            fallback_index=consumed.fallback_index,
             status="provider_error",
             response=None,
             latency_ms=_elapsed_ms(started_at),
             error_type=type(exc).__name__,
-        )
-        reconcile_reserved_attempt(
-            reservation_id,
-            ai_job_id=queued.ai_job_id,
-            network_attempt=True,
-            usage_source="estimated",
+            adapter_invoked=True,
+            dispatch_state=AIExternalDispatchState.unknown,
+            requested_output_ceiling=metadata.max_output_tokens,
+            effective_output_ceiling=reserved.max_output_tokens,
+            outcome_reason=type(exc).__name__,
+            reservation_id=reservation_id,
             registry=registry,
         )
         outcome = _outcome(
+            flow_id=flow_id,
             consumed=consumed,
             metadata=metadata,
             ledger_id=queued.ai_job_id,
@@ -266,55 +309,74 @@ def run_confirmation_ticket(
             context_digest=context_digest,
             blocked=False,
         )
+        _terminalize_confirmation_flow(flow_id, outcome)
         return ConfirmedTicketExecution(ticket_id, metadata.workspace_id, outcome)
 
     status, error_type = _response_status(response)
-    try:
-        finalize_queued_ai_job(
-            queued.ai_job_id,
-            status=status,
-            response=response,
-            latency_ms=_elapsed_ms(started_at),
-            error_type=error_type,
-        )
-    except EgressSpineStateError as exc:
-        finalize_queued_ai_job(
-            queued.ai_job_id,
+    binding_mismatch = (response.provider_id, response.model_id) != (binding.provider_id, binding.model_id) or (
+        response.usage.provider_id,
+        response.usage.model_id,
+    ) != (binding.provider_id, binding.model_id)
+    dispatch_invalid = response.external_dispatch_state not in {
+        AIExternalDispatchState.not_started,
+        AIExternalDispatchState.started,
+        AIExternalDispatchState.unknown,
+    } or (status == "success" and response.external_dispatch_state is AIExternalDispatchState.not_started)
+    if binding_mismatch or dispatch_invalid:
+        reason_code = "response_binding_mismatch" if binding_mismatch else "response_dispatch_invalid"
+        error_name = "EgressSpineStateError" if binding_mismatch else "EgressContractError"
+        finalize_external_attempt(
+            flow_id=flow_id,
+            ai_job_id=queued.ai_job_id,
+            binding=binding,
+            fallback_index=consumed.fallback_index,
             status="provider_error",
             response=None,
             latency_ms=_elapsed_ms(started_at),
-            error_type=type(exc).__name__,
-        )
-        reconcile_reserved_attempt(
-            reservation_id,
-            ai_job_id=queued.ai_job_id,
-            network_attempt=True,
-            usage_source="estimated",
+            error_type=error_name,
+            adapter_invoked=True,
+            dispatch_state=AIExternalDispatchState.unknown,
+            requested_output_ceiling=metadata.max_output_tokens,
+            effective_output_ceiling=reserved.max_output_tokens,
+            outcome_reason=reason_code,
+            reservation_id=reservation_id,
             registry=registry,
         )
         outcome = _outcome(
+            flow_id=flow_id,
             consumed=consumed,
             metadata=metadata,
             ledger_id=queued.ai_job_id,
             status="provider_error",
             response=None,
-            error_type=type(exc).__name__,
-            reason_code="response_binding_mismatch",
+            error_type=error_name,
+            reason_code=reason_code,
             context_digest=context_digest,
             blocked=False,
         )
+        _terminalize_confirmation_flow(flow_id, outcome)
         return ConfirmedTicketExecution(ticket_id, metadata.workspace_id, outcome)
 
-    reconcile_reserved_attempt(
-        reservation_id,
+    assert response.external_dispatch_state is not None
+    finalize_external_attempt(
+        flow_id=flow_id,
         ai_job_id=queued.ai_job_id,
-        network_attempt=True,
-        actual_input_tokens=response.usage.input_tokens,
-        actual_output_tokens=response.usage.output_tokens,
-        usage_source=response.usage.usage_source.value,
+        binding=binding,
+        fallback_index=consumed.fallback_index,
+        status=status,
+        response=response,
+        latency_ms=_elapsed_ms(started_at),
+        error_type=error_type,
+        adapter_invoked=True,
+        dispatch_state=response.external_dispatch_state,
+        requested_output_ceiling=metadata.max_output_tokens,
+        effective_output_ceiling=reserved.max_output_tokens,
+        outcome_reason=error_type or status,
+        reservation_id=reservation_id,
         registry=registry,
     )
     outcome = _outcome(
+        flow_id=flow_id,
         consumed=consumed,
         metadata=metadata,
         ledger_id=queued.ai_job_id,
@@ -325,7 +387,11 @@ def run_confirmation_ticket(
         context_digest=context_digest,
         blocked=False,
     )
-    if status == "success":
+    _terminalize_confirmation_flow(flow_id, outcome)
+    if (
+        status == "success"
+        and normalize_finish_reason(response.finish_reason, failed=response.error is not None) != "length"
+    ):
         proposed_ids, parse_error = _create_proposed_records_from_response(
             task_kind=metadata.task_kind,
             response=response,
@@ -341,7 +407,8 @@ def _load_ticket_metadata(ticket_id: str) -> _TicketMetadata:
     with open_sqlite_connection() as connection:
         row = connection.execute(
             """
-            SELECT packet.task_kind, packet.workspace_id, decision.source_count,
+            SELECT ticket.state AS ticket_state, packet.task_kind, packet.workspace_id,
+                   decision.source_count,
                    ticket.trigger_ids_json, ticket.packet_digest,
                    packet.provider_id, packet.model_id, packet.route_class,
                    packet.fallback_index, packet.max_output_tokens
@@ -361,6 +428,7 @@ def _load_ticket_metadata(ticket_id: str) -> _TicketMetadata:
     if not isinstance(trigger_ids, list) or not all(isinstance(value, str) for value in trigger_ids):
         raise EgressStateError("confirmation ticket trigger metadata is malformed")
     return _TicketMetadata(
+        ticket_state=str(row["ticket_state"]),
         task_kind=str(row["task_kind"]),
         workspace_id=row["workspace_id"],
         source_count=int(row["source_count"]),
@@ -414,11 +482,7 @@ def _create_confirmation_job(
     packet: dict[str, object] | None,
 ):
     blocks = packet["context_blocks"] if packet is not None else []
-    prompt_digest = (
-        canonical_digest({"effective_packet_prompt": packet["prompt"]})
-        if packet is not None
-        else None
-    )
+    prompt_digest = canonical_digest({"effective_packet_prompt": packet["prompt"]}) if packet is not None else None
     context_digest = canonical_digest(blocks) if blocks else None
     context_sources = context_sources_manifest(blocks) if blocks else None
     return create_queued_ai_job(
@@ -437,6 +501,9 @@ def _create_confirmation_job(
 
 def _terminal_outcome(
     *,
+    flow_id: str,
+    binding: ProviderBinding,
+    registry: ProviderRegistry,
     consumed: EgressTicketConsumption,
     metadata: _TicketMetadata,
     route_metadata: dict[str, object],
@@ -453,21 +520,26 @@ def _terminal_outcome(
         route_metadata=route_metadata,
         packet=packet,
     )
-    try:
-        finalize_queued_ai_job(
-            queued.ai_job_id,
-            status=status,
-            response=None,
-            latency_ms=_elapsed_ms(started_at),
-            error_type=error_type,
-        )
-    finally:
-        if reservation_id is not None:
-            _release_before_network_strict(
-                reservation_id=reservation_id,
-                ai_job_id=queued.ai_job_id,
-            )
-    return _outcome(
+    finalize_external_attempt(
+        flow_id=flow_id,
+        ai_job_id=queued.ai_job_id,
+        binding=binding,
+        fallback_index=consumed.fallback_index,
+        status=status,
+        response=None,
+        latency_ms=_elapsed_ms(started_at),
+        error_type=error_type,
+        adapter_invoked=False,
+        dispatch_state=AIExternalDispatchState.not_started,
+        requested_output_ceiling=metadata.max_output_tokens,
+        effective_output_ceiling=metadata.max_output_tokens,
+        outcome_reason=reason_code,
+        reservation_id=reservation_id,
+        registry=registry,
+        use_confirmation_pricing_snapshot=not consumed.authorized,
+    )
+    outcome = _outcome(
+        flow_id=flow_id,
         consumed=consumed,
         metadata=metadata,
         ledger_id=queued.ai_job_id,
@@ -478,10 +550,13 @@ def _terminal_outcome(
         context_digest=_context_digest(packet),
         blocked=True,
     )
+    _terminalize_confirmation_flow(flow_id, outcome)
+    return outcome
 
 
 def _outcome(
     *,
+    flow_id: str,
     consumed: EgressTicketConsumption,
     metadata: _TicketMetadata,
     ledger_id: str,
@@ -497,11 +572,7 @@ def _outcome(
         model_id=consumed.model_id,
         blocked=blocked,
         blocked_reason=reason_code if blocked else None,
-        decision_reason=(
-            f"egress_ticket:{reason_code}"
-            if blocked
-            else f"confirmed_ticket:{consumed.ticket_id}"
-        ),
+        decision_reason=(f"egress_ticket:{reason_code}" if blocked else f"confirmed_ticket:{consumed.ticket_id}"),
     )
     return AiTaskOutcome(
         status=status,
@@ -518,6 +589,71 @@ def _outcome(
         egress_reservation_id=consumed.reservation_id,
         egress_reason_code=reason_code,
         egress_trigger_ids=metadata.trigger_ids,
+        flow_id=flow_id,
+    )
+
+
+def _terminalize_confirmation_flow(flow_id: str, outcome: AiTaskOutcome) -> None:
+    finish_reason = (
+        normalize_finish_reason(outcome.response.finish_reason, failed=False)
+        if outcome.status == "success" and outcome.response is not None
+        else None
+    )
+    if outcome.status == "success" and finish_reason == "length":
+        state = "partial_terminal"
+        reason = "output_length_limit"
+    elif outcome.status == "success":
+        state = "complete"
+        reason = "completed"
+    else:
+        failure_reason = outcome.egress_reason_code
+        if failure_reason == "ticket_consumed":
+            failure_reason = None
+        state = "failed_terminal"
+        reason = normalize_outcome_reason(failure_reason or outcome.error_type or outcome.status)
+    transition_flow_state(
+        flow_id=flow_id,
+        new_state=state,
+        terminal_reason=reason,
+        terminal_attempt_id=outcome.ledger_id,
+    )
+
+
+def _binding_from_ticket(metadata: _TicketMetadata, registry: ProviderRegistry) -> ProviderBinding:
+    provider = registry.providers.get(metadata.provider_id)
+    model = registry.models.get((metadata.provider_id, metadata.model_id))
+    if (
+        provider is None
+        or model is None
+        or provider.execution_class != "external_provider"
+        or not provider.enabled
+        or not provider.requires_network
+        or metadata.route_class not in model.route_classes
+        or model.pricing is None
+    ):
+        raise EgressSpineStateError("confirmation ticket binding is not a registered external provider")
+    return ProviderBinding(
+        route_class=metadata.route_class,
+        provider_id=metadata.provider_id,
+        model_id=metadata.model_id,
+        requires_network=True,
+        max_output_tokens=model.max_output_tokens,
+        execution_class=provider.execution_class,
+        context_window_tokens=model.context_window_tokens,
+    )
+
+
+def _persisted_external_binding(metadata: _TicketMetadata) -> ProviderBinding:
+    """Rebuild non-dispatched identity from the server-owned ticket snapshot."""
+
+    return ProviderBinding(
+        route_class=metadata.route_class,
+        provider_id=metadata.provider_id,
+        model_id=metadata.model_id,
+        requires_network=True,
+        max_output_tokens=metadata.max_output_tokens,
+        execution_class="external_provider",
+        context_window_tokens=None,
     )
 
 

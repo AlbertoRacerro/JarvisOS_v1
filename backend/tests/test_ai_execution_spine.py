@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 from uuid import uuid4
 
+import pytest
+
 from app.modules.ai.contracts import (
+    AIExternalDispatchState,
     AIRequest,
     AIResponse,
     AIUsage,
@@ -107,6 +110,7 @@ def _stub_scaleway_adapter(captured_text: str = "stub cloud answer", provider_id
                     output_tokens=4,
                 ),
                 safety_status="allowed",
+                external_dispatch_state=AIExternalDispatchState.started,
             )
 
         def stream(self, request: AIRequest):  # pragma: no cover - not used
@@ -351,52 +355,122 @@ def test_local_ollama_route_bindings_have_expected_defaults(monkeypatch) -> None
     assert bindings["local:general"].model_id == bindings["local:gemma"].model_id
 
 
+def test_fallback_bindings_preserve_complete_registry_metadata() -> None:
+    from app.modules.ai.egress_runtime import _binding_chain
+    from app.modules.ai.execution import _registry_fallback_bindings
+    from app.modules.ai.provider_registry import load_default_provider_registry
+
+    registry = load_default_provider_registry()
+    primary = registry.bindings["external:cheap"]
+    execution_chain = _registry_fallback_bindings("external:cheap", primary)
+    egress_chain = _binding_chain(
+        route_class="external:cheap",
+        primary=primary,
+        bindings=None,
+        registry=registry,
+    )
+
+    for chain in (execution_chain, egress_chain):
+        assert [
+            (
+                binding.provider_id,
+                binding.model_id,
+                binding.execution_class,
+                binding.context_window_tokens,
+                binding.max_output_tokens,
+            )
+            for binding in chain
+        ] == [
+            ("deepseek", "deepseek-v4-pro", "external_provider", 8192, 512),
+            ("glm", "glm-5.2", "external_provider", 8192, 1024),
+        ]
+
+
 def test_local_ollama_route_env_override_precedence(monkeypatch) -> None:
     _clear_local_route_env(monkeypatch)
-    monkeypatch.setenv("AI_ROUTE_LOCAL_FAST_MODEL", "fast:test")
-    monkeypatch.setenv("AI_ROUTE_LOCAL_GENERAL_MODEL", "general:test")
-    monkeypatch.setenv("AI_ROUTE_LOCAL_MODEL", "legacy:test")
-    monkeypatch.setenv("AI_ROUTE_LOCAL_CODER_MODEL", "coder:test")
-    monkeypatch.setenv("AI_ROUTE_LOCAL_CODER_HEAVY_MODEL", "coder-heavy:test")
+    monkeypatch.setenv("AI_ROUTE_LOCAL_FAST_MODEL", "qwen3:8b")
+    monkeypatch.setenv("AI_ROUTE_LOCAL_GENERAL_MODEL", "gemma4:12b-it-qat")
+    monkeypatch.setenv("AI_ROUTE_LOCAL_MODEL", "unregistered-legacy-model")
+    monkeypatch.setenv("AI_ROUTE_LOCAL_CODER_MODEL", "deepseek-coder-v2:16b")
+    monkeypatch.setenv("AI_ROUTE_LOCAL_CODER_HEAVY_MODEL", "qwen3-coder:30b")
     from app.modules.ai.execution import _default_bindings
 
     bindings = _default_bindings()
 
-    assert bindings["local:fast"].model_id == "fast:test"
-    assert bindings["local:general"].model_id == "general:test"
-    assert bindings["local:gemma"].model_id == "general:test"
-    assert bindings["local:coder"].model_id == "coder:test"
-    assert bindings["local:coder_heavy"].model_id == "coder-heavy:test"
+    expected = {
+        "local:fast": "qwen3:8b",
+        "local:general": "gemma4:12b-it-qat",
+        "local:gemma": "gemma4:12b-it-qat",
+        "local:coder": "deepseek-coder-v2:16b",
+        "local:coder_heavy": "qwen3-coder:30b",
+    }
+    for route_class, model_id in expected.items():
+        binding = bindings[route_class]
+        assert binding.model_id == model_id
+        assert binding.execution_class == "local_compute"
+        assert binding.context_window_tokens == 8192
+        assert binding.max_output_tokens == 512
 
-    monkeypatch.delenv("AI_ROUTE_LOCAL_GENERAL_MODEL", raising=False)
-    bindings = _default_bindings()
-
-    assert bindings["local:general"].model_id == "legacy:test"
-    assert bindings["local:gemma"].model_id == "legacy:test"
-    assert bindings["local:fast"].model_id == "fast:test"
-    assert bindings["local:coder"].model_id == "coder:test"
-    assert bindings["local:coder_heavy"].model_id == "coder-heavy:test"
-
+    monkeypatch.delenv("AI_ROUTE_LOCAL_GENERAL_MODEL")
+    with pytest.raises(ValueError, match="must resolve uniquely to a registered model"):
+        _default_bindings()
 
 def test_local_ollama_routes_pass_model_preference_to_adapter(monkeypatch, tmp_path) -> None:
     _isolate_and_init(monkeypatch, tmp_path)
     _clear_local_route_env(monkeypatch)
-    monkeypatch.setenv("AI_ROUTE_LOCAL_FAST_MODEL", "fast:override")
-    monkeypatch.setenv("AI_ROUTE_LOCAL_CODER_MODEL", "coder:override")
+    monkeypatch.setenv("AI_ROUTE_LOCAL_FAST_MODEL", "qwen3:8b")
+    monkeypatch.setenv("AI_ROUTE_LOCAL_CODER_MODEL", "deepseek-coder-v2:16b")
     from app.modules.ai.execution import run_ai_task
 
     adapter = _CaptureAdapter()
 
-    fast = run_ai_task(user_prompt="fast", route_class="local:fast", adapters={"local_ollama": adapter})
-    coder = run_ai_task(user_prompt="coder", route_class="local:coder", adapters={"local_ollama": adapter})
+    fast = run_ai_task(
+        user_prompt="fast",
+        route_class="local:fast",
+        adapters={"local_ollama": adapter},
+    )
+    coder = run_ai_task(
+        user_prompt="coder",
+        route_class="local:coder",
+        adapters={"local_ollama": adapter},
+    )
 
     assert fast.status == "success"
     assert coder.status == "success"
-    assert [request.model_preference for request in adapter.requests] == ["fast:override", "coder:override"]
+    assert [request.model_preference for request in adapter.requests] == [
+        "qwen3:8b",
+        "deepseek-coder-v2:16b",
+    ]
     rows = _all_ai_jobs()
-    assert [row["selected_route_class"] for row in rows] == ["local:fast", "local:coder"]
-    assert [row["provider_id"] for row in rows] == ["local_ollama", "local_ollama"]
+    assert [row["selected_route_class"] for row in rows] == [
+        "local:fast",
+        "local:coder",
+    ]
+    assert [row["provider_id"] for row in rows] == [
+        "local_ollama",
+        "local_ollama",
+    ]
 
+
+def test_unregistered_local_override_is_rejected_before_adapter_invocation(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    _isolate_and_init(monkeypatch, tmp_path)
+    _clear_local_route_env(monkeypatch)
+    monkeypatch.setenv("AI_ROUTE_LOCAL_FAST_MODEL", "unregistered-model")
+    from app.modules.ai.execution import run_ai_task
+
+    adapter = _CaptureAdapter()
+
+    with pytest.raises(ValueError, match="must resolve uniquely to a registered model"):
+        run_ai_task(
+            user_prompt="must not dispatch",
+            route_class="local:fast",
+            adapters={"local_ollama": adapter},
+        )
+
+    assert adapter.requests == []
 
 def test_local_gemma_route_executes_and_writes_ai_job(monkeypatch, tmp_path) -> None:
     _isolate_and_init(monkeypatch, tmp_path)
@@ -657,6 +731,7 @@ class _ErrorAdapter:
             safety_status="blocked",
             blocked_reason="provider_failed",
             error=AIProviderError(code=self.code, message="provider failed", retryable=self.retryable),
+            external_dispatch_state=AIExternalDispatchState.started,
         )
 
     def stream(self, request: AIRequest):  # pragma: no cover - not used
@@ -690,6 +765,7 @@ class _SuccessAdapter:
                 output_tokens=7,
             ),
             safety_status="allowed",
+            external_dispatch_state=AIExternalDispatchState.started,
         )
 
     def stream(self, request: AIRequest):  # pragma: no cover - not used

@@ -8,6 +8,8 @@ from app.modules.ai.contracts import AIPolicyMode, AITaskType, AIUsage
 
 
 class AISettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     policy_mode: AIPolicyMode | None = None
     monthly_api_budget_usd: float | None = Field(default=None, ge=0)
     paid_ai_enabled: bool | None = None
@@ -18,11 +20,15 @@ class AISettingsUpdate(BaseModel):
     scaleway_enabled: bool | None = None
     scaleway_smoke_test_enabled: bool | None = None
     scaleway_live_smoke_test_enabled: bool | None = None
+    # Recognized legacy write-only aliases. The settings service intentionally ignores them.
+    scaleway_token_cap: int | None = Field(default=None, ge=0)
+    scaleway_tokens_month_to_date: int | None = Field(default=None, ge=0)
     scaleway_monthly_token_cap: int | None = Field(default=None, ge=0)
     scaleway_hard_stop_token_cap: int | None = Field(default=None, ge=0)
     scaleway_input_tokens_month_to_date: int | None = Field(default=None, ge=0)
     scaleway_output_tokens_month_to_date: int | None = Field(default=None, ge=0)
     smoke_test_mode_enabled: bool | None = None
+    max_direct_continuations: int | None = Field(default=None, ge=0, le=16, strict=True)
 
 
 class AISettingsRead(BaseModel):
@@ -44,6 +50,10 @@ class AISettingsRead(BaseModel):
     scaleway_output_tokens_month_to_date: int
     usage_total_tokens: int
     smoke_test_mode_enabled: bool
+    max_direct_continuations: int
+    max_direct_continuations_min: int = 0
+    max_direct_continuations_max: int = 16
+    direct_continuation_policy_version: str
     updated_at: str
 
 
@@ -123,7 +133,9 @@ class AITaskRunRequest(BaseModel):
 
     prompt: str = Field(min_length=1)
     route_class: str | None = None
-    task_kind: str = "general"
+    task_kind: str = Field(
+        default="general", pattern=r"^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+    )
     max_tokens: int | None = Field(default=None, ge=1)
     context_blocks: list[dict[str, Any]] | None = None
     include_project_context: bool = False

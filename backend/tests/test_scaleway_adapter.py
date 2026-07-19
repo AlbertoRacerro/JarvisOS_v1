@@ -16,7 +16,11 @@ from app.modules.ai.contracts import (
     ModelRegistry,
     ProviderRegistry,
 )
-from app.modules.ai.providers.scaleway import ScalewayChatResult, ScalewayProvider
+from app.modules.ai.providers.scaleway import (
+    ScalewayChatResult,
+    ScalewayNotConfiguredError,
+    ScalewayProvider,
+)
 from app.modules.ai.providers.scaleway_adapter import (
     SCALEWAY_ADAPTER_INTERFACE,
     SCALEWAY_PROVIDER_ID,
@@ -227,7 +231,7 @@ def test_partial_reported_scaleway_usage_is_marked_mixed(monkeypatch) -> None:
 
 def test_missing_key_error_maps_to_safe_provider_error_without_key_leak(monkeypatch) -> None:
     def fake_completion(self: ScalewayProvider, *, prompt: str, estimated_output_tokens: int) -> ScalewayChatResult:
-        raise RuntimeError("SCALEWAY_API_KEY is required for live Scaleway smoke calls.")
+        raise ScalewayNotConfiguredError("missing before transport")
 
     monkeypatch.setattr(ScalewayProvider, "create_live_console_completion", fake_completion)
 
@@ -242,10 +246,11 @@ def test_missing_key_error_maps_to_safe_provider_error_without_key_leak(monkeypa
 
     assert response.error is not None
     assert response.error.code == AIProviderErrorCode.provider_auth_missing
-    assert response.blocked_reason == "scaleway_live_call_failed"
+    assert response.blocked_reason == "scaleway_api_key_missing"
     assert response.raw_provider_metadata["adapter_interface"] == SCALEWAY_ADAPTER_INTERFACE
     assert response.raw_provider_metadata["external_call_attempted"] is False
-    assert "SCALEWAY_API_KEY is required" not in response.model_dump_json()
+    assert response.raw_provider_metadata["external_dispatch_state"] == "not_started"
+    assert "missing before transport" not in response.model_dump_json()
 
 
 def test_unsupported_task_type_does_not_call_scaleway(monkeypatch) -> None:

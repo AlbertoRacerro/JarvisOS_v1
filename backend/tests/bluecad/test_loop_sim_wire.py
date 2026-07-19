@@ -37,7 +37,18 @@ def _init() -> None:
 
 
 def _bindings() -> dict[str, ProviderBinding]:
-    return {route: ProviderBinding(route, "scaleway", "scripted", False, 4000) for route in ["external:cheap", "external:reasoning"]}
+    return {
+        route: ProviderBinding(
+            route,
+            "scaleway",
+            "scripted",
+            False,
+            4000,
+            execution_class="synthetic",
+            context_window_tokens=8192,
+        )
+        for route in ["external:cheap", "external:reasoning"]
+    }
 
 
 def _spec(name: str = "minimal_single_tube.json") -> str:
