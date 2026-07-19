@@ -160,7 +160,9 @@ def test_runner_creates_and_executes_batch_growth_successfully(client: TestClien
     assert artifact["filename"] == "timeseries.csv"
     assert artifact["artifact_type"] == "csv"
     assert artifact["role"] == "csv"
-    assert artifact["relative_path"].endswith("outputs\\timeseries.csv") or artifact["relative_path"].endswith("outputs/timeseries.csv")
+    assert artifact["relative_path"].endswith("outputs\\timeseries.csv") or artifact["relative_path"].endswith(
+        "outputs/timeseries.csv"
+    )
     assert artifact["stored_path"].startswith(str(Path(str(runner_job["output_dir"]))))
     assert artifact["size_bytes"] > 0
     assert artifact["under_data_root"] is True
@@ -628,6 +630,8 @@ def test_batch_growth_registration_golden_script_bytes_and_response_shape(client
         "model_spec_id",
         "version_label",
         "implementation_artifact_id",
+        "input_contract",
+        "input_contract_sha256",
         "status",
         "script_sha256",
         "script_path",
@@ -636,8 +640,13 @@ def test_batch_growth_registration_golden_script_bytes_and_response_shape(client
     }
 
     assert set(implementation) == expected_keys
+    assert implementation["input_contract"] is None
+    assert implementation["input_contract_sha256"] is None
     assert script_path.name == "batch_growth.py"
-    assert script_path.read_bytes() == (Path(__file__).parents[1] / "app/modules/runner/examples/batch_growth.py").read_bytes()
+    assert (
+        script_path.read_bytes()
+        == (Path(__file__).parents[1] / "app/modules/runner/examples/batch_growth.py").read_bytes()
+    )
     assert implementation["script_sha256"] == "2081c2e072400101476b9b5a612e14660cc9b54874ebb57e68d8b856af71f97c"
 
     from app.core.database import open_sqlite_connection

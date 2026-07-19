@@ -12,7 +12,11 @@ from app.core.egress_schema import (
     EGRESS_SCHEMA_MIGRATION_STATEMENTS,
     EGRESS_SCHEMA_STATEMENTS,
 )
-from app.core.schema import SCHEMA_MIGRATION_STATEMENTS, SCHEMA_STATEMENTS
+from app.core.schema import (
+    SCHEMA_MIGRATION_STATEMENTS,
+    SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID,
+    SCHEMA_STATEMENTS,
+)
 from app.core.sensitivity_schema import SENSITIVITY_SCHEMA_STATEMENTS
 from app.core.token_flow_schema import TOKEN_FLOW_SCHEMA_MIGRATION_ID
 
@@ -25,23 +29,21 @@ def test_token_flow_schema_fresh_bootstrap_is_complete_and_idempotent():
     assert first.ready is True
     assert second.ready is True
     assert count_schema_migrations() == first_count
-    assert get_current_schema_migration().migration_id == TOKEN_FLOW_SCHEMA_MIGRATION_ID
+    assert get_current_schema_migration().migration_id == SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID
 
     with open_sqlite_connection() as connection:
         tables = {
-            row["name"]
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            ).fetchall()
+            row["name"] for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
         }
-        job_columns = {
-            row["name"] for row in connection.execute("PRAGMA table_info(ai_jobs)").fetchall()
-        }
-        settings_columns = {
-            row["name"]
-            for row in connection.execute("PRAGMA table_info(ai_settings)").fetchall()
-        }
+        job_columns = {row["name"] for row in connection.execute("PRAGMA table_info(ai_jobs)").fetchall()}
+        token_flow_migration = connection.execute(
+            "SELECT status FROM schema_migrations WHERE migration_id = ?",
+            (TOKEN_FLOW_SCHEMA_MIGRATION_ID,),
+        ).fetchone()
+        settings_columns = {row["name"] for row in connection.execute("PRAGMA table_info(ai_settings)").fetchall()}
 
+    assert token_flow_migration is not None
+    assert token_flow_migration["status"] == "applied"
     assert {"ai_flows", "ai_flow_segments"}.issubset(tables)
     assert {
         "flow_id",
@@ -102,15 +104,11 @@ def test_token_flow_upgrade_preserves_legacy_attempt_and_both_usage_contracts():
         connection.commit()
 
         with pytest.raises(sqlite3.IntegrityError):
-            connection.execute(
-                "UPDATE ai_jobs SET normalized_usage_source = 'fabricated' WHERE id = 'legacy-job'"
-            )
+            connection.execute("UPDATE ai_jobs SET normalized_usage_source = 'fabricated' WHERE id = 'legacy-job'")
         connection.rollback()
 
         with pytest.raises(sqlite3.IntegrityError):
-            connection.execute(
-                "UPDATE ai_jobs SET usage_source = 'none' WHERE id = 'legacy-job'"
-            )
+            connection.execute("UPDATE ai_jobs SET usage_source = 'none' WHERE id = 'legacy-job'")
         connection.rollback()
 
 
@@ -168,9 +166,7 @@ def test_flow_attempt_order_is_unique_and_segments_remain_separate_from_ledger()
         connection.rollback()
 
         job = connection.execute("SELECT * FROM ai_jobs WHERE id = 'attempt-1'").fetchone()
-        segment = connection.execute(
-            "SELECT body_text FROM ai_flow_segments WHERE id = 'segment-1'"
-        ).fetchone()
+        segment = connection.execute("SELECT body_text FROM ai_flow_segments WHERE id = 'segment-1'").fetchone()
 
     assert job is not None
     assert "body_text" not in job.keys()

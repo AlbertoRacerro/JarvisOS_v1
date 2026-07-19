@@ -9,7 +9,10 @@ from app.core.database import (
     open_sqlite_connection,
 )
 from app.core.egress_schema import EGRESS_SCHEMA_MIGRATION_ID
-from app.core.schema import SCHEMA_STATEMENTS
+from app.core.schema import (
+    SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID,
+    SCHEMA_STATEMENTS,
+)
 from app.core.sensitivity_schema import SENSITIVITY_SCHEMA_STATEMENTS
 from app.core.token_flow_schema import TOKEN_FLOW_SCHEMA_MIGRATION_ID
 
@@ -40,13 +43,15 @@ def test_egress_schema_remains_recorded_after_token_flow_migration():
 
     assert first.ready is True
     assert second.ready is True
-    assert get_current_schema_migration().migration_id == TOKEN_FLOW_SCHEMA_MIGRATION_ID
-    assert count_schema_migrations() == 11
+    assert get_current_schema_migration().migration_id == SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID
+    assert count_schema_migrations() == 12
 
     with open_sqlite_connection() as connection:
-        rows = connection.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table'"
-        ).fetchall()
+        rows = connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+        token_flow_migration = connection.execute(
+            "SELECT status FROM schema_migrations WHERE migration_id = ?",
+            (TOKEN_FLOW_SCHEMA_MIGRATION_ID,),
+        ).fetchone()
         egress_migration = connection.execute(
             """
             SELECT status FROM schema_migrations WHERE migration_id = ?
@@ -55,6 +60,8 @@ def test_egress_schema_remains_recorded_after_token_flow_migration():
         ).fetchone()
     tables = {row["name"] for row in rows}
     assert EXPECTED_EGRESS_TABLES.issubset(tables)
+    assert token_flow_migration is not None
+    assert token_flow_migration["status"] == "applied"
     assert egress_migration is not None
     assert egress_migration["status"] == "applied"
 
@@ -64,10 +71,7 @@ def test_ai_job_usage_source_column_exists_and_rejects_invalid_values():
     initialize_database()
 
     with open_sqlite_connection() as connection:
-        columns = {
-            row["name"]
-            for row in connection.execute("PRAGMA table_info(ai_jobs)").fetchall()
-        }
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(ai_jobs)").fetchall()}
         assert EXPECTED_AI_JOB_USAGE_SOURCE_COLUMN in columns
         with pytest.raises(sqlite3.IntegrityError):
             connection.execute(
@@ -100,10 +104,7 @@ def test_ai_job_usage_source_column_upgrades_predecessor_table():
     initialize_database()
 
     with open_sqlite_connection() as connection:
-        columns = {
-            row["name"]
-            for row in connection.execute("PRAGMA table_info(ai_jobs)").fetchall()
-        }
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(ai_jobs)").fetchall()}
     assert EXPECTED_AI_JOB_USAGE_SOURCE_COLUMN in columns
 
 
@@ -112,12 +113,7 @@ def test_sanitizer_provenance_columns_exist_on_fresh_database():
     initialize_database()
 
     with open_sqlite_connection() as connection:
-        columns = {
-            row["name"]
-            for row in connection.execute(
-                "PRAGMA table_info(sanitized_derivatives)"
-            ).fetchall()
-        }
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(sanitized_derivatives)").fetchall()}
 
     assert EXPECTED_SANITIZER_PROVENANCE_COLUMNS.issubset(columns)
 
@@ -128,24 +124,14 @@ def test_sanitizer_provenance_columns_upgrade_immediate_predecessor_database():
             connection.execute(statement)
         for statement in SENSITIVITY_SCHEMA_STATEMENTS:
             connection.execute(statement)
-        before = {
-            row["name"]
-            for row in connection.execute(
-                "PRAGMA table_info(sanitized_derivatives)"
-            ).fetchall()
-        }
+        before = {row["name"] for row in connection.execute("PRAGMA table_info(sanitized_derivatives)").fetchall()}
         connection.commit()
     assert EXPECTED_SANITIZER_PROVENANCE_COLUMNS.isdisjoint(before)
 
     initialize_database()
 
     with open_sqlite_connection() as connection:
-        after = {
-            row["name"]
-            for row in connection.execute(
-                "PRAGMA table_info(sanitized_derivatives)"
-            ).fetchall()
-        }
+        after = {row["name"] for row in connection.execute("PRAGMA table_info(sanitized_derivatives)").fetchall()}
     assert EXPECTED_SANITIZER_PROVENANCE_COLUMNS.issubset(after)
 
 
