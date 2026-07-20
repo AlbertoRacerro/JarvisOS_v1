@@ -51,6 +51,7 @@ class ParameterCreate(BaseModel):
     confidence: float | None = None
     status: str = "draft"
     notes: str | None = None
+    supersedes_parameter_id: str | None = None
 
     @model_validator(mode="after")
     def validate_uncertainty_bounds(self) -> "ParameterCreate":
