@@ -94,7 +94,7 @@ jobs:
           PY
       - name: Format and auto-fix changed Python
         run: |
-          pip install -q -r backend/requirements.txt
+          pip install -q -r backend/requirements.txt ruff
           ruff format backend/app/modules/flowsheet backend/app/modules/memory backend/app/modules/modeling backend/tests/test_flowsheet_stale_propagation.py
           ruff check --fix backend/app/modules/flowsheet backend/app/modules/memory backend/app/modules/modeling backend/tests/test_flowsheet_stale_propagation.py
           python -m compileall -q backend/app
