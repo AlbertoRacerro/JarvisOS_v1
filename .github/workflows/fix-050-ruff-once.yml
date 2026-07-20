@@ -1,0 +1,46 @@
+name: Fix 050 Ruff once
+
+on:
+  push:
+    branches:
+      - impl/050-flowsheet-dag
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.repository == 'AlbertoRacerro/JarvisOS_v1'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: impl/050-flowsheet-dag
+          fetch-depth: 0
+      - name: Rename shadowing loop variable and remove temporary workflows
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('backend/app/modules/flowsheet/service.py')
+          text = path.read_text(encoding='utf-8')
+          old = '    for kind, field in (("assumption", "assumptions.source_ai_job_id"), ("parameter", "parameters.source_ai_job_id")):\n        for row in rows[kind]:\n            _add_ai_proposal_edge(builder, row, _ref(kind, row["id"]), field)'
+          new = '    for kind, source_field in (("assumption", "assumptions.source_ai_job_id"), ("parameter", "parameters.source_ai_job_id")):\n        for row in rows[kind]:\n            _add_ai_proposal_edge(builder, row, _ref(kind, row["id"]), source_field)'
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'expected one Ruff anchor, found {count}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          for temporary in (
+              '.github/workflows/fix-050-ruff-once.yml',
+              '.github/workflows/diagnose-050-ruff.yml',
+          ):
+              candidate = Path(temporary)
+              if candidate.exists():
+                  candidate.unlink()
+      - name: Commit lint correction
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/app/modules/flowsheet/service.py .github/workflows/fix-050-ruff-once.yml .github/workflows/diagnose-050-ruff.yml
+          git commit -m "Fix flowsheet Ruff shadowing"
+          git push origin HEAD:impl/050-flowsheet-dag
