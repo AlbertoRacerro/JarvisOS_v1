@@ -24,6 +24,7 @@ jobs:
           cp backend/app/core/egress_schema.py /tmp/061b-resume/backend/app/core/
           cp backend/app/modules/ai/egress_persistence.py /tmp/061b-resume/backend/app/modules/ai/
           cp backend/app/modules/ai/egress_lifecycle.py /tmp/061b-resume/backend/app/modules/ai/
+          cp backend/app/modules/ai/egress_revalidation.py /tmp/061b-resume/backend/app/modules/ai/
           cp backend/app/modules/ai/egress_runtime.py /tmp/061b-resume/backend/app/modules/ai/
           cp backend/app/modules/ai/egress_confirmation.py /tmp/061b-resume/backend/app/modules/ai/
           cp backend/app/modules/ai/token_flow_service.py /tmp/061b-resume/backend/app/modules/ai/
