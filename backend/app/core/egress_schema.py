@@ -49,6 +49,7 @@ EGRESS_SCHEMA_STATEMENTS = [
         sanitizer_failed_manifest_json TEXT NOT NULL,
         policy_capped_manifest_json TEXT NOT NULL,
         budget_dropped_manifest_json TEXT NOT NULL,
+        source_digests_json TEXT NOT NULL DEFAULT '{}',
         final_level TEXT NOT NULL CHECK (final_level IN ('S0', 'S1')),
         max_output_tokens INTEGER NOT NULL CHECK (max_output_tokens > 0),
         policy_version TEXT NOT NULL,
@@ -359,6 +360,7 @@ EGRESS_SCHEMA_MIGRATION_STATEMENTS = [
     "ALTER TABLE sanitized_derivatives ADD COLUMN auto_approved INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE ai_jobs ADD COLUMN usage_source TEXT "
     "CHECK (usage_source IN ('actual', 'estimated', 'mixed'))",
+    "ALTER TABLE egress_packets ADD COLUMN source_digests_json TEXT NOT NULL DEFAULT '{}'",
 ]
 
 EGRESS_SCHEMA_INDEX_STATEMENTS = [

@@ -18,6 +18,15 @@ from app.modules.ai.execution_types import ProviderBinding
 from app.modules.ai.token_flow_service import get_flow
 from app.modules.ai.token_flow_status import get_continuation_flow_status
 
+UNKNOWN_RECORD_OUTPUT = (
+    "decision body before record\n"
+    "```jarvis-records\n"
+    '{"record_version":"jarvis_records_v0","records":['
+    '{"record_kind":"decision","title":"Must not capture",'
+    '"decision_text":"Unknown finish is not complete"}]}\n'
+    "```"
+)
+
 
 @dataclass(frozen=True)
 class _ResponseSpec:
@@ -234,3 +243,38 @@ def test_fresh_context_capacity_check_blocks_before_second_adapter_call(
     assert flow["terminal_reason"] == "continuation_context_capacity_exceeded"
     assert flow["attempt_count"] == 1
     assert flow["continuation_count"] == 0
+
+
+def test_unknown_finish_is_partial_and_does_not_capture_records(
+    initialized_database,
+) -> None:
+    adapter = _SequenceAdapter(
+        _ResponseSpec(UNKNOWN_RECORD_OUTPUT, None),
+    )
+
+    outcome = run_ai_task(
+        user_prompt="Return one candidate decision.",
+        task_kind="decision_support",
+        route_class="local:sequence",
+        max_output_tokens=64,
+        adapters={"sequence": adapter},
+        bindings={"local:sequence": _binding()},
+        workspace_id="bluerev",
+    )
+
+    assert outcome.status == "success"
+    assert outcome.response is not None
+    assert outcome.response.text == UNKNOWN_RECORD_OUTPUT
+    assert outcome.proposed_record_ids in (None, [])
+    assert len(adapter.requests) == 1
+    flow = get_flow(str(outcome.flow_id))
+    assert flow["state"] == "partial_terminal"
+    assert flow["terminal_reason"] == "finish_unknown"
+
+    from app.core.database import open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        proposals = connection.execute(
+            "SELECT COUNT(*) AS count FROM decisions WHERE origin = 'ai_proposed'"
+        ).fetchone()
+    assert proposals["count"] == 0

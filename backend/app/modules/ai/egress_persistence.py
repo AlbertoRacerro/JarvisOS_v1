@@ -256,6 +256,7 @@ def _persist_packet(
             "sanitizer_failed_manifest_json": projection.sanitizer_failed_manifest_json,
             "policy_capped_manifest_json": projection.policy_capped_manifest_json,
             "budget_dropped_manifest_json": projection.budget_dropped_manifest_json,
+            "source_digests_json": projection.source_digests_json,
             "final_level": material.final_level,
             "max_output_tokens": material.max_output_tokens,
             "policy_version": projection.policy_version,
@@ -275,9 +276,9 @@ def _persist_packet(
             prompt_derivative_id, packet_json, included_manifest_json,
             withheld_manifest_json, sanitizer_failed_manifest_json,
             policy_capped_manifest_json, budget_dropped_manifest_json,
-            final_level, max_output_tokens, policy_version, trigger_version,
-            config_digest, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            source_digests_json, final_level, max_output_tokens, policy_version,
+            trigger_version, config_digest, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             packet_id,
@@ -297,6 +298,7 @@ def _persist_packet(
             projection.sanitizer_failed_manifest_json,
             projection.policy_capped_manifest_json,
             projection.budget_dropped_manifest_json,
+            projection.source_digests_json,
             material.final_level,
             material.max_output_tokens,
             projection.policy_version,

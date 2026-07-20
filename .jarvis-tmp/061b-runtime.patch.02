@@ -1,5 +1,0 @@
-ith open_sqlite_connection() as connection:
-+        proposals = connection.execute(
-+            "SELECT COUNT(*) AS count FROM decisions WHERE origin = 'ai_proposed'"
-+        ).fetchone()
-+    assert proposals["count"] == 0

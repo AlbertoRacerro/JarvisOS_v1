@@ -474,7 +474,7 @@ def _run_external_network_task(
         and normalize_finish_reason(
             external.response.finish_reason, failed=external.response.error is not None
         )
-        in {"stop", "unknown"}
+        == "stop"
     ):
         proposed_record_ids, records_parse_error = _create_proposed_records_from_response(
             task_kind=task_kind,
@@ -530,12 +530,16 @@ def _terminalize_local_flow(
     finish_reason: str | None = None,
 ) -> None:
     normalized_finish = normalize_finish_reason(finish_reason, failed=False)
-    if status == "success" and normalized_finish in {"stop", "unknown"}:
+    if status == "success" and normalized_finish == "stop":
         state = "complete"
         terminal_reason = "completed"
     elif status == "success":
         state = "partial_terminal"
-        terminal_reason = f"finish_{normalized_finish}"
+        terminal_reason = (
+            "output_length_limit"
+            if normalized_finish == "length"
+            else f"finish_{normalized_finish}"
+        )
     else:
         state = "failed_terminal"
         terminal_reason = normalize_outcome_reason(reason or status)
@@ -859,11 +863,11 @@ def _run_local_continuations(
             continue
 
         final_state = (
-            "complete" if normalized_finish in {"stop", "unknown"} else "partial_terminal"
+            "complete" if normalized_finish == "stop" else "partial_terminal"
         )
         terminal_reason = (
             "completed"
-            if normalized_finish in {"stop", "unknown"}
+            if normalized_finish == "stop"
             else f"continuation_finish_{normalized_finish}"
         )
         _, assembled = terminalize_assembled_output(
@@ -878,7 +882,7 @@ def _run_local_continuations(
             response, assembled.body_text
         )
         current_outcome.response = assembled_response
-        if normalized_finish in {"stop", "unknown"}:
+        if normalized_finish == "stop":
             proposed_ids, parse_error = _create_proposed_records_from_response(
                 task_kind=task_kind,
                 response=assembled_response,
@@ -1415,7 +1419,7 @@ def run_ai_task(
             reason=error_type,
             finish_reason=response.finish_reason,
         )
-        if status == "success" and normalized_finish in {"stop", "unknown"}:
+        if status == "success" and normalized_finish == "stop":
             proposed_record_ids, records_parse_error = _create_proposed_records_from_response(
                 task_kind=task_kind,
                 response=response,

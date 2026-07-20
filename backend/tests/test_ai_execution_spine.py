@@ -995,6 +995,7 @@ class _TextCaptureAdapter:
             text=self.text,
             content=self.text,
             usage=AIUsage(provider_id="fake", model_id="fake-model", input_tokens=1, output_tokens=1),
+            finish_reason="stop",
             safety_status="allowed",
         )
 

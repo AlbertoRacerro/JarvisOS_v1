@@ -45,13 +45,28 @@ BINDING = ProviderBinding(
     execution_class="external_provider",
     context_window_tokens=4096,
 )
+UNKNOWN_RECORD_OUTPUT = (
+    "decision body before record\n"
+    "```jarvis-records\n"
+    '{"record_version":"jarvis_records_v0","records":['
+    '{"record_kind":"decision","title":"Must not capture",'
+    '"decision_text":"Unknown finish is not complete"}]}\n'
+    "```"
+)
 
 
 class SequenceExternalAdapter:
     provider_id = "deepseek"
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        final_finish_reason: str | None = "stop",
+        final_text: str = "external omega",
+    ) -> None:
         self.requests: list[AIRequest] = []
+        self.final_finish_reason = final_finish_reason
+        self.final_text = final_text
 
     def complete(self, request: AIRequest) -> AIResponse:
         self.requests.append(request)
@@ -59,7 +74,7 @@ class SequenceExternalAdapter:
         text, finish_reason = (
             ("external alpha ", "length")
             if index == 1
-            else ("external omega", "stop")
+            else (self.final_text, self.final_finish_reason)
         )
         return AIResponse(
             provider_id="deepseek",
@@ -295,3 +310,41 @@ def test_silent_allow_length_runs_fresh_external_continuation(
         "actual",
         "actual",
     ]
+
+
+def test_external_unknown_finish_is_partial_without_hidden_retry_or_capture(
+    initialized_database,
+) -> None:
+    adapter = SequenceExternalAdapter(
+        final_finish_reason=None,
+        final_text=UNKNOWN_RECORD_OUTPUT,
+    )
+
+    outcome = run_external_task(
+        user_prompt="Return one candidate decision.",
+        task_kind="decision_support",
+        selected_route_class=BINDING.route_class,
+        requested_route_class=BINDING.route_class,
+        context_blocks=None,
+        max_output_tokens=64,
+        adapters={BINDING.provider_id: adapter},
+        bindings={BINDING.route_class: BINDING},
+        workspace_id=WORKSPACE_ID,
+        context_build_error=None,
+        external_blocked_reason=None,
+        task_type_for=_task_type,
+    )
+
+    assert outcome.status == "success"
+    assert outcome.response is not None
+    assert outcome.response.text == "external alpha " + UNKNOWN_RECORD_OUTPUT
+    assert len(adapter.requests) == 2
+    flow = get_flow(str(outcome.flow_id))
+    assert flow["state"] == "partial_terminal"
+    assert flow["terminal_reason"] == "continuation_finish_unknown"
+
+    with open_sqlite_connection() as connection:
+        proposals = connection.execute(
+            "SELECT COUNT(*) AS count FROM decisions WHERE origin = 'ai_proposed'"
+        ).fetchone()
+    assert proposals["count"] == 0

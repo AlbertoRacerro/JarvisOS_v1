@@ -417,6 +417,11 @@ def test_response_binding_mismatch_is_recorded_and_reconciled_conservatively(mon
 def test_length_response_is_recorded_as_partial_terminal(monkeypatch):
     _bootstrap(monkeypatch)
     _seed_prior_network_attempt()
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            "UPDATE ai_settings SET max_direct_continuations = 0 WHERE id = 'default'"
+        )
+        connection.commit()
 
     class LengthAdapter(CountingAdapter):
         def complete(self, request: AIRequest) -> AIResponse:
@@ -434,7 +439,7 @@ def test_length_response_is_recorded_as_partial_terminal(monkeypatch):
             (outcome.flow_id,),
         ).fetchone()
     assert flow["state"] == "partial_terminal"
-    assert flow["terminal_reason"] == "output_length_limit"
+    assert flow["terminal_reason"] == "continuation_guard_exhausted"
     assert flow["terminal_attempt_id"] == outcome.ledger_id
 
 
