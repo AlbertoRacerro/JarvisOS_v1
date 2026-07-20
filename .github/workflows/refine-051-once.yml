@@ -92,14 +92,26 @@ jobs:
                   )'''
           memory.write_text(text[:start] + replacement_block + text[end:], encoding='utf-8')
           PY
-      - name: Format and lint changed Python
+      - name: Format and auto-fix changed Python
         run: |
           pip install -q -r backend/requirements.txt
           ruff format backend/app/modules/flowsheet backend/app/modules/memory backend/app/modules/modeling backend/tests/test_flowsheet_stale_propagation.py
           ruff check --fix backend/app/modules/flowsheet backend/app/modules/memory backend/app/modules/modeling backend/tests/test_flowsheet_stale_propagation.py
-          ruff check backend/app/modules/flowsheet backend/app/modules/memory backend/app/modules/modeling backend/tests/test_flowsheet_stale_propagation.py
           python -m compileall -q backend/app
-      - name: Commit verified refinements
+      - name: Capture remaining Ruff findings
+        id: lint
+        continue-on-error: true
+        run: |
+          ruff check backend/app/modules/flowsheet backend/app/modules/memory backend/app/modules/modeling backend/tests/test_flowsheet_stale_propagation.py > /tmp/ruff-051.log 2>&1
+      - name: Upload Ruff report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruff-051-log
+          path: /tmp/ruff-051.log
+          if-no-files-found: error
+          retention-days: 1
+      - name: Commit formatted refinements
         run: |
           rm -f .github/workflows/refine-051-once.yml
           git diff --check
@@ -108,3 +120,6 @@ jobs:
           git add -A
           git commit -m "Refine spec 051 determinism and formatting"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
+      - name: Enforce Ruff result
+        if: steps.lint.outcome != 'success'
+        run: exit 1
