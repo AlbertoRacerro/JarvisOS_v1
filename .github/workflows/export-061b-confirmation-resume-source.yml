@@ -1,0 +1,35 @@
+name: Export 061b confirmation resume source
+
+on:
+  push:
+    branches: [impl/061b-confirmation-resume]
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage exact source
+        run: |
+          mkdir -p /tmp/061b-resume/backend/app/core
+          mkdir -p /tmp/061b-resume/backend/app/modules/ai
+          mkdir -p /tmp/061b-resume/backend/tests
+          cp backend/app/core/egress_schema.py /tmp/061b-resume/backend/app/core/
+          cp backend/app/modules/ai/egress_persistence.py /tmp/061b-resume/backend/app/modules/ai/
+          cp backend/app/modules/ai/egress_runtime.py /tmp/061b-resume/backend/app/modules/ai/
+          cp backend/app/modules/ai/egress_confirmation.py /tmp/061b-resume/backend/app/modules/ai/
+          cp backend/app/modules/ai/token_flow_service.py /tmp/061b-resume/backend/app/modules/ai/
+          cp backend/app/modules/ai/token_flow_external_runtime.py /tmp/061b-resume/backend/app/modules/ai/
+          cp backend/app/modules/ai/token_flow_continuation.py /tmp/061b-resume/backend/app/modules/ai/
+          cp backend/tests/test_ai_egress_confirmation.py /tmp/061b-resume/backend/tests/
+          cp backend/tests/test_token_flow_external_runtime_integration.py /tmp/061b-resume/backend/tests/
+      - name: Upload exact source
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-061b-confirmation-resume
+          path: /tmp/061b-resume
+          if-no-files-found: error
+          retention-days: 1
