@@ -44,6 +44,11 @@ jobs:
           git apply --check --index .jarvis-tmp/061b-confirmation-resume-diagnostic.patch
           git apply --index .jarvis-tmp/061b-confirmation-resume-diagnostic.patch
 
+          echo 'cc9b89e5fc8d52014a04b8bb261ce753a8cfef85a0aa2e542a864fe6572015b0  .jarvis-tmp/061b-confirmation-resume-followup.patch' \
+            | sha256sum -c -
+          git apply --check --index .jarvis-tmp/061b-confirmation-resume-followup.patch
+          git apply --index .jarvis-tmp/061b-confirmation-resume-followup.patch
+
       - name: Install dependencies
         working-directory: backend
         run: |
@@ -67,6 +72,7 @@ jobs:
               app/core/egress_schema.py \
               app/modules/ai/egress_persistence.py \
               app/modules/ai/egress_lifecycle.py \
+              app/modules/ai/egress_revalidation.py \
               app/modules/ai/egress_runtime.py \
               app/modules/ai/egress_confirmation.py \
               app/modules/ai/token_flow_confirmation_resume.py \
@@ -101,7 +107,8 @@ jobs:
             .github/workflows/apply-061b-confirmation-resume.yml \
             .github/workflows/export-061b-confirmation-resume-source.yml \
             .jarvis-tmp/061b-confirmation-resume.patch.gz.b64 \
-            .jarvis-tmp/061b-confirmation-resume-diagnostic.patch
+            .jarvis-tmp/061b-confirmation-resume-diagnostic.patch \
+            .jarvis-tmp/061b-confirmation-resume-followup.patch
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'feat: resume confirmed external continuations'
