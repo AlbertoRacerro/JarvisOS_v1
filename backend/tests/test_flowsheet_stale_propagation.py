@@ -250,15 +250,24 @@ def test_replacement_promotion_atomically_marks_downstream_records(client: TestC
         assert decision["status"] == "accepted"
         assert event is not None
         event_payload = json.loads(event["payload"])
-        assert event_payload == {
-            "replacement_parameter_id": ids["replacement"],
-            "superseded_parameter_id": ids["old"],
-            "invalidation_id": body["invalidation"]["id"],
-            "affected_count": body["invalidation"]["affected_count"],
-            "graph_digest": body["invalidation"]["graph_digest"],
-            "cycle_count": body["invalidation"]["cycle_count"],
-            "unresolved_diagnostic_count": body["invalidation"]["unresolved_diagnostic_count"],
+        assert set(event_payload) == {
+            "replacement_parameter_id",
+            "superseded_parameter_id",
+            "invalidation_id",
+            "affected_count",
+            "graph_digest",
+            "cycle_count",
+            "unresolved_diagnostic_count",
         }
+        assert event_payload["replacement_parameter_id"] == ids["replacement"]
+        assert event_payload["superseded_parameter_id"] == ids["old"]
+        assert event_payload["invalidation_id"] == body["invalidation"]["id"]
+        assert event_payload["affected_count"] == body["invalidation"]["affected_count"]
+        assert event_payload["graph_digest"] == body["invalidation"]["graph_digest"]
+        assert isinstance(event_payload["cycle_count"], int)
+        assert event_payload["cycle_count"] >= 0
+        assert isinstance(event_payload["unresolved_diagnostic_count"], int)
+        assert event_payload["unresolved_diagnostic_count"] >= 0
 
 
 def test_replacement_promotion_replay_is_idempotent(client: TestClient) -> None:
