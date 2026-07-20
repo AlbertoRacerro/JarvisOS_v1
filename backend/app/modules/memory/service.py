@@ -4,7 +4,23 @@ from uuid import uuid4
 from app.core.database import open_sqlite_connection
 from app.core.repository import row_to_model, rows_to_models
 from app.modules.events.service import log_event, utc_now
-from app.modules.memory.models import CalcParameterProposalCreate, MemoryProposalCreate, MemoryRecordRead
+from app.modules.flowsheet.freshness import (
+    FreshnessError,
+    invalidation_summary_from_connection,
+    persist_freshness_invalidation,
+    prepare_freshness_invalidation,
+)
+from app.modules.memory.models import (
+    CalcParameterProposalCreate,
+    MemoryProposalCreate,
+    MemoryRecordRead,
+    ParameterReplacementInvalidationRead,
+    ParameterReplacementRead,
+)
+from app.modules.memory.replacement import (
+    ParameterReplacementError,
+    validate_parameter_replacement_proposal,
+)
 
 _ALLOWED_STATUSES = {"proposed", "accepted", "rejected", "superseded"}
 _TABLE_BY_KIND = {
@@ -47,7 +63,8 @@ def _select_record_sql(kind: str) -> str:
             SELECT id, 'assumption' AS record_kind, workspace_id,
                 CASE WHEN status IN ('proposed', 'accepted', 'rejected', 'superseded') THEN status ELSE 'proposed' END AS status,
                 origin, source_ai_job_id, promoted_at, created_at, updated_at,
-                NULL AS title, statement, NULL AS decision_text, NULL AS name, source_ref, notes
+                NULL AS title, statement, NULL AS decision_text, NULL AS name, source_ref, notes,
+                NULL AS supersedes_parameter_id
             FROM assumptions
         """
     if kind == "parameter":
@@ -55,7 +72,8 @@ def _select_record_sql(kind: str) -> str:
             SELECT id, 'parameter' AS record_kind, workspace_id,
                 CASE WHEN status IN ('proposed', 'accepted', 'rejected', 'superseded') THEN status ELSE 'proposed' END AS status,
                 origin, source_ai_job_id, promoted_at, created_at, updated_at,
-                NULL AS title, NULL AS statement, NULL AS decision_text, name, source_ref, notes
+                NULL AS title, NULL AS statement, NULL AS decision_text, name, source_ref, notes,
+                supersedes_parameter_id
             FROM parameters
         """
     if kind == "decision":
@@ -63,7 +81,8 @@ def _select_record_sql(kind: str) -> str:
             SELECT id, 'decision' AS record_kind, workspace_id,
                 CASE WHEN status IN ('proposed', 'accepted', 'rejected', 'superseded') THEN status ELSE 'proposed' END AS status,
                 origin, source_ai_job_id, promoted_at, created_at, updated_at,
-                title, NULL AS statement, decision_text, NULL AS name, NULL AS source_ref, notes
+                title, NULL AS statement, decision_text, NULL AS name, NULL AS source_ref, notes,
+                NULL AS supersedes_parameter_id
             FROM decisions
         """
     raise ValueError("Unsupported memory record kind.")
@@ -120,13 +139,21 @@ def create_proposal(payload: MemoryProposalCreate) -> MemoryRecordRead:
         elif payload.record_kind == "parameter":
             if not payload.name:
                 raise ValueError("name is required for parameter proposals.")
+            validate_parameter_replacement_proposal(
+                connection,
+                workspace_id=payload.workspace_id,
+                supersedes_parameter_id=payload.supersedes_parameter_id,
+                replacement_parameter_id=record_id,
+                unit=payload.unit,
+                value=payload.value,
+            )
             connection.execute(
                 """
                 INSERT INTO parameters (
                     id, workspace_id, name, symbol, value, unit, value_status, value_min,
                     value_max, source_ref, confidence, status, created_at, updated_at, notes,
-                    origin, source_ai_job_id, promoted_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?, ?, ?, 'ai_proposed', ?, NULL)
+                    origin, source_ai_job_id, promoted_at, supersedes_parameter_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?, ?, ?, 'ai_proposed', ?, NULL, ?)
                 """,
                 (
                     record_id,
@@ -144,6 +171,7 @@ def create_proposal(payload: MemoryProposalCreate) -> MemoryRecordRead:
                     now,
                     payload.notes,
                     source_ai_job_id,
+                    payload.supersedes_parameter_id,
                 ),
             )
         elif payload.record_kind == "decision":
@@ -192,8 +220,8 @@ def create_calc_parameter_proposals(payloads: list[CalcParameterProposalCreate])
                 INSERT INTO parameters (
                     id, workspace_id, name, symbol, value, unit, value_status, value_min,
                     value_max, source_ref, confidence, status, created_at, updated_at, notes,
-                    origin, source_ai_job_id, promoted_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?, ?, ?, 'calc', NULL, NULL)
+                    origin, source_ai_job_id, promoted_at, supersedes_parameter_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?, ?, ?, 'calc', NULL, NULL, NULL)
                 """,
                 (
                     record_id,
@@ -231,6 +259,11 @@ def _transition(kind: str, record_id: str, target_status: str) -> MemoryRecordRe
         current_status = _normalize_status(record.status)
         if current_status != "proposed":
             raise ValueError(f"Cannot transition {current_status} record to {target_status}.")
+        if kind == "parameter" and target_status == "accepted" and record.supersedes_parameter_id:
+            raise ParameterReplacementError(
+                "parameter_replacement_promotion_required",
+                "Configured Parameter replacements require the replacement promotion endpoint.",
+            )
         now = utc_now()
         promoted_at = now if target_status == "accepted" else record.promoted_at
         connection.execute(
@@ -243,6 +276,156 @@ def _transition(kind: str, record_id: str, target_status: str) -> MemoryRecordRe
         _log_memory_event(connection, f"MemoryProposal{target_status.title()}", updated)
         connection.commit()
     return updated
+
+
+def promote_parameter_replacement(record_id: str) -> ParameterReplacementRead:
+    try:
+        with open_sqlite_connection() as connection:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                existing = connection.execute(
+                    """
+                    SELECT id, workspace_id, superseded_parameter_id, replacement_parameter_id
+                    FROM freshness_invalidations
+                    WHERE replacement_parameter_id = ?
+                    """,
+                    (record_id,),
+                ).fetchone()
+                if existing is not None:
+                    accepted = _get_record(connection, "parameter", str(existing["replacement_parameter_id"]))
+                    superseded = _get_record(connection, "parameter", str(existing["superseded_parameter_id"]))
+                    if (
+                        accepted is None
+                        or superseded is None
+                        or accepted.status != "accepted"
+                        or superseded.status != "superseded"
+                    ):
+                        raise ParameterReplacementError(
+                            "parameter_replacement_state_inconsistent",
+                            "Stored Parameter replacement state is inconsistent.",
+                        )
+                    summary = invalidation_summary_from_connection(connection, str(existing["id"]))
+                    connection.rollback()
+                    return _replacement_response(accepted, superseded, summary)
+
+                replacement = connection.execute(
+                    """
+                    SELECT id, workspace_id, status, origin, value, unit, supersedes_parameter_id
+                    FROM parameters WHERE id = ?
+                    """,
+                    (record_id,),
+                ).fetchone()
+                if replacement is None:
+                    raise ParameterReplacementError(
+                        "parameter_replacement_not_found",
+                        "Parameter replacement proposal was not found.",
+                    )
+                if str(replacement["origin"]) == "calc":
+                    raise ParameterReplacementError(
+                        "parameter_replacement_not_configured",
+                        "Calculation-originated Parameters cannot configure replacement in V0.",
+                    )
+                if _normalize_status(str(replacement["status"])) != "proposed":
+                    raise ParameterReplacementError(
+                        "parameter_replacement_state_inconsistent",
+                        "Parameter replacement proposal is not proposed.",
+                    )
+                superseded_id = replacement["supersedes_parameter_id"]
+                if superseded_id is None:
+                    raise ParameterReplacementError(
+                        "parameter_replacement_not_configured",
+                        "Parameter replacement is not configured.",
+                    )
+                superseded_id = str(superseded_id)
+                validate_parameter_replacement_proposal(
+                    connection,
+                    workspace_id=str(replacement["workspace_id"]),
+                    supersedes_parameter_id=superseded_id,
+                    replacement_parameter_id=record_id,
+                    unit=str(replacement["unit"]),
+                    value=None if replacement["value"] is None else str(replacement["value"]),
+                )
+                already = connection.execute(
+                    "SELECT id FROM freshness_invalidations WHERE superseded_parameter_id = ?",
+                    (superseded_id,),
+                ).fetchone()
+                if already is not None:
+                    raise ParameterReplacementError(
+                        "parameter_already_replaced",
+                        "The accepted Parameter already has an accepted replacement.",
+                    )
+
+                now = utc_now()
+                prepared = prepare_freshness_invalidation(
+                    connection,
+                    workspace_id=str(replacement["workspace_id"]),
+                    superseded_parameter_id=superseded_id,
+                    replacement_parameter_id=record_id,
+                    created_at=now,
+                )
+                connection.execute(
+                    "UPDATE parameters SET status = 'superseded', updated_at = ? WHERE id = ?",
+                    (now, superseded_id),
+                )
+                connection.execute(
+                    "UPDATE parameters SET status = 'accepted', promoted_at = ?, updated_at = ? WHERE id = ?",
+                    (now, now, record_id),
+                )
+                persist_freshness_invalidation(connection, prepared)
+                log_event(
+                    connection,
+                    event_type="ParameterReplacementAccepted",
+                    actor="local-user",
+                    target_type="Parameter",
+                    target_id=record_id,
+                    workspace_id=str(replacement["workspace_id"]),
+                    payload={
+                        "replacement_parameter_id": record_id,
+                        "superseded_parameter_id": superseded_id,
+                        "invalidation_id": prepared.id,
+                        "affected_count": prepared.affected_count,
+                        "graph_digest": prepared.source_graph_digest,
+                        "cycle_count": prepared.cycle_count,
+                        "unresolved_diagnostic_count": prepared.unresolved_diagnostic_count,
+                    },
+                )
+                accepted = _get_record(connection, "parameter", record_id)
+                superseded = _get_record(connection, "parameter", superseded_id)
+                if accepted is None or superseded is None:
+                    raise ParameterReplacementError(
+                        "parameter_replacement_state_inconsistent",
+                        "Parameter replacement records are missing after persistence.",
+                    )
+                summary = invalidation_summary_from_connection(connection, prepared.id)
+                connection.commit()
+                return _replacement_response(accepted, superseded, summary)
+            except Exception:
+                connection.rollback()
+                raise
+    except sqlite3.IntegrityError as exc:
+        raise ParameterReplacementError(
+            "parameter_already_replaced",
+            "A competing Parameter replacement already succeeded.",
+        ) from exc
+
+
+def _replacement_response(
+    accepted: MemoryRecordRead,
+    superseded: MemoryRecordRead,
+    summary: object,
+) -> ParameterReplacementRead:
+    return ParameterReplacementRead(
+        accepted_parameter=accepted,
+        superseded_parameter=superseded,
+        invalidation=ParameterReplacementInvalidationRead(
+            id=summary.id,
+            source_ref=summary.source_ref,
+            replacement_ref=summary.replacement_ref,
+            affected_count=int(summary.affected_count),
+            graph_digest=str(summary.graph_digest),
+            created_at=summary.created_at,
+        ),
+    )
 
 
 def promote_record(kind: str, record_id: str) -> MemoryRecordRead:
