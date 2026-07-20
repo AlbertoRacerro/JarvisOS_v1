@@ -36,9 +36,29 @@ type ScenarioBinding = {
   parameterId: string;
 };
 
+const BUNDLED_PROCESS0_LABEL = "bluerev-geometry-hydraulics-v0-bundled";
+const BUNDLED_PROCESS1_LABEL = "bluerev-biomass-nutrients-harvest-v0-bundled";
+
 async function registerBundledBlueRevProcess0(workspaceId: string): Promise<ModelImplementation> {
   const response = await fetch(
     `${API_BASE_URL}/workspaces/${workspaceId}/bundled-models/bluerev-geometry-hydraulics-v0/register`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Request failed with ${response.status}`);
+  }
+
+  return response.json() as Promise<ModelImplementation>;
+}
+
+async function registerBundledBlueRevProcess1(workspaceId: string): Promise<ModelImplementation> {
+  const response = await fetch(
+    `${API_BASE_URL}/workspaces/${workspaceId}/bundled-models/bluerev-biomass-nutrients-harvest-v0/register`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -78,6 +98,13 @@ function DomainFoundation() {
     () => eligibleImplementations.find((item) => item.id === implementationId) ?? null,
     [eligibleImplementations, implementationId]
   );
+  const bundledProcess0Registered = implementations.some(
+    (item) => item.version_label === BUNDLED_PROCESS0_LABEL
+  );
+  const bundledProcess1Registered = implementations.some(
+    (item) => item.version_label === BUNDLED_PROCESS1_LABEL
+  );
+  const canRegisterBundled = !bundledProcess0Registered || !bundledProcess1Registered;
 
   const refreshWorkspaces = () =>
     listWorkspaces().then((items) => {
@@ -148,18 +175,27 @@ function DomainFoundation() {
       .catch((error: Error) => setMessage(error.message));
   };
 
-  const onRegisterBundledModel = () => {
+  const onRegisterBundledModels = async () => {
     setScenarioBusy(true);
     setMessage(null);
-    registerBundledBlueRevProcess0(workspaceId)
-      .then((implementation) =>
-        refreshWorkspaceRecords(workspaceId).then(() => {
-          setImplementationId(implementation.id);
-          setMessage("Bundled BlueRev 047 model registered.");
-        })
-      )
-      .catch((error: Error) => setMessage(error.message))
-      .finally(() => setScenarioBusy(false));
+    let selectedId = "";
+    try {
+      if (!bundledProcess0Registered) {
+        selectedId = (await registerBundledBlueRevProcess0(workspaceId)).id;
+      }
+      if (!bundledProcess1Registered) {
+        selectedId = (await registerBundledBlueRevProcess1(workspaceId)).id;
+      }
+      await refreshWorkspaceRecords(workspaceId);
+      if (selectedId) {
+        setImplementationId(selectedId);
+      }
+      setMessage("Missing bundled BlueRev models registered.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setScenarioBusy(false);
+    }
   };
 
   const onModelSpecSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -340,7 +376,8 @@ function DomainFoundation() {
         runLabel={runLabel}
         onRunLabelChange={setRunLabel}
         onRun={onRunScenario}
-        onRegisterBundled={onRegisterBundledModel}
+        onRegisterBundled={onRegisterBundledModels}
+        canRegisterBundled={canRegisterBundled}
         result={scenarioResult}
         busy={scenarioBusy}
       />
@@ -409,6 +446,7 @@ function ScenarioPanel({
   onRunLabelChange,
   onRun,
   onRegisterBundled,
+  canRegisterBundled,
   result,
   busy
 }: {
@@ -426,6 +464,7 @@ function ScenarioPanel({
   onRunLabelChange: (value: string) => void;
   onRun: () => void;
   onRegisterBundled: () => void;
+  canRegisterBundled: boolean;
   result: RunnerJobRunResponse | null;
   busy: boolean;
 }) {
@@ -441,11 +480,18 @@ function ScenarioPanel({
         <div className="scenario-empty">
           <p>No reviewed model implementation exposes an input contract yet.</p>
           <button type="button" className="secondary-button" disabled={busy} onClick={onRegisterBundled}>
-            Register bundled BlueRev 047 model
+            Register missing bundled BlueRev models
           </button>
         </div>
       ) : (
         <>
+          {canRegisterBundled && (
+            <div className="scenario-empty">
+              <button type="button" className="secondary-button" disabled={busy} onClick={onRegisterBundled}>
+                Register missing bundled BlueRev models
+              </button>
+            </div>
+          )}
           <label className="scenario-model-select">
             Model implementation
             <select value={implementationId} onChange={(event) => onImplementationChange(event.target.value)}>

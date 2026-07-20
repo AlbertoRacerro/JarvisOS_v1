@@ -22,6 +22,7 @@ from app.modules.runner.service import (
     list_run_logs,
     preview_model_bindings,
     register_bundled_bluerev_process0,
+    register_bundled_bluerev_process1,
     run_runner_job,
 )
 
@@ -65,6 +66,19 @@ def register_bundled_bluerev_process0_endpoint(
 ) -> ModelImplementationRead:
     try:
         return register_bundled_bluerev_process0(workspace_id)
+    except RunnerSafetyError as exc:
+        raise _runner_error(exc) from exc
+
+
+@router.post(
+    "/workspaces/{workspace_id}/bundled-models/bluerev-biomass-nutrients-harvest-v0/register",
+    response_model=ModelImplementationRead,
+)
+def register_bundled_bluerev_process1_endpoint(
+    workspace_id: str,
+) -> ModelImplementationRead:
+    try:
+        return register_bundled_bluerev_process1(workspace_id)
     except RunnerSafetyError as exc:
         raise _runner_error(exc) from exc
 

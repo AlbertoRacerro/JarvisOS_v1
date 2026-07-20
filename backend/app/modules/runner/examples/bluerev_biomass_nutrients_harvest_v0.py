@@ -208,7 +208,7 @@ outputs = {
     "carbon_stock_volume_per_event": {"value": carbon_stock / feed_events, "unit": "mL/event"},
     "co2_uptake_equivalent": {"value": co2_equivalent, "unit": "gCO2/d"},
     "oxygen_production_equivalent": {"value": oxygen_equivalent, "unit": "gO2/d"},
-    "oxygen_volume_stp_equivalent": {"value": oxygen_volume_stp, "unit": "L/d"},
+    "oxygen_volume_stp_equivalent": {"value": oxygen_volume_stp, "unit": "L O2/d"},
     "co2_gas_rate_benchmark": {"value": co2_gas_rate, "unit": "mLCO2/min"},
     "whole_culture_bleed_rate": {"value": whole_culture_bleed, "unit": "L/d"},
     "whole_culture_bleed_per_event": {"value": whole_culture_bleed / feed_events, "unit": "L/event"},
