@@ -1,0 +1,39 @@
+name: Complete 048 from PR once
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: >-
+      github.repository == 'AlbertoRacerro/JarvisOS_v1' &&
+      github.event.pull_request.number == 150 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'impl/048-biomass-harvest-model'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: impl/048-biomass-harvest-model
+          fetch-depth: 0
+      - name: Apply guarded patch and remove temporary files
+        shell: bash
+        run: |
+          python scripts/complete_048_once.py
+          rm -f \
+            scripts/complete_048_once.py \
+            .github/workflows/complete-048-once.yml \
+            .github/workflows/complete-048-pr-once.yml \
+            .trigger-048-complete
+          python -m py_compile backend/app/modules/runner/examples/bluerev_biomass_nutrients_harvest_v0.py
+          git diff --check
+          git config user.name 'JarvisOS Integration Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Wire bundled BlueRev 048 model'
+          git push origin HEAD:impl/048-biomass-harvest-model
