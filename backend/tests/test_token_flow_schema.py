@@ -13,8 +13,8 @@ from app.core.egress_schema import (
     EGRESS_SCHEMA_STATEMENTS,
 )
 from app.core.schema import (
+    CURRENT_SCHEMA_MIGRATION_ID,
     SCHEMA_MIGRATION_STATEMENTS,
-    SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID,
     SCHEMA_STATEMENTS,
 )
 from app.core.sensitivity_schema import SENSITIVITY_SCHEMA_STATEMENTS
@@ -29,7 +29,7 @@ def test_token_flow_schema_fresh_bootstrap_is_complete_and_idempotent():
     assert first.ready is True
     assert second.ready is True
     assert count_schema_migrations() == first_count
-    assert get_current_schema_migration().migration_id == SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID
+    assert get_current_schema_migration().migration_id == CURRENT_SCHEMA_MIGRATION_ID
 
     with open_sqlite_connection() as connection:
         tables = {
