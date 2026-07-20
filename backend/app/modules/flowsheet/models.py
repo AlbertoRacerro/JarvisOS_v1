@@ -26,6 +26,7 @@ DiagnosticCode = Literal[
     "payload_reference_invalid",
     "context_manifest_invalid",
 ]
+FreshnessState = Literal["fresh", "stale"]
 
 
 class FlowsheetNodeRead(BaseModel):
@@ -73,3 +74,45 @@ class FlowsheetGraphRead(BaseModel):
     topological_order: list[str] | None
     is_acyclic: bool
     diagnostics: FlowsheetDiagnosticsRead
+
+
+class FlowsheetFreshnessInvalidationSummaryRead(BaseModel):
+    id: str
+    source_ref: str
+    replacement_ref: str
+    affected_count: int | None = None
+    graph_digest: str | None = None
+    reason_code: str | None = None
+    path: list[str] | None = None
+    path_digest: str | None = None
+    created_at: str
+
+
+class FlowsheetNodeFreshnessRead(BaseModel):
+    record_ref: str
+    state: FreshnessState
+    invalidation_count: int
+    latest_invalidation: FlowsheetFreshnessInvalidationSummaryRead | None = None
+
+
+class FlowsheetFreshnessMarkRead(BaseModel):
+    record_ref: str
+    record_kind: str
+    record_id: str
+    reason_code: str
+    path: list[str]
+    path_digest: str
+    created_at: str
+
+
+class FlowsheetFreshnessInvalidationDetailRead(BaseModel):
+    id: str
+    workspace_id: str
+    source_ref: str
+    replacement_ref: str
+    source_graph_digest: str
+    affected_count: int
+    unresolved_diagnostic_count: int
+    cycle_count: int
+    created_at: str
+    marks: list[FlowsheetFreshnessMarkRead]
