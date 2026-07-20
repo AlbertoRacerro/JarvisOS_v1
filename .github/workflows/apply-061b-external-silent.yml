@@ -1,0 +1,471 @@
+name: Apply 061b external silent continuation once
+
+on:
+  pull_request:
+    types: [synchronize]
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-external-silent:
+    if: >-
+      github.repository == 'AlbertoRacerro/JarvisOS_v1' &&
+      github.event.pull_request.number == 145
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Apply bounded external runtime patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          transaction_path = Path(
+              'backend/app/modules/ai/token_flow_external_transaction.py'
+          )
+          transaction = transaction_path.read_text(encoding='utf-8')
+          old_import = (
+              'from app.modules.ai.token_flow_transaction import '
+              'record_attempt_evidence_in_transaction\n'
+          )
+          new_import = (
+              'from app.modules.ai.token_flow_continuation import (\n'
+              '    ContinuationDecision,\n'
+              '    apply_continuation_lineage,\n'
+              ')\n'
+              'from app.modules.ai.token_flow_continuation_transaction import (\n'
+              '    record_continuation_attempt_evidence_in_transaction,\n'
+              ')\n'
+              'from app.modules.ai.token_flow_transaction import '
+              'record_attempt_evidence_in_transaction\n'
+          )
+          if old_import not in transaction:
+              raise SystemExit('external transaction import anchor not found')
+          transaction = transaction.replace(old_import, new_import, 1)
+          old_signature = (
+              '    use_confirmation_pricing_snapshot: bool = False,\n'
+              '    now: datetime | None = None,\n'
+          )
+          new_signature = (
+              '    use_confirmation_pricing_snapshot: bool = False,\n'
+              '    continuation_decision: ContinuationDecision | None = None,\n'
+              '    now: datetime | None = None,\n'
+          )
+          if old_signature not in transaction:
+              raise SystemExit('external finalization signature anchor not found')
+          transaction = transaction.replace(old_signature, new_signature, 1)
+          old_record = (
+              '        flow = record_attempt_evidence_in_transaction(\n'
+              '            connection,\n'
+              '            flow_id=flow_id,\n'
+              '            attempt_id=ai_job_id,\n'
+              '            evidence=evidence,\n'
+              '        )\n'
+          )
+          new_record = (
+              '        if continuation_decision is None:\n'
+              '            flow = record_attempt_evidence_in_transaction(\n'
+              '                connection,\n'
+              '                flow_id=flow_id,\n'
+              '                attempt_id=ai_job_id,\n'
+              '                evidence=evidence,\n'
+              '            )\n'
+              '        else:\n'
+              '            evidence = apply_continuation_lineage(\n'
+              '                evidence, continuation_decision\n'
+              '            )\n'
+              '            flow = record_continuation_attempt_evidence_in_transaction(\n'
+              '                connection,\n'
+              '                flow_id=flow_id,\n'
+              '                attempt_id=ai_job_id,\n'
+              '                evidence=evidence,\n'
+              '                decision=continuation_decision,\n'
+              '                now=now,\n'
+              '            )\n'
+          )
+          if old_record not in transaction:
+              raise SystemExit('external evidence recording anchor not found')
+          transaction = transaction.replace(old_record, new_record, 1)
+          transaction_path.write_text(transaction, encoding='utf-8')
+
+          runtime_path = Path('backend/app/modules/ai/egress_runtime.py')
+          runtime = runtime_path.read_text(encoding='utf-8')
+          old_import = (
+              'from app.modules.ai.token_flow_external_transaction import '
+              'finalize_external_attempt\n'
+          )
+          new_import = (
+              'from app.modules.ai.token_flow_continuation import ContinuationDecision\n'
+              'from app.modules.ai.token_flow_external_transaction import '
+              'finalize_external_attempt\n'
+          )
+          if old_import not in runtime:
+              raise SystemExit('egress runtime import anchor not found')
+          runtime = runtime.replace(old_import, new_import, 1)
+
+          old_terminal = (
+              '    if outcome.status == "success" and finish_reason == "length":\n'
+              '        state = "partial_terminal"\n'
+              '        reason = "output_length_limit"\n'
+              '    elif outcome.status == "success":\n'
+              '        state = "complete"\n'
+              '        reason = "completed"\n'
+          )
+          new_terminal = (
+              '    if outcome.status == "success" and finish_reason == "length":\n'
+              '        state = "partial_terminal"\n'
+              '        reason = "output_length_limit"\n'
+              '    elif outcome.status == "success" and finish_reason in {"stop", "unknown"}:\n'
+              '        state = "complete"\n'
+              '        reason = "completed"\n'
+              '    elif outcome.status == "success":\n'
+              '        state = "partial_terminal"\n'
+              '        reason = f"finish_{finish_reason}"\n'
+          )
+          if old_terminal not in runtime:
+              raise SystemExit('external terminalization anchor not found')
+          runtime = runtime.replace(old_terminal, new_terminal, 1)
+
+          old_return = (
+              '        _terminalize_external_flow(flow_id, outcome)\n'
+              '        return outcome\n'
+          )
+          new_return = (
+              '        finish_reason = (\n'
+              '            normalize_finish_reason(\n'
+              '                outcome.response.finish_reason,\n'
+              '                failed=outcome.response.error is not None,\n'
+              '            )\n'
+              '            if outcome.status == "success" and outcome.response is not None\n'
+              '            else None\n'
+              '        )\n'
+              '        if (\n'
+              '            outcome.status == "success"\n'
+              '            and outcome.response is not None\n'
+              '            and bool(outcome.response.text)\n'
+              '            and finish_reason == "length"\n'
+              '        ):\n'
+              '            if max_output_tokens is None:\n'
+              '                raise EgressSpineStateError(\n'
+              '                    "successful external attempt omitted output ceiling"\n'
+              '                )\n'
+              '            from app.modules.ai.token_flow_external_runtime import (\n'
+              '                run_silent_allow_external_continuations,\n'
+              '            )\n'
+              '\n'
+              '            return run_silent_allow_external_continuations(\n'
+              '                initial_outcome=outcome,\n'
+              '                original_prompt=user_prompt,\n'
+              '                task_kind=task_kind,\n'
+              '                selected_route_class=selected_route_class,\n'
+              '                requested_route_class=requested_route_class,\n'
+              '                context_blocks=context_blocks,\n'
+              '                max_output_tokens=max_output_tokens,\n'
+              '                adapters=adapters,\n'
+              '                bindings=bindings,\n'
+              '                workspace_id=workspace_id,\n'
+              '                task_type_for=task_type_for,\n'
+              '                task_prompt_for=prompt_builder,\n'
+              '                binding=binding,\n'
+              '                fallback_index=fallback_index,\n'
+              '                registry=registry,\n'
+              '                policy=policy,\n'
+              '            )\n'
+              '        _terminalize_external_flow(flow_id, outcome)\n'
+              '        return outcome\n'
+          )
+          if runtime.count(old_return) != 1:
+              raise SystemExit('external run return anchor count changed')
+          runtime = runtime.replace(old_return, new_return, 1)
+
+          old_signature = (
+              '    policy: EgressPolicyConfig,\n'
+              '    flow_id: str,\n'
+              ') -> ExternalTaskOutcome:\n'
+          )
+          new_signature = (
+              '    policy: EgressPolicyConfig,\n'
+              '    flow_id: str,\n'
+              '    continuation_decision: ContinuationDecision | None = None,\n'
+              '    continuation_original_prompt: str | None = None,\n'
+              '    continuation_expected_sensitivity_level: str | None = None,\n'
+              ') -> ExternalTaskOutcome:\n'
+          )
+          if old_signature not in runtime:
+              raise SystemExit('_run_binding signature anchor not found')
+          runtime = runtime.replace(old_signature, new_signature, 1)
+
+          old_material = (
+              '    material = EgressPacketMaterial(\n'
+              '        operation=EXTERNAL_PROVIDER_OPERATION,\n'
+              '        task_kind=task_kind,\n'
+              '        route_class=selected_route_class,\n'
+              '        provider_id=binding.provider_id,\n'
+              '        model_id=binding.model_id,\n'
+              '        fallback_index=fallback_index,\n'
+              '        prompt=prompt.effective_prompt or "",\n'
+              '        context_blocks=context.blocks,\n'
+              '        prompt_level=prompt.prompt_level or "S1",\n'
+              '        context_level=context.level,\n'
+              '        final_level=final_level,\n'
+              '        max_output_tokens=attempt_max,\n'
+              '        workspace_id=workspace_id,\n'
+              '        prompt_derivative_id=prompt.prompt_derivative_id,\n'
+              '        included_manifest=context.included_manifest,\n'
+              '        withheld_manifest=context.withheld_manifest,\n'
+              '        budget_dropped_manifest=context.budget_dropped_manifest,\n'
+              '        source_digests=context.source_digests,\n'
+              '    )\n'
+          )
+          new_material = (
+              '    if continuation_decision is None:\n'
+              '        material = EgressPacketMaterial(\n'
+              '            operation=EXTERNAL_PROVIDER_OPERATION,\n'
+              '            task_kind=task_kind,\n'
+              '            route_class=selected_route_class,\n'
+              '            provider_id=binding.provider_id,\n'
+              '            model_id=binding.model_id,\n'
+              '            fallback_index=fallback_index,\n'
+              '            prompt=prompt.effective_prompt or "",\n'
+              '            context_blocks=context.blocks,\n'
+              '            prompt_level=prompt.prompt_level or "S1",\n'
+              '            context_level=context.level,\n'
+              '            final_level=final_level,\n'
+              '            max_output_tokens=attempt_max,\n'
+              '            workspace_id=workspace_id,\n'
+              '            prompt_derivative_id=prompt.prompt_derivative_id,\n'
+              '            included_manifest=context.included_manifest,\n'
+              '            withheld_manifest=context.withheld_manifest,\n'
+              '            budget_dropped_manifest=context.budget_dropped_manifest,\n'
+              '            source_digests=context.source_digests,\n'
+              '        )\n'
+              '    else:\n'
+              '        if (\n'
+              '            continuation_original_prompt is None\n'
+              '            or continuation_expected_sensitivity_level is None\n'
+              '        ):\n'
+              '            raise EgressSpineStateError(\n'
+              '                "external continuation authority is incomplete"\n'
+              '            )\n'
+              '        from app.modules.ai.token_flow_external_continuation import (\n'
+              '            build_external_continuation_packet,\n'
+              '        )\n'
+              '\n'
+              '        continuation_packet = build_external_continuation_packet(\n'
+              '            decision=continuation_decision,\n'
+              '            route_class=selected_route_class,\n'
+              '            task_kind=task_kind,\n'
+              '            original_prompt=continuation_original_prompt,\n'
+              '            workspace_id=_flow_workspace_id(workspace_id),\n'
+              '            prompt_level=prompt.prompt_level or "S1",\n'
+              '            expected_sensitivity_level=(\n'
+              '                continuation_expected_sensitivity_level\n'
+              '            ),\n'
+              '            requested_output_tokens=attempt_max,\n'
+              '            context_blocks=context.blocks,\n'
+              '            context_level=context.level,\n'
+              '            included_manifest=context.included_manifest,\n'
+              '            withheld_manifest=context.withheld_manifest,\n'
+              '            source_digests=context.source_digests,\n'
+              '            bindings={selected_route_class: binding},\n'
+              '            registry=registry,\n'
+              '            policy=policy,\n'
+              '        )\n'
+              '        material = continuation_packet.material\n'
+              '        ai_prompt_digest = canonical_digest({"prompt": material.prompt})\n'
+              '        route_metadata = {\n'
+              '            **route_metadata,\n'
+              '            "continuation_flow_id": flow_id,\n'
+              '            "continuation_parent_attempt_id": (\n'
+              '                continuation_decision.parent_attempt_id\n'
+              '            ),\n'
+              '            "continuation_index": (\n'
+              '                continuation_decision.next_continuation_index\n'
+              '            ),\n'
+              '        }\n'
+          )
+          if old_material not in runtime:
+              raise SystemExit('external material anchor not found')
+          runtime = runtime.replace(old_material, new_material, 1)
+
+          runtime = runtime.replace(
+              '            flow_id=flow_id,\n        )\n',
+              '            flow_id=flow_id,\n'
+              '            continuation_decision=continuation_decision,\n'
+              '        )\n',
+              3,
+          )
+          if runtime.count('continuation_decision=continuation_decision,') < 3:
+              raise SystemExit('prepacket continuation propagation failed')
+
+          prep_terminal_anchor = (
+              '            registry=registry,\n'
+              '        )\n'
+              '        return _outcome(\n'
+          )
+          prep_terminal_replacement = (
+              '            registry=registry,\n'
+              '            continuation_decision=continuation_decision,\n'
+              '        )\n'
+              '        return _outcome(\n'
+          )
+          prep_index = runtime.find(
+              prep_terminal_anchor,
+              runtime.find('if preparation.result != "allow":'),
+          )
+          if prep_index < 0:
+              raise SystemExit('preparation terminal job anchor not found')
+          runtime = (
+              runtime[:prep_index]
+              + runtime[prep_index:].replace(
+                  prep_terminal_anchor, prep_terminal_replacement, 1
+              )
+          )
+
+          finalize_anchor = (
+              '            registry=registry,\n'
+              '        )\n'
+          )
+          finalize_replacement = (
+              '            registry=registry,\n'
+              '            continuation_decision=continuation_decision,\n'
+              '        )\n'
+          )
+          start = runtime.find('reservation_id = preparation.reservation_id')
+          tail = runtime[start:]
+          if tail.count(finalize_anchor) < 4:
+              raise SystemExit('external finalize anchors changed')
+          tail = tail.replace(finalize_anchor, finalize_replacement, 4)
+          runtime = runtime[:start] + tail
+
+          old_persist_signature = (
+              '    registry: ProviderRegistry,\n'
+              '    flow_id: str,\n'
+              ') -> ExternalTaskOutcome:\n'
+          )
+          new_persist_signature = (
+              '    registry: ProviderRegistry,\n'
+              '    flow_id: str,\n'
+              '    continuation_decision: ContinuationDecision | None = None,\n'
+              ') -> ExternalTaskOutcome:\n'
+          )
+          persist_start = runtime.find('def _persist_prepacket(')
+          persist_end = runtime.find('def _terminal_job(', persist_start)
+          persist_block = runtime[persist_start:persist_end]
+          if old_persist_signature not in persist_block:
+              raise SystemExit('_persist_prepacket signature anchor not found')
+          persist_block = persist_block.replace(
+              old_persist_signature, new_persist_signature, 1
+          )
+          persist_block = persist_block.replace(
+              '        registry=registry,\n'
+              '    )\n'
+              '    return _outcome(\n',
+              '        registry=registry,\n'
+              '        continuation_decision=continuation_decision,\n'
+              '    )\n'
+              '    return _outcome(\n',
+              1,
+          )
+          runtime = runtime[:persist_start] + persist_block + runtime[persist_end:]
+
+          old_terminal_signature = (
+              '    effective_output_ceiling: int | None,\n'
+              '    registry: ProviderRegistry,\n'
+              ') -> str:\n'
+          )
+          new_terminal_signature = (
+              '    effective_output_ceiling: int | None,\n'
+              '    registry: ProviderRegistry,\n'
+              '    continuation_decision: ContinuationDecision | None = None,\n'
+              ') -> str:\n'
+          )
+          if old_terminal_signature not in runtime:
+              raise SystemExit('_terminal_job signature anchor not found')
+          runtime = runtime.replace(
+              old_terminal_signature, new_terminal_signature, 1
+          )
+          terminal_start = runtime.find('def _terminal_job(')
+          terminal_end = runtime.find('def _outcome(', terminal_start)
+          terminal_block = runtime[terminal_start:terminal_end]
+          terminal_block = terminal_block.replace(
+              '        registry=registry,\n'
+              '    )\n',
+              '        registry=registry,\n'
+              '        continuation_decision=continuation_decision,\n'
+              '    )\n',
+              1,
+          )
+          runtime = runtime[:terminal_start] + terminal_block + runtime[terminal_end:]
+          runtime_path.write_text(runtime, encoding='utf-8')
+          PY
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run verified external slice
+        id: verified
+        working-directory: backend
+        shell: bash
+        run: |
+          set -o pipefail
+          set +e
+          {
+            python -m ruff check app tests
+            ruff_status=$?
+            if [ "$ruff_status" -ne 0 ]; then
+              exit "$ruff_status"
+            fi
+            python -m pytest -q --tb=short \
+              tests/test_token_flow_external_runtime_integration.py
+            focused_status=$?
+            if [ "$focused_status" -ne 0 ]; then
+              exit "$focused_status"
+            fi
+            python -m pytest -q --tb=short
+          } 2>&1 | tee "$RUNNER_TEMP/external-silent-continuation.log"
+          status=${PIPESTATUS[0]}
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload external diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: external-silent-continuation-diagnostics
+          path: ${{ runner.temp }}/external-silent-continuation.log
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Enforce verified result
+        if: always()
+        run: test "${{ steps.verified.outputs.status }}" = "0"
+
+      - name: Commit verified external slice
+        if: steps.verified.outputs.status == '0'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            backend/app/modules/ai/egress_runtime.py \
+            backend/app/modules/ai/token_flow_external_transaction.py
+          git diff --cached --quiet && exit 0
+          git commit -m "feat: continue silent-allow external outputs"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
