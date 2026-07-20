@@ -1,0 +1,50 @@
+             material.max_output_tokens,
+             projection.policy_version,
+diff --git a/backend/tests/test_ai_egress_runtime.py b/backend/tests/test_ai_egress_runtime.py
+index d13dc772e69aecbd124c4a5ccd58e4ef27430241..c08d22a58c6bcf4fbf3419f1e026783f509ac0d0 100644
+--- a/backend/tests/test_ai_egress_runtime.py
++++ b/backend/tests/test_ai_egress_runtime.py
+@@ -417,6 +417,11 @@ def test_response_binding_mismatch_is_recorded_and_reconciled_conservatively(mon
+ def test_length_response_is_recorded_as_partial_terminal(monkeypatch):
+     _bootstrap(monkeypatch)
+     _seed_prior_network_attempt()
++    with open_sqlite_connection() as connection:
++        connection.execute(
++            "UPDATE ai_settings SET max_direct_continuations = 0 WHERE id = 'default'"
++        )
++        connection.commit()
+ 
+     class LengthAdapter(CountingAdapter):
+         def complete(self, request: AIRequest) -> AIResponse:
+diff --git a/backend/tests/test_ai_execution_spine.py b/backend/tests/test_ai_execution_spine.py
+index 560109aca9fb88ab87a30bb694bb99c2f2b278a3..2f0400e784cbe71932d4531ecf5c4c49def484f0 100644
+--- a/backend/tests/test_ai_execution_spine.py
++++ b/backend/tests/test_ai_execution_spine.py
+@@ -995,6 +995,7 @@ class _TextCaptureAdapter:
+             text=self.text,
+             content=self.text,
+             usage=AIUsage(provider_id="fake", model_id="fake-model", input_tokens=1, output_tokens=1),
++            finish_reason="stop",
+             safety_status="allowed",
+         )
+ 
+diff --git a/backend/tests/test_token_flow_local_runtime_integration.py b/backend/tests/test_token_flow_local_runtime_integration.py
+index a9e793f0cf9077d6ea52dd810279f01d6a59b9ed..4cd54c15558143b060890d4fcf0bc3681407afa0 100644
+--- a/backend/tests/test_token_flow_local_runtime_integration.py
++++ b/backend/tests/test_token_flow_local_runtime_integration.py
+@@ -5,7 +5,6 @@ from dataclasses import dataclass
+ 
+ import pytest
+ 
+-from app.modules.ai.context_builder import canonical_digest
+ from app.modules.ai.contracts import (
+     AIProviderHealth,
+     AIRequest,
+@@ -13,6 +12,7 @@ from app.modules.ai.contracts import (
+     AIUsage,
+     AIUsageSource,
+ )
++from app.modules.ai.context_builder import canonical_digest
+ from app.modules.ai.execution import run_ai_task
+ from app.modules.ai.execution_types import ProviderBinding
+ from app.modules.ai.token_flow_service import get_flow
