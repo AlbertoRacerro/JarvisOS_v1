@@ -521,9 +521,9 @@ def _add_foreign_key_edges(builder: _GraphBuilder, rows: dict[str, list[dict[str
                 "decisions.linked_run_id",
             )
         _add_ai_proposal_edge(builder, row, downstream, "decisions.source_ai_job_id")
-    for kind, field in (("assumption", "assumptions.source_ai_job_id"), ("parameter", "parameters.source_ai_job_id")):
+    for kind, source_field in (("assumption", "assumptions.source_ai_job_id"), ("parameter", "parameters.source_ai_job_id")):
         for row in rows[kind]:
-            _add_ai_proposal_edge(builder, row, _ref(kind, row["id"]), field)
+            _add_ai_proposal_edge(builder, row, _ref(kind, row["id"]), source_field)
     for row in rows["bluecad_candidate"]:
         candidate_ref = _ref("bluecad_candidate", row["id"])
         if row.get("parent_candidate_id"):
