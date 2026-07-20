@@ -57,38 +57,48 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('backend/app/modules/ai/egress_runtime.py')
           text = path.read_text(encoding='utf-8')
+          allowed = {'_run_binding', '_persist_prepacket', '_terminal_job'}
+          current_function = None
+          repaired: list[str] = []
+          for line in text.splitlines(keepends=True):
+              match = re.match(r'^def ([A-Za-z0-9_]+)\(', line)
+              if match:
+                  current_function = match.group(1)
+              if (
+                  'continuation_decision=continuation_decision,' in line
+                  and current_function not in allowed
+              ):
+                  continue
+              repaired.append(line)
+          text = ''.join(repaired)
 
-          run_start = text.index('def run_external_task(')
-          binding_start = text.index('def _run_binding(', run_start)
-          run_block = text[run_start:binding_start]
-          leaked_line = '            continuation_decision=continuation_decision,\n'
-          if leaked_line not in run_block:
-              raise SystemExit('leaked initial continuation argument not found')
-          run_block = run_block.replace(leaked_line, '', 1)
-          text = text[:run_start] + run_block + text[binding_start:]
+          def ensure_parameter(function_name: str, next_function: str) -> None:
+              nonlocal text
+              start = text.index(f'def {function_name}(')
+              end = text.index(f'def {next_function}(', start)
+              block = text[start:end]
+              parameter = (
+                  '    continuation_decision: ContinuationDecision | None = None,\n'
+              )
+              if parameter in block:
+                  return
+              if function_name == '_persist_prepacket':
+                  anchor = '    flow_id: str,\n) -> ExternalTaskOutcome:\n'
+                  replacement = '    flow_id: str,\n' + parameter + ') -> ExternalTaskOutcome:\n'
+              else:
+                  anchor = '    registry: ProviderRegistry,\n) -> str:\n'
+                  replacement = '    registry: ProviderRegistry,\n' + parameter + ') -> str:\n'
+              if anchor not in block:
+                  raise SystemExit(f'{function_name} signature anchor not found')
+              block = block.replace(anchor, replacement, 1)
+              text = text[:start] + block + text[end:]
 
-          persist_start = text.index('def _persist_prepacket(')
-          terminal_start = text.index('def _terminal_job(', persist_start)
-          persist_block = text[persist_start:terminal_start]
-          parameter = (
-              '    continuation_decision: ContinuationDecision | None = None,\n'
-          )
-          if parameter not in persist_block:
-              signature_anchor = (
-                  '    flow_id: str,\n'
-                  ') -> ExternalTaskOutcome:\n'
-              )
-              if signature_anchor not in persist_block:
-                  raise SystemExit('persist prepacket signature anchor not found')
-              persist_block = persist_block.replace(
-                  signature_anchor,
-                  '    flow_id: str,\n' + parameter + ') -> ExternalTaskOutcome:\n',
-                  1,
-              )
-          text = text[:persist_start] + persist_block + text[terminal_start:]
+          ensure_parameter('_persist_prepacket', '_terminal_job')
+          ensure_parameter('_terminal_job', '_outcome')
           path.write_text(text, encoding='utf-8')
           PY
 
