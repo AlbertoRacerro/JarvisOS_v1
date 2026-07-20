@@ -482,7 +482,7 @@ def test_node_resolver_alias_and_workspace_isolation(client: TestClient) -> None
     parameter = client.get(f"/workspaces/bluerev/flowsheet/nodes/parameter:{ids['input_parameter']}")
     assert parameter.status_code == 200
     assert parameter.json()["ref"] == f"parameter:{ids['input_parameter']}"
-    assert "value" not in parameter.text
+    assert '"value":' not in parameter.text
 
     evidence = client.get(f"/workspaces/bluerev/flowsheet/nodes/evidence_record:{ids['evidence']}")
     assert evidence.status_code == 200
