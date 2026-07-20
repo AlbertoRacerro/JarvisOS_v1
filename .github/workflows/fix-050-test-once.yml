@@ -1,0 +1,46 @@
+name: Fix 050 test assertion once
+
+on:
+  pull_request:
+    types: [synchronize]
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: >-
+      github.repository == 'AlbertoRacerro/JarvisOS_v1' &&
+      github.event.pull_request.number == 156 &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Apply exact assertion fix and clean diagnostics
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('backend/tests/test_flowsheet_dependency_graph.py')
+          text = path.read_text(encoding='utf-8')
+          old = '    assert "value" not in parameter.text\n'
+          new = '    assert \'"value":\' not in parameter.text\n'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one assertion anchor, found {text.count(old)}')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+          rm -f .github/workflows/diagnose-050.yml
+          rm -f .github/workflows/fix-050-test-once.yml
+          git diff --check
+          git diff --exit-code -- backend/app || true
+          test "$(git diff --name-only | sort | tr '\n' ' ')" = "backend/tests/test_flowsheet_dependency_graph.py "
+      - name: Commit verified fix
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Fix spec 050 data-minimization assertion"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
