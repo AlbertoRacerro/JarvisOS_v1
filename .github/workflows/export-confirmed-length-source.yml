@@ -1,0 +1,27 @@
+name: Export confirmed length source
+
+on:
+  push:
+    branches: [impl/061b-confirmed-length-loop]
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage exact source
+        run: |
+          mkdir -p /tmp/confirmed-length/backend/app/modules/ai
+          mkdir -p /tmp/confirmed-length/backend/tests
+          cp backend/app/modules/ai/egress_confirmation_core.py /tmp/confirmed-length/backend/app/modules/ai/
+          cp backend/app/modules/ai/token_flow_external_runtime.py /tmp/confirmed-length/backend/app/modules/ai/
+          cp backend/tests/test_token_flow_external_runtime_integration.py /tmp/confirmed-length/backend/tests/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: confirmed-length-exact-source
+          path: /tmp/confirmed-length
+          if-no-files-found: error
+          retention-days: 1
