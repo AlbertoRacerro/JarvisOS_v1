@@ -134,18 +134,26 @@ class _GraphBuilder:
 
 
 def get_flowsheet_node(workspace_id: str, node_ref: str) -> FlowsheetNodeRead:
-    kind, record_id = _parse_node_ref(node_ref)
     with open_sqlite_connection() as connection:
         connection.execute("PRAGMA query_only = ON")
         connection.execute("BEGIN")
         try:
-            _require_workspace(connection, workspace_id)
-            row = _select_node_row(connection, workspace_id, kind, record_id)
-            if row is None:
-                raise FlowsheetError("flowsheet_node_not_found", "Flowsheet node not found.")
-            return _node_from_row(kind, row)
+            return resolve_flowsheet_node_from_connection(connection, workspace_id, node_ref)
         finally:
             connection.rollback()
+
+
+def resolve_flowsheet_node_from_connection(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    node_ref: str,
+) -> FlowsheetNodeRead:
+    _require_workspace(connection, workspace_id)
+    kind, record_id = _parse_node_ref(node_ref)
+    row = _select_node_row(connection, workspace_id, kind, record_id)
+    if row is None:
+        raise FlowsheetError("flowsheet_node_not_found", "Flowsheet node not found.")
+    return _node_from_row(kind, row)
 
 
 def get_flowsheet_graph(workspace_id: str) -> FlowsheetGraphRead:
@@ -153,49 +161,56 @@ def get_flowsheet_graph(workspace_id: str) -> FlowsheetGraphRead:
         connection.execute("PRAGMA query_only = ON")
         connection.execute("BEGIN")
         try:
-            _require_workspace(connection, workspace_id)
-            rows = _load_workspace_rows(connection, workspace_id)
-            nodes = _build_nodes(rows)
-            _enforce_bound("nodes", len(nodes), MAX_GRAPH_NODES)
-            builder = _GraphBuilder(nodes)
-            _add_foreign_key_edges(builder, rows)
-            run_payloads = _add_payload_edges(builder, rows)
-            _add_source_reference_edges(builder, rows, run_payloads)
-            _add_ai_context_edges(builder, rows)
-            edges = _materialize_edges(builder.edges)
-            _enforce_bound("edges", len(edges), MAX_GRAPH_EDGES)
-            unresolved = sorted(
-                builder.diagnostics.values(),
-                key=lambda item: (item.owner_ref, item.source_field, item.code, item.raw_ref or ""),
-            )
-            if len(unresolved) > MAX_GRAPH_DIAGNOSTICS:
-                raise FlowsheetError(
-                    "flowsheet_diagnostics_limit_exceeded",
-                    "Flowsheet unresolved-reference diagnostics exceed the V0 limit.",
-                    bound="diagnostics",
-                    observed_count=len(unresolved),
-                )
-            node_list = sorted(nodes.values(), key=lambda item: (item.kind, item.id))
-            is_acyclic, order, cycles = _topological_projection(nodes, edges)
-            diagnostics = FlowsheetDiagnosticsRead(
-                unsupported_reference_count=sum(item.code == "unsupported_reference" for item in unresolved),
-                malformed_reference_count=sum(item.code == "malformed_reference" for item in unresolved),
-                dangling_reference_count=sum(item.code == "dangling_reference" for item in unresolved),
-                cycle_count=len(cycles),
-                manual_binding_count=builder.manual_binding_count,
-                unresolved_references=unresolved,
-                cycles=cycles,
-            )
-            return FlowsheetGraphRead(
-                workspace_id=workspace_id,
-                nodes=node_list,
-                edges=edges,
-                topological_order=order,
-                is_acyclic=is_acyclic,
-                diagnostics=diagnostics,
-            )
+            return build_flowsheet_graph_from_connection(connection, workspace_id)
         finally:
             connection.rollback()
+
+
+def build_flowsheet_graph_from_connection(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+) -> FlowsheetGraphRead:
+    _require_workspace(connection, workspace_id)
+    rows = _load_workspace_rows(connection, workspace_id)
+    nodes = _build_nodes(rows)
+    _enforce_bound("nodes", len(nodes), MAX_GRAPH_NODES)
+    builder = _GraphBuilder(nodes)
+    _add_foreign_key_edges(builder, rows)
+    run_payloads = _add_payload_edges(builder, rows)
+    _add_source_reference_edges(builder, rows, run_payloads)
+    _add_ai_context_edges(builder, rows)
+    edges = _materialize_edges(builder.edges)
+    _enforce_bound("edges", len(edges), MAX_GRAPH_EDGES)
+    unresolved = sorted(
+        builder.diagnostics.values(),
+        key=lambda item: (item.owner_ref, item.source_field, item.code, item.raw_ref or ""),
+    )
+    if len(unresolved) > MAX_GRAPH_DIAGNOSTICS:
+        raise FlowsheetError(
+            "flowsheet_diagnostics_limit_exceeded",
+            "Flowsheet unresolved-reference diagnostics exceed the V0 limit.",
+            bound="diagnostics",
+            observed_count=len(unresolved),
+        )
+    node_list = sorted(nodes.values(), key=lambda item: (item.kind, item.id))
+    is_acyclic, order, cycles = _topological_projection(nodes, edges)
+    diagnostics = FlowsheetDiagnosticsRead(
+        unsupported_reference_count=sum(item.code == "unsupported_reference" for item in unresolved),
+        malformed_reference_count=sum(item.code == "malformed_reference" for item in unresolved),
+        dangling_reference_count=sum(item.code == "dangling_reference" for item in unresolved),
+        cycle_count=len(cycles),
+        manual_binding_count=builder.manual_binding_count,
+        unresolved_references=unresolved,
+        cycles=cycles,
+    )
+    return FlowsheetGraphRead(
+        workspace_id=workspace_id,
+        nodes=node_list,
+        edges=edges,
+        topological_order=order,
+        is_acyclic=is_acyclic,
+        diagnostics=diagnostics,
+    )
 
 
 def _require_workspace(connection: sqlite3.Connection, workspace_id: str) -> None:

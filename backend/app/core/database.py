@@ -128,6 +128,8 @@ def is_database_initialized() -> bool:
         "parameters",
         "requirements",
         "simulation_runs",
+        "freshness_invalidations",
+        "freshness_marks",
         "runner_jobs",
         "run_logs",
         "run_artifacts",
