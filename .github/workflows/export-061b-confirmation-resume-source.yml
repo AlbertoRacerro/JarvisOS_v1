@@ -1,14 +1,18 @@
 name: Export 061b confirmation resume source
 
 on:
-  push:
-    branches: [impl/061b-confirmation-resume]
+  pull_request:
+    types: [opened, synchronize]
+    branches: [spec/061b-token-flow-continuation]
 
 permissions:
   contents: read
 
 jobs:
   export:
+    if: >-
+      github.repository == 'AlbertoRacerro/JarvisOS_v1' &&
+      github.event.pull_request.head.ref == 'impl/061b-confirmation-resume'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
