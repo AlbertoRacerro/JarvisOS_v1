@@ -1,0 +1,195 @@
+{
+  "schema_version": 1,
+  "evaluation_mode": "forward",
+  "variables": [
+    {
+      "name": "productive_liquid_volume",
+      "label": "Productive liquid volume",
+      "unit": "m3",
+      "required": true,
+      "category": "design",
+      "description": "Caller-asserted biologically productive liquid volume.",
+      "domain": {"exclusive_min": 0.0}
+    },
+    {
+      "name": "operating_biomass_concentration",
+      "label": "Operating biomass concentration",
+      "unit": "gDW/L",
+      "required": true,
+      "category": "operating",
+      "description": "Dry biomass concentration in the productive liquid.",
+      "domain": {"exclusive_min": 0.0}
+    },
+    {
+      "name": "volumetric_productivity",
+      "label": "Volumetric productivity",
+      "unit": "gDW/L/d",
+      "required": true,
+      "category": "model_parameter",
+      "description": "Imposed M0 biomass productivity; not a kinetic prediction.",
+      "domain": {"exclusive_min": 0.0}
+    },
+    {
+      "name": "maximum_specific_growth_rate",
+      "label": "Maximum specific growth rate",
+      "unit": "1/d",
+      "required": true,
+      "category": "model_parameter",
+      "description": "Screening reference used only for the dilution-to-growth ratio.",
+      "domain": {"exclusive_min": 0.0}
+    },
+    {
+      "name": "operating_days_per_year",
+      "label": "Operating days per year",
+      "unit": "d/y",
+      "required": true,
+      "category": "operating",
+      "description": "Annualization basis for biomass, energy, and partial economics.",
+      "domain": {"exclusive_min": 0.0, "max": 366.0}
+    },
+    {
+      "name": "feed_events_per_day",
+      "label": "Feed and harvest events per day",
+      "unit": "1/d",
+      "required": true,
+      "category": "operating",
+      "description": "Event frequency used only to convert daily quantities to per-event quantities.",
+      "domain": {"exclusive_min": 0.0}
+    },
+    {
+      "name": "biomass_nitrogen_fraction",
+      "label": "Biomass nitrogen fraction",
+      "unit": "gN/gDW",
+      "required": true,
+      "category": "property",
+      "description": "Nitrogen incorporated per dry biomass mass.",
+      "domain": {"min": 0.0, "max": 1.0}
+    },
+    {
+      "name": "biomass_phosphorus_fraction",
+      "label": "Biomass phosphorus fraction",
+      "unit": "gP/gDW",
+      "required": true,
+      "category": "property",
+      "description": "Phosphorus incorporated per dry biomass mass.",
+      "domain": {"min": 0.0, "max": 1.0}
+    },
+    {
+      "name": "biomass_carbon_fraction",
+      "label": "Biomass carbon fraction",
+      "unit": "gC/gDW",
+      "required": true,
+      "category": "property",
+      "description": "Carbon incorporated per dry biomass mass.",
+      "domain": {"exclusive_min": 0.0, "max": 1.0}
+    },
+    {
+      "name": "nitrogen_stock_concentration",
+      "label": "Nitrogen stock concentration",
+      "unit": "mgN/mL",
+      "required": true,
+      "category": "operating",
+      "description": "Elemental nitrogen concentration in the dosing stock.",
+      "domain": {"exclusive_min": 0.0}
+    },
+    {
+      "name": "phosphorus_stock_concentration",
+      "label": "Phosphorus stock concentration",
+      "unit": "mgP/mL",
+      "required": true,
+      "category": "operating",
+      "description": "Elemental phosphorus concentration in the dosing stock.",
+      "domain": {"exclusive_min": 0.0}
+    },
+    {
+      "name": "carbon_stock_concentration",
+      "label": "Carbon stock concentration",
+      "unit": "mgC/mL",
+      "required": true,
+      "category": "operating",
+      "description": "Elemental carbon concentration in the dosing stock.",
+      "domain": {"exclusive_min": 0.0}
+    },
+    {
+      "name": "co2_specific_gas_rate",
+      "label": "CO2 specific gas-rate benchmark",
+      "unit": "mLCO2/L/min",
+      "required": true,
+      "category": "operating",
+      "description": "Instantaneous pH-control gas-rate benchmark, not consumed CO2.",
+      "domain": {"min": 0.0}
+    },
+    {
+      "name": "harvest_recovery",
+      "label": "Single-pass biomass capture recovery",
+      "unit": "1",
+      "required": true,
+      "category": "equipment",
+      "description": "Captured biomass fraction from the processed side stream with filtrate return.",
+      "domain": {"exclusive_min": 0.0, "max": 1.0}
+    },
+    {
+      "name": "concentrate_biomass_concentration",
+      "label": "Concentrate biomass concentration",
+      "unit": "gDW/L",
+      "required": true,
+      "category": "equipment",
+      "description": "Dry biomass concentration in recovered concentrate; must exceed culture concentration.",
+      "domain": {"exclusive_min": 0.0}
+    },
+    {
+      "name": "filtration_flux",
+      "label": "Filtration flux",
+      "unit": "L/m2/h",
+      "required": true,
+      "category": "equipment",
+      "description": "Screening permeate or processed-volume flux used for area sizing.",
+      "domain": {"exclusive_min": 0.0}
+    },
+    {
+      "name": "filtration_operating_hours_per_day",
+      "label": "Filtration operating hours per day",
+      "unit": "h/d",
+      "required": true,
+      "category": "operating",
+      "description": "Explicit daily filtration time basis.",
+      "domain": {"exclusive_min": 0.0, "max": 24.0}
+    },
+    {
+      "name": "pump_electric_power",
+      "label": "Pump electric power",
+      "unit": "W",
+      "required": true,
+      "category": "equipment",
+      "description": "Bound pump electrical power, typically from the reviewed 047 model.",
+      "domain": {"min": 0.0}
+    },
+    {
+      "name": "circulation_operating_hours_per_day",
+      "label": "Circulation operating hours per day",
+      "unit": "h/d",
+      "required": true,
+      "category": "operating",
+      "description": "Explicit daily pump operating-time basis.",
+      "domain": {"exclusive_min": 0.0, "max": 24.0}
+    },
+    {
+      "name": "electricity_price",
+      "label": "Electricity price",
+      "unit": "EUR/kWh",
+      "required": true,
+      "category": "model_parameter",
+      "description": "Electricity price for the pump-electricity-only economic boundary.",
+      "domain": {"min": 0.0}
+    },
+    {
+      "name": "product_price",
+      "label": "Recovered biomass product price",
+      "unit": "EUR/kgDW",
+      "required": false,
+      "category": "model_parameter",
+      "description": "Optional sale price used only for the gross-margin proxy.",
+      "domain": {"min": 0.0}
+    }
+  ]
+}
