@@ -1,0 +1,103 @@
+name: Complete 049 integration once
+
+on:
+  pull_request:
+    types: [synchronize]
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: >-
+      github.repository == 'AlbertoRacerro/JarvisOS_v1' &&
+      github.event.pull_request.number == 153 &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: impl/049-buoyancy-optics-model
+          fetch-depth: 0
+      - name: Apply guarded integration patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path_str: str, old: str, new: str) -> None:
+              path = Path(path_str)
+              text = path.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path_str}: expected one anchor, found {count}: {old[:80]!r}')
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          service = 'backend/app/modules/runner/service.py'
+          replace_once(
+              service,
+              'BUNDLED_BLUEREV_PROCESS1_TITLE = "BlueRev biomass, nutrients, and harvesting bundled V0"\nSUPPORTED_IMPLEMENTATION_KINDS',
+              'BUNDLED_BLUEREV_PROCESS1_TITLE = "BlueRev biomass, nutrients, and harvesting bundled V0"\n'
+              'BUNDLED_BLUEREV_PROCESS2_LABEL = "bluerev-buoyancy-optical-screening-v0-bundled"\n'
+              'BUNDLED_BLUEREV_PROCESS2_TITLE = "BlueRev buoyancy and optical screening bundled V0"\n'
+              'SUPPORTED_IMPLEMENTATION_KINDS',
+          )
+
+          process2_function = '''\n\ndef register_bundled_bluerev_process2(workspace_id: str) -> ModelImplementationRead:\n    script_path = _bluerev_process2_script_path()\n    contract_path = _bluerev_process2_contract_path()\n    contract = json.loads(contract_path.read_text(encoding="utf-8"))\n    _, contract_sha256, _ = canonicalize_input_contract(contract)\n    script_sha256 = sha256_file(script_path)\n\n    with open_sqlite_connection() as connection:\n        _require_workspace(connection, workspace_id)\n        existing = connection.execute(\n            """\n            SELECT mv.*, a.sha256 AS script_sha256, a.stored_path AS script_path\n            FROM model_versions mv\n            JOIN artifacts a ON a.id = mv.implementation_artifact_id\n            WHERE mv.workspace_id = ?\n              AND mv.version_label = ?\n              AND mv.input_contract_sha256 = ?\n              AND a.sha256 = ?\n            ORDER BY mv.created_at ASC\n            LIMIT 1\n            """,\n            (\n                workspace_id,\n                BUNDLED_BLUEREV_PROCESS2_LABEL,\n                contract_sha256,\n                script_sha256,\n            ),\n        ).fetchone()\n        if existing is not None:\n            return _model_implementation_from_row(existing)\n        model_spec = connection.execute(\n            """\n            SELECT id FROM model_specs\n            WHERE workspace_id = ? AND title = ?\n            ORDER BY created_at ASC\n            LIMIT 1\n            """,\n            (workspace_id, BUNDLED_BLUEREV_PROCESS2_TITLE),\n        ).fetchone()\n\n    if model_spec is None:\n        created_spec = create_model_spec(\n            workspace_id,\n            ModelSpecCreate(\n                title=BUNDLED_BLUEREV_PROCESS2_TITLE,\n                engineering_question=(\n                    "Evaluate caller-selected static displacement, auxiliary flotation, "\n                    "and bounded optical-transmission proxies without design defaults."\n                ),\n                scope=(\n                    "Reviewed 049 forward M0 model; masses, displacement, safety factor, "\n                    "fouling, attenuation, and optical path are supplied per scenario."\n                ),\n            ),\n        )\n        model_spec_id = created_spec.id\n    else:\n        model_spec_id = str(model_spec["id"])\n\n    return create_model_implementation(\n        workspace_id,\n        ModelImplementationCreate(\n            model_spec_id=model_spec_id,\n            version_label=BUNDLED_BLUEREV_PROCESS2_LABEL,\n            implementation_kind=CALC_V0_IMPLEMENTATION_KIND,\n            notes="Bundled reviewed 049 forward model with a value-free input contract.",\n            script_text=script_path.read_text(encoding="utf-8"),\n            input_contract=contract,\n        ),\n    )\n'''
+          replace_once(
+              service,
+              '\n\ndef get_model_implementation(workspace_id: str, model_version_id: str) -> ModelImplementationRead:',
+              process2_function + '\n\ndef get_model_implementation(workspace_id: str, model_version_id: str) -> ModelImplementationRead:',
+          )
+
+          helpers = '''\n\ndef _bluerev_process2_script_path() -> Path:\n    return Path(__file__).resolve().parent / "examples" / "bluerev_buoyancy_optical_screening_v0.py"\n\n\ndef _bluerev_process2_contract_path() -> Path:\n    return (\n        Path(__file__).resolve().parent\n        / "examples"\n        / "bluerev_buoyancy_optical_screening_v0.contract.json"\n    )\n'''
+          replace_once(service, '\n\ndef _pretty_json(canonical_payload: str) -> str:', helpers + '\n\ndef _pretty_json(canonical_payload: str) -> str:')
+
+          routes = 'backend/app/modules/runner/routes.py'
+          replace_once(
+              routes,
+              '    register_bundled_bluerev_process1,\n    run_runner_job,',
+              '    register_bundled_bluerev_process1,\n    register_bundled_bluerev_process2,\n    run_runner_job,',
+          )
+          endpoint = '''\n\n@router.post(\n    "/workspaces/{workspace_id}/bundled-models/bluerev-buoyancy-optical-screening-v0/register",\n    response_model=ModelImplementationRead,\n)\ndef register_bundled_bluerev_process2_endpoint(\n    workspace_id: str,\n) -> ModelImplementationRead:\n    try:\n        return register_bundled_bluerev_process2(workspace_id)\n    except RunnerSafetyError as exc:\n        raise _runner_error(exc) from exc\n'''
+          replace_once(routes, '\n\n@router.get("/workspaces/{workspace_id}/model-implementations"', endpoint + '\n\n@router.get("/workspaces/{workspace_id}/model-implementations"')
+
+          frontend = 'frontend/src/pages/DomainFoundation.tsx'
+          replace_once(
+              frontend,
+              'const BUNDLED_PROCESS1_LABEL = "bluerev-biomass-nutrients-harvest-v0-bundled";\n',
+              'const BUNDLED_PROCESS1_LABEL = "bluerev-biomass-nutrients-harvest-v0-bundled";\n'
+              'const BUNDLED_PROCESS2_LABEL = "bluerev-buoyancy-optical-screening-v0-bundled";\n',
+          )
+          register_function = '''\nasync function registerBundledBlueRevProcess2(workspaceId: string): Promise<ModelImplementation> {\n  const response = await fetch(\n    `${API_BASE_URL}/workspaces/${workspaceId}/bundled-models/bluerev-buoyancy-optical-screening-v0/register`,\n    {\n      method: "POST",\n      headers: { "Content-Type": "application/json" },\n      body: JSON.stringify({})\n    }\n  );\n\n  if (!response.ok) {\n    throw new Error(`Request failed with ${response.status}`);\n  }\n\n  return response.json() as Promise<ModelImplementation>;\n}\n'''
+          replace_once(frontend, '\nfunction DomainFoundation() {', '\n' + register_function + '\nfunction DomainFoundation() {')
+          replace_once(
+              frontend,
+              '  const canRegisterBundled = !bundledProcess0Registered || !bundledProcess1Registered;',
+              '  const bundledProcess2Registered = implementations.some(\n'
+              '    (item) => item.version_label === BUNDLED_PROCESS2_LABEL\n'
+              '  );\n'
+              '  const canRegisterBundled =\n'
+              '    !bundledProcess0Registered || !bundledProcess1Registered || !bundledProcess2Registered;',
+          )
+          replace_once(
+              frontend,
+              '      if (!bundledProcess1Registered) {\n        selectedId = (await registerBundledBlueRevProcess1(workspaceId)).id;\n      }\n      await refreshWorkspaceRecords(workspaceId);',
+              '      if (!bundledProcess1Registered) {\n        selectedId = (await registerBundledBlueRevProcess1(workspaceId)).id;\n      }\n'
+              '      if (!bundledProcess2Registered) {\n        selectedId = (await registerBundledBlueRevProcess2(workspaceId)).id;\n      }\n'
+              '      await refreshWorkspaceRecords(workspaceId);',
+          )
+
+          status = 'docs/specs/STATUS.md'
+          old_row = '| 049 | ready | — | BLUEREV-PROCESS-2: buoyancy and light/transmittance proxies | 043, 047 | Add hardware mass and safety factor to buoyancy; require explicit optical path length; label proxies honestly and expose the measurements that would promote real light models. |'
+          new_row = '| 049 | in_review | [#153](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/153) | BLUEREV-PROCESS-2: buoyancy and light/transmittance proxies | 043, 047 | Add hardware mass and safety factor to buoyancy; require explicit optical path length; label proxies honestly and expose the measurements that would promote real light models. |'
+          replace_once(status, old_row, new_row)
+
+          Path('.github/workflows/complete-049-integration-once.yml').unlink()
+      - name: Commit integrated implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/app/modules/runner/service.py backend/app/modules/runner/routes.py frontend/src/pages/DomainFoundation.tsx docs/specs/STATUS.md .github/workflows/complete-049-integration-once.yml
+          git commit -m "Wire bundled 049 model"
+          git push origin HEAD:impl/049-buoyancy-optics-model
