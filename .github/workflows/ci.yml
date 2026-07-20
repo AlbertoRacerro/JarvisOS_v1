@@ -35,14 +35,16 @@ jobs:
 
           path = Path("backend/app/modules/ai/token_flow_service.py")
           text = path.read_text(encoding="utf-8")
-          old = '''        output_digest = None
-                  if flow["terminal_attempt_id"] is not None:
-          '''.replace("                  ", "")
-          new = '''        output_digest = flow["final_output_digest"]
-                  if output_digest is not None:
-                      output_digest = _output_digest(output_digest)
-                  elif flow["terminal_attempt_id"] is not None:
-          '''.replace("                  ", "")
+          old = (
+              '        output_digest = None\n'
+              '        if flow["terminal_attempt_id"] is not None:\n'
+          )
+          new = (
+              '        output_digest = flow["final_output_digest"]\n'
+              '        if output_digest is not None:\n'
+              '            output_digest = _output_digest(output_digest)\n'
+              '        elif flow["terminal_attempt_id"] is not None:\n'
+          )
           if new in text:
               raise SystemExit(0)
           if old not in text:
