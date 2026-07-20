@@ -12,13 +12,13 @@ diff --git a/backend/app/modules/ai/egress_lifecycle.py b/backend/app/modules/ai
 diff --git a/backend/app/modules/ai/egress_revalidation.py b/backend/app/modules/ai/egress_revalidation.py
 --- a/backend/app/modules/ai/egress_revalidation.py
 +++ b/backend/app/modules/ai/egress_revalidation.py
-@@ -18,6 +18,7 @@ def validate_ticket_authority_state(
+@@ -18,4 +18,5 @@ def validate_ticket_authority_state(
      *,
      material: EgressPacketMaterial,
      projection: EgressPacketProjection,
 +    allow_continuation_segments: bool = False,
  ) -> None:
-@@ -33,7 +34,11 @@ def validate_ticket_authority_state(
+@@ -33,4 +34,8 @@ def validate_ticket_authority_state(
          projection=projection,
      )
      _validate_context_authority(connection, material=material)
@@ -28,13 +28,13 @@ diff --git a/backend/app/modules/ai/egress_revalidation.py b/backend/app/modules
 +        material=material,
 +        allow_continuation_segments=allow_continuation_segments,
 +    )
-@@ -261,6 +266,7 @@ def _validate_source_digests(
+@@ -261,4 +266,5 @@ def _validate_source_digests(
      connection: sqlite3.Connection,
      *,
      material: EgressPacketMaterial,
 +    allow_continuation_segments: bool,
  ) -> None:
-@@ -270,6 +276,13 @@ def _validate_source_digests(
+@@ -270,6 +276,12 @@ def _validate_source_digests(
              "ticket source digests have no workspace binding"
          )
      for source_ref, expected_digest in sorted(expected.items()):
@@ -50,7 +50,7 @@ diff --git a/backend/app/modules/ai/egress_revalidation.py b/backend/app/modules
 diff --git a/backend/app/modules/ai/token_flow_confirmation_resume.py b/backend/app/modules/ai/token_flow_confirmation_resume.py
 --- a/backend/app/modules/ai/token_flow_confirmation_resume.py
 +++ b/backend/app/modules/ai/token_flow_confirmation_resume.py
-@@ -357,7 +357,18 @@ def _validate_context(
+@@ -357,7 +357,20 @@ def _validate_context(
              "continuation confirmation source digests are malformed"
          ) from exc
      segment_key = f"segment:{authority.protected_segment_index}"
