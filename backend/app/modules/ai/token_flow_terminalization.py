@@ -163,7 +163,7 @@ def terminalize_assembled_output(
                 body_text=body_text,
             )
 
-            connection.execute(
+            updated = connection.execute(
                 """
                 UPDATE ai_flows
                 SET state = ?, terminal_reason = ?, terminal_attempt_id = ?,
@@ -181,7 +181,7 @@ def terminalize_assembled_output(
                     flow_id,
                 ),
             )
-            if connection.total_changes < 1:
+            if updated.rowcount != 1:
                 raise TokenFlowConflictError(
                     "assembled terminalization changed concurrently"
                 )

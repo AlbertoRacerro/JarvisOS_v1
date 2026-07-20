@@ -43,6 +43,14 @@ from app.modules.ai.providers.local_ollama_adapter import (
 )
 from app.modules.ai.providers.openai_compat_adapter import OpenAICompatAdapter
 from app.modules.ai.providers.scaleway_adapter import SCALEWAY_PROVIDER_ID, ScalewayProviderAdapter
+from app.modules.ai.token_flow_continuation import (
+    ContinuationDecision,
+    apply_continuation_lineage,
+    evaluate_direct_continuation,
+)
+from app.modules.ai.token_flow_continuation_transaction import (
+    record_continuation_attempt_evidence_in_transaction,
+)
 from app.modules.ai.token_flow_evidence import AttemptEvidence
 from app.modules.ai.token_flow_runtime import (
     local_exception_evidence,
@@ -51,7 +59,15 @@ from app.modules.ai.token_flow_runtime import (
     normalize_finish_reason,
     normalize_outcome_reason,
 )
-from app.modules.ai.token_flow_service import create_flow, transition_flow_state
+from app.modules.ai.token_flow_segments import store_protected_segment
+from app.modules.ai.token_flow_service import (
+    create_flow,
+    get_flow,
+    transition_flow_state,
+)
+from app.modules.ai.token_flow_terminalization import (
+    terminalize_assembled_output,
+)
 from app.modules.ai.token_flow_transaction import record_attempt_evidence_in_transaction
 from app.modules.events.service import utc_now
 from app.modules.memory.models import MemoryProposalCreate
@@ -197,6 +213,7 @@ def _write_ai_job(
     fallback_index: int | None = None,
     flow_id: str | None = None,
     evidence: AttemptEvidence | None = None,
+    continuation_decision: ContinuationDecision | None = None,
     input_tokens_override: int | None = None,
     output_tokens_override: int | None = None,
 ) -> str:
@@ -224,6 +241,8 @@ def _write_ai_job(
     context_sources_json = json.dumps(context_sources) if context_sources else None
     if (flow_id is None) != (evidence is None):
         raise ValueError("flow_id and attempt evidence must be supplied together")
+    if continuation_decision is not None and (flow_id is None or evidence is None):
+        raise ValueError("continuation decision requires flow and attempt evidence")
     with open_sqlite_connection() as connection:
         connection.execute("BEGIN IMMEDIATE")
         try:
@@ -259,12 +278,21 @@ def _write_ai_job(
                 ),
             )
             if flow_id is not None and evidence is not None:
-                record_attempt_evidence_in_transaction(
-                    connection,
-                    flow_id=flow_id,
-                    attempt_id=job_id,
-                    evidence=evidence,
-                )
+                if continuation_decision is None:
+                    record_attempt_evidence_in_transaction(
+                        connection,
+                        flow_id=flow_id,
+                        attempt_id=job_id,
+                        evidence=evidence,
+                    )
+                else:
+                    record_continuation_attempt_evidence_in_transaction(
+                        connection,
+                        flow_id=flow_id,
+                        attempt_id=job_id,
+                        evidence=evidence,
+                        decision=continuation_decision,
+                    )
             connection.commit()
         except Exception:
             connection.rollback()
@@ -446,7 +474,7 @@ def _run_external_network_task(
         and normalize_finish_reason(
             external.response.finish_reason, failed=external.response.error is not None
         )
-        != "length"
+        in {"stop", "unknown"}
     ):
         proposed_record_ids, records_parse_error = _create_proposed_records_from_response(
             task_kind=task_kind,
@@ -502,12 +530,12 @@ def _terminalize_local_flow(
     finish_reason: str | None = None,
 ) -> None:
     normalized_finish = normalize_finish_reason(finish_reason, failed=False)
-    if status == "success" and normalized_finish == "length":
-        state = "partial_terminal"
-        terminal_reason = "output_length_limit"
-    elif status == "success":
+    if status == "success" and normalized_finish in {"stop", "unknown"}:
         state = "complete"
         terminal_reason = "completed"
+    elif status == "success":
+        state = "partial_terminal"
+        terminal_reason = f"finish_{normalized_finish}"
     else:
         state = "failed_terminal"
         terminal_reason = normalize_outcome_reason(reason or status)
@@ -517,6 +545,349 @@ def _terminalize_local_flow(
         terminal_reason=terminal_reason,
         terminal_attempt_id=attempt_id,
     )
+
+
+_LOCAL_CONTINUATION_SENSITIVITY = "S4"
+
+
+def _assembled_local_response(response: AIResponse, body_text: str) -> AIResponse:
+    return response.model_copy(
+        update={"text": body_text, "content": body_text}
+    )
+
+
+def _run_local_continuations(
+    *,
+    flow_id: str,
+    initial_attempt_id: str,
+    initial_response: AIResponse,
+    initial_outcome: AiTaskOutcome,
+    original_prompt: str,
+    task_kind: str,
+    requested_route_class: str | None,
+    selected_route_class: str,
+    context_digest: str | None,
+    context_sources: list[dict] | None,
+    context_sources_count: int,
+    requested_output_tokens: int | None,
+    adapters: dict[str, AIProviderAdapter],
+    bindings: dict[str, ProviderBinding] | None,
+    workspace_id: str | None,
+) -> AiTaskOutcome:
+    from app.modules.ai.token_flow_local_continuation import (
+        plan_local_continuation,
+    )
+
+    current_attempt_id = initial_attempt_id
+    current_response = initial_response
+    current_outcome = initial_outcome
+    flow_workspace_id = get_flow(flow_id)["workspace_id"]
+
+    while True:
+        continuation = evaluate_direct_continuation(
+            flow_id=flow_id,
+            workspace_id=flow_workspace_id,
+            expected_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
+        )
+        if not continuation.eligible:
+            _, assembled = terminalize_assembled_output(
+                flow_id=flow_id,
+                terminal_attempt_id=current_attempt_id,
+                new_state="partial_terminal",
+                terminal_reason=f"continuation_{continuation.reason}",
+                workspace_id=flow_workspace_id,
+                expected_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
+            )
+            current_outcome.response = _assembled_local_response(
+                current_response, assembled.body_text
+            )
+            return current_outcome
+
+        if requested_output_tokens is None or requested_output_tokens <= 0:
+            _, assembled = terminalize_assembled_output(
+                flow_id=flow_id,
+                terminal_attempt_id=current_attempt_id,
+                new_state="partial_terminal",
+                terminal_reason="continuation_binding_metadata_incomplete",
+                workspace_id=flow_workspace_id,
+                expected_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
+            )
+            current_outcome.response = _assembled_local_response(
+                current_response, assembled.body_text
+            )
+            return current_outcome
+
+        plan = plan_local_continuation(
+            decision=continuation,
+            route_class=selected_route_class,
+            task_type=_ai_task_type_for(task_kind),
+            original_prompt=original_prompt,
+            workspace_id=flow_workspace_id,
+            expected_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
+            requested_output_tokens=requested_output_tokens,
+            bindings=bindings,
+        )
+        if not plan.ready or plan.binding is None or plan.request is None:
+            _, assembled = terminalize_assembled_output(
+                flow_id=flow_id,
+                terminal_attempt_id=current_attempt_id,
+                new_state="partial_terminal",
+                terminal_reason=f"continuation_{plan.reason}",
+                workspace_id=flow_workspace_id,
+                expected_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
+            )
+            current_outcome.response = _assembled_local_response(
+                current_response, assembled.body_text
+            )
+            return current_outcome
+
+        binding = plan.binding
+        request = plan.request
+        adapter = adapters.get(binding.provider_id)
+        route_decision = RoutingDecision(
+            provider_id=binding.provider_id,
+            model_id=binding.model_id,
+            decision_reason=f"bound:{binding.route_class}",
+        )
+        route_metadata = {
+            "continuation_flow_id": flow_id,
+            "continuation_parent_attempt_id": continuation.parent_attempt_id,
+            "continuation_index": continuation.next_continuation_index,
+            "continuation_segment_count": request.metadata.get(
+                "continuation_segment_count"
+            ),
+        }
+        if adapter is None:
+            evidence = apply_continuation_lineage(
+                no_execution_evidence(
+                    selected_route_class=binding.route_class,
+                    binding=binding,
+                    outcome_reason="adapter_unavailable",
+                    requested_output_ceiling=requested_output_tokens,
+                    effective_output_ceiling=plan.effective_output_tokens,
+                    fallback_index=0,
+                ),
+                continuation,
+            )
+            ledger_id = _write_ai_job(
+                status="config_error",
+                task_kind=task_kind,
+                requested_route_class=requested_route_class,
+                selected_route_class=binding.route_class,
+                decision=route_decision,
+                prompt_digest=canonical_digest(
+                    {"prompt": request.prompt or ""}
+                ),
+                context_digest=context_digest,
+                context_sources=context_sources,
+                response=None,
+                latency_ms=0,
+                error_type="config_error",
+                route_metadata=route_metadata,
+                fallback_index=0,
+                flow_id=flow_id,
+                evidence=evidence,
+                continuation_decision=continuation,
+            )
+            _, assembled = terminalize_assembled_output(
+                flow_id=flow_id,
+                terminal_attempt_id=ledger_id,
+                new_state="partial_terminal",
+                terminal_reason="continuation_adapter_unavailable",
+                workspace_id=flow_workspace_id,
+                expected_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
+            )
+            return _outcome_with_flow(
+                AiTaskOutcome(
+                    "config_error",
+                    ledger_id,
+                    binding.route_class,
+                    route_decision,
+                    response=_assembled_local_response(
+                        current_response, assembled.body_text
+                    ),
+                    error_type="config_error",
+                    context_digest=context_digest,
+                    context_sources_count=context_sources_count,
+                ),
+                flow_id,
+            )
+
+        attempt_started = time.perf_counter()
+        try:
+            response = adapter.complete(request)
+        except Exception as exc:
+            evidence, usage = local_exception_evidence(
+                binding=binding,
+                prompt=request.prompt or "",
+                selected_route_class=binding.route_class,
+                requested_output_ceiling=requested_output_tokens,
+                effective_output_ceiling=plan.effective_output_tokens,
+                fallback_index=0,
+            )
+            evidence = apply_continuation_lineage(evidence, continuation)
+            ledger_id = _write_ai_job(
+                status="provider_error",
+                task_kind=task_kind,
+                requested_route_class=requested_route_class,
+                selected_route_class=binding.route_class,
+                decision=route_decision,
+                prompt_digest=canonical_digest(
+                    {"prompt": request.prompt or ""}
+                ),
+                context_digest=context_digest,
+                context_sources=context_sources,
+                response=None,
+                latency_ms=_elapsed_ms(attempt_started),
+                error_type=type(exc).__name__,
+                route_metadata=route_metadata,
+                fallback_index=0,
+                flow_id=flow_id,
+                evidence=evidence,
+                continuation_decision=continuation,
+                input_tokens_override=usage.input_tokens,
+                output_tokens_override=usage.output_tokens,
+            )
+            _, assembled = terminalize_assembled_output(
+                flow_id=flow_id,
+                terminal_attempt_id=ledger_id,
+                new_state="partial_terminal",
+                terminal_reason="continuation_adapter_exception",
+                workspace_id=flow_workspace_id,
+                expected_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
+            )
+            return _outcome_with_flow(
+                AiTaskOutcome(
+                    "provider_error",
+                    ledger_id,
+                    binding.route_class,
+                    route_decision,
+                    response=_assembled_local_response(
+                        current_response, assembled.body_text
+                    ),
+                    error_type=type(exc).__name__,
+                    context_digest=context_digest,
+                    context_sources_count=context_sources_count,
+                ),
+                flow_id,
+            )
+
+        status, error_type = _response_status(response)
+        evidence = apply_continuation_lineage(
+            local_response_evidence(
+                binding=binding,
+                response=response,
+                selected_route_class=binding.route_class,
+                outcome_reason=error_type or status,
+                requested_output_ceiling=requested_output_tokens,
+                effective_output_ceiling=plan.effective_output_tokens,
+                fallback_index=0,
+            ),
+            continuation,
+        )
+        ledger_id = _write_ai_job(
+            status=status,
+            task_kind=task_kind,
+            requested_route_class=requested_route_class,
+            selected_route_class=binding.route_class,
+            decision=route_decision,
+            prompt_digest=canonical_digest(
+                {"prompt": request.prompt or ""}
+            ),
+            context_digest=context_digest,
+            context_sources=context_sources,
+            response=response,
+            latency_ms=_elapsed_ms(attempt_started),
+            error_type=error_type,
+            route_metadata=route_metadata,
+            fallback_index=0,
+            flow_id=flow_id,
+            evidence=evidence,
+            continuation_decision=continuation,
+        )
+        if status != "success" or response.text is None:
+            _, assembled = terminalize_assembled_output(
+                flow_id=flow_id,
+                terminal_attempt_id=ledger_id,
+                new_state="partial_terminal",
+                terminal_reason=f"continuation_{normalize_outcome_reason(error_type or status)}",
+                workspace_id=flow_workspace_id,
+                expected_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
+            )
+            return _outcome_with_flow(
+                AiTaskOutcome(
+                    status,
+                    ledger_id,
+                    binding.route_class,
+                    route_decision,
+                    response=_assembled_local_response(
+                        current_response, assembled.body_text
+                    ),
+                    error_type=error_type,
+                    context_digest=context_digest,
+                    context_sources_count=context_sources_count,
+                ),
+                flow_id,
+            )
+
+        store_protected_segment(
+            flow_id=flow_id,
+            originating_attempt_id=ledger_id,
+            body_text=response.text,
+            effective_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
+            workspace_id=flow_workspace_id,
+        )
+        normalized_finish = normalize_finish_reason(
+            response.finish_reason,
+            failed=False,
+        )
+        current_attempt_id = ledger_id
+        current_response = response
+        current_outcome = _outcome_with_flow(
+            AiTaskOutcome(
+                "success",
+                ledger_id,
+                binding.route_class,
+                route_decision,
+                response=response,
+                context_digest=context_digest,
+                context_sources_count=context_sources_count,
+            ),
+            flow_id,
+        )
+        if normalized_finish == "length":
+            continue
+
+        final_state = (
+            "complete" if normalized_finish in {"stop", "unknown"} else "partial_terminal"
+        )
+        terminal_reason = (
+            "completed"
+            if normalized_finish in {"stop", "unknown"}
+            else f"continuation_finish_{normalized_finish}"
+        )
+        _, assembled = terminalize_assembled_output(
+            flow_id=flow_id,
+            terminal_attempt_id=ledger_id,
+            new_state=final_state,
+            terminal_reason=terminal_reason,
+            workspace_id=flow_workspace_id,
+            expected_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
+        )
+        assembled_response = _assembled_local_response(
+            response, assembled.body_text
+        )
+        current_outcome.response = assembled_response
+        if normalized_finish in {"stop", "unknown"}:
+            proposed_ids, parse_error = _create_proposed_records_from_response(
+                task_kind=task_kind,
+                response=assembled_response,
+                ledger_id=ledger_id,
+                workspace_id=workspace_id,
+            )
+            current_outcome.proposed_record_ids = proposed_ids
+            current_outcome.records_parse_error = parse_error
+        return current_outcome
 
 
 def _outcome_with_flow(outcome: AiTaskOutcome, flow_id: str) -> AiTaskOutcome:
@@ -1004,6 +1375,39 @@ def run_ai_task(
             prior_retryable_error_code = retryable_error_code
             continue
 
+        normalized_finish = normalize_finish_reason(
+            response.finish_reason, failed=False
+        )
+        if (
+            status == "success"
+            and normalized_finish == "length"
+            and bool(response.text)
+        ):
+            store_protected_segment(
+                flow_id=flow_id,
+                originating_attempt_id=ledger_id,
+                body_text=str(response.text),
+                effective_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
+                workspace_id=get_flow(flow_id)["workspace_id"],
+            )
+            return _run_local_continuations(
+                flow_id=flow_id,
+                initial_attempt_id=ledger_id,
+                initial_response=response,
+                initial_outcome=last_outcome,
+                original_prompt=request.prompt or "",
+                task_kind=task_kind,
+                requested_route_class=requested_route_class,
+                selected_route_class=selected_route_class,
+                context_digest=context_digest,
+                context_sources=context_sources,
+                context_sources_count=context_sources_count,
+                requested_output_tokens=attempt_max,
+                adapters=adapters,
+                bindings=bindings,
+                workspace_id=workspace_id,
+            )
+
         _terminalize_local_flow(
             flow_id=flow_id,
             status=status,
@@ -1011,9 +1415,7 @@ def run_ai_task(
             reason=error_type,
             finish_reason=response.finish_reason,
         )
-        if status == "success" and normalize_finish_reason(
-            response.finish_reason, failed=False
-        ) != "length":
+        if status == "success" and normalized_finish in {"stop", "unknown"}:
             proposed_record_ids, records_parse_error = _create_proposed_records_from_response(
                 task_kind=task_kind,
                 response=response,

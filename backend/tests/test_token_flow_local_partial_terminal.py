@@ -33,7 +33,7 @@ class _LengthAdapter:
         raise NotImplementedError
 
 
-def test_local_length_response_terminalizes_flow_as_partial(monkeypatch, tmp_path) -> None:
+def test_local_length_response_retries_until_guard_then_partial(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("JARVISOS_DATA_ROOT", str(tmp_path / "local-partial"))
     from app.core.config import get_settings
 
@@ -71,5 +71,5 @@ def test_local_length_response_terminalizes_flow_as_partial(monkeypatch, tmp_pat
             (outcome.flow_id,),
         ).fetchone()
     assert flow["state"] == "partial_terminal"
-    assert flow["terminal_reason"] == "output_length_limit"
+    assert flow["terminal_reason"] == "continuation_guard_exhausted"
     assert flow["terminal_attempt_id"] == outcome.ledger_id
