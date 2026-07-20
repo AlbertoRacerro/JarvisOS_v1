@@ -1,0 +1,141 @@
+{
+  "schema_version": 1,
+  "evaluation_mode": "forward",
+  "variables": [
+    {
+      "name": "tube_material_mass",
+      "label": "Tube and material mass",
+      "unit": "kg",
+      "required": true,
+      "category": "design",
+      "description": "Caller-asserted supported tube and material mass.",
+      "domain": {"min": 0.0}
+    },
+    {
+      "name": "contained_liquid_volume",
+      "label": "Contained liquid volume",
+      "unit": "m3",
+      "required": true,
+      "category": "design",
+      "description": "Contained process-liquid volume; may bind the reviewed 047 total liquid inventory.",
+      "domain": {"min": 0.0}
+    },
+    {
+      "name": "contained_liquid_density",
+      "label": "Contained liquid density",
+      "unit": "kg/m3",
+      "required": true,
+      "category": "property",
+      "description": "Density of the contained process liquid.",
+      "domain": {"exclusive_min": 0.0}
+    },
+    {
+      "name": "attached_hardware_mass",
+      "label": "Attached hardware mass",
+      "unit": "kg",
+      "required": true,
+      "category": "equipment",
+      "description": "Explicitly included nodes, sensors, fittings, pump allocation, and other hardware mass.",
+      "domain": {"min": 0.0}
+    },
+    {
+      "name": "other_supported_payload_mass",
+      "label": "Other supported payload mass",
+      "unit": "kg",
+      "required": true,
+      "category": "design",
+      "description": "Explicit additional supported payload mass.",
+      "domain": {"min": 0.0}
+    },
+    {
+      "name": "external_fluid_density",
+      "label": "External fluid density",
+      "unit": "kg/m3",
+      "required": true,
+      "category": "property",
+      "description": "Density of the surrounding water used for static displacement screening.",
+      "domain": {"exclusive_min": 0.0}
+    },
+    {
+      "name": "buoyancy_safety_factor",
+      "label": "Buoyancy screening safety factor",
+      "unit": "1",
+      "required": true,
+      "category": "design",
+      "description": "Explicit screening multiplier applied to total supported wet mass; not a certification factor.",
+      "domain": {"min": 1.0}
+    },
+    {
+      "name": "inherent_displacement_volume",
+      "label": "Inherent sealed displacement volume",
+      "unit": "m3",
+      "required": true,
+      "category": "design",
+      "description": "Caller-asserted sealed or non-flooded displacement already supplied by the assembly.",
+      "domain": {"min": 0.0}
+    },
+    {
+      "name": "clean_tube_transmittance",
+      "label": "Clean tube transmittance",
+      "unit": "1",
+      "required": true,
+      "category": "property",
+      "description": "Dimensionless clean-wall transmission proxy.",
+      "domain": {"exclusive_min": 0.0, "max": 1.0}
+    },
+    {
+      "name": "daily_fouling_loss_fraction",
+      "label": "Daily fouling loss fraction",
+      "unit": "1",
+      "required": true,
+      "category": "model_parameter",
+      "description": "Dimensionless optical-loss fraction for one nominal day in the discrete screening relationship.",
+      "domain": {"min": 0.0, "exclusive_max": 1.0}
+    },
+    {
+      "name": "cleaning_interval",
+      "label": "Cleaning interval",
+      "unit": "d",
+      "required": true,
+      "category": "operating",
+      "description": "Elapsed nominal days between clean-state restoration events in the screening proxy.",
+      "domain": {"min": 0.0}
+    },
+    {
+      "name": "culture_attenuation_coefficient",
+      "label": "Culture attenuation coefficient",
+      "unit": "L/gDW/m",
+      "required": true,
+      "category": "model_parameter",
+      "description": "Dry-weight-specific Beer-Lambert-like attenuation coefficient to be measured.",
+      "domain": {"min": 0.0}
+    },
+    {
+      "name": "operating_biomass_concentration",
+      "label": "Operating biomass concentration",
+      "unit": "gDW/L",
+      "required": true,
+      "category": "operating",
+      "description": "Dry biomass concentration used only in the optical transmission proxy.",
+      "domain": {"min": 0.0}
+    },
+    {
+      "name": "optical_path_length",
+      "label": "Explicit optical path length",
+      "unit": "m",
+      "required": true,
+      "category": "design",
+      "description": "Caller-selected attenuation path; never derived automatically from tube diameter.",
+      "domain": {"exclusive_min": 0.0}
+    },
+    {
+      "name": "available_auxiliary_flotation_volume",
+      "label": "Available auxiliary flotation volume",
+      "unit": "m3",
+      "required": false,
+      "category": "equipment",
+      "description": "Optional candidate auxiliary displacement used only for margin and pass/fail comparison.",
+      "domain": {"exclusive_min": 0.0}
+    }
+  ]
+}
