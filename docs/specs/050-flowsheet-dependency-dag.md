@@ -423,8 +423,8 @@ breaking.
 - cycles do not mutate, reject, supersede, or stale any record;
 - 050 never claims a cyclic result is a DAG.
 
-Cycle paths are canonicalized by rotating each path to its lexicographically smallest
-node and choosing the lexicographically smaller direction when equivalent. At most 20
+Cycle paths are canonicalized by rotating each directed path to its lexicographically
+smallest node. Edge direction is never reversed. At most 20
 cycles and at most 50 nodes per cycle are returned.
 
 ## Snapshot and determinism
