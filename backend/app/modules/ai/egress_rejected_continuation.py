@@ -47,11 +47,16 @@ def consume_persisted_rejected_continuation(
             raise egress_persistence.EgressStateError(
                 f"confirmation ticket is not pending: {state}"
             )
-        reason_code = (
-            "ticket_expired"
-            if state == "expired"
-            else str(row["revocation_reason"] or "ticket_revoked")
-        )
+        if state == "expired":
+            reason_code = "ticket_expired"
+        else:
+            revocation = connection.execute(
+                "SELECT revocation_reason FROM egress_confirmation_tickets WHERE id = ?",
+                (ticket_id,),
+            ).fetchone()
+            reason_code = str(
+                revocation["revocation_reason"] or "ticket_revoked"
+            )
         pause_attempt_id = (
             terminalize_rejected_continuation_confirmation_in_transaction(
                 connection,

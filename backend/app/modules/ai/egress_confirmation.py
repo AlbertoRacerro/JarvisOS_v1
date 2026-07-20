@@ -6,6 +6,15 @@ from app.modules.ai.egress_rejected_continuation import (
 )
 
 ConfirmedTicketExecution = _core.ConfirmedTicketExecution
+evaluate_provider_budget_gate = _core.evaluate_provider_budget_gate
+_create_proposed_records_from_response = _core._create_proposed_records_from_response
+
+
+def _sync_patchable_bindings() -> None:
+    _core.evaluate_provider_budget_gate = evaluate_provider_budget_gate
+    _core._create_proposed_records_from_response = (
+        _create_proposed_records_from_response
+    )
 
 
 def run_confirmation_ticket(
@@ -17,6 +26,7 @@ def run_confirmation_ticket(
 ) -> ConfirmedTicketExecution:
     """Run one 059b confirmation, including rejected 061b cleanup on access."""
 
+    _sync_patchable_bindings()
     metadata = _core._load_ticket_metadata(ticket_id)
     if (
         metadata.ticket_state in {"expired", "revoked"}
