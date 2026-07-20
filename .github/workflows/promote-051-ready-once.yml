@@ -1,0 +1,46 @@
+name: Promote 051 ready once
+
+on:
+  pull_request:
+    types: [synchronize]
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    if: >-
+      github.repository == 'AlbertoRacerro/JarvisOS_v1' &&
+      github.event.pull_request.number == 158 &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - name: Apply exact registry promotion
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('docs/specs/STATUS.md')
+          text = path.read_text(encoding='utf-8')
+          old = '| 051 | planned | — | FLOWSHEET-RECALC stale propagation | 050 | When an accepted input changes, deterministically mark dependent outputs stale and explain the dependency path; no automatic recomputation or silent promotion. |'
+          new = '| 051 | ready | — | FLOWSHEET-RECALC stale propagation | 050 | When an accepted input changes, deterministically mark dependent outputs stale and explain the dependency path; no automatic recomputation or silent promotion. |'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one planned 051 row, found {text.count(old)}')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+          rm -f .github/workflows/promote-051-ready-once.yml
+          git diff --check
+          test "$(git diff --name-only origin/master | sort | tr '\n' ' ')" = "docs/specs/051-flowsheet-recalc-stale-propagation.md docs/specs/STATUS.md "
+          test "$(git diff --numstat origin/master -- docs/specs/STATUS.md)" = $'1\t1\tdocs/specs/STATUS.md'
+      - name: Commit verified promotion
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Promote spec 051 to ready"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
