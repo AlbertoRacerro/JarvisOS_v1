@@ -23,6 +23,7 @@ class MemoryProposalCreate(BaseModel):
     value_min: float | None = None
     value_max: float | None = None
     source_ref: str | None = None
+    supersedes_parameter_id: str | None = None
     title: str | None = None
     decision_text: str | None = None
     rationale: str | None = None
@@ -32,6 +33,8 @@ class MemoryProposalCreate(BaseModel):
     @model_validator(mode="after")
     def validate_parameter_fields(self) -> "MemoryProposalCreate":
         if self.record_kind != "parameter":
+            if self.supersedes_parameter_id is not None:
+                raise ValueError("supersedes_parameter_id is supported only for Parameter proposals.")
             return self
         if self.name is None or not self.name.strip():
             raise ValueError("name is required for parameter proposals.")
@@ -78,7 +81,23 @@ class MemoryRecordRead(BaseModel):
     name: str | None = None
     source_ref: str | None = None
     notes: str | None = None
+    supersedes_parameter_id: str | None = None
 
 
 class MemoryTransitionRead(BaseModel):
     record: MemoryRecordRead
+
+
+class ParameterReplacementInvalidationRead(BaseModel):
+    id: str
+    source_ref: str
+    replacement_ref: str
+    affected_count: int
+    graph_digest: str
+    created_at: str
+
+
+class ParameterReplacementRead(BaseModel):
+    accepted_parameter: MemoryRecordRead
+    superseded_parameter: MemoryRecordRead
+    invalidation: ParameterReplacementInvalidationRead
