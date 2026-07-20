@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.modules.ai import egress_lifecycle, egress_persistence
 from app.modules.ai.egress_service import EgressTicketConsumption
 from app.modules.ai.token_flow_confirmation_resume import (
     parse_continuation_authority,
     terminalize_rejected_continuation_confirmation_in_transaction,
 )
-
-from app.modules.ai import egress_lifecycle, egress_persistence
 
 
 @dataclass(frozen=True, slots=True)
