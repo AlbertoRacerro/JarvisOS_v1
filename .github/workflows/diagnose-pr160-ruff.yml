@@ -1,0 +1,40 @@
+name: Diagnose PR160 Ruff
+
+on:
+  pull_request:
+    types: [synchronize]
+    branches: [spec/061b-token-flow-continuation]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    if: >-
+      github.repository == 'AlbertoRacerro/JarvisOS_v1' &&
+      github.event.pull_request.number == 160
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Ruff
+        run: python -m pip install ruff
+      - name: Capture Ruff output
+        shell: bash
+        run: |
+          set +e
+          cd backend
+          python -m ruff check . > "$RUNNER_TEMP/pr160-ruff.log" 2>&1
+          echo $? > "$RUNNER_TEMP/pr160-ruff.status"
+          exit 0
+      - name: Upload Ruff diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr160-ruff-diagnostics
+          path: |
+            ${{ runner.temp }}/pr160-ruff.log
+            ${{ runner.temp }}/pr160-ruff.status
+          if-no-files-found: error
+          retention-days: 1
