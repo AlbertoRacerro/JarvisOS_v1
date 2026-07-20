@@ -442,17 +442,18 @@ def _recompute(connection: sqlite3.Connection, flow_id: str) -> Flow:
     )
     if flow["state"] in TERMINAL:
         flow = _require_flow(connection, flow_id)
-        output_digest = None
+        terminal_attempt = None
         if flow["terminal_attempt_id"] is not None:
             terminal_attempt = _require_latest_attempt(
                 connection, flow_id, str(flow["terminal_attempt_id"])
             )
             _validate_terminal_status(str(flow["state"]), terminal_attempt["status"])
-            output_digest = terminal_attempt["output_digest"]
-            if output_digest is not None:
-                output_digest = _output_digest(output_digest)
-        if flow["state"] in {"complete", "partial_terminal"}:
-            output_digest = _output_digest(output_digest)
+        output_digest = _terminal_output_digest(
+            connection,
+            flow_id=flow_id,
+            flow=flow,
+            terminal_attempt=terminal_attempt,
+        )
         accounting_payload = {
             "accounting_basis_counts": accounting,
             "execution_class_counts": execution,
@@ -476,6 +477,86 @@ def _recompute(connection: sqlite3.Connection, flow_id: str) -> Flow:
             (accounting_digest, output_digest, flow_id),
         )
     return _decode_flow(_require_flow(connection, flow_id))
+
+
+def _terminal_output_digest(
+    connection: sqlite3.Connection,
+    *,
+    flow_id: str,
+    flow: sqlite3.Row,
+    terminal_attempt: sqlite3.Row | None,
+) -> str | None:
+    segments = connection.execute(
+        """
+        SELECT segment_index, originating_attempt_id, body_text, body_digest
+        FROM ai_flow_segments
+        WHERE flow_id = ?
+        ORDER BY segment_index
+        """,
+        (flow_id,),
+    ).fetchall()
+    if segments:
+        indexes = [int(row["segment_index"]) for row in segments]
+        if indexes != list(range(len(segments))):
+            raise TokenFlowConflictError(
+                "terminal protected segment indexes changed"
+            )
+        bodies: list[str] = []
+        originating_attempt_ids: list[str] = []
+        for segment in segments:
+            body = segment["body_text"]
+            if not isinstance(body, str) or not body:
+                raise TokenFlowConflictError(
+                    "terminal protected segment body is malformed"
+                )
+            body_digest = canonical_digest({"text": body})
+            if segment["body_digest"] != body_digest:
+                raise TokenFlowConflictError(
+                    "terminal protected segment digest evidence changed"
+                )
+            origin_id = str(segment["originating_attempt_id"])
+            origin = connection.execute(
+                "SELECT output_digest FROM ai_jobs WHERE id = ? AND flow_id = ?",
+                (origin_id, flow_id),
+            ).fetchone()
+            if origin is None or origin["output_digest"] != body_digest:
+                raise TokenFlowConflictError(
+                    "terminal protected segment origin evidence changed"
+                )
+            bodies.append(body)
+            originating_attempt_ids.append(origin_id)
+        if len(set(originating_attempt_ids)) != len(originating_attempt_ids):
+            raise TokenFlowConflictError(
+                "terminal protected segment origins are duplicated"
+            )
+        if (
+            terminal_attempt is not None
+            and terminal_attempt["output_digest"] is not None
+            and originating_attempt_ids[-1] != terminal_attempt["id"]
+        ):
+            raise TokenFlowConflictError(
+                "terminal output attempt no longer owns the final segment"
+            )
+        output_digest: str | None = canonical_digest(
+            {"text": "".join(bodies)}
+        )
+    else:
+        output_digest = (
+            terminal_attempt["output_digest"]
+            if terminal_attempt is not None
+            else None
+        )
+        if output_digest is not None:
+            output_digest = _output_digest(output_digest)
+
+    if flow["state"] in {"complete", "partial_terminal"}:
+        output_digest = _output_digest(output_digest)
+    persisted = flow["final_output_digest"]
+    if persisted is not None and persisted != output_digest:
+        raise TokenFlowConflictError(
+            "terminal flow digest evidence changed"
+        )
+    return output_digest
 
 
 def _validate_evidence(
