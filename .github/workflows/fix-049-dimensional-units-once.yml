@@ -1,0 +1,64 @@
+name: Fix 049 dimensional units once
+
+on:
+  push:
+    branches:
+      - spec/049-buoyancy-optics-definition
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.repository == 'AlbertoRacerro/JarvisOS_v1'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: spec/049-buoyancy-optics-definition
+          fetch-depth: 0
+      - name: Apply guarded dimensional correction
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('docs/specs/049-bluerev-process-2.md')
+          text = path.read_text(encoding='utf-8')
+
+          old_name = 'fouling_loss_fraction_per_day'
+          expected_name_count = 7
+          if text.count(old_name) != expected_name_count:
+              raise SystemExit(f'expected {expected_name_count} old fouling names, found {text.count(old_name)}')
+          text = text.replace(old_name, 'daily_fouling_loss_fraction')
+
+          replacements = {
+              '| `daily_fouling_loss_fraction` | `1/d` | yes | model_parameter | `>= 0` and `< 1`; discrete fractional daily loss |':
+                  '| `daily_fouling_loss_fraction` | `1` | yes | model_parameter | `>= 0` and `< 1`; dimensionless loss fraction for one nominal day |',
+              '* (1 - daily_fouling_loss_fraction) ^ cleaning_interval_days':
+                  '* (1 - daily_fouling_loss_fraction) ^ (cleaning_interval_days / 1 day)',
+              '* (1 - daily_fouling_loss_fraction) ^ cleaning_interval':
+                  '* (1 - daily_fouling_loss_fraction) ^ (cleaning_interval / 1 day)',
+              '| `culture_attenuation_coefficient` | `L/g/m` | yes | model_parameter | `>= 0`; to-measure screening coefficient |':
+                  '| `culture_attenuation_coefficient` | `L/gDW/m` | yes | model_parameter | `>= 0`; dry-weight-specific to-measure screening coefficient |',
+              'daily_fouling_loss_fraction = 0.01 1/d':
+                  'daily_fouling_loss_fraction = 0.01 1',
+              'culture_attenuation_coefficient = 1 L/g/m':
+                  'culture_attenuation_coefficient = 1 L/gDW/m',
+              '- the output is named a transmission proxy, not center irradiance.':
+                  '- the output is named a transmission proxy, not center irradiance;\n- the attenuation coefficient is normalized from the workbook generic `g` basis to explicit dry-weight `gDW`.'
+          }
+          for old, new in replacements.items():
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected one occurrence of {old!r}, found {count}')
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+          Path('.github/workflows/fix-049-dimensional-units-once.yml').unlink()
+      - name: Commit corrected definition
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/specs/049-bluerev-process-2.md .github/workflows/fix-049-dimensional-units-once.yml
+          git commit -m "Correct spec 049 dimensional units"
+          git push origin HEAD:spec/049-buoyancy-optics-definition
