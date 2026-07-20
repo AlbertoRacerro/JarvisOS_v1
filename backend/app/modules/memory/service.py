@@ -5,7 +5,6 @@ from app.core.database import open_sqlite_connection
 from app.core.repository import row_to_model, rows_to_models
 from app.modules.events.service import log_event, utc_now
 from app.modules.flowsheet.freshness import (
-    FreshnessError,
     invalidation_summary_from_connection,
     persist_freshness_invalidation,
     prepare_freshness_invalidation,
@@ -337,14 +336,6 @@ def promote_parameter_replacement(record_id: str) -> ParameterReplacementRead:
                         "Parameter replacement is not configured.",
                     )
                 superseded_id = str(superseded_id)
-                validate_parameter_replacement_proposal(
-                    connection,
-                    workspace_id=str(replacement["workspace_id"]),
-                    supersedes_parameter_id=superseded_id,
-                    replacement_parameter_id=record_id,
-                    unit=str(replacement["unit"]),
-                    value=None if replacement["value"] is None else str(replacement["value"]),
-                )
                 already = connection.execute(
                     "SELECT id FROM freshness_invalidations WHERE superseded_parameter_id = ?",
                     (superseded_id,),
@@ -354,6 +345,14 @@ def promote_parameter_replacement(record_id: str) -> ParameterReplacementRead:
                         "parameter_already_replaced",
                         "The accepted Parameter already has an accepted replacement.",
                     )
+                validate_parameter_replacement_proposal(
+                    connection,
+                    workspace_id=str(replacement["workspace_id"]),
+                    supersedes_parameter_id=superseded_id,
+                    replacement_parameter_id=record_id,
+                    unit=str(replacement["unit"]),
+                    value=None if replacement["value"] is None else str(replacement["value"]),
+                )
 
                 now = utc_now()
                 prepared = prepare_freshness_invalidation(

@@ -212,18 +212,14 @@ def test_replacement_promotion_atomically_marks_downstream_records(client: TestC
     assert body["invalidation"]["affected_count"] >= 6
     assert body["invalidation"]["graph_digest"].startswith("sha256:")
 
-    run_freshness = client.get(
-        f"/workspaces/bluerev/flowsheet/nodes/simulation_run:{ids['run']}/freshness"
-    )
+    run_freshness = client.get(f"/workspaces/bluerev/flowsheet/nodes/simulation_run:{ids['run']}/freshness")
     assert run_freshness.status_code == 200, run_freshness.text
     assert run_freshness.json()["latest_invalidation"]["path"] == [
         f"parameter:{ids['old']}",
         f"simulation_run:{ids['run']}",
     ]
 
-    output_freshness = client.get(
-        f"/workspaces/bluerev/flowsheet/nodes/parameter:{ids['output_parameter']}/freshness"
-    )
+    output_freshness = client.get(f"/workspaces/bluerev/flowsheet/nodes/parameter:{ids['output_parameter']}/freshness")
     assert output_freshness.status_code == 200, output_freshness.text
     assert output_freshness.json()["latest_invalidation"]["path"] == [
         f"parameter:{ids['old']}",
@@ -232,9 +228,7 @@ def test_replacement_promotion_atomically_marks_downstream_records(client: TestC
         f"parameter:{ids['output_parameter']}",
     ]
 
-    detail = client.get(
-        f"/workspaces/bluerev/flowsheet/invalidations/{body['invalidation']['id']}"
-    )
+    detail = client.get(f"/workspaces/bluerev/flowsheet/invalidations/{body['invalidation']['id']}")
     assert detail.status_code == 200, detail.text
     detail_body = detail.json()
     assert [item["record_ref"] for item in detail_body["marks"]] == sorted(
@@ -247,12 +241,8 @@ def test_replacement_promotion_atomically_marks_downstream_records(client: TestC
     from app.core.database import open_sqlite_connection
 
     with open_sqlite_connection() as connection:
-        run = connection.execute(
-            "SELECT status FROM simulation_runs WHERE id = ?", (ids["run"],)
-        ).fetchone()
-        decision = connection.execute(
-            "SELECT status FROM decisions WHERE id = ?", (ids["decision"],)
-        ).fetchone()
+        run = connection.execute("SELECT status FROM simulation_runs WHERE id = ?", (ids["run"],)).fetchone()
+        decision = connection.execute("SELECT status FROM decisions WHERE id = ?", (ids["decision"],)).fetchone()
         event = connection.execute(
             "SELECT payload FROM events WHERE event_type = 'ParameterReplacementAccepted'"
         ).fetchone()
@@ -274,9 +264,7 @@ def test_replacement_promotion_replay_is_idempotent(client: TestClient) -> None:
     from app.core.database import open_sqlite_connection
 
     with open_sqlite_connection() as connection:
-        invalidations = connection.execute(
-            "SELECT COUNT(*) AS count FROM freshness_invalidations"
-        ).fetchone()
+        invalidations = connection.execute("SELECT COUNT(*) AS count FROM freshness_invalidations").fetchone()
         events = connection.execute(
             "SELECT COUNT(*) AS count FROM events WHERE event_type = 'ParameterReplacementAccepted'"
         ).fetchone()
@@ -304,9 +292,7 @@ def test_zero_descendant_replacement_creates_audit_batch(client: TestClient) -> 
     assert response.status_code == 200, response.text
     assert response.json()["invalidation"]["affected_count"] == 0
 
-    old_freshness = client.get(
-        f"/workspaces/bluerev/flowsheet/nodes/parameter:{old_id}/freshness"
-    )
+    old_freshness = client.get(f"/workspaces/bluerev/flowsheet/nodes/parameter:{old_id}/freshness")
     assert old_freshness.status_code == 200
     assert old_freshness.json()["state"] == "fresh"
 
@@ -343,9 +329,7 @@ def test_competing_replacement_loser_is_rejected_without_partial_state(client: T
     from app.core.database import open_sqlite_connection
 
     with open_sqlite_connection() as connection:
-        second = connection.execute(
-            "SELECT status FROM parameters WHERE id = ?", (second_id,)
-        ).fetchone()
+        second = connection.execute("SELECT status FROM parameters WHERE id = ?", (second_id,)).fetchone()
         assert second["status"] == "proposed"
 
 
@@ -371,7 +355,5 @@ def test_same_name_without_explicit_replacement_keeps_ordinary_promotion(client:
     from app.core.database import open_sqlite_connection
 
     with open_sqlite_connection() as connection:
-        count = connection.execute(
-            "SELECT COUNT(*) AS count FROM freshness_invalidations"
-        ).fetchone()
+        count = connection.execute("SELECT COUNT(*) AS count FROM freshness_invalidations").fetchone()
         assert count["count"] == 0

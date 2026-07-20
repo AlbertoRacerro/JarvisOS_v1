@@ -179,8 +179,7 @@ def select_context_records(
             else:
                 clauses.append(_like_clause(kind, normalized_query, values))
         rows = connection.execute(
-            f"SELECT * FROM {table} WHERE {' AND '.join(clauses)} "
-            "ORDER BY updated_at DESC, id ASC LIMIT ?",
+            f"SELECT * FROM {table} WHERE {' AND '.join(clauses)} ORDER BY updated_at DESC, id ASC LIMIT ?",
             (*values, max_items_per_kind),
         ).fetchall()
         results[kind] = rows_to_models(rows, _CONTEXT_MODELS[kind])

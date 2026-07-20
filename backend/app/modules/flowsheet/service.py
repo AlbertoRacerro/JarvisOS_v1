@@ -44,12 +44,8 @@ _CANONICAL_KINDS = frozenset(
 )
 _KIND_ALIASES = {"evidence_record": "evidence"}
 _CONTEXT_KINDS = frozenset({"decision", "assumption", "parameter", "requirement", "evidence"})
-_BLUECAD_ATTEMPT_REF_RE = re.compile(
-    r"^bluecad_candidate:([^:]{1,256}):attempt:([1-9][0-9]*)$"
-)
-_BLUECAD_SIM_REF_RE = re.compile(
-    r"^bluecad_candidate:([^:]{1,256}):attempt:([1-9][0-9]*):sim:([^:]{1,256})$"
-)
+_BLUECAD_ATTEMPT_REF_RE = re.compile(r"^bluecad_candidate:([^:]{1,256}):attempt:([1-9][0-9]*)$")
+_BLUECAD_SIM_REF_RE = re.compile(r"^bluecad_candidate:([^:]{1,256}):attempt:([1-9][0-9]*):sim:([^:]{1,256})$")
 
 
 class FlowsheetError(ValueError):
@@ -260,18 +256,12 @@ def _select_node_row(
             "SELECT id, name, status, origin, unit, value_status, created_at "
             "FROM parameters WHERE workspace_id = ? AND id = ?"
         ),
-        "decision": (
-            "SELECT id, title, status, origin, created_at FROM decisions WHERE workspace_id = ? AND id = ?"
-        ),
-        "requirement": (
-            "SELECT id, statement, status, created_at FROM requirements WHERE workspace_id = ? AND id = ?"
-        ),
+        "decision": ("SELECT id, title, status, origin, created_at FROM decisions WHERE workspace_id = ? AND id = ?"),
+        "requirement": ("SELECT id, statement, status, created_at FROM requirements WHERE workspace_id = ? AND id = ?"),
         "bluecad_candidate": (
             "SELECT id, status, origin, created_at FROM bluecad_candidates WHERE workspace_id = ? AND id = ?"
         ),
-        "evidence": (
-            "SELECT id, kind, verdict, created_at FROM evidence_records WHERE workspace_id = ? AND id = ?"
-        ),
+        "evidence": ("SELECT id, kind, verdict, created_at FROM evidence_records WHERE workspace_id = ? AND id = ?"),
     }
     if kind in direct_queries:
         row = connection.execute(direct_queries[kind], (workspace_id, record_id)).fetchone()
@@ -341,9 +331,7 @@ def _load_workspace_rows(connection: sqlite3.Connection, workspace_id: str) -> d
             "SELECT id, title, status, origin, linked_run_id, source_ai_job_id, created_at "
             "FROM decisions WHERE workspace_id = ?"
         ),
-        "requirement": (
-            "SELECT id, statement, status, created_at FROM requirements WHERE workspace_id = ?"
-        ),
+        "requirement": ("SELECT id, statement, status, created_at FROM requirements WHERE workspace_id = ?"),
         "bluecad_candidate": (
             "SELECT id, status, origin, parent_candidate_id, spec_artifact_id, glb_artifact_id, "
             "report_artifact_id, promoted_decision_id, created_at "
@@ -353,9 +341,7 @@ def _load_workspace_rows(connection: sqlite3.Connection, workspace_id: str) -> d
             "SELECT id, kind, verdict, source_run_id, candidate_id, attempt_id, report_artifact_id, created_at "
             "FROM evidence_records WHERE workspace_id = ?"
         ),
-        "run_artifact": (
-            "SELECT simulation_run_id, artifact_id, role FROM run_artifacts WHERE workspace_id = ?"
-        ),
+        "run_artifact": ("SELECT simulation_run_id, artifact_id, role FROM run_artifacts WHERE workspace_id = ?"),
     }
     rows = {
         kind: [dict(row) for row in connection.execute(query, (workspace_id,)).fetchall()]
@@ -481,7 +467,15 @@ def _node_from_row(kind: str, row: dict[str, Any]) -> FlowsheetNodeRead:
 def _add_foreign_key_edges(builder: _GraphBuilder, rows: dict[str, list[dict[str, Any]]]) -> None:
     for row in rows["model_version"]:
         downstream = _ref("model_version", row["id"])
-        _add_typed_edge(builder, "model_spec", row.get("model_spec_id"), downstream, "has_version", "dependency", "model_versions.model_spec_id")
+        _add_typed_edge(
+            builder,
+            "model_spec",
+            row.get("model_spec_id"),
+            downstream,
+            "has_version",
+            "dependency",
+            "model_versions.model_spec_id",
+        )
         _add_typed_edge(
             builder,
             "artifact",
@@ -536,7 +530,10 @@ def _add_foreign_key_edges(builder: _GraphBuilder, rows: dict[str, list[dict[str
                 "decisions.linked_run_id",
             )
         _add_ai_proposal_edge(builder, row, downstream, "decisions.source_ai_job_id")
-    for kind, source_field in (("assumption", "assumptions.source_ai_job_id"), ("parameter", "parameters.source_ai_job_id")):
+    for kind, source_field in (
+        ("assumption", "assumptions.source_ai_job_id"),
+        ("parameter", "parameters.source_ai_job_id"),
+    ):
         for row in rows[kind]:
             _add_ai_proposal_edge(builder, row, _ref(kind, row["id"]), source_field)
     for row in rows["bluecad_candidate"]:
@@ -724,12 +721,15 @@ def _add_payload_edges(
                         "simulation_runs.input_payload:input_artifact_ids",
                         owner_ref=run_ref,
                     )
-        elif model_version is None and payload is not None and (
-            "candidate_id" in payload or "attempt_id" in payload
-        ):
+        elif model_version is None and payload is not None and ("candidate_id" in payload or "attempt_id" in payload):
             candidate_id = payload.get("candidate_id")
             attempt_id = payload.get("attempt_id")
-            if not isinstance(candidate_id, str) or not candidate_id or not isinstance(attempt_id, str) or not attempt_id:
+            if (
+                not isinstance(candidate_id, str)
+                or not candidate_id
+                or not isinstance(attempt_id, str)
+                or not attempt_id
+            ):
                 builder.add_diagnostic(
                     owner_ref=run_ref,
                     source_field="simulation_runs.input_payload",

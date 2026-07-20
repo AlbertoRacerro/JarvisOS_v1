@@ -12,6 +12,7 @@ from app.modules.flowsheet.models import (
     FlowsheetFreshnessInvalidationDetailRead,
     FlowsheetFreshnessInvalidationSummaryRead,
     FlowsheetFreshnessMarkRead,
+    FlowsheetGraphRead,
     FlowsheetNodeFreshnessRead,
 )
 from app.modules.flowsheet.service import (
@@ -72,14 +73,14 @@ def prepare_freshness_invalidation(
     source_ref = f"parameter:{superseded_parameter_id}"
     replacement_ref = f"parameter:{replacement_parameter_id}"
     if source_ref not in {node.ref for node in graph.nodes}:
-        raise FreshnessError("parameter_replacement_not_found", "Superseded Parameter is absent from the workspace graph.")
+        raise FreshnessError(
+            "parameter_replacement_not_found", "Superseded Parameter is absent from the workspace graph."
+        )
 
     adjacency: dict[str, list[tuple[str, str, str]]] = {}
     for edge in graph.edges:
         if edge.edge_class == "dependency" or edge.relation == "executed_by":
-            adjacency.setdefault(edge.upstream_ref, []).append(
-                (edge.downstream_ref, edge.relation, edge.edge_class)
-            )
+            adjacency.setdefault(edge.upstream_ref, []).append((edge.downstream_ref, edge.relation, edge.edge_class))
     for items in adjacency.values():
         items.sort()
 
@@ -141,10 +142,7 @@ def prepare_freshness_invalidation(
         replacement_parameter_id=replacement_parameter_id,
         source_graph_digest=_graph_digest(graph),
         unresolved_diagnostic_count=len(graph.diagnostics.unresolved_references),
-        cycle_count=sum(
-            any(record_ref in closure for record_ref in cycle)
-            for cycle in graph.diagnostics.cycles
-        ),
+        cycle_count=sum(any(record_ref in closure for record_ref in cycle) for cycle in graph.diagnostics.cycles),
         created_at=created_at,
         marks=tuple(marks),
     )
@@ -320,12 +318,28 @@ def _latest_summary(row: sqlite3.Row) -> FlowsheetFreshnessInvalidationSummaryRe
     )
 
 
-def _graph_digest(graph: object) -> str:
+def _graph_digest(graph: FlowsheetGraphRead) -> str:
     payload = {
-        "nodes": [node.model_dump(mode="json") for node in graph.nodes],
-        "edges": [edge.model_dump(mode="json") for edge in graph.edges],
+        "nodes": sorted(node.ref for node in graph.nodes),
+        "edges": [
+            {
+                "upstream_ref": edge.upstream_ref,
+                "downstream_ref": edge.downstream_ref,
+                "relation": edge.relation,
+                "edge_class": edge.edge_class,
+                "authorities": sorted(edge.authorities),
+                "source_fields": sorted(edge.source_fields),
+            }
+            for edge in graph.edges
+        ],
         "unresolved_references": [
-            item.model_dump(mode="json") for item in graph.diagnostics.unresolved_references
+            {
+                "owner_ref": item.owner_ref,
+                "source_field": item.source_field,
+                "code": item.code,
+                "raw_ref": item.raw_ref,
+            }
+            for item in graph.diagnostics.unresolved_references
         ],
     }
     return _sha256_prefixed(_canonical_json(payload))

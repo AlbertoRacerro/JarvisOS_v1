@@ -26,9 +26,7 @@ router = APIRouter(prefix="/memory", tags=["memory"])
 def _domain_error(exc: Exception) -> HTTPException:
     if isinstance(exc, ParameterReplacementError):
         public_code = (
-            "parameter_replacement_not_found"
-            if exc.code == "parameter_replacement_cross_workspace"
-            else exc.code
+            "parameter_replacement_not_found" if exc.code == "parameter_replacement_cross_workspace" else exc.code
         )
         if public_code == "parameter_replacement_not_found":
             status_code = 404
