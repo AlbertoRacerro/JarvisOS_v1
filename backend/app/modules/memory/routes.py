@@ -2,13 +2,67 @@ import sqlite3
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.modules.memory.models import MemoryProposalCreate, MemoryRecordKind, MemoryRecordRead, MemoryStatus
-from app.modules.memory.service import create_proposal, list_proposals, promote_record, reject_record
+from app.modules.flowsheet.freshness import FreshnessError
+from app.modules.flowsheet.service import FlowsheetError
+from app.modules.memory.models import (
+    MemoryProposalCreate,
+    MemoryRecordKind,
+    MemoryRecordRead,
+    MemoryStatus,
+    ParameterReplacementRead,
+)
+from app.modules.memory.replacement import ParameterReplacementError
+from app.modules.memory.service import (
+    create_proposal,
+    list_proposals,
+    promote_parameter_replacement,
+    promote_record,
+    reject_record,
+)
 
 router = APIRouter(prefix="/memory", tags=["memory"])
 
 
 def _domain_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, ParameterReplacementError):
+        public_code = (
+            "parameter_replacement_not_found"
+            if exc.code == "parameter_replacement_cross_workspace"
+            else exc.code
+        )
+        if public_code == "parameter_replacement_not_found":
+            status_code = 404
+        elif public_code in {
+            "parameter_already_replaced",
+            "parameter_replacement_state_inconsistent",
+            "parameter_replacement_promotion_required",
+        }:
+            status_code = 409
+        else:
+            status_code = 400
+        return HTTPException(
+            status_code=status_code,
+            detail={"code": public_code, "message": exc.message},
+        )
+    if isinstance(exc, (FreshnessError, FlowsheetError)):
+        if exc.code in {"flowsheet_workspace_not_found", "flowsheet_node_not_found"}:
+            status_code = 404
+        elif exc.code in {
+            "freshness_lineage_incomplete",
+            "freshness_path_limit_exceeded",
+            "freshness_mark_limit_exceeded",
+            "flowsheet_graph_limit_exceeded",
+            "flowsheet_diagnostics_limit_exceeded",
+        }:
+            status_code = 409
+        else:
+            status_code = 400
+        detail: dict[str, object] = {"code": exc.code, "message": exc.message}
+        if exc.bound is not None:
+            detail["bound"] = exc.bound
+        if exc.observed_count is not None:
+            detail["observed_count"] = exc.observed_count
+        return HTTPException(status_code=status_code, detail=detail)
     if isinstance(exc, ValueError):
         message = str(exc)
         status_code = 404 if "not found" in message.lower() else 400
@@ -22,7 +76,11 @@ def _domain_error(exc: Exception) -> HTTPException:
 def create_memory_proposal_endpoint(payload: MemoryProposalCreate) -> MemoryRecordRead:
     try:
         return create_proposal(payload)
-    except (ValueError, sqlite3.IntegrityError) as exc:
+    except (
+        ValueError,
+        sqlite3.IntegrityError,
+        ParameterReplacementError,
+    ) as exc:
         raise _domain_error(exc) from exc
 
 
@@ -41,7 +99,24 @@ def list_memory_proposals_endpoint(
 def promote_memory_record_endpoint(record_kind: MemoryRecordKind, record_id: str) -> MemoryRecordRead:
     try:
         return promote_record(record_kind, record_id)
-    except (ValueError, sqlite3.IntegrityError) as exc:
+    except (ValueError, sqlite3.IntegrityError, ParameterReplacementError) as exc:
+        raise _domain_error(exc) from exc
+
+
+@router.post(
+    "/parameter/{record_id}/promote-replacement",
+    response_model=ParameterReplacementRead,
+)
+def promote_parameter_replacement_endpoint(record_id: str) -> ParameterReplacementRead:
+    try:
+        return promote_parameter_replacement(record_id)
+    except (
+        ValueError,
+        sqlite3.IntegrityError,
+        ParameterReplacementError,
+        FreshnessError,
+        FlowsheetError,
+    ) as exc:
         raise _domain_error(exc) from exc
 
 
