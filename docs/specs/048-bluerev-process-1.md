@@ -1,8 +1,6 @@
 # 048 — BLUEREV-PROCESS-1: biomass, nutrients, gas, harvest, energy, and preliminary economics
 
-Status: planned definition draft. `docs/specs/STATUS.md` is authoritative. This
-document does not authorize implementation and must not be promoted to `ready`
-until every promotion blocker below is closed with source-bound evidence.
+Status: implementation-ready full specification. `docs/specs/STATUS.md` is authoritative.
 
 Depends on: 043, 047
 
@@ -10,466 +8,646 @@ Related merged operator surface: 071
 
 ## Goal
 
-Port the next BlueRev workbook block into one reviewed, deterministic `calc_v0`
-forward model for:
+Add one reviewed, deterministic `calc_v0` forward model that turns an explicit
+productive liquid volume and caller-selected biological, nutrient, harvesting, and
+economic inputs into an M0 screening result for:
 
-- biological productive-volume semantics;
-- biomass inventory and production rate;
-- nitrogen, phosphorus, and carbon demand;
-- bounded gas-demand and degassing proxies;
-- semi-continuous harvest, recovered biomass, concentrate, and filtration sizing;
-- pump and declared auxiliary energy;
-- preliminary variable operating-cost and margin proxies.
+- biomass inventory and imposed productivity;
+- nitrogen, phosphorus, and carbon incorporation demand;
+- stock-solution dosing;
+- bounded CO2/O2 stoichiometric and gas-rate proxies;
+- whole-culture bleed and side-stream cell-retention sizing;
+- corrected concentrate and filtration sizing;
+- pump electricity and pump-electricity-only variable-cost KPIs;
+- an optional gross-margin proxy with an explicit `not_computable` state.
 
-The result must be useful for comparing operator-selected BlueRev scenarios without
-pretending that the workbook is a validated biological model, a gas-transfer model,
-a complete equipment design, or a techno-economic assessment.
+The model compares operator-selected scenarios. It is not a calibrated biological
+model, gas-transfer model, harvesting-equipment selection, complete energy balance,
+full techno-economic assessment, or digital twin.
 
-This definition freezes known corrections and the evidence needed to finish the
-contract. It deliberately does not invent workbook formulas that are not available
-in the repository.
+No numerical fixture in this document is a selected Mark-1 value or product default.
+Every project and operating value remains an editable 071 binding.
 
 ## Maintainer direction
 
-Use the existing mechanisms only:
+Use the smallest existing mechanisms:
 
-- one reviewed repository script executed through `calc_v0` after the full formula
-  contract is frozen;
-- the merged 047 outputs as explicit caller-bound inputs where needed, never by
-  reading another run or a workbook at runtime;
-- the merged 071 model contract, binding preview, and scenario panel;
+- one reviewed repository script executed only through `calc_v0`;
+- one immutable, value-free 071 input-contract artifact;
+- explicit caller binding of upstream 047 outputs where appropriate;
 - the existing runner registration, hash, timeout, artifact, log, simulation-run,
   and MemoryStore proposal boundaries;
+- the existing Domain Foundation scenario panel without a new frontend surface;
 - deterministic offline tests with independent calculations;
 - no workbook runtime dependency;
-- no new equation engine, optimizer, workflow engine, TEA framework, unit package,
+- no equation engine, optimizer, workflow engine, TEA framework, unit package,
   background worker, provider call, model call, or second scenario store.
 
-No numerical fixture in this document is a selected Mark-1 value or product default.
+## Source baseline and authority
 
-## Source baseline and current evidence
-
-External reference artifact identified by the prior workbook audit:
+External reference artifact:
 
 - `BlueRev_Data_Model_v0_10_N_gaditana_refs_fixed.xlsx`;
-- principal sheets: `10_Model_Input`, `40_Calculations`, `50_Sensitivity`, and
-  `70_Formula_Audit`;
-- workbook formulas are concentrated in `01_Dashboard`, `40_Calculations`, and
-  `50_Sensitivity`;
-- the workbook lookup pattern resolves input IDs from `10_Model_Input` through an
-  `INDEX(..., MATCH(...))` lookup.
+- internal workbook headings still say v0.9, which is configuration drift and is
+  preserved only as source history;
+- relevant sheets: `10_Model_Input`, `23_Data_Media_Nutrients`,
+  `24_Data_Harvesting`, `40_Calculations`, `50_Sensitivity`, and
+  `70_Formula_Audit`.
 
-The workbook is not stored in this repository and must not become a runtime or CI
-input. Before this definition may become implementation-ready, the relevant ranks
-8–18 must be transcribed into this document with exact source locations, original
-formulas, corrected formulas, units, validity domains, and verification cases.
+The workbook is a requirements and regression artifact, not executable truth. It is
+not stored in the repository and must not be read at runtime or in CI. The complete
+corrected equations and golden values required by 048 are restated below.
 
-### Audited workbook inputs already known
+The workbook formula audit already records these prior corrections:
 
-These values are regression fixtures from the workbook audit, not defaults:
+- dilution equivalent is whole-culture bleed divided by liquid volume;
+- filtration area is based on side-stream volume, not concentrate volume;
+- biomass sensitivity recalculates liquid volume for each diameter case;
+- formula references use stable Parameter IDs rather than fixed input-row positions.
 
-| Parameter ID | Fixture value | Workbook unit / meaning |
-| --- | ---: | --- |
-| `X_set` | 0.8 | `gDW/L`, target broth biomass concentration |
-| `P_vol` | 0.15 | `gDW/L/d`, volumetric biomass productivity |
-| `mu_max` | 0.4 | `1/d`, maximum specific growth-rate reference |
-| `gN_gDW` | 0.06 | `gN/gDW`, biomass nitrogen requirement |
-| `gP_gDW` | 0.008 | `gP/gDW`, biomass phosphorus requirement |
-| `gC_gDW` | 0.5 | `gC/gDW`, biomass carbon requirement |
-| `N_res_target_mg_L` | 2 | `mgN/L`, residual nitrogen target |
-| `P_res_target_mg_L` | 0.2 | `mgP/L`, residual phosphorus target |
-| `feed_events_per_d` | 1 | `1/d`, nominal daily feed/harvest events |
-| `stock_N_mgN_mL` | 20 | `mgN/mL`, nitrogen stock concentration |
-| `stock_P_mgP_mL` | 2 | `mgP/mL`, phosphorus stock concentration |
-| `stock_C_mgC_mL` | 20 | `mgC/mL`, carbon stock concentration |
-| `DO_target_pct` | 150 | `% saturation`, operating reference only |
-| `DO_alarm_pct` | 200 | `% saturation`, alarm reference only |
-| `CO2_spec_mL_L_min` | 0.8 | `mL gas/L/min`, nominal gas-dose proxy |
-| `degasser_gas_velocity_m_s` | 0.04 | `m/s`, degasser superficial-velocity proxy |
-| `harvest_recovery` | 0.9 | `1`, recovered-product fraction |
-| `X_concentrate_g_L` | 20 | `gDW/L`, concentrate solids concentration |
-| `filter_flux_LMH` | 24.7 | `L/m2/h`, filtration flux fixture |
-| `electricity_EUR_kWh` | 0.25 | `EUR/kWh`, electricity-price fixture |
-| `op_days_y` | 300 | `d/y`, annual operating-days fixture |
+The independent architecture audit found one remaining recovery-basis defect:
 
-The following audited fields are intentionally not consumed by 048 unless the final
-formula extraction proves they belong here:
+- `40_Calculations!C43` sizes side-stream volume as biomass production divided by
+  culture concentration and capture recovery;
+- `40_Calculations!C44` divides concentrate volume by capture recovery again.
 
-- `tube_transmittance`, `fouling_loss_pct_d`, `cleaning_interval_d`, and
-  `k_att_L_g_m` belong primarily to 049 light/transmittance work;
-- `node_cost_EUR`, `pump_cost_EUR`, and `sensor_cost_EUR` are capital-cost fixtures
-  and must not be silently included in variable OPEX;
-- blank `OD_DW_factor`, `v_min_susp_m_s`, and `shear_limit_Pa` values remain missing
-  measurements, never zeroes.
+048 keeps the first relationship under explicit filtrate-return semantics and removes
+the second recovery division. Recovery is applied exactly once.
 
-## Known corrections that are binding
+## Model boundary
 
-### 1. Productive volume must be explicit
+### Biological fidelity
 
-047 distinguishes:
+The calculation is `M0_static_screening`.
 
-- `tube_liquid_volume`;
-- `total_liquid_inventory`.
+Volumetric productivity is an independent caller input. It is not calculated from
+light, temperature, pH, salinity, nutrients, DIC, dissolved oxygen, flow, fouling, or
+`maximum_specific_growth_rate`. Those variables may affect the real process but are
+not coupled in 048.
 
-048 must not silently rename either quantity as productive volume. The final contract
-must require an explicit productive-volume basis that is visible in the input and
-result diagnostics. Acceptable directions for the final spec are limited to:
+`maximum_specific_growth_rate` is used only for a screening ratio. The model must not
+present `volumetric_productivity / biomass_concentration` as a calibrated kinetic rate
+or washout prediction.
 
-1. an explicitly bound upstream 047 volume whose whole inventory is asserted to be
-   biologically productive; or
-2. an explicit productive-volume value with provenance; or
-3. a bound inventory multiplied by an explicit active-volume fraction.
+### Productive-volume boundary
 
-The implementation must reject an absent or contradictory basis. A regression fixture
-may choose one basis for testing, but no basis may become a product default.
+047 distinguishes tube liquid volume from total liquid inventory. 048 therefore
+requires `productive_liquid_volume` explicitly in `m3`.
 
-### 2. Recovery must not corrupt the reactor harvest balance
+A caller may bind the accepted 047 `total_liquid_inventory` output when the whole
+inventory is deliberately asserted to be biologically productive, or may supply a
+different accepted/manual volume. 048 never chooses this basis automatically.
 
-For a steady or quasi-steady semi-continuous comparison, the amount of broth removed
-to maintain the reactor biomass inventory is governed by net biomass production and
-broth concentration. Downstream recovery affects recovered product and losses; it
-must not silently increase or decrease the reactor broth withdrawal.
+Required diagnostics:
 
-The final equations must preserve the distinction between at least:
+- `productive_volume_basis = "caller_asserted_explicit_volume"`;
+- `upstream_volume_not_auto_selected = true`.
 
-- gross biomass removed from the reactor;
-- recovered biomass product;
-- unrecovered biomass loss;
-- harvest broth volume;
-- concentrate volume.
+### Nutrient boundary
 
-A formula that divides the reactor harvest volume by `harvest_recovery` is rejected
-unless a separately named make-up or compensation policy is explicitly modeled and
-mass-balanced.
+N, P, and C calculations represent biomass-incorporation demand only. They do not
+include:
 
-### 3. Pump-only energy is not total process energy
+- initial medium charge;
+- residual N/P target inventory;
+- replacement of nutrients discharged in makeup, purge, or cleaning streams;
+- precipitation, volatilization, leakage, biological excretion, or measurement error.
 
-047 supplies `pump_electric_power`. 048 may calculate pump energy on an explicit
-operating-time basis. It must never label pump energy or pump electricity cost as
-`total_energy`, `total_electricity`, `total_opex`, or an equivalent complete KPI.
+The workbook residual targets remain inactive validation/control targets and are not
+048 model inputs. They must not be silently added to daily demand.
 
-Every energy and cost result must carry a machine-readable completeness boundary:
+### Gas boundary
 
-- included loads;
-- excluded loads;
-- missing loads;
-- time basis;
-- whether a total is computable.
+The model separates:
 
-Gas handling, filtration/harvest, controls, cleaning, thermal management, and other
-loads are excluded unless an explicit input or reviewed submodel represents them.
+- carbon incorporated into biomass;
+- stoichiometric CO2-equivalent uptake;
+- stoichiometric O2-equivalent production;
+- an instantaneous CO2 gas-rate benchmark used for pH-control screening.
 
-### 4. Missing economic inputs produce `not_computable`
+The gas-rate benchmark is not continuous consumed CO2, mass transfer, kLa, utilization,
+off-gas, blower duty, or degasser performance. DO setpoint/alarm and degasser velocity
+remain outside the active 048 contract.
 
-The workbook audit confirms an electricity-price fixture but does not establish all
-prices, consumable costs, product price, operating-time bases, or auxiliary loads
-required for a complete economic result.
+### Harvest boundary
 
-The `preliminary_economic_evaluation_v0` family must therefore support explicit
-`not_computable` outcomes. Missing data must never be replaced by zero and a partial
-boundary must never be presented as a full economic value.
+V0 supports two explicitly different comparisons:
 
-## Candidate calculation families to freeze after extraction
+1. whole-culture bleed with no cell retention;
+2. side-stream filtration with filtrate returned to the loop.
 
-The names below define the required semantic separation. Exact equations remain
-blocked until the source extraction table is complete.
+For side-stream filtration, `harvest_recovery` is the single-pass biomass capture
+fraction. The side stream is sized so captured biomass equals imposed daily biomass
+production. Uncaptured biomass is returned with filtrate and is not called a product
+loss.
 
-### A. Volume, biomass, and productivity
+The following identity is mandatory:
 
-Required candidate outputs:
+```text
+side_stream_biomass_feed
+= recovered_biomass + returned_uncaptured_biomass
+```
+
+A discard-filtrate or purge-loss model is not supported in 048 and requires a later
+mass-balance contract.
+
+### Energy and economic boundary
+
+048 represents only electricity used by the bound 047 pump power. Its exact economic
+boundary is:
+
+```text
+economic_boundary = pump_electricity_only
+```
+
+Excluded categories are:
+
+- nutrient and carbon-source purchase;
+- CO2/air supply and gas handling;
+- filtration/harvesting power and consumables;
+- controls and sensors;
+- cleaning and fouling management;
+- thermal management;
+- labor, maintenance, logistics, leases, waste, and water;
+- CAPEX, financing, depreciation, tax, and revenue quality adjustments.
+
+`variable_opex_rate` and `specific_variable_cost` are therefore valid only under the
+named partial boundary. They must never be labelled total OPEX or total production
+cost.
+
+`gross_margin_proxy` is emitted only when `product_price` is supplied. Otherwise the
+biological/harvest calculation succeeds, the numeric KPI is absent, and diagnostics
+report `not_computable:missing_product_price`. Missing price is never replaced by zero.
+
+## Exact input contract
+
+The value-free 071 contract contains the following variables. Required variables count
+toward forward input DOF; `product_price` is optional.
+
+| Name | Unit | Required | Category | Domain / meaning |
+| --- | --- | --- | --- | --- |
+| `productive_liquid_volume` | `m3` | yes | design | `> 0`; explicit biologically productive liquid volume |
+| `operating_biomass_concentration` | `gDW/L` | yes | operating | `> 0` |
+| `volumetric_productivity` | `gDW/L/d` | yes | model_parameter | `> 0`; imposed M0 productivity |
+| `maximum_specific_growth_rate` | `1/d` | yes | model_parameter | `> 0`; screening reference only |
+| `operating_days_per_year` | `d/y` | yes | operating | `> 0` and `<= 366` |
+| `feed_events_per_day` | `1/d` | yes | operating | `> 0` |
+| `biomass_nitrogen_fraction` | `gN/gDW` | yes | property | `>= 0` and `<= 1` |
+| `biomass_phosphorus_fraction` | `gP/gDW` | yes | property | `>= 0` and `<= 1` |
+| `biomass_carbon_fraction` | `gC/gDW` | yes | property | `> 0` and `<= 1` |
+| `nitrogen_stock_concentration` | `mgN/mL` | yes | operating | `> 0` |
+| `phosphorus_stock_concentration` | `mgP/mL` | yes | operating | `> 0` |
+| `carbon_stock_concentration` | `mgC/mL` | yes | operating | `> 0` |
+| `co2_specific_gas_rate` | `mLCO2/L/min` | yes | operating | `>= 0`; instantaneous benchmark |
+| `harvest_recovery` | `1` | yes | equipment | `> 0` and `<= 1`; capture fraction |
+| `concentrate_biomass_concentration` | `gDW/L` | yes | equipment | `> 0`; script also requires it to exceed culture concentration |
+| `filtration_flux` | `L/m2/h` | yes | equipment | `> 0` |
+| `filtration_operating_hours_per_day` | `h/d` | yes | operating | `> 0` and `<= 24` |
+| `pump_electric_power` | `W` | yes | equipment | `>= 0`; caller may bind 047 output |
+| `circulation_operating_hours_per_day` | `h/d` | yes | operating | `> 0` and `<= 24` |
+| `electricity_price` | `EUR/kWh` | yes | model_parameter | `>= 0` |
+| `product_price` | `EUR/kgDW` | no | model_parameter | `>= 0`; optional margin proxy |
+
+V0 performs no unit conversion. Equivalent unit strings are rejected.
+
+The script accepts exactly all required names and at most the optional
+`product_price`. Unknown names, absent required names, unknown keys inside an input
+item, booleans, non-finite values, wrong units, and domain violations fail closed.
+
+## Constants and derived quantities
+
+Use SI-compatible arithmetic internally while preserving the exact units above.
+
+```text
+V_L = productive_liquid_volume * 1000
+```
+
+Frozen workbook screening conversion factors:
+
+```text
+NaNO3_per_N = 6.07 mg NaNO3 / mg N
+NaH2PO4_H2O_per_P = 4.46 mg salt / mg P
+NaHCO3_per_C = 6.99 mg NaHCO3 / mg C
+O2_molar_volume_STP = 22.414 L/mol
+```
+
+The three salt factors are intentionally the rounded factors stored in the workbook
+data sheet. Diagnostics must identify them as rounded screening constants. A later
+precision amendment may replace them, but implementation must not silently mix exact
+molar-mass ratios with the regression baseline.
+
+## Calculation contract
+
+### 1. Biomass inventory and production
+
+```text
+biomass_inventory = V_L * X / 1000
+biomass_production_g_d = V_L * P_vol
+biomass_production_kg_d = biomass_production_g_d / 1000
+annual_biomass_equivalent = biomass_production_kg_d * operating_days_per_year
+D_eq = P_vol / X
+D_eq_over_mu_max = D_eq / mu_max
+```
+
+Outputs:
 
 - `biological_productive_volume`, `m3`;
 - `biomass_inventory`, `kgDW`;
 - `gross_biomass_production_rate`, `kgDW/d`;
-- `specific_productivity_check`, `1/d`, only when its denominator is defined;
-- `productive_volume_basis_code`, diagnostic metadata.
+- `annual_biomass_equivalent`, `kgDW/y`;
+- `equivalent_dilution_rate`, `1/d`;
+- `equivalent_dilution_to_mu_max`, `1`.
 
-The final spec must reconcile `P_vol`, `mu_max`, and `X_set` without implying that a
-volumetric-productivity fixture is mechanistically derived from `mu_max` unless the
-workbook formula and biological assumptions explicitly do so.
+`annual_biomass_equivalent` is an annualized equivalent, not a production guarantee.
 
-### B. Nutrient and carbon demand
+### 2. Nutrient and carbon incorporation
 
-Required semantic families:
+```text
+N_demand = biomass_production_g_d * gN_gDW * 1000
+P_demand = biomass_production_g_d * gP_gDW * 1000
+C_demand = biomass_production_g_d * gC_gDW * 1000
 
-- stoichiometric biomass-incorporation demand for N, P, and C;
-- residual-inventory or residual-replacement requirement, if and only if the final
-  mass-balance boundary defines feed/makeup concentration and replacement volume;
-- total declared addition rate;
-- stock-solution dosing volume per day and per feed event;
-- omitted or uncharacterized losses as diagnostics, never hidden factors.
+NaNO3_dose = N_demand * 6.07
+NaH2PO4_H2O_dose = P_demand * 4.46
+NaHCO3_equivalent_dose = C_demand * 6.99
 
-A residual target alone is not a nutrient-consumption model. The final formula must
-state whether incoming makeup contains nutrients, whether the residual inventory is
-already established, and whether the calculation is initial charge, replacement,
-or daily metabolic demand.
+N_stock_volume = N_demand / stock_N
+P_stock_volume = P_demand / stock_P
+C_stock_volume = C_demand / stock_C
 
-### C. Gas and degassing proxies
+stock_volume_per_event = stock_volume_per_day / feed_events_per_day
+```
 
-At least three different quantities must remain separate:
+Outputs:
 
-- stoichiometric carbon demand;
-- nominal gas-dose flow derived from `CO2_spec_mL_L_min` and an explicit liquid-volume
-  basis;
-- any degasser area or capacity proxy derived from a declared gas volumetric flow and
-  `degasser_gas_velocity_m_s`.
+- `nitrogen_incorporation_demand`, `mgN/d`;
+- `phosphorus_incorporation_demand`, `mgP/d`;
+- `carbon_incorporation_demand`, `mgC/d`;
+- `sodium_nitrate_equivalent_dose`, `mg/d`;
+- `sodium_dihydrogen_phosphate_monohydrate_equivalent_dose`, `mg/d`;
+- `sodium_bicarbonate_equivalent_dose`, `mg/d`;
+- `nitrogen_stock_volume_rate`, `mL/d`;
+- `phosphorus_stock_volume_rate`, `mL/d`;
+- `carbon_stock_volume_rate`, `mL/d`;
+- corresponding three `*_stock_volume_per_event`, `mL/event`.
 
-No gas-transfer efficiency, CO2 utilization, oxygen-production rate, kLa, mass-transfer
-coefficient, compressor/blower duty, or degassing performance may be inferred without
-an explicit input or reviewed correlation.
+These are demanded element and equivalent-stock quantities. They are not proof of
+solubility, sterility, bioavailability, precipitation safety, or pH compatibility.
 
-`DO_target_pct` and `DO_alarm_pct` are operating references. They are not sufficient
-to calculate oxygen mass transfer or degasser duty.
+### 3. Carbon, oxygen, and gas-rate proxies
 
-### D. Harvest and filtration
+```text
+CO2_equivalent_g_d = C_demand * (44 / 12) / 1000
+O2_equivalent_g_d = C_demand * (32 / 12) / 1000
+O2_volume_STP_L_d = (O2_equivalent_g_d / 32) * 22.414
+CO2_gas_rate_benchmark = V_L * co2_specific_gas_rate
+```
 
-Required candidate outputs:
+Outputs:
 
-- `harvest_broth_volume_rate`, `L/d`;
-- `gross_harvested_biomass_rate`, `kgDW/d`;
+- `co2_uptake_equivalent`, `gCO2/d`;
+- `oxygen_production_equivalent`, `gO2/d`;
+- `oxygen_volume_stp_equivalent`, `L O2/d`;
+- `co2_gas_rate_benchmark`, `mLCO2/min`.
+
+The O2 relationship is a screening stoichiometric equivalent and not a measured net
+photosynthetic oxygen rate.
+
+### 4. Whole-culture bleed comparison
+
+```text
+whole_culture_bleed = biomass_production_g_d / X
+whole_culture_bleed_per_event = whole_culture_bleed / feed_events_per_day
+whole_culture_dilution = whole_culture_bleed / V_L
+```
+
+Outputs:
+
+- `whole_culture_bleed_rate`, `L/d`;
+- `whole_culture_bleed_per_event`, `L/event`;
+- `whole_culture_dilution_equivalent`, `1/d`.
+
+This is the no-cell-retention comparison. It is not the side-stream filtrate-return
+liquid loss.
+
+### 5. Side-stream capture with filtrate return
+
+```text
+side_stream_processed = biomass_production_g_d / (X * harvest_recovery)
+side_stream_processed_per_event = side_stream_processed / feed_events_per_day
+side_stream_biomass_feed = side_stream_processed * X / 1000
+recovered_biomass = biomass_production_kg_d
+returned_uncaptured_biomass = side_stream_biomass_feed - recovered_biomass
+concentrate_volume = recovered_biomass * 1000 / X_concentrate
+filter_area = side_stream_processed / (filtration_hours_per_day * filtration_flux)
+```
+
+Outputs:
+
+- `side_stream_processed_rate`, `L/d`;
+- `side_stream_processed_per_event`, `L/event`;
+- `side_stream_biomass_feed_rate`, `kgDW/d`;
 - `recovered_biomass_rate`, `kgDW/d`;
-- `unrecovered_biomass_loss_rate`, `kgDW/d`;
+- `returned_uncaptured_biomass_rate`, `kgDW/d`;
 - `concentrate_volume_rate`, `L/d`;
-- `required_filter_area`, `m2`, only with an explicit filtration-time basis;
-- `harvest_events_per_day` and `harvest_volume_per_event` when event semantics are
-  included.
+- `required_filter_area`, `m2`.
 
-`filter_flux_LMH` cannot produce area from a daily volume without an explicit number
-of filtration operating hours per day or per event. Using 24 hours or one event as a
-silent default is forbidden.
+Required identities, evaluated with deterministic tolerance:
 
-### E. Energy and operating-cost boundary
+```text
+side_stream_biomass_feed
+= recovered_biomass + returned_uncaptured_biomass
 
-Required energy separation:
+recovered_biomass = gross_biomass_production_rate
+```
 
-- `pump_electric_energy_rate`, such as `kWh/d`, with explicit circulation hours;
-- separately declared gas, harvest, controls, cleaning, thermal, or other loads;
-- `known_electric_energy_rate`, the sum of represented loads;
-- `total_electric_energy_rate` only when the declared completeness gate is satisfied;
-- annualized values only from an explicit operating-days basis.
+`concentrate_volume` must not divide by `harvest_recovery` again.
 
-Required `preliminary_economic_evaluation_v0` family:
+### 6. Pump electricity
 
-- `variable_opex_rate`;
-- `specific_variable_cost`;
-- `gross_margin_proxy`.
+```text
+pump_energy_daily = pump_electric_power * circulation_hours_per_day / 1000
+pump_energy_annual = pump_energy_daily * operating_days_per_year
+specific_pump_energy = pump_energy_daily / recovered_biomass
+```
 
-Each member has a parallel machine-readable status:
+Outputs:
 
-- `computable`;
-- `not_computable` with bounded missing-input and boundary reason codes.
+- `pump_electric_energy_rate`, `kWh/d`;
+- `annual_pump_electric_energy`, `kWh/y`;
+- `specific_pump_energy`, `kWh/kgDW`.
 
-When computable:
+### 7. Preliminary economic evaluation
 
-- `variable_opex_rate` sums only named included variable-cost categories;
-- `specific_variable_cost` divides the compatible-time-basis variable OPEX by
-  recovered biomass, not gross production or reactor inventory;
-- `gross_margin_proxy` uses recovered biomass, an explicit product-price input, and
-  a compatible time basis, then subtracts the same declared variable-OPEX boundary.
+```text
+variable_opex_daily = pump_energy_daily * electricity_price
+variable_opex_annual = variable_opex_daily * operating_days_per_year
+specific_variable_cost = variable_opex_daily / recovered_biomass
+```
 
-The numeric `outputs` object remains compatible with the existing 043 requirement
-that outputs are finite numbers with units. A non-computable KPI is omitted from
-numeric outputs and represented explicitly in bounded diagnostics; it is never
-emitted as zero, NaN, infinity, or a partial number under the full KPI name.
+Outputs always present under the partial boundary:
 
-Required diagnostic metadata includes:
+- `variable_opex_rate`, `EUR/d`;
+- `annual_variable_opex`, `EUR/y`;
+- `specific_variable_cost`, `EUR/kgDW`.
 
+When `product_price` is supplied:
+
+```text
+gross_margin_proxy = recovered_biomass * product_price - variable_opex_daily
+annual_gross_margin_proxy = gross_margin_proxy * operating_days_per_year
+```
+
+Additional outputs:
+
+- `gross_margin_proxy`, `EUR/d`;
+- `annual_gross_margin_proxy`, `EUR/y`.
+
+When `product_price` is absent, these two numeric outputs are absent and diagnostics
+contain:
+
+```json
+{
+  "gross_margin_proxy": {
+    "status": "not_computable",
+    "reason": "missing_product_price"
+  }
+}
+```
+
+## Successful result and diagnostics
+
+Every numeric output is finite and has the exact non-empty unit declared above.
+
+Required diagnostics include:
+
+- `model_id = "bluerev_biomass_nutrients_harvest_v0"`;
+- `model_fidelity = "M0_static_screening"`;
+- `species_basis = "Nannochloropsis_gaditana_screening"`;
+- `productivity_is_imposed_input = true`;
+- `productive_volume_basis = "caller_asserted_explicit_volume"`;
+- `nutrient_boundary = "biomass_incorporation_only"`;
+- `residual_nutrient_targets_not_modeled = true`;
+- `gas_rate_semantics = "instantaneous_pH_control_benchmark"`;
+- `gas_transfer_not_evaluated = true`;
+- `harvest_mode = "side_stream_capture_with_filtrate_return"`;
+- `harvest_recovery_application_count = 1`;
+- `filtrate_discard_not_modeled = true`;
 - `economic_model_id = "preliminary_economic_evaluation_v0"`;
-- `economic_boundary` listing included, excluded, and missing categories;
-- `economic_basis` naming the time and product-mass basis;
-- per-KPI status and missing-input reason codes;
+- `economic_boundary = "pump_electricity_only"`;
+- `economic_basis = "daily_recovered_dry_biomass"`;
+- `included_variable_cost_categories = ["pump_electricity"]`;
+- bounded excluded and missing cost-category lists;
+- per-KPI status for the three economic KPI families;
 - `full_tea = false`;
-- `capex_included = false` unless a later reviewed amendment says otherwise;
-- `workbook_runtime_dependency = false`.
+- `capex_included = false`;
+- `workbook_runtime_dependency = false`;
+- rounded salt-conversion-factor metadata.
 
-## Provenance and uncertainty blocker
+### Per-input provenance and uncertainty evidence
 
-Current 043 `calc_v0` items preserve numeric `value`, exact `unit`, and optional
-`source_parameter_id`. That is sufficient for basic provenance but not for an
-immutable per-run snapshot of uncertainty metadata.
+For every contract variable, diagnostics contain one bounded entry with:
 
-048 must not claim per-input uncertainty support merely because a source parameter ID
-exists. Before promotion to `ready`, the definition must select and test one bounded
-mechanism that snapshots, for every decision-relevant input:
+- `binding_state = "parameter"`, `"manual"`, or `"missing_optional"`;
+- `source_parameter_id` only when the caller supplied a verified parameter binding;
+- `uncertainty_state = "not_characterized"`.
 
-- uncertainty kind;
-- lower/upper bound or equivalent bounded representation;
-- confidence or evidence-quality state where available;
-- source record identity;
-- explicit `not_characterized` when uncertainty is missing.
-
-Recommended direction: a minimal additive, generic input-metadata snapshot associated
-with the immutable simulation-run input, populated by the existing binding service
-from current Parameter records. The calculation script should receive only the
-numeric values it needs; uncertainty metadata should remain inspectable evidence and
-must not silently alter equations. This recommendation requires a separately reviewed
-contract amendment if it changes 043/071 storage or API semantics.
-
-Companion numeric pseudo-inputs for every uncertainty field are not recommended: they
-inflate the engineering DOF count and confuse model variables with evidence metadata.
-
-## Exact formula-extraction gate
-
-Before this definition can become a full implementation-ready spec, add one row for
-every workbook rank 8–18 calculation:
-
-| Rank / output | Source sheet and cell | Original Excel formula | Referenced input IDs | Original unit | Corrected equation | Corrected unit | Validity domain | Verification case | Correction rationale |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-
-The completed table must establish at least:
-
-1. which 047 volume output, explicit volume, or active fraction defines productive
-   volume;
-2. biomass inventory and production equations;
-3. N/P/C demand, residual, stock-dose, and event-basis equations;
-4. carbon-demand versus gas-dose semantics;
-5. harvest, recovery, concentrate, and filter-area balances;
-6. operating hours and annualization bases;
-7. every included energy load and the completeness rule;
-8. every economic price/cost input and the exact `not_computable` conditions;
-9. independent numerical golden cases and failure cases;
-10. every intentional difference from workbook output.
-
-A screenshot, cached value, dashboard label, or apparent numerical agreement is not a
-formula contract.
-
-## Required additional inputs to resolve
-
-The final extraction may rename or remove these, but it must explicitly resolve the
-underlying information gaps rather than assume values:
-
-- productive-volume basis and, when used, active-volume fraction;
-- circulation operating hours per day;
-- filtration operating hours per day or per event;
-- makeup/feed N and P concentrations when residual replacement is calculated;
-- carbon-source identity and carbon-to-delivered-CO2 or carbon-source conversion;
-- gas composition, standard-state basis, and utilization fraction when a gas mass
-  balance is claimed;
-- gas-handling power or specific energy if gas electricity is included;
-- filtration/harvest power, specific energy, or consumable cost if included;
-- nutrient and carbon-source prices if included in variable OPEX;
-- product price and saleable-product basis for gross margin;
-- any cleaning, thermal, controls, or other variable loads included in a total;
-- uncertainty and provenance snapshot fields for every decision-relevant input.
-
-Missing entries remain missing and drive explicit non-computable statuses.
+048 does not fabricate uncertainty intervals and does not change numerical equations
+based on uncertainty metadata. The immutable simulation-run input payload and result
+diagnostics preserve the evidence available in V0. A later generic uncertainty
+snapshot may extend this boundary without changing 048 equations.
 
 ## Validation and failure semantics
 
-The final implementation must retain the existing 043 envelope and use bounded script
-diagnostics without adding runner error codes merely for 048.
+The existing 043 envelope remains authoritative. Script-specific failures use one
+bounded stderr message:
 
-Required stable script reasons must include at least:
+```text
+bluerev_calc_error:<stable_reason>[:<field_name>]
+```
+
+Required stable reasons:
 
 - `input_contract_invalid`;
 - `input_unit_invalid`;
 - `input_domain_invalid`;
 - `productive_volume_basis_invalid`;
+- `harvest_concentration_invalid`;
 - `mass_balance_invalid`;
-- `time_basis_missing`;
-- `economic_basis_incompatible`;
-- `correlation_not_qualified`.
+- `time_basis_invalid`.
 
-Invalid physical inputs fail the run. Missing optional economic inputs do not fail an
-otherwise valid biological/harvest run; they produce explicit economic
-`not_computable` diagnostics.
+Failures exit non-zero, produce no successful result artifact, and create zero
+parameter proposals. These are script diagnostics, not new runner error codes.
 
-## Required verification before implementation merge
+Missing optional `product_price` is not a run failure.
 
-### Source and equation evidence
+## Corrected workbook regression fixture
 
-1. Every rank 8–18 formula is source-located and restated independently of the
-   workbook runtime.
-2. Every corrected formula has a dimensional derivation and one independent numerical
-   calculation.
-3. Workbook values are fixtures only and are never product defaults.
+The fixture below is evidence only:
 
-### Mass-balance tests
+| Input | Value | Unit |
+| --- | ---: | --- |
+| `productive_liquid_volume` | 0.019137166941154067 | `m3` |
+| `operating_biomass_concentration` | 0.8 | `gDW/L` |
+| `volumetric_productivity` | 0.15 | `gDW/L/d` |
+| `maximum_specific_growth_rate` | 0.4 | `1/d` |
+| `operating_days_per_year` | 300 | `d/y` |
+| `feed_events_per_day` | 1 | `1/d` |
+| `biomass_nitrogen_fraction` | 0.06 | `gN/gDW` |
+| `biomass_phosphorus_fraction` | 0.008 | `gP/gDW` |
+| `biomass_carbon_fraction` | 0.5 | `gC/gDW` |
+| `nitrogen_stock_concentration` | 20 | `mgN/mL` |
+| `phosphorus_stock_concentration` | 2 | `mgP/mL` |
+| `carbon_stock_concentration` | 20 | `mgC/mL` |
+| `co2_specific_gas_rate` | 0.8 | `mLCO2/L/min` |
+| `harvest_recovery` | 0.9 | `1` |
+| `concentrate_biomass_concentration` | 20 | `gDW/L` |
+| `filtration_flux` | 24.7 | `L/m2/h` |
+| `filtration_operating_hours_per_day` | 24 | `h/d` |
+| `pump_electric_power` | 0.5024804066626467 | `W` |
+| `circulation_operating_hours_per_day` | 24 | `h/d` |
+| `electricity_price` | 0.25 | `EUR/kWh` |
+| `product_price` | omitted | `EUR/kgDW` |
 
-4. Productive volume changes biomass inventory and production linearly and changes no
-   unrelated geometry output.
-5. Gross harvested biomass closes against production under the declared steady-state
-   boundary.
-6. Recovered plus unrecovered biomass equals gross harvested biomass.
-7. Changing `harvest_recovery` changes recovered/lost product but not reactor broth
-   withdrawal under the default balance semantics.
-8. Concentrate volume reconciles recovered biomass and concentrate concentration.
-9. Filter area scales with harvest volume and inversely with flux and declared
-   filtration hours.
+Expected values include:
 
-### Nutrient and gas tests
+| Output | Expected value | Unit |
+| --- | ---: | --- |
+| `biomass_inventory` | 0.015309733552923255 | `kgDW` |
+| `gross_biomass_production_rate` | 0.00287057504117311 | `kgDW/d` |
+| `annual_biomass_equivalent` | 0.8611725123519329 | `kgDW/y` |
+| `equivalent_dilution_rate` | 0.1875 | `1/d` |
+| `equivalent_dilution_to_mu_max` | 0.46875 | `1` |
+| `nitrogen_incorporation_demand` | 172.2345024703866 | `mgN/d` |
+| `phosphorus_incorporation_demand` | 22.96460032938488 | `mgP/d` |
+| `carbon_incorporation_demand` | 1435.287520586555 | `mgC/d` |
+| `sodium_nitrate_equivalent_dose` | 1045.4634299952465 | `mg/d` |
+| `sodium_dihydrogen_phosphate_monohydrate_equivalent_dose` | 102.42211746905656 | `mg/d` |
+| `sodium_bicarbonate_equivalent_dose` | 10032.659768900021 | `mg/d` |
+| `nitrogen_stock_volume_rate` | 8.61172512351933 | `mL/d` |
+| `phosphorus_stock_volume_rate` | 11.48230016469244 | `mL/d` |
+| `carbon_stock_volume_rate` | 71.76437602932775 | `mL/d` |
+| `co2_uptake_equivalent` | 5.262720908817368 | `gCO2/d` |
+| `oxygen_production_equivalent` | 3.8274333882308134 | `gO2/d` |
+| `oxygen_volume_stp_equivalent` | 2.6808778738689205 | `L O2/d` |
+| `co2_gas_rate_benchmark` | 15.309733552923255 | `mLCO2/min` |
+| `whole_culture_bleed_rate` | 3.5882188014663874 | `L/d` |
+| `side_stream_processed_rate` | 3.9869097794070965 | `L/d` |
+| `side_stream_biomass_feed_rate` | 0.0031895278235256775 | `kgDW/d` |
+| `recovered_biomass_rate` | 0.00287057504117311 | `kgDW/d` |
+| `returned_uncaptured_biomass_rate` | 0.00031895278235256766 | `kgDW/d` |
+| `concentrate_volume_rate` | 0.1435287520586555 | `L/d` |
+| `required_filter_area` | 0.006725556308041661 | `m2` |
+| `pump_electric_energy_rate` | 0.012059529759903521 | `kWh/d` |
+| `annual_pump_electric_energy` | 3.6178589279710565 | `kWh/y` |
+| `specific_pump_energy` | 4.201085004548492 | `kWh/kgDW` |
+| `variable_opex_rate` | 0.0030148824399758804 | `EUR/d` |
+| `annual_variable_opex` | 0.9044647319927641 | `EUR/y` |
+| `specific_variable_cost` | 1.050271251137123 | `EUR/kgDW` |
 
-10. N/P/C stoichiometric demand scales with biomass production and composition factors.
-11. Stock dosing reconciles mass and stock concentration with exact unit conversion.
-12. Residual-target additions are excluded or explicitly balanced; no residual target
-    is treated as metabolic consumption.
-13. Carbon demand, gas-dose proxy, and degasser proxy remain separately named and
-    independently testable.
+The workbook concentrate result near `0.159476 L/d` is intentionally superseded by
+`0.143529 L/d` because recovery is not applied twice. The fixture has no product price,
+so no numeric margin output is expected.
+
+## Required verification
+
+### Contract and registration
+
+1. The value-free input contract is canonical and digest-stable.
+2. It contains exactly 20 required variables and one optional variable.
+3. It embeds no value, default, recommendation, or fixture.
+4. The bundled registration path creates or reuses the reviewed implementation
+   idempotently and the 071 panel can select it.
+5. Empty bindings report `20/0/20`; all required valid bindings report `20/20/0`.
+6. Missing optional product price does not prevent preview state `ready`.
+
+### Formula and dimensional tests
+
+7. An independent calculation reproduces the corrected golden case.
+8. Every output has the exact declared unit and finite numeric value.
+9. Same normalized inputs produce byte-identical result JSON.
+10. Productive volume scales inventory, production, nutrient demand, harvest, energy
+    intensity denominator, and gas-rate benchmark as specified.
+11. `maximum_specific_growth_rate` changes only the screening ratio.
+12. Salt and stock-volume calculations reconcile mass and concentration.
+
+### Harvest balance tests
+
+13. Recovery = 1 makes side-stream processed equal whole-culture bleed and returned
+    uncaptured biomass equal zero.
+14. Lower recovery increases side-stream and filter area but does not change recovered
+    biomass, whole-culture bleed comparison, or concentrate volume.
+15. Side-stream feed equals recovered plus returned biomass at recovery < 1.
+16. Concentrate volume equals recovered biomass divided by concentrate concentration
+    and never divides by recovery twice.
+17. Concentrate concentration at or below culture concentration fails deterministically.
+18. Filter area scales inversely with filtration flux and filtration hours.
+19. Event outputs scale inversely with event frequency without changing daily totals.
+
+### Gas and inactive-input tests
+
+20. Carbon demand, CO2 equivalent, O2 equivalent, and gas-rate benchmark remain
+    separately named and independently scalable.
+21. No kLa, gas utilization, degasser area, DO control, or blower-power output exists.
+22. Residual N/P targets, pH, temperature, salinity, light/fouling, and validation-only
+    workbook inputs are absent from the active contract.
 
 ### Energy and economics tests
 
-14. Pump energy reconciles 047 pump power and the explicit operating-time basis.
-15. Omitting an auxiliary load prevents a complete-total claim when that load is inside
-    the selected economic boundary.
-16. Missing product price, recovery, or compatible time basis yields
-    `gross_margin_proxy = not_computable`, never zero or a partial numeric output.
-17. `specific_variable_cost` uses recovered saleable biomass and the identical time
-    basis as variable OPEX.
-18. Capital-cost fixtures do not enter variable OPEX.
-19. Annualization uses explicit operating days and preserves daily/annual
-    reconciliation.
+23. Pump energy reconciles bound 047 pump power and circulation hours.
+24. Specific pump energy and specific variable cost use recovered dry biomass on the
+    same daily basis.
+25. Product price absent yields explicit margin `not_computable` diagnostics and no
+    numeric zero/partial margin output.
+26. Product price present yields daily and annual gross-margin proxies with exact
+    time-basis reconciliation.
+27. Capital-cost workbook fixtures never enter variable OPEX.
+28. Diagnostics expose included, excluded, and missing economic categories and never
+    claim full TEA or total economic cost.
 
-### Provenance and determinism tests
+### Authority and failure tests
 
-20. Every input preserves exact unit and source identity when supplied.
-21. Every input has an immutable uncertainty snapshot or explicit
-    `not_characterized` evidence under the selected metadata contract.
-22. Same inputs and metadata produce byte-identical canonical result JSON.
-23. Failed runs produce no successful result artifact or parameter proposals.
-24. Successful numeric outputs create proposed records only; nothing is promoted
-    automatically.
+29. Manual bindings carry no fabricated source parameter ID.
+30. Parameter-backed bindings preserve their verified source IDs.
+31. Every input has explicit `uncertainty_state = "not_characterized"` in V0.
+32. Two binding sets create distinct immutable simulation runs.
+33. Successful outputs create proposed records only; nothing is promoted automatically.
+34. Wrong units, non-finite values, absent required inputs, invalid domains, impossible
+    concentration order, and unknown fields fail with bounded reasons.
+35. Failed runs produce no successful result artifact or parameter proposals.
+36. Tests run offline and make no provider, network, Ollama, workbook, or external-tool
+    call.
 
-## Files likely touched by the future implementation
+## Files expected in implementation
 
-Verify against current master after this definition is promoted to `ready`:
+Verify against current master before starting:
 
-- one reviewed script under `backend/app/modules/runner/examples/`;
-- one value-free 071 input contract artifact;
-- focused calculation and runner integration tests;
-- the smallest approved uncertainty/provenance snapshot surface if the promotion
-  blocker requires it;
+- `backend/app/modules/runner/examples/bluerev_biomass_nutrients_harvest_v0.py`;
+- one adjacent value-free contract JSON;
+- focused script and real-runner integration tests;
+- the smallest extension of the existing bundled-model registration service needed to
+  register this second reviewed BlueRev model;
 - `docs/specs/STATUS.md` for normal implementation lifecycle;
-- this document for final source table and implementation notes.
+- this file only for implementation notes if concrete compatibility findings require it.
 
-Do not modify the 047 formulas, 071 DOF semantics, MemoryStore promotion authority,
-or general runner policy to make 048 easier.
+No frontend change is expected: 071 renders contracts generically.
+
+Do not modify 047 equations, 071 DOF semantics, MemoryStore promotion authority, or
+general runner policy merely to implement 048.
 
 ## Non-goals
 
-This slice does not provide:
+048 does not provide:
 
-- dynamic growth, acclimation, inhibition, contamination, or population models;
-- validated oxygen or CO2 mass-transfer, kLa, CFD, or gas-equilibrium models;
-- filter selection, fouling, cleaning-cycle, or membrane-life prediction;
-- complete electrical design, controls design, thermal model, or maintenance model;
-- CAPEX, depreciation, financing, tax, labor, logistics, land/sea lease, or full TEA;
-- automatic uncertainty propagation, Monte Carlo analysis, sensitivity execution, or
-  optimization;
-- automatic promotion of inputs, outputs, or design decisions;
+- dynamic growth, acclimation, limitation, inhibition, contamination, or population
+  models;
+- residual-nutrient control or a complete liquid/material balance;
+- carbonate equilibrium, alkalinity, pH, DIC, kLa, gas utilization, or DO dynamics;
+- validated oxygen production or degassing performance;
+- filter selection, fouling, cleaning-cycle, membrane-life, or discard-filtrate models;
+- gas, harvesting, cleaning, control, thermal, labor, maintenance, or logistics cost;
+- CAPEX, depreciation, financing, tax, LCA, or full TEA;
+- automatic uncertainty propagation, Monte Carlo, sensitivity execution, optimization,
+  inverse solving, or target selection;
+- automatic promotion or automatic design selection;
 - hidden defaults, silent zero substitution, or workbook execution.
-
-## Promotion blockers
-
-048 remains `planned` until all of the following are complete:
-
-1. the exact workbook ranks 8–18 extraction table is filled;
-2. productive-volume basis is selected and justified;
-3. recovery/harvest balance is independently verified;
-4. missing time, energy, price, and consumable inputs are resolved or explicitly
-   classified as non-computable;
-5. the uncertainty/provenance snapshot contract is accepted through the normal spec
-   process;
-6. complete input, output, diagnostic, validity, golden-case, and failure contracts
-   are frozen;
-7. the registry is deliberately promoted to `ready` in a separate maintainer-approved
-   change.
