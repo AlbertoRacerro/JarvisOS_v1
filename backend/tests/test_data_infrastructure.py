@@ -46,7 +46,7 @@ def test_schema_migration_table_records_baseline_and_current_version(client: Tes
     from app.core.schema import (
         CURRENT_SCHEMA_MIGRATION_ID,
         SCHEMA_BASELINE_MIGRATION_ID,
-        SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID,
+        SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_ID,
     )
     from app.core.token_flow_schema import TOKEN_FLOW_SCHEMA_MIGRATION_ID
 
@@ -56,7 +56,7 @@ def test_schema_migration_table_records_baseline_and_current_version(client: Tes
         ).fetchall()
 
     migrations = {row["migration_id"]: dict(row) for row in rows}
-    assert CURRENT_SCHEMA_MIGRATION_ID == SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID
+    assert CURRENT_SCHEMA_MIGRATION_ID == SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_ID
     assert SCHEMA_BASELINE_MIGRATION_ID in migrations
     assert EGRESS_SCHEMA_MIGRATION_ID in migrations
     assert TOKEN_FLOW_SCHEMA_MIGRATION_ID in migrations
