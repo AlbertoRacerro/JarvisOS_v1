@@ -40,6 +40,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
+      - name: Normalize canonical import order
+        working-directory: backend
+        run: |
+          python -m ruff check --fix \
+            app/modules/ai/egress_confirmation_core.py \
+            app/modules/ai/token_flow_confirmed_length.py \
+            tests/test_token_flow_confirmed_length_resume.py
       - name: Validate confirmed length loop
         id: validate
         working-directory: backend
@@ -74,6 +81,10 @@ jobs:
       - name: Commit reviewed source only
         if: steps.validate.outputs.status == '0'
         run: |
+          git add \
+            backend/app/modules/ai/egress_confirmation_core.py \
+            backend/app/modules/ai/token_flow_confirmed_length.py \
+            backend/tests/test_token_flow_confirmed_length_resume.py
           git rm \
             .github/workflows/apply-confirmed-length-loop.yml \
             .github/workflows/export-confirmed-length-source.yml \
