@@ -1,0 +1,267 @@
+diff --git a/backend/app/modules/ai/egress_runtime.py b/backend/app/modules/ai/egress_runtime.py
+index 0d4804f76ad24964cc99621e05622ece2e11b842..48a773dff6d3cc85dcbd57e40e537b5abe38bdd4 100644
+--- a/backend/app/modules/ai/egress_runtime.py
++++ b/backend/app/modules/ai/egress_runtime.py
+@@ -50,6 +50,7 @@ from app.modules.ai.provider_registry import (
+     load_default_provider_registry,
+ )
+ from app.modules.ai.settings import ensure_ai_settings, get_ai_settings
++from app.modules.ai.token_flow_continuation import ContinuationDecision
+ from app.modules.ai.token_flow_external_transaction import finalize_external_attempt
+ from app.modules.ai.token_flow_runtime import normalize_finish_reason, normalize_outcome_reason
+ from app.modules.ai.token_flow_service import create_flow, transition_flow_state
+@@ -168,12 +169,16 @@ def _terminalize_external_flow(flow_id: str, outcome: ExternalTaskOutcome) -> No
+         if outcome.status == "success" and outcome.response is not None
+         else None
+     )
+-    if outcome.status == "success" and finish_reason == "length":
+-        state = "partial_terminal"
+-        reason = "output_length_limit"
+-    elif outcome.status == "success":
++    if outcome.status == "success" and finish_reason == "stop":
+         state = "complete"
+         reason = "completed"
++    elif outcome.status == "success":
++        state = "partial_terminal"
++        reason = (
++            "output_length_limit"
++            if finish_reason == "length"
++            else f"finish_{finish_reason}"
++        )
+     else:
+         state = "failed_terminal"
+         failure_reason = outcome.egress_reason_code
+@@ -264,6 +269,46 @@ def run_external_task(
+         ):
+             prior_retryable_error_code = outcome.retryable_error_code
+             continue
++        finish_reason = (
++            normalize_finish_reason(
++                outcome.response.finish_reason,
++                failed=outcome.response.error is not None,
++            )
++            if outcome.status == "success" and outcome.response is not None
++            else None
++        )
++        if (
++            outcome.status == "success"
++            and outcome.response is not None
++            and bool(outcome.response.text)
++            and finish_reason == "length"
++        ):
++            if max_output_tokens is None:
++                raise EgressSpineStateError(
++                    "successful external attempt omitted output ceiling"
++                )
++            from app.modules.ai.token_flow_external_runtime import (
++                run_silent_allow_external_continuations,
++            )
++
++            return run_silent_allow_external_continuations(
++                initial_outcome=outcome,
++                original_prompt=user_prompt,
++                task_kind=task_kind,
++                selected_route_class=selected_route_class,
++                requested_route_class=requested_route_class,
++                context_blocks=context_blocks,
++                max_output_tokens=max_output_tokens,
++                adapters=adapters,
++                bindings=bindings,
++                workspace_id=workspace_id,
++                task_type_for=task_type_for,
++                task_prompt_for=prompt_builder,
++                binding=binding,
++                fallback_index=fallback_index,
++                registry=registry,
++                policy=policy,
++            )
+         _terminalize_external_flow(flow_id, outcome)
+         return outcome
+ 
+@@ -293,6 +338,8 @@ def _run_binding(
+     registry: ProviderRegistry,
+     policy: EgressPolicyConfig,
+     flow_id: str,
++    continuation_decision: ContinuationDecision | None = None,
++    continuation_expected_sensitivity_level: str | None = None,
+ ) -> ExternalTaskOutcome:
+     started_at = time.perf_counter()
+     raw_prompt_digest = sha256_text(user_prompt)
+@@ -303,6 +350,13 @@ def _run_binding(
+         binding=binding,
+         prior_retryable_error_code=prior_retryable_error_code,
+     )
++    if continuation_decision is not None:
++        route_metadata = {
++            **route_metadata,
++            "continuation_flow_id": flow_id,
++            "continuation_parent_attempt_id": continuation_decision.parent_attempt_id,
++            "continuation_index": continuation_decision.next_continuation_index,
++        }
+ 
+     try:
+         if not binding.requires_network:
+@@ -375,6 +429,7 @@ def _run_binding(
+             requested_output_ceiling=max_output_tokens,
+             registry=registry,
+             flow_id=flow_id,
++            continuation_decision=continuation_decision,
+         )
+ 
+     adapter = adapters.get(binding.provider_id)
+@@ -407,6 +462,7 @@ def _run_binding(
+             requested_output_ceiling=max_output_tokens,
+             registry=registry,
+             flow_id=flow_id,
++            continuation_decision=continuation_decision,
+         )
+ 
+     attempt_max = min(max_output_tokens, binding.max_output_tokens)
+@@ -414,26 +470,59 @@ def _run_binding(
+         (prompt.prompt_level or "S1", context.level),
+         key=_LEVEL_RANK.__getitem__,
+     )
+-    material = EgressPacketMaterial(
+-        operation=EXTERNAL_PROVIDER_OPERATION,
+-        task_kind=task_kind,
+-        route_class=selected_route_class,
+-        provider_id=binding.provider_id,
+-        model_id=binding.model_id,
+-        fallback_index=fallback_index,
+-        prompt=prompt.effective_prompt or "",
+-        context_blocks=context.blocks,
+-        prompt_level=prompt.prompt_level or "S1",
+-        context_level=context.level,
+-        final_level=final_level,
+-        max_output_tokens=attempt_max,
+-        workspace_id=workspace_id,
+-        prompt_derivative_id=prompt.prompt_derivative_id,
+-        included_manifest=context.included_manifest,
+-        withheld_manifest=context.withheld_manifest,
+-        budget_dropped_manifest=context.budget_dropped_manifest,
+-        source_digests=context.source_digests,
+-    )
++    if continuation_decision is None:
++        material = EgressPacketMaterial(
++            operation=EXTERNAL_PROVIDER_OPERATION,
++            task_kind=task_kind,
++            route_class=selected_route_class,
++            provider_id=binding.provider_id,
++            model_id=binding.model_id,
++            fallback_index=fallback_index,
++            prompt=prompt.effective_prompt or "",
++            context_blocks=context.blocks,
++            prompt_level=prompt.prompt_level or "S1",
++            context_level=context.level,
++            final_level=final_level,
++            max_output_tokens=attempt_max,
++            workspace_id=workspace_id,
++            prompt_derivative_id=prompt.prompt_derivative_id,
++            included_manifest=context.included_manifest,
++            withheld_manifest=context.withheld_manifest,
++            budget_dropped_manifest=context.budget_dropped_manifest,
++            source_digests=context.source_digests,
++        )
++    else:
++        if continuation_expected_sensitivity_level is None:
++            raise EgressSpineStateError(
++                "external continuation authority is incomplete"
++            )
++        from app.modules.ai.token_flow_external_continuation import (
++            build_external_continuation_packet,
++        )
++
++        continuation_packet = build_external_continuation_packet(
++            decision=continuation_decision,
++            route_class=selected_route_class,
++            task_kind=task_kind,
++            original_prompt=prompt.effective_prompt or "",
++            workspace_id=_flow_workspace_id(workspace_id),
++            prompt_level=prompt.prompt_level or "S1",
++            expected_sensitivity_level=continuation_expected_sensitivity_level,
++            requested_output_tokens=attempt_max,
++            fallback_index=fallback_index,
++            prompt_derivative_id=prompt.prompt_derivative_id,
++            context_blocks=context.blocks,
++            context_level=context.level,
++            included_manifest=context.included_manifest,
++            withheld_manifest=context.withheld_manifest,
++            budget_dropped_manifest=context.budget_dropped_manifest,
++            source_digests=context.source_digests,
++            bindings={selected_route_class: binding},
++            registry=registry,
++            policy=policy,
++        )
++        material = continuation_packet.material
++        ai_prompt_digest = canonical_digest({"prompt": material.prompt})
+     try:
+         preparation = prepare_egress_attempt(
+             material,
+@@ -469,6 +558,7 @@ def _run_binding(
+             requested_output_ceiling=max_output_tokens,
+             registry=registry,
+             flow_id=flow_id,
++            continuation_decision=continuation_decision,
+         )
+ 
+     route_metadata = {
+@@ -499,6 +589,7 @@ def _run_binding(
+             requested_output_ceiling=max_output_tokens,
+             effective_output_ceiling=attempt_max,
+             registry=registry,
++            continuation_decision=continuation_decision,
+         )
+         return _outcome(
+             status=status,
+@@ -574,6 +665,7 @@ def _run_binding(
+             outcome_reason="egress_start_failed",
+             reservation_id=_reconcilable_start_failure_reservation(reservation_id),
+             registry=registry,
++            continuation_decision=continuation_decision,
+         )
+         return _outcome(
+             status="config_error",
+@@ -612,6 +704,7 @@ def _run_binding(
+             outcome_reason=type(exc).__name__,
+             reservation_id=reservation_id,
+             registry=registry,
++            continuation_decision=continuation_decision,
+         )
+         return _outcome(
+             status="provider_error",
+@@ -667,6 +760,7 @@ def _run_binding(
+             outcome_reason=reason_code,
+             reservation_id=reservation_id,
+             registry=registry,
++            continuation_decision=continuation_decision,
+         )
+         return _outcome(
+             status="provider_error",
+@@ -702,6 +796,7 @@ def _run_binding(
+         outcome_reason=error_type or status,
+         reservation_id=reservation_id,
+         registry=registry,
++        continuation_decision=continuation_decision,
+     )
+     retryable = (
+         response.error.code.value
+@@ -865,6 +960,7 @@ def _persist_prepacket(
+     requested_output_ceiling: int | None,
+     registry: ProviderRegistry,
+     flow_id: str,
++    continuation_decision: ContinuationDecision | None = None,
+ ) -> ExternalTaskOutcome:
+     final_level = _prepacket_final_level(stop.prompt_level, stop.context_level)
+     recorded = record_prepacket_egress_decision(
+@@ -920,6 +1016,7 @@ def _persist_prepacket(
+         requested_output_ceiling=requested_output_ceiling,
+         effective_output_ceiling=None,
+         registry=registry,
++        continuation_decision=continuation_decision,
+     )
+     return _outcome(
+         status=status,
+@@ -962,6 +1059,7 @@ def _terminal_job(
+     requested_output_ceiling: int | None,
+     effective_output_ceiling: int | None,
+     r
