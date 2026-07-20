@@ -1,0 +1,47 @@
+name: Reconcile 050 merged once
+
+on:
+  pull_request:
+    types: [synchronize]
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    if: >-
+      github.repository == 'AlbertoRacerro/JarvisOS_v1' &&
+      github.event.pull_request.number == 157 &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - name: Apply exact registry transition
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('docs/specs/STATUS.md')
+          text = path.read_text(encoding='utf-8')
+          old = '| 050 | in_review | [#156](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/156) | FLOWSHEET-1 dependency DAG | 047, 048, 049 | Materialize an inspectable graph from existing provenance without a recompute engine; normalize legacy FK/source forms at read time and own the shared `<kind>:<id>` resolver. |'
+          new = '| 050 | merged | [#156](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/156) | FLOWSHEET-1 dependency DAG | 047, 048, 049 | Materialize an inspectable graph from existing provenance without a recompute engine; normalize legacy FK/source forms at read time and own the shared `<kind>:<id>` resolver. |'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one 050 in_review row, found {text.count(old)}')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+          rm -f .reconcile-050-marker
+          rm -f .github/workflows/reconcile-050-once.yml
+          git diff --check
+          test "$(git diff --name-only origin/master | tr '\n' ' ')" = "docs/specs/STATUS.md "
+          test "$(git diff --numstat origin/master -- docs/specs/STATUS.md)" = $'1\t1\tdocs/specs/STATUS.md'
+      - name: Commit verified reconciliation
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Mark spec 050 merged"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
