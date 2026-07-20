@@ -38,6 +38,7 @@ type ScenarioBinding = {
 
 const BUNDLED_PROCESS0_LABEL = "bluerev-geometry-hydraulics-v0-bundled";
 const BUNDLED_PROCESS1_LABEL = "bluerev-biomass-nutrients-harvest-v0-bundled";
+const BUNDLED_PROCESS2_LABEL = "bluerev-buoyancy-optical-screening-v0-bundled";
 
 async function registerBundledBlueRevProcess0(workspaceId: string): Promise<ModelImplementation> {
   const response = await fetch(
@@ -59,6 +60,24 @@ async function registerBundledBlueRevProcess0(workspaceId: string): Promise<Mode
 async function registerBundledBlueRevProcess1(workspaceId: string): Promise<ModelImplementation> {
   const response = await fetch(
     `${API_BASE_URL}/workspaces/${workspaceId}/bundled-models/bluerev-biomass-nutrients-harvest-v0/register`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Request failed with ${response.status}`);
+  }
+
+  return response.json() as Promise<ModelImplementation>;
+}
+
+
+async function registerBundledBlueRevProcess2(workspaceId: string): Promise<ModelImplementation> {
+  const response = await fetch(
+    `${API_BASE_URL}/workspaces/${workspaceId}/bundled-models/bluerev-buoyancy-optical-screening-v0/register`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -104,7 +123,11 @@ function DomainFoundation() {
   const bundledProcess1Registered = implementations.some(
     (item) => item.version_label === BUNDLED_PROCESS1_LABEL
   );
-  const canRegisterBundled = !bundledProcess0Registered || !bundledProcess1Registered;
+  const bundledProcess2Registered = implementations.some(
+    (item) => item.version_label === BUNDLED_PROCESS2_LABEL
+  );
+  const canRegisterBundled =
+    !bundledProcess0Registered || !bundledProcess1Registered || !bundledProcess2Registered;
 
   const refreshWorkspaces = () =>
     listWorkspaces().then((items) => {
@@ -185,6 +208,9 @@ function DomainFoundation() {
       }
       if (!bundledProcess1Registered) {
         selectedId = (await registerBundledBlueRevProcess1(workspaceId)).id;
+      }
+      if (!bundledProcess2Registered) {
+        selectedId = (await registerBundledBlueRevProcess2(workspaceId)).id;
       }
       await refreshWorkspaceRecords(workspaceId);
       if (selectedId) {

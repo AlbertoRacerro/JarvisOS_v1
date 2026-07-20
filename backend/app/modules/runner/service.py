@@ -59,6 +59,8 @@ BUNDLED_BLUEREV_PROCESS0_LABEL = "bluerev-geometry-hydraulics-v0-bundled"
 BUNDLED_BLUEREV_PROCESS0_TITLE = "BlueRev geometry and hydraulics bundled V0"
 BUNDLED_BLUEREV_PROCESS1_LABEL = "bluerev-biomass-nutrients-harvest-v0-bundled"
 BUNDLED_BLUEREV_PROCESS1_TITLE = "BlueRev biomass, nutrients, and harvesting bundled V0"
+BUNDLED_BLUEREV_PROCESS2_LABEL = "bluerev-buoyancy-optical-screening-v0-bundled"
+BUNDLED_BLUEREV_PROCESS2_TITLE = "BlueRev buoyancy and optical screening bundled V0"
 SUPPORTED_IMPLEMENTATION_KINDS = frozenset(
     {IMPLEMENTATION_KIND, BLUECAD_L2_IMPLEMENTATION_KIND, CALC_V0_IMPLEMENTATION_KIND}
 )
@@ -325,6 +327,78 @@ def register_bundled_bluerev_process1(workspace_id: str) -> ModelImplementationR
             version_label=BUNDLED_BLUEREV_PROCESS1_LABEL,
             implementation_kind=CALC_V0_IMPLEMENTATION_KIND,
             notes="Bundled reviewed 048 forward model with a value-free input contract.",
+            script_text=script_path.read_text(encoding="utf-8"),
+            input_contract=contract,
+        ),
+    )
+
+
+def register_bundled_bluerev_process2(workspace_id: str) -> ModelImplementationRead:
+    script_path = _bluerev_process2_script_path()
+    contract_path = _bluerev_process2_contract_path()
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    _, contract_sha256, _ = canonicalize_input_contract(contract)
+    script_sha256 = sha256_file(script_path)
+
+    with open_sqlite_connection() as connection:
+        _require_workspace(connection, workspace_id)
+        existing = connection.execute(
+            """
+            SELECT mv.*, a.sha256 AS script_sha256, a.stored_path AS script_path
+            FROM model_versions mv
+            JOIN artifacts a ON a.id = mv.implementation_artifact_id
+            WHERE mv.workspace_id = ?
+              AND mv.version_label = ?
+              AND mv.input_contract_sha256 = ?
+              AND a.sha256 = ?
+            ORDER BY mv.created_at ASC
+            LIMIT 1
+            """,
+            (
+                workspace_id,
+                BUNDLED_BLUEREV_PROCESS2_LABEL,
+                contract_sha256,
+                script_sha256,
+            ),
+        ).fetchone()
+        if existing is not None:
+            return _model_implementation_from_row(existing)
+        model_spec = connection.execute(
+            """
+            SELECT id FROM model_specs
+            WHERE workspace_id = ? AND title = ?
+            ORDER BY created_at ASC
+            LIMIT 1
+            """,
+            (workspace_id, BUNDLED_BLUEREV_PROCESS2_TITLE),
+        ).fetchone()
+
+    if model_spec is None:
+        created_spec = create_model_spec(
+            workspace_id,
+            ModelSpecCreate(
+                title=BUNDLED_BLUEREV_PROCESS2_TITLE,
+                engineering_question=(
+                    "Evaluate caller-selected static displacement, auxiliary flotation, "
+                    "and bounded optical-transmission proxies without design defaults."
+                ),
+                scope=(
+                    "Reviewed 049 forward M0 model; masses, displacement, safety factor, "
+                    "fouling, attenuation, and optical path are supplied per scenario."
+                ),
+            ),
+        )
+        model_spec_id = created_spec.id
+    else:
+        model_spec_id = str(model_spec["id"])
+
+    return create_model_implementation(
+        workspace_id,
+        ModelImplementationCreate(
+            model_spec_id=model_spec_id,
+            version_label=BUNDLED_BLUEREV_PROCESS2_LABEL,
+            implementation_kind=CALC_V0_IMPLEMENTATION_KIND,
+            notes="Bundled reviewed 049 forward model with a value-free input contract.",
             script_text=script_path.read_text(encoding="utf-8"),
             input_contract=contract,
         ),
@@ -1161,6 +1235,18 @@ def _bluerev_process1_contract_path() -> Path:
         Path(__file__).resolve().parent
         / "examples"
         / "bluerev_biomass_nutrients_harvest_v0.contract.json"
+    )
+
+
+def _bluerev_process2_script_path() -> Path:
+    return Path(__file__).resolve().parent / "examples" / "bluerev_buoyancy_optical_screening_v0.py"
+
+
+def _bluerev_process2_contract_path() -> Path:
+    return (
+        Path(__file__).resolve().parent
+        / "examples"
+        / "bluerev_buoyancy_optical_screening_v0.contract.json"
     )
 
 
