@@ -1,0 +1,50 @@
+name: Diagnose 051 tests
+
+on:
+  pull_request:
+    types: [synchronize]
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  focused:
+    if: >-
+      github.repository == 'AlbertoRacerro/JarvisOS_v1' &&
+      github.event.pull_request.number == 159
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install dependencies
+        run: pip install -q -r backend/requirements.txt pytest
+      - name: Run focused 051 tests
+        id: focused
+        continue-on-error: true
+        env:
+          PYTHONPATH: backend
+        run: pytest -q backend/tests/test_flowsheet_stale_propagation.py -vv --tb=short > /tmp/pytest-051-focused.log 2>&1
+      - name: Run migration and API compatibility tests
+        id: compatibility
+        continue-on-error: true
+        env:
+          PYTHONPATH: backend
+        run: pytest -q backend/tests -k 'migration or schema or memory or modeling' --tb=short > /tmp/pytest-051-compat.log 2>&1
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-051-diagnostics
+          path: |
+            /tmp/pytest-051-focused.log
+            /tmp/pytest-051-compat.log
+          if-no-files-found: error
+          retention-days: 1
+      - name: Enforce focused result
+        if: steps.focused.outcome != 'success' || steps.compatibility.outcome != 'success'
+        run: exit 1
