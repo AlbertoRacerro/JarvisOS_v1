@@ -1,4 +1,4 @@
-name: Diagnose reviewed 051 refinements
+name: Publish reviewed 051 refinements once
 
 on:
   pull_request:
@@ -6,13 +6,14 @@ on:
     branches: [master]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  diagnose:
+  publish:
     if: >-
       github.repository == 'AlbertoRacerro/JarvisOS_v1' &&
-      github.event.pull_request.number == 159
+      github.event.pull_request.number == 159 &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,10 +22,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Apply reviewed refinements in workspace
+      - name: Apply reviewed refinements
         run: |
           python - <<'PY'
           from pathlib import Path
+          from textwrap import dedent, indent
 
           freshness = Path('backend/app/modules/flowsheet/freshness.py')
           text = freshness.read_text(encoding='utf-8')
@@ -34,7 +36,8 @@ jobs:
           text = text.replace(anchor, '    FlowsheetFreshnessMarkRead,\n    FlowsheetGraphRead,\n    FlowsheetNodeFreshnessRead,\n')
           start = text.index('def _graph_digest(')
           end = text.index('\ndef _parse_path', start)
-          replacement = '''def _graph_digest(graph: FlowsheetGraphRead) -> str:
+          graph_function = dedent('''\
+          def _graph_digest(graph: FlowsheetGraphRead) -> str:
               payload = {
                   "nodes": sorted(node.ref for node in graph.nodes),
                   "edges": [
@@ -59,62 +62,50 @@ jobs:
                   ],
               }
               return _sha256_prefixed(_canonical_json(payload))
-          
-          '''
-          freshness.write_text(text[:start] + replacement + text[end + 1:], encoding='utf-8')
+
+          ''')
+          freshness.write_text(text[:start] + graph_function + text[end + 1:], encoding='utf-8')
 
           memory = Path('backend/app/modules/memory/service.py')
           text = memory.read_text(encoding='utf-8')
           start = text.rindex('                validate_parameter_replacement_proposal(')
           end = text.index('\n\n                now = utc_now()', start)
-          replacement = '''                already = connection.execute(
-                      "SELECT id FROM freshness_invalidations WHERE superseded_parameter_id = ?",
-                      (superseded_id,),
-                  ).fetchone()
-                  if already is not None:
-                      raise ParameterReplacementError(
-                          "parameter_already_replaced",
-                          "The accepted Parameter already has an accepted replacement.",
-                      )
-                  validate_parameter_replacement_proposal(
-                      connection,
-                      workspace_id=str(replacement["workspace_id"]),
-                      supersedes_parameter_id=superseded_id,
-                      replacement_parameter_id=record_id,
-                      unit=str(replacement["unit"]),
-                      value=None if replacement["value"] is None else str(replacement["value"]),
-                  )'''
+          replacement = indent(
+              dedent('''\
+              already = connection.execute(
+                  "SELECT id FROM freshness_invalidations WHERE superseded_parameter_id = ?",
+                  (superseded_id,),
+              ).fetchone()
+              if already is not None:
+                  raise ParameterReplacementError(
+                      "parameter_already_replaced",
+                      "The accepted Parameter already has an accepted replacement.",
+                  )
+              validate_parameter_replacement_proposal(
+                  connection,
+                  workspace_id=str(replacement["workspace_id"]),
+                  supersedes_parameter_id=superseded_id,
+                  replacement_parameter_id=record_id,
+                  unit=str(replacement["unit"]),
+                  value=None if replacement["value"] is None else str(replacement["value"]),
+              )'''),
+              ' ' * 16,
+          )
           memory.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
           PY
-      - name: Capture exact formatter and lint output
-        id: diagnose
-        continue-on-error: true
+      - name: Format and verify
         run: |
-          set +e
-          {
-            pip install -q -r backend/requirements.txt ruff
-            echo '--- ruff version ---'
-            ruff --version
-            echo '--- format ---'
-            ruff format backend/app/modules/flowsheet backend/app/modules/memory backend/app/modules/modeling backend/tests/test_flowsheet_stale_propagation.py
-            echo '--- check fix ---'
-            ruff check --fix backend/app/modules/flowsheet backend/app/modules/memory backend/app/modules/modeling backend/tests/test_flowsheet_stale_propagation.py
-            echo '--- check final ---'
-            ruff check backend/app/modules/flowsheet backend/app/modules/memory backend/app/modules/modeling backend/tests/test_flowsheet_stale_propagation.py
-            echo '--- compileall ---'
-            python -m compileall -q backend/app
-          } > /tmp/reviewed-refine-051.log 2>&1
-          code=$?
-          echo "exit_code=$code" >> /tmp/reviewed-refine-051.log
-          exit $code
-      - name: Upload reviewed refinement log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: reviewed-refine-051-log
-          path: /tmp/reviewed-refine-051.log
-          if-no-files-found: error
-          retention-days: 1
-      - name: Enforce diagnostic result
-        if: steps.diagnose.outcome != 'success'
-        run: exit 1
+          pip install -q -r backend/requirements.txt ruff
+          ruff format backend/app/modules/flowsheet backend/app/modules/memory backend/app/modules/modeling backend/tests/test_flowsheet_stale_propagation.py
+          ruff check --fix backend/app/modules/flowsheet backend/app/modules/memory backend/app/modules/modeling backend/tests/test_flowsheet_stale_propagation.py
+          ruff check backend/app/modules/flowsheet backend/app/modules/memory backend/app/modules/modeling backend/tests/test_flowsheet_stale_propagation.py
+          python -m compileall -q backend/app
+      - name: Commit verified refinements
+        run: |
+          rm -f .github/workflows/refine-051-once.yml
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Refine spec 051 determinism and formatting"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
