@@ -13,6 +13,7 @@ from app.core.logging import configure_logging
 from app.modules.ai.routes import router as ai_router
 from app.modules.ai.sensitivity_routes import router as sensitivity_router
 from app.modules.bluecad.routes import router as bluecad_router
+from app.modules.flowsheet.routes import router as flowsheet_router
 from app.modules.local_ai.runtime.lifecycle import create_local_ai_runtime_lifecycle_from_env
 from app.modules.memory.routes import router as memory_router
 from app.modules.modeling.routes import router as modeling_router
@@ -62,6 +63,7 @@ def create_app() -> FastAPI:
     app.include_router(modeling_router)
     app.include_router(memory_router)
     app.include_router(runner_router)
+    app.include_router(flowsheet_router)
 
     # Serve the built frontend (single-process desktop launch) when present.
     # Conditional so tests/dev without a build are unaffected; API routers are
