@@ -1,0 +1,63 @@
+name: Repair 061b patcher once
+
+on:
+  pull_request:
+    types: [synchronize]
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  repair-patcher:
+    if: >-
+      github.repository == 'AlbertoRacerro/JarvisOS_v1' &&
+      github.event.pull_request.number == 145
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Remove circular import from generated patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/ci.yml')
+          text = path.read_text(encoding='utf-8')
+          top_level = (
+              "              'from app.modules.ai.token_flow_local_continuation import (\\n'\n"
+              "              '    plan_local_continuation,\\n'\n"
+              "              ')\\n'\n"
+          )
+          lazy_anchor = (
+              '              ) -> AiTaskOutcome:\n'
+              '                  current_attempt_id = initial_attempt_id\n'
+          )
+          lazy_replacement = (
+              '              ) -> AiTaskOutcome:\n'
+              '                  from app.modules.ai.token_flow_local_continuation import (\n'
+              '                      plan_local_continuation,\n'
+              '                  )\n'
+              '\n'
+              '                  current_attempt_id = initial_attempt_id\n'
+          )
+          if top_level not in text:
+              raise SystemExit('top-level continuation planner import anchor not found')
+          if lazy_anchor not in text:
+              raise SystemExit('local continuation helper anchor not found')
+          text = text.replace(top_level, '', 1)
+          text = text.replace(lazy_anchor, lazy_replacement, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Commit repaired patcher and remove helper
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/ci.yml
+          git rm .github/workflows/fix-061b-patcher.yml
+          git commit -m "ci: avoid 061b local continuation import cycle"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
