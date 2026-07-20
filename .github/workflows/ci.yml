@@ -59,17 +59,44 @@ jobs:
           pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Run focused terminalization tests
+        id: focused
         working-directory: backend
+        shell: bash
         run: |
-          python -m ruff check \
-            app/modules/ai/token_flow_service.py \
-            app/modules/ai/token_flow_terminalization.py \
-            tests/test_token_flow_terminalization.py
-          python -m pytest -q --tb=short \
-            tests/test_token_flow_terminalization.py \
-            tests/test_token_flow_service.py
+          set -o pipefail
+          set +e
+          {
+            python -m ruff check \
+              app/modules/ai/token_flow_service.py \
+              app/modules/ai/token_flow_terminalization.py \
+              tests/test_token_flow_terminalization.py
+            ruff_status=$?
+            if [ "$ruff_status" -ne 0 ]; then
+              exit "$ruff_status"
+            fi
+            python -m pytest -q --tb=short \
+              tests/test_token_flow_terminalization.py \
+              tests/test_token_flow_service.py
+          } 2>&1 | tee "$RUNNER_TEMP/terminalization-focused.log"
+          status=${PIPESTATUS[0]}
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload focused diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminalization-focused-diagnostics
+          path: ${{ runner.temp }}/terminalization-focused.log
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Enforce focused result
+        if: always()
+        run: test "${{ steps.focused.outputs.status }}" = "0"
 
       - name: Commit verified patch
+        if: steps.focused.outputs.status == '0'
         run: |
           if git diff --quiet -- backend/app/modules/ai/token_flow_service.py; then
             echo "Patch already present."
