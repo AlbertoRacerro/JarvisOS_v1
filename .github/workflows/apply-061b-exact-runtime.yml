@@ -29,7 +29,7 @@ jobs:
             backend/requirements.txt
             backend/requirements-dev.txt
 
-      - name: Verify and apply exact patch
+      - name: Verify and apply exact patches
         run: |
           cat \
             .jarvis-tmp/061b-runtime.patch.00 \
@@ -40,6 +40,15 @@ jobs:
             | sha256sum -c -
           git apply --check --index /tmp/061b-runtime.patch
           git apply --index /tmp/061b-runtime.patch
+
+          cat \
+            .jarvis-tmp/061b-runtime-followup.patch.00 \
+            .jarvis-tmp/061b-runtime-followup.patch.01 \
+            > /tmp/061b-runtime-followup.patch
+          echo 'b943cfe81a19f238ffa5539dc9e5f8d6398b5acf2d87bc251e9e3969a8e54f8e  /tmp/061b-runtime-followup.patch' \
+            | sha256sum -c -
+          git apply --check --index /tmp/061b-runtime-followup.patch
+          git apply --index /tmp/061b-runtime-followup.patch
 
       - name: Install dependencies
         working-directory: backend
@@ -55,15 +64,22 @@ jobs:
           set -o pipefail
           set +e
           {
+            set -e
             python -m ruff check \
+              app/core/egress_schema.py \
+              app/modules/ai/egress_persistence.py \
               app/modules/ai/egress_runtime.py \
               app/modules/ai/execution.py \
               app/modules/ai/token_flow_external_continuation.py \
               app/modules/ai/token_flow_external_runtime.py \
               app/modules/ai/token_flow_external_transaction.py \
+              tests/test_ai_egress_runtime.py \
+              tests/test_ai_execution_spine.py \
               tests/test_token_flow_external_runtime_integration.py \
               tests/test_token_flow_local_runtime_integration.py
             python -m pytest -q --tb=short \
+              tests/test_ai_egress_runtime.py \
+              tests/test_ai_execution_spine.py \
               tests/test_token_flow_external_runtime_integration.py \
               tests/test_token_flow_local_runtime_integration.py \
               tests/test_token_flow_external_continuation.py \
@@ -88,9 +104,12 @@ jobs:
         run: |
           git rm \
             .github/workflows/apply-061b-exact-runtime.yml \
+            .github/workflows/export-061b-followup-source.yml \
             .jarvis-tmp/061b-runtime.patch.00 \
             .jarvis-tmp/061b-runtime.patch.01 \
-            .jarvis-tmp/061b-runtime.patch.02
+            .jarvis-tmp/061b-runtime.patch.02 \
+            .jarvis-tmp/061b-runtime-followup.patch.00 \
+            .jarvis-tmp/061b-runtime-followup.patch.01
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'fix: wire governed external continuations'
