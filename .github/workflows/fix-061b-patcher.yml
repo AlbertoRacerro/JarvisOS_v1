@@ -95,14 +95,40 @@ jobs:
           pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Run full verified suite
+        id: verified
         if: hashFiles(format('{0}/runtime-already-present', runner.temp)) == ''
         working-directory: backend
+        shell: bash
         run: |
-          python -m ruff check app tests
-          python -m pytest -q --tb=short
+          set -o pipefail
+          set +e
+          {
+            python -m ruff check app tests
+            ruff_status=$?
+            if [ "$ruff_status" -ne 0 ]; then
+              exit "$ruff_status"
+            fi
+            python -m pytest -q --tb=short
+          } 2>&1 | tee "$RUNNER_TEMP/local-continuation-runtime.log"
+          status=${PIPESTATUS[0]}
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload full-suite diagnostics
+        if: always() && hashFiles(format('{0}/runtime-already-present', runner.temp)) == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-continuation-runtime-diagnostics
+          path: ${{ runner.temp }}/local-continuation-runtime.log
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Enforce verified result
+        if: always() && hashFiles(format('{0}/runtime-already-present', runner.temp)) == ''
+        run: test "${{ steps.verified.outputs.status }}" = "0"
 
       - name: Commit verified runtime only
-        if: hashFiles(format('{0}/runtime-already-present', runner.temp)) == ''
+        if: steps.verified.outputs.status == '0'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
