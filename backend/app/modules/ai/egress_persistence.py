@@ -47,6 +47,48 @@ class EgressPreparation:
     config_digest: str
 
 
+@dataclass(frozen=True, slots=True)
+class EgressContinuationAuthority:
+    flow_id: str
+    parent_attempt_id: str
+    parent_flow_attempt_index: int
+    next_continuation_index: int
+    protected_segment_index: int
+    expected_sensitivity_level: str
+
+    def canonical_json(self) -> str:
+        for name, value in (
+            ("flow_id", self.flow_id),
+            ("parent_attempt_id", self.parent_attempt_id),
+        ):
+            if not isinstance(value, str) or not value.strip():
+                raise EgressContractError(f"{name} must be non-empty text")
+        for name, value, minimum in (
+            ("parent_flow_attempt_index", self.parent_flow_attempt_index, 0),
+            ("next_continuation_index", self.next_continuation_index, 1),
+            ("protected_segment_index", self.protected_segment_index, 0),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+                raise EgressContractError(f"{name} is outside its valid range")
+        if self.expected_sensitivity_level not in {"S0", "S1"}:
+            raise EgressContractError(
+                "external continuation authority requires S0 or S1 sensitivity"
+            )
+        return json.dumps(
+            {
+                "expected_sensitivity_level": self.expected_sensitivity_level,
+                "flow_id": self.flow_id.strip(),
+                "next_continuation_index": self.next_continuation_index,
+                "parent_attempt_id": self.parent_attempt_id.strip(),
+                "parent_flow_attempt_index": self.parent_flow_attempt_index,
+                "protected_segment_index": self.protected_segment_index,
+                "version": "token-flow-confirmation-resume-v0",
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+
 @dataclass(frozen=True)
 class _BudgetSnapshot:
     global_actual_cost_usd: float
@@ -64,6 +106,7 @@ def prepare_egress_attempt(
     *,
     policy: EgressPolicyConfig | None = None,
     registry: ProviderRegistry | None = None,
+    continuation_authority: EgressContinuationAuthority | None = None,
     now: datetime | None = None,
 ) -> EgressPreparation:
     """Persist one immutable packet and one policy decision atomically.
@@ -75,6 +118,10 @@ def prepare_egress_attempt(
 
     policy = policy or load_default_egress_policy()
     registry = registry or load_default_provider_registry()
+    if continuation_authority is not None and not isinstance(
+        continuation_authority, EgressContinuationAuthority
+    ):
+        raise TypeError("continuation_authority must be EgressContinuationAuthority")
     projection = build_packet_projection(material, policy=policy, registry=registry)
     now_dt = _normalized_now(now)
     now_iso = now_dt.isoformat()
@@ -164,6 +211,7 @@ def prepare_egress_attempt(
                 trigger_ids=trigger_ids,
                 now_dt=now_dt,
                 policy=policy,
+                continuation_authority=continuation_authority,
             )
             return _preparation(
                 decision_id=decision_id,
@@ -387,14 +435,15 @@ def _insert_ticket(
     trigger_ids: tuple[str, ...],
     now_dt: datetime,
     policy: EgressPolicyConfig,
+    continuation_authority: EgressContinuationAuthority | None,
 ) -> None:
     connection.execute(
         """
         INSERT INTO egress_confirmation_tickets (
             id, decision_id, packet_id, packet_digest, provider_id, model_id,
-            trigger_ids_json, source_digests_json, policy_version,
-            config_digest, state, created_at, expires_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+            trigger_ids_json, source_digests_json, continuation_authority_json,
+            policy_version, config_digest, state, created_at, expires_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
         """,
         (
             ticket_id,
@@ -405,6 +454,11 @@ def _insert_ticket(
             material.model_id,
             json.dumps(trigger_ids, separators=(",", ":")),
             projection.source_digests_json,
+            (
+                continuation_authority.canonical_json()
+                if continuation_authority is not None
+                else None
+            ),
             projection.policy_version,
             projection.config_digest,
             now_dt.isoformat(),

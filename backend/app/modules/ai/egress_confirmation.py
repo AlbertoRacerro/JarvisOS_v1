@@ -37,13 +37,20 @@ from app.modules.ai.execution import (
 from app.modules.ai.execution_types import ProviderBinding
 from app.modules.ai.provider_registry import ProviderRegistry, load_default_provider_registry
 from app.modules.ai.settings import get_ai_settings
+from app.modules.ai.token_flow_confirmation_resume import (
+    ContinuationConfirmationAuthority,
+    parse_continuation_authority,
+)
+from app.modules.ai.token_flow_continuation import ContinuationDecision
 from app.modules.ai.token_flow_external_transaction import finalize_external_attempt
 from app.modules.ai.token_flow_runtime import normalize_finish_reason, normalize_outcome_reason
+from app.modules.ai.token_flow_segments import store_protected_segment
 from app.modules.ai.token_flow_service import (
     activate_confirmation_flow,
     get_confirmation_flow_for_ticket,
     transition_flow_state,
 )
+from app.modules.ai.token_flow_terminalization import terminalize_assembled_output
 
 
 @dataclass(frozen=True)
@@ -66,6 +73,7 @@ class _TicketMetadata:
     route_class: str
     fallback_index: int
     max_output_tokens: int
+    continuation_authority_json: str | None
 
 
 def run_confirmation_ticket(
@@ -88,18 +96,50 @@ def run_confirmation_ticket(
     flow = get_confirmation_flow_for_ticket(ticket_id)
     flow_id = str(flow["id"])
 
+    is_continuation = metadata.continuation_authority_json is not None
     consumed = consume_confirmation_ticket(
         ticket_id,
         registry=registry,
         policy=policy,
+        continuation_flow_id=flow_id if is_continuation else None,
     )
     binding = (
         _binding_from_ticket(metadata, registry)
         if consumed.authorized
         else _persisted_external_binding(metadata)
     )
-    activate_confirmation_flow(flow_id=flow_id, ticket_id=ticket_id)
+    continuation_authority = (
+        parse_continuation_authority(consumed.continuation_authority_json)
+        if consumed.authorized
+        else None
+    )
+    continuation_decision = (
+        continuation_authority.decision()
+        if continuation_authority is not None
+        else None
+    )
+    if not is_continuation:
+        activate_confirmation_flow(flow_id=flow_id, ticket_id=ticket_id)
     base_route_metadata = _route_metadata(consumed, metadata)
+
+    if not consumed.authorized and is_continuation:
+        if consumed.continuation_pause_attempt_id is None:
+            raise EgressSpineStateError(
+                "rejected continuation confirmation omitted pause attempt"
+            )
+        outcome = _outcome(
+            flow_id=flow_id,
+            consumed=consumed,
+            metadata=metadata,
+            ledger_id=consumed.continuation_pause_attempt_id,
+            status="config_error",
+            response=None,
+            error_type=consumed.reason_code,
+            reason_code=consumed.reason_code,
+            context_digest=None,
+            blocked=True,
+        )
+        return ConfirmedTicketExecution(ticket_id, metadata.workspace_id, outcome)
 
     if not _ticket_metadata_matches_consumption(metadata, consumed):
         packet = _safe_load_consumed_packet(consumed)
@@ -116,6 +156,7 @@ def run_confirmation_ticket(
             started_at=started_at,
             reservation_id=consumed.reservation_id,
             packet=packet,
+            continuation_decision=continuation_decision,
         )
         return ConfirmedTicketExecution(ticket_id, metadata.workspace_id, outcome)
 
@@ -133,6 +174,7 @@ def run_confirmation_ticket(
             started_at=started_at,
             reservation_id=None,
             packet=None,
+            continuation_decision=continuation_decision,
         )
         return ConfirmedTicketExecution(ticket_id, metadata.workspace_id, outcome)
 
@@ -156,6 +198,7 @@ def run_confirmation_ticket(
             started_at=started_at,
             reservation_id=reservation_id,
             packet=None,
+            continuation_decision=continuation_decision,
         )
         return ConfirmedTicketExecution(ticket_id, metadata.workspace_id, outcome)
 
@@ -177,6 +220,7 @@ def run_confirmation_ticket(
             started_at=started_at,
             reservation_id=reservation_id,
             packet=packet,
+            continuation_decision=continuation_decision,
         )
         return ConfirmedTicketExecution(ticket_id, metadata.workspace_id, outcome)
 
@@ -195,6 +239,7 @@ def run_confirmation_ticket(
             started_at=started_at,
             reservation_id=reservation_id,
             packet=packet,
+            continuation_decision=continuation_decision,
         )
         return ConfirmedTicketExecution(ticket_id, metadata.workspace_id, outcome)
 
@@ -261,6 +306,7 @@ def run_confirmation_ticket(
             outcome_reason="egress_start_failed",
             reservation_id=_reconcilable_start_failure_reservation(reservation_id),
             registry=registry,
+            continuation_decision=continuation_decision,
         )
         outcome = _outcome(
             flow_id=flow_id,
@@ -274,7 +320,11 @@ def run_confirmation_ticket(
             context_digest=context_digest,
             blocked=True,
         )
-        _terminalize_confirmation_flow(flow_id, outcome)
+        _finish_confirmation_flow(
+            flow_id,
+            outcome,
+            continuation_authority=continuation_authority,
+        )
         return ConfirmedTicketExecution(ticket_id, metadata.workspace_id, outcome)
 
     try:
@@ -296,6 +346,7 @@ def run_confirmation_ticket(
             outcome_reason=type(exc).__name__,
             reservation_id=reservation_id,
             registry=registry,
+            continuation_decision=continuation_decision,
         )
         outcome = _outcome(
             flow_id=flow_id,
@@ -309,7 +360,11 @@ def run_confirmation_ticket(
             context_digest=context_digest,
             blocked=False,
         )
-        _terminalize_confirmation_flow(flow_id, outcome)
+        _finish_confirmation_flow(
+            flow_id,
+            outcome,
+            continuation_authority=continuation_authority,
+        )
         return ConfirmedTicketExecution(ticket_id, metadata.workspace_id, outcome)
 
     status, error_type = _response_status(response)
@@ -341,6 +396,7 @@ def run_confirmation_ticket(
             outcome_reason=reason_code,
             reservation_id=reservation_id,
             registry=registry,
+            continuation_decision=continuation_decision,
         )
         outcome = _outcome(
             flow_id=flow_id,
@@ -354,7 +410,11 @@ def run_confirmation_ticket(
             context_digest=context_digest,
             blocked=False,
         )
-        _terminalize_confirmation_flow(flow_id, outcome)
+        _finish_confirmation_flow(
+            flow_id,
+            outcome,
+            continuation_authority=continuation_authority,
+        )
         return ConfirmedTicketExecution(ticket_id, metadata.workspace_id, outcome)
 
     assert response.external_dispatch_state is not None
@@ -374,6 +434,7 @@ def run_confirmation_ticket(
         outcome_reason=error_type or status,
         reservation_id=reservation_id,
         registry=registry,
+        continuation_decision=continuation_decision,
     )
     outcome = _outcome(
         flow_id=flow_id,
@@ -387,10 +448,18 @@ def run_confirmation_ticket(
         context_digest=context_digest,
         blocked=False,
     )
-    _terminalize_confirmation_flow(flow_id, outcome)
+    _finish_confirmation_flow(
+        flow_id,
+        outcome,
+        continuation_authority=continuation_authority,
+    )
     if (
-        status == "success"
-        and normalize_finish_reason(response.finish_reason, failed=response.error is not None) != "length"
+        continuation_authority is None
+        and status == "success"
+        and normalize_finish_reason(
+            response.finish_reason, failed=response.error is not None
+        )
+        == "stop"
     ):
         proposed_ids, parse_error = _create_proposed_records_from_response(
             task_kind=metadata.task_kind,
@@ -410,7 +479,7 @@ def _load_ticket_metadata(ticket_id: str) -> _TicketMetadata:
             SELECT ticket.state AS ticket_state, packet.task_kind, packet.workspace_id,
                    decision.source_count,
                    ticket.trigger_ids_json, ticket.packet_digest,
-                   packet.provider_id, packet.model_id, packet.route_class,
+                   ticket.continuation_authority_json, packet.provider_id, packet.model_id, packet.route_class,
                    packet.fallback_index, packet.max_output_tokens
             FROM egress_confirmation_tickets AS ticket
             JOIN egress_decisions AS decision ON decision.id = ticket.decision_id
@@ -439,6 +508,7 @@ def _load_ticket_metadata(ticket_id: str) -> _TicketMetadata:
         route_class=str(row["route_class"]),
         fallback_index=int(row["fallback_index"]),
         max_output_tokens=int(row["max_output_tokens"]),
+        continuation_authority_json=row["continuation_authority_json"],
     )
 
 
@@ -513,6 +583,7 @@ def _terminal_outcome(
     started_at: float,
     reservation_id: str | None,
     packet: dict[str, object] | None,
+    continuation_decision: ContinuationDecision | None,
 ) -> AiTaskOutcome:
     queued = _create_confirmation_job(
         consumed=consumed,
@@ -537,6 +608,7 @@ def _terminal_outcome(
         reservation_id=reservation_id,
         registry=registry,
         use_confirmation_pricing_snapshot=not consumed.authorized,
+        continuation_decision=continuation_decision,
     )
     outcome = _outcome(
         flow_id=flow_id,
@@ -550,7 +622,13 @@ def _terminal_outcome(
         context_digest=_context_digest(packet),
         blocked=True,
     )
-    _terminalize_confirmation_flow(flow_id, outcome)
+    _finish_confirmation_flow(
+        flow_id,
+        outcome,
+        continuation_authority=(
+            parse_continuation_authority(consumed.continuation_authority_json)
+        ),
+    )
     return outcome
 
 
@@ -593,30 +671,100 @@ def _outcome(
     )
 
 
-def _terminalize_confirmation_flow(flow_id: str, outcome: AiTaskOutcome) -> None:
+def _finish_confirmation_flow(
+    flow_id: str,
+    outcome: AiTaskOutcome,
+    *,
+    continuation_authority: ContinuationConfirmationAuthority | None,
+) -> None:
     finish_reason = (
-        normalize_finish_reason(outcome.response.finish_reason, failed=False)
+        normalize_finish_reason(
+            outcome.response.finish_reason,
+            failed=outcome.response.error is not None,
+        )
         if outcome.status == "success" and outcome.response is not None
         else None
     )
-    if outcome.status == "success" and finish_reason == "length":
-        state = "partial_terminal"
-        reason = "output_length_limit"
-    elif outcome.status == "success":
+    if continuation_authority is not None:
+        if (
+            outcome.status == "success"
+            and outcome.response is not None
+            and outcome.response.text
+        ):
+            store_protected_segment(
+                flow_id=flow_id,
+                originating_attempt_id=outcome.ledger_id,
+                body_text=outcome.response.text,
+                effective_sensitivity_level=(
+                    continuation_authority.expected_sensitivity_level
+                ),
+                workspace_id=_flow_workspace_id(flow_id),
+            )
+        complete = outcome.status == "success" and finish_reason == "stop"
+        if complete:
+            reason = "completed"
+        elif outcome.status == "success":
+            reason = (
+                "output_length_limit"
+                if finish_reason == "length"
+                else f"continuation_finish_{finish_reason}"
+            )
+        else:
+            failure_reason = outcome.egress_reason_code
+            if failure_reason == "ticket_consumed":
+                failure_reason = None
+            reason = f"continuation_{normalize_outcome_reason(failure_reason or outcome.error_type or outcome.status)}"
+        _, assembled = terminalize_assembled_output(
+            flow_id=flow_id,
+            terminal_attempt_id=outcome.ledger_id,
+            new_state="complete" if complete else "partial_terminal",
+            terminal_reason=reason,
+            workspace_id=_flow_workspace_id(flow_id),
+            expected_sensitivity_level=(
+                continuation_authority.expected_sensitivity_level
+            ),
+        )
+        if outcome.response is not None:
+            outcome.response = outcome.response.model_copy(
+                update={"text": assembled.body_text, "content": assembled.body_text}
+            )
+        return
+
+    if outcome.status == "success" and finish_reason == "stop":
         state = "complete"
         reason = "completed"
+    elif outcome.status == "success":
+        state = "partial_terminal"
+        reason = (
+            "output_length_limit"
+            if finish_reason == "length"
+            else f"finish_{finish_reason}"
+        )
     else:
         failure_reason = outcome.egress_reason_code
         if failure_reason == "ticket_consumed":
             failure_reason = None
         state = "failed_terminal"
-        reason = normalize_outcome_reason(failure_reason or outcome.error_type or outcome.status)
+        reason = normalize_outcome_reason(
+            failure_reason or outcome.error_type or outcome.status
+        )
     transition_flow_state(
         flow_id=flow_id,
         new_state=state,
         terminal_reason=reason,
         terminal_attempt_id=outcome.ledger_id,
     )
+
+
+def _flow_workspace_id(flow_id: str) -> str | None:
+    with open_sqlite_connection() as connection:
+        row = connection.execute(
+            "SELECT workspace_id FROM ai_flows WHERE id = ?",
+            (flow_id,),
+        ).fetchone()
+    if row is None:
+        raise EgressSpineStateError("confirmation flow disappeared")
+    return row["workspace_id"]
 
 
 def _binding_from_ticket(metadata: _TicketMetadata, registry: ProviderRegistry) -> ProviderBinding:

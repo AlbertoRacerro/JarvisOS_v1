@@ -28,7 +28,10 @@ from app.modules.ai.egress_lifecycle import (
     reconcile_reserved_attempt,
     start_reserved_attempt,
 )
-from app.modules.ai.egress_persistence import prepare_egress_attempt
+from app.modules.ai.egress_persistence import (
+    EgressContinuationAuthority,
+    prepare_egress_attempt,
+)
 from app.modules.ai.egress_policy import (
     EXTERNAL_PROVIDER_OPERATION,
     EgressPolicyConfig,
@@ -523,11 +526,32 @@ def _run_binding(
         )
         material = continuation_packet.material
         ai_prompt_digest = canonical_digest({"prompt": material.prompt})
+    continuation_authority = None
+    if continuation_decision is not None:
+        if (
+            continuation_decision.parent_attempt_id is None
+            or continuation_decision.parent_flow_attempt_index is None
+            or continuation_decision.next_continuation_index is None
+            or continuation_decision.protected_segment_index is None
+            or continuation_expected_sensitivity_level is None
+        ):
+            raise EgressSpineStateError(
+                "external continuation decision omitted persisted authority"
+            )
+        continuation_authority = EgressContinuationAuthority(
+            flow_id=flow_id,
+            parent_attempt_id=continuation_decision.parent_attempt_id,
+            parent_flow_attempt_index=continuation_decision.parent_flow_attempt_index,
+            next_continuation_index=continuation_decision.next_continuation_index,
+            protected_segment_index=continuation_decision.protected_segment_index,
+            expected_sensitivity_level=continuation_expected_sensitivity_level,
+        )
     try:
         preparation = prepare_egress_attempt(
             material,
             registry=registry,
             policy=policy,
+            continuation_authority=continuation_authority,
         )
     except ValueError as exc:
         stop = _stop(
