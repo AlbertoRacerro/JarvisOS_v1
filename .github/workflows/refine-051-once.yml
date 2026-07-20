@@ -1,0 +1,145 @@
+name: Refine 051 once
+
+on:
+  pull_request:
+    types: [synchronize]
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  refine:
+    if: >-
+      github.repository == 'AlbertoRacerro/JarvisOS_v1' &&
+      github.event.pull_request.number == 159 &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Apply reviewed logic refinements
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path_name: str, old: str, new: str) -> None:
+              path = Path(path_name)
+              text = path.read_text(encoding='utf-8')
+              if text.count(old) != 1:
+                  raise SystemExit(f'{path_name}: expected one anchor, found {text.count(old)}')
+              path.write_text(text.replace(old, new), encoding='utf-8')
+
+          replace_once(
+              'backend/app/modules/flowsheet/freshness.py',
+              '''    FlowsheetFreshnessMarkRead,
+                  FlowsheetNodeFreshnessRead,
+              )
+          ''',
+              '''    FlowsheetFreshnessMarkRead,
+                  FlowsheetGraphRead,
+                  FlowsheetNodeFreshnessRead,
+              )
+          ''',
+          )
+          replace_once(
+              'backend/app/modules/flowsheet/freshness.py',
+              '''def _graph_digest(graph: object) -> str:
+              payload = {
+                  "nodes": [node.model_dump(mode="json") for node in graph.nodes],
+                  "edges": [edge.model_dump(mode="json") for edge in graph.edges],
+                  "unresolved_references": [
+                      item.model_dump(mode="json") for item in graph.diagnostics.unresolved_references
+                  ],
+              }
+              return _sha256_prefixed(_canonical_json(payload))
+          ''',
+              '''def _graph_digest(graph: FlowsheetGraphRead) -> str:
+              payload = {
+                  "nodes": sorted(node.ref for node in graph.nodes),
+                  "edges": [
+                      {
+                          "upstream_ref": edge.upstream_ref,
+                          "downstream_ref": edge.downstream_ref,
+                          "relation": edge.relation,
+                          "edge_class": edge.edge_class,
+                          "authorities": sorted(edge.authorities),
+                          "source_fields": sorted(edge.source_fields),
+                      }
+                      for edge in graph.edges
+                  ],
+                  "unresolved_references": [
+                      {
+                          "owner_ref": item.owner_ref,
+                          "source_field": item.source_field,
+                          "code": item.code,
+                          "raw_ref": item.raw_ref,
+                      }
+                      for item in graph.diagnostics.unresolved_references
+                  ],
+              }
+              return _sha256_prefixed(_canonical_json(payload))
+          ''',
+          )
+          replace_once(
+              'backend/app/modules/memory/service.py',
+              '''                validate_parameter_replacement_proposal(
+                      connection,
+                      workspace_id=str(replacement["workspace_id"]),
+                      supersedes_parameter_id=superseded_id,
+                      replacement_parameter_id=record_id,
+                      unit=str(replacement["unit"]),
+                      value=None if replacement["value"] is None else str(replacement["value"]),
+                  )
+                  already = connection.execute(
+                      "SELECT id FROM freshness_invalidations WHERE superseded_parameter_id = ?",
+                      (superseded_id,),
+                  ).fetchone()
+                  if already is not None:
+                      raise ParameterReplacementError(
+                          "parameter_already_replaced",
+                          "The accepted Parameter already has an accepted replacement.",
+                      )
+          ''',
+              '''                already = connection.execute(
+                      "SELECT id FROM freshness_invalidations WHERE superseded_parameter_id = ?",
+                      (superseded_id,),
+                  ).fetchone()
+                  if already is not None:
+                      raise ParameterReplacementError(
+                          "parameter_already_replaced",
+                          "The accepted Parameter already has an accepted replacement.",
+                      )
+                  validate_parameter_replacement_proposal(
+                      connection,
+                      workspace_id=str(replacement["workspace_id"]),
+                      supersedes_parameter_id=superseded_id,
+                      replacement_parameter_id=record_id,
+                      unit=str(replacement["unit"]),
+                      value=None if replacement["value"] is None else str(replacement["value"]),
+                  )
+          ''',
+          )
+          PY
+      - name: Format and lint changed Python
+        run: |
+          pip install -q -r backend/requirements.txt
+          ruff format backend/app/modules/flowsheet backend/app/modules/memory backend/app/modules/modeling backend/tests/test_flowsheet_stale_propagation.py
+          ruff check --fix backend/app/modules/flowsheet backend/app/modules/memory backend/app/modules/modeling backend/tests/test_flowsheet_stale_propagation.py
+          ruff check backend/app/modules/flowsheet backend/app/modules/memory backend/app/modules/modeling backend/tests/test_flowsheet_stale_propagation.py
+          python -m compileall -q backend/app
+      - name: Commit verified refinements
+        run: |
+          rm -f .github/workflows/refine-051-once.yml
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Refine spec 051 determinism and formatting"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
