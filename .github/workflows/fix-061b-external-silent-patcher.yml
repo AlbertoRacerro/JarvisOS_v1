@@ -1,0 +1,161 @@
+name: Apply corrected 061b external silent once
+
+on:
+  pull_request:
+    types: [synchronize]
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-corrected-external-silent:
+    if: >-
+      github.repository == 'AlbertoRacerro/JarvisOS_v1' &&
+      github.event.pull_request.number == 145
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Extract original external patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from textwrap import dedent
+
+          workflow = Path(
+              '.github/workflows/apply-061b-external-silent.yml'
+          ).read_text(encoding='utf-8')
+          start_marker = (
+              '      - name: Apply bounded external runtime patch\n'
+              '        run: |\n'
+          )
+          end_marker = '\n      - name: Install dependencies\n'
+          if start_marker not in workflow or end_marker not in workflow:
+              raise SystemExit('external patch block markers not found')
+          block = workflow.split(start_marker, 1)[1].split(end_marker, 1)[0]
+          Path('/tmp/apply-061b-external.py').write_text(
+              dedent(block).split("python - <<'PY'\n", 1)[1].rsplit('\nPY', 1)[0],
+              encoding='utf-8',
+          )
+          PY
+          python /tmp/apply-061b-external.py
+
+      - name: Repair generated function scopes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('backend/app/modules/ai/egress_runtime.py')
+          text = path.read_text(encoding='utf-8')
+
+          run_start = text.index('def run_external_task(')
+          binding_start = text.index('def _run_binding(', run_start)
+          run_block = text[run_start:binding_start]
+          leaked = (
+              '            flow_id=flow_id,\n'
+              '            continuation_decision=continuation_decision,\n'
+              '        )\n'
+          )
+          clean = (
+              '            flow_id=flow_id,\n'
+              '        )\n'
+          )
+          if leaked not in run_block:
+              raise SystemExit('leaked initial continuation argument not found')
+          run_block = run_block.replace(leaked, clean, 1)
+          text = text[:run_start] + run_block + text[binding_start:]
+
+          persist_start = text.index('def _persist_prepacket(')
+          terminal_start = text.index('def _terminal_job(', persist_start)
+          persist_block = text[persist_start:terminal_start]
+          old_signature = (
+              '    registry: ProviderRegistry,\n'
+              '    flow_id: str,\n'
+              ') -> ExternalTaskOutcome:\n'
+          )
+          new_signature = (
+              '    registry: ProviderRegistry,\n'
+              '    flow_id: str,\n'
+              '    continuation_decision: ContinuationDecision | None = None,\n'
+              ') -> ExternalTaskOutcome:\n'
+          )
+          if old_signature not in persist_block:
+              raise SystemExit('persist prepacket signature was not unmodified')
+          persist_block = persist_block.replace(
+              old_signature, new_signature, 1
+          )
+          text = text[:persist_start] + persist_block + text[terminal_start:]
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Format and run verified external slice
+        id: verified
+        working-directory: backend
+        shell: bash
+        run: |
+          set -o pipefail
+          set +e
+          {
+            python -m ruff check --fix \
+              app/modules/ai/egress_runtime.py \
+              app/modules/ai/token_flow_external_transaction.py
+            python -m ruff check app tests
+            ruff_status=$?
+            if [ "$ruff_status" -ne 0 ]; then
+              exit "$ruff_status"
+            fi
+            python -m pytest -q --tb=short \
+              tests/test_token_flow_external_runtime_integration.py
+            focused_status=$?
+            if [ "$focused_status" -ne 0 ]; then
+              exit "$focused_status"
+            fi
+            python -m pytest -q --tb=short
+          } 2>&1 | tee "$RUNNER_TEMP/external-silent-continuation.log"
+          status=${PIPESTATUS[0]}
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload corrected external diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corrected-external-silent-diagnostics
+          path: ${{ runner.temp }}/external-silent-continuation.log
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Enforce corrected result
+        if: always()
+        run: test "${{ steps.verified.outputs.status }}" = "0"
+
+      - name: Commit verified external runtime only
+        if: steps.verified.outputs.status == '0'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            backend/app/modules/ai/egress_runtime.py \
+            backend/app/modules/ai/token_flow_external_transaction.py
+          git diff --cached --quiet && exit 0
+          git commit -m "feat: continue silent-allow external outputs"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
