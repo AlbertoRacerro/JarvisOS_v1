@@ -43,10 +43,13 @@ def build_external_continuation_packet(
     prompt_level: str,
     expected_sensitivity_level: str,
     requested_output_tokens: int,
+    fallback_index: int = 0,
+    prompt_derivative_id: str | None = None,
     context_blocks: tuple[dict[str, Any], ...] = (),
     context_level: str = "S0",
     included_manifest: tuple[dict[str, Any], ...] = (),
     withheld_manifest: tuple[dict[str, Any], ...] = (),
+    budget_dropped_manifest: tuple[dict[str, Any], ...] = (),
     source_digests: tuple[tuple[str, str], ...] = (),
     bindings: dict[str, ProviderBinding] | None = None,
     registry: ProviderRegistry | None = None,
@@ -63,6 +66,12 @@ def build_external_continuation_packet(
         requested_output_tokens, int
     ) or requested_output_tokens <= 0:
         raise ValueError("requested_output_tokens must be a positive integer")
+    if (
+        isinstance(fallback_index, bool)
+        or not isinstance(fallback_index, int)
+        or fallback_index < 0
+    ):
+        raise ValueError("fallback_index must be a nonnegative integer")
     if prompt_level not in _SAFE_EXTERNAL_LEVELS:
         raise TokenFlowConflictError(
             "external continuation prompt must already be S0 or S1"
@@ -132,7 +141,7 @@ def build_external_continuation_packet(
         route_class=binding.route_class,
         provider_id=binding.provider_id,
         model_id=binding.model_id,
-        fallback_index=0,
+        fallback_index=fallback_index,
         prompt=continuation_prompt,
         context_blocks=context_blocks,
         prompt_level=prompt_level,
@@ -140,8 +149,10 @@ def build_external_continuation_packet(
         final_level=_maximum_level(prompt_level, context_level),
         max_output_tokens=effective_output,
         workspace_id=workspace_id,
+        prompt_derivative_id=prompt_derivative_id,
         included_manifest=included_manifest,
         withheld_manifest=withheld_manifest,
+        budget_dropped_manifest=budget_dropped_manifest,
         source_digests=tuple(source_digests) + segment_digests,
     )
     projection = build_packet_projection(
