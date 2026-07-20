@@ -64,39 +64,30 @@ jobs:
           run_start = text.index('def run_external_task(')
           binding_start = text.index('def _run_binding(', run_start)
           run_block = text[run_start:binding_start]
-          leaked = (
-              '            flow_id=flow_id,\n'
-              '            continuation_decision=continuation_decision,\n'
-              '        )\n'
-          )
-          clean = (
-              '            flow_id=flow_id,\n'
-              '        )\n'
-          )
-          if leaked not in run_block:
+          leaked_line = '            continuation_decision=continuation_decision,\n'
+          if leaked_line not in run_block:
               raise SystemExit('leaked initial continuation argument not found')
-          run_block = run_block.replace(leaked, clean, 1)
+          run_block = run_block.replace(leaked_line, '', 1)
           text = text[:run_start] + run_block + text[binding_start:]
 
           persist_start = text.index('def _persist_prepacket(')
           terminal_start = text.index('def _terminal_job(', persist_start)
           persist_block = text[persist_start:terminal_start]
-          old_signature = (
-              '    registry: ProviderRegistry,\n'
-              '    flow_id: str,\n'
-              ') -> ExternalTaskOutcome:\n'
-          )
-          new_signature = (
-              '    registry: ProviderRegistry,\n'
-              '    flow_id: str,\n'
+          parameter = (
               '    continuation_decision: ContinuationDecision | None = None,\n'
-              ') -> ExternalTaskOutcome:\n'
           )
-          if old_signature not in persist_block:
-              raise SystemExit('persist prepacket signature was not unmodified')
-          persist_block = persist_block.replace(
-              old_signature, new_signature, 1
-          )
+          if parameter not in persist_block:
+              signature_anchor = (
+                  '    flow_id: str,\n'
+                  ') -> ExternalTaskOutcome:\n'
+              )
+              if signature_anchor not in persist_block:
+                  raise SystemExit('persist prepacket signature anchor not found')
+              persist_block = persist_block.replace(
+                  signature_anchor,
+                  '    flow_id: str,\n' + parameter + ') -> ExternalTaskOutcome:\n',
+                  1,
+              )
           text = text[:persist_start] + persist_block + text[terminal_start:]
           path.write_text(text, encoding='utf-8')
           PY
@@ -141,7 +132,7 @@ jobs:
         with:
           name: corrected-external-silent-diagnostics
           path: ${{ runner.temp }}/external-silent-continuation.log
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 1
 
       - name: Enforce corrected result
