@@ -32,36 +32,39 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          from textwrap import dedent
 
           path = Path("backend/app/modules/ai/token_flow_service.py")
           text = path.read_text(encoding="utf-8")
-          old_block = '''        output_digest = None
-          if flow["terminal_attempt_id"] is not None:
-              terminal_attempt = _require_latest_attempt(
-                  connection, flow_id, str(flow["terminal_attempt_id"])
-              )
-              _validate_terminal_status(str(flow["state"]), terminal_attempt["status"])
-              output_digest = terminal_attempt["output_digest"]
-              if output_digest is not None:
-                  output_digest = _output_digest(output_digest)
-          if flow["state"] in {"complete", "partial_terminal"}:
-              output_digest = _output_digest(output_digest)
-          '''.replace("          ", "")
-          new_block = '''        terminal_attempt = None
-          if flow["terminal_attempt_id"] is not None:
-              terminal_attempt = _require_latest_attempt(
-                  connection, flow_id, str(flow["terminal_attempt_id"])
-              )
-              _validate_terminal_status(str(flow["state"]), terminal_attempt["status"])
-          output_digest = _terminal_output_digest(
-              connection,
-              flow_id=flow_id,
-              flow=flow,
-              terminal_attempt=terminal_attempt,
+          old_block = (
+              '        output_digest = None\n'
+              '        if flow["terminal_attempt_id"] is not None:\n'
+              '            terminal_attempt = _require_latest_attempt(\n'
+              '                connection, flow_id, str(flow["terminal_attempt_id"])\n'
+              '            )\n'
+              '            _validate_terminal_status(str(flow["state"]), terminal_attempt["status"])\n'
+              '            output_digest = terminal_attempt["output_digest"]\n'
+              '            if output_digest is not None:\n'
+              '                output_digest = _output_digest(output_digest)\n'
+              '        if flow["state"] in {"complete", "partial_terminal"}:\n'
+              '            output_digest = _output_digest(output_digest)\n'
           )
-          '''.replace("          ", "")
+          new_block = (
+              '        terminal_attempt = None\n'
+              '        if flow["terminal_attempt_id"] is not None:\n'
+              '            terminal_attempt = _require_latest_attempt(\n'
+              '                connection, flow_id, str(flow["terminal_attempt_id"])\n'
+              '            )\n'
+              '            _validate_terminal_status(str(flow["state"]), terminal_attempt["status"])\n'
+              '        output_digest = _terminal_output_digest(\n'
+              '            connection,\n'
+              '            flow_id=flow_id,\n'
+              '            flow=flow,\n'
+              '            terminal_attempt=terminal_attempt,\n'
+              '        )\n'
+          )
           helper_marker = "\n\ndef _validate_evidence(\n"
-          helper = '''
+          helper = dedent('''
 
           def _terminal_output_digest(
               connection: sqlite3.Connection,
@@ -141,7 +144,7 @@ jobs:
                       "terminal flow digest evidence changed"
                   )
               return output_digest
-          '''.replace("          ", "")
+          ''')
           if new_block in text and "def _terminal_output_digest(" in text:
               raise SystemExit(0)
           if old_block not in text:
