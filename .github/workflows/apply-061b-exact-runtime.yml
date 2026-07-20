@@ -45,7 +45,7 @@ jobs:
             .jarvis-tmp/061b-runtime-followup.patch.00 \
             .jarvis-tmp/061b-runtime-followup.patch.01 \
             > /tmp/061b-runtime-followup.patch
-          echo 'b943cfe81a19f238ffa5539dc9e5f8d6398b5acf2d87bc251e9e3969a8e54f8e  /tmp/061b-runtime-followup.patch' \
+          echo '2667c480bf53020fbf5f2917a91416216d0586ea2b57fbf8ee2c7303479535d1  /tmp/061b-runtime-followup.patch' \
             | sha256sum -c -
           git apply --check --index /tmp/061b-runtime-followup.patch
           git apply --index /tmp/061b-runtime-followup.patch
