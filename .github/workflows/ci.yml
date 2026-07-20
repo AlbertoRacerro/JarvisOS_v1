@@ -71,30 +71,9 @@ jobs:
           python -m ruff check app tests ../scripts/check_spec_status.py
           ../scripts/cheap_review.py ../scripts/manual_review.py
 
-      - name: Pytest diagnostic
-        id: pytest
+      - name: Pytest
         working-directory: backend
-        shell: bash
-        run: |
-          set -o pipefail
-          set +e
-          python -m pytest -q --tb=short 2>&1 | tee "$RUNNER_TEMP/pytest-061b.log"
-          status=${PIPESTATUS[0]}
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit 0
-
-      - name: Upload pytest diagnostic
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pytest-061b-diagnostic
-          path: ${{ runner.temp }}/pytest-061b.log
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Enforce Pytest
-        if: always()
-        run: test "${{ steps.pytest.outputs.status }}" = "0"
+        run: python -m pytest -q
 
   bluecad-geometry-canary:
     runs-on: ubuntu-24.04
