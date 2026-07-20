@@ -56,6 +56,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
+      - name: Normalize deterministic import order
+        working-directory: backend
+        run: python -m ruff check --fix tests/test_token_flow_local_runtime_integration.py
+
       - name: Validate patched runtime
         id: validate
         working-directory: backend
@@ -102,6 +106,7 @@ jobs:
       - name: Commit reviewed source only
         if: steps.validate.outputs.status == '0'
         run: |
+          git add backend/tests/test_token_flow_local_runtime_integration.py
           git rm \
             .github/workflows/apply-061b-exact-runtime.yml \
             .github/workflows/export-061b-followup-source.yml \
