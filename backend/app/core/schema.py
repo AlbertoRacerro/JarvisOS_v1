@@ -18,8 +18,10 @@ SCHEMA_SENSITIVITY_CONTEXT_MIGRATION_ID = "0009_sensitivity_context_foundation"
 SCHEMA_SENSITIVITY_CONTEXT_MIGRATION_NAME = "IP egress sensitivity labels and sanitized derivatives"
 SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID = "0012_model_input_contract"
 SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_NAME = "Model-version input contracts and scenario DOF metadata"
-CURRENT_SCHEMA_MIGRATION_ID = SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID
-CURRENT_SCHEMA_MIGRATION_NAME = SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_NAME
+SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_ID = "0013_freshness_invalidation"
+SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_NAME = "Parameter replacement and freshness invalidation overlay"
+CURRENT_SCHEMA_MIGRATION_ID = SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_ID
+CURRENT_SCHEMA_MIGRATION_NAME = SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_NAME
 
 SCHEMA_MIGRATION_RECORDS = [
     {
@@ -70,6 +72,11 @@ SCHEMA_MIGRATION_RECORDS = [
     {
         "migration_id": SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID,
         "name": SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_NAME,
+        "checksum": None,
+    },
+    {
+        "migration_id": SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_ID,
+        "name": SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_NAME,
         "checksum": None,
     },
 ]
@@ -222,10 +229,47 @@ SCHEMA_STATEMENTS = [
         origin TEXT NOT NULL DEFAULT 'user',
         source_ai_job_id TEXT,
         promoted_at TEXT,
+        supersedes_parameter_id TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         notes TEXT,
-        FOREIGN KEY (workspace_id) REFERENCES workspaces(id)
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id),
+        FOREIGN KEY (supersedes_parameter_id) REFERENCES parameters(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS freshness_invalidations (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        superseded_parameter_id TEXT NOT NULL,
+        replacement_parameter_id TEXT NOT NULL,
+        source_graph_digest TEXT NOT NULL,
+        affected_count INTEGER NOT NULL,
+        unresolved_diagnostic_count INTEGER NOT NULL,
+        cycle_count INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id),
+        FOREIGN KEY (superseded_parameter_id) REFERENCES parameters(id),
+        FOREIGN KEY (replacement_parameter_id) REFERENCES parameters(id),
+        UNIQUE(workspace_id, superseded_parameter_id),
+        UNIQUE(workspace_id, replacement_parameter_id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS freshness_marks (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        invalidation_id TEXT NOT NULL,
+        record_ref TEXT NOT NULL,
+        record_kind TEXT NOT NULL,
+        record_id TEXT NOT NULL,
+        reason_code TEXT NOT NULL,
+        path_json TEXT NOT NULL,
+        path_digest TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id),
+        FOREIGN KEY (invalidation_id) REFERENCES freshness_invalidations(id),
+        UNIQUE(invalidation_id, record_ref)
     )
     """,
     """
@@ -495,6 +539,7 @@ SCHEMA_MIGRATION_STATEMENTS = [
     "ALTER TABLE runner_jobs ADD COLUMN implementation_kind TEXT NOT NULL DEFAULT 'batch_growth_v0'",
     "ALTER TABLE model_versions ADD COLUMN input_contract_payload TEXT",
     "ALTER TABLE model_versions ADD COLUMN input_contract_sha256 TEXT",
+    "ALTER TABLE parameters ADD COLUMN supersedes_parameter_id TEXT",
 ]
 
 SCHEMA_FTS_STATEMENTS = [
@@ -552,4 +597,8 @@ SCHEMA_INDEX_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_bluecad_candidates_workspace_created ON bluecad_candidates(workspace_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_bluecad_attempts_candidate_attempt ON bluecad_attempts(candidate_id, attempt_no)",
     "CREATE INDEX IF NOT EXISTS idx_evidence_records_workspace_kind ON evidence_records(workspace_id, kind, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_parameters_workspace_supersedes ON parameters(workspace_id, supersedes_parameter_id)",
+    "CREATE INDEX IF NOT EXISTS idx_freshness_marks_workspace_ref ON freshness_marks(workspace_id, record_ref)",
+    "CREATE INDEX IF NOT EXISTS idx_freshness_marks_invalidation_ref ON freshness_marks(invalidation_id, record_ref)",
+    "CREATE INDEX IF NOT EXISTS idx_freshness_invalidations_workspace_created ON freshness_invalidations(workspace_id, created_at)",
 ]

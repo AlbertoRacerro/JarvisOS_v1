@@ -44,12 +44,8 @@ _CANONICAL_KINDS = frozenset(
 )
 _KIND_ALIASES = {"evidence_record": "evidence"}
 _CONTEXT_KINDS = frozenset({"decision", "assumption", "parameter", "requirement", "evidence"})
-_BLUECAD_ATTEMPT_REF_RE = re.compile(
-    r"^bluecad_candidate:([^:]{1,256}):attempt:([1-9][0-9]*)$"
-)
-_BLUECAD_SIM_REF_RE = re.compile(
-    r"^bluecad_candidate:([^:]{1,256}):attempt:([1-9][0-9]*):sim:([^:]{1,256})$"
-)
+_BLUECAD_ATTEMPT_REF_RE = re.compile(r"^bluecad_candidate:([^:]{1,256}):attempt:([1-9][0-9]*)$")
+_BLUECAD_SIM_REF_RE = re.compile(r"^bluecad_candidate:([^:]{1,256}):attempt:([1-9][0-9]*):sim:([^:]{1,256})$")
 
 
 class FlowsheetError(ValueError):
@@ -134,18 +130,26 @@ class _GraphBuilder:
 
 
 def get_flowsheet_node(workspace_id: str, node_ref: str) -> FlowsheetNodeRead:
-    kind, record_id = _parse_node_ref(node_ref)
     with open_sqlite_connection() as connection:
         connection.execute("PRAGMA query_only = ON")
         connection.execute("BEGIN")
         try:
-            _require_workspace(connection, workspace_id)
-            row = _select_node_row(connection, workspace_id, kind, record_id)
-            if row is None:
-                raise FlowsheetError("flowsheet_node_not_found", "Flowsheet node not found.")
-            return _node_from_row(kind, row)
+            return resolve_flowsheet_node_from_connection(connection, workspace_id, node_ref)
         finally:
             connection.rollback()
+
+
+def resolve_flowsheet_node_from_connection(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    node_ref: str,
+) -> FlowsheetNodeRead:
+    _require_workspace(connection, workspace_id)
+    kind, record_id = _parse_node_ref(node_ref)
+    row = _select_node_row(connection, workspace_id, kind, record_id)
+    if row is None:
+        raise FlowsheetError("flowsheet_node_not_found", "Flowsheet node not found.")
+    return _node_from_row(kind, row)
 
 
 def get_flowsheet_graph(workspace_id: str) -> FlowsheetGraphRead:
@@ -153,49 +157,56 @@ def get_flowsheet_graph(workspace_id: str) -> FlowsheetGraphRead:
         connection.execute("PRAGMA query_only = ON")
         connection.execute("BEGIN")
         try:
-            _require_workspace(connection, workspace_id)
-            rows = _load_workspace_rows(connection, workspace_id)
-            nodes = _build_nodes(rows)
-            _enforce_bound("nodes", len(nodes), MAX_GRAPH_NODES)
-            builder = _GraphBuilder(nodes)
-            _add_foreign_key_edges(builder, rows)
-            run_payloads = _add_payload_edges(builder, rows)
-            _add_source_reference_edges(builder, rows, run_payloads)
-            _add_ai_context_edges(builder, rows)
-            edges = _materialize_edges(builder.edges)
-            _enforce_bound("edges", len(edges), MAX_GRAPH_EDGES)
-            unresolved = sorted(
-                builder.diagnostics.values(),
-                key=lambda item: (item.owner_ref, item.source_field, item.code, item.raw_ref or ""),
-            )
-            if len(unresolved) > MAX_GRAPH_DIAGNOSTICS:
-                raise FlowsheetError(
-                    "flowsheet_diagnostics_limit_exceeded",
-                    "Flowsheet unresolved-reference diagnostics exceed the V0 limit.",
-                    bound="diagnostics",
-                    observed_count=len(unresolved),
-                )
-            node_list = sorted(nodes.values(), key=lambda item: (item.kind, item.id))
-            is_acyclic, order, cycles = _topological_projection(nodes, edges)
-            diagnostics = FlowsheetDiagnosticsRead(
-                unsupported_reference_count=sum(item.code == "unsupported_reference" for item in unresolved),
-                malformed_reference_count=sum(item.code == "malformed_reference" for item in unresolved),
-                dangling_reference_count=sum(item.code == "dangling_reference" for item in unresolved),
-                cycle_count=len(cycles),
-                manual_binding_count=builder.manual_binding_count,
-                unresolved_references=unresolved,
-                cycles=cycles,
-            )
-            return FlowsheetGraphRead(
-                workspace_id=workspace_id,
-                nodes=node_list,
-                edges=edges,
-                topological_order=order,
-                is_acyclic=is_acyclic,
-                diagnostics=diagnostics,
-            )
+            return build_flowsheet_graph_from_connection(connection, workspace_id)
         finally:
             connection.rollback()
+
+
+def build_flowsheet_graph_from_connection(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+) -> FlowsheetGraphRead:
+    _require_workspace(connection, workspace_id)
+    rows = _load_workspace_rows(connection, workspace_id)
+    nodes = _build_nodes(rows)
+    _enforce_bound("nodes", len(nodes), MAX_GRAPH_NODES)
+    builder = _GraphBuilder(nodes)
+    _add_foreign_key_edges(builder, rows)
+    run_payloads = _add_payload_edges(builder, rows)
+    _add_source_reference_edges(builder, rows, run_payloads)
+    _add_ai_context_edges(builder, rows)
+    edges = _materialize_edges(builder.edges)
+    _enforce_bound("edges", len(edges), MAX_GRAPH_EDGES)
+    unresolved = sorted(
+        builder.diagnostics.values(),
+        key=lambda item: (item.owner_ref, item.source_field, item.code, item.raw_ref or ""),
+    )
+    if len(unresolved) > MAX_GRAPH_DIAGNOSTICS:
+        raise FlowsheetError(
+            "flowsheet_diagnostics_limit_exceeded",
+            "Flowsheet unresolved-reference diagnostics exceed the V0 limit.",
+            bound="diagnostics",
+            observed_count=len(unresolved),
+        )
+    node_list = sorted(nodes.values(), key=lambda item: (item.kind, item.id))
+    is_acyclic, order, cycles = _topological_projection(nodes, edges)
+    diagnostics = FlowsheetDiagnosticsRead(
+        unsupported_reference_count=sum(item.code == "unsupported_reference" for item in unresolved),
+        malformed_reference_count=sum(item.code == "malformed_reference" for item in unresolved),
+        dangling_reference_count=sum(item.code == "dangling_reference" for item in unresolved),
+        cycle_count=len(cycles),
+        manual_binding_count=builder.manual_binding_count,
+        unresolved_references=unresolved,
+        cycles=cycles,
+    )
+    return FlowsheetGraphRead(
+        workspace_id=workspace_id,
+        nodes=node_list,
+        edges=edges,
+        topological_order=order,
+        is_acyclic=is_acyclic,
+        diagnostics=diagnostics,
+    )
 
 
 def _require_workspace(connection: sqlite3.Connection, workspace_id: str) -> None:
@@ -245,18 +256,12 @@ def _select_node_row(
             "SELECT id, name, status, origin, unit, value_status, created_at "
             "FROM parameters WHERE workspace_id = ? AND id = ?"
         ),
-        "decision": (
-            "SELECT id, title, status, origin, created_at FROM decisions WHERE workspace_id = ? AND id = ?"
-        ),
-        "requirement": (
-            "SELECT id, statement, status, created_at FROM requirements WHERE workspace_id = ? AND id = ?"
-        ),
+        "decision": ("SELECT id, title, status, origin, created_at FROM decisions WHERE workspace_id = ? AND id = ?"),
+        "requirement": ("SELECT id, statement, status, created_at FROM requirements WHERE workspace_id = ? AND id = ?"),
         "bluecad_candidate": (
             "SELECT id, status, origin, created_at FROM bluecad_candidates WHERE workspace_id = ? AND id = ?"
         ),
-        "evidence": (
-            "SELECT id, kind, verdict, created_at FROM evidence_records WHERE workspace_id = ? AND id = ?"
-        ),
+        "evidence": ("SELECT id, kind, verdict, created_at FROM evidence_records WHERE workspace_id = ? AND id = ?"),
     }
     if kind in direct_queries:
         row = connection.execute(direct_queries[kind], (workspace_id, record_id)).fetchone()
@@ -326,9 +331,7 @@ def _load_workspace_rows(connection: sqlite3.Connection, workspace_id: str) -> d
             "SELECT id, title, status, origin, linked_run_id, source_ai_job_id, created_at "
             "FROM decisions WHERE workspace_id = ?"
         ),
-        "requirement": (
-            "SELECT id, statement, status, created_at FROM requirements WHERE workspace_id = ?"
-        ),
+        "requirement": ("SELECT id, statement, status, created_at FROM requirements WHERE workspace_id = ?"),
         "bluecad_candidate": (
             "SELECT id, status, origin, parent_candidate_id, spec_artifact_id, glb_artifact_id, "
             "report_artifact_id, promoted_decision_id, created_at "
@@ -338,9 +341,7 @@ def _load_workspace_rows(connection: sqlite3.Connection, workspace_id: str) -> d
             "SELECT id, kind, verdict, source_run_id, candidate_id, attempt_id, report_artifact_id, created_at "
             "FROM evidence_records WHERE workspace_id = ?"
         ),
-        "run_artifact": (
-            "SELECT simulation_run_id, artifact_id, role FROM run_artifacts WHERE workspace_id = ?"
-        ),
+        "run_artifact": ("SELECT simulation_run_id, artifact_id, role FROM run_artifacts WHERE workspace_id = ?"),
     }
     rows = {
         kind: [dict(row) for row in connection.execute(query, (workspace_id,)).fetchall()]
@@ -466,7 +467,15 @@ def _node_from_row(kind: str, row: dict[str, Any]) -> FlowsheetNodeRead:
 def _add_foreign_key_edges(builder: _GraphBuilder, rows: dict[str, list[dict[str, Any]]]) -> None:
     for row in rows["model_version"]:
         downstream = _ref("model_version", row["id"])
-        _add_typed_edge(builder, "model_spec", row.get("model_spec_id"), downstream, "has_version", "dependency", "model_versions.model_spec_id")
+        _add_typed_edge(
+            builder,
+            "model_spec",
+            row.get("model_spec_id"),
+            downstream,
+            "has_version",
+            "dependency",
+            "model_versions.model_spec_id",
+        )
         _add_typed_edge(
             builder,
             "artifact",
@@ -521,7 +530,10 @@ def _add_foreign_key_edges(builder: _GraphBuilder, rows: dict[str, list[dict[str
                 "decisions.linked_run_id",
             )
         _add_ai_proposal_edge(builder, row, downstream, "decisions.source_ai_job_id")
-    for kind, source_field in (("assumption", "assumptions.source_ai_job_id"), ("parameter", "parameters.source_ai_job_id")):
+    for kind, source_field in (
+        ("assumption", "assumptions.source_ai_job_id"),
+        ("parameter", "parameters.source_ai_job_id"),
+    ):
         for row in rows[kind]:
             _add_ai_proposal_edge(builder, row, _ref(kind, row["id"]), source_field)
     for row in rows["bluecad_candidate"]:
@@ -709,12 +721,15 @@ def _add_payload_edges(
                         "simulation_runs.input_payload:input_artifact_ids",
                         owner_ref=run_ref,
                     )
-        elif model_version is None and payload is not None and (
-            "candidate_id" in payload or "attempt_id" in payload
-        ):
+        elif model_version is None and payload is not None and ("candidate_id" in payload or "attempt_id" in payload):
             candidate_id = payload.get("candidate_id")
             attempt_id = payload.get("attempt_id")
-            if not isinstance(candidate_id, str) or not candidate_id or not isinstance(attempt_id, str) or not attempt_id:
+            if (
+                not isinstance(candidate_id, str)
+                or not candidate_id
+                or not isinstance(attempt_id, str)
+                or not attempt_id
+            ):
                 builder.add_diagnostic(
                     owner_ref=run_ref,
                     source_field="simulation_runs.input_payload",

@@ -51,11 +51,14 @@ class ParameterCreate(BaseModel):
     confidence: float | None = None
     status: str = "draft"
     notes: str | None = None
+    supersedes_parameter_id: str | None = None
 
     @model_validator(mode="after")
     def validate_uncertainty_bounds(self) -> "ParameterCreate":
         if self.value_min is not None and self.value_max is not None and self.value_min > self.value_max:
             raise ValueError("value_min must be less than or equal to value_max")
+        if self.supersedes_parameter_id is not None and self.status != "proposed":
+            raise ValueError("Parameter replacements must be created with proposed status.")
         return self
 
 

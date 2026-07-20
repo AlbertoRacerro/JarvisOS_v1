@@ -4,6 +4,7 @@ from uuid import uuid4
 from app.core.database import open_sqlite_connection
 from app.core.repository import optional_row_to_model, row_to_model, rows_to_models
 from app.modules.events.service import log_event, utc_now
+from app.modules.memory.replacement import validate_parameter_replacement_proposal
 from app.modules.modeling.models import (
     AssumptionCreate,
     AssumptionRead,
@@ -178,8 +179,7 @@ def select_context_records(
             else:
                 clauses.append(_like_clause(kind, normalized_query, values))
         rows = connection.execute(
-            f"SELECT * FROM {table} WHERE {' AND '.join(clauses)} "
-            "ORDER BY updated_at DESC, id ASC LIMIT ?",
+            f"SELECT * FROM {table} WHERE {' AND '.join(clauses)} ORDER BY updated_at DESC, id ASC LIMIT ?",
             (*values, max_items_per_kind),
         ).fetchall()
         results[kind] = rows_to_models(rows, _CONTEXT_MODELS[kind])
@@ -313,12 +313,21 @@ def create_parameter(workspace_id: str, payload: ParameterCreate) -> ParameterRe
     record_id = str(uuid4())
     with open_sqlite_connection() as connection:
         _require_workspace(connection, workspace_id)
+        validate_parameter_replacement_proposal(
+            connection,
+            workspace_id=workspace_id,
+            supersedes_parameter_id=payload.supersedes_parameter_id,
+            replacement_parameter_id=record_id,
+            unit=payload.unit,
+            value=payload.value,
+        )
         connection.execute(
             """
             INSERT INTO parameters (
                 id, workspace_id, name, symbol, value, unit, value_status, value_min,
-                value_max, source_ref, confidence, status, created_at, updated_at, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                value_max, source_ref, confidence, status, created_at, updated_at, notes,
+                supersedes_parameter_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record_id,
@@ -336,6 +345,7 @@ def create_parameter(workspace_id: str, payload: ParameterCreate) -> ParameterRe
                 now,
                 now,
                 payload.notes,
+                payload.supersedes_parameter_id,
             ),
         )
         _log_creation(
@@ -361,7 +371,7 @@ def list_parameters(workspace_id: str) -> list[ParameterRead]:
                 COALESCE(unit, 'unspecified') AS unit,
                 COALESCE(value_status, 'candidate') AS value_status,
                 value_min, value_max, source_ref, confidence, status,
-                created_at, updated_at, notes
+                created_at, updated_at, notes, supersedes_parameter_id
             FROM parameters
             WHERE workspace_id = ?
             ORDER BY created_at DESC

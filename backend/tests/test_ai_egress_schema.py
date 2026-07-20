@@ -10,7 +10,7 @@ from app.core.database import (
 )
 from app.core.egress_schema import EGRESS_SCHEMA_MIGRATION_ID
 from app.core.schema import (
-    SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID,
+    CURRENT_SCHEMA_MIGRATION_ID,
     SCHEMA_STATEMENTS,
 )
 from app.core.sensitivity_schema import SENSITIVITY_SCHEMA_STATEMENTS
@@ -43,8 +43,8 @@ def test_egress_schema_remains_recorded_after_token_flow_migration():
 
     assert first.ready is True
     assert second.ready is True
-    assert get_current_schema_migration().migration_id == SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID
-    assert count_schema_migrations() == 12
+    assert get_current_schema_migration().migration_id == CURRENT_SCHEMA_MIGRATION_ID
+    assert count_schema_migrations() == 13
 
     with open_sqlite_connection() as connection:
         rows = connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
