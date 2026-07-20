@@ -1,0 +1,39 @@
+name: Reconcile 049 ready once
+
+on:
+  push:
+    branches:
+      - spec/049-buoyancy-optics-definition
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    if: github.repository == 'AlbertoRacerro/JarvisOS_v1'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: spec/049-buoyancy-optics-definition
+          fetch-depth: 0
+      - name: Promote 049 and remove workflow
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('docs/specs/STATUS.md')
+          text = path.read_text(encoding='utf-8')
+          old = "| 049 | planned | — | BLUEREV-PROCESS-2: buoyancy and light/transmittance proxies | 043, 047 | Add hardware mass and safety factor to buoyancy; require explicit optical path length; label proxies honestly and expose the measurements that would promote real light models. |"
+          new = "| 049 | ready | — | BLUEREV-PROCESS-2: buoyancy and light/transmittance proxies | 043, 047 | Add hardware mass and safety factor to buoyancy; require explicit optical path length; label proxies honestly and expose the measurements that would promote real light models. |"
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one 049 planned row, found {text.count(old)}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          Path('.github/workflows/reconcile-049-ready-once.yml').unlink()
+      - name: Commit reconciled definition
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/specs/STATUS.md .github/workflows/reconcile-049-ready-once.yml
+          git commit -m "Mark spec 049 ready"
+          git push origin HEAD:spec/049-buoyancy-optics-definition
