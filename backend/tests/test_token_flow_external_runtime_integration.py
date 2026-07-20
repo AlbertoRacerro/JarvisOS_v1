@@ -37,7 +37,7 @@ from app.modules.events.service import utc_now
 WORKSPACE_ID = "bluerev"
 NOW = datetime(2026, 7, 20, 18, 0, tzinfo=UTC)
 BINDING = ProviderBinding(
-    route_class="external:sequence",
+    route_class="external:cheap",
     provider_id="deepseek",
     model_id="deepseek-v4-pro",
     requires_network=True,
