@@ -31,7 +31,7 @@ jobs:
         run: |
           base64 -d .jarvis-tmp/confirmed-length-loop.patch.gz.b64 \
             | gzip -d > /tmp/confirmed-length-loop.patch
-          echo '930ef56ec53e998aba68e8d469b74d46e6a9876e0643c9f2a22e017df5b1d4ee  /tmp/confirmed-length-loop.patch' \
+          echo '19156593edc7c640ade834e24f789bac44a1a95e8615e2cde775b20a3787bed8  /tmp/confirmed-length-loop.patch' \
             | sha256sum -c -
           git apply --check --index /tmp/confirmed-length-loop.patch
           git apply --index /tmp/confirmed-length-loop.patch
