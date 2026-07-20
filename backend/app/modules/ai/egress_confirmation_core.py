@@ -41,6 +41,7 @@ from app.modules.ai.token_flow_confirmation_resume import (
     ContinuationConfirmationAuthority,
     parse_continuation_authority,
 )
+from app.modules.ai.token_flow_confirmed_length import continue_after_confirmed_length
 from app.modules.ai.token_flow_continuation import ContinuationDecision
 from app.modules.ai.token_flow_external_transaction import finalize_external_attempt
 from app.modules.ai.token_flow_runtime import normalize_finish_reason, normalize_outcome_reason
@@ -448,6 +449,31 @@ def run_confirmation_ticket(
         context_digest=context_digest,
         blocked=False,
     )
+    finish_reason = normalize_finish_reason(
+        response.finish_reason, failed=response.error is not None
+    )
+    if (
+        continuation_authority is not None
+        and status == "success"
+        and finish_reason == "length"
+    ):
+        outcome = continue_after_confirmed_length(
+            initial_outcome=outcome,
+            current_packet=packet,
+            task_kind=metadata.task_kind,
+            binding=binding,
+            fallback_index=consumed.fallback_index,
+            max_output_tokens=metadata.max_output_tokens,
+            adapters=adapter_table,
+            registry=registry,
+            policy=policy,
+            expected_sensitivity_level=(
+                continuation_authority.expected_sensitivity_level
+            ),
+        )
+        return ConfirmedTicketExecution(
+            ticket_id, metadata.workspace_id, outcome
+        )
     _finish_confirmation_flow(
         flow_id,
         outcome,
