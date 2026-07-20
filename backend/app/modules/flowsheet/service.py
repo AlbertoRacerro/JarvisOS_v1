@@ -424,7 +424,7 @@ def _node_from_row(kind: str, row: dict[str, Any]) -> FlowsheetNodeRead:
         metadata["artifact_type"] = row.get("artifact_type")
         metadata["mime_type"] = row.get("mime_type")
     elif kind == "assumption":
-        label = f"Assumption: {row.get('statement') or record_id[:8]}"
+        label = f"Assumption {record_id[:8]}"
     elif kind == "parameter":
         label = str(row.get("name") or f"Parameter {record_id[:8]}")
         metadata["unit"] = row.get("unit")
@@ -432,7 +432,7 @@ def _node_from_row(kind: str, row: dict[str, Any]) -> FlowsheetNodeRead:
     elif kind == "decision":
         label = str(row.get("title") or f"Decision {record_id[:8]}")
     elif kind == "requirement":
-        label = f"Requirement: {row.get('statement') or record_id[:8]}"
+        label = f"Requirement {record_id[:8]}"
     elif kind == "ai_job":
         label = f"AI job: {row.get('task_kind') or record_id[:8]}"
         metadata["task_kind"] = row.get("task_kind")
