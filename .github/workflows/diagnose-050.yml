@@ -22,7 +22,7 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - name: Install dependencies
-        run: pip install -q -r backend/requirements.txt
+        run: pip install -q -r backend/requirements.txt pytest
       - name: Run focused flowsheet tests
         id: focused
         continue-on-error: true
