@@ -44,7 +44,7 @@ jobs:
           git apply --check --index .jarvis-tmp/061b-confirmation-resume-diagnostic.patch
           git apply --index .jarvis-tmp/061b-confirmation-resume-diagnostic.patch
 
-          echo '6e937a4af5d40e8eabd17d1d6cfa928c7e350c61023eb7b326ab1767b5560532  .jarvis-tmp/061b-confirmation-resume-followup.patch' \
+          echo 'b701a8189cbdbb84e7cec1b5dfc941ddebbd2532f5d65c3a3c36d4c0f8c68550  .jarvis-tmp/061b-confirmation-resume-followup.patch' \
             | sha256sum -c -
           git apply --check --index .jarvis-tmp/061b-confirmation-resume-followup.patch
           git apply --index .jarvis-tmp/061b-confirmation-resume-followup.patch
