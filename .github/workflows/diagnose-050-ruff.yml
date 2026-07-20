@@ -1,0 +1,30 @@
+name: Diagnose 050 Ruff
+
+on:
+  pull_request:
+    types: [synchronize]
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  ruff:
+    if: github.repository == 'AlbertoRacerro/JarvisOS_v1' && github.event.pull_request.number == 156
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'ruff>=0.6'
+      - name: Capture diagnostics
+        working-directory: backend
+        shell: bash
+        run: |
+          python -m ruff check app tests ../scripts/check_spec_status.py ../scripts/cheap_review.py ../scripts/manual_review.py > "$RUNNER_TEMP/ruff-050.txt" 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ruff-050-diagnostics
+          path: ${{ runner.temp }}/ruff-050.txt
+          retention-days: 2
