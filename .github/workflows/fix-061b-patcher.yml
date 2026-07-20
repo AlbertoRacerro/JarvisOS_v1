@@ -29,7 +29,7 @@ jobs:
             backend/requirements.txt
             backend/requirements-dev.txt
 
-      - name: Extract and correct existing runtime patch
+      - name: Extract existing runtime patch
         run: |
           if grep -q '^def _run_local_continuations' backend/app/modules/ai/execution.py; then
             echo "Runtime integration already present."
@@ -46,50 +46,63 @@ jobs:
           if start_marker not in workflow or end_marker not in workflow:
               raise SystemExit('runtime patch block markers not found')
           block = workflow.split(start_marker, 1)[1].split(end_marker, 1)[0]
-          script = dedent(block)
-          top_level = (
-              "              'from app.modules.ai.token_flow_local_continuation import (\\n'\n"
-              "              '    plan_local_continuation,\\n'\n"
-              "              ')\\n'\n"
+          Path('/tmp/apply-061b-runtime.sh').write_text(
+              dedent(block),
+              encoding='utf-8',
           )
-          lazy_anchor = (
-              '              ) -> AiTaskOutcome:\n'
-              '                  current_attempt_id = initial_attempt_id\n'
-          )
-          lazy_replacement = (
-              '              ) -> AiTaskOutcome:\n'
-              '                  from app.modules.ai.token_flow_local_continuation import (\n'
-              '                      plan_local_continuation,\n'
-              '                  )\n'
-              '\n'
-              '                  current_attempt_id = initial_attempt_id\n'
-          )
-          if top_level not in script:
-              raise SystemExit('top-level continuation planner import anchor not found')
-          if lazy_anchor not in script:
-              raise SystemExit('local continuation helper anchor not found')
-          script = script.replace(top_level, '', 1)
-          script = script.replace(lazy_anchor, lazy_replacement, 1)
-          Path('/tmp/apply-061b-runtime.sh').write_text(script, encoding='utf-8')
           PY
           bash /tmp/apply-061b-runtime.sh
 
+      - name: Break generated import cycle
+        if: hashFiles(format('{0}/runtime-already-present', runner.temp)) == ''
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('backend/app/modules/ai/execution.py')
+          text = path.read_text(encoding='utf-8')
+          top_level = (
+              'from app.modules.ai.token_flow_local_continuation import (\n'
+              '    plan_local_continuation,\n'
+              ')\n'
+          )
+          lazy_anchor = (
+              ') -> AiTaskOutcome:\n'
+              '    current_attempt_id = initial_attempt_id\n'
+          )
+          lazy_replacement = (
+              ') -> AiTaskOutcome:\n'
+              '    from app.modules.ai.token_flow_local_continuation import (\n'
+              '        plan_local_continuation,\n'
+              '    )\n'
+              '\n'
+              '    current_attempt_id = initial_attempt_id\n'
+          )
+          if top_level not in text:
+              raise SystemExit('generated top-level planner import not found')
+          if lazy_anchor not in text:
+              raise SystemExit('generated continuation function anchor not found')
+          text = text.replace(top_level, '', 1)
+          text = text.replace(lazy_anchor, lazy_replacement, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+
       - name: Install dependencies
-        if: hashFiles(format('{0}', runner.temp), 'runtime-already-present') == ''
+        if: hashFiles(format('{0}/runtime-already-present', runner.temp)) == ''
         working-directory: backend
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Run full verified suite
-        if: hashFiles(format('{0}', runner.temp), 'runtime-already-present') == ''
+        if: hashFiles(format('{0}/runtime-already-present', runner.temp)) == ''
         working-directory: backend
         run: |
           python -m ruff check app tests
           python -m pytest -q --tb=short
 
       - name: Commit verified runtime only
-        if: hashFiles(format('{0}', runner.temp), 'runtime-already-present') == ''
+        if: hashFiles(format('{0}/runtime-already-present', runner.temp)) == ''
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
