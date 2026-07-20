@@ -45,6 +45,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
+      - name: Normalize repository import order
+        working-directory: backend
+        run: python -m ruff check --fix app/modules/ai/egress_confirmation.py
+
       - name: Validate confirmation resume
         id: validate
         working-directory: backend
@@ -87,6 +91,7 @@ jobs:
       - name: Commit reviewed source only
         if: steps.validate.outputs.status == '0'
         run: |
+          git add backend/app/modules/ai/egress_confirmation.py
           git rm \
             .github/workflows/apply-061b-confirmation-resume.yml \
             .github/workflows/export-061b-confirmation-resume-source.yml \
