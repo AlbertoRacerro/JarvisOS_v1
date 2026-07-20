@@ -22,8 +22,21 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - name: Install dependencies
-        run: pip install -r backend/requirements.txt
+        run: pip install -q -r backend/requirements.txt
       - name: Run focused flowsheet tests
+        id: focused
+        continue-on-error: true
         env:
           PYTHONPATH: backend
-        run: pytest -q backend/tests/test_flowsheet_dependency_graph.py -vv --tb=short
+        run: pytest -q backend/tests/test_flowsheet_dependency_graph.py -vv --tb=short > /tmp/pytest-050.log 2>&1
+      - name: Upload focused test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-050-log
+          path: /tmp/pytest-050.log
+          if-no-files-found: error
+          retention-days: 1
+      - name: Enforce focused result
+        if: steps.focused.outcome != 'success'
+        run: exit 1
