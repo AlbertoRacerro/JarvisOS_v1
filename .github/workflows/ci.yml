@@ -110,57 +110,50 @@ jobs:
               raise SystemExit("_write_ai_job validation anchor not found")
           text = text.replace(old_validation, new_validation, 1)
 
-          old_record = dedent('''
-                      if flow_id is not None and evidence is not None:
-                          record_attempt_evidence_in_transaction(
-                              connection,
-                              flow_id=flow_id,
-                              attempt_id=job_id,
-                              evidence=evidence,
-                          )
-          ''')
-          new_record = dedent('''
-                      if flow_id is not None and evidence is not None:
-                          if continuation_decision is None:
-                              record_attempt_evidence_in_transaction(
-                                  connection,
-                                  flow_id=flow_id,
-                                  attempt_id=job_id,
-                                  evidence=evidence,
-                              )
-                          else:
-                              record_continuation_attempt_evidence_in_transaction(
-                                  connection,
-                                  flow_id=flow_id,
-                                  attempt_id=job_id,
-                                  evidence=evidence,
-                                  decision=continuation_decision,
-                              )
-          ''')
+          old_record = (
+              '            if flow_id is not None and evidence is not None:\n'
+              '                record_attempt_evidence_in_transaction(\n'
+              '                    connection,\n'
+              '                    flow_id=flow_id,\n'
+              '                    attempt_id=job_id,\n'
+              '                    evidence=evidence,\n'
+              '                )\n'
+          )
+          new_record = (
+              '            if flow_id is not None and evidence is not None:\n'
+              '                if continuation_decision is None:\n'
+              '                    record_attempt_evidence_in_transaction(\n'
+              '                        connection,\n'
+              '                        flow_id=flow_id,\n'
+              '                        attempt_id=job_id,\n'
+              '                        evidence=evidence,\n'
+              '                    )\n'
+              '                else:\n'
+              '                    record_continuation_attempt_evidence_in_transaction(\n'
+              '                        connection,\n'
+              '                        flow_id=flow_id,\n'
+              '                        attempt_id=job_id,\n'
+              '                        evidence=evidence,\n'
+              '                        decision=continuation_decision,\n'
+              '                    )\n'
+          )
           if old_record not in text:
               raise SystemExit("_write_ai_job transaction anchor not found")
           text = text.replace(old_record, new_record, 1)
 
-          old_external_capture = dedent('''
-                  if (
-                      external.status == "success"
-                      and external.response is not None
-                      and normalize_finish_reason(
-                          external.response.finish_reason, failed=external.response.error is not None
-                      )
-                      != "length"
-                  ):
-          ''')
-          new_external_capture = dedent('''
-                  if (
-                      external.status == "success"
-                      and external.response is not None
-                      and normalize_finish_reason(
-                          external.response.finish_reason, failed=external.response.error is not None
-                      )
-                      == "stop"
-                  ):
-          ''')
+          old_external_capture = (
+              '    if (\n'
+              '        external.status == "success"\n'
+              '        and external.response is not None\n'
+              '        and normalize_finish_reason(\n'
+              '            external.response.finish_reason, failed=external.response.error is not None\n'
+              '        )\n'
+              '        != "length"\n'
+              '    ):\n'
+          )
+          new_external_capture = old_external_capture.replace(
+              '        != "length"\n', '        == "stop"\n'
+          )
           if old_external_capture not in text:
               raise SystemExit("external record-capture anchor not found")
           text = text.replace(old_external_capture, new_external_capture, 1)
@@ -566,27 +559,27 @@ jobs:
               raise SystemExit("local continuation helper marker not found")
           text = text.replace(helper_marker, helper + helper_marker, 1)
 
-          old_final = dedent('''
-                      _terminalize_local_flow(
-                          flow_id=flow_id,
-                          status=status,
-                          attempt_id=ledger_id,
-                          reason=error_type,
-                          finish_reason=response.finish_reason,
-                      )
-                      if status == "success" and normalize_finish_reason(
-                          response.finish_reason, failed=False
-                      ) != "length":
-                          proposed_record_ids, records_parse_error = _create_proposed_records_from_response(
-                              task_kind=task_kind,
-                              response=response,
-                              ledger_id=ledger_id,
-                              workspace_id=workspace_id,
-                          )
-                          last_outcome.proposed_record_ids = proposed_record_ids
-                          last_outcome.records_parse_error = records_parse_error
-                      return last_outcome
-          ''')
+          old_final = (
+              '        _terminalize_local_flow(\n'
+              '            flow_id=flow_id,\n'
+              '            status=status,\n'
+              '            attempt_id=ledger_id,\n'
+              '            reason=error_type,\n'
+              '            finish_reason=response.finish_reason,\n'
+              '        )\n'
+              '        if status == "success" and normalize_finish_reason(\n'
+              '            response.finish_reason, failed=False\n'
+              '        ) != "length":\n'
+              '            proposed_record_ids, records_parse_error = _create_proposed_records_from_response(\n'
+              '                task_kind=task_kind,\n'
+              '                response=response,\n'
+              '                ledger_id=ledger_id,\n'
+              '                workspace_id=workspace_id,\n'
+              '            )\n'
+              '            last_outcome.proposed_record_ids = proposed_record_ids\n'
+              '            last_outcome.records_parse_error = records_parse_error\n'
+              '        return last_outcome\n'
+          )
           new_final = dedent('''
                       normalized_finish = normalize_finish_reason(
                           response.finish_reason, failed=False
@@ -639,6 +632,10 @@ jobs:
                           last_outcome.records_parse_error = records_parse_error
                       return last_outcome
           ''')
+          new_final = "".join(
+              f"        {line}\n" if line else "\n"
+              for line in new_final.strip("\n").splitlines()
+          )
           if old_final not in text:
               raise SystemExit("initial local response anchor not found")
           text = text.replace(old_final, new_final, 1)
