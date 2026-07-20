@@ -29,38 +29,18 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          def replace_once(path_name: str, old: str, new: str) -> None:
-              path = Path(path_name)
-              text = path.read_text(encoding='utf-8')
-              if text.count(old) != 1:
-                  raise SystemExit(f'{path_name}: expected one anchor, found {text.count(old)}')
-              path.write_text(text.replace(old, new), encoding='utf-8')
-
-          replace_once(
-              'backend/app/modules/flowsheet/freshness.py',
-              '''    FlowsheetFreshnessMarkRead,
-                  FlowsheetNodeFreshnessRead,
-              )
-          ''',
-              '''    FlowsheetFreshnessMarkRead,
-                  FlowsheetGraphRead,
-                  FlowsheetNodeFreshnessRead,
-              )
-          ''',
+          freshness = Path('backend/app/modules/flowsheet/freshness.py')
+          text = freshness.read_text(encoding='utf-8')
+          import_anchor = '    FlowsheetFreshnessMarkRead,\n    FlowsheetNodeFreshnessRead,\n'
+          if text.count(import_anchor) != 1:
+              raise SystemExit(f'freshness import anchor count={text.count(import_anchor)}')
+          text = text.replace(
+              import_anchor,
+              '    FlowsheetFreshnessMarkRead,\n    FlowsheetGraphRead,\n    FlowsheetNodeFreshnessRead,\n',
           )
-          replace_once(
-              'backend/app/modules/flowsheet/freshness.py',
-              '''def _graph_digest(graph: object) -> str:
-              payload = {
-                  "nodes": [node.model_dump(mode="json") for node in graph.nodes],
-                  "edges": [edge.model_dump(mode="json") for edge in graph.edges],
-                  "unresolved_references": [
-                      item.model_dump(mode="json") for item in graph.diagnostics.unresolved_references
-                  ],
-              }
-              return _sha256_prefixed(_canonical_json(payload))
-          ''',
-              '''def _graph_digest(graph: FlowsheetGraphRead) -> str:
+          start = text.index('def _graph_digest(')
+          end = text.index('\ndef _parse_path', start)
+          graph_function = '''def _graph_digest(graph: FlowsheetGraphRead) -> str:
               payload = {
                   "nodes": sorted(node.ref for node in graph.nodes),
                   "edges": [
@@ -85,29 +65,15 @@ jobs:
                   ],
               }
               return _sha256_prefixed(_canonical_json(payload))
-          ''',
-          )
-          replace_once(
-              'backend/app/modules/memory/service.py',
-              '''                validate_parameter_replacement_proposal(
-                      connection,
-                      workspace_id=str(replacement["workspace_id"]),
-                      supersedes_parameter_id=superseded_id,
-                      replacement_parameter_id=record_id,
-                      unit=str(replacement["unit"]),
-                      value=None if replacement["value"] is None else str(replacement["value"]),
-                  )
-                  already = connection.execute(
-                      "SELECT id FROM freshness_invalidations WHERE superseded_parameter_id = ?",
-                      (superseded_id,),
-                  ).fetchone()
-                  if already is not None:
-                      raise ParameterReplacementError(
-                          "parameter_already_replaced",
-                          "The accepted Parameter already has an accepted replacement.",
-                      )
-          ''',
-              '''                already = connection.execute(
+          
+          '''
+          freshness.write_text(text[:start] + graph_function + text[end + 1 :], encoding='utf-8')
+
+          memory = Path('backend/app/modules/memory/service.py')
+          text = memory.read_text(encoding='utf-8')
+          start = text.rindex('                validate_parameter_replacement_proposal(')
+          end = text.index('\n\n                now = utc_now()', start)
+          replacement_block = '''                already = connection.execute(
                       "SELECT id FROM freshness_invalidations WHERE superseded_parameter_id = ?",
                       (superseded_id,),
                   ).fetchone()
@@ -123,9 +89,8 @@ jobs:
                       replacement_parameter_id=record_id,
                       unit=str(replacement["unit"]),
                       value=None if replacement["value"] is None else str(replacement["value"]),
-                  )
-          ''',
-          )
+                  )'''
+          memory.write_text(text[:start] + replacement_block + text[end:], encoding='utf-8')
           PY
       - name: Format and lint changed Python
         run: |
