@@ -42,4 +42,5 @@ jobs:
           name: source-061b-confirmation-resume
           path: /tmp/061b-resume
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 1
