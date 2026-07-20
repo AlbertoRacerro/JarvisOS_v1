@@ -1,0 +1,47 @@
+name: Diagnose PR160 Pytest
+
+on:
+  pull_request:
+    types: [synchronize]
+    branches: [spec/061b-token-flow-continuation]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    if: >-
+      github.repository == 'AlbertoRacerro/JarvisOS_v1' &&
+      github.event.pull_request.number == 160
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+      - name: Capture focused Pytest
+        shell: bash
+        run: |
+          set +e
+          cd backend
+          python -m pytest -q --tb=long \
+            tests/test_token_flow_rejected_confirmation_access.py \
+            tests/test_token_flow_external_runtime_integration.py \
+            tests/test_ai_egress_confirmation.py \
+            > "$RUNNER_TEMP/pr160-pytest.log" 2>&1
+          echo $? > "$RUNNER_TEMP/pr160-pytest.status"
+          exit 0
+      - name: Upload Pytest diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr160-pytest-diagnostics
+          path: |
+            ${{ runner.temp }}/pr160-pytest.log
+            ${{ runner.temp }}/pr160-pytest.status
+          if-no-files-found: error
+          retention-days: 1
