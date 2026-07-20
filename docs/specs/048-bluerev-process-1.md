@@ -58,6 +58,11 @@ The workbook is a requirements and regression artifact, not executable truth. It
 not stored in the repository and must not be read at runtime or in CI. The complete
 corrected equations and golden values required by 048 are restated below.
 
+Workbook source locators are the stable metric labels in `40_Calculations` and the
+Parameter IDs in `10_Model_Input`; the independent audit additionally identifies
+`40_Calculations!C43` and `C44` for the disputed recovery formulas. Runtime and tests
+use the equations below, not source-cell coordinates.
+
 The workbook formula audit already records these prior corrections:
 
 - dilution equivalent is whole-culture bleed divided by liquid volume;
