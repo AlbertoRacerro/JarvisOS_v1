@@ -1,0 +1,27 @@
+diff --git a/backend/tests/test_token_flow_external_runtime_integration.py b/backend/tests/test_token_flow_external_runtime_integration.py
+index 32dacb5d1c252c8122cef265130d50bcfc456b3c..fb8eb738d447f069775e247e960518f029ef1715 100644
+--- a/backend/tests/test_token_flow_external_runtime_integration.py
++++ b/backend/tests/test_token_flow_external_runtime_integration.py
+@@ -442,6 +442,22 @@ def _pause_external_continuation(*, task_kind: str = "general"):
+     assert flow["state"] == "confirmation_required"
+     assert flow["attempt_count"] == 2
+     assert flow["continuation_count"] == 1
++
++    from app.modules.ai.token_flow_confirmation_resume import (
++        validate_pending_continuation_confirmation_in_transaction,
++    )
++
++    with open_sqlite_connection() as connection:
++        ticket = connection.execute(
++            "SELECT continuation_authority_json FROM egress_confirmation_tickets WHERE id = ?",
++            (outcome.egress_ticket_id,),
++        ).fetchone()
++        validate_pending_continuation_confirmation_in_transaction(
++            connection,
++            flow_id=str(outcome.flow_id),
++            ticket_id=str(outcome.egress_ticket_id),
++            authority_json=str(ticket["continuation_authority_json"]),
++        )
+     return outcome
+ 
+ 
