@@ -1,4 +1,4 @@
-name: Diagnose 051 tests
+name: Diagnose 051 full suite
 
 on:
   pull_request:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  focused:
+  full-suite:
     if: >-
       github.repository == 'AlbertoRacerro/JarvisOS_v1' &&
       github.event.pull_request.number == 159
@@ -23,28 +23,20 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - name: Install dependencies
         run: pip install -q -r backend/requirements.txt pytest
-      - name: Run focused 051 tests
-        id: focused
+      - name: Run complete backend suite
+        id: full
         continue-on-error: true
         env:
           PYTHONPATH: backend
-        run: pytest -q backend/tests/test_flowsheet_stale_propagation.py -vv --tb=short > /tmp/pytest-051-focused.log 2>&1
-      - name: Run migration and API compatibility tests
-        id: compatibility
-        continue-on-error: true
-        env:
-          PYTHONPATH: backend
-        run: pytest -q backend/tests -k 'migration or schema or memory or modeling' --tb=short > /tmp/pytest-051-compat.log 2>&1
-      - name: Upload logs
+        run: pytest -q backend/tests --tb=short > /tmp/pytest-051-full.log 2>&1
+      - name: Upload complete suite log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pytest-051-diagnostics
-          path: |
-            /tmp/pytest-051-focused.log
-            /tmp/pytest-051-compat.log
+          name: pytest-051-full-log
+          path: /tmp/pytest-051-full.log
           if-no-files-found: error
           retention-days: 1
-      - name: Enforce focused result
-        if: steps.focused.outcome != 'success' || steps.compatibility.outcome != 'success'
+      - name: Enforce complete result
+        if: steps.full.outcome == 'failure'
         run: exit 1
