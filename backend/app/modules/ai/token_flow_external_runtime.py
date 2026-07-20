@@ -94,7 +94,6 @@ def run_silent_allow_external_continuations(
             policy=policy,
             flow_id=flow_id,
             continuation_decision=decision,
-            continuation_original_prompt=original_prompt,
             continuation_expected_sensitivity_level=sensitivity_level,
         )
         if (
@@ -135,7 +134,7 @@ def run_silent_allow_external_continuations(
             effective_sensitivity_level=child_sensitivity,
             workspace_id=flow_workspace_id,
         )
-        complete = finish_reason in {"stop", "unknown"}
+        complete = finish_reason == "stop"
         _, assembled = terminalize_assembled_output(
             flow_id=flow_id,
             terminal_attempt_id=child.ledger_id,
