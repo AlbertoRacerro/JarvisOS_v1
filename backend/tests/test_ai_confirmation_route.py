@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import test_token_flow_external_runtime_integration as integration
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-import test_token_flow_external_runtime_integration as integration
 
 from app.modules.ai import escalations
 from app.modules.ai.egress_confirmation import run_confirmation_ticket
