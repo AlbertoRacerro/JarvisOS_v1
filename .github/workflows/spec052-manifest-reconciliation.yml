@@ -1,0 +1,122 @@
+name: Spec 052 manifest reconciliation patch
+
+on:
+  push:
+    branches:
+      - spec/052-cad-link
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: spec/052-cad-link
+          fetch-depth: 0
+      - name: Apply exact manifest reconciliation additions
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str, count: int = 1) -> None:
+              file = Path(path)
+              text = file.read_text(encoding="utf-8")
+              observed = text.count(old)
+              if observed != count:
+                  raise SystemExit(f"{path}: expected {count} exact occurrence(s), found {observed}")
+              file.write_text(text.replace(old, new, count), encoding="utf-8")
+
+          path = "backend/app/modules/bluecad/cad_link.py"
+          replace(
+              path,
+              '        result = build_geometry_spec(preview["resolved_geometry_spec"], out_dir)\n        source_ref = f"bluecad_candidate:{candidate_id}:attempt:1"\n',
+              '        result = build_geometry_spec(preview["resolved_geometry_spec"], out_dir)\n'
+              '        _append_manifest_reconciliation(result, preview["reconciliation"])\n'
+              '        source_ref = f"bluecad_candidate:{candidate_id}:attempt:1"\n',
+          )
+          replace(
+              path,
+              '    external_area = math.pi * (outer_mm / 1000.0) * (length_mm / 1000.0)\n',
+              '    external_area = math.pi * (outer_mm / 1000.0) * (length_mm / 1000.0)\n'
+              '    solid_material_volume = math.pi / 4.0 * (outer_mm**2 - inner_mm**2) * length_mm\n',
+          )
+          replace(
+              path,
+              '            "external_illuminated_area_m2": external_area,\n        },\n    }\n\n\ndef _check',
+              '            "external_illuminated_area_m2": external_area,\n'
+              '            "solid_material_volume_mm3": solid_material_volume,\n'
+              '        },\n'
+              '    }\n\n\n'
+              'def _append_manifest_reconciliation(result: Any, reconciliation: dict[str, Any]) -> None:\n'
+              '    if result.manifest is None:\n'
+              '        return\n'
+              '    assembly = result.manifest.get("assembly")\n'
+              '    actual = None if not isinstance(assembly, dict) else assembly.get("total_volume_mm3")\n'
+              '    expected = reconciliation["cad_values"]["solid_material_volume_mm3"]\n'
+              '    passed = (\n'
+              '        isinstance(actual, (int, float))\n'
+              '        and not isinstance(actual, bool)\n'
+              '        and math.isfinite(float(actual))\n'
+              '        and math.isclose(float(actual), float(expected), rel_tol=REL_TOL, abs_tol=1e-6)\n'
+              '    )\n'
+              '    result.report.setdefault("checks", []).append(\n'
+              '        {\n'
+              '            "id": "CAD_LINK_SOLID_VOLUME_RECONCILIATION",\n'
+              '            "tier": 2,\n'
+              '            "status": "pass" if passed else "fail",\n'
+              '            "detail": {\n'
+              '                "actual_manifest_solid_volume_mm3": actual,\n'
+              '                "expected_annular_solid_volume_mm3": expected,\n'
+              '                "relative_tolerance": REL_TOL,\n'
+              '                "absolute_tolerance_mm3": 1e-6,\n'
+              '            },\n'
+              '        }\n'
+              '    )\n'
+              '    if not passed:\n'
+              '        result.report["verdict"] = "fail"\n'
+              '    if result.report_path is not None:\n'
+              '        result.report_path.write_text(\n'
+              '            json.dumps(result.report, indent=2, sort_keys=True) + "\\n",\n'
+              '            encoding="utf-8",\n'
+              '        )\n\n\n'
+              'def _check',
+          )
+
+          test_path = "backend/tests/test_cad_link.py"
+          replace(
+              test_path,
+              '    assert all(check["passed"] for check in body["reconciliation"]["checks"])\n',
+              '    assert all(check["passed"] for check in body["reconciliation"]["checks"])\n'
+              '    assert body["reconciliation"]["cad_values"]["solid_material_volume_mm3"] > 0\n',
+          )
+          replace(
+              test_path,
+              '        assert all("AI loop" not in row["notes"] for row in rows)\n',
+              '        assert all("AI loop" not in row["notes"] for row in rows)\n'
+              '        report_path = connection.execute(\n'
+              '            "SELECT stored_path FROM artifacts WHERE id = ?",\n'
+              '            (candidate["report_artifact_id"],),\n'
+              '        ).fetchone()["stored_path"]\n'
+              '        report = json.loads(Path(report_path).read_text(encoding="utf-8"))\n'
+              '        solid_check = next(\n'
+              '            check for check in report["checks"]\n'
+              '            if check["id"] == "CAD_LINK_SOLID_VOLUME_RECONCILIATION"\n'
+              '        )\n'
+              '        assert solid_check["status"] == "pass"\n',
+          )
+
+          Path(".github/workflows/spec052-manifest-reconciliation.yml").unlink()
+          PY
+      - name: Commit manifest reconciliation
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Reconcile CAD manifest solid volume for spec 052"
+          git push origin HEAD:spec/052-cad-link
