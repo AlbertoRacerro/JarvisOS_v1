@@ -732,8 +732,13 @@ def _load_existing_link(workspace_id: str, preview_digest: str) -> dict[str, Any
 
 def _replay_response(workspace_id: str, row: dict[str, Any], preview: dict[str, Any]) -> CadLinkExecuteResponse:
     expected = {
+        "source_simulation_run_id": preview["source_simulation_run_id"],
+        "source_runner_job_id": preview["source_runner_job_id"],
+        "transformation_version": preview["transformation_version"],
         "source_snapshot_digest": preview["source_snapshot_digest"],
         "source_model_identity_digest": preview["source_model_identity_digest"],
+        "analysis_contract_digest": preview["analysis_contract_digest"],
+        "preview_digest": preview["preview_digest"],
         "resolved_spec_digest": preview["resolved_spec_digest"],
         "reconciliation_digest": preview["reconciliation_digest"],
     }

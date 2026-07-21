@@ -528,6 +528,38 @@ def test_optional_analysis_reuses_existing_stage_without_ai(
         assert connection.execute("SELECT COUNT(*) AS count FROM ai_jobs").fetchone()["count"] == 0
 
 
+def test_replay_rejects_inconsistent_persisted_link(client: TestClient) -> None:
+    source = _source_run(client)
+    preview = _preview(client, source["run_id"]).json()
+    first = _execute(client, source["run_id"], preview["preview_digest"])
+    assert first.status_code == 200, first.text
+
+    from app.core.database import open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            "UPDATE bluecad_cad_links SET transformation_version = 'tampered' "
+            "WHERE preview_digest = ?",
+            (preview["preview_digest"],),
+        )
+        connection.commit()
+
+    replay = _execute(client, source["run_id"], preview["preview_digest"])
+    assert replay.status_code == 409
+    assert replay.json()["detail"]["code"] == "cad_link_persistence_inconsistent"
+
+    with open_sqlite_connection() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) AS count FROM bluecad_candidates"
+        ).fetchone()["count"] == 1
+        assert connection.execute(
+            "SELECT COUNT(*) AS count FROM bluecad_attempts"
+        ).fetchone()["count"] == 1
+        assert connection.execute(
+            "SELECT COUNT(*) AS count FROM bluecad_cad_links"
+        ).fetchone()["count"] == 1
+
+
 def test_concurrent_execute_owns_one_candidate_and_one_link(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
