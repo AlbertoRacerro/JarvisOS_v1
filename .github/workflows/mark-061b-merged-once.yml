@@ -1,0 +1,42 @@
+name: Mark 061b merged once
+
+on:
+  push:
+    branches: [docs/mark-061b-merged]
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    if: github.repository == 'AlbertoRacerro/JarvisOS_v1'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: docs/mark-061b-merged
+          fetch-depth: 0
+      - name: Update exact registry row
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('docs/specs/STATUS.md')
+          text = path.read_text(encoding='utf-8')
+          old = '| 061b | in_review | [#145](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/145) | TOKEN-FLOW-CONTINUATION-0 | 061a | Add exact-length continuation, protected accumulated segments, restart-safe 059b confirmation resume, assembled-output digests, single final record capture, and safe continuation status after 061a is merged. |'
+          new = '| 061b | merged | [#145](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/145) | TOKEN-FLOW-CONTINUATION-0 | 061a | Add exact-length continuation, protected accumulated segments, restart-safe 059b confirmation resume, assembled-output digests, single final record capture, and safe continuation status after 061a is merged. |'
+          if text.count(old) != 1:
+              raise SystemExit('expected exactly one 061b in_review registry row')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+          git diff --check
+          git diff -- docs/specs/STATUS.md
+      - name: Commit status-only result
+        run: |
+          git rm .github/workflows/mark-061b-merged-once.yml
+          git add docs/specs/STATUS.md
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'docs: mark 061b merged'
+          git push origin HEAD:docs/mark-061b-merged
