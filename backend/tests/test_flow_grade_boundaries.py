@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import test_token_flow_local_runtime_integration as local
 import pytest
+import test_token_flow_local_runtime_integration as local
 
 from app.modules.ai.flow_grade_contracts import FlowGradeConflictError
 from app.modules.ai.flow_grade_read import get_flow_grade_state
