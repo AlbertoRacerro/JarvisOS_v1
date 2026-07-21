@@ -51,6 +51,18 @@ TOKEN_FLOW_SCHEMA_STATEMENTS = [
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS ai_flow_record_captures (
+        flow_id TEXT PRIMARY KEY,
+        terminal_attempt_id TEXT NOT NULL,
+        final_output_digest TEXT NOT NULL,
+        proposal_ids_json TEXT NOT NULL DEFAULT '[]',
+        parse_error TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (flow_id) REFERENCES ai_flows(id),
+        FOREIGN KEY (terminal_attempt_id) REFERENCES ai_jobs(id)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS ai_flow_segments (
         id TEXT PRIMARY KEY,
         flow_id TEXT NOT NULL,
@@ -148,4 +160,8 @@ TOKEN_FLOW_SCHEMA_INDEX_STATEMENTS = [
     "CREATE INDEX IF NOT EXISTS idx_ai_flows_state ON ai_flows(state, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_ai_flows_workspace ON ai_flows(workspace_id, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_ai_flow_segments_expiry ON ai_flow_segments(expires_at)",
+    """
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_flow_record_captures_terminal
+    ON ai_flow_record_captures(terminal_attempt_id)
+    """,
 ]

@@ -253,6 +253,7 @@ def transition_flow_state(
     new_state: FlowState,
     terminal_reason: str | None = None,
     terminal_attempt_id: str | None = None,
+    terminal_response_text: str | None = None,
 ) -> Flow:
     flow_id = _safe(flow_id, ID_RE, "flow_id")
     if new_state not in {*TRANSITIONS, *TERMINAL}:
@@ -280,7 +281,11 @@ def transition_flow_state(
                     if new_state in {"complete", "partial_terminal"}:
                         _output_digest(attempt["output_digest"])
             else:
-                if terminal_reason is not None or terminal_attempt_id is not None:
+                if (
+                    terminal_reason is not None
+                    or terminal_attempt_id is not None
+                    or terminal_response_text is not None
+                ):
                     raise TokenFlowError("nonterminal transition cannot set terminal metadata")
                 if new_state == "confirmation_required":
                     _require_confirmation_attempt(connection, flow_id)
@@ -303,6 +308,23 @@ def transition_flow_state(
                 ),
             )
             recomputed = _recompute(connection, flow_id)
+            if terminal_response_text is not None:
+                if new_state != "complete" or terminal_attempt_id is None:
+                    raise TokenFlowError(
+                        "terminal response capture requires a complete flow"
+                    )
+                from app.modules.ai.flow_record_capture import (
+                    capture_final_flow_records_in_transaction,
+                )
+
+                capture_final_flow_records_in_transaction(
+                    connection,
+                    flow_id=flow_id,
+                    task_kind=str(flow["task_kind"]),
+                    response_text=terminal_response_text,
+                    terminal_attempt_id=terminal_attempt_id,
+                    workspace_id=flow["workspace_id"],
+                )
             connection.commit()
             return recomputed
         except Exception:
