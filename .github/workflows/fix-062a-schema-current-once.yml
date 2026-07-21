@@ -1,0 +1,82 @@
+name: Fix 062a current schema once
+
+on:
+  push:
+    branches:
+      - impl/062a-grade-authority
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: impl/062a-grade-authority
+      - name: Align schema authority tests and clean diagnostics
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path_text: str, old: str, new: str) -> None:
+              path = Path(path_text)
+              text = path.read_text(encoding="utf-8")
+              if text.count(old) != 1:
+                  raise SystemExit(f"expected one anchor in {path_text}: {old!r}")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          replace_once(
+              "backend/app/core/schema.py",
+              "CURRENT_SCHEMA_MIGRATION_ID = SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_ID\n"
+              "CURRENT_SCHEMA_MIGRATION_NAME = SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_NAME\n",
+              'CURRENT_SCHEMA_MIGRATION_ID = "0014_grade_0"\n'
+              'CURRENT_SCHEMA_MIGRATION_NAME = "Flow outcome subjects and append-only human grades"\n',
+          )
+          replace_once(
+              "backend/tests/test_data_infrastructure.py",
+              "    from app.core.schema import (\n"
+              "        CURRENT_SCHEMA_MIGRATION_ID,\n"
+              "        SCHEMA_BASELINE_MIGRATION_ID,\n"
+              "        SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_ID,\n"
+              "    )\n",
+              "    from app.core.grade_schema import GRADE_SCHEMA_MIGRATION_ID\n"
+              "    from app.core.schema import (\n"
+              "        CURRENT_SCHEMA_MIGRATION_ID,\n"
+              "        SCHEMA_BASELINE_MIGRATION_ID,\n"
+              "        SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_ID,\n"
+              "    )\n",
+          )
+          replace_once(
+              "backend/tests/test_data_infrastructure.py",
+              "    assert CURRENT_SCHEMA_MIGRATION_ID == SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_ID\n"
+              "    assert SCHEMA_BASELINE_MIGRATION_ID in migrations\n",
+              "    assert CURRENT_SCHEMA_MIGRATION_ID == GRADE_SCHEMA_MIGRATION_ID\n"
+              "    assert SCHEMA_BASELINE_MIGRATION_ID in migrations\n"
+              "    assert SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_ID in migrations\n"
+              "    assert GRADE_SCHEMA_MIGRATION_ID in migrations\n",
+          )
+          replace_once(
+              "backend/tests/test_data_infrastructure.py",
+              "    assert migrations[TOKEN_FLOW_SCHEMA_MIGRATION_ID][\"status\"] == \"applied\"\n"
+              "    assert CURRENT_SCHEMA_MIGRATION_ID in migrations\n",
+              "    assert migrations[TOKEN_FLOW_SCHEMA_MIGRATION_ID][\"status\"] == \"applied\"\n"
+              "    assert migrations[GRADE_SCHEMA_MIGRATION_ID][\"status\"] == \"applied\"\n"
+              "    assert CURRENT_SCHEMA_MIGRATION_ID in migrations\n",
+          )
+
+          for workflow in (
+              ".github/workflows/diagnose-pytest-062a.yml",
+              ".github/workflows/fix-062a-schema-current-once.yml",
+          ):
+              path = Path(workflow)
+              if path.exists():
+                  path.unlink()
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Align 062a schema migration authority"
+          git push origin HEAD:impl/062a-grade-authority
