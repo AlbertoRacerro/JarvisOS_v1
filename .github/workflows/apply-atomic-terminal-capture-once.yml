@@ -28,13 +28,26 @@ jobs:
             backend/requirements.txt
             backend/requirements-dev.txt
       - name: Decode and apply reviewed patch
+        shell: bash
         run: |
-          base64 -d .jarvis-tmp/atomic-terminal-capture.patch.gz.b64 \
-            | gzip -d > /tmp/atomic-terminal-capture.patch
-          echo 'cdaef09f7a09d3787d0b5c09da929ed9078f5f0e47d60094e4f31a80ca80f16e  /tmp/atomic-terminal-capture.patch' \
-            | sha256sum -c -
-          git apply --check --index --directory=backend /tmp/atomic-terminal-capture.patch
-          git apply --index --directory=backend /tmp/atomic-terminal-capture.patch
+          set -o pipefail
+          {
+            base64 -d .jarvis-tmp/atomic-terminal-capture.patch.gz.b64 \
+              | gzip -d > /tmp/atomic-terminal-capture.patch
+            echo 'cdaef09f7a09d3787d0b5c09da929ed9078f5f0e47d60094e4f31a80ca80f16e  /tmp/atomic-terminal-capture.patch' \
+              | sha256sum -c -
+            grep '^diff --git' /tmp/atomic-terminal-capture.patch
+            git apply --verbose --check --index --directory=backend /tmp/atomic-terminal-capture.patch
+            git apply --index --directory=backend /tmp/atomic-terminal-capture.patch
+          } 2>&1 | tee "$RUNNER_TEMP/atomic-terminal-capture-apply.log"
+      - name: Upload apply diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: atomic-terminal-capture-apply-diagnostics
+          path: ${{ runner.temp }}/atomic-terminal-capture-apply.log
+          if-no-files-found: warn
+          retention-days: 1
       - name: Install dependencies
         working-directory: backend
         run: |
