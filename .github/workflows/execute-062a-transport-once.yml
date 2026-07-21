@@ -1,0 +1,53 @@
+name: Execute 062a source transport once
+
+on:
+  push:
+    branches:
+      - impl/062a-grade-authority
+  pull_request:
+    branches:
+      - master
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  execute:
+    if: github.event_name == 'push' || github.event.pull_request.number == 166
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: impl/062a-grade-authority
+      - name: Execute embedded source payload and clean transport
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          transport = Path('.github/workflows/apply-062a-grade-authority-once.yml')
+          text = transport.read_text(encoding='utf-8')
+          start_marker = "          python - <<'PY'\n"
+          end_marker = "          PY\n"
+          start = text.index(start_marker) + len(start_marker)
+          end = text.index(end_marker, start)
+          lines = text[start:end].splitlines()
+          script = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in lines
+          )
+          exec(compile(script, str(transport), 'exec'), {'__name__': '__main__'})
+          for path_text in (
+              '.github/workflows/fix-062a-transport-once.yml',
+              '.github/workflows/execute-062a-transport-once.yml',
+          ):
+              path = Path(path_text)
+              if path.exists():
+                  path.unlink()
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Implement 062a flow grade authority"
+          git push origin HEAD:impl/062a-grade-authority
