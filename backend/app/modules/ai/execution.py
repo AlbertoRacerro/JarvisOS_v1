@@ -36,6 +36,7 @@ from app.modules.ai.contracts import (
     RoutingDecision,
 )
 from app.modules.ai.execution_types import ProviderBinding
+from app.modules.ai.flow_record_capture import capture_final_flow_records
 from app.modules.ai.providers.fake_adapter import FAKE_PROVIDER_ID, FakeProviderAdapter
 from app.modules.ai.providers.local_ollama_adapter import (
     LOCAL_OLLAMA_PROVIDER_ID,
@@ -398,6 +399,15 @@ def _prompt_for_task(task_kind: str, blocks: list[dict], user_prompt: str) -> st
 def _create_proposed_records_from_response(
     *, task_kind: str, response: AIResponse, ledger_id: str, workspace_id: str | None
 ) -> tuple[list[str], str | None]:
+    capture = capture_final_flow_records(
+        task_kind=task_kind,
+        response_text=response.text,
+        terminal_attempt_id=ledger_id,
+        workspace_id=workspace_id,
+    )
+    if capture is not None:
+        return list(capture.proposal_ids), capture.parse_error
+
     if task_kind not in RECORD_CAPTURE_TASK_KINDS or response.text is None:
         return [], None
     from app.modules.ai.record_capture import parse_jarvis_records_block
@@ -411,7 +421,9 @@ def _create_proposed_records_from_response(
     errors: list[str] = [parsed.error] if parsed.error else []
     for index, record in enumerate(parsed.records):
         try:
-            payload = MemoryProposalCreate(workspace_id=workspace_id, source_ai_job_id=ledger_id, **record)
+            payload = MemoryProposalCreate(
+                workspace_id=workspace_id, source_ai_job_id=ledger_id, **record
+            )
             created = create_proposal(payload)
         except ValueError as exc:
             errors.append(f"record_create_error[{index}]: {exc}")
@@ -528,6 +540,7 @@ def _terminalize_local_flow(
     attempt_id: str,
     reason: str | None,
     finish_reason: str | None = None,
+    response_text: str | None = None,
 ) -> None:
     normalized_finish = normalize_finish_reason(finish_reason, failed=False)
     if status == "success" and normalized_finish == "stop":
@@ -548,6 +561,7 @@ def _terminalize_local_flow(
         new_state=state,
         terminal_reason=terminal_reason,
         terminal_attempt_id=attempt_id,
+        terminal_response_text=response_text if state == "complete" else None,
     )
 
 
@@ -1418,6 +1432,7 @@ def run_ai_task(
             attempt_id=ledger_id,
             reason=error_type,
             finish_reason=response.finish_reason,
+            response_text=response.text,
         )
         if status == "success" and normalized_finish == "stop":
             proposed_record_ids, records_parse_error = _create_proposed_records_from_response(

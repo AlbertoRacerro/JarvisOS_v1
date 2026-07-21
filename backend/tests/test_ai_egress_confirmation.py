@@ -115,6 +115,7 @@ def _success_response(provider_id: str = "deepseek", model_id: str = "deepseek-v
             provider_cost_estimate=(11 * 5.0 + 7 * 20.0) / 1_000_000,
             currency="USD",
         ),
+        finish_reason="stop",
         safety_status="allowed",
         external_dispatch_state=AIExternalDispatchState.started,
     )
