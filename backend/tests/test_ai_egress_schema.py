@@ -44,7 +44,7 @@ def test_egress_schema_remains_recorded_after_token_flow_migration():
     assert first.ready is True
     assert second.ready is True
     assert get_current_schema_migration().migration_id == CURRENT_SCHEMA_MIGRATION_ID
-    assert count_schema_migrations() == 14
+    assert count_schema_migrations() == 15
 
     with open_sqlite_connection() as connection:
         rows = connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
