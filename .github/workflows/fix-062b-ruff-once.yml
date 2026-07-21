@@ -1,0 +1,52 @@
+name: Fix 062b Ruff once
+
+on:
+  pull_request:
+    branches:
+      - master
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.event.pull_request.number == 167 && github.head_ref == 'impl/062b-grade-cohorts'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: impl/062b-grade-cohorts
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Ruff
+        run: python -m pip install ruff
+      - name: Apply bounded Ruff fixes
+        working-directory: backend
+        run: |
+          python -m ruff check --fix \
+            app/modules/ai/flow_grade_cohort_contracts.py \
+            app/modules/ai/flow_grade_cohort_distributions.py \
+            app/modules/ai/flow_grade_cohort_models.py \
+            app/modules/ai/flow_grade_cohort_routes.py \
+            app/modules/ai/flow_grade_cohort_store.py \
+            app/modules/ai/flow_grade_cohorts.py \
+            app/modules/ai/routes.py \
+            tests/test_flow_grade_cohort_bounds.py \
+            tests/test_flow_grade_cohort_distributions.py \
+            tests/test_flow_grade_cohort_note_privacy.py \
+            tests/test_flow_grade_cohort_unknown_buckets.py \
+            tests/test_flow_grade_cohort_withdrawal_invariance.py \
+            tests/test_flow_grade_cohorts.py \
+            tests/test_grade_status_registry.py
+      - name: Commit fixes and remove workflow
+        shell: bash
+        run: |
+          git config user.name "JarvisOS automation"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/workflows/fix-062b-ruff-once.yml
+          git add backend/app/modules/ai backend/tests
+          git commit -m "Fix 062b lint findings"
+          git push origin HEAD:impl/062b-grade-cohorts
