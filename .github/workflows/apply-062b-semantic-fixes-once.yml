@@ -31,7 +31,13 @@ jobs:
           def replace_once(path: str, pattern: str, replacement: str) -> None:
               target = Path(path)
               text = target.read_text(encoding="utf-8")
-              updated, count = re.subn(pattern, replacement, text, count=1)
+              updated, count = re.subn(
+                  pattern,
+                  replacement,
+                  text,
+                  count=1,
+                  flags=re.MULTILINE,
+              )
               if count != 1:
                   raise SystemExit(f"expected exactly one match in {path}, found {count}")
               target.write_text(updated, encoding="utf-8")
