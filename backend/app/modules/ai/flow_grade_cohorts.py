@@ -11,6 +11,7 @@ from app.modules.ai.flow_grade_cohort_contracts import (
     EXECUTION_COMPOSITIONS,
     GRADE_BUCKETS,
     PROVIDER_QUALITY_BUCKETS,
+    USAGE_SOURCES,
     decimal_text,
     decimal_value,
     dispatch_quality,
@@ -18,8 +19,20 @@ from app.modules.ai.flow_grade_cohort_contracts import (
     execution_composition,
     provider_quality,
 )
+from app.modules.ai.flow_grade_cohort_distributions import numeric_distribution
 from app.modules.ai.flow_grade_cohort_models import FlowGradeCohortRead
 from app.modules.ai.flow_grade_cohort_store import load_cohort_rows
+
+NON_PROVIDER_BASES = {
+    "no_execution",
+    "synthetic_not_economic",
+    "local_compute_unpriced",
+    "external_not_sent",
+}
+CONSERVATIVE_BASES = {
+    "conservative_standard_input",
+    "conservative_estimated_usage",
+}
 
 
 def get_flow_grade_cohort(
@@ -45,6 +58,7 @@ def get_flow_grade_cohort(
     provider_quality_counts = _counts(PROVIDER_QUALITY_BUCKETS)
     execution_metrics = _metrics(EXECUTION_CLASSES)
     dispatch_metrics = _metrics(DISPATCH_STATES)
+    usage_metrics = _metrics(USAGE_SOURCES)
     accounting_metrics = _metrics(ACCOUNTING_BASES)
     attempts_by_grade = _counts(GRADE_BUCKETS)
     spend_by_grade = {key: Decimal("0") for key in GRADE_BUCKETS}
@@ -53,6 +67,10 @@ def get_flow_grade_cohort(
     route_mix: dict[str, int] = {}
     fallback_counts: dict[str, int] = {}
     continuation_counts: dict[str, int] = {}
+    no_execution_reasons: dict[str, int] = {}
+    input_token_values: list[int] = []
+    output_token_values: list[int] = []
+    latency_values: list[int] = []
 
     total_flow_spend = Decimal("0")
     total_attempt_spend = Decimal("0")
@@ -66,8 +84,12 @@ def get_flow_grade_cohort(
     local_unpriced_flows = 0
     synthetic_flows = 0
     legacy_flows = 0
+    no_execution_attempts = 0
     external_not_sent = 0
     external_unknown = 0
+    external_not_sent_spend_is_zero = True
+    unknown_dispatch_uses_conservative_basis = True
+    non_provider_bases_have_zero_external_spend = True
 
     for flow in rows.flows:
         flow_id = str(flow["id"])
@@ -96,9 +118,14 @@ def get_flow_grade_cohort(
         flow_spend = decimal_value(flow["external_provider_spend_usd_decimal"])
         total_flow_spend += flow_spend
         spend_by_grade[grade] += flow_spend
-        classes = {str(attempt["execution_class"]) for attempt in attempts}
+        all_classes = {str(attempt["execution_class"]) for attempt in attempts}
+        invoked_classes = {
+            str(attempt["execution_class"])
+            for attempt in attempts
+            if bool(attempt["adapter_invoked"])
+        }
         states = {str(attempt["external_dispatch_state"]) for attempt in attempts}
-        composition_counts[execution_composition(classes)] += 1
+        composition_counts[execution_composition(invoked_classes)] += 1
         dispatch_quality_counts[dispatch_quality(states)] += 1
         provider_quality_counts[provider_quality(attempts)] += 1
 
@@ -114,14 +141,13 @@ def get_flow_grade_cohort(
             eligible_grade_counts[grade] += 1
             eligible_spend += flow_spend
 
-        has_local = "local_compute" in classes
-        if has_local:
+        if "local_compute" in invoked_classes:
             flows_with_local += 1
         if bool(flow["local_compute_cost_unpriced"]):
             local_unpriced_flows += 1
-        if bool(flow["synthetic_evidence_present"]) or "synthetic" in classes:
+        if bool(flow["synthetic_evidence_present"]) or "synthetic" in all_classes:
             synthetic_flows += 1
-        if "legacy_unknown" in classes or any(
+        if "legacy_unknown" in all_classes or any(
             attempt["accounting_basis"] == "legacy_unknown" for attempt in attempts
         ):
             legacy_flows += 1
@@ -130,6 +156,7 @@ def get_flow_grade_cohort(
             attempts_by_grade[grade] += 1
             execution_class = str(attempt["execution_class"])
             dispatch_state = str(attempt["external_dispatch_state"])
+            usage_source = str(attempt["normalized_usage_source"])
             accounting_basis = str(attempt["accounting_basis"])
             attempt_spend = decimal_value(
                 attempt["accounted_provider_spend_usd_decimal"]
@@ -137,16 +164,36 @@ def get_flow_grade_cohort(
             total_attempt_spend += attempt_spend
             _add_metric(execution_metrics[execution_class], attempt, attempt_spend)
             _add_metric(dispatch_metrics[dispatch_state], attempt, attempt_spend)
+            _add_metric(usage_metrics[usage_source], attempt, attempt_spend)
             _add_metric(accounting_metrics[accounting_basis], attempt, attempt_spend)
-            if execution_class == "local_compute":
+            input_token_values.append(_count(attempt["input_tokens"]))
+            output_token_values.append(_count(attempt["output_tokens"]))
+            latency_values.append(_count(attempt["latency_ms"]))
+
+            invoked = bool(attempt["adapter_invoked"])
+            if not invoked:
+                no_execution_attempts += 1
+                reason = str(
+                    attempt["outcome_reason"]
+                    or attempt["accounting_basis"]
+                    or "unspecified"
+                )
+                no_execution_reasons[reason] = no_execution_reasons.get(reason, 0) + 1
+            if execution_class == "local_compute" and invoked:
                 local_attempts += 1
                 local_input_tokens += _count(attempt["input_tokens"])
                 local_output_tokens += _count(attempt["output_tokens"])
                 local_latency_ms += _count(attempt["latency_ms"])
             if accounting_basis == "external_not_sent":
                 external_not_sent += 1
+                external_not_sent_spend_is_zero &= attempt_spend == 0
             if dispatch_state == "unknown":
                 external_unknown += 1
+                unknown_dispatch_uses_conservative_basis &= (
+                    accounting_basis in CONSERVATIVE_BASES
+                )
+            if accounting_basis in NON_PROVIDER_BASES:
+                non_provider_bases_have_zero_external_spend &= attempt_spend == 0
             _increment(provider_mix, attempt["provider_id"])
             _increment(model_mix, attempt["model_id"])
             _increment(route_mix, attempt["selected_route_class"])
@@ -174,6 +221,9 @@ def get_flow_grade_cohort(
         grade_state_counts=grade_state_counts,
         current_grade_counts=current_grade_counts,
         grade_coverage=(graded / gradeable) if gradeable else None,
+        current_failed_grade_rate=(
+            current_grade_counts["failed"] / graded if graded else None
+        ),
         eligible_flow_count=eligible_flows,
         eligible_grade_counts=eligible_grade_counts,
         exclusion_reason_counts=exclusion_counts,
@@ -182,6 +232,7 @@ def get_flow_grade_cohort(
         provider_accounting_quality_counts=provider_quality_counts,
         attempt_metrics_by_execution_class=_serialize_metrics(execution_metrics),
         attempt_metrics_by_dispatch_state=_serialize_metrics(dispatch_metrics),
+        attempt_metrics_by_usage_source=_serialize_metrics(usage_metrics),
         attempt_metrics_by_accounting_basis=_serialize_metrics(accounting_metrics),
         attempt_counts_by_current_grade=attempts_by_grade,
         external_provider_spend_usd_total=decimal_text(total_flow_spend),
@@ -201,6 +252,8 @@ def get_flow_grade_cohort(
         local_cost_unpriced_flow_count=local_unpriced_flows,
         synthetic_flow_count=synthetic_flows,
         legacy_ambiguous_flow_count=legacy_flows,
+        no_execution_attempt_count=no_execution_attempts,
+        no_execution_reason_counts=no_execution_reasons,
         external_not_sent_attempt_count=external_not_sent,
         external_unknown_attempt_count=external_unknown,
         revision_event_count=rows.revision_event_count,
@@ -211,6 +264,9 @@ def get_flow_grade_cohort(
         route_mix=route_mix,
         fallback_index_counts=fallback_counts,
         continuation_index_counts=continuation_counts,
+        input_tokens_distribution=numeric_distribution(input_token_values),
+        output_tokens_distribution=numeric_distribution(output_token_values),
+        latency_ms_distribution=numeric_distribution(latency_values),
         reconciliation={
             "flow_states_match_terminal_flows": sum(state_counts.values())
             == terminal_flows,
@@ -240,12 +296,21 @@ def get_flow_grade_cohort(
                 dispatch_metrics
             )
             == attempt_count,
+            "usage_source_attempts_match_attempts": _metric_attempts(usage_metrics)
+            == attempt_count,
             "accounting_basis_attempts_match_attempts": _metric_attempts(
                 accounting_metrics
             )
             == attempt_count,
             "accounting_spend_matches_flow_spend": total_attempt_spend
             == total_flow_spend,
+            "external_not_sent_spend_is_zero": external_not_sent_spend_is_zero,
+            "unknown_dispatch_uses_conservative_basis": (
+                unknown_dispatch_uses_conservative_basis
+            ),
+            "non_provider_bases_have_zero_external_spend": (
+                non_provider_bases_have_zero_external_spend
+            ),
         },
     )
 
