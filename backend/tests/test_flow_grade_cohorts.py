@@ -245,6 +245,7 @@ def test_complete_cohort_reconciles_quality_and_economic_evidence(
     assert cohort.grade_state_counts["graded"] == 4
     assert cohort.grade_state_counts["ungraded"] == 2
     assert cohort.grade_coverage == pytest.approx(4 / 6)
+    assert cohort.current_failed_grade_rate == 0
     assert cohort.eligible_flow_count == 5
     assert cohort.eligible_grade_counts["useful"] == 2
     assert cohort.exclusion_reason_counts == {
@@ -252,10 +253,10 @@ def test_complete_cohort_reconciles_quality_and_economic_evidence(
         "non_empirical_task_kind": 1,
     }
     assert cohort.execution_composition_counts == {
-        "no_adapter_execution": 0,
+        "no_adapter_execution": 1,
         "synthetic_only": 1,
         "local_compute_only": 1,
-        "external_provider_only": 4,
+        "external_provider_only": 3,
         "mixed_executed_classes": 0,
     }
     assert cohort.external_dispatch_quality_counts == {
@@ -286,6 +287,20 @@ def test_complete_cohort_reconciles_quality_and_economic_evidence(
     assert cohort.synthetic_flow_count == 1
     assert cohort.external_not_sent_attempt_count == 1
     assert cohort.external_unknown_attempt_count == 1
+    assert cohort.no_execution_attempt_count == 1
+    assert cohort.no_execution_reason_counts == {"external_not_sent": 1}
+    assert cohort.attempt_metrics_by_usage_source["actual"].attempts == 3
+    assert cohort.attempt_metrics_by_usage_source["estimated"].attempts == 2
+    assert cohort.attempt_metrics_by_usage_source["none"].attempts == 1
+    assert cohort.input_tokens_distribution.model_dump() == {
+        "count": 6, "minimum": 0, "p50": 10, "p95": 10, "maximum": 10
+    }
+    assert cohort.output_tokens_distribution.model_dump() == {
+        "count": 6, "minimum": 0, "p50": 5, "p95": 5, "maximum": 5
+    }
+    assert cohort.latency_ms_distribution.model_dump() == {
+        "count": 6, "minimum": 100, "p50": 100, "p95": 100, "maximum": 100
+    }
     assert cohort.revision_event_count == 1
     assert cohort.withdrawal_event_count == 1
     assert all(cohort.reconciliation.model_dump().values())
