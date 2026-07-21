@@ -48,7 +48,7 @@ class FlowGradeCohortRead(BaseModel):
     grade_state_counts: dict[str, int] = Field(default_factory=dict)
     current_grade_counts: dict[str, int] = Field(default_factory=dict)
     grade_coverage: float | None = None
-    current_failed_grade_rate: float | None = None
+    deterministic_failure_rate: float | None = None
     eligible_flow_count: int
     eligible_grade_counts: dict[str, int] = Field(default_factory=dict)
     exclusion_reason_counts: dict[str, int] = Field(default_factory=dict)

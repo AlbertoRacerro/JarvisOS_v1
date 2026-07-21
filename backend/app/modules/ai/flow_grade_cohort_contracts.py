@@ -71,6 +71,8 @@ def decimal_text(value: Decimal) -> str:
 
 
 def execution_composition(classes: set[str]) -> str:
+    if "legacy_unknown" in classes:
+        return "mixed_executed_classes"
     known = classes & {"synthetic", "local_compute", "external_provider"}
     if not known:
         return "no_adapter_execution"

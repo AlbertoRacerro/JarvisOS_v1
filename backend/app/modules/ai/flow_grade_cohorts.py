@@ -235,9 +235,11 @@ def get_flow_grade_cohort(
         grade_state_counts=grade_state_counts,
         current_grade_counts=current_grade_counts,
         grade_coverage=(graded / gradeable) if gradeable else None,
-        current_failed_grade_rate=(
-            current_grade_counts["failed"] / graded if graded else None
-        ),
+        deterministic_failure_rate=(
+    state_counts["failed_terminal"] / terminal_flows
+    if terminal_flows
+    else None
+),
         eligible_flow_count=eligible_flows,
         eligible_grade_counts=eligible_grade_counts,
         exclusion_reason_counts=exclusion_counts,
