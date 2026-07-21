@@ -1,0 +1,48 @@
+name: Spec 052 additive schema test fix
+
+on:
+  push:
+    branches:
+      - spec/052-cad-link
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: spec/052-cad-link
+          fetch-depth: 0
+      - name: Apply exact additive migration expectation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("backend/tests/test_ai_egress_schema.py")
+          text = path.read_text(encoding="utf-8")
+          old = "    assert count_schema_migrations() == 14\n"
+          if text.count(old) != 1:
+              raise SystemExit("expected exactly one historical migration-count assertion")
+          path.write_text(text.replace(old, "    assert count_schema_migrations() == 15\n", 1), encoding="utf-8")
+
+          for disposable in (
+              Path(".github/workflows/spec052-schema-test-fix.yml"),
+              Path(".github/workflows/spec052-full-pytest-diagnostics.yml"),
+              Path("reports/spec052-full-pytest.txt"),
+          ):
+              if disposable.exists():
+                  disposable.unlink()
+          PY
+      - name: Commit exact compatibility fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Update additive schema migration expectations"
+          git push origin HEAD:spec/052-cad-link
