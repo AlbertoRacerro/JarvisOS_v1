@@ -138,6 +138,7 @@ def is_database_initialized() -> bool:
         "ai_settings",
         "ai_flows",
         "ai_flow_segments",
+        "ai_flow_record_captures",
         "sensitivity_labels",
         "sanitized_derivatives",
         "egress_prompt_derivatives",

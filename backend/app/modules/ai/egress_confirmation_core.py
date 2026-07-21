@@ -471,6 +471,23 @@ def run_confirmation_ticket(
                 continuation_authority.expected_sensitivity_level
             ),
         )
+        if (
+            outcome.status == "success"
+            and outcome.response is not None
+            and normalize_finish_reason(
+                outcome.response.finish_reason,
+                failed=outcome.response.error is not None,
+            )
+            == "stop"
+        ):
+            proposed_ids, parse_error = _create_proposed_records_from_response(
+                task_kind=metadata.task_kind,
+                response=outcome.response,
+                ledger_id=outcome.ledger_id,
+                workspace_id=metadata.workspace_id,
+            )
+            outcome.proposed_record_ids = proposed_ids
+            outcome.records_parse_error = parse_error
         return ConfirmedTicketExecution(
             ticket_id, metadata.workspace_id, outcome
         )
@@ -480,17 +497,18 @@ def run_confirmation_ticket(
         continuation_authority=continuation_authority,
     )
     if (
-        continuation_authority is None
-        and status == "success"
+        outcome.status == "success"
+        and outcome.response is not None
         and normalize_finish_reason(
-            response.finish_reason, failed=response.error is not None
+            outcome.response.finish_reason,
+            failed=outcome.response.error is not None,
         )
         == "stop"
     ):
         proposed_ids, parse_error = _create_proposed_records_from_response(
             task_kind=metadata.task_kind,
-            response=response,
-            ledger_id=queued.ai_job_id,
+            response=outcome.response,
+            ledger_id=outcome.ledger_id,
             workspace_id=metadata.workspace_id,
         )
         outcome.proposed_record_ids = proposed_ids
