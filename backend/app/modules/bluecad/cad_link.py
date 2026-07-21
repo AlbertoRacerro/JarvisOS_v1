@@ -219,6 +219,7 @@ def execute_cad_link_047(workspace_id: str, payload: CadLinkExecuteRequest) -> C
         spec_path = out_dir / "geometry_spec.json"
         spec_path.write_text(canonical_json(preview["resolved_geometry_spec"]) + "\n", encoding="utf-8")
         result = build_geometry_spec(preview["resolved_geometry_spec"], out_dir)
+        _append_manifest_reconciliation(result, preview["reconciliation"])
         source_ref = f"bluecad_candidate:{candidate_id}:attempt:1"
         spec_artifact_id = register_artifact(
             workspace_id,
@@ -554,6 +555,7 @@ def _reconcile(
     inner_mm = outer_mm - 2.0 * wall_mm
     liquid_volume = math.pi * (inner_mm / 1000.0) ** 2 / 4.0 * (length_mm / 1000.0)
     external_area = math.pi * (outer_mm / 1000.0) * (length_mm / 1000.0)
+    solid_material_volume = math.pi / 4.0 * (outer_mm**2 - inner_mm**2) * length_mm
     source_volume = _output_value(outputs, "tube_liquid_volume", "m3")
     source_area = _output_value(outputs, "external_illuminated_area_proxy", "m2")
     checks = [
@@ -572,8 +574,43 @@ def _reconcile(
             "length_m": length_mm / 1000.0,
             "tube_liquid_volume_m3": liquid_volume,
             "external_illuminated_area_m2": external_area,
+            "solid_material_volume_mm3": solid_material_volume,
         },
     }
+
+
+def _append_manifest_reconciliation(result: Any, reconciliation: dict[str, Any]) -> None:
+    if result.manifest is None:
+        return
+    assembly = result.manifest.get("assembly")
+    actual = None if not isinstance(assembly, dict) else assembly.get("total_volume_mm3")
+    expected = reconciliation["cad_values"]["solid_material_volume_mm3"]
+    passed = (
+        isinstance(actual, (int, float))
+        and not isinstance(actual, bool)
+        and math.isfinite(float(actual))
+        and math.isclose(float(actual), float(expected), rel_tol=REL_TOL, abs_tol=1e-6)
+    )
+    result.report.setdefault("checks", []).append(
+        {
+            "id": "CAD_LINK_SOLID_VOLUME_RECONCILIATION",
+            "tier": 2,
+            "status": "pass" if passed else "fail",
+            "detail": {
+                "actual_manifest_solid_volume_mm3": actual,
+                "expected_annular_solid_volume_mm3": expected,
+                "relative_tolerance": REL_TOL,
+                "absolute_tolerance_mm3": 1e-6,
+            },
+        }
+    )
+    if not passed:
+        result.report["verdict"] = "fail"
+    if result.report_path is not None:
+        result.report_path.write_text(
+            json.dumps(result.report, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
 
 
 def _check(name: str, observed: float, expected: float, absolute_tolerance: float) -> dict[str, Any]:

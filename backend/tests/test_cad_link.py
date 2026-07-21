@@ -180,6 +180,7 @@ def test_preview_is_zero_write_and_reconciles_exact_047_proxy(client: TestClient
         "wall_t_mm": "3",
     }
     assert all(check["passed"] for check in body["reconciliation"]["checks"])
+    assert body["reconciliation"]["cad_values"]["solid_material_volume_mm3"] > 0
     assert set(body["source_snapshot"]) == {
         "tube_length",
         "tube_inner_diameter",
@@ -234,6 +235,16 @@ def test_execute_is_non_ai_idempotent_and_uses_honest_artifact_provenance(client
         assert len(rows) == len(artifact_ids)
         assert all("deterministic CAD-LINK-0" in row["notes"] for row in rows)
         assert all("AI loop" not in row["notes"] for row in rows)
+        report_path = connection.execute(
+            "SELECT stored_path FROM artifacts WHERE id = ?",
+            (candidate["report_artifact_id"],),
+        ).fetchone()["stored_path"]
+        report = json.loads(Path(report_path).read_text(encoding="utf-8"))
+        solid_check = next(
+            check for check in report["checks"]
+            if check["id"] == "CAD_LINK_SOLID_VOLUME_RECONCILIATION"
+        )
+        assert solid_check["status"] == "pass"
         assert connection.execute("SELECT COUNT(*) AS count FROM ai_jobs").fetchone()["count"] == before_ai
 
     second = _execute(client, str(source["run_id"]), preview["preview_digest"])
