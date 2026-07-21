@@ -49,20 +49,22 @@ before Codex or another coding agent may act on them.
    PR #98/ADR-059, and PR #101 lifecycle reconciliation.
 2. `059b` implementation is merged in PR #119; preserve its server-owned sensitivity,
    packet, trigger, ticket, reservation, accounting, audit, and fallback boundaries.
-3. `061a` TOKEN-FLOW-CORE-0 is merged in PR #134. Preserve its canonical flow,
-   attempt, confirmation, and accounting authority while implementing `061b`
-   continuation, protected resume, and assembled-output completion separately.
+3. `061a` and `061b` are merged in PRs #134 and #145. Preserve their canonical flow,
+   attempt, protected continuation, confirmation, assembled-output, and accounting
+   authority.
 4. Draft and promote `066` HERMES-PASSTHROUGH-0 and `067` JARVIS-MCP-0 only after
    their contracts are reconciled with 059b, 061a/061b, and existing service boundaries.
 5. Draft and promote `068` HERMES-CONFIG-0 only after 066/067 are stable and a
    concrete Windows-first host-isolation boundary is selected.
-6. Complete the merged `047` model through `071` editable bindings, scenario runs,
-   and honest forward DOF inspection before expanding to `048` + `049`; Hermes work
-   must not indefinitely displace measurable BlueRev engineering progress.
+6. Preserve the merged `047`–`051` and `071` process-model, editable-binding,
+   forward-DOF, dependency-graph, and stale-propagation foundation. Promote and
+   implement `052` CAD-LINK before residual UI work unless a concrete runtime
+   blocker is recorded; Hermes work must not indefinitely displace measurable
+   BlueRev engineering progress.
 7. Run `069` MEMORY-CONSOLIDATE-0 as the first Hermes dogfood only after 066–068
    are merged and the required local route is qualified.
 8. Continue `063`/`064`, `012` → `033`, and residual conversation/UI rows according
-   to dependencies and measured value.
+   to dependencies, explicit maintainer priority, and measured value.
 
 Trigger-gated rows remain `planned` until their stated evidence exists. Always
 check rows marked `in_review` before choosing any `ready` spec and confirm no open
@@ -79,7 +81,7 @@ PR overlaps the target files or runtime boundary.
 | 005 | merged | [#12](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/12) | BLUECAD CAD adapter MVP | — | Define GeometrySpec v0, deterministic CAD construction/export, and Tier 0–1 validation foundations. |
 | 005b | merged | [#19](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/19) | BLUECAD remaining part-kind builders | 005 | Add deterministic manifold, float, anchor-mount, and harvest-module builders plus interface-aware ports. |
 | 006 | merged | [#23](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/23) | BLUECAD workbench + 3D viewer | 005, 010 | Add the operator workbench, secure BLUECAD artifact serving, candidate detail, validation reports, attempt history, and GLB viewing. |
-| 006b | ready | — | BLUECAD parametric variants | 006 | Add sliders and deterministic rebuilds for approved parametric GeometrySpec variants. |
+| 006b | blocked | — | BLUECAD parametric variants | 006 | Full spec is ready, but the maintainer has deferred frontend work; keep the backend and slider surface as one slice and resume only when the UI window reopens. |
 | 006c | merged | [#30](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/30) | BLUECAD workbench UX pass | 006 | Add archive, malformed-detail inspection, promotion, retry/duplicate-brief flows, and safer validation rendering. |
 | 007 | merged | [#17](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/17) | BLUECAD tool registry | 005 | Add fail-closed tool registration, health/hash checks, subprocess execution boundaries, and CI license-boundary enforcement. |
 | 008 | merged | [#32](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/32) | BLUECAD Gmsh mesh adapter | 005, 007 | Generate deterministic Gmsh inputs and physical groups, invoke Gmsh through the registry, and return structured mesh-quality outcomes. |
@@ -127,7 +129,7 @@ PR overlaps the target files or runtime boundary.
 | 049 | merged | [#153](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/153) | BLUEREV-PROCESS-2: buoyancy and light/transmittance proxies | 043, 047 | Add hardware mass and safety factor to buoyancy; require explicit optical path length; label proxies honestly and expose the measurements that would promote real light models. |
 | 050 | merged | [#156](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/156) | FLOWSHEET-1 dependency DAG | 047, 048, 049 | Materialize an inspectable graph from existing provenance without a recompute engine; normalize legacy FK/source forms at read time and own the shared `<kind>:<id>` resolver. |
 | 051 | merged | [#159](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/159) | FLOWSHEET-RECALC stale propagation | 050 | When an accepted input changes, deterministically mark dependent outputs stale and explain the dependency path; no automatic recomputation or silent promotion. |
-| 052 | planned | — | CAD-LINK: process calculations to geometry and evidence back-links | 005, 038, 050 | Map accepted diameter, length, and tube-count outputs into GeometrySpec inputs and return validation/FEM evidence to the upstream nodes without making solver output authoritative. |
+| 052 | ready | — | CAD-LINK: process calculations to geometry and evidence back-links | 005, 038, 050, 051, 071 | Bind accepted fresh process Parameters to a valid fixed-topology GeometrySpec template through an explicit digest-bound preview/execute manifest, then return validation/FEM lineage without topology synthesis, automatic recompute, promotion, or solver authority. |
 | 053 | planned | — | Decision packet and dossier export | 041, 044, 048 | Export recommendations, alternatives, evidence, assumptions, uncertainty, and provenance as a readable decision-to-evidence dossier for thesis, advisor, investor, or later IP/grant workflows. |
 | 054 | planned | — | Proposal-review UI | 040, 041, 058 | Show proposed records with provenance and provide explicit promote/reject actions over existing endpoints; this is the load-bearing human authority surface. |
 | 055 | planned | — | Project view: Mark-1 as one navigable object | 035, 044, 050 | Assemble decisions, calculations, CAD, evidence, and flowsheet for one workspace without inventing a second store or duplicating canonical data; 3D/digital-twin rendering follows the ADR-058 contract (`scene_component_id` plus a typed binding manifest to `<kind>:<id>` records; no engineering values stored in the view). |
