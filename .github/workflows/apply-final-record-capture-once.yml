@@ -27,21 +27,31 @@ jobs:
           cache-dependency-path: |
             backend/requirements.txt
             backend/requirements-dev.txt
-      - name: Decode and apply reviewed patch
+      - name: Materialize reviewed source
         shell: bash
         run: |
           set -o pipefail
           {
-            base64 -d .jarvis-tmp/final-record-capture.patch.gz.b64 \
-              | gzip -d > /tmp/final-record-capture.patch
-            sha256sum /tmp/final-record-capture.patch
-            echo 'e703564014211b764f6d0490e40ca090de9d454cc0006123777ba72794380b6f  /tmp/final-record-capture.patch' \
+            cat \
+              .jarvis-tmp/final-record-capture.patch.gz.b64.part1 \
+              .jarvis-tmp/final-record-capture.patch.gz.b64.part2 \
+              | base64 -d | gzip -d > /tmp/final-record-capture.patch
+            echo '49b1a09a33c046a3477e6f72e0142a8efbbd54896d815f3e20e42e87dbecdb47  /tmp/final-record-capture.patch' \
               | sha256sum -c -
-            grep '^diff --git' /tmp/final-record-capture.patch
             git apply --check --index --directory=backend /tmp/final-record-capture.patch
             git apply --index --directory=backend /tmp/final-record-capture.patch
+
+            base64 -d .jarvis-tmp/flow-record-capture.py.gz.b64 \
+              | gzip -d > backend/app/modules/ai/flow_record_capture.py
+            echo 'bda01d75f956bb508adcf18d57c70c355c6a7e09651f7ef3cb5cbddfefc4cac4  backend/app/modules/ai/flow_record_capture.py' \
+              | sha256sum -c -
+
+            base64 -d .jarvis-tmp/test-token-flow-final-record-capture.py.gz.b64 \
+              | gzip -d > backend/tests/test_token_flow_final_record_capture.py
+            echo '7e9ed1df93902cb5a991c152b445ab1513149b2214c59a6b7e5c28a6e11d8568  backend/tests/test_token_flow_final_record_capture.py' \
+              | sha256sum -c -
           } 2>&1 | tee "$RUNNER_TEMP/final-record-capture-apply.log"
-      - name: Upload apply diagnostics
+      - name: Upload materialization diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -115,7 +125,11 @@ jobs:
           git rm \
             .github/workflows/apply-final-record-capture-once.yml \
             .github/workflows/export-final-record-capture-source.yml \
-            .jarvis-tmp/final-record-capture.patch.gz.b64
+            .jarvis-tmp/final-record-capture.patch.gz.b64 \
+            .jarvis-tmp/final-record-capture.patch.gz.b64.part1 \
+            .jarvis-tmp/final-record-capture.patch.gz.b64.part2 \
+            .jarvis-tmp/flow-record-capture.py.gz.b64 \
+            .jarvis-tmp/test-token-flow-final-record-capture.py.gz.b64
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'feat: capture final flow records exactly once'
