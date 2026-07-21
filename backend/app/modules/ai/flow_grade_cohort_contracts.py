@@ -11,7 +11,7 @@ EXECUTION_CLASSES = (
     "legacy_unknown",
 )
 DISPATCH_STATES = ("not_applicable", "not_started", "started", "unknown")
-USAGE_SOURCES = ("actual", "mixed", "estimated", "none")
+USAGE_SOURCES = ("actual", "mixed", "estimated", "none", "legacy_unknown")
 ACCOUNTING_BASES = (
     "no_execution",
     "synthetic_not_economic",
@@ -107,6 +107,7 @@ def provider_quality(rows: list[dict[str, object]]) -> str:
             "conservative_standard_input",
             "conservative_estimated_usage",
             "legacy_unknown",
+            "None",
         }
     )
     if exact and not conservative:
@@ -123,13 +124,19 @@ def exclusion_reasons(
     current_subject_id: str | None,
 ) -> list[str]:
     reasons: list[str] = []
-    classes = {str(row["execution_class"]) for row in attempts}
-    bases = {str(row["accounting_basis"]) for row in attempts}
+    raw_classes = {row["execution_class"] for row in attempts}
+    raw_bases = {row["accounting_basis"] for row in attempts}
+    classes = {str(value) for value in raw_classes}
     if bool(flow["synthetic_evidence_present"]) or "synthetic" in classes:
         reasons.append("synthetic_evidence")
     if str(flow["task_kind"]) in NON_EMPIRICAL_TASK_KINDS:
         reasons.append("non_empirical_task_kind")
-    if "legacy_unknown" in classes or "legacy_unknown" in bases:
+    if (
+        any(value not in EXECUTION_CLASSES for value in raw_classes)
+        or any(value not in ACCOUNTING_BASES for value in raw_bases)
+        or "legacy_unknown" in raw_classes
+        or "legacy_unknown" in raw_bases
+    ):
         reasons.append("ambiguous_legacy_evidence")
     if not flow["final_accounting_digest"] or current_subject_id is None:
         reasons.append("incomplete_finalized_provenance")
