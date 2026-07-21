@@ -1,1 +1,0 @@
-spec-072 exact-head verification trigger
