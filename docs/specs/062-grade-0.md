@@ -1,9 +1,10 @@
 # 062 — GRADE-0: human quality evidence and complete outcome cohorts
 
-Status: implementation in review. `docs/specs/STATUS.md` is authoritative. The 062a
-backend authority slice provides immutable flow subjects, append-only grade history,
-and bounded operator API routes. Complete cohort analytics and the operator-visible
-frontend result surface remain pending.
+Status: backend implementation complete; frontend result surface pending.
+`docs/specs/STATUS.md` remains authoritative. The 062a authority and 062b read-only
+cohort slices now provide immutable flow subjects, append-only human grade history,
+bounded operator APIs, complete outcome cohorts, reconciliation checks, and external
+provider spend per useful eligible outcome. No routing actuation is authorized.
 
 Depends on: 021, 059b, 061
 
