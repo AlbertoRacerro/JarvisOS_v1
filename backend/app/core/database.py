@@ -4,6 +4,11 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.core.cad_link_schema import (
+    CAD_LINK_SCHEMA_INDEX_STATEMENTS,
+    CAD_LINK_SCHEMA_MIGRATION_RECORD,
+    CAD_LINK_SCHEMA_STATEMENTS,
+)
 from app.core.egress_schema import (
     EGRESS_SCHEMA_INDEX_STATEMENTS,
     EGRESS_SCHEMA_MIGRATION_RECORD,
@@ -85,6 +90,8 @@ def initialize_database() -> DatabaseInfo:
     with open_sqlite_connection() as connection:
         for statement in SCHEMA_STATEMENTS:
             connection.execute(statement)
+        for statement in CAD_LINK_SCHEMA_STATEMENTS:
+            connection.execute(statement)
         for statement in SENSITIVITY_SCHEMA_STATEMENTS:
             connection.execute(statement)
         for statement in EGRESS_SCHEMA_STATEMENTS:
@@ -104,6 +111,8 @@ def initialize_database() -> DatabaseInfo:
                 if "duplicate column name" not in str(exc).lower():
                     raise
         for statement in SCHEMA_INDEX_STATEMENTS:
+            connection.execute(statement)
+        for statement in CAD_LINK_SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         for statement in SENSITIVITY_SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
@@ -144,6 +153,7 @@ def is_database_initialized() -> bool:
         "run_artifacts",
         "decisions",
         "ai_jobs",
+        "bluecad_cad_links",
         "ai_settings",
         "ai_flows",
         "ai_flow_segments",
@@ -232,6 +242,7 @@ def _record_schema_migrations(connection: sqlite3.Connection) -> None:
     now = utc_now()
     records = [
         *SCHEMA_MIGRATION_RECORDS,
+        CAD_LINK_SCHEMA_MIGRATION_RECORD,
         EGRESS_SCHEMA_MIGRATION_RECORD,
         TOKEN_FLOW_SCHEMA_MIGRATION_RECORD,
         GRADE_SCHEMA_MIGRATION_RECORD,

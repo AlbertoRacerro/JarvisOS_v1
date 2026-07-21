@@ -10,6 +10,14 @@ from fastapi.responses import FileResponse
 
 from app.core.database import open_sqlite_connection
 from app.core.paths import build_paths
+from app.modules.bluecad.cad_link import (
+    CadLinkError,
+    CadLinkExecuteRequest,
+    CadLinkExecuteResponse,
+    CadLinkPreviewRequest,
+    execute_cad_link_047,
+    preview_cad_link_047,
+)
 from app.modules.bluecad.ledger import archive_candidate, get_candidate, list_candidates, mark_promoted
 from app.modules.bluecad.loop import create_bluecad_candidate
 from app.modules.bluecad.models import BluecadCandidateCreate, BluecadCandidateRead
@@ -52,6 +60,13 @@ def _bluecad_artifact_path(workspace_id: str, artifact_id: str) -> tuple[Path, s
     return stored_path, media_type
 
 
+def _cad_link_error(exc: CadLinkError) -> HTTPException:
+    return HTTPException(
+        status_code=exc.status_code,
+        detail={"code": exc.code, "message": exc.message},
+    )
+
+
 def _domain_error(exc: Exception) -> HTTPException:
     if isinstance(exc, ValueError):
         return HTTPException(status_code=400, detail={"error": str(exc)})
@@ -66,6 +81,26 @@ def create_candidate_endpoint(workspace_id: str, payload: BluecadCandidateCreate
         return create_bluecad_candidate(workspace_id, payload)
     except (ValueError, sqlite3.IntegrityError) as exc:
         raise _domain_error(exc) from exc
+
+
+@router.post("/cad-link/047/preview")
+def preview_cad_link_047_endpoint(
+    workspace_id: str, payload: CadLinkPreviewRequest
+) -> dict[str, object]:
+    try:
+        return preview_cad_link_047(workspace_id, payload)
+    except CadLinkError as exc:
+        raise _cad_link_error(exc) from exc
+
+
+@router.post("/cad-link/047/execute", response_model=CadLinkExecuteResponse)
+def execute_cad_link_047_endpoint(
+    workspace_id: str, payload: CadLinkExecuteRequest
+) -> CadLinkExecuteResponse:
+    try:
+        return execute_cad_link_047(workspace_id, payload)
+    except CadLinkError as exc:
+        raise _cad_link_error(exc) from exc
 
 
 @router.get("/candidates", response_model=list[BluecadCandidateRead])
