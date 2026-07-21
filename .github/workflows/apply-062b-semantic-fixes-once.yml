@@ -1,0 +1,87 @@
+name: Apply 062b semantic fixes once
+
+on:
+  pull_request:
+    branches:
+      - master
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.pull_request.number == 167 && github.head_ref == 'impl/062b-grade-cohorts'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: impl/062b-grade-cohorts
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Apply bounded semantic fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          model = Path('backend/app/modules/ai/flow_grade_cohort_models.py')
+          text = model.read_text(encoding='utf-8')
+          old = '    current_failed_grade_rate: float | None = None\n'
+          new = '    deterministic_failure_rate: float | None = None\n'
+          if old not in text:
+              raise SystemExit('model field target not found')
+          model.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          cohorts = Path('backend/app/modules/ai/flow_grade_cohorts.py')
+          text = cohorts.read_text(encoding='utf-8')
+          old = '''        current_failed_grade_rate=(
+              current_grade_counts["failed"] / graded if graded else None
+          ),
+          '''
+          new = '''        deterministic_failure_rate=(
+              state_counts["failed_terminal"] / terminal_flows
+              if terminal_flows
+              else None
+          ),
+          '''
+          if old not in text:
+              raise SystemExit('cohort failure-rate target not found')
+          cohorts.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          contracts = Path('backend/app/modules/ai/flow_grade_cohort_contracts.py')
+          text = contracts.read_text(encoding='utf-8')
+          old = '''def execution_composition(classes: set[str]) -> str:
+              known = classes & {"synthetic", "local_compute", "external_provider"}
+          '''
+          new = '''def execution_composition(classes: set[str]) -> str:
+              if "legacy_unknown" in classes:
+                  return "mixed_executed_classes"
+              known = classes & {"synthetic", "local_compute", "external_provider"}
+          '''
+          if old not in text:
+              raise SystemExit('execution-composition target not found')
+          contracts.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          test_file = Path('backend/tests/test_flow_grade_cohorts.py')
+          text = test_file.read_text(encoding='utf-8')
+          old = '    assert cohort.current_failed_grade_rate == 0\n'
+          new = '    assert cohort.deterministic_failure_rate == pytest.approx(1 / 6)\n'
+          if old not in text:
+              raise SystemExit('cohort test target not found')
+          test_file.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+      - name: Commit source changes and remove workflow
+        shell: bash
+        run: |
+          git config user.name "JarvisOS automation"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/workflows/apply-062b-semantic-fixes-once.yml
+          git add backend/app/modules/ai/flow_grade_cohort_models.py \
+                  backend/app/modules/ai/flow_grade_cohorts.py \
+                  backend/app/modules/ai/flow_grade_cohort_contracts.py \
+                  backend/tests/test_flow_grade_cohorts.py
+          git commit -m "Fix 062b cohort semantics"
+          git push origin HEAD:impl/062b-grade-cohorts
