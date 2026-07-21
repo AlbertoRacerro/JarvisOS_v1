@@ -9,4 +9,4 @@ def test_grade_status_registry_lists_backend_slices() -> None:
     assert "| 062 | in_review |" in row or "| 062 | blocked |" in row
     assert "pull/166" in row
     assert "pull/167" in row
-    assert "frontend" in row
+    assert "four-choice result surface remains pending" in row

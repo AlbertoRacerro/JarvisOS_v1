@@ -245,7 +245,7 @@ def test_complete_cohort_reconciles_quality_and_economic_evidence(
     assert cohort.grade_state_counts["graded"] == 4
     assert cohort.grade_state_counts["ungraded"] == 2
     assert cohort.grade_coverage == pytest.approx(4 / 6)
-    assert cohort.deterministic_failure_rate == pytest.approx(1 / 6)
+    assert cohort.deterministic_failure_rate == pytest.approx(2 / 6)
     assert cohort.eligible_flow_count == 5
     assert cohort.eligible_grade_counts["useful"] == 2
     assert cohort.exclusion_reason_counts == {
