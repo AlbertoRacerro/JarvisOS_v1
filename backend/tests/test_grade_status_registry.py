@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 STATUS_PATH = Path(__file__).resolve().parents[2] / "docs" / "specs" / "STATUS.md"
 
 
