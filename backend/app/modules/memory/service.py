@@ -106,101 +106,114 @@ def _log_memory_event(connection: sqlite3.Connection, event_type: str, record: M
     )
 
 
-def create_proposal(payload: MemoryProposalCreate) -> MemoryRecordRead:
+def _create_proposal_in_transaction(
+    connection: sqlite3.Connection,
+    payload: MemoryProposalCreate,
+) -> MemoryRecordRead:
     now = utc_now()
     record_id = str(uuid4())
+    _require_workspace(connection, payload.workspace_id)
+    source_ai_job_id = _require_ai_job(connection, payload.source_ai_job_id)
+    if payload.record_kind == "assumption":
+        if not payload.statement:
+            raise ValueError("statement is required for assumption proposals.")
+        connection.execute(
+            """
+            INSERT INTO assumptions (
+                id, workspace_id, statement, scope, confidence, status, source_ref,
+                created_at, updated_at, notes, origin, source_ai_job_id, promoted_at
+            ) VALUES (?, ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, 'ai_proposed', ?, NULL)
+            """,
+            (
+                record_id,
+                payload.workspace_id,
+                payload.statement,
+                payload.scope,
+                payload.confidence if isinstance(payload.confidence, str) else None,
+                payload.source_ref,
+                now,
+                now,
+                payload.notes,
+                source_ai_job_id,
+            ),
+        )
+    elif payload.record_kind == "parameter":
+        if not payload.name:
+            raise ValueError("name is required for parameter proposals.")
+        validate_parameter_replacement_proposal(
+            connection,
+            workspace_id=payload.workspace_id,
+            supersedes_parameter_id=payload.supersedes_parameter_id,
+            replacement_parameter_id=record_id,
+            unit=payload.unit,
+            value=payload.value,
+        )
+        connection.execute(
+            """
+            INSERT INTO parameters (
+                id, workspace_id, name, symbol, value, unit, value_status, value_min,
+                value_max, source_ref, confidence, status, created_at, updated_at, notes,
+                origin, source_ai_job_id, promoted_at, supersedes_parameter_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?, ?, ?, 'ai_proposed', ?, NULL, ?)
+            """,
+            (
+                record_id,
+                payload.workspace_id,
+                payload.name,
+                payload.symbol,
+                payload.value,
+                payload.unit,
+                payload.value_status,
+                payload.value_min,
+                payload.value_max,
+                payload.source_ref,
+                payload.confidence if isinstance(payload.confidence, int | float) else None,
+                now,
+                now,
+                payload.notes,
+                source_ai_job_id,
+                payload.supersedes_parameter_id,
+            ),
+        )
+    elif payload.record_kind == "decision":
+        if not payload.title or not payload.decision_text:
+            raise ValueError("title and decision_text are required for decision proposals.")
+        connection.execute(
+            """
+            INSERT INTO decisions (
+                id, workspace_id, title, decision_text, rationale, status, linked_run_id,
+                created_at, updated_at, notes, origin, source_ai_job_id, promoted_at
+            ) VALUES (?, ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, 'ai_proposed', ?, NULL)
+            """,
+            (
+                record_id,
+                payload.workspace_id,
+                payload.title,
+                payload.decision_text,
+                payload.rationale,
+                payload.linked_run_id,
+                now,
+                now,
+                payload.notes,
+                source_ai_job_id,
+            ),
+        )
+    record = _get_record(connection, payload.record_kind, record_id)
+    if record is None:
+        raise ValueError("Proposal was not created.")
+    _log_memory_event(connection, "MemoryProposalCreated", record)
+    return record
+
+
+def create_proposal(payload: MemoryProposalCreate) -> MemoryRecordRead:
     with open_sqlite_connection() as connection:
-        _require_workspace(connection, payload.workspace_id)
-        source_ai_job_id = _require_ai_job(connection, payload.source_ai_job_id)
-        if payload.record_kind == "assumption":
-            if not payload.statement:
-                raise ValueError("statement is required for assumption proposals.")
-            connection.execute(
-                """
-                INSERT INTO assumptions (
-                    id, workspace_id, statement, scope, confidence, status, source_ref,
-                    created_at, updated_at, notes, origin, source_ai_job_id, promoted_at
-                ) VALUES (?, ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, 'ai_proposed', ?, NULL)
-                """,
-                (
-                    record_id,
-                    payload.workspace_id,
-                    payload.statement,
-                    payload.scope,
-                    payload.confidence if isinstance(payload.confidence, str) else None,
-                    payload.source_ref,
-                    now,
-                    now,
-                    payload.notes,
-                    source_ai_job_id,
-                ),
-            )
-        elif payload.record_kind == "parameter":
-            if not payload.name:
-                raise ValueError("name is required for parameter proposals.")
-            validate_parameter_replacement_proposal(
-                connection,
-                workspace_id=payload.workspace_id,
-                supersedes_parameter_id=payload.supersedes_parameter_id,
-                replacement_parameter_id=record_id,
-                unit=payload.unit,
-                value=payload.value,
-            )
-            connection.execute(
-                """
-                INSERT INTO parameters (
-                    id, workspace_id, name, symbol, value, unit, value_status, value_min,
-                    value_max, source_ref, confidence, status, created_at, updated_at, notes,
-                    origin, source_ai_job_id, promoted_at, supersedes_parameter_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?, ?, ?, 'ai_proposed', ?, NULL, ?)
-                """,
-                (
-                    record_id,
-                    payload.workspace_id,
-                    payload.name,
-                    payload.symbol,
-                    payload.value,
-                    payload.unit,
-                    payload.value_status,
-                    payload.value_min,
-                    payload.value_max,
-                    payload.source_ref,
-                    payload.confidence if isinstance(payload.confidence, int | float) else None,
-                    now,
-                    now,
-                    payload.notes,
-                    source_ai_job_id,
-                    payload.supersedes_parameter_id,
-                ),
-            )
-        elif payload.record_kind == "decision":
-            if not payload.title or not payload.decision_text:
-                raise ValueError("title and decision_text are required for decision proposals.")
-            connection.execute(
-                """
-                INSERT INTO decisions (
-                    id, workspace_id, title, decision_text, rationale, status, linked_run_id,
-                    created_at, updated_at, notes, origin, source_ai_job_id, promoted_at
-                ) VALUES (?, ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, 'ai_proposed', ?, NULL)
-                """,
-                (
-                    record_id,
-                    payload.workspace_id,
-                    payload.title,
-                    payload.decision_text,
-                    payload.rationale,
-                    payload.linked_run_id,
-                    now,
-                    now,
-                    payload.notes,
-                    source_ai_job_id,
-                ),
-            )
-        record = _get_record(connection, payload.record_kind, record_id)
-        if record is None:
-            raise ValueError("Proposal was not created.")
-        _log_memory_event(connection, "MemoryProposalCreated", record)
-        connection.commit()
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            record = _create_proposal_in_transaction(connection, payload)
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
     return record
 
 

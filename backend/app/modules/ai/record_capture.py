@@ -11,6 +11,7 @@ from typing import Any
 
 MAX_RECORDS = 10
 RECORD_VERSION = "jarvis_records_v0"
+RECORD_CAPTURE_TASK_KINDS = frozenset({"decision_support"})
 
 JARVIS_RECORDS_PROMPT_FRAGMENT = """Optional structured record capture: if your answer includes candidate engineering decisions, assumptions, or parameters that should be reviewed before becoming project memory, emit at most one fenced code block tagged `jarvis-records`. The block must contain JSON with `record_version` equal to `jarvis_records_v0` and a `records` array of at most 10 decision, assumption, or parameter objects. Do not include workspace_id; JarvisOS supplies workspace scope deterministically. Omit the block entirely when there are no record proposals."""
 
