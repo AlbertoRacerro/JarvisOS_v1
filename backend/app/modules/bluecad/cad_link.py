@@ -32,13 +32,13 @@ from app.modules.bluecad.service import build_geometry_spec
 from app.modules.bluecad.spec import SpecValidationError, canonical_json, canonicalize_geometry_spec
 from app.modules.events.service import utc_now
 from app.modules.runner.input_contracts import canonicalize_input_contract
+from app.modules.runner.safety import sha256_file
 from app.modules.runner.service import (
     BUNDLED_BLUEREV_PROCESS0_LABEL,
     CALC_V0_IMPLEMENTATION_KIND,
     _bluerev_process0_contract_path,
     _bluerev_process0_script_path,
 )
-from app.modules.runner.safety import sha256_file
 
 TRANSFORMATION_VERSION = "bluerev_047_m0_tube_proxy_v0_1"
 IMPLEMENTATION_VERSION = "cad_link_047_v0_1"
