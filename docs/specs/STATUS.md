@@ -56,14 +56,16 @@ before Codex or another coding agent may act on them.
    their contracts are reconciled with 059b, 061a/061b, and existing service boundaries.
 5. Draft and promote `068` HERMES-CONFIG-0 only after 066/067 are stable and a
    concrete Windows-first host-isolation boundary is selected.
-6. Preserve the merged `047`–`051` and `071` process-model, editable-binding,
-   forward-DOF, dependency-graph, and stale-propagation foundation. Promote and
-   implement `052` CAD-LINK before residual UI work unless a concrete runtime
-   blocker is recorded; Hermes work must not indefinitely displace measurable
-   BlueRev engineering progress.
-7. Run `069` MEMORY-CONSOLIDATE-0 as the first Hermes dogfood only after 066–068
+6. Preserve the merged `047`–`052` and `071` process-model, editable-binding,
+   forward-DOF, dependency-graph, stale-propagation, and deterministic M0 CAD-link
+   foundation.
+7. Promote and implement `072` before residual UI work. It must separate installed
+   geometry from the representative hydraulic path and establish explicit symmetric
+   topology before any multi-part CAD-LINK-1 claim; Hermes work must not indefinitely
+   displace measurable BlueRev engineering progress.
+8. Run `069` MEMORY-CONSOLIDATE-0 as the first Hermes dogfood only after 066–068
    are merged and the required local route is qualified.
-8. Continue `063`/`064`, `012` → `033`, and residual conversation/UI rows according
+9. Continue `063`/`064`, `012` → `033`, and residual conversation/UI rows according
    to dependencies, explicit maintainer priority, and measured value.
 
 Trigger-gated rows remain `planned` until their stated evidence exists. Always
@@ -154,6 +156,7 @@ PR overlaps the target files or runtime boundary.
 | 068 | planned | — | HERMES-CONFIG-0 | 066, 067 | Freeze a pinned/fingerprinted Hermes profile with passthrough-only model paths, Jarvis MCP only, host-level workspace isolation, explicit tool allowlist, disabled browser/computer/cron/proactive paths, and bounded delegation. |
 | 069 | planned | — | MEMORY-CONSOLIDATE-0 | 040, 042, 061a, 061b, 062, 066, 067, 068 | First Hermes dogfood: consolidate bounded accepted records/evidence into MemoryStore proposals with conflict preservation, provenance, grading, and cost evidence; never promote, overwrite, delete, or lower sensitivity. |
 | 071 | merged | [#147](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/147) | MODEL-SCENARIO-DOF-0: editable bindings, scenario runs, and degree-of-freedom inspection | 040, 043, 047 | Expose immutable value-free model input contracts, side-effect-free forward binding/DOF preview, parameter-backed or manual scenario bindings, existing-runner execution, and one bounded Domain Foundation panel; no inverse solver, targets, optimizer, automatic promotion, or embedded design defaults. |
+| 072 | ready | — | BLUEREV-PROCESS-3: explicit symmetric hydraulic topology M1 | 043, 047, 050, 051, 052, 071 | Add one deterministic fixed-topology closed loop with common supply/return sections and 1–12 identical parallel branches; separate installed geometry from the representative hydraulic path, emit a canonical topology manifest, and prove reduction to 047 without adding a generic network solver, CAD layout, automatic recompute, or UI. |
 
 ## Superseded planning aliases and resolved collisions
 
