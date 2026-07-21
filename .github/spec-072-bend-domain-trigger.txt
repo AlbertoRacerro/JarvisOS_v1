@@ -1,0 +1,1 @@
+spec-072 bend-domain hardening trigger
