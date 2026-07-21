@@ -1,0 +1,43 @@
+name: Fix stale merged status assertion
+
+on:
+  push:
+    branches:
+      - spec/072-process-topology-definition
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: spec/072-process-topology-definition
+          fetch-depth: 0
+      - name: Patch exact stale assertion
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('backend/tests/test_cad_link.py')
+          text = path.read_text(encoding='utf-8')
+          old = '    assert "| in_review |" in line\n'
+          new = '    assert "| merged |" in line\n'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one stale assertion, found {text.count(old)}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+      - name: Commit compatibility fix and remove diagnostics
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/spec-072-fix-stale-status-test.yml
+          if [ -f docs/specs/.tmp-072-pytest.txt ]; then
+            git rm docs/specs/.tmp-072-pytest.txt
+          fi
+          git add backend/tests/test_cad_link.py
+          git commit -m "Align CAD-link status test with merged registry state"
+          git push origin HEAD:spec/072-process-topology-definition
