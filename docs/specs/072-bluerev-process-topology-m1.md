@@ -146,16 +146,18 @@ with no extra keys and no embedded design defaults.
 | `branch_dark_straight_length` | `m` | `>= 0` | Dark straight centreline length per branch. |
 | `branch_bend_count` | `1` | integer 0–64 | Identical bends per branch. |
 | `branch_illuminated_bend_count` | `1` | integer 0–`branch_bend_count` | Bends whose arc area is counted as illuminated. |
-| `branch_bend_centerline_radius` | `mm` | `> 0` when bend count > 0 | Centreline radius of every represented bend. |
-| `branch_bend_angle` | `deg` | `> 0` and `<= 180` when bend count > 0 | Included angle of every represented bend. |
+| `branch_bend_centerline_radius` | `mm` | `= 0` when bend count is 0; `> branch_tube_outer_diameter / 2` otherwise | Centreline radius of every represented bend. |
+| `branch_bend_angle` | `deg` | `= 0` when bend count is 0; `> 0` and `<= 180` otherwise | Included angle of every represented bend. |
 | `common_supply_length` | `m` | `>= 0` | Centreline length carrying total flow before the split. |
 | `common_return_length` | `m` | `>= 0` | Centreline length carrying total flow after the merge. |
 
 At least one of illuminated straight length, dark straight length, or bend count must be
-positive. If `branch_bend_count = 0`, both bend radius and angle remain required numeric
-bindings for contract stability but are ignored only after being validated as finite and
-non-negative; the canonical manifest records zero bend use. Implementations must not
-silently substitute radius or angle defaults.
+positive. If `branch_bend_count = 0`, illuminated bend count, bend radius, and bend angle
+must all be exactly zero. They remain explicit required bindings so the input shape is
+stable, but no irrelevant positive value may alter the run or manifest digest. When bend
+count is non-zero, the centreline radius must exceed half the branch outer diameter to
+exclude a geometrically self-intersecting tube sweep. Implementations must not silently
+substitute radius or angle defaults.
 
 ### Hydraulic diameters
 
@@ -214,7 +216,9 @@ additional exact runtime checks:
 - `parallel_path_count` is between 1 and 12 inclusive;
 - `branch_bend_count` is between 0 and 64 inclusive;
 - `branch_illuminated_bend_count` is between 0 and `branch_bend_count` inclusive;
-- positive bend radius and angle are mandatory when bend count is non-zero;
+- when bend count is zero, illuminated bend count, radius, and angle are exactly zero;
+- when bend count is non-zero, angle is in `(0, 180]` degrees and bend centreline radius
+  is greater than half the branch outer diameter;
 - branch and common outer diameters exceed their inner diameters;
 - at least one branch length contribution is positive;
 - every numeric value is finite;
@@ -656,6 +660,8 @@ manifest/output artifacts stale. No automatic rerun, CAD rebuild, or promotion o
 
 - integer count acceptance/rejection without rounding;
 - invalid illuminated bend count rejection;
+- exact zero radius/angle/illuminated-count enforcement for zero-bend branches;
+- non-zero bend angle and centreline-radius geometry-bound rejection;
 - positive wall-thickness checks for branch and common tubing;
 - finite-number and exact-unit rejection;
 - zero-length branch rejection;
