@@ -26,52 +26,43 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
-          model = Path('backend/app/modules/ai/flow_grade_cohort_models.py')
-          text = model.read_text(encoding='utf-8')
-          old = '    current_failed_grade_rate: float | None = None\n'
-          new = '    deterministic_failure_rate: float | None = None\n'
-          if old not in text:
-              raise SystemExit('model field target not found')
-          model.write_text(text.replace(old, new, 1), encoding='utf-8')
+          def replace_once(path: str, pattern: str, replacement: str) -> None:
+              target = Path(path)
+              text = target.read_text(encoding="utf-8")
+              updated, count = re.subn(pattern, replacement, text, count=1)
+              if count != 1:
+                  raise SystemExit(f"expected exactly one match in {path}, found {count}")
+              target.write_text(updated, encoding="utf-8")
 
-          cohorts = Path('backend/app/modules/ai/flow_grade_cohorts.py')
-          text = cohorts.read_text(encoding='utf-8')
-          old = '''        current_failed_grade_rate=(
-              current_grade_counts["failed"] / graded if graded else None
-          ),
-          '''
-          new = '''        deterministic_failure_rate=(
+          replace_once(
+              "backend/app/modules/ai/flow_grade_cohort_models.py",
+              r"^    current_failed_grade_rate: float \| None = None$",
+              "    deterministic_failure_rate: float | None = None",
+          )
+          replace_once(
+              "backend/app/modules/ai/flow_grade_cohorts.py",
+              r'''        current_failed_grade_rate=\(\n\s*current_grade_counts\["failed"\] / graded if graded else None\n\s*\),''',
+              '''        deterministic_failure_rate=(
               state_counts["failed_terminal"] / terminal_flows
               if terminal_flows
               else None
-          ),
-          '''
-          if old not in text:
-              raise SystemExit('cohort failure-rate target not found')
-          cohorts.write_text(text.replace(old, new, 1), encoding='utf-8')
-
-          contracts = Path('backend/app/modules/ai/flow_grade_cohort_contracts.py')
-          text = contracts.read_text(encoding='utf-8')
-          old = '''def execution_composition(classes: set[str]) -> str:
-              known = classes & {"synthetic", "local_compute", "external_provider"}
-          '''
-          new = '''def execution_composition(classes: set[str]) -> str:
+          ),''',
+          )
+          replace_once(
+              "backend/app/modules/ai/flow_grade_cohort_contracts.py",
+              r'''def execution_composition\(classes: set\[str\]\) -> str:\n    known = classes & \{"synthetic", "local_compute", "external_provider"\}''',
+              '''def execution_composition(classes: set[str]) -> str:
               if "legacy_unknown" in classes:
                   return "mixed_executed_classes"
-              known = classes & {"synthetic", "local_compute", "external_provider"}
-          '''
-          if old not in text:
-              raise SystemExit('execution-composition target not found')
-          contracts.write_text(text.replace(old, new, 1), encoding='utf-8')
-
-          test_file = Path('backend/tests/test_flow_grade_cohorts.py')
-          text = test_file.read_text(encoding='utf-8')
-          old = '    assert cohort.current_failed_grade_rate == 0\n'
-          new = '    assert cohort.deterministic_failure_rate == pytest.approx(1 / 6)\n'
-          if old not in text:
-              raise SystemExit('cohort test target not found')
-          test_file.write_text(text.replace(old, new, 1), encoding='utf-8')
+              known = classes & {"synthetic", "local_compute", "external_provider"}''',
+          )
+          replace_once(
+              "backend/tests/test_flow_grade_cohorts.py",
+              r"^    assert cohort\.current_failed_grade_rate == 0$",
+              "    assert cohort.deterministic_failure_rate == pytest.approx(1 / 6)",
+          )
           PY
       - name: Commit source changes and remove workflow
         shell: bash
