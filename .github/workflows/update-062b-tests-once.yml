@@ -1,0 +1,82 @@
+name: Update 062b tests once
+
+on:
+  push:
+    branches:
+      - impl/062b-grade-cohorts
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: impl/062b-grade-cohorts
+      - name: Update cohort expectations and clean diagnostics
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path_text: str, old: str, new: str) -> None:
+              path = Path(path_text)
+              text = path.read_text(encoding="utf-8")
+              if text.count(old) != 1:
+                  raise SystemExit(f"expected one anchor in {path_text}: {old!r}")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          test = "backend/tests/test_flow_grade_cohorts.py"
+          replace_once(
+              test,
+              "    assert cohort.grade_coverage == pytest.approx(4 / 6)\n",
+              "    assert cohort.grade_coverage == pytest.approx(4 / 6)\n"
+              "    assert cohort.current_failed_grade_rate == 0\n",
+          )
+          replace_once(
+              test,
+              '        "no_adapter_execution": 0,\n'
+              '        "synthetic_only": 1,\n'
+              '        "local_compute_only": 1,\n'
+              '        "external_provider_only": 4,\n',
+              '        "no_adapter_execution": 1,\n'
+              '        "synthetic_only": 1,\n'
+              '        "local_compute_only": 1,\n'
+              '        "external_provider_only": 3,\n',
+          )
+          replace_once(
+              test,
+              "    assert cohort.external_unknown_attempt_count == 1\n"
+              "    assert cohort.revision_event_count == 1\n",
+              "    assert cohort.external_unknown_attempt_count == 1\n"
+              "    assert cohort.no_execution_attempt_count == 1\n"
+              "    assert cohort.no_execution_reason_counts == {\"external_not_sent\": 1}\n"
+              "    assert cohort.attempt_metrics_by_usage_source[\"actual\"].attempts == 3\n"
+              "    assert cohort.attempt_metrics_by_usage_source[\"estimated\"].attempts == 2\n"
+              "    assert cohort.attempt_metrics_by_usage_source[\"none\"].attempts == 1\n"
+              "    assert cohort.input_tokens_distribution.model_dump() == {\n"
+              "        \"count\": 6, \"minimum\": 0, \"p50\": 10, \"p95\": 10, \"maximum\": 10\n"
+              "    }\n"
+              "    assert cohort.output_tokens_distribution.model_dump() == {\n"
+              "        \"count\": 6, \"minimum\": 0, \"p50\": 5, \"p95\": 5, \"maximum\": 5\n"
+              "    }\n"
+              "    assert cohort.latency_ms_distribution.model_dump() == {\n"
+              "        \"count\": 6, \"minimum\": 100, \"p50\": 100, \"p95\": 100, \"maximum\": 100\n"
+              "    }\n"
+              "    assert cohort.revision_event_count == 1\n",
+          )
+          for workflow in (
+              ".github/workflows/diagnose-pytest-062b.yml",
+              ".github/workflows/update-062b-tests-once.yml",
+          ):
+              path = Path(workflow)
+              if path.exists():
+                  path.unlink()
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Complete 062b reconciliation tests"
+          git push origin HEAD:impl/062b-grade-cohorts
