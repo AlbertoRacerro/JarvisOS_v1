@@ -32,8 +32,10 @@ jobs:
         run: |
           set -o pipefail
           {
-            base64 -d .jarvis-tmp/atomic-terminal-capture.patch.gz.b64 \
-              | gzip -d > /tmp/atomic-terminal-capture.patch
+            cat \
+              .jarvis-tmp/atomic-terminal-capture.patch.gz.b64.part1 \
+              .jarvis-tmp/atomic-terminal-capture.patch.gz.b64.part2 \
+              | base64 -d | gzip -d > /tmp/atomic-terminal-capture.patch
             echo 'cdaef09f7a09d3787d0b5c09da929ed9078f5f0e47d60094e4f31a80ca80f16e  /tmp/atomic-terminal-capture.patch' \
               | sha256sum -c -
             grep '^diff --git' /tmp/atomic-terminal-capture.patch
@@ -110,7 +112,9 @@ jobs:
             backend/tests/test_token_flow_final_record_capture.py
           git rm \
             .github/workflows/apply-atomic-terminal-capture-once.yml \
-            .jarvis-tmp/atomic-terminal-capture.patch.gz.b64
+            .jarvis-tmp/atomic-terminal-capture.patch.gz.b64 \
+            .jarvis-tmp/atomic-terminal-capture.patch.gz.b64.part1 \
+            .jarvis-tmp/atomic-terminal-capture.patch.gz.b64.part2
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'fix: atomically terminalize and capture records'
