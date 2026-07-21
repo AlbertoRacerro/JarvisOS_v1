@@ -158,6 +158,9 @@ def test_preview_is_zero_write_and_reconciles_exact_047_proxy(client: TestClient
     assert body["transformation_version"] == "bluerev_047_m0_tube_proxy_v0_1"
     assert body["source_simulation_run_id"] == source["run_id"]
     assert body["source_runner_job_id"] == source["runner_job_id"]
+    assert body["source_input_payload_digest"].startswith("sha256:")
+    assert body["source_output_payload_digest"].startswith("sha256:")
+    assert body["geometry_spec_version"] == "bluecad_geometry_spec_v0_1"
     assert body["resolved_geometry_spec"] == {
         "spec_version": "bluecad_geometry_spec_v0_1",
         "name": "bluerev_047_m0_tube_proxy",
@@ -183,6 +186,7 @@ def test_preview_is_zero_write_and_reconciles_exact_047_proxy(client: TestClient
         "tube_outer_diameter",
     }
     assert all(item["status"] == "accepted" for item in body["source_snapshot"].values())
+    assert all(item["name"].startswith("Canonical ") for item in body["source_snapshot"].values())
     assert _table_counts() == before_counts
     assert _data_root_paths() == before_paths
 

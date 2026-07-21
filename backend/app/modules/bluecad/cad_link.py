@@ -14,7 +14,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.core.cad_link_schema import CAD_LINK_SCHEMA_STATEMENTS
+from app.core.cad_link_schema import CAD_LINK_SCHEMA_INDEX_STATEMENTS, CAD_LINK_SCHEMA_STATEMENTS
 from app.core.database import open_sqlite_connection
 from app.modules.bluecad.evidence import record_validation_evidence
 from app.modules.bluecad.ledger import (
@@ -430,6 +430,7 @@ def _build_preview(
         decimals[name] = executed
         source_snapshot[name] = {
             "parameter_ref": f"parameter:{parameter_id}",
+            "name": str(parameter["name"]),
             "executed_value": _decimal_text(executed),
             "current_value": _decimal_text(current),
             "unit": expected_unit,
@@ -489,6 +490,9 @@ def _build_preview(
         "source_runner_job_id": str(job["id"]),
         "run_status": str(run["status"]),
         "runner_status": str(job["status"]),
+        "source_input_payload_digest": _digest(input_payload),
+        "source_output_payload_digest": _digest(output_payload),
+        "geometry_spec_version": str(resolved_spec["spec_version"]),
         "source_model_identity": model_identity,
         "source_model_identity_digest": model_identity_digest,
         "source_snapshot": source_snapshot,
@@ -653,6 +657,8 @@ def _digest(value: Any) -> str:
 def _ensure_link_schema() -> None:
     with open_sqlite_connection() as connection:
         for statement in CAD_LINK_SCHEMA_STATEMENTS:
+            connection.execute(statement)
+        for statement in CAD_LINK_SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         connection.commit()
 

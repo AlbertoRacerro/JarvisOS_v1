@@ -587,6 +587,9 @@ def _add_foreign_key_edges(builder: _GraphBuilder, rows: dict[str, list[dict[str
                 "provenance",
                 "bluecad_candidates.promoted_decision_id",
             )
+    candidate_origins = {
+        candidate.get("id"): candidate.get("origin") for candidate in rows["bluecad_candidate"]
+    }
     for row in rows["bluecad_attempt"]:
         attempt_ref = _ref("bluecad_attempt", row["id"])
         _add_typed_edge(
@@ -595,16 +598,10 @@ def _add_foreign_key_edges(builder: _GraphBuilder, rows: dict[str, list[dict[str
             row.get("candidate_id"),
             attempt_ref,
             "process_link_build"
-            if next(
-                (candidate.get("origin") for candidate in rows["bluecad_candidate"] if candidate.get("id") == row.get("candidate_id")),
-                None,
-            ) == "process_linked"
+            if candidate_origins.get(row.get("candidate_id")) == "process_linked"
             else "has_attempt",
             "dependency"
-            if next(
-                (candidate.get("origin") for candidate in rows["bluecad_candidate"] if candidate.get("id") == row.get("candidate_id")),
-                None,
-            ) == "process_linked"
+            if candidate_origins.get(row.get("candidate_id")) == "process_linked"
             else "provenance",
             "bluecad_attempts.candidate_id",
         )
