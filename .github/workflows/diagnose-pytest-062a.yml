@@ -27,14 +27,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
-      - name: Capture focused Pytest output
+      - name: Capture full Pytest output
         working-directory: backend
         shell: bash
         run: |
-          python -m pytest -q tests/test_flow_grades.py tests/test_flow_grade_boundaries.py > /tmp/pytest-062a.txt 2>&1 || true
+          python -m pytest -q --maxfail=20 > /tmp/pytest-full-062a.txt 2>&1 || true
       - uses: actions/upload-artifact@v4
         with:
-          name: pytest-062a-output
-          path: /tmp/pytest-062a.txt
+          name: pytest-full-062a-output
+          path: /tmp/pytest-full-062a.txt
           if-no-files-found: error
           retention-days: 1
