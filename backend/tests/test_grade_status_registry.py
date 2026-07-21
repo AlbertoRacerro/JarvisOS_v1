@@ -10,3 +10,4 @@ def test_grade_status_registry_lists_backend_slices() -> None:
     assert "pull/166" in row
     assert "pull/167" in row
     assert "four-choice result surface remains pending" in row
+    assert "never actuate routing" in row
