@@ -325,6 +325,15 @@ def transition_flow_state(
                     terminal_attempt_id=terminal_attempt_id,
                     workspace_id=flow["workspace_id"],
                 )
+            if is_terminal:
+                from app.modules.ai.flow_grade_subjects import (
+                    ensure_flow_grade_subject_in_transaction,
+                )
+
+                ensure_flow_grade_subject_in_transaction(
+                    connection,
+                    flow_id=flow_id,
+                )
             connection.commit()
             return recomputed
         except Exception:

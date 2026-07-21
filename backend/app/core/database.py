@@ -10,6 +10,11 @@ from app.core.egress_schema import (
     EGRESS_SCHEMA_MIGRATION_STATEMENTS,
     EGRESS_SCHEMA_STATEMENTS,
 )
+from app.core.grade_schema import (
+    GRADE_SCHEMA_INDEX_STATEMENTS,
+    GRADE_SCHEMA_MIGRATION_RECORD,
+    GRADE_SCHEMA_STATEMENTS,
+)
 from app.core.paths import build_paths
 from app.core.schema import (
     CONTEXT_RECORDS_FTS_BACKFILL_STATEMENT,
@@ -86,6 +91,8 @@ def initialize_database() -> DatabaseInfo:
             connection.execute(statement)
         for statement in TOKEN_FLOW_SCHEMA_STATEMENTS:
             connection.execute(statement)
+        for statement in GRADE_SCHEMA_STATEMENTS:
+            connection.execute(statement)
         for statement in [
             *SCHEMA_MIGRATION_STATEMENTS,
             *EGRESS_SCHEMA_MIGRATION_STATEMENTS,
@@ -103,6 +110,8 @@ def initialize_database() -> DatabaseInfo:
         for statement in EGRESS_SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         for statement in TOKEN_FLOW_SCHEMA_INDEX_STATEMENTS:
+            connection.execute(statement)
+        for statement in GRADE_SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         if _sqlite_fts5_available(connection):
             for statement in SCHEMA_FTS_STATEMENTS:
@@ -139,6 +148,8 @@ def is_database_initialized() -> bool:
         "ai_flows",
         "ai_flow_segments",
         "ai_flow_record_captures",
+        "ai_flow_grade_subjects",
+        "ai_flow_grade_events",
         "sensitivity_labels",
         "sanitized_derivatives",
         "egress_prompt_derivatives",
@@ -223,6 +234,7 @@ def _record_schema_migrations(connection: sqlite3.Connection) -> None:
         *SCHEMA_MIGRATION_RECORDS,
         EGRESS_SCHEMA_MIGRATION_RECORD,
         TOKEN_FLOW_SCHEMA_MIGRATION_RECORD,
+        GRADE_SCHEMA_MIGRATION_RECORD,
     ]
     for record in records:
         connection.execute(
