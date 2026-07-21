@@ -1,0 +1,95 @@
+name: Spec 052 provenance fix
+
+on:
+  push:
+    branches:
+      - spec/052-cad-link
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: spec/052-cad-link
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Apply fail-closed provenance patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              text = target.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one exact match, found {count}')
+              target.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          loop_path = 'backend/app/modules/bluecad/loop.py'
+          replace_once(
+              loop_path,
+              '''def _run_simulation_stage(\n    workspace_id: str,\n    candidate_id: str,\n    attempt_id: str,\n    attempt_no: int,\n    analysis_spec_without_geometry: dict[str, Any] | None,\n    build: dict[str, Any],\n) -> None:\n''',
+              '''def _run_simulation_stage(\n    workspace_id: str,\n    candidate_id: str,\n    attempt_id: str,\n    attempt_no: int,\n    analysis_spec_without_geometry: dict[str, Any] | None,\n    build: dict[str, Any],\n    *,\n    producer_notes: str | None = None,\n) -> None:\n''',
+          )
+          replace_once(
+              loop_path,
+              '''        mesh_report_artifact_id = _register_sim_report(workspace_id, out_dir / "mesh_result.json", mesh_result, source_ref)\n''',
+              '''        mesh_report_artifact_id = _register_sim_report(\n            workspace_id,\n            out_dir / "mesh_result.json",\n            mesh_result,\n            source_ref,\n            producer_notes=producer_notes,\n        )\n''',
+          )
+          replace_once(
+              loop_path,
+              '''        fem_report_artifact_id = _register_sim_report(workspace_id, out_dir / "fem_result.json", fem_payload, source_ref)\n''',
+              '''        fem_report_artifact_id = _register_sim_report(\n            workspace_id,\n            out_dir / "fem_result.json",\n            fem_payload,\n            source_ref,\n            producer_notes=producer_notes,\n        )\n''',
+          )
+          replace_once(
+              loop_path,
+              '''def _register_sim_report(workspace_id: str, path: Path, payload: dict[str, Any], source_ref: str) -> str:\n    path.parent.mkdir(parents=True, exist_ok=True)\n    path.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\\n", encoding="utf-8")\n    return register_artifact(workspace_id, path, role="bluecad_sim_report", source_ref=source_ref)\n''',
+              '''def _register_sim_report(\n    workspace_id: str,\n    path: Path,\n    payload: dict[str, Any],\n    source_ref: str,\n    *,\n    producer_notes: str | None = None,\n) -> str:\n    path.parent.mkdir(parents=True, exist_ok=True)\n    path.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\\n", encoding="utf-8")\n    if producer_notes is None:\n        return register_artifact(workspace_id, path, role="bluecad_sim_report", source_ref=source_ref)\n    return register_artifact(\n        workspace_id,\n        path,\n        role="bluecad_sim_report",\n        source_ref=source_ref,\n        producer_notes=producer_notes,\n    )\n''',
+          )
+
+          replace_once(
+              'backend/app/modules/bluecad/cad_link.py',
+              '''                    "manifest_artifact_id": manifest_artifact_id,\n                    "glb_artifact_id": glb_artifact_id,\n                },\n            )\n''',
+              '''                    "manifest_artifact_id": manifest_artifact_id,\n                    "glb_artifact_id": glb_artifact_id,\n                },\n                producer_notes=ARTIFACT_PRODUCER,\n            )\n''',
+          )
+
+          test_path = 'backend/tests/test_cad_link_boundaries.py'
+          replace_once(
+              test_path,
+              '''        analysis_spec: dict[str, Any] | None,\n        artifacts: dict[str, Any],\n    ) -> None:\n''',
+              '''        analysis_spec: dict[str, Any] | None,\n        artifacts: dict[str, Any],\n        *,\n        producer_notes: str | None = None,\n    ) -> None:\n''',
+          )
+          replace_once(
+              test_path,
+              '''                "analysis_spec": analysis_spec,\n                "artifacts": artifacts,\n            }\n''',
+              '''                "analysis_spec": analysis_spec,\n                "artifacts": artifacts,\n                "producer_notes": producer_notes,\n            }\n''',
+          )
+          replace_once(
+              test_path,
+              '''    assert observed["analysis_spec"] == analysis\n    assert observed["artifacts"]["result"].manifest is not None\n''',
+              '''    assert observed["analysis_spec"] == analysis\n    assert observed["artifacts"]["result"].manifest is not None\n    assert observed["producer_notes"] == cad_link.ARTIFACT_PRODUCER\n''',
+          )
+          marker = '''\ndef test_replay_rejects_inconsistent_persisted_link(client: TestClient) -> None:\n'''
+          test = '''\ndef test_optional_analysis_artifacts_keep_process_linked_provenance(\n    client: TestClient, monkeypatch: pytest.MonkeyPatch\n) -> None:\n    source = _source_run(client)\n    analysis = _analysis_spec()\n    preview = _preview(client, source["run_id"], analysis).json()\n\n    from app.modules.bluecad import cad_link, loop\n\n    monkeypatch.setattr(\n        loop,\n        "mesh_analysis_spec",\n        lambda *args, **kwargs: {\n            "schema_version": "bluecad_mesh_result_v0_1",\n            "verdict": "fail",\n            "errors": [{"code": "MESH_GROUP_EMPTY", "detail": {"group": "LOAD_tube_proxy_port_b"}}],\n            "attempts": [\n                {\n                    "attempt_no": 1,\n                    "target_size": 5.0,\n                    "counts": {},\n                    "errors": [],\n                }\n            ],\n            "artifacts": {},\n        },\n    )\n\n    response = _execute(client, source["run_id"], preview["preview_digest"], analysis)\n    assert response.status_code == 200, response.text\n\n    from app.core.database import open_sqlite_connection\n\n    with open_sqlite_connection() as connection:\n        rows = connection.execute(\n            "SELECT notes FROM artifacts WHERE artifact_type = 'bluecad_sim_report'"\n        ).fetchall()\n        ai_job_count = connection.execute(\n            "SELECT COUNT(*) AS count FROM ai_jobs"\n        ).fetchone()["count"]\n\n    assert len(rows) == 1\n    assert rows[0]["notes"] == cad_link.ARTIFACT_PRODUCER\n    assert "AI loop" not in rows[0]["notes"]\n    assert ai_job_count == 0\n\n\n'''
+          target = Path(test_path)
+          text = target.read_text(encoding='utf-8')
+          if text.count(marker) != 1:
+              raise SystemExit(f'{test_path}: replay marker not unique')
+          target.write_text(text.replace(marker, test + marker, 1), encoding='utf-8')
+          PY
+      - name: Commit fix and remove patch workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/spec-052-provenance-fix.yml
+          git add backend/app/modules/bluecad/loop.py backend/app/modules/bluecad/cad_link.py backend/tests/test_cad_link_boundaries.py
+          git commit -m "Preserve deterministic provenance for CAD-link analysis artifacts"
+          git push origin HEAD:spec/052-cad-link
