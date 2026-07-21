@@ -540,6 +540,7 @@ def _terminalize_local_flow(
     attempt_id: str,
     reason: str | None,
     finish_reason: str | None = None,
+    response_text: str | None = None,
 ) -> None:
     normalized_finish = normalize_finish_reason(finish_reason, failed=False)
     if status == "success" and normalized_finish == "stop":
@@ -560,6 +561,7 @@ def _terminalize_local_flow(
         new_state=state,
         terminal_reason=terminal_reason,
         terminal_attempt_id=attempt_id,
+        terminal_response_text=response_text if state == "complete" else None,
     )
 
 
@@ -1430,6 +1432,7 @@ def run_ai_task(
             attempt_id=ledger_id,
             reason=error_type,
             finish_reason=response.finish_reason,
+            response_text=response.text,
         )
         if status == "success" and normalized_finish == "stop":
             proposed_record_ids, records_parse_error = _create_proposed_records_from_response(

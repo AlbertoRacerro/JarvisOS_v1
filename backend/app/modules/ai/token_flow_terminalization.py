@@ -5,6 +5,9 @@ from typing import Literal
 
 from app.core.database import open_sqlite_connection
 from app.modules.ai.context_builder import canonical_digest
+from app.modules.ai.flow_record_capture import (
+    capture_final_flow_records_in_transaction,
+)
 from app.modules.ai.token_flow_assembly import AssembledOutput
 from app.modules.ai.token_flow_segments import (
     _sensitivity_level,
@@ -189,6 +192,15 @@ def terminalize_assembled_output(
             if result["final_output_digest"] != assembled.body_digest:
                 raise TokenFlowConflictError(
                     "assembled output digest was not preserved"
+                )
+            if new_state == "complete":
+                capture_final_flow_records_in_transaction(
+                    connection,
+                    flow_id=flow_id,
+                    task_kind=str(flow["task_kind"]),
+                    response_text=assembled.body_text,
+                    terminal_attempt_id=terminal_attempt_id,
+                    workspace_id=workspace_id,
                 )
             connection.commit()
             return result, assembled
