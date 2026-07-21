@@ -1,0 +1,40 @@
+name: Diagnose Pytest 062a
+
+on:
+  pull_request:
+    branches:
+      - master
+    types: [synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    if: github.event.pull_request.number == 166
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+      - name: Capture focused Pytest output
+        working-directory: backend
+        shell: bash
+        run: |
+          python -m pytest -q tests/test_flow_grades.py tests/test_flow_grade_boundaries.py > /tmp/pytest-062a.txt 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pytest-062a-output
+          path: /tmp/pytest-062a.txt
+          if-no-files-found: error
+          retention-days: 1
