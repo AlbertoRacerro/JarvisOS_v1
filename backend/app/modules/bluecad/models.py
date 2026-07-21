@@ -135,9 +135,9 @@ def _transform_bbox(bbox: tuple[tuple[float, float, float], tuple[float, float, 
 # Spec 010 AI loop ledger/API models.
 
 CandidateStatus = Literal["generating", "validating", "valid", "parked", "archived"]
-ParkedReason = Literal["attempts_exhausted", "budget_blocked", "policy_blocked", "malformed_repeated", "user_cancelled"]
-CandidateOrigin = Literal["ai", "parametric_variant"]
-ProposalOutcome = Literal["ok", "malformed", "provider_error", "blocked"]
+ParkedReason = Literal["attempts_exhausted", "budget_blocked", "policy_blocked", "malformed_repeated", "user_cancelled", "cad_link_failed"]
+CandidateOrigin = Literal["ai", "parametric_variant", "process_linked"]
+ProposalOutcome = Literal["ok", "malformed", "provider_error", "blocked", "not_applicable"]
 ValidationVerdict = Literal["pass", "fail"]
 
 _CALCULIX_SAFE_MATERIAL_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")

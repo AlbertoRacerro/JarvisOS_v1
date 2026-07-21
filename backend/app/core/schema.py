@@ -20,8 +20,8 @@ SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID = "0012_model_input_contract"
 SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_NAME = "Model-version input contracts and scenario DOF metadata"
 SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_ID = "0013_freshness_invalidation"
 SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_NAME = "Parameter replacement and freshness invalidation overlay"
-CURRENT_SCHEMA_MIGRATION_ID = "0014_grade_0"
-CURRENT_SCHEMA_MIGRATION_NAME = "Flow outcome subjects and append-only human grades"
+CURRENT_SCHEMA_MIGRATION_ID = "0015_cad_link_0"
+CURRENT_SCHEMA_MIGRATION_NAME = "Deterministic bundled-047 M0 cylinder links to BLUECAD"
 
 SCHEMA_MIGRATION_RECORDS = [
     {

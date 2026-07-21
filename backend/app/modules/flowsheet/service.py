@@ -342,6 +342,10 @@ def _load_workspace_rows(connection: sqlite3.Connection, workspace_id: str) -> d
             "FROM evidence_records WHERE workspace_id = ?"
         ),
         "run_artifact": ("SELECT simulation_run_id, artifact_id, role FROM run_artifacts WHERE workspace_id = ?"),
+        "cad_link": (
+            "SELECT source_simulation_run_id, child_candidate_id "
+            "FROM bluecad_cad_links WHERE workspace_id = ?"
+        ),
     }
     rows = {
         kind: [dict(row) for row in connection.execute(query, (workspace_id,)).fetchall()]
@@ -536,6 +540,16 @@ def _add_foreign_key_edges(builder: _GraphBuilder, rows: dict[str, list[dict[str
     ):
         for row in rows[kind]:
             _add_ai_proposal_edge(builder, row, _ref(kind, row["id"]), source_field)
+    for row in rows["cad_link"]:
+        _add_typed_edge(
+            builder,
+            "simulation_run",
+            row.get("source_simulation_run_id"),
+            _ref("bluecad_candidate", row.get("child_candidate_id")),
+            "m0_geometry_link",
+            "dependency",
+            "bluecad_cad_links.source_simulation_run_id",
+        )
     for row in rows["bluecad_candidate"]:
         candidate_ref = _ref("bluecad_candidate", row["id"])
         if row.get("parent_candidate_id"):
@@ -555,8 +569,12 @@ def _add_foreign_key_edges(builder: _GraphBuilder, rows: dict[str, list[dict[str
                     "bluecad_candidate",
                     row["id"],
                     _ref("artifact", row[field_name]),
-                    "current_candidate_artifact",
-                    "provenance",
+                    "process_link_artifact"
+                    if row.get("origin") == "process_linked"
+                    else "current_candidate_artifact",
+                    "dependency"
+                    if row.get("origin") == "process_linked"
+                    else "provenance",
                     f"bluecad_candidates.{field_name}",
                 )
         if row.get("promoted_decision_id"):
@@ -569,6 +587,9 @@ def _add_foreign_key_edges(builder: _GraphBuilder, rows: dict[str, list[dict[str
                 "provenance",
                 "bluecad_candidates.promoted_decision_id",
             )
+    candidate_origins = {
+        candidate.get("id"): candidate.get("origin") for candidate in rows["bluecad_candidate"]
+    }
     for row in rows["bluecad_attempt"]:
         attempt_ref = _ref("bluecad_attempt", row["id"])
         _add_typed_edge(
@@ -576,8 +597,12 @@ def _add_foreign_key_edges(builder: _GraphBuilder, rows: dict[str, list[dict[str
             "bluecad_candidate",
             row.get("candidate_id"),
             attempt_ref,
-            "has_attempt",
-            "provenance",
+            "process_link_build"
+            if candidate_origins.get(row.get("candidate_id")) == "process_linked"
+            else "has_attempt",
+            "dependency"
+            if candidate_origins.get(row.get("candidate_id")) == "process_linked"
+            else "provenance",
             "bluecad_attempts.candidate_id",
         )
         if row.get("proposal_ai_job_id"):
