@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import test_token_flow_local_runtime_integration as local
 import pytest
+import test_token_flow_local_runtime_integration as local
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
