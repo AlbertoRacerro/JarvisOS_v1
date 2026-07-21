@@ -443,6 +443,46 @@ def test_persistence_failure_never_exposes_valid_unlinked_candidate(
     assert len(links) == 1
 
 
+def test_analysis_failure_preserves_registered_artifacts(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _source_run(client)
+    analysis = _analysis_spec()
+    preview = _preview(client, source["run_id"], analysis).json()
+
+    from app.modules.bluecad import cad_link
+
+    def fail_stage(*args, **kwargs) -> None:
+        raise RuntimeError("fixture analysis-stage failure")
+
+    monkeypatch.setattr(cad_link, "_run_simulation_stage", fail_stage)
+    response = _execute(client, source["run_id"], preview["preview_digest"], analysis)
+    assert response.status_code == 500
+    assert response.json()["detail"]["code"] == "cad_link_persistence_failed"
+
+    from app.core.database import open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        candidate = connection.execute(
+            "SELECT * FROM bluecad_candidates"
+        ).fetchone()
+        attempt = connection.execute(
+            "SELECT * FROM bluecad_attempts"
+        ).fetchone()
+        artifact_rows = connection.execute(
+            "SELECT stored_path FROM artifacts WHERE source_ref = ?",
+            (f"bluecad_candidate:{candidate['id']}:attempt:1",),
+        ).fetchall()
+    assert candidate["status"] == "parked"
+    assert candidate["parked_reason"] == "cad_link_failed"
+    assert candidate["spec_artifact_id"] is not None
+    assert candidate["report_artifact_id"] is not None
+    assert candidate["glb_artifact_id"] is not None
+    assert attempt["finished_at"] is not None
+    assert len(artifact_rows) >= 4
+    assert all(Path(row["stored_path"]).is_file() for row in artifact_rows)
+
+
 def test_optional_analysis_reuses_existing_stage_without_ai(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

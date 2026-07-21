@@ -214,6 +214,11 @@ def execute_cad_link_047(workspace_id: str, payload: CadLinkExecuteRequest) -> C
         ) from None
 
     out_dir = candidate_work_dir(workspace_id, candidate_id, 1)
+    spec_artifact_id: str | None = None
+    report_artifact_id: str | None = None
+    manifest_artifact_id: str | None = None
+    glb_artifact_id: str | None = None
+    attempt_finished = False
     try:
         out_dir.mkdir(parents=True, exist_ok=False)
         spec_path = out_dir / "geometry_spec.json"
@@ -235,7 +240,6 @@ def execute_cad_link_047(workspace_id: str, payload: CadLinkExecuteRequest) -> C
             source_ref=source_ref,
             producer_notes=ARTIFACT_PRODUCER,
         )
-        manifest_artifact_id = None
         if result.manifest_path is not None and result.manifest_path.exists():
             manifest_artifact_id = register_artifact(
                 workspace_id,
@@ -244,7 +248,6 @@ def execute_cad_link_047(workspace_id: str, payload: CadLinkExecuteRequest) -> C
                 source_ref=source_ref,
                 producer_notes=ARTIFACT_PRODUCER,
             )
-        glb_artifact_id = None
         glb_path = out_dir / "model.glb"
         if glb_path.exists():
             glb_artifact_id = register_artifact(
@@ -267,17 +270,18 @@ def execute_cad_link_047(workspace_id: str, payload: CadLinkExecuteRequest) -> C
             manifest_artifact_id=manifest_artifact_id,
             error_detail={"transformation_version": TRANSFORMATION_VERSION},
         )
+        attempt_finished = True
+        update_candidate_artifacts(
+            candidate_id,
+            spec_artifact_id=spec_artifact_id,
+            glb_artifact_id=glb_artifact_id,
+            report_artifact_id=report_artifact_id,
+        )
         record_validation_evidence(
             workspace_id,
             candidate_id,
             attempt_id,
             result.report,
-            report_artifact_id=report_artifact_id,
-        )
-        update_candidate_artifacts(
-            candidate_id,
-            spec_artifact_id=spec_artifact_id,
-            glb_artifact_id=glb_artifact_id,
             report_artifact_id=report_artifact_id,
         )
         if verdict == "pass":
@@ -300,8 +304,25 @@ def execute_cad_link_047(workspace_id: str, payload: CadLinkExecuteRequest) -> C
         else:
             park_candidate(candidate_id, "cad_link_failed", notes="Deterministic CAD-link validation failed.")
     except Exception as exc:
+        if not attempt_finished:
+            _best_effort_finish_failed_attempt(
+                attempt_id,
+                exc,
+                spec_artifact_id=spec_artifact_id,
+                report_artifact_id=report_artifact_id,
+                manifest_artifact_id=manifest_artifact_id,
+            )
         park_candidate(candidate_id, "cad_link_failed", notes=f"cad_link_execution_error={type(exc).__name__}")
-        _best_effort_cleanup_unregistered(out_dir)
+        if all(
+            artifact_id is None
+            for artifact_id in (
+                spec_artifact_id,
+                report_artifact_id,
+                manifest_artifact_id,
+                glb_artifact_id,
+            )
+        ):
+            _best_effort_cleanup_unregistered(out_dir)
         raise CadLinkError(
             "cad_link_persistence_failed",
             "The deterministic CAD-link build did not complete coherently.",
@@ -749,6 +770,32 @@ def _require_path(path: Path | None, fallback: Path) -> Path:
     if not resolved.exists():
         raise RuntimeError("expected deterministic BLUECAD artifact is missing")
     return resolved
+
+
+def _best_effort_finish_failed_attempt(
+    attempt_id: str,
+    exc: Exception,
+    *,
+    spec_artifact_id: str | None,
+    report_artifact_id: str | None,
+    manifest_artifact_id: str | None,
+) -> None:
+    try:
+        finish_attempt(
+            attempt_id,
+            proposal_outcome="not_applicable",
+            build_outcome="cad_link_execution_error",
+            validation_verdict="fail",
+            spec_artifact_id=spec_artifact_id,
+            report_artifact_id=report_artifact_id,
+            manifest_artifact_id=manifest_artifact_id,
+            error_detail={
+                "transformation_version": TRANSFORMATION_VERSION,
+                "error_type": type(exc).__name__,
+            },
+        )
+    except Exception:
+        return
 
 
 def _best_effort_cleanup_unregistered(out_dir: Path) -> None:
