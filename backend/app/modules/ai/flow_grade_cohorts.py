@@ -118,13 +118,19 @@ def get_flow_grade_cohort(
         flow_spend = decimal_value(flow["external_provider_spend_usd_decimal"])
         total_flow_spend += flow_spend
         spend_by_grade[grade] += flow_spend
-        all_classes = {str(attempt["execution_class"]) for attempt in attempts}
+        all_classes = {
+            _bucket(attempt["execution_class"], execution_metrics, "legacy_unknown")
+            for attempt in attempts
+        }
         invoked_classes = {
-            str(attempt["execution_class"])
+            _bucket(attempt["execution_class"], execution_metrics, "legacy_unknown")
             for attempt in attempts
             if bool(attempt["adapter_invoked"])
         }
-        states = {str(attempt["external_dispatch_state"]) for attempt in attempts}
+        states = {
+            _bucket(attempt["external_dispatch_state"], dispatch_metrics, "unknown")
+            for attempt in attempts
+        }
         composition_counts[execution_composition(invoked_classes)] += 1
         dispatch_quality_counts[dispatch_quality(states)] += 1
         provider_quality_counts[provider_quality(attempts)] += 1
@@ -154,10 +160,18 @@ def get_flow_grade_cohort(
 
         for attempt in attempts:
             attempts_by_grade[grade] += 1
-            execution_class = str(attempt["execution_class"])
-            dispatch_state = str(attempt["external_dispatch_state"])
-            usage_source = str(attempt["normalized_usage_source"])
-            accounting_basis = str(attempt["accounting_basis"])
+            execution_class = _bucket(
+                attempt["execution_class"], execution_metrics, "legacy_unknown"
+            )
+            dispatch_state = _bucket(
+                attempt["external_dispatch_state"], dispatch_metrics, "unknown"
+            )
+            usage_source = _bucket(
+                attempt["normalized_usage_source"], usage_metrics, "legacy_unknown"
+            )
+            accounting_basis = _bucket(
+                attempt["accounting_basis"], accounting_metrics, "legacy_unknown"
+            )
             attempt_spend = decimal_value(
                 attempt["accounted_provider_spend_usd_decimal"]
             )
@@ -376,6 +390,15 @@ def _metric_attempts(metrics: dict[str, dict[str, object]]) -> int:
 
 def _count(value: object) -> int:
     return int(value or 0)
+
+
+def _bucket(
+    value: object,
+    allowed: dict[str, object],
+    fallback: str,
+) -> str:
+    key = str(value) if value is not None else fallback
+    return key if key in allowed else fallback
 
 
 def _increment(
