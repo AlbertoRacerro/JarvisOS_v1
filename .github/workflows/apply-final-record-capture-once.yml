@@ -28,13 +28,27 @@ jobs:
             backend/requirements.txt
             backend/requirements-dev.txt
       - name: Decode and apply reviewed patch
+        shell: bash
         run: |
-          base64 -d .jarvis-tmp/final-record-capture.patch.gz.b64 \
-            | gzip -d > /tmp/final-record-capture.patch
-          echo 'e703564014211b764f6d0490e40ca090de9d454cc0006123777ba72794380b6f  /tmp/final-record-capture.patch' \
-            | sha256sum -c -
-          git apply --check --index --directory=backend /tmp/final-record-capture.patch
-          git apply --index --directory=backend /tmp/final-record-capture.patch
+          set -o pipefail
+          {
+            base64 -d .jarvis-tmp/final-record-capture.patch.gz.b64 \
+              | gzip -d > /tmp/final-record-capture.patch
+            sha256sum /tmp/final-record-capture.patch
+            echo 'e703564014211b764f6d0490e40ca090de9d454cc0006123777ba72794380b6f  /tmp/final-record-capture.patch' \
+              | sha256sum -c -
+            grep '^diff --git' /tmp/final-record-capture.patch
+            git apply --check --index --directory=backend /tmp/final-record-capture.patch
+            git apply --index --directory=backend /tmp/final-record-capture.patch
+          } 2>&1 | tee "$RUNNER_TEMP/final-record-capture-apply.log"
+      - name: Upload apply diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-record-capture-apply-diagnostics
+          path: ${{ runner.temp }}/final-record-capture-apply.log
+          if-no-files-found: warn
+          retention-days: 1
       - name: Install dependencies
         working-directory: backend
         run: |
