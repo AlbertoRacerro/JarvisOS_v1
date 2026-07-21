@@ -31,7 +31,7 @@ jobs:
         run: |
           base64 -d .jarvis-tmp/final-record-capture.patch.gz.b64 \
             | gzip -d > /tmp/final-record-capture.patch
-          echo '49b1a09a33c046a3477e6f72e0142a8efbbd54896d815f3e20e42e87dbecdb47  /tmp/final-record-capture.patch' \
+          echo '31b6e83d90b642fb7291c927aa81e75a79d82c021e3033532c29defeb806f491  /tmp/final-record-capture.patch' \
             | sha256sum -c -
           git apply --check --index --directory=backend /tmp/final-record-capture.patch
           git apply --index --directory=backend /tmp/final-record-capture.patch
