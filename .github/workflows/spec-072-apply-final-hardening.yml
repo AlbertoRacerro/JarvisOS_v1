@@ -1,0 +1,94 @@
+name: Apply final spec 072 definition hardening
+
+on:
+  push:
+    branches:
+      - spec/072-process-topology-definition
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: spec/072-process-topology-definition
+          fetch-depth: 0
+      - name: Apply exact fail-closed definition patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('docs/specs/072-bluerev-process-topology-m1.md')
+          text = path.read_text(encoding='utf-8')
+          replacements = [
+              (
+                  '| `branch_bend_centerline_radius` | `mm` | `> 0` when bend count > 0 | Centreline radius of every represented bend. |',
+                  '| `branch_bend_centerline_radius` | `mm` | `= 0` when bend count is 0; `> branch_tube_outer_diameter / 2` otherwise | Centreline radius of every represented bend. |',
+              ),
+              (
+                  '| `branch_bend_angle` | `deg` | `> 0` and `<= 180` when bend count > 0 | Included angle of every represented bend. |',
+                  '| `branch_bend_angle` | `deg` | `= 0` when bend count is 0; `> 0` and `<= 180` otherwise | Included angle of every represented bend. |',
+              ),
+              (
+                  '''At least one of illuminated straight length, dark straight length, or bend count must be
+positive. If `branch_bend_count = 0`, both bend radius and angle remain required numeric
+bindings for contract stability but are ignored only after being validated as finite and
+non-negative; the canonical manifest records zero bend use. Implementations must not
+silently substitute radius or angle defaults.
+''',
+                  '''At least one of illuminated straight length, dark straight length, or bend count must be
+positive. If `branch_bend_count = 0`, illuminated bend count, bend radius, and bend angle
+must all be exactly zero. They remain explicit required bindings so the input shape is
+stable, but no irrelevant positive value may alter the run or manifest digest. When bend
+count is non-zero, the centreline radius must exceed half the branch outer diameter to
+exclude a geometrically self-intersecting tube sweep. Implementations must not silently
+substitute radius or angle defaults.
+''',
+              ),
+              (
+                  '''- `branch_illuminated_bend_count` is between 0 and `branch_bend_count` inclusive;
+- positive bend radius and angle are mandatory when bend count is non-zero;
+- branch and common outer diameters exceed their inner diameters;
+''',
+                  '''- `branch_illuminated_bend_count` is between 0 and `branch_bend_count` inclusive;
+- when bend count is zero, illuminated bend count, radius, and angle are exactly zero;
+- when bend count is non-zero, angle is in `(0, 180]` degrees and bend centreline radius
+  is greater than half the branch outer diameter;
+- branch and common outer diameters exceed their inner diameters;
+''',
+              ),
+              (
+                  '''- integer count acceptance/rejection without rounding;
+- invalid illuminated bend count rejection;
+- positive wall-thickness checks for branch and common tubing;
+''',
+                  '''- integer count acceptance/rejection without rounding;
+- invalid illuminated bend count rejection;
+- exact zero radius/angle/illuminated-count enforcement for zero-bend branches;
+- non-zero bend angle and centreline-radius geometry-bound rejection;
+- positive wall-thickness checks for branch and common tubing;
+''',
+              ),
+          ]
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'exact replacement count={count}: {old[:100]!r}')
+              text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+      - name: Commit patch and remove temporary workflows
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/spec-072-apply-final-hardening.yml
+          if [ -f .github/workflows/spec-072-pytest-diagnostic-v2.yml ]; then
+            git rm .github/workflows/spec-072-pytest-diagnostic-v2.yml
+          fi
+          git add docs/specs/072-bluerev-process-topology-m1.md
+          git commit -m "Harden bend-domain contract in spec 072"
+          git push origin HEAD:spec/072-process-topology-definition
