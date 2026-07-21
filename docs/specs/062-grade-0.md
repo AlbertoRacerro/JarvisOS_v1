@@ -1,9 +1,9 @@
 # 062 — GRADE-0: human quality evidence and complete outcome cohorts
 
-Status: planned full-spec draft. `docs/specs/STATUS.md` is authoritative. This
-contract must not become `ready` until 061 is implemented and merged, terminal flow
-identity/accounting finalization are stable, and the operator-visible result surface is
-rechecked.
+Status: implementation in review. `docs/specs/STATUS.md` is authoritative. The 062a
+backend authority slice provides immutable flow subjects, append-only grade history,
+and bounded operator API routes. Complete cohort analytics and the operator-visible
+frontend result surface remain pending.
 
 Depends on: 021, 059b, 061
 
