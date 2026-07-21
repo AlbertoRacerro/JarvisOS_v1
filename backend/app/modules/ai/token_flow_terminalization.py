@@ -202,6 +202,14 @@ def terminalize_assembled_output(
                     terminal_attempt_id=terminal_attempt_id,
                     workspace_id=workspace_id,
                 )
+            from app.modules.ai.flow_grade_subjects import (
+                ensure_flow_grade_subject_in_transaction,
+            )
+
+            ensure_flow_grade_subject_in_transaction(
+                connection,
+                flow_id=flow_id,
+            )
             connection.commit()
             return result, assembled
         except Exception:
