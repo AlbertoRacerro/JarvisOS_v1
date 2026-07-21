@@ -1,0 +1,40 @@
+name: Finalize spec 052 registry state
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - name: Mark merged implementation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('docs/specs/STATUS.md')
+          text = path.read_text(encoding='utf-8')
+          old = '| 052 | in_review | [#170](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/170) | CAD-LINK-0: 047 M0 cylinder proxy to BLUECAD |'
+          new = '| 052 | merged | [#170](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/170) | CAD-LINK-0: 047 M0 cylinder proxy to BLUECAD |'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one 052 in_review row, found {text.count(old)}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+      - name: Commit registry update and remove workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/finalize-spec-052-status.yml
+          git add docs/specs/STATUS.md
+          git commit -m "Mark spec 052 merged"
+          git push origin HEAD:master
