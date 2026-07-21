@@ -4,12 +4,17 @@ on:
   push:
     branches:
       - impl/062a-grade-authority
+  pull_request:
+    branches:
+      - master
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
 
 jobs:
   apply:
+    if: github.event_name == 'push' || github.event.pull_request.number == 166
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,7 +51,7 @@ jobs:
               raise SystemExit("one-shot workflow is missing")
           workflow.unlink()
           PY
-          python -m py_compile             backend/app/core/grade_schema.py             backend/app/modules/ai/flow_grades.py             backend/app/modules/ai/models.py             backend/app/modules/ai/routes.py             backend/app/modules/ai/token_flow_service.py             backend/tests/test_flow_grades.py
+          python -m py_compile backend/app/core/grade_schema.py backend/app/modules/ai/flow_grades.py backend/app/modules/ai/models.py backend/app/modules/ai/routes.py backend/app/modules/ai/token_flow_service.py backend/tests/test_flow_grades.py
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
