@@ -797,6 +797,11 @@ def _finish_confirmation_flow(
         new_state=state,
         terminal_reason=reason,
         terminal_attempt_id=outcome.ledger_id,
+        terminal_response_text=(
+            outcome.response.text
+            if state == "complete" and outcome.response is not None
+            else None
+        ),
     )
 
 
