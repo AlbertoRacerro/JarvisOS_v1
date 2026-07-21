@@ -110,7 +110,7 @@ def load_cohort_rows(
             subject_placeholders = ",".join("?" for _ in subject_ids)
             latest_events = connection.execute(
                 f"""
-                SELECT event.*
+                SELECT event.subject_id, event.action, event.grade
                 FROM ai_flow_grade_events AS event
                 JOIN (
                     SELECT subject_id, MAX(event_index) AS event_index
