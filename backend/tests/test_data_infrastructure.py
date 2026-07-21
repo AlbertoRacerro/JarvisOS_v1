@@ -43,6 +43,7 @@ def uninitialized_client(tmp_path, monkeypatch) -> Iterator[TestClient]:
 def test_schema_migration_table_records_baseline_and_current_version(client: TestClient) -> None:
     from app.core.database import open_sqlite_connection
     from app.core.egress_schema import EGRESS_SCHEMA_MIGRATION_ID
+    from app.core.grade_schema import GRADE_SCHEMA_MIGRATION_ID
     from app.core.schema import (
         CURRENT_SCHEMA_MIGRATION_ID,
         SCHEMA_BASELINE_MIGRATION_ID,
@@ -56,12 +57,15 @@ def test_schema_migration_table_records_baseline_and_current_version(client: Tes
         ).fetchall()
 
     migrations = {row["migration_id"]: dict(row) for row in rows}
-    assert CURRENT_SCHEMA_MIGRATION_ID == SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_ID
+    assert CURRENT_SCHEMA_MIGRATION_ID == GRADE_SCHEMA_MIGRATION_ID
     assert SCHEMA_BASELINE_MIGRATION_ID in migrations
+    assert SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_ID in migrations
+    assert GRADE_SCHEMA_MIGRATION_ID in migrations
     assert EGRESS_SCHEMA_MIGRATION_ID in migrations
     assert TOKEN_FLOW_SCHEMA_MIGRATION_ID in migrations
     assert migrations[EGRESS_SCHEMA_MIGRATION_ID]["status"] == "applied"
     assert migrations[TOKEN_FLOW_SCHEMA_MIGRATION_ID]["status"] == "applied"
+    assert migrations[GRADE_SCHEMA_MIGRATION_ID]["status"] == "applied"
     assert CURRENT_SCHEMA_MIGRATION_ID in migrations
     assert migrations[CURRENT_SCHEMA_MIGRATION_ID]["status"] == "applied"
 
