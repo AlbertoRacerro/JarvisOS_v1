@@ -500,6 +500,8 @@ def test_optional_analysis_reuses_existing_stage_without_ai(
         attempt_no: int,
         analysis_spec: dict[str, Any] | None,
         artifacts: dict[str, Any],
+        *,
+        producer_notes: str | None = None,
     ) -> None:
         observed.update(
             {
@@ -509,6 +511,7 @@ def test_optional_analysis_reuses_existing_stage_without_ai(
                 "attempt_no": attempt_no,
                 "analysis_spec": analysis_spec,
                 "artifacts": artifacts,
+                "producer_notes": producer_notes,
             }
         )
 
@@ -521,11 +524,60 @@ def test_optional_analysis_reuses_existing_stage_without_ai(
     assert observed["candidate_id"] == candidate["id"]
     assert observed["analysis_spec"] == analysis
     assert observed["artifacts"]["result"].manifest is not None
+    assert observed["producer_notes"] == cad_link.ARTIFACT_PRODUCER
 
     from app.core.database import open_sqlite_connection
 
     with open_sqlite_connection() as connection:
         assert connection.execute("SELECT COUNT(*) AS count FROM ai_jobs").fetchone()["count"] == 0
+
+
+def test_optional_analysis_artifacts_keep_process_linked_provenance(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _source_run(client)
+    analysis = _analysis_spec()
+    preview = _preview(client, source["run_id"], analysis).json()
+
+    from app.modules.bluecad import cad_link, loop
+
+    monkeypatch.setattr(
+        loop,
+        "mesh_analysis_spec",
+        lambda *args, **kwargs: {
+            "schema_version": "bluecad_mesh_result_v0_1",
+            "verdict": "fail",
+            "errors": [{"code": "MESH_GROUP_EMPTY", "detail": {"group": "LOAD_tube_proxy_port_b"}}],
+            "attempts": [
+                {
+                    "attempt_no": 1,
+                    "target_size": 5.0,
+                    "counts": {},
+                    "errors": [],
+                }
+            ],
+            "artifacts": {},
+        },
+    )
+
+    response = _execute(client, source["run_id"], preview["preview_digest"], analysis)
+    assert response.status_code == 200, response.text
+
+    from app.core.database import open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        rows = connection.execute(
+            "SELECT notes FROM artifacts WHERE artifact_type = 'bluecad_sim_report'"
+        ).fetchall()
+        ai_job_count = connection.execute(
+            "SELECT COUNT(*) AS count FROM ai_jobs"
+        ).fetchone()["count"]
+
+    assert len(rows) == 1
+    assert rows[0]["notes"] == cad_link.ARTIFACT_PRODUCER
+    assert "AI loop" not in rows[0]["notes"]
+    assert ai_job_count == 0
+
 
 
 def test_replay_rejects_inconsistent_persisted_link(client: TestClient) -> None:

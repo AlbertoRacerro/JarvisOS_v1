@@ -300,6 +300,7 @@ def execute_cad_link_047(workspace_id: str, payload: CadLinkExecuteRequest) -> C
                     "manifest_artifact_id": manifest_artifact_id,
                     "glb_artifact_id": glb_artifact_id,
                 },
+                producer_notes=ARTIFACT_PRODUCER,
             )
         else:
             park_candidate(candidate_id, "cad_link_failed", notes="Deterministic CAD-link validation failed.")
