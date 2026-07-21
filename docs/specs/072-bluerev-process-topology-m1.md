@@ -198,14 +198,16 @@ invented centreline lengths, external areas, or residence-path order.
 | --- | --- | --- | --- |
 | `common_supply_minor_loss_coefficient` | `1` | `>= 0` | Common-section velocity. |
 | `split_manifold_loss_coefficient` | `1` | `>= 0` | Common-section inlet velocity. |
-| `branch_bend_loss_coefficient_per_bend` | `1` | `>= 0` | Branch velocity, multiplied by bend count. |
+| `branch_bend_loss_coefficient_per_bend` | `1` | `= 0` when bend count is 0; `>= 0` otherwise | Branch velocity, multiplied by bend count. |
 | `branch_misc_minor_loss_coefficient` | `1` | `>= 0` | Branch velocity. |
 | `merge_manifold_loss_coefficient` | `1` | `>= 0` | Common-section outlet velocity. |
 | `common_return_minor_loss_coefficient` | `1` | `>= 0` | Common-section velocity. |
 
 All K values are caller-owned preliminary model parameters with normal Parameter
 provenance. The model does not infer them from CAD, vendor data, elbow radius, manifold
-shape, or part count.
+shape, or part count. When `branch_bend_count = 0`,
+`branch_bend_loss_coefficient_per_bend` must also be exactly zero so an inert coefficient
+cannot create a second manifest or digest for the same physical topology.
 
 ## Integer and cross-field validation
 
@@ -216,7 +218,8 @@ additional exact runtime checks:
 - `parallel_path_count` is between 1 and 12 inclusive;
 - `branch_bend_count` is between 0 and 64 inclusive;
 - `branch_illuminated_bend_count` is between 0 and `branch_bend_count` inclusive;
-- when bend count is zero, illuminated bend count, radius, and angle are exactly zero;
+- when bend count is zero, illuminated bend count, radius, angle, and bend-loss
+  coefficient are exactly zero;
 - when bend count is non-zero, angle is in `(0, 180]` degrees and bend centreline radius
   is greater than half the branch outer diameter;
 - branch and common outer diameters exceed their inner diameters;
@@ -407,6 +410,84 @@ equivalent_static_head = dP_total / (rho * g)
 Pump curve, NPSH, static elevation, wave-induced pressure, manifold maldistribution, and
 control margin remain unevaluated and are reported explicitly in diagnostics.
 
+## Closed `calc_v0` topology-manifest artifact profile
+
+The current generic `calc_v0` sandbox permits direct literal access only to
+`input.json` and `result.json`, and the generic runner registers only `result.json`.
+072 must not weaken that default contract or accept arbitrary caller-declared artifact
+paths.
+
+Implementation adds one closed internal artifact profile:
+
+```text
+profile: bluerev_topology_manifest_v0_1
+```
+
+The profile is selected only when all four stored model-identity values match the
+reviewed bundled 072 constants:
+
+```text
+implementation_kind = calc_v0
+version_label = bluerev-process-topology-m1-v0.1.0
+script_sha256 = exact bundled 072 script hash
+input_contract_sha256 = exact bundled 072 contract hash
+```
+
+The profile is derived by trusted runner code after loading the registered model version.
+It is not a request field, contract field, script declaration, environment variable, or
+caller-selectable model option. A matching label with a different script or contract
+hash remains ordinary `calc_v0` and cannot obtain the additional file permission.
+
+For this exact profile only, the AST/file policy extends the generic allowlist by:
+
+- permitting the `hashlib` import root;
+- permitting one additional direct literal call:
+  `open("topology_manifest.json", "w")`;
+- retaining the existing ban on dynamic paths, aliases to `open`, `pathlib` file access,
+  binary/append/update/exclusive modes, subdirectories, and every other filename.
+
+`input.json` remains read-only. `result.json` and `topology_manifest.json` remain
+write-only text-truncate outputs. Generic `calc_v0` continues to allow only
+`input.json` and `result.json`.
+
+The bundled script writes `topology_manifest.json` as exact UTF-8 canonical JSON bytes:
+
+```text
+json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
+```
+
+with no trailing newline and no self-referential digest field. The script computes
+`sha256:<lowercase-hex>` over those exact bytes and places the value under the versioned
+`result.json` diagnostics field `topology_manifest_sha256`.
+
+After process exit and before any run or runner job is marked succeeded, trusted runner
+code for this profile must:
+
+1. apply the ordinary `calc_v0` numerical output validation;
+2. require that `result.json` does not declare caller-controlled artifacts;
+3. require exactly one `topology_manifest.json` regular file at the run root, within the
+   existing JSON and artifact byte limits;
+4. parse it as a finite JSON object and require its on-disk bytes to equal the canonical
+   serialization above;
+5. validate it against `bluerev_process_topology_m1_v0_1.schema.json`;
+6. verify its model, contract, topology, and executed-input identities against the exact
+   registered model version and canonical simulation-run input payload, including every
+   optional `source_parameter_id`;
+7. recompute the raw-file SHA-256 and require exact equality with
+   `result.json.diagnostics.topology_manifest_sha256`;
+8. register exactly two runner-owned artifacts through the existing artifact and
+   `run_artifacts` stores:
+   - `result.json` with role `calc_result_json`;
+   - `topology_manifest.json` with role `bluerev_topology_manifest`.
+
+The runner constructs this two-item artifact list itself. The script cannot add, remove,
+rename, re-role, or re-type artifacts. Missing, extra, non-canonical, schema-invalid,
+identity-mismatched, digest-mismatched, oversized, or non-regular manifest output fails
+the run before success and before Parameter proposals are created.
+
+No new mutable topology table, general artifact declaration language, wildcard path,
+directory traversal, or broader `calc_v0` permission is introduced.
+
 ## Canonical topology manifest
 
 Each successful run writes a deterministic `topology_manifest.json` artifact and reports
@@ -463,7 +544,8 @@ The manifest records:
 - representative-path and installed-total length distinction;
 - K coefficient identities and dynamic-pressure bases;
 - result and contract version identifiers;
-- topology-manifest digest computed without a self-referential digest field.
+- no self-referential digest field: the exact canonical file digest is recorded by
+  `result.json` and the registered artifact metadata.
 
 It does not contain 3D frames, generated CAD IDs, spatial coordinates, or inferred part
 placement.
@@ -555,7 +637,8 @@ A dedicated fixture must reduce M1 exactly to the 047 M0 equations when:
 - `parallel_path_count = 1`;
 - common supply and return lengths are zero;
 - split and merge manifold volumes are zero;
-- bend count is zero;
+- bend count, illuminated bend count, bend radius, bend angle, and bend-loss
+  coefficient are zero;
 - dark branch length is zero;
 - branch illuminated length equals 047 `tube_length`;
 - branch diameters equal 047 tube diameters;
@@ -630,6 +713,7 @@ manifest/output artifacts stale. No automatic rerun, CAD rebuild, or promotion o
 ## Explicit non-goals
 
 - arbitrary directed process graphs;
+- broadening generic `calc_v0` file or artifact permissions;
 - asymmetric branch dimensions or velocities;
 - automatic flow distribution or pressure balancing;
 - valves, branch states, bypasses, nested manifolds, or cross-connections;
@@ -652,6 +736,11 @@ manifest/output artifacts stale. No automatic rerun, CAD rebuild, or promotion o
 
 - contract canonicalization and hash stability;
 - registration idempotency and exact script/contract identity;
+- the closed topology-manifest profile is selected only by the exact bundled label,
+  script hash, contract hash, and `calc_v0` implementation kind;
+- spoofed labels or mismatched hashes retain generic `calc_v0` restrictions;
+- generic `calc_v0` cannot open or register `topology_manifest.json`;
+- the exact 072 profile permits only the fixed manifest filename and write-only mode;
 - all variables required, exact-name, exact-unit, no extra keys;
 - zero seeded Parameters or defaults;
 - existing 071 preview reports the correct structural/bound/unresolved DOF counts.
@@ -660,7 +749,8 @@ manifest/output artifacts stale. No automatic rerun, CAD rebuild, or promotion o
 
 - integer count acceptance/rejection without rounding;
 - invalid illuminated bend count rejection;
-- exact zero radius/angle/illuminated-count enforcement for zero-bend branches;
+- exact zero radius/angle/illuminated-count/bend-loss-K enforcement for zero-bend
+  branches;
 - non-zero bend angle and centreline-radius geometry-bound rejection;
 - positive wall-thickness checks for branch and common tubing;
 - finite-number and exact-unit rejection;
@@ -700,7 +790,9 @@ manifest/output artifacts stale. No automatic rerun, CAD rebuild, or promotion o
   same pinned environment;
 - no wall-clock value, UUID, filesystem root, or absolute runner path enters the
   manifest digest;
-- result references the exact registered manifest artifact hash;
+- exact canonical manifest bytes and raw SHA-256 agree with the result diagnostic and
+  registered artifact hash;
+- the registered run has exactly the runner-owned result and topology-manifest artifacts;
 - zero `ai_jobs` rows and no AI provenance note;
 - graph/staleness paths remain explainable through existing 050/051 nodes.
 
@@ -713,9 +805,11 @@ manifest/output artifacts stale. No automatic rerun, CAD rebuild, or promotion o
 
 ### Failure modes
 
-- malformed manifest construction fails the run honestly;
+- missing, extra, non-regular, oversized, non-canonical, malformed, schema-invalid,
+  input-identity-mismatched, or digest-mismatched manifest output fails the run honestly;
+- caller-controlled artifact declarations are rejected for the closed profile;
 - artifact registration failure cannot leave a succeeded run with a missing manifest;
-- script or contract hash tampering fails closed;
+- script or contract hash tampering fails closed and cannot activate the profile;
 - repeated registration or repeated runner execution follows existing idempotency and
   immutable-history behavior;
 - no test requires network access, provider credentials, or frontend runtime.
@@ -725,8 +819,9 @@ manifest/output artifacts stale. No automatic rerun, CAD rebuild, or promotion o
 Implementation remains one spec but should be reviewed in this order:
 
 1. bundled contract, script, topology schema, and pure numeric fixtures;
-2. registration identity and runner integration;
-3. deterministic topology artifact registration and output digest binding;
+2. exact model-identity registration and the closed, model-scoped `calc_v0` manifest
+   file-policy profile;
+3. fixed two-artifact validation/registration and output digest binding;
 4. 050/051 lineage and stale-propagation verification;
 5. M0 reduction proof and adversarial failure matrix;
 6. exact-head CI and existing real-tool regression proof to ensure CAD/FEM boundaries
