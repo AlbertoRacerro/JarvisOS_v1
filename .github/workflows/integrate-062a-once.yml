@@ -1,0 +1,137 @@
+name: Integrate 062a backend authority once
+
+on:
+  push:
+    branches:
+      - impl/062a-grade-authority
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: impl/062a-grade-authority
+      - name: Integrate schema routes terminalization and registry
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path_text: str, old: str, new: str) -> None:
+              path = Path(path_text)
+              text = path.read_text(encoding="utf-8")
+              if text.count(old) != 1:
+                  raise SystemExit(f"expected one anchor in {path_text}: {old!r}")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          replace_once(
+              "backend/app/core/database.py",
+              "from app.core.paths import build_paths\n",
+              "from app.core.grade_schema import (\n"
+              "    GRADE_SCHEMA_INDEX_STATEMENTS,\n"
+              "    GRADE_SCHEMA_MIGRATION_RECORD,\n"
+              "    GRADE_SCHEMA_STATEMENTS,\n"
+              ")\n"
+              "from app.core.paths import build_paths\n",
+          )
+          replace_once(
+              "backend/app/core/database.py",
+              "        for statement in TOKEN_FLOW_SCHEMA_STATEMENTS:\n"
+              "            connection.execute(statement)\n",
+              "        for statement in TOKEN_FLOW_SCHEMA_STATEMENTS:\n"
+              "            connection.execute(statement)\n"
+              "        for statement in GRADE_SCHEMA_STATEMENTS:\n"
+              "            connection.execute(statement)\n",
+          )
+          replace_once(
+              "backend/app/core/database.py",
+              "        for statement in TOKEN_FLOW_SCHEMA_INDEX_STATEMENTS:\n"
+              "            connection.execute(statement)\n",
+              "        for statement in TOKEN_FLOW_SCHEMA_INDEX_STATEMENTS:\n"
+              "            connection.execute(statement)\n"
+              "        for statement in GRADE_SCHEMA_INDEX_STATEMENTS:\n"
+              "            connection.execute(statement)\n",
+          )
+          replace_once(
+              "backend/app/core/database.py",
+              '        "ai_flow_record_captures",\n',
+              '        "ai_flow_record_captures",\n'
+              '        "ai_flow_grade_subjects",\n'
+              '        "ai_flow_grade_events",\n',
+          )
+          replace_once(
+              "backend/app/core/database.py",
+              "        TOKEN_FLOW_SCHEMA_MIGRATION_RECORD,\n",
+              "        TOKEN_FLOW_SCHEMA_MIGRATION_RECORD,\n"
+              "        GRADE_SCHEMA_MIGRATION_RECORD,\n",
+          )
+
+          replace_once(
+              "backend/app/modules/ai/routes.py",
+              "from app.modules.ai.gateway import AIGateway\n",
+              "from app.modules.ai.flow_grade_routes import router as flow_grade_router\n"
+              "from app.modules.ai.gateway import AIGateway\n",
+          )
+          replace_once(
+              "backend/app/modules/ai/routes.py",
+              'router = APIRouter(prefix="/ai", tags=["ai"])\n',
+              'router = APIRouter(prefix="/ai", tags=["ai"])\n'
+              'router.include_router(flow_grade_router)\n',
+          )
+
+          replace_once(
+              "backend/app/modules/ai/token_flow_service.py",
+              "            connection.commit()\n"
+              "            return recomputed\n",
+              "            if is_terminal:\n"
+              "                from app.modules.ai.flow_grade_subjects import (\n"
+              "                    ensure_flow_grade_subject_in_transaction,\n"
+              "                )\n\n"
+              "                ensure_flow_grade_subject_in_transaction(\n"
+              "                    connection,\n"
+              "                    flow_id=flow_id,\n"
+              "                )\n"
+              "            connection.commit()\n"
+              "            return recomputed\n",
+          )
+          replace_once(
+              "backend/app/modules/ai/token_flow_terminalization.py",
+              "            connection.commit()\n"
+              "            return result, assembled\n",
+              "            from app.modules.ai.flow_grade_subjects import (\n"
+              "                ensure_flow_grade_subject_in_transaction,\n"
+              "            )\n\n"
+              "            ensure_flow_grade_subject_in_transaction(\n"
+              "                connection,\n"
+              "                flow_id=flow_id,\n"
+              "            )\n"
+              "            connection.commit()\n"
+              "            return result, assembled\n",
+          )
+
+          replace_once(
+              "docs/specs/STATUS.md",
+              "| 062 | ready | — | GRADE-0 | 021, 059b, 061a, 061b |",
+              "| 062 | in_review | [#166](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/166) | GRADE-0 | 021, 059b, 061a, 061b |",
+          )
+
+          for workflow in (
+              ".github/workflows/apply-062a-grade-authority-once.yml",
+              ".github/workflows/diagnose-062a-transport.yml",
+              ".github/workflows/execute-062a-transport-once.yml",
+              ".github/workflows/fix-062a-transport-once.yml",
+              ".github/workflows/integrate-062a-once.yml",
+          ):
+              path = Path(workflow)
+              if path.exists():
+                  path.unlink()
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Integrate 062a grade authority"
+          git push origin HEAD:impl/062a-grade-authority
