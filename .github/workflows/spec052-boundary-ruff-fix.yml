@@ -1,0 +1,40 @@
+name: Spec 052 boundary Ruff fix
+
+on:
+  push:
+    branches:
+      - spec/052-cad-link
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: spec/052-cad-link
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install lint dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Apply safe Ruff fixes
+        shell: bash
+        run: |
+          cd backend
+          python -m ruff check --fix app tests ../scripts/check_spec_status.py ../scripts/cheap_review.py ../scripts/manual_review.py
+          cd ..
+          rm .github/workflows/spec052-boundary-ruff-fix.yml
+      - name: Commit lint-only changes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Apply Ruff fixes to spec 052 boundary coverage"
+          git push origin HEAD:spec/052-cad-link
