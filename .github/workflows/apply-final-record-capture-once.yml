@@ -33,8 +33,8 @@ jobs:
             | gzip -d > /tmp/final-record-capture.patch
           echo '49b1a09a33c046a3477e6f72e0142a8efbbd54896d815f3e20e42e87dbecdb47  /tmp/final-record-capture.patch' \
             | sha256sum -c -
-          git apply --check --index /tmp/final-record-capture.patch
-          git apply --index /tmp/final-record-capture.patch
+          git apply --check --index --directory=backend /tmp/final-record-capture.patch
+          git apply --index --directory=backend /tmp/final-record-capture.patch
       - name: Install dependencies
         working-directory: backend
         run: |
