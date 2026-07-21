@@ -5,7 +5,9 @@ import test_token_flow_local_runtime_integration as local
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.core.cad_link_schema import CAD_LINK_SCHEMA_MIGRATION_RECORD
 from app.core.database import get_current_schema_migration, open_sqlite_connection
+from app.core.grade_schema import GRADE_SCHEMA_MIGRATION_ID
 from app.modules.ai.execution import run_ai_task
 from app.modules.ai.flow_grade_contracts import FlowGradeConflictError
 from app.modules.ai.flow_grade_events import set_flow_grade, withdraw_flow_grade
@@ -30,9 +32,9 @@ def _complete_local_flow() -> str:
     return str(outcome.flow_id)
 
 
-def test_grade_schema_is_current_and_required(initialized_database) -> None:
+def test_grade_schema_remains_applied_and_required(initialized_database) -> None:
     migration = get_current_schema_migration()
-    assert migration.migration_id == "0014_grade_0"
+    assert migration.migration_id == CAD_LINK_SCHEMA_MIGRATION_RECORD["migration_id"]
     with open_sqlite_connection() as connection:
         tables = {
             row["name"]
@@ -40,6 +42,12 @@ def test_grade_schema_is_current_and_required(initialized_database) -> None:
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             ).fetchall()
         }
+        grade_migration = connection.execute(
+            "SELECT status FROM schema_migrations WHERE migration_id = ?",
+            (GRADE_SCHEMA_MIGRATION_ID,),
+        ).fetchone()
+    assert grade_migration is not None
+    assert grade_migration["status"] == "applied"
     assert {"ai_flow_grade_subjects", "ai_flow_grade_events"} <= tables
 
 
