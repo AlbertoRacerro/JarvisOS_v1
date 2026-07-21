@@ -11,6 +11,7 @@ EXECUTION_CLASSES = (
     "legacy_unknown",
 )
 DISPATCH_STATES = ("not_applicable", "not_started", "started", "unknown")
+USAGE_SOURCES = ("actual", "mixed", "estimated", "none")
 ACCOUNTING_BASES = (
     "no_execution",
     "synthetic_not_economic",
