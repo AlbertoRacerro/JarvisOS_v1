@@ -20,6 +20,11 @@ from app.modules.ai.provider_registry import (
     load_default_provider_registry,
     resolve_model_pricing,
 )
+from app.modules.ai.token_flow_confirmation_resume import (
+    activate_consumed_continuation_confirmation_in_transaction,
+    terminalize_rejected_continuation_confirmation_in_transaction,
+    validate_pending_continuation_confirmation_in_transaction,
+)
 
 
 @dataclass(frozen=True)
@@ -36,6 +41,8 @@ class EgressTicketConsumption:
     route_class: str
     fallback_index: int
     max_output_tokens: int
+    continuation_authority_json: str | None = field(default=None, repr=False)
+    continuation_pause_attempt_id: str | None = None
     packet_json: str | None = field(default=None, repr=False)
 
 
@@ -77,17 +84,22 @@ def consume_confirmation_ticket(
     *,
     policy: EgressPolicyConfig | None = None,
     registry: ProviderRegistry | None = None,
+    continuation_flow_id: str | None = None,
     now: datetime | None = None,
 ) -> EgressTicketConsumption:
     """Consume one pending ticket and create one active reservation atomically.
 
-    The caller supplies only the ticket ID. The exact prompt, context, binding, digests,
-    limits, and source state are reconstructed from persisted server-owned rows and
-    revalidated against current policy/registry/budget state.
+    Continuation tickets additionally revalidate and reactivate their paused flow in
+    the same SQLite transaction. Expired or revoked continuation tickets terminalize
+    the canonical no-dispatch pause attempt without invoking an adapter.
     """
 
     if not isinstance(ticket_id, str) or not ticket_id.strip():
         raise EgressContractError("ticket_id must be non-empty text")
+    if continuation_flow_id is not None and (
+        not isinstance(continuation_flow_id, str) or not continuation_flow_id.strip()
+    ):
+        raise EgressContractError("continuation_flow_id must be non-empty text")
     policy = policy or load_default_egress_policy()
     registry = registry or load_default_provider_registry()
     now_dt = persistence._normalized_now(now)
@@ -102,6 +114,16 @@ def consume_confirmation_ticket(
             raise persistence.EgressStateError(
                 f"confirmation ticket is not pending: {row['ticket_state']}"
             )
+        authority_json = row["continuation_authority_json"]
+        if authority_json is not None and continuation_flow_id is None:
+            raise persistence.EgressStateError(
+                "continuation confirmation ticket requires flow authority"
+            )
+        if authority_json is None and continuation_flow_id is not None:
+            raise persistence.EgressStateError(
+                "ordinary confirmation ticket cannot claim continuation authority"
+            )
+
         if row["expires_at"] <= now_iso:
             _transition_ticket(
                 connection,
@@ -111,7 +133,56 @@ def consume_confirmation_ticket(
                 now_iso=now_iso,
                 reason="ticket_expired",
             )
-            return _ticket_consumption(row, authorized=False, reason_code="ticket_expired")
+            pause_id = (
+                terminalize_rejected_continuation_confirmation_in_transaction(
+                    connection,
+                    flow_id=continuation_flow_id,
+                    ticket_id=ticket_id,
+                    terminal_reason="ticket_expired",
+                    now=now_dt,
+                )
+                if authority_json is not None and continuation_flow_id is not None
+                else None
+            )
+            return _ticket_consumption(
+                row,
+                authorized=False,
+                reason_code="ticket_expired",
+                continuation_pause_attempt_id=pause_id,
+            )
+
+        if authority_json is not None and continuation_flow_id is not None:
+            try:
+                validate_pending_continuation_confirmation_in_transaction(
+                    connection,
+                    flow_id=continuation_flow_id,
+                    ticket_id=ticket_id,
+                    authority_json=str(authority_json),
+                    now=now_dt,
+                )
+            except (EgressContractError, persistence.EgressStateError, ValueError):
+                _transition_ticket(
+                    connection,
+                    ticket_id=ticket_id,
+                    expected_version=int(row["ticket_version"]),
+                    new_state="revoked",
+                    now_iso=now_iso,
+                    reason="ticket_continuation_authority_invalid",
+                )
+                pause_id = terminalize_rejected_continuation_confirmation_in_transaction(
+                    connection,
+                    flow_id=continuation_flow_id,
+                    ticket_id=ticket_id,
+                    terminal_reason="ticket_continuation_authority_invalid",
+                    now=now_dt,
+                )
+                return _ticket_consumption(
+                    row,
+                    authorized=False,
+                    reason_code="ticket_continuation_authority_invalid",
+                    continuation_pause_attempt_id=pause_id,
+                )
+
         try:
             material, projection = _rebuild_ticket_projection(
                 row,
@@ -122,6 +193,7 @@ def consume_confirmation_ticket(
                 connection,
                 material=material,
                 projection=projection,
+                allow_continuation_segments=authority_json is not None,
             )
         except (EgressContractError, persistence.EgressStateError, ValueError):
             _transition_ticket(
@@ -132,10 +204,22 @@ def consume_confirmation_ticket(
                 now_iso=now_iso,
                 reason="ticket_binding_or_policy_drift",
             )
+            pause_id = (
+                terminalize_rejected_continuation_confirmation_in_transaction(
+                    connection,
+                    flow_id=continuation_flow_id,
+                    ticket_id=ticket_id,
+                    terminal_reason="ticket_binding_or_policy_drift",
+                    now=now_dt,
+                )
+                if authority_json is not None and continuation_flow_id is not None
+                else None
+            )
             return _ticket_consumption(
                 row,
                 authorized=False,
                 reason_code="ticket_binding_or_policy_drift",
+                continuation_pause_attempt_id=pause_id,
             )
 
         snapshot = persistence._budget_snapshot(
@@ -160,10 +244,22 @@ def consume_confirmation_ticket(
                 now_iso=now_iso,
                 reason=blocking_reason,
             )
+            pause_id = (
+                terminalize_rejected_continuation_confirmation_in_transaction(
+                    connection,
+                    flow_id=continuation_flow_id,
+                    ticket_id=ticket_id,
+                    terminal_reason=blocking_reason,
+                    now=now_dt,
+                )
+                if authority_json is not None and continuation_flow_id is not None
+                else None
+            )
             return _ticket_consumption(
                 row,
                 authorized=False,
                 reason_code=blocking_reason,
+                continuation_pause_attempt_id=pause_id,
             )
 
         reservation_id = str(uuid4())
@@ -186,12 +282,23 @@ def consume_confirmation_ticket(
             now_dt=now_dt,
             policy=policy,
         )
+        pause_id = None
+        if authority_json is not None and continuation_flow_id is not None:
+            resolved = activate_consumed_continuation_confirmation_in_transaction(
+                connection,
+                flow_id=continuation_flow_id,
+                ticket_id=ticket_id,
+                authority_json=str(authority_json),
+                now=now_dt,
+            )
+            pause_id = resolved.pause_attempt_id
         return _ticket_consumption(
             row,
             authorized=True,
             reason_code="ticket_consumed",
             reservation_id=reservation_id,
             packet_json=projection.packet_json,
+            continuation_pause_attempt_id=pause_id,
         )
 
 
@@ -412,7 +519,7 @@ def _ticket_row(connection: sqlite3.Connection, ticket_id: str) -> sqlite3.Row |
             ticket.packet_digest AS ticket_packet_digest,
             ticket.policy_version AS ticket_policy_version,
             ticket.config_digest AS ticket_config_digest,
-            ticket.source_digests_json,
+            ticket.source_digests_json, ticket.continuation_authority_json,
             decision.id AS decision_id, decision.safe_input_digest,
             decision.prompt_level, decision.context_level, decision.final_level,
             decision.projected_input_tokens, decision.projected_output_tokens,
@@ -578,6 +685,7 @@ def _ticket_consumption(
     reason_code: str,
     reservation_id: str | None = None,
     packet_json: str | None = None,
+    continuation_pause_attempt_id: str | None = None,
 ) -> EgressTicketConsumption:
     return EgressTicketConsumption(
         authorized=authorized,
@@ -592,6 +700,8 @@ def _ticket_consumption(
         route_class=str(row["route_class"]),
         fallback_index=int(row["fallback_index"]),
         max_output_tokens=int(row["max_output_tokens"]),
+        continuation_authority_json=row["continuation_authority_json"],
+        continuation_pause_attempt_id=continuation_pause_attempt_id,
         packet_json=packet_json,
     )
 

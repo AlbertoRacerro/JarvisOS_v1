@@ -49,6 +49,7 @@ EGRESS_SCHEMA_STATEMENTS = [
         sanitizer_failed_manifest_json TEXT NOT NULL,
         policy_capped_manifest_json TEXT NOT NULL,
         budget_dropped_manifest_json TEXT NOT NULL,
+        source_digests_json TEXT NOT NULL DEFAULT '{}',
         final_level TEXT NOT NULL CHECK (final_level IN ('S0', 'S1')),
         max_output_tokens INTEGER NOT NULL CHECK (max_output_tokens > 0),
         policy_version TEXT NOT NULL,
@@ -132,6 +133,7 @@ EGRESS_SCHEMA_STATEMENTS = [
         model_id TEXT NOT NULL,
         trigger_ids_json TEXT NOT NULL,
         source_digests_json TEXT NOT NULL,
+        continuation_authority_json TEXT,
         policy_version TEXT NOT NULL,
         config_digest TEXT NOT NULL,
         state TEXT NOT NULL CHECK (state IN ('pending', 'consumed', 'expired', 'revoked')),
@@ -359,6 +361,8 @@ EGRESS_SCHEMA_MIGRATION_STATEMENTS = [
     "ALTER TABLE sanitized_derivatives ADD COLUMN auto_approved INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE ai_jobs ADD COLUMN usage_source TEXT "
     "CHECK (usage_source IN ('actual', 'estimated', 'mixed'))",
+    "ALTER TABLE egress_packets ADD COLUMN source_digests_json TEXT NOT NULL DEFAULT '{}'",
+    "ALTER TABLE egress_confirmation_tickets ADD COLUMN continuation_authority_json TEXT",
 ]
 
 EGRESS_SCHEMA_INDEX_STATEMENTS = [

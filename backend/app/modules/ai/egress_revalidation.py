@@ -16,6 +16,7 @@ def validate_ticket_authority_state(
     *,
     material: EgressPacketMaterial,
     projection: EgressPacketProjection,
+    allow_continuation_segments: bool = False,
 ) -> None:
     """Revalidate mutable authority referenced by one pending confirmation ticket.
 
@@ -31,7 +32,11 @@ def validate_ticket_authority_state(
         projection=projection,
     )
     _validate_context_authority(connection, material=material)
-    _validate_source_digests(connection, material=material)
+    _validate_source_digests(
+        connection,
+        material=material,
+        allow_continuation_segments=allow_continuation_segments,
+    )
 
 
 def _validate_prompt_derivative(
@@ -259,6 +264,7 @@ def _validate_source_digests(
     connection: sqlite3.Connection,
     *,
     material: EgressPacketMaterial,
+    allow_continuation_segments: bool,
 ) -> None:
     expected = dict(material.source_digests)
     if not expected:
@@ -268,6 +274,12 @@ def _validate_source_digests(
             "ticket source digests have no workspace binding"
         )
     for source_ref, expected_digest in sorted(expected.items()):
+        if source_ref.startswith("segment:"):
+            if allow_continuation_segments:
+                continue
+            raise sensitivity.SensitivityPolicyError(
+                "ordinary confirmation ticket cannot reference protected segments"
+            )
         snapshot, _label = _resolve_current_source(
             connection,
             workspace_id=material.workspace_id,

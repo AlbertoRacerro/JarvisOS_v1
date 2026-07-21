@@ -23,6 +23,13 @@ from app.modules.ai.provider_registry import (
     load_default_provider_registry,
     resolve_model_pricing,
 )
+from app.modules.ai.token_flow_continuation import (
+    ContinuationDecision,
+    apply_continuation_lineage,
+)
+from app.modules.ai.token_flow_continuation_transaction import (
+    record_continuation_attempt_evidence_in_transaction,
+)
 from app.modules.ai.token_flow_external import (
     external_not_started_evidence,
     external_reconciled_evidence,
@@ -70,6 +77,7 @@ def finalize_external_attempt(
     reservation_id: str | None = None,
     registry: ProviderRegistry | None = None,
     use_confirmation_pricing_snapshot: bool = False,
+    continuation_decision: ContinuationDecision | None = None,
     now: datetime | None = None,
 ) -> ExternalAttemptFinalization:
     """Finalize one external attempt, 059b accounting, and 061 evidence atomically."""
@@ -215,12 +223,27 @@ def finalize_external_attempt(
                 usage_source=legacy_usage_source,
             )
 
-        flow = record_attempt_evidence_in_transaction(
-            connection,
-            flow_id=flow_id,
-            attempt_id=ai_job_id,
-            evidence=evidence,
-        )
+        if continuation_decision is None:
+            flow = record_attempt_evidence_in_transaction(
+                connection,
+                flow_id=flow_id,
+                attempt_id=ai_job_id,
+                evidence=evidence,
+            )
+        else:
+            continuation_evidence = apply_continuation_lineage(
+                evidence,
+                continuation_decision,
+            )
+            flow = record_continuation_attempt_evidence_in_transaction(
+                connection,
+                flow_id=flow_id,
+                attempt_id=ai_job_id,
+                evidence=continuation_evidence,
+                decision=continuation_decision,
+                now=now,
+            )
+            evidence = continuation_evidence
         return ExternalAttemptFinalization(
             flow_id=str(flow["id"]),
             ai_job_id=ai_job_id,
