@@ -39,7 +39,9 @@ def load_cohort_rows(
     if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 5000:
         raise ValueError("limit must be between 1 and 5000")
 
-    clauses = ["state IN ('complete', 'partial_terminal', 'failed_terminal', 'cancelled_terminal')"]
+    clauses = [
+        "state IN ('complete', 'partial_terminal', 'failed_terminal', 'cancelled_terminal')"
+    ]
     values: list[object] = []
     if workspace_id is not None:
         clauses.append("workspace_id = ?")
@@ -82,12 +84,12 @@ def load_cohort_rows(
         attempts = connection.execute(
             f"""
             SELECT id, flow_id, flow_attempt_index, fallback_index,
-                   continuation_index, execution_class,
+                   continuation_index, execution_class, adapter_invoked,
                    external_dispatch_state, normalized_usage_source,
                    accounting_basis, accounted_provider_spend_usd_decimal,
                    input_tokens, output_tokens, cache_read_tokens,
                    reasoning_tokens, latency_ms, selected_route_class,
-                   provider_id, model_id
+                   provider_id, model_id, outcome_reason
             FROM ai_jobs
             WHERE flow_id IN ({placeholders})
             ORDER BY flow_id, flow_attempt_index
