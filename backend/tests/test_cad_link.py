@@ -404,5 +404,5 @@ def test_migration_and_registry_contract_are_live(client: TestClient) -> None:
 
     status = Path(__file__).resolve().parents[2] / "docs/specs/STATUS.md"
     line = next(line for line in status.read_text(encoding="utf-8").splitlines() if line.startswith("| 052 |"))
-    assert "| in_review |" in line
+    assert "| merged |" in line
     assert "/pull/170" in line
