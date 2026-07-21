@@ -8,6 +8,9 @@ from app.modules.ai.context_builder import ContextSelectionSpec, build_workspace
 from app.modules.ai.egress_persistence import EgressStateError
 from app.modules.ai.egress_service import EgressContractError
 from app.modules.ai.escalations import confirm_escalation
+from app.modules.ai.flow_grade_cohort_routes import (
+    router as flow_grade_cohort_router,
+)
 from app.modules.ai.flow_grade_routes import router as flow_grade_router
 from app.modules.ai.gateway import AIGateway
 from app.modules.ai.models import (
@@ -35,6 +38,7 @@ from app.modules.ai.settings import ensure_ai_settings, update_ai_settings
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 router.include_router(flow_grade_router)
+router.include_router(flow_grade_cohort_router)
 
 
 @router.get("/settings", response_model=AISettingsRead)
