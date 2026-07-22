@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import math
 from copy import deepcopy
 from pathlib import Path
 
@@ -16,8 +15,8 @@ from app.modules.bluecad.spec import SpecValidationError, canonicalize_geometry_
 
 pytestmark = pytest.mark.bluecad_kernel
 
-ROOT = Path(__file__).resolve().parents[3]
-SCHEMA_PATH = ROOT.parent / "schemas" / "bluecad_geometry_spec_v0_1.schema.json"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+SCHEMA_PATH = REPO_ROOT / "schemas" / "bluecad_geometry_spec_v0_1.schema.json"
 
 
 def _params(branch_count: int = 2) -> dict[str, float | int]:
@@ -56,6 +55,11 @@ def _assert_invalid(params: dict, expected_path: str) -> None:
     assert exc_info.value.detail["path"] == expected_path
 
 
+def _shape_check(shape: object, attribute: str) -> bool:
+    value = getattr(shape, attribute)
+    return bool(value() if callable(value) else value)
+
+
 def test_schema_validator_and_prompt_expose_same_closed_contract() -> None:
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     capped = schema["$defs"]["cappedManifoldParams"]
@@ -91,8 +95,8 @@ def test_canonical_contract_is_stable_and_preserves_existing_version() -> None:
         (lambda p: p.__setitem__("branch_count", 1.5), "$.parts[0].params.branch_count"),
         (lambda p: p.__setitem__("branch_count", True), "$.parts[0].params.branch_count"),
         (lambda p: p.__setitem__("branch_count", 13), "$.parts[0].params.branch_count"),
-        (lambda p: p.__setitem__("main_wall_t", 60.0), "$.parts[0].params.wall_t"),
-        (lambda p: p.__setitem__("branch_wall_t", 30.0), "$.parts[0].params.wall_t"),
+        (lambda p: p.__setitem__("main_wall_t", 60.0), "$.parts[0].params.main_wall_t"),
+        (lambda p: p.__setitem__("branch_wall_t", 30.0), "$.parts[0].params.branch_wall_t"),
         (lambda p: p.__setitem__("branch_stub_length", 0.0), "$.parts[0].params.branch_stub_length"),
         (lambda p: p.__setitem__("cap_thickness", 0.0), "$.parts[0].params.cap_thickness"),
         (lambda p: p.__setitem__("unexpected", 1.0), "$.parts[0].params"),
@@ -119,6 +123,7 @@ def test_kernel_build_has_exact_ports_final_volume_and_valid_solid(branch_count:
     pitch = params["branch_outer_d"] + params["branch_gap"]
     header_length = params["branch_outer_d"] + 2.0 * params["end_gap"] + pitch * (branch_count - 1)
     sweep = params["main_outer_d"] / 2.0 + params["branch_stub_length"]
+    radius = max(params["main_outer_d"], params["branch_outer_d"]) / 2.0
 
     assert built.kind == "capped_manifold"
     assert list(built.ports) == ["common", *[f"branch_{index}" for index in range(1, branch_count + 1)]]
@@ -131,15 +136,13 @@ def test_kernel_build_has_exact_ports_final_volume_and_valid_solid(branch_count:
         assert port.direction == (0.0, 1.0, 0.0)
         assert port.outer_d == params["branch_outer_d"]
         assert port.wall_t == params["branch_wall_t"]
-    assert built.bbox_mm == pytest.approx(
-        (
-            (0.0, -params["main_outer_d"] / 2.0, -max(params["main_outer_d"], params["branch_outer_d"]) / 2.0),
-            (header_length + params["cap_thickness"], sweep, max(params["main_outer_d"], params["branch_outer_d"]) / 2.0),
-        )
+    assert built.bbox_mm[0] == pytest.approx((0.0, -params["main_outer_d"] / 2.0, -radius))
+    assert built.bbox_mm[1] == pytest.approx(
+        (header_length + params["cap_thickness"], sweep, radius)
     )
     assert built.volume_mm3 == pytest.approx(float(built.shape.volume), rel=1e-12, abs=1e-9)
-    assert built.shape.is_valid
-    assert built.shape.is_manifold
+    assert _shape_check(built.shape, "is_valid")
+    assert _shape_check(built.shape, "is_manifold")
 
 
 @pytest.mark.skipif(importlib.util.find_spec("build123d") is None, reason="build123d is not installed")
