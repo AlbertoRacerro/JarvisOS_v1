@@ -170,8 +170,16 @@ def _validate_part(part: Any, index: int, seen_part_ids: set[str]) -> None:
             path,
             required=_ALLOWED_CAPPED_MANIFOLD_PARAMS,
         )
-        _validate_wall({"outer_d": params["main_outer_d"], "wall_t": params["main_wall_t"]}, path)
-        _validate_wall({"outer_d": params["branch_outer_d"], "wall_t": params["branch_wall_t"]}, path)
+        if params["main_wall_t"] * 2 >= params["main_outer_d"]:
+            _invalid(
+                f"{path}.params.main_wall_t",
+                "main_wall_t must be less than half of main_outer_d.",
+            )
+        if params["branch_wall_t"] * 2 >= params["branch_outer_d"]:
+            _invalid(
+                f"{path}.params.branch_wall_t",
+                "branch_wall_t must be less than half of branch_outer_d.",
+            )
         _validate_int_bounds(params["branch_count"], f"{path}.params.branch_count", minimum=1, maximum=12)
         branch_pitch = float(params["branch_outer_d"]) + float(params["branch_gap"])
         header_length = (
