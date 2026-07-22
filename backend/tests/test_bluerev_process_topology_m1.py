@@ -204,8 +204,8 @@ def test_manifest_is_canonical_complete_and_raw_hash_bound(tmp_path):
     [
         ({"parallel_path_count": (1.5, "1")}, "parallel_path_count"),
         ({"branch_illuminated_bend_count": (3, "1")}, "branch_illuminated_bend_count"),
-        ({"branch_bend_count": (0, "1"), "branch_bend_centerline_radius": (1.0, "mm")}, "branch_bend_centerline_radius"),
-        ({"branch_bend_count": (0, "1"), "branch_bend_loss_coefficient_per_bend": (0.1, "1")}, "branch_bend_loss_coefficient_per_bend"),
+        ({"branch_bend_count": (0, "1"), "branch_illuminated_bend_count": (0, "1"), "branch_bend_centerline_radius": (1.0, "mm"), "branch_bend_angle": (0.0, "deg"), "branch_bend_loss_coefficient_per_bend": (0.0, "1")}, "branch_bend_centerline_radius"),
+        ({"branch_bend_count": (0, "1"), "branch_illuminated_bend_count": (0, "1"), "branch_bend_centerline_radius": (0.0, "mm"), "branch_bend_angle": (0.0, "deg"), "branch_bend_loss_coefficient_per_bend": (0.1, "1")}, "branch_bend_loss_coefficient_per_bend"),
         ({"branch_bend_centerline_radius": (30.0, "mm")}, "branch_bend_centerline_radius"),
         ({"branch_bend_angle": (181.0, "deg")}, "branch_bend_angle"),
         ({"branch_tube_outer_diameter": (50.0, "mm")}, "branch_tube_outer_diameter"),
