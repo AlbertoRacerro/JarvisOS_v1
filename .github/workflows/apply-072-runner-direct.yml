@@ -1,0 +1,38 @@
+name: Apply spec 072 runner integration directly
+
+on:
+  push:
+    branches:
+      - spec/072-process-topology
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: spec/072-process-topology
+          fetch-depth: 0
+      - name: Apply exact patch or record diagnostic
+        shell: bash
+        run: |
+          set +e
+          git show f13127e0d6623ab948db449fe5de8707b0b93ead:scripts/apply_072_runner_patch.py > /tmp/apply_072_runner_patch.py
+          python /tmp/apply_072_runner_patch.py > /tmp/apply-072.log 2>&1
+          rc=$?
+          rm .github/workflows/apply-072-runner-direct.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if [ "$rc" -eq 0 ]; then
+            git add backend/app/modules/runner/service.py backend/app/modules/runner/safety.py backend/app/modules/runner/routes.py backend/tests/test_bluerev_process_topology_m1_runner.py .github/workflows/apply-072-runner-direct.yml
+            git commit -m 'Integrate BlueRev topology M1 runner'
+          else
+            cp /tmp/apply-072.log docs/specs/.tmp-072-patch.log
+            git add docs/specs/.tmp-072-patch.log .github/workflows/apply-072-runner-direct.yml
+            git commit -m 'Record spec 072 patch diagnostic'
+          fi
+          git push origin HEAD:spec/072-process-topology
