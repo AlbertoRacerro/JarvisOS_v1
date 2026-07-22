@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,11 @@ RELATIONAL_CONSTRAINTS = {
     "2 * main_wall_t < main_outer_d",
     "2 * branch_wall_t < branch_outer_d",
 }
+CANARY_PROFILE = "ubuntu24-py311"
+KERNEL_PROOF = pytest.mark.skipif(
+    os.getenv("JARVISOS_BLUECAD_CANARY_PROFILE") != CANARY_PROFILE,
+    reason="bounded capped-manifold kernel matrix runs in the pinned BLUECAD canary",
+)
 
 
 def _params(branch_count: int = 2) -> dict[str, float | int]:
@@ -134,6 +140,7 @@ def test_derived_overflow_fails_closed() -> None:
     _assert_invalid(params, "$.parts[0].params")
 
 
+@KERNEL_PROOF
 @pytest.mark.parametrize("branch_count", [1, 2, 12])
 def test_kernel_build_has_exact_ports_final_volume_and_valid_solid(
     branch_count: int,
@@ -164,6 +171,7 @@ def test_kernel_build_has_exact_ports_final_volume_and_valid_solid(
     assert _shape_check(built.shape, "is_manifold")
 
 
+@KERNEL_PROOF
 def test_common_and_branch_bores_are_open_and_cap_is_closed(capped_builds: dict[int, Any]) -> None:
     bd = _require_build123d()
 
@@ -200,6 +208,7 @@ def test_common_and_branch_bores_are_open_and_cap_is_closed(capped_builds: dict[
     assert float((built.shape & cap_probe).volume) > 0.0
 
 
+@KERNEL_PROOF
 @pytest.mark.parametrize("branch_count", [1, 2, 12])
 def test_mirrored_parallel_path_assembly_is_consistent(branch_count: int) -> None:
     _require_build123d()
@@ -242,6 +251,7 @@ def test_mirrored_parallel_path_assembly_is_consistent(branch_count: int) -> Non
     assert assembled["right"].ports["common"].direction == pytest.approx((1.0, 0.0, 0.0))
 
 
+@KERNEL_PROOF
 def test_repeated_builds_have_identical_manifest_entries(capped_builds: dict[int, Any]) -> None:
     first = capped_builds[2].manifest_entry()
     second = build_part(deepcopy(_part(2))).manifest_entry()
