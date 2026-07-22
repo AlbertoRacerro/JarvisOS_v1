@@ -3,5 +3,6 @@
 -r requirements.txt
 pytest==8.3.4
 hypothesis==6.156.6
+jsonschema==4.26.0
 ruff>=0.6
 mypy>=1.11
