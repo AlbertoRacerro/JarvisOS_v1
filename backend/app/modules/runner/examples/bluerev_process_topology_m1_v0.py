@@ -452,6 +452,11 @@ manifest = {
     },
     "geometry_totals": {
         "branch_centerline_length_each_m": branch_length,
+        "common_supply_length_m": ls,
+        "common_return_length_m": lr,
+        "common_inner_diameter_m": di_c,
+        "common_outer_diameter_m": do_c,
+        "common_wall_thickness_m": common_wall_thickness_mm / 1000.0,
         "installed_branch_centerline_length_total_m": installed_branch_length,
         "installed_tube_centerline_length_total_m": installed_tube_length,
         "representative_hydraulic_path_length_m": representative_path_length,

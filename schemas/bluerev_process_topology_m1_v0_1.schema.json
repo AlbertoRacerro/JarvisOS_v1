@@ -703,12 +703,32 @@
           "minimum": 0,
           "type": "number"
         },
+        "common_inner_diameter_m": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "common_outer_diameter_m": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "common_return_length_m": {
+          "minimum": 0,
+          "type": "number"
+        },
         "common_return_liquid_volume_m3": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "common_supply_length_m": {
           "minimum": 0,
           "type": "number"
         },
         "common_supply_liquid_volume_m3": {
           "minimum": 0,
+          "type": "number"
+        },
+        "common_wall_thickness_m": {
+          "exclusiveMinimum": 0,
           "type": "number"
         },
         "dark_branch_external_area_m2": {
@@ -754,6 +774,11 @@
       },
       "required": [
         "branch_centerline_length_each_m",
+        "common_supply_length_m",
+        "common_return_length_m",
+        "common_inner_diameter_m",
+        "common_outer_diameter_m",
+        "common_wall_thickness_m",
         "installed_branch_centerline_length_total_m",
         "installed_tube_centerline_length_total_m",
         "representative_hydraulic_path_length_m",

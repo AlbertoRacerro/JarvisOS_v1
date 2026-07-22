@@ -197,6 +197,12 @@ def test_manifest_is_canonical_complete_and_raw_hash_bound(tmp_path):
     assert result["diagnostics"]["topology_manifest_sha256"] == f"sha256:{expected_raw_sha}"
     assert manifest["symmetry"]["parallel_path_count"] == 2
     assert manifest["ordered_components"][3] == "parallel_branch_group"
+    geometry = manifest["geometry_totals"]
+    assert geometry["common_supply_length_m"] == pytest.approx(1.0)
+    assert geometry["common_return_length_m"] == pytest.approx(1.5)
+    assert geometry["common_inner_diameter_m"] == pytest.approx(0.08)
+    assert geometry["common_outer_diameter_m"] == pytest.approx(0.09)
+    assert geometry["common_wall_thickness_m"] == pytest.approx(0.005)
 
 
 @pytest.mark.parametrize(
@@ -268,6 +274,8 @@ def test_one_path_degenerate_case_matches_047_equations(tmp_path):
     assert outputs["total_pressure_loss"]["value"] == pytest.approx(total_loss)
     assert outputs["hydraulic_power"]["value"] == pytest.approx(hydraulic_power)
     assert outputs["pump_electric_power"]["value"] == pytest.approx(hydraulic_power / 0.7)
+    expected_material = math.pi * (outer**2 - diameter**2) / 4.0 * length
+    assert outputs["tube_material_volume_proxy"]["value"] == pytest.approx(expected_material)
     assert result["diagnostics"]["m0_reduction_status"] == "exact_047_reduction"
     assert result["diagnostics"]["single_length_projection_status"] == (
         "single_length_representable"
@@ -290,3 +298,17 @@ def test_branch_and_common_correlation_qualification(tmp_path, overrides, qualif
     assert (completed.returncode == 0) is qualified
     if not qualified:
         assert "correlation_not_qualified" in completed.stderr
+
+
+
+def test_manifest_bytes_are_identical_for_repeated_identical_runs(tmp_path):
+    payload = input_set()
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    assert run_model(first, payload).returncode == 0
+    assert run_model(second, payload).returncode == 0
+    assert (first / "topology_manifest.json").read_bytes() == (
+        second / "topology_manifest.json"
+    ).read_bytes()

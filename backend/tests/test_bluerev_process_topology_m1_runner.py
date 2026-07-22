@@ -8,6 +8,12 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.database import open_sqlite_connection
+from app.modules.events.service import utc_now
+from app.modules.flowsheet.freshness import (
+    persist_freshness_invalidation,
+    prepare_freshness_invalidation,
+)
 from app.modules.runner.input_contracts import canonicalize_input_contract
 from app.modules.runner.safety import RunnerSafetyError, preflight_script_policy, sha256_file
 from app.modules.runner.topology_m1 import (
@@ -99,6 +105,8 @@ def test_topology_m1_registration_preview_run_and_artifacts(client: TestClient) 
     ]
     assert all(row["under_data_root"] for row in rows)
     assert all(row["sha256"] and len(row["sha256"]) == 64 for row in rows)
+    with open_sqlite_connection() as connection:
+        assert int(connection.execute("SELECT COUNT(*) AS count FROM ai_jobs").fetchone()["count"]) == 0
     manifest_row = next(row for row in rows if row["role"] == "bluerev_topology_manifest")
     assert diagnostics["topology_manifest_sha256"] == f"sha256:{manifest_row['sha256']}"
 
@@ -188,6 +196,9 @@ def _direct_model_run(tmp_path: Path):
         ("schema", "runner_topology_manifest_schema_invalid"),
         ("input", "runner_topology_manifest_input_mismatch"),
         ("digest", "runner_topology_manifest_digest_mismatch"),
+        ("extra", "runner_topology_manifest_schema_invalid"),
+        ("oversized", "runner_topology_manifest_too_large"),
+        ("symlink", "runner_topology_manifest_invalid"),
     ],
 )
 def test_manifest_failure_matrix(tmp_path: Path, mutation: str, code: str) -> None:
@@ -197,12 +208,19 @@ def test_manifest_failure_matrix(tmp_path: Path, mutation: str, code: str) -> No
         path.unlink()
     elif mutation == "malformed":
         path.write_text("{", encoding="utf-8")
+    elif mutation == "symlink":
+        target = tmp_path / "manifest-target.json"
+        target.write_bytes(path.read_bytes())
+        path.unlink()
+        path.symlink_to(target)
     else:
         manifest = json.loads(path.read_text(encoding="utf-8"))
         if mutation == "schema":
             manifest["topology_kind"] = "wrong"
         elif mutation == "input":
             manifest["executed_inputs"]["liquid_density"]["value"] = 999.0
+        elif mutation == "extra":
+            manifest["unexpected"] = True
         raw = json.dumps(manifest, sort_keys=True, separators=(",", ":"), allow_nan=False)
         if mutation == "noncanonical":
             raw = json.dumps(manifest, indent=2, sort_keys=True)
@@ -218,7 +236,7 @@ def test_manifest_failure_matrix(tmp_path: Path, mutation: str, code: str) -> No
             tmp_path,
             json.dumps(payload, sort_keys=True, separators=(",", ":")),
             result,
-            max_bytes=1024 * 1024,
+            max_bytes=(1 if mutation == "oversized" else 1024 * 1024),
         )
     assert exc_info.value.code == code
 
@@ -251,6 +269,12 @@ def test_invalid_manifest_fails_run_before_artifact_registration(
     )
     assert artifacts.status_code == 200
     assert artifacts.json() == []
+    with open_sqlite_connection() as connection:
+        assert int(
+            connection.execute(
+                "SELECT COUNT(*) AS count FROM parameters WHERE origin = 'calc'"
+            ).fetchone()["count"]
+        ) == 0
 
 
 def test_caller_artifact_declaration_is_rejected_before_registration(
@@ -279,3 +303,90 @@ def test_caller_artifact_declaration_is_rejected_before_registration(
     body = executed.json()
     assert body["runner_job"]["status"] == "failed"
     assert body["error"]["code"] == "runner_topology_artifact_declaration_forbidden"
+
+
+
+def test_topology_run_reuses_flowsheet_lineage_and_staleness(client: TestClient) -> None:
+    source_parameter_id = "source-parameter-072"
+    replacement_parameter_id = "replacement-parameter-072"
+    now = utc_now()
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO parameters (
+                id, workspace_id, name, value, unit, value_status, status,
+                created_at, updated_at, origin
+            ) VALUES (?, 'bluerev', 'Liquid density source', '1000', 'kg/m3',
+                      'known', 'accepted', ?, ?, 'manual')
+            """,
+            (source_parameter_id, now, now),
+        )
+        connection.execute(
+            """
+            INSERT INTO parameters (
+                id, workspace_id, name, value, unit, value_status, status,
+                created_at, updated_at, origin, supersedes_parameter_id
+            ) VALUES (?, 'bluerev', 'Liquid density replacement', '998', 'kg/m3',
+                      'known', 'proposed', ?, ?, 'manual', ?)
+            """,
+            (replacement_parameter_id, now, now, source_parameter_id),
+        )
+        connection.commit()
+
+    endpoint = "/workspaces/bluerev/bundled-models/bluerev-process-topology-m1-v0/register"
+    implementation = client.post(endpoint).json()
+    payload = _valid_input()
+    payload["liquid_density"]["source_parameter_id"] = source_parameter_id
+    created = client.post(
+        "/workspaces/bluerev/runner-jobs",
+        json={"model_version_id": implementation["id"], "input_set": payload},
+    )
+    assert created.status_code == 201, created.text
+    runner_job = created.json()["runner_job"]
+    executed = client.post(f"/runner-jobs/{runner_job['id']}/run")
+    assert executed.status_code == 200, executed.text
+    body = executed.json()
+    assert body["runner_job"]["status"] == "succeeded"
+    run_id = body["simulation_run"]["id"]
+
+    artifacts = client.get(
+        f"/workspaces/bluerev/simulation-runs/{run_id}/artifacts"
+    ).json()
+    artifact_refs = {f"artifact:{row['artifact_id']}" for row in artifacts}
+    graph_response = client.get("/workspaces/bluerev/flowsheet/graph")
+    assert graph_response.status_code == 200, graph_response.text
+    graph = graph_response.json()
+    edges = {
+        (edge["upstream_ref"], edge["downstream_ref"], edge["relation"])
+        for edge in graph["edges"]
+    }
+    run_ref = f"simulation_run:{run_id}"
+    runner_ref = f"runner_job:{runner_job['id']}"
+    assert (f"parameter:{source_parameter_id}", run_ref, "bound_input") in edges
+    assert (f"model_version:{implementation['id']}", run_ref, "configured_run") in edges
+    assert (run_ref, runner_ref, "executed_by") in edges
+    for artifact_ref in artifact_refs:
+        assert (run_ref, artifact_ref, "produced_artifact") in edges
+
+    with open_sqlite_connection() as connection:
+        prepared = prepare_freshness_invalidation(
+            connection,
+            workspace_id="bluerev",
+            superseded_parameter_id=source_parameter_id,
+            replacement_parameter_id=replacement_parameter_id,
+            created_at=utc_now(),
+        )
+        persist_freshness_invalidation(connection, prepared)
+        connection.commit()
+
+    run_freshness = client.get(
+        f"/workspaces/bluerev/flowsheet/nodes/{run_ref}/freshness"
+    )
+    assert run_freshness.status_code == 200, run_freshness.text
+    assert run_freshness.json()["state"] == "stale"
+    for artifact_ref in artifact_refs:
+        freshness = client.get(
+            f"/workspaces/bluerev/flowsheet/nodes/{artifact_ref}/freshness"
+        )
+        assert freshness.status_code == 200, freshness.text
+        assert freshness.json()["state"] == "stale"
