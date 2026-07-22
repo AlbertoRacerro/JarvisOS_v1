@@ -123,6 +123,36 @@ def single_float_specs(draw: st.DrawFn) -> dict[str, Any]:
     }
 
 
+@st.composite
+def single_capped_manifold_specs(draw: st.DrawFn) -> dict[str, Any]:
+    main_outer_d = draw(st.integers(80, 180))
+    branch_outer_d = draw(st.integers(20, min(70, main_outer_d - 10)))
+    part: dict[str, Any] = {
+        "part_id": "manifold1",
+        "kind": "capped_manifold",
+        "params": {
+            "main_outer_d": main_outer_d,
+            "main_wall_t": draw(st.integers(2, min(12, (main_outer_d - 1) // 4))),
+            "branch_count": draw(st.sampled_from((1, 2, 12))),
+            "branch_outer_d": branch_outer_d,
+            "branch_wall_t": draw(st.integers(1, min(8, (branch_outer_d - 1) // 4))),
+            "branch_gap": draw(st.integers(2, 30)),
+            "end_gap": draw(st.integers(2, 30)),
+            "branch_stub_length": draw(st.integers(20, 120)),
+            "cap_thickness": draw(st.integers(2, 20)),
+        },
+    }
+    frame = draw(planar_frame())
+    if frame is not None:
+        part["frame"] = frame
+    return {
+        "spec_version": SPEC_VERSION,
+        "name": "property_single_capped_manifold",
+        "parts": [part],
+        "connections": [],
+    }
+
+
 @settings(max_examples=8)
 @given(single_tube_specs())
 def test_single_tube_valid_domain_invariants(spec: dict[str, Any]) -> None:
@@ -149,6 +179,13 @@ def test_single_float_valid_domain_invariants(spec: dict[str, Any]) -> None:
 
 
 @settings(max_examples=3)
+@given(single_capped_manifold_specs())
+def test_single_capped_manifold_valid_domain_invariants(spec: dict[str, Any]) -> None:
+    with TemporaryDirectory(prefix="bluecad-property-capped-manifold-") as directory:
+        build_and_assert(spec, Path(directory) / "build")
+
+
+@settings(max_examples=3)
 @given(single_tube_specs())
 def test_single_tube_same_environment_repeatability(spec: dict[str, Any]) -> None:
     build_twice_and_assert(spec)
@@ -163,4 +200,10 @@ def test_connected_tube_same_environment_repeatability(spec: dict[str, Any]) -> 
 @settings(max_examples=3)
 @given(single_float_specs())
 def test_single_float_same_environment_repeatability(spec: dict[str, Any]) -> None:
+    build_twice_and_assert(spec)
+
+
+@settings(max_examples=1)
+@given(single_capped_manifold_specs())
+def test_single_capped_manifold_same_environment_repeatability(spec: dict[str, Any]) -> None:
     build_twice_and_assert(spec)
