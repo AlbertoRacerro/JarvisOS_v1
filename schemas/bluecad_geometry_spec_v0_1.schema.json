@@ -69,7 +69,14 @@
       },
       "type": "object"
     },
-    "positiveInteger1To12": {"type": "integer", "minimum": 1, "maximum": 12},
+    "positiveInteger1To12": {
+      "$comment": "Draft 2020-12 treats numerically integral JSON numbers such as 1.0 as integers. The canonical Python validator named below additionally requires a decoded Python int and rejects float and bool representations.",
+      "x-jarvis-representation-validator": "app.modules.bluecad.spec.validate_geometry_spec",
+      "x-jarvis-python-type": "int-not-bool",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 12
+    },
     "manifoldParams": {
       "additionalProperties": false,
       "properties": {"outer_d_main": {"$ref": "#/$defs/positiveNumber"}, "wall_t": {"$ref": "#/$defs/positiveNumber"}, "length": {"$ref": "#/$defs/positiveNumber"}, "n_out": {"$ref": "#/$defs/positiveInteger1To12"}, "out_d": {"$ref": "#/$defs/positiveNumber"}, "out_wall_t": {"$ref": "#/$defs/positiveNumber"}, "spacing": {"$ref": "#/$defs/positiveNumber"}},
