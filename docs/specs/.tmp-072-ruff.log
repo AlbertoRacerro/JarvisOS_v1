@@ -1,0 +1,73 @@
+I001 [*] Import block is un-sorted or un-formatted
+  --> app/modules/runner/service.py:1:1
+   |
+ 1 | / import json
+ 2 | | import mimetypes
+ 3 | | import shutil
+ 4 | | from math import isfinite
+ 5 | | from pathlib import Path
+ 6 | | from uuid import uuid4
+ 7 | |
+ 8 | | from app.core.database import open_sqlite_connection
+ 9 | | from app.core.paths import build_paths
+10 | | from app.modules.events.service import log_event, utc_now
+11 | | from app.modules.memory.models import CalcParameterProposalCreate
+12 | | from app.modules.memory.service import create_calc_parameter_proposals
+13 | | from app.modules.modeling.models import ModelSpecCreate
+14 | | from app.modules.modeling.service import create_model_spec
+15 | | from app.modules.runner.input_contracts import (
+16 | |     build_binding_preview,
+17 | |     canonicalize_input_contract,
+18 | | )
+19 | | from app.modules.runner.local_python import LocalPythonResult, execute_python_script
+20 | | from app.modules.runner.models import (
+21 | |     BindingPreviewRequest,
+22 | |     BindingPreviewResponse,
+23 | |     ModelImplementationCreate,
+24 | |     ModelImplementationRead,
+25 | |     RunArtifactRead,
+26 | |     RunLogRead,
+27 | |     RunnerJobCreate,
+28 | |     RunnerJobCreateResponse,
+29 | |     RunnerJobRead,
+30 | |     RunnerJobRunResponse,
+31 | |     SimulationRunDetail,
+32 | | )
+33 | | from app.modules.runner.safety import (
+34 | |     BLUECAD_L2_REQUIRED_ARTIFACTS,
+35 | |     DEFAULT_TIMEOUT_SECONDS,
+36 | |     MAX_ARTIFACT_BYTES,
+37 | |     MAX_OUTPUT_JSON_BYTES,
+38 | |     MAX_STDERR_BYTES,
+39 | |     MAX_STDOUT_BYTES,
+40 | |     RunnerSafetyError,
+41 | |     canonical_json,
+42 | |     model_implementation_root,
+43 | |     preflight_script_policy,
+44 | |     run_root,
+45 | |     safe_artifact_path,
+46 | |     sha256_file,
+47 | |     validate_batch_growth_input,
+48 | |     validate_bluecad_l2_input,
+49 | |     validate_calc_v0_input,
+50 | |     validate_run_paths,
+51 | |     validate_script_path,
+52 | | )
+53 | | from app.modules.runner.topology_m1 import (
+54 | |     MODEL_LABEL as BUNDLED_BLUEREV_TOPOLOGY_M1_LABEL,
+55 | |     bundled_contract_path as _bluerev_topology_m1_contract_path,
+56 | |     bundled_script_path as _bluerev_topology_m1_script_path,
+57 | |     is_exact_bundled_profile,
+58 | |     runner_owned_artifacts,
+59 | |     validate_manifest,
+60 | | )
+   | |_^
+61 |
+62 |   RUNNER_TYPE = "python_local"
+   |
+help: Organize imports
+
+Found 1 error.
+[*] 1 fixable with the `--fix` option.
+
+exit_code=1
