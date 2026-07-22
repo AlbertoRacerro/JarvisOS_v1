@@ -16,11 +16,12 @@ from app.modules.bluecad.spec import SpecValidationError, canonicalize_geometry_
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCHEMA_PATH = REPO_ROOT / "schemas" / "bluecad_geometry_spec_v0_1.schema.json"
-RELATIONAL_VALIDATOR = "app.modules.bluecad.spec.validate_geometry_spec"
+CANONICAL_VALIDATOR = "app.modules.bluecad.spec.validate_geometry_spec"
 RELATIONAL_CONSTRAINTS = {
     "2 * main_wall_t < main_outer_d",
     "2 * branch_wall_t < branch_outer_d",
 }
+STRICT_INTEGER_TYPE = "int-not-bool"
 CANARY_PROFILE = "ubuntu24-py311"
 KERNEL_PROOF = pytest.mark.skipif(
     os.getenv("JARVISOS_BLUECAD_CANARY_PROFILE") != CANARY_PROFILE,
@@ -86,14 +87,17 @@ def _shape_check(shape: object, attribute: str) -> bool:
 def test_schema_validator_and_prompt_expose_same_closed_contract() -> None:
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     part_schema = schema["$defs"]["part"]
+    strict_integer = schema["$defs"]["positiveInteger1To12"]
     capped = schema["$defs"]["cappedManifoldParams"]
     assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
     assert part_schema["unevaluatedProperties"] is False
     assert "additionalProperties" not in part_schema
+    assert strict_integer["x-jarvis-representation-validator"] == CANONICAL_VALIDATOR
+    assert strict_integer["x-jarvis-python-type"] == STRICT_INTEGER_TYPE
     assert set(capped["required"]) == PARAM_NAMES
     assert set(capped["properties"]) == PARAM_NAMES
     assert capped["additionalProperties"] is False
-    assert capped["x-jarvis-relational-validator"] == RELATIONAL_VALIDATOR
+    assert capped["x-jarvis-relational-validator"] == CANONICAL_VALIDATOR
     assert set(capped["x-jarvis-relational-constraints"]) == RELATIONAL_CONSTRAINTS
 
     valid_part = _spec(2)["parts"][0]
@@ -130,6 +134,7 @@ def test_canonical_contract_is_stable_and_preserves_existing_version() -> None:
     [
         (lambda p: p.__setitem__("branch_gap", 0.0), "$.parts[0].params.branch_gap"),
         (lambda p: p.__setitem__("end_gap", 0.0), "$.parts[0].params.end_gap"),
+        (lambda p: p.__setitem__("branch_count", 1.0), "$.parts[0].params.branch_count"),
         (lambda p: p.__setitem__("branch_count", 1.5), "$.parts[0].params.branch_count"),
         (lambda p: p.__setitem__("branch_count", True), "$.parts[0].params.branch_count"),
         (lambda p: p.__setitem__("branch_count", 13), "$.parts[0].params.branch_count"),
