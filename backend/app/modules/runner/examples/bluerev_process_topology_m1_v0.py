@@ -4,7 +4,8 @@ import math
 
 MODEL_ID = "bluerev_process_topology_m1_v0"
 MODEL_LABEL = "bluerev-process-topology-m1-v0.1.0"
-MANIFEST_SCHEMA_VERSION = "0.1"
+MANIFEST_SCHEMA_VERSION = "bluerev_process_topology_m1_v0_1"
+CONTRACT_VERSION = "bluerev_process_topology_m1_v0_contract_1"
 
 EXPECTED_UNITS = {
     "parallel_path_count": "1",
@@ -84,6 +85,11 @@ for name, expected_unit in EXPECTED_UNITS.items():
         fail("input_contract_invalid", name)
     if item["unit"] != expected_unit:
         fail("input_unit_invalid", name)
+    source_parameter_id = item.get("source_parameter_id")
+    if source_parameter_id is not None and (
+        not isinstance(source_parameter_id, str) or not source_parameter_id.strip()
+    ):
+        fail("input_contract_invalid", name)
     values[name] = float(value)
 
 parallel_path_count = require_integer(values, "parallel_path_count", 1, 12)
@@ -230,17 +236,72 @@ equivalent_static_head = total_pressure_loss / (rho * gravity)
 hydraulic_power = total_pressure_loss * total_flow
 pump_electric_power = hydraulic_power / eta
 
+branch_wall_thickness_mm = (
+    values["branch_tube_outer_diameter"] - values["branch_tube_inner_diameter"]
+) / 2.0
+common_wall_thickness_mm = (
+    values["common_tube_outer_diameter"] - values["common_tube_inner_diameter"]
+) / 2.0
+common_supply_transit_time = ls / v_c
+common_return_transit_time = lr / v_c
+
+single_length_representable = (
+    parallel_path_count == 1
+    and ls == 0.0
+    and lr == 0.0
+    and v_split == 0.0
+    and v_merge == 0.0
+    and di_c == di_b
+    and do_c == do_b
+)
+m0_reduction_case = (
+    single_length_representable
+    and branch_bend_count == 0
+    and branch_illuminated_bend_count == 0
+    and rb == 0.0
+    and values["branch_bend_angle"] == 0.0
+    and values["branch_bend_loss_coefficient_per_bend"] == 0.0
+    and ld == 0.0
+    and values["common_supply_minor_loss_coefficient"] == 0.0
+    and values["split_manifold_loss_coefficient"] == 0.0
+    and values["merge_manifold_loss_coefficient"] == 0.0
+    and values["common_return_minor_loss_coefficient"] == 0.0
+)
+m0_reduction_status = (
+    "exact_047_reduction" if m0_reduction_case else "not_m0_reduction_case"
+)
+single_length_projection_status = (
+    "single_length_representable"
+    if single_length_representable
+    else "not_single_length_representable"
+)
+
 outputs = {
-    "branch_hydraulic_cross_section_area": {"value": area_b, "unit": "m2"},
-    "common_hydraulic_cross_section_area": {"value": area_c, "unit": "m2"},
-    "branch_bend_length_each": {"value": bend_length_each, "unit": "m"},
-    "branch_bend_length_total_each_path": {"value": branch_bend_length, "unit": "m"},
-    "branch_length_each": {"value": branch_length, "unit": "m"},
-    "branch_illuminated_length_each": {"value": branch_illuminated_length, "unit": "m"},
-    "branch_dark_length_each": {"value": branch_dark_length, "unit": "m"},
-    "installed_branch_length_total": {"value": installed_branch_length, "unit": "m"},
-    "installed_tube_length_total": {"value": installed_tube_length, "unit": "m"},
-    "representative_hydraulic_path_length": {"value": representative_path_length, "unit": "m"},
+    "parallel_path_count": {"value": parallel_path_count, "unit": "1"},
+    "branch_bend_count": {"value": branch_bend_count, "unit": "1"},
+    "branch_bend_arc_length_each": {"value": bend_length_each, "unit": "m"},
+    "branch_bend_total_length": {"value": branch_bend_length, "unit": "m"},
+    "branch_centerline_length": {"value": branch_length, "unit": "m"},
+    "branch_illuminated_centerline_length": {
+        "value": branch_illuminated_length,
+        "unit": "m",
+    },
+    "branch_dark_centerline_length": {"value": branch_dark_length, "unit": "m"},
+    "installed_branch_centerline_length_total": {
+        "value": installed_branch_length,
+        "unit": "m",
+    },
+    "installed_tube_centerline_length_total": {
+        "value": installed_tube_length,
+        "unit": "m",
+    },
+    "representative_hydraulic_path_length": {
+        "value": representative_path_length,
+        "unit": "m",
+    },
+    "branch_wall_thickness": {"value": branch_wall_thickness_mm, "unit": "mm"},
+    "common_wall_thickness": {"value": common_wall_thickness_mm, "unit": "mm"},
+    "tube_material_volume_proxy": {"value": tube_material_volume, "unit": "m3"},
     "branch_liquid_volume_each": {"value": branch_volume_each, "unit": "m3"},
     "branch_liquid_volume_total": {"value": branch_volume_total, "unit": "m3"},
     "common_supply_liquid_volume": {"value": common_supply_volume, "unit": "m3"},
@@ -248,32 +309,48 @@ outputs = {
     "manifold_liquid_volume_total": {"value": manifold_volume, "unit": "m3"},
     "non_tube_liquid_volume_total": {"value": non_tube_volume, "unit": "m3"},
     "total_liquid_inventory": {"value": total_inventory, "unit": "m3"},
-    "branch_illuminated_external_area_total": {"value": branch_illuminated_area, "unit": "m2"},
-    "branch_dark_external_area_total": {"value": branch_dark_area, "unit": "m2"},
-    "common_dark_external_area_total": {"value": common_dark_area, "unit": "m2"},
+    "illuminated_branch_external_area": {
+        "value": branch_illuminated_area,
+        "unit": "m2",
+    },
+    "dark_branch_external_area": {"value": branch_dark_area, "unit": "m2"},
+    "common_external_area": {"value": common_dark_area, "unit": "m2"},
     "tube_external_area_total": {"value": tube_external_area, "unit": "m2"},
-    "tube_material_volume": {"value": tube_material_volume, "unit": "m3"},
-    "branch_flow_rate_each": {"value": branch_flow, "unit": "m3/s"},
+    "branch_hydraulic_cross_section_area": {"value": area_b, "unit": "m2"},
+    "common_hydraulic_cross_section_area": {"value": area_c, "unit": "m2"},
+    "branch_flow_rate": {"value": branch_flow, "unit": "m3/s"},
     "total_circulation_flow_rate": {"value": total_flow, "unit": "m3/s"},
+    "branch_velocity": {"value": v_b, "unit": "m/s"},
     "common_velocity": {"value": v_c, "unit": "m/s"},
+    "common_supply_nominal_transit_time": {
+        "value": common_supply_transit_time,
+        "unit": "s",
+    },
     "branch_nominal_transit_time": {"value": branch_transit_time, "unit": "s"},
-    "representative_tube_path_transit_time": {"value": representative_path_transit_time, "unit": "s"},
+    "common_return_nominal_transit_time": {
+        "value": common_return_transit_time,
+        "unit": "s",
+    },
+    "representative_path_nominal_transit_time": {
+        "value": representative_path_transit_time,
+        "unit": "s",
+    },
     "total_inventory_turnover_time": {"value": inventory_turnover_time, "unit": "s"},
     "branch_reynolds_number": {"value": re_b, "unit": "1"},
     "common_reynolds_number": {"value": re_c, "unit": "1"},
     "branch_darcy_friction_factor": {"value": ff_b, "unit": "1"},
     "common_darcy_friction_factor": {"value": ff_c, "unit": "1"},
+    "branch_major_pressure_loss": {"value": branch_major, "unit": "Pa"},
+    "branch_bend_pressure_loss": {"value": bend_loss, "unit": "Pa"},
+    "branch_misc_pressure_loss": {"value": branch_misc_loss, "unit": "Pa"},
+    "representative_branch_pressure_loss": {"value": branch_path_loss, "unit": "Pa"},
     "common_supply_major_pressure_loss": {"value": supply_major, "unit": "Pa"},
     "common_supply_minor_pressure_loss": {"value": supply_minor, "unit": "Pa"},
     "split_manifold_pressure_loss": {"value": split_loss, "unit": "Pa"},
-    "branch_major_pressure_loss": {"value": branch_major, "unit": "Pa"},
-    "branch_bend_pressure_loss": {"value": bend_loss, "unit": "Pa"},
-    "branch_misc_minor_pressure_loss": {"value": branch_misc_loss, "unit": "Pa"},
     "merge_manifold_pressure_loss": {"value": merge_loss, "unit": "Pa"},
     "common_return_major_pressure_loss": {"value": return_major, "unit": "Pa"},
     "common_return_minor_pressure_loss": {"value": return_minor, "unit": "Pa"},
-    "branch_path_pressure_loss": {"value": branch_path_loss, "unit": "Pa"},
-    "common_path_pressure_loss": {"value": common_path_loss, "unit": "Pa"},
+    "common_pressure_loss": {"value": common_path_loss, "unit": "Pa"},
     "total_pressure_loss": {"value": total_pressure_loss, "unit": "Pa"},
     "equivalent_static_head": {"value": equivalent_static_head, "unit": "m"},
     "hydraulic_power": {"value": hydraulic_power, "unit": "W"},
@@ -282,57 +359,118 @@ outputs = {
 
 canonical_input = canonical_json(inputs)
 input_sha256 = hashlib.sha256(canonical_input.encode("utf-8")).hexdigest()
-manifest_core = {
+limitations = [
+    "symmetric_parallel_branches_only",
+    "non_spatial_topology",
+    "no_network_solver",
+    "no_recycle_convergence",
+    "no_property_package",
+    "no_pump_curve_or_npsh",
+    "tube_external_area_is_not_complete_reactor_area",
+]
+manifest = {
     "schema_version": MANIFEST_SCHEMA_VERSION,
-    "model_id": MODEL_ID,
-    "model_label": MODEL_LABEL,
-    "input_sha256": input_sha256,
-    "topology": {
-        "loop_count": 1,
+    "topology_kind": "symmetric_parallel_closed_loop",
+    "model_identity": {
+        "model_id": MODEL_ID,
+        "version_label": MODEL_LABEL,
+        "input_contract_version": CONTRACT_VERSION,
+        "result_schema_version": 1,
+    },
+    "executed_inputs": inputs,
+    "input_payload_sha256": input_sha256,
+    "symmetry": {
         "parallel_path_count": parallel_path_count,
-        "branch_template_order": [
-            "branch_illuminated_straight_run",
-            "branch_bend_group",
-            "branch_dark_straight_run",
-        ],
-        "representative_path_order": [
-            "common_supply_run",
-            "split_manifold",
-            "branch_template",
-            "merge_manifold",
-            "common_return_run",
-        ],
-        "components": [
-            {"id": "common_supply_run", "kind": "tube_run", "multiplicity": 1, "hydraulic_role": "common_supply", "length_m": ls, "inner_diameter_m": di_c, "outer_diameter_m": do_c, "illumination": "dark"},
-            {"id": "split_manifold", "kind": "manifold", "multiplicity": 1, "hydraulic_role": "split", "liquid_volume_m3": v_split},
-            {"id": "branch_illuminated_straight_run", "kind": "tube_run", "multiplicity": parallel_path_count, "hydraulic_role": "parallel_branch", "length_each_m": li, "inner_diameter_m": di_b, "outer_diameter_m": do_b, "illumination": "illuminated"},
-            {"id": "branch_bend_group", "kind": "bend_group", "multiplicity": parallel_path_count, "bend_count_each": branch_bend_count, "illuminated_bend_count_each": branch_illuminated_bend_count, "bend_length_each_m": bend_length_each, "centerline_radius_m": rb, "angle_deg": values["branch_bend_angle"]},
-            {"id": "branch_dark_straight_run", "kind": "tube_run", "multiplicity": parallel_path_count, "hydraulic_role": "parallel_branch", "length_each_m": ld, "inner_diameter_m": di_b, "outer_diameter_m": do_b, "illumination": "dark"},
-            {"id": "merge_manifold", "kind": "manifold", "multiplicity": 1, "hydraulic_role": "merge", "liquid_volume_m3": v_merge},
-            {"id": "common_return_run", "kind": "tube_run", "multiplicity": 1, "hydraulic_role": "common_return", "length_m": lr, "inner_diameter_m": di_c, "outer_diameter_m": do_c, "illumination": "dark"},
-            {"id": "reservoir_pump_suction_inventory", "kind": "inventory", "multiplicity": 1, "hydraulic_role": "reservoir", "liquid_volume_m3": v_reservoir},
-        ],
+        "branch_template_id": "branch_template",
+        "representative_path_id": "representative_path",
     },
-    "summary": {
-        "installed_tube_length_total_m": installed_tube_length,
-        "representative_hydraulic_path_length_m": representative_path_length,
-        "total_liquid_inventory_m3": total_inventory,
-        "total_circulation_flow_rate_m3_s": total_flow,
-        "total_pressure_loss_pa": total_pressure_loss,
-    },
-    "limitations": [
-        "symmetric_parallel_branches_only",
-        "non_spatial_topology",
-        "no_network_solver",
-        "no_recycle_convergence",
-        "no_property_package",
-        "no_pump_curve_or_npsh",
-        "tube_external_area_is_not_complete_reactor_area",
+    "ordered_components": [
+        "pump",
+        "common_supply",
+        "split_manifold",
+        "parallel_branch_group",
+        "merge_manifold",
+        "common_return",
+        "reservoir",
     ],
+    "branch_template": {
+        "illuminated_straight": {
+            "length_m": li,
+            "inner_diameter_m": di_b,
+            "outer_diameter_m": do_b,
+            "wall_thickness_m": branch_wall_thickness_mm / 1000.0,
+            "illumination": "illuminated",
+        },
+        "bend_group": {
+            "bend_count_each": branch_bend_count,
+            "illuminated_bend_count_each": branch_illuminated_bend_count,
+            "dark_bend_count_each": branch_bend_count - branch_illuminated_bend_count,
+            "arc_length_each_m": bend_length_each,
+            "total_length_each_m": branch_bend_length,
+            "centerline_radius_m": rb,
+            "angle_deg": values["branch_bend_angle"],
+            "loss_coefficient_each": values[
+                "branch_bend_loss_coefficient_per_bend"
+            ],
+            "dynamic_pressure_basis": "branch",
+        },
+        "dark_straight": {
+            "length_m": ld,
+            "inner_diameter_m": di_b,
+            "outer_diameter_m": do_b,
+            "wall_thickness_m": branch_wall_thickness_mm / 1000.0,
+            "illumination": "dark",
+        },
+    },
+    "hydraulic_basis": {
+        "branch": {
+            "velocity_m_s": v_b,
+            "cross_section_area_m2": area_b,
+            "reynolds_number": re_b,
+            "darcy_friction_factor": ff_b,
+            "friction_correlation": corr_b,
+            "dynamic_pressure_pa": q_b,
+        },
+        "common": {
+            "velocity_m_s": v_c,
+            "cross_section_area_m2": area_c,
+            "reynolds_number": re_c,
+            "darcy_friction_factor": ff_c,
+            "friction_correlation": corr_c,
+            "dynamic_pressure_pa": q_c,
+        },
+        "loss_coefficients": {
+            "common_supply": values["common_supply_minor_loss_coefficient"],
+            "split_manifold": values["split_manifold_loss_coefficient"],
+            "branch_bend_each": values[
+                "branch_bend_loss_coefficient_per_bend"
+            ],
+            "branch_misc": values["branch_misc_minor_loss_coefficient"],
+            "merge_manifold": values["merge_manifold_loss_coefficient"],
+            "common_return": values["common_return_minor_loss_coefficient"],
+        },
+    },
+    "geometry_totals": {
+        "branch_centerline_length_each_m": branch_length,
+        "installed_branch_centerline_length_total_m": installed_branch_length,
+        "installed_tube_centerline_length_total_m": installed_tube_length,
+        "representative_hydraulic_path_length_m": representative_path_length,
+        "branch_liquid_volume_total_m3": branch_volume_total,
+        "common_supply_liquid_volume_m3": common_supply_volume,
+        "common_return_liquid_volume_m3": common_return_volume,
+        "manifold_liquid_volume_total_m3": manifold_volume,
+        "reservoir_liquid_volume_m3": v_reservoir,
+        "total_liquid_inventory_m3": total_inventory,
+        "illuminated_branch_external_area_m2": branch_illuminated_area,
+        "dark_branch_external_area_m2": branch_dark_area,
+        "common_external_area_m2": common_dark_area,
+        "tube_external_area_total_m2": tube_external_area,
+        "tube_material_volume_proxy_m3": tube_material_volume,
+    },
+    "limitations": limitations,
 }
-manifest_digest = hashlib.sha256(canonical_json(manifest_core).encode("utf-8")).hexdigest()
-manifest = dict(manifest_core)
-manifest["topology_digest"] = manifest_digest
+manifest_text = canonical_json(manifest)
+manifest_sha256 = hashlib.sha256(manifest_text.encode("utf-8")).hexdigest()
 
 result = {
     "schema_version": 1,
@@ -345,16 +483,22 @@ result = {
         "branch_friction_correlation": corr_b,
         "common_friction_correlation": corr_c,
         "friction_factor_convention": "Darcy",
-        "pressure_path_semantics": "common_supply_plus_one_representative_branch_plus_common_return",
-        "installed_geometry_semantics": "sum_across_all_repeated_branches_and_common_runs",
+        "pressure_path_semantics": (
+            "common_supply_plus_one_representative_branch_plus_common_return"
+        ),
+        "installed_geometry_semantics": (
+            "sum_across_all_repeated_branches_and_common_runs"
+        ),
         "topology_manifest_schema_version": MANIFEST_SCHEMA_VERSION,
-        "topology_digest": manifest_digest,
-        "input_sha256": input_sha256,
+        "topology_manifest_sha256": f"sha256:{manifest_sha256}",
+        "input_payload_sha256": input_sha256,
+        "m0_reduction_status": m0_reduction_status,
+        "single_length_projection_status": single_length_projection_status,
         "workbook_runtime_dependency": False,
     },
 }
 
 with open("topology_manifest.json", "w", encoding="utf-8") as handle:
-    json.dump(manifest, handle, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    handle.write(manifest_text)
 with open("result.json", "w", encoding="utf-8") as handle:
-    json.dump(result, handle, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    handle.write(canonical_json(result))

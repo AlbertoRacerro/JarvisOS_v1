@@ -798,7 +798,15 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
                         "runner_input_invalid",
                         "Simulation run is missing input payload.",
                     )
-                validate_manifest(output_dir, simulation_run.input_payload, output)
+                validate_manifest(
+                    output_dir,
+                    simulation_run.input_payload,
+                    output,
+                    max_bytes=min(
+                        int(job["max_output_json_bytes"]),
+                        int(job["max_artifact_bytes"]),
+                    ),
+                )
                 declared_artifacts = runner_owned_artifacts()
             else:
                 declared_artifacts = [
