@@ -1,0 +1,34 @@
+name: Diagnose spec 072 runner patch
+
+on:
+  push:
+    branches:
+      - spec/072-process-topology
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: spec/072-process-topology
+          fetch-depth: 0
+      - name: Capture exact patch failure
+        shell: bash
+        run: |
+          set +e
+          git show f13127e0d6623ab948db449fe5de8707b0b93ead:scripts/apply_072_runner_patch.py > /tmp/apply_072_runner_patch.py
+          python /tmp/apply_072_runner_patch.py > docs/specs/.tmp-072-patch.log 2>&1
+          rc=$?
+          printf '\nexit_code=%s\n' "$rc" >> docs/specs/.tmp-072-patch.log
+          rm .github/workflows/diagnose-072-runner-patch.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f docs/specs/.tmp-072-patch.log
+          git add .github/workflows/diagnose-072-runner-patch.yml
+          git commit -m 'Capture spec 072 patch failure'
+          git push origin HEAD:spec/072-process-topology
