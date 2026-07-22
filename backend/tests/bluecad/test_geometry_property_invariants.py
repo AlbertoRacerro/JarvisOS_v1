@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -13,6 +15,11 @@ from tests.bluecad.property_geometry_support import (
 )
 
 SPEC_VERSION = "bluecad_geometry_spec_v0_1"
+CANARY_PROFILE = "ubuntu24-py311"
+CAPPED_MANIFOLD_PROPERTY = pytest.mark.skipif(
+    os.getenv("JARVISOS_BLUECAD_CANARY_PROFILE") != CANARY_PROFILE,
+    reason="capped-manifold property builds run in the pinned BLUECAD canary",
+)
 CARDINAL_DIRECTIONS = (
     (1, 0, 0),
     (-1, 0, 0),
@@ -178,6 +185,7 @@ def test_single_float_valid_domain_invariants(spec: dict[str, Any]) -> None:
         build_and_assert(spec, Path(directory) / "build")
 
 
+@CAPPED_MANIFOLD_PROPERTY
 @settings(max_examples=3)
 @given(single_capped_manifold_specs())
 def test_single_capped_manifold_valid_domain_invariants(spec: dict[str, Any]) -> None:
@@ -203,6 +211,7 @@ def test_single_float_same_environment_repeatability(spec: dict[str, Any]) -> No
     build_twice_and_assert(spec)
 
 
+@CAPPED_MANIFOLD_PROPERTY
 @settings(max_examples=1)
 @given(single_capped_manifold_specs())
 def test_single_capped_manifold_same_environment_repeatability(spec: dict[str, Any]) -> None:
