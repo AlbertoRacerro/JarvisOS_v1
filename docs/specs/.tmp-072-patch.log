@@ -1,5 +1,0 @@
-  File "/tmp/apply_072_runner_patch.py", line 90
-    SELECT mv.*, a.sha256 AS script_sha256, a.stored_path AS script_path
-IndentationError: unexpected indent
-
-exit_code=1

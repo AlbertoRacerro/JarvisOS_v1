@@ -19,6 +19,7 @@ MAX_TIMEOUT_SECONDS = 60
 REQUIRED_BATCH_GROWTH_PARAMETERS = ("mu_max", "X0", "t_final", "dt")
 
 ALLOWED_CALC_V0_IMPORT_ROOTS = frozenset({"json", "math", "statistics"})
+ALLOWED_CALC_V0_TOPOLOGY_M1_IMPORT_ROOTS = ALLOWED_CALC_V0_IMPORT_ROOTS | frozenset({"hashlib"})
 
 ALLOWED_BLUECAD_L2_IMPORT_ROOTS = frozenset({
     "build123d",
@@ -297,6 +298,8 @@ def preflight_script_policy(script_path: Path, *, ast_policy: str | None = None,
         preflight_bluecad_l2_ast_policy(text)
     elif ast_policy == "calc_v0":
         preflight_calc_v0_ast_policy(text)
+    elif ast_policy == "calc_v0_topology_m1":
+        preflight_calc_v0_topology_m1_ast_policy(text)
 
 
 def preflight_calc_v0_ast_policy(source: str) -> None:
@@ -305,6 +308,16 @@ def preflight_calc_v0_ast_policy(source: str) -> None:
         ALLOWED_CALC_V0_IMPORT_ROOTS,
         FORBIDDEN_CALC_V0_NAME_REFERENCES,
         enforce_calc_file_contract=True,
+    )
+
+
+def preflight_calc_v0_topology_m1_ast_policy(source: str) -> None:
+    _preflight_ast_policy(
+        source,
+        ALLOWED_CALC_V0_TOPOLOGY_M1_IMPORT_ROOTS,
+        FORBIDDEN_CALC_V0_NAME_REFERENCES,
+        enforce_calc_file_contract=True,
+        allow_topology_manifest=True,
     )
 
 
@@ -318,6 +331,7 @@ def _preflight_ast_policy(
     forbidden_name_references: frozenset[str],
     *,
     enforce_calc_file_contract: bool = False,
+    allow_topology_manifest: bool = False,
 ) -> None:
     try:
         tree = ast.parse(source)
@@ -343,7 +357,7 @@ def _preflight_ast_policy(
             ):
                 raise RunnerSafetyError(SANDBOX_VIOLATION, f"Dynamic code loading is not allowed: {name}.")
             if enforce_calc_file_contract:
-                _validate_calc_call_file_contract(node)
+                _validate_calc_call_file_contract(node, allow_topology_manifest=allow_topology_manifest)
         elif enforce_calc_file_contract and _is_forbidden_calc_open_reference(node, parents):
             raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 open() access must be a direct checked call.")
         elif enforce_calc_file_contract and _is_loaded_dunder_reference(node):
@@ -400,26 +414,49 @@ def _is_forbidden_calc_open_reference(node: ast.AST, parents: dict[ast.AST, ast.
     return False
 
 
-def _validate_calc_call_file_contract(node: ast.Call) -> None:
+def _validate_calc_call_file_contract(
+    node: ast.Call,
+    *,
+    allow_topology_manifest: bool = False,
+) -> None:
     name = _call_name(node.func)
     if name == "open":
-        _validate_calc_open_call(node)
+        _validate_calc_open_call(
+            node,
+            allow_topology_manifest=allow_topology_manifest,
+        )
         return
     if name.endswith(".open") or _is_builtins_open_subscript(node.func):
         raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 open() access must be a direct checked call.")
 
 
-def _validate_calc_open_call(node: ast.Call) -> None:
+def _validate_calc_open_call(
+    node: ast.Call,
+    *,
+    allow_topology_manifest: bool = False,
+) -> None:
     if not node.args or not isinstance(node.args[0], ast.Constant) or not isinstance(node.args[0].value, str):
-        raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 open() paths must be literal input.json or result.json.")
+        raise RunnerSafetyError(
+            SANDBOX_VIOLATION,
+            "calc_v0 open() paths must be literal allowlisted filenames.",
+        )
     path = node.args[0].value
-    if path not in {"input.json", "result.json"}:
-        raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 scripts may only open input.json and result.json.")
+    allowed_paths = {"input.json", "result.json"}
+    if allow_topology_manifest:
+        allowed_paths.add("topology_manifest.json")
+    if path not in allowed_paths:
+        raise RunnerSafetyError(
+            SANDBOX_VIOLATION,
+            "calc_v0 script open() path is not allowlisted.",
+        )
     mode = _calc_open_mode(node)
     if path == "input.json" and mode != "r":
         raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 input.json must be opened read-only text mode.")
-    if path == "result.json" and mode != "w":
-        raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 result.json must be opened write-only text truncate mode.")
+    if path in {"result.json", "topology_manifest.json"} and mode != "w":
+        raise RunnerSafetyError(
+            SANDBOX_VIOLATION,
+            f"calc_v0 {path} must be opened write-only text truncate mode.",
+        )
 
 
 def _calc_open_mode(node: ast.Call) -> str:
