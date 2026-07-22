@@ -1,0 +1,32 @@
+{
+  "evaluation_mode": "forward",
+  "schema_version": 1,
+  "variables": [
+    {"category":"design","description":"Number of identical active parallel hydraulic branches; exact integer validation is applied by the bundled model.","domain":{"min":1,"max":12},"label":"Parallel path count","name":"parallel_path_count","required":true,"unit":"1"},
+    {"category":"design","description":"Illuminated straight centreline length per branch.","domain":{"min":0.0},"label":"Branch illuminated straight length","name":"branch_illuminated_straight_length","required":true,"unit":"m"},
+    {"category":"design","description":"Dark straight centreline length per branch.","domain":{"min":0.0},"label":"Branch dark straight length","name":"branch_dark_straight_length","required":true,"unit":"m"},
+    {"category":"design","description":"Identical bend count per branch; exact integer and cross-field rules are enforced by the bundled model.","domain":{"min":0,"max":64},"label":"Branch bend count","name":"branch_bend_count","required":true,"unit":"1"},
+    {"category":"design","description":"Illuminated bends per branch; exact integer and bend-count bounds are enforced by the bundled model.","domain":{"min":0,"max":64},"label":"Illuminated branch bend count","name":"branch_illuminated_bend_count","required":true,"unit":"1"},
+    {"category":"design","description":"Common centreline radius for represented branch bends; zero for a zero-bend branch.","domain":{"min":0.0},"label":"Branch bend centreline radius","name":"branch_bend_centerline_radius","required":true,"unit":"mm"},
+    {"category":"design","description":"Included angle of every represented branch bend; zero for a zero-bend branch.","domain":{"min":0.0,"max":180.0},"label":"Branch bend angle","name":"branch_bend_angle","required":true,"unit":"deg"},
+    {"category":"design","description":"Common supply centreline length before the split.","domain":{"min":0.0},"label":"Common supply length","name":"common_supply_length","required":true,"unit":"m"},
+    {"category":"design","description":"Common return centreline length after the merge.","domain":{"min":0.0},"label":"Common return length","name":"common_return_length","required":true,"unit":"m"},
+    {"category":"design","description":"Hydraulic inner diameter of every branch.","domain":{"exclusive_min":0.0},"label":"Branch tube inner diameter","name":"branch_tube_inner_diameter","required":true,"unit":"mm"},
+    {"category":"design","description":"External diameter of every branch tube.","domain":{"exclusive_min":0.0},"label":"Branch tube outer diameter","name":"branch_tube_outer_diameter","required":true,"unit":"mm"},
+    {"category":"design","description":"Hydraulic inner diameter of common supply and return runs.","domain":{"exclusive_min":0.0},"label":"Common tube inner diameter","name":"common_tube_inner_diameter","required":true,"unit":"mm"},
+    {"category":"design","description":"External diameter of common supply and return runs.","domain":{"exclusive_min":0.0},"label":"Common tube outer diameter","name":"common_tube_outer_diameter","required":true,"unit":"mm"},
+    {"category":"design","description":"Explicit liquid holdup in the split manifold.","domain":{"min":0.0},"label":"Split manifold liquid volume","name":"split_manifold_liquid_volume","required":true,"unit":"L"},
+    {"category":"design","description":"Explicit liquid holdup in the merge manifold.","domain":{"min":0.0},"label":"Merge manifold liquid volume","name":"merge_manifold_liquid_volume","required":true,"unit":"L"},
+    {"category":"design","description":"Reservoir and pump-suction liquid holdup outside tubing and manifolds.","domain":{"min":0.0},"label":"Reservoir liquid volume","name":"reservoir_liquid_volume","required":true,"unit":"L"},
+    {"category":"operating","description":"Target mean velocity inside each identical active branch.","domain":{"exclusive_min":0.0},"label":"Target branch velocity","name":"target_branch_velocity","required":true,"unit":"m/s"},
+    {"category":"property","description":"Liquid density used by hydraulic calculations.","domain":{"exclusive_min":0.0},"label":"Liquid density","name":"liquid_density","required":true,"unit":"kg/m3"},
+    {"category":"property","description":"Liquid dynamic viscosity used by Reynolds calculations.","domain":{"exclusive_min":0.0},"label":"Dynamic viscosity","name":"dynamic_viscosity","required":true,"unit":"Pa*s"},
+    {"category":"equipment","description":"Overall pump electrical efficiency.","domain":{"exclusive_min":0.0,"max":1.0},"label":"Pump efficiency","name":"pump_efficiency","required":true,"unit":"1"},
+    {"category":"model_parameter","description":"Minor-loss coefficient for the common supply run, based on common velocity.","domain":{"min":0.0},"label":"Common supply loss coefficient","name":"common_supply_minor_loss_coefficient","required":true,"unit":"1"},
+    {"category":"model_parameter","description":"Split-manifold loss coefficient based on common inlet velocity.","domain":{"min":0.0},"label":"Split manifold loss coefficient","name":"split_manifold_loss_coefficient","required":true,"unit":"1"},
+    {"category":"model_parameter","description":"Loss coefficient per represented bend based on branch velocity; zero when bend count is zero.","domain":{"min":0.0},"label":"Branch bend loss coefficient per bend","name":"branch_bend_loss_coefficient_per_bend","required":true,"unit":"1"},
+    {"category":"model_parameter","description":"Other represented branch minor-loss coefficient based on branch velocity.","domain":{"min":0.0},"label":"Branch miscellaneous loss coefficient","name":"branch_misc_minor_loss_coefficient","required":true,"unit":"1"},
+    {"category":"model_parameter","description":"Merge-manifold loss coefficient based on common outlet velocity.","domain":{"min":0.0},"label":"Merge manifold loss coefficient","name":"merge_manifold_loss_coefficient","required":true,"unit":"1"},
+    {"category":"model_parameter","description":"Minor-loss coefficient for the common return run, based on common velocity.","domain":{"min":0.0},"label":"Common return loss coefficient","name":"common_return_minor_loss_coefficient","required":true,"unit":"1"}
+  ]
+}

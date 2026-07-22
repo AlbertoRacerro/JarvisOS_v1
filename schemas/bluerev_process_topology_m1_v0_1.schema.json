@@ -1,0 +1,1022 @@
+{
+  "$id": "https://jarvisos.local/schemas/bluerev_process_topology_m1_v0_1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "branch_template": {
+      "additionalProperties": false,
+      "properties": {
+        "bend_group": {
+          "additionalProperties": false,
+          "properties": {
+            "angle_deg": {
+              "maximum": 180,
+              "minimum": 0,
+              "type": "number"
+            },
+            "arc_length_each_m": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "bend_count_each": {
+              "maximum": 64,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "centerline_radius_m": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "dark_bend_count_each": {
+              "maximum": 64,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "dynamic_pressure_basis": {
+              "const": "branch"
+            },
+            "illuminated_bend_count_each": {
+              "maximum": 64,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "loss_coefficient_each": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "total_length_each_m": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "required": [
+            "bend_count_each",
+            "illuminated_bend_count_each",
+            "dark_bend_count_each",
+            "arc_length_each_m",
+            "total_length_each_m",
+            "centerline_radius_m",
+            "angle_deg",
+            "loss_coefficient_each",
+            "dynamic_pressure_basis"
+          ],
+          "type": "object"
+        },
+        "dark_straight": {
+          "additionalProperties": false,
+          "properties": {
+            "illumination": {
+              "const": "dark"
+            },
+            "inner_diameter_m": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "length_m": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "outer_diameter_m": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "wall_thickness_m": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            }
+          },
+          "required": [
+            "length_m",
+            "inner_diameter_m",
+            "outer_diameter_m",
+            "wall_thickness_m",
+            "illumination"
+          ],
+          "type": "object"
+        },
+        "illuminated_straight": {
+          "additionalProperties": false,
+          "properties": {
+            "illumination": {
+              "const": "illuminated"
+            },
+            "inner_diameter_m": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "length_m": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "outer_diameter_m": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "wall_thickness_m": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            }
+          },
+          "required": [
+            "length_m",
+            "inner_diameter_m",
+            "outer_diameter_m",
+            "wall_thickness_m",
+            "illumination"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "illuminated_straight",
+        "bend_group",
+        "dark_straight"
+      ],
+      "type": "object"
+    },
+    "executed_inputs": {
+      "additionalProperties": false,
+      "properties": {
+        "branch_bend_angle": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "deg"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "branch_bend_centerline_radius": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "mm"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "branch_bend_count": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "1"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "branch_bend_loss_coefficient_per_bend": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "1"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "branch_dark_straight_length": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "m"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "branch_illuminated_bend_count": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "1"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "branch_illuminated_straight_length": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "m"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "branch_misc_minor_loss_coefficient": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "1"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "branch_tube_inner_diameter": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "mm"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "branch_tube_outer_diameter": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "mm"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "common_return_length": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "m"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "common_return_minor_loss_coefficient": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "1"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "common_supply_length": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "m"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "common_supply_minor_loss_coefficient": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "1"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "common_tube_inner_diameter": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "mm"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "common_tube_outer_diameter": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "mm"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "dynamic_viscosity": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "Pa*s"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "liquid_density": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "kg/m3"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "merge_manifold_liquid_volume": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "L"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "merge_manifold_loss_coefficient": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "1"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "parallel_path_count": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "1"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "pump_efficiency": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "1"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "reservoir_liquid_volume": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "L"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "split_manifold_liquid_volume": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "L"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "split_manifold_loss_coefficient": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "1"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        },
+        "target_branch_velocity": {
+          "additionalProperties": false,
+          "properties": {
+            "source_parameter_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "unit": {
+              "const": "m/s"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "parallel_path_count",
+        "branch_illuminated_straight_length",
+        "branch_dark_straight_length",
+        "branch_bend_count",
+        "branch_illuminated_bend_count",
+        "branch_bend_centerline_radius",
+        "branch_bend_angle",
+        "common_supply_length",
+        "common_return_length",
+        "branch_tube_inner_diameter",
+        "branch_tube_outer_diameter",
+        "common_tube_inner_diameter",
+        "common_tube_outer_diameter",
+        "split_manifold_liquid_volume",
+        "merge_manifold_liquid_volume",
+        "reservoir_liquid_volume",
+        "target_branch_velocity",
+        "liquid_density",
+        "dynamic_viscosity",
+        "pump_efficiency",
+        "common_supply_minor_loss_coefficient",
+        "split_manifold_loss_coefficient",
+        "branch_bend_loss_coefficient_per_bend",
+        "branch_misc_minor_loss_coefficient",
+        "merge_manifold_loss_coefficient",
+        "common_return_minor_loss_coefficient"
+      ],
+      "type": "object"
+    },
+    "geometry_totals": {
+      "additionalProperties": false,
+      "properties": {
+        "branch_centerline_length_each_m": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "branch_liquid_volume_total_m3": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "common_external_area_m2": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "common_inner_diameter_m": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "common_outer_diameter_m": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "common_return_length_m": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "common_return_liquid_volume_m3": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "common_supply_length_m": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "common_supply_liquid_volume_m3": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "common_wall_thickness_m": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "dark_branch_external_area_m2": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "illuminated_branch_external_area_m2": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "installed_branch_centerline_length_total_m": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "installed_tube_centerline_length_total_m": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "manifold_liquid_volume_total_m3": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "representative_hydraulic_path_length_m": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "reservoir_liquid_volume_m3": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "total_liquid_inventory_m3": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "tube_external_area_total_m2": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "tube_material_volume_proxy_m3": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "branch_centerline_length_each_m",
+        "common_supply_length_m",
+        "common_return_length_m",
+        "common_inner_diameter_m",
+        "common_outer_diameter_m",
+        "common_wall_thickness_m",
+        "installed_branch_centerline_length_total_m",
+        "installed_tube_centerline_length_total_m",
+        "representative_hydraulic_path_length_m",
+        "branch_liquid_volume_total_m3",
+        "common_supply_liquid_volume_m3",
+        "common_return_liquid_volume_m3",
+        "manifold_liquid_volume_total_m3",
+        "reservoir_liquid_volume_m3",
+        "total_liquid_inventory_m3",
+        "illuminated_branch_external_area_m2",
+        "dark_branch_external_area_m2",
+        "common_external_area_m2",
+        "tube_external_area_total_m2",
+        "tube_material_volume_proxy_m3"
+      ],
+      "type": "object"
+    },
+    "hydraulic_basis": {
+      "additionalProperties": false,
+      "properties": {
+        "branch": {
+          "additionalProperties": false,
+          "properties": {
+            "cross_section_area_m2": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "darcy_friction_factor": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "dynamic_pressure_pa": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "friction_correlation": {
+              "enum": [
+                "laminar_64_over_Re",
+                "blasius_smooth_pipe_v0"
+              ]
+            },
+            "reynolds_number": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "velocity_m_s": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            }
+          },
+          "required": [
+            "velocity_m_s",
+            "cross_section_area_m2",
+            "reynolds_number",
+            "darcy_friction_factor",
+            "friction_correlation",
+            "dynamic_pressure_pa"
+          ],
+          "type": "object"
+        },
+        "common": {
+          "additionalProperties": false,
+          "properties": {
+            "cross_section_area_m2": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "darcy_friction_factor": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "dynamic_pressure_pa": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "friction_correlation": {
+              "enum": [
+                "laminar_64_over_Re",
+                "blasius_smooth_pipe_v0"
+              ]
+            },
+            "reynolds_number": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "velocity_m_s": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            }
+          },
+          "required": [
+            "velocity_m_s",
+            "cross_section_area_m2",
+            "reynolds_number",
+            "darcy_friction_factor",
+            "friction_correlation",
+            "dynamic_pressure_pa"
+          ],
+          "type": "object"
+        },
+        "loss_coefficients": {
+          "additionalProperties": false,
+          "properties": {
+            "branch_bend_each": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "branch_misc": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "common_return": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "common_supply": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "merge_manifold": {
+              "minimum": 0,
+              "type": "number"
+            },
+            "split_manifold": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "required": [
+            "common_supply",
+            "split_manifold",
+            "branch_bend_each",
+            "branch_misc",
+            "merge_manifold",
+            "common_return"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "branch",
+        "common",
+        "loss_coefficients"
+      ],
+      "type": "object"
+    },
+    "input_payload_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "limitations": {
+      "const": [
+        "symmetric_parallel_branches_only",
+        "non_spatial_topology",
+        "no_network_solver",
+        "no_recycle_convergence",
+        "no_property_package",
+        "no_pump_curve_or_npsh",
+        "tube_external_area_is_not_complete_reactor_area"
+      ]
+    },
+    "model_identity": {
+      "additionalProperties": false,
+      "properties": {
+        "input_contract_version": {
+          "const": "bluerev_process_topology_m1_v0_contract_1"
+        },
+        "model_id": {
+          "const": "bluerev_process_topology_m1_v0"
+        },
+        "result_schema_version": {
+          "const": 1
+        },
+        "version_label": {
+          "const": "bluerev-process-topology-m1-v0.1.0"
+        }
+      },
+      "required": [
+        "model_id",
+        "version_label",
+        "input_contract_version",
+        "result_schema_version"
+      ],
+      "type": "object"
+    },
+    "ordered_components": {
+      "const": [
+        "pump",
+        "common_supply",
+        "split_manifold",
+        "parallel_branch_group",
+        "merge_manifold",
+        "common_return",
+        "reservoir"
+      ]
+    },
+    "schema_version": {
+      "const": "bluerev_process_topology_m1_v0_1"
+    },
+    "symmetry": {
+      "additionalProperties": false,
+      "properties": {
+        "branch_template_id": {
+          "const": "branch_template"
+        },
+        "parallel_path_count": {
+          "maximum": 12,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "representative_path_id": {
+          "const": "representative_path"
+        }
+      },
+      "required": [
+        "parallel_path_count",
+        "branch_template_id",
+        "representative_path_id"
+      ],
+      "type": "object"
+    },
+    "topology_kind": {
+      "const": "symmetric_parallel_closed_loop"
+    }
+  },
+  "required": [
+    "schema_version",
+    "topology_kind",
+    "model_identity",
+    "executed_inputs",
+    "input_payload_sha256",
+    "symmetry",
+    "ordered_components",
+    "branch_template",
+    "hydraulic_basis",
+    "geometry_totals",
+    "limitations"
+  ],
+  "title": "BlueRev process topology M1 manifest",
+  "type": "object"
+}

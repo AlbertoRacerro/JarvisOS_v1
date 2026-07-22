@@ -50,6 +50,20 @@ from app.modules.runner.safety import (
     validate_run_paths,
     validate_script_path,
 )
+from app.modules.runner.topology_m1 import (
+    MODEL_LABEL as BUNDLED_BLUEREV_TOPOLOGY_M1_LABEL,
+)
+from app.modules.runner.topology_m1 import (
+    bundled_contract_path as _bluerev_topology_m1_contract_path,
+)
+from app.modules.runner.topology_m1 import (
+    bundled_script_path as _bluerev_topology_m1_script_path,
+)
+from app.modules.runner.topology_m1 import (
+    is_exact_bundled_profile,
+    runner_owned_artifacts,
+    validate_manifest,
+)
 
 RUNNER_TYPE = "python_local"
 IMPLEMENTATION_KIND = "batch_growth_v0"
@@ -61,6 +75,7 @@ BUNDLED_BLUEREV_PROCESS1_LABEL = "bluerev-biomass-nutrients-harvest-v0-bundled"
 BUNDLED_BLUEREV_PROCESS1_TITLE = "BlueRev biomass, nutrients, and harvesting bundled V0"
 BUNDLED_BLUEREV_PROCESS2_LABEL = "bluerev-buoyancy-optical-screening-v0-bundled"
 BUNDLED_BLUEREV_PROCESS2_TITLE = "BlueRev buoyancy and optical screening bundled V0"
+BUNDLED_BLUEREV_TOPOLOGY_M1_TITLE = "BlueRev explicit symmetric process topology M1"
 SUPPORTED_IMPLEMENTATION_KINDS = frozenset(
     {IMPLEMENTATION_KIND, BLUECAD_L2_IMPLEMENTATION_KIND, CALC_V0_IMPLEMENTATION_KIND}
 )
@@ -405,6 +420,82 @@ def register_bundled_bluerev_process2(workspace_id: str) -> ModelImplementationR
     )
 
 
+
+def register_bundled_bluerev_topology_m1(workspace_id: str) -> ModelImplementationRead:
+    script_path = _bluerev_topology_m1_script_path()
+    contract_path = _bluerev_topology_m1_contract_path()
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    _, contract_sha256, _ = canonicalize_input_contract(contract)
+    script_sha256 = sha256_file(script_path)
+
+    with open_sqlite_connection() as connection:
+        _require_workspace(connection, workspace_id)
+        existing = connection.execute(
+            """
+            SELECT mv.*, a.sha256 AS script_sha256, a.stored_path AS script_path
+            FROM model_versions mv
+            JOIN artifacts a ON a.id = mv.implementation_artifact_id
+            WHERE mv.workspace_id = ?
+              AND mv.version_label = ?
+              AND mv.input_contract_sha256 = ?
+              AND a.sha256 = ?
+            ORDER BY mv.created_at ASC
+            LIMIT 1
+            """,
+            (
+                workspace_id,
+                BUNDLED_BLUEREV_TOPOLOGY_M1_LABEL,
+                contract_sha256,
+                script_sha256,
+            ),
+        ).fetchone()
+        if existing is not None:
+            return _model_implementation_from_row(existing)
+        model_spec = connection.execute(
+            """
+            SELECT id FROM model_specs
+            WHERE workspace_id = ? AND title = ?
+            ORDER BY created_at ASC
+            LIMIT 1
+            """,
+            (workspace_id, BUNDLED_BLUEREV_TOPOLOGY_M1_TITLE),
+        ).fetchone()
+
+    if model_spec is None:
+        created_spec = create_model_spec(
+            workspace_id,
+            ModelSpecCreate(
+                title=BUNDLED_BLUEREV_TOPOLOGY_M1_TITLE,
+                engineering_question=(
+                    "Evaluate caller-selected symmetric parallel-loop geometry, hydraulics, "
+                    "inventory, residence time, illuminated tube area, and pump power."
+                ),
+                scope=(
+                    "Reviewed 072 forward M1 model; all topology, geometry, property, "
+                    "operating, and loss-coefficient values are supplied per scenario."
+                ),
+            ),
+        )
+        model_spec_id = created_spec.id
+    else:
+        model_spec_id = str(model_spec["id"])
+
+    return create_model_implementation(
+        workspace_id,
+        ModelImplementationCreate(
+            model_spec_id=model_spec_id,
+            version_label=BUNDLED_BLUEREV_TOPOLOGY_M1_LABEL,
+            implementation_kind=CALC_V0_IMPLEMENTATION_KIND,
+            notes=(
+                "Bundled reviewed 072 symmetric topology M1 model with a value-free "
+                "input contract."
+            ),
+            script_text=script_path.read_text(encoding="utf-8"),
+            input_contract=contract,
+        ),
+    )
+
+
 def get_model_implementation(workspace_id: str, model_version_id: str) -> ModelImplementationRead:
     with open_sqlite_connection() as connection:
         row = connection.execute(
@@ -478,7 +569,21 @@ def create_runner_job(workspace_id: str, payload: RunnerJobCreate) -> RunnerJobC
         if implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND:
             preflight_script_policy(script_path, ast_import_allowlist=True)
         elif implementation_kind == CALC_V0_IMPLEMENTATION_KIND:
-            preflight_script_policy(script_path, ast_policy=CALC_V0_IMPLEMENTATION_KIND)
+            topology_profile = is_exact_bundled_profile(model_version, script_sha)
+            if topology_profile:
+                _validate_topology_source_parameter_bindings(
+                    connection,
+                    workspace_id,
+                    input_payload,
+                )
+            preflight_script_policy(
+                script_path,
+                ast_policy=(
+                    "calc_v0_topology_m1"
+                    if topology_profile
+                    else CALC_V0_IMPLEMENTATION_KIND
+                ),
+            )
 
         job_run_root = run_root(workspace_id, simulation_run_id)
         connection.execute(
@@ -578,10 +683,34 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
 
     script_path = validate_script_path(workspace_id, job["script_path"])
     implementation_kind = job["implementation_kind"]
+    simulation_run = get_simulation_run_detail(workspace_id, simulation_run_id)
+    topology_profile = False
+    if implementation_kind == CALC_V0_IMPLEMENTATION_KIND:
+        if simulation_run.model_version_id is None:
+            raise RunnerSafetyError(
+                "runner_model_version_not_found",
+                "Simulation run has no model implementation.",
+            )
+        with open_sqlite_connection() as connection:
+            model_version = _load_model_version_with_artifact(
+                connection,
+                workspace_id,
+                simulation_run.model_version_id,
+            )
+        topology_profile = is_exact_bundled_profile(
+            model_version,
+            str(job["script_sha256"]),
+        )
     try:
         preflight_script_policy(
             script_path,
-            ast_policy=CALC_V0_IMPLEMENTATION_KIND if implementation_kind == CALC_V0_IMPLEMENTATION_KIND else None,
+            ast_policy=(
+                "calc_v0_topology_m1"
+                if topology_profile
+                else CALC_V0_IMPLEMENTATION_KIND
+                if implementation_kind == CALC_V0_IMPLEMENTATION_KIND
+                else None
+            ),
             ast_import_allowlist=implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND,
         )
     except RunnerSafetyError as exc:
@@ -612,7 +741,6 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
     working_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    simulation_run = get_simulation_run_detail(workspace_id, simulation_run_id)
     if simulation_run.input_payload is None:
         raise RunnerSafetyError("runner_input_invalid", "Simulation run is missing input payload.")
     input_file.write_text(_pretty_json(simulation_run.input_payload), encoding="utf-8")
@@ -665,14 +793,36 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
         if implementation_kind == CALC_V0_IMPLEMENTATION_KIND:
             calc_outputs = _validate_calc_v0_output(output)
             output_payload = _canonical_result_json(output)
-            declared_artifacts = [
-                {
-                    "path": "result.json",
-                    "role": "calc_result_json",
-                    "artifact_type": "json",
-                    "mime_type": "application/json",
-                }
-            ]
+            if topology_profile:
+                if "artifacts" in output:
+                    raise RunnerSafetyError(
+                        "runner_topology_artifact_declaration_forbidden",
+                        "Topology M1 artifacts are runner-owned and cannot be declared by the script.",
+                    )
+                if simulation_run.input_payload is None:
+                    raise RunnerSafetyError(
+                        "runner_input_invalid",
+                        "Simulation run is missing input payload.",
+                    )
+                validate_manifest(
+                    output_dir,
+                    simulation_run.input_payload,
+                    output,
+                    max_bytes=min(
+                        int(job["max_output_json_bytes"]),
+                        int(job["max_artifact_bytes"]),
+                    ),
+                )
+                declared_artifacts = runner_owned_artifacts()
+            else:
+                declared_artifacts = [
+                    {
+                        "path": "result.json",
+                        "role": "calc_result_json",
+                        "artifact_type": "json",
+                        "mime_type": "application/json",
+                    }
+                ]
         artifact_ids = _register_declared_artifacts(
             workspace_id,
             simulation_run_id,
@@ -1088,6 +1238,53 @@ def _validate_bluecad_l2_output(output_dir: Path, artifacts: list[object]) -> No
                 f"{role} must declare required filename {required_filename}.",
             )
         safe_artifact_path(output_dir, relative_path)
+
+
+
+def _validate_topology_source_parameter_bindings(
+    connection,
+    workspace_id: str,
+    input_payload: str,
+) -> None:
+    inputs = json.loads(input_payload)
+    for name, item in inputs.items():
+        source_parameter_id = item.get("source_parameter_id")
+        if source_parameter_id is None:
+            continue
+        row = connection.execute(
+            """
+            SELECT value, unit, status
+            FROM parameters
+            WHERE id = ? AND workspace_id = ?
+            """,
+            (source_parameter_id, workspace_id),
+        ).fetchone()
+        if row is None:
+            raise RunnerSafetyError(
+                "runner_topology_source_parameter_not_found",
+                f"Topology input {name} references a Parameter that does not exist in the workspace.",
+            )
+        if row["status"] != "accepted":
+            raise RunnerSafetyError(
+                "runner_topology_source_parameter_not_accepted",
+                f"Topology input {name} must reference an accepted Parameter.",
+            )
+        try:
+            parameter_value = float(row["value"])
+        except (TypeError, ValueError) as exc:
+            raise RunnerSafetyError(
+                "runner_topology_source_parameter_mismatch",
+                f"Topology input {name} source Parameter value is not finite numeric data.",
+            ) from exc
+        if (
+            not isfinite(parameter_value)
+            or parameter_value != float(item["value"])
+            or row["unit"] != item["unit"]
+        ):
+            raise RunnerSafetyError(
+                "runner_topology_source_parameter_mismatch",
+                f"Topology input {name} does not match its source Parameter value and unit.",
+            )
 
 
 def _load_runner_job(connection, runner_job_id: str):

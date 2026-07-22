@@ -24,6 +24,7 @@ from app.modules.runner.service import (
     register_bundled_bluerev_process0,
     register_bundled_bluerev_process1,
     register_bundled_bluerev_process2,
+    register_bundled_bluerev_topology_m1,
     run_runner_job,
 )
 
@@ -93,6 +94,20 @@ def register_bundled_bluerev_process2_endpoint(
 ) -> ModelImplementationRead:
     try:
         return register_bundled_bluerev_process2(workspace_id)
+    except RunnerSafetyError as exc:
+        raise _runner_error(exc) from exc
+
+
+
+@router.post(
+    "/workspaces/{workspace_id}/bundled-models/bluerev-process-topology-m1-v0/register",
+    response_model=ModelImplementationRead,
+)
+def register_bundled_bluerev_topology_m1_endpoint(
+    workspace_id: str,
+) -> ModelImplementationRead:
+    try:
+        return register_bundled_bluerev_topology_m1(workspace_id)
     except RunnerSafetyError as exc:
         raise _runner_error(exc) from exc
 
