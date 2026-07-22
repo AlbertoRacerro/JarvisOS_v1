@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import importlib.util
 import json
 from copy import deepcopy
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -13,10 +13,13 @@ from app.modules.bluecad.capped_manifold import PARAM_NAMES
 from app.modules.bluecad.prompts import PROMPT_VERSION, SYSTEM_TEMPLATE
 from app.modules.bluecad.spec import SpecValidationError, canonicalize_geometry_spec
 
-pytestmark = pytest.mark.bluecad_kernel
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCHEMA_PATH = REPO_ROOT / "schemas" / "bluecad_geometry_spec_v0_1.schema.json"
+RELATIONAL_VALIDATOR = "app.modules.bluecad.spec.validate_geometry_spec"
+RELATIONAL_CONSTRAINTS = {
+    "2 * main_wall_t < main_outer_d",
+    "2 * branch_wall_t < branch_outer_d",
+}
 
 
 def _params(branch_count: int = 2) -> dict[str, float | int]:
@@ -55,6 +58,14 @@ def _assert_invalid(params: dict, expected_path: str) -> None:
     assert exc_info.value.detail["path"] == expected_path
 
 
+def _require_build123d() -> Any:
+    return pytest.importorskip(
+        "build123d",
+        reason="build123d or one of its native dependencies is not importable",
+        exc_type=ImportError,
+    )
+
+
 def _shape_check(shape: object, attribute: str) -> bool:
     value = getattr(shape, attribute)
     return bool(value() if callable(value) else value)
@@ -66,6 +77,8 @@ def test_schema_validator_and_prompt_expose_same_closed_contract() -> None:
     assert set(capped["required"]) == PARAM_NAMES
     assert set(capped["properties"]) == PARAM_NAMES
     assert capped["additionalProperties"] is False
+    assert capped["x-jarvis-relational-validator"] == RELATIONAL_VALIDATOR
+    assert set(capped["x-jarvis-relational-constraints"]) == RELATIONAL_CONSTRAINTS
     capped_part = next(
         item
         for item in schema["$defs"]["part"]["oneOf"]
@@ -115,9 +128,9 @@ def test_derived_overflow_fails_closed() -> None:
     _assert_invalid(params, "$.parts[0].params")
 
 
-@pytest.mark.skipif(importlib.util.find_spec("build123d") is None, reason="build123d is not installed")
 @pytest.mark.parametrize("branch_count", [1, 2, 12])
 def test_kernel_build_has_exact_ports_final_volume_and_valid_solid(branch_count: int) -> None:
+    _require_build123d()
     built = build_part(_part(branch_count))
     params = _params(branch_count)
     pitch = params["branch_outer_d"] + params["branch_gap"]
@@ -137,17 +150,14 @@ def test_kernel_build_has_exact_ports_final_volume_and_valid_solid(branch_count:
         assert port.outer_d == params["branch_outer_d"]
         assert port.wall_t == params["branch_wall_t"]
     assert built.bbox_mm[0] == pytest.approx((0.0, -params["main_outer_d"] / 2.0, -radius))
-    assert built.bbox_mm[1] == pytest.approx(
-        (header_length + params["cap_thickness"], sweep, radius)
-    )
+    assert built.bbox_mm[1] == pytest.approx((header_length + params["cap_thickness"], sweep, radius))
     assert built.volume_mm3 == pytest.approx(float(built.shape.volume), rel=1e-12, abs=1e-9)
     assert _shape_check(built.shape, "is_valid")
     assert _shape_check(built.shape, "is_manifold")
 
 
-@pytest.mark.skipif(importlib.util.find_spec("build123d") is None, reason="build123d is not installed")
 def test_common_and_branch_bores_are_open_and_cap_is_closed() -> None:
-    import build123d as bd
+    bd = _require_build123d()
 
     params = _params(2)
     built = build_part(_part(2))
@@ -182,9 +192,9 @@ def test_common_and_branch_bores_are_open_and_cap_is_closed() -> None:
     assert float((built.shape & cap_probe).volume) > 0.0
 
 
-@pytest.mark.skipif(importlib.util.find_spec("build123d") is None, reason="build123d is not installed")
 @pytest.mark.parametrize("branch_count", [1, 2, 12])
 def test_mirrored_parallel_path_assembly_is_consistent(branch_count: int) -> None:
+    _require_build123d()
     params = _params(branch_count)
     branch_length = 500.0
     parts = [_part(branch_count, "left")]
@@ -224,8 +234,8 @@ def test_mirrored_parallel_path_assembly_is_consistent(branch_count: int) -> Non
     assert assembled["right"].ports["common"].direction == pytest.approx((1.0, 0.0, 0.0))
 
 
-@pytest.mark.skipif(importlib.util.find_spec("build123d") is None, reason="build123d is not installed")
 def test_repeated_builds_have_identical_manifest_entries() -> None:
+    _require_build123d()
     first = build_part(_part(12)).manifest_entry()
     second = build_part(deepcopy(_part(12))).manifest_entry()
     assert first == second
