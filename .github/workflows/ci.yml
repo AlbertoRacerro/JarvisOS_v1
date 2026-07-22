@@ -97,7 +97,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Run bounded property suite and canonical canary
+      - name: Run bounded property suite, capped-manifold kernel proof, and canonical canary
         id: property
         working-directory: backend
         shell: bash
@@ -109,6 +109,7 @@ jobs:
           SECONDS=0
           python -m pytest -q \
             tests/bluecad/test_geometry_property_invariants.py \
+            tests/bluecad/test_capped_manifold.py \
             tests/bluecad/test_manifest_determinism_canary.py \
             2>&1 | tee "$RUNNER_TEMP/bluecad-property-canary.log"
           status=${PIPESTATUS[0]}
