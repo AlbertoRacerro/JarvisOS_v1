@@ -130,10 +130,11 @@ def reduction_input():
         split_manifold_liquid_volume=(0.0, "L"),
         merge_manifold_liquid_volume=(0.0, "L"),
         branch_bend_loss_coefficient_per_bend=(0.0, "1"),
-        common_supply_minor_loss_coefficient=(0.0, "1"),
-        split_manifold_loss_coefficient=(0.0, "1"),
-        merge_manifold_loss_coefficient=(0.0, "1"),
-        common_return_minor_loss_coefficient=(0.0, "1"),
+        common_supply_minor_loss_coefficient=(0.01, "1"),
+        split_manifold_loss_coefficient=(0.02, "1"),
+        branch_misc_minor_loss_coefficient=(0.03, "1"),
+        merge_manifold_loss_coefficient=(0.02, "1"),
+        common_return_minor_loss_coefficient=(0.02, "1"),
     )
 
 
@@ -270,7 +271,25 @@ def test_one_path_degenerate_case_matches_047_equations(tmp_path):
     assert outputs["branch_reynolds_number"]["value"] == pytest.approx(reynolds)
     assert outputs["branch_darcy_friction_factor"]["value"] == pytest.approx(friction)
     assert outputs["branch_major_pressure_loss"]["value"] == pytest.approx(major)
-    assert outputs["branch_misc_pressure_loss"]["value"] == pytest.approx(minor)
+    branch_minor = 0.03 * dynamic_pressure
+    common_minor = 0.07 * dynamic_pressure
+    assert outputs["branch_misc_pressure_loss"]["value"] == pytest.approx(branch_minor)
+    assert outputs["common_supply_minor_pressure_loss"]["value"] == pytest.approx(
+        0.01 * dynamic_pressure
+    )
+    assert outputs["split_manifold_pressure_loss"]["value"] == pytest.approx(
+        0.02 * dynamic_pressure
+    )
+    assert outputs["merge_manifold_pressure_loss"]["value"] == pytest.approx(
+        0.02 * dynamic_pressure
+    )
+    assert outputs["common_return_minor_pressure_loss"]["value"] == pytest.approx(
+        0.02 * dynamic_pressure
+    )
+    assert outputs["common_pressure_loss"]["value"] == pytest.approx(common_minor)
+    assert outputs["representative_branch_pressure_loss"]["value"] == pytest.approx(
+        major + branch_minor
+    )
     assert outputs["total_pressure_loss"]["value"] == pytest.approx(total_loss)
     assert outputs["hydraulic_power"]["value"] == pytest.approx(hydraulic_power)
     assert outputs["pump_electric_power"]["value"] == pytest.approx(hydraulic_power / 0.7)
@@ -312,3 +331,37 @@ def test_manifest_bytes_are_identical_for_repeated_identical_runs(tmp_path):
     assert (first / "topology_manifest.json").read_bytes() == (
         second / "topology_manifest.json"
     ).read_bytes()
+
+
+
+def test_single_length_projection_rejects_dark_straight_split(tmp_path):
+    payload = reduction_input()
+    payload["branch_illuminated_straight_length"]["value"] = 11.0
+    payload["branch_dark_straight_length"]["value"] = 1.0
+    completed = run_model(tmp_path, payload)
+    assert completed.returncode == 0, completed.stderr
+    diagnostics = json.loads(
+        (tmp_path / "result.json").read_text(encoding="utf-8")
+    )["diagnostics"]
+    assert diagnostics["single_length_projection_status"] == (
+        "not_single_length_representable"
+    )
+    assert diagnostics["m0_reduction_status"] == "not_m0_reduction_case"
+
+
+def test_single_length_projection_rejects_nonilluminated_bend(tmp_path):
+    payload = reduction_input()
+    payload["branch_bend_count"]["value"] = 1
+    payload["branch_illuminated_bend_count"]["value"] = 0
+    payload["branch_bend_centerline_radius"]["value"] = 100.0
+    payload["branch_bend_angle"]["value"] = 90.0
+    payload["branch_bend_loss_coefficient_per_bend"]["value"] = 0.2
+    completed = run_model(tmp_path, payload)
+    assert completed.returncode == 0, completed.stderr
+    diagnostics = json.loads(
+        (tmp_path / "result.json").read_text(encoding="utf-8")
+    )["diagnostics"]
+    assert diagnostics["single_length_projection_status"] == (
+        "not_single_length_representable"
+    )
+    assert diagnostics["m0_reduction_status"] == "not_m0_reduction_case"

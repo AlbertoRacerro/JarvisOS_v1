@@ -570,6 +570,12 @@ def create_runner_job(workspace_id: str, payload: RunnerJobCreate) -> RunnerJobC
             preflight_script_policy(script_path, ast_import_allowlist=True)
         elif implementation_kind == CALC_V0_IMPLEMENTATION_KIND:
             topology_profile = is_exact_bundled_profile(model_version, script_sha)
+            if topology_profile:
+                _validate_topology_source_parameter_bindings(
+                    connection,
+                    workspace_id,
+                    input_payload,
+                )
             preflight_script_policy(
                 script_path,
                 ast_policy=(
@@ -1232,6 +1238,53 @@ def _validate_bluecad_l2_output(output_dir: Path, artifacts: list[object]) -> No
                 f"{role} must declare required filename {required_filename}.",
             )
         safe_artifact_path(output_dir, relative_path)
+
+
+
+def _validate_topology_source_parameter_bindings(
+    connection,
+    workspace_id: str,
+    input_payload: str,
+) -> None:
+    inputs = json.loads(input_payload)
+    for name, item in inputs.items():
+        source_parameter_id = item.get("source_parameter_id")
+        if source_parameter_id is None:
+            continue
+        row = connection.execute(
+            """
+            SELECT value, unit, status
+            FROM parameters
+            WHERE id = ? AND workspace_id = ?
+            """,
+            (source_parameter_id, workspace_id),
+        ).fetchone()
+        if row is None:
+            raise RunnerSafetyError(
+                "runner_topology_source_parameter_not_found",
+                f"Topology input {name} references a Parameter that does not exist in the workspace.",
+            )
+        if row["status"] != "accepted":
+            raise RunnerSafetyError(
+                "runner_topology_source_parameter_not_accepted",
+                f"Topology input {name} must reference an accepted Parameter.",
+            )
+        try:
+            parameter_value = float(row["value"])
+        except (TypeError, ValueError) as exc:
+            raise RunnerSafetyError(
+                "runner_topology_source_parameter_mismatch",
+                f"Topology input {name} source Parameter value is not finite numeric data.",
+            ) from exc
+        if (
+            not isfinite(parameter_value)
+            or parameter_value != float(item["value"])
+            or row["unit"] != item["unit"]
+        ):
+            raise RunnerSafetyError(
+                "runner_topology_source_parameter_mismatch",
+                f"Topology input {name} does not match its source Parameter value and unit.",
+            )
 
 
 def _load_runner_job(connection, runner_job_id: str):

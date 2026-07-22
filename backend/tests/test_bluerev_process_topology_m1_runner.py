@@ -390,3 +390,62 @@ def test_topology_run_reuses_flowsheet_lineage_and_staleness(client: TestClient)
         )
         assert freshness.status_code == 200, freshness.text
         assert freshness.json()["state"] == "stale"
+
+
+
+@pytest.mark.parametrize(
+    ("case", "expected_code"),
+    [
+        ("missing", "runner_topology_source_parameter_not_found"),
+        ("wrong_value", "runner_topology_source_parameter_mismatch"),
+        ("wrong_unit", "runner_topology_source_parameter_mismatch"),
+        ("not_accepted", "runner_topology_source_parameter_not_accepted"),
+    ],
+)
+def test_direct_runner_rejects_invalid_source_parameter_binding(
+    client: TestClient,
+    case: str,
+    expected_code: str,
+) -> None:
+    source_parameter_id = f"source-parameter-{case}"
+    if case != "missing":
+        parameter_value = "999" if case == "wrong_value" else "1000"
+        parameter_unit = "g/L" if case == "wrong_unit" else "kg/m3"
+        parameter_status = "proposed" if case == "not_accepted" else "accepted"
+        now = utc_now()
+        with open_sqlite_connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO parameters (
+                    id, workspace_id, name, value, unit, value_status, status,
+                    created_at, updated_at, origin
+                ) VALUES (?, 'bluerev', ?, ?, ?, 'known', ?, ?, ?, 'manual')
+                """,
+                (
+                    source_parameter_id,
+                    f"Source parameter {case}",
+                    parameter_value,
+                    parameter_unit,
+                    parameter_status,
+                    now,
+                    now,
+                ),
+            )
+            connection.commit()
+
+    endpoint = "/workspaces/bluerev/bundled-models/bluerev-process-topology-m1-v0/register"
+    implementation = client.post(endpoint).json()
+    payload = _valid_input()
+    payload["liquid_density"]["source_parameter_id"] = source_parameter_id
+    created = client.post(
+        "/workspaces/bluerev/runner-jobs",
+        json={"model_version_id": implementation["id"], "input_set": payload},
+    )
+    assert created.status_code == 400, created.text
+    assert created.json()["detail"]["code"] == expected_code
+    with open_sqlite_connection() as connection:
+        assert int(
+            connection.execute(
+                "SELECT COUNT(*) AS count FROM simulation_runs"
+            ).fetchone()["count"]
+        ) == 0

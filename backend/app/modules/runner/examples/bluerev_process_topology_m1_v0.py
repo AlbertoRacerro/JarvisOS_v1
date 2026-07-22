@@ -253,6 +253,7 @@ single_length_representable = (
     and v_merge == 0.0
     and di_c == di_b
     and do_c == do_b
+    and branch_dark_length == 0.0
 )
 m0_reduction_case = (
     single_length_representable
@@ -262,10 +263,6 @@ m0_reduction_case = (
     and values["branch_bend_angle"] == 0.0
     and values["branch_bend_loss_coefficient_per_bend"] == 0.0
     and ld == 0.0
-    and values["common_supply_minor_loss_coefficient"] == 0.0
-    and values["split_manifold_loss_coefficient"] == 0.0
-    and values["merge_manifold_loss_coefficient"] == 0.0
-    and values["common_return_minor_loss_coefficient"] == 0.0
 )
 m0_reduction_status = (
     "exact_047_reduction" if m0_reduction_case else "not_m0_reduction_case"
