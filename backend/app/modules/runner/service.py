@@ -52,8 +52,14 @@ from app.modules.runner.safety import (
 )
 from app.modules.runner.topology_m1 import (
     MODEL_LABEL as BUNDLED_BLUEREV_TOPOLOGY_M1_LABEL,
+)
+from app.modules.runner.topology_m1 import (
     bundled_contract_path as _bluerev_topology_m1_contract_path,
+)
+from app.modules.runner.topology_m1 import (
     bundled_script_path as _bluerev_topology_m1_script_path,
+)
+from app.modules.runner.topology_m1 import (
     is_exact_bundled_profile,
     runner_owned_artifacts,
     validate_manifest,
