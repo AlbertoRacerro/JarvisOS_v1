@@ -77,6 +77,12 @@
       "type": "object"
     },
     "cappedManifoldParams": {
+      "$comment": "Draft 2020-12 cannot compare sibling numeric fields. The canonical Python validator named below is mandatory after structural JSON Schema validation.",
+      "x-jarvis-relational-validator": "app.modules.bluecad.spec.validate_geometry_spec",
+      "x-jarvis-relational-constraints": [
+        "2 * main_wall_t < main_outer_d",
+        "2 * branch_wall_t < branch_outer_d"
+      ],
       "additionalProperties": false,
       "properties": {"main_outer_d": {"$ref": "#/$defs/positiveNumber"}, "main_wall_t": {"$ref": "#/$defs/positiveNumber"}, "branch_count": {"$ref": "#/$defs/positiveInteger1To12"}, "branch_outer_d": {"$ref": "#/$defs/positiveNumber"}, "branch_wall_t": {"$ref": "#/$defs/positiveNumber"}, "branch_gap": {"$ref": "#/$defs/positiveNumber"}, "end_gap": {"$ref": "#/$defs/positiveNumber"}, "branch_stub_length": {"$ref": "#/$defs/positiveNumber"}, "cap_thickness": {"$ref": "#/$defs/positiveNumber"}},
       "required": ["main_outer_d", "main_wall_t", "branch_count", "branch_outer_d", "branch_wall_t", "branch_gap", "end_gap", "branch_stub_length", "cap_thickness"],
