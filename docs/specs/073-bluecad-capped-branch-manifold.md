@@ -67,8 +67,8 @@ The exact parameter object is:
   "branch_count": 1,
   "branch_outer_d": 0.0,
   "branch_wall_t": 0.0,
-  "branch_spacing": 0.0,
-  "end_clearance": 0.0,
+  "branch_gap": 0.0,
+  "end_gap": 0.0,
   "branch_stub_length": 0.0,
   "cap_thickness": 0.0
 }
@@ -76,6 +76,11 @@ The exact parameter object is:
 
 All dimensional values are millimetres. No field is optional and no field has a
 runtime or registration default.
+
+`branch_gap` is the clear distance between adjacent branch outer surfaces.
+`end_gap` is the clear axial distance between an end plane of the cylindrical
+header cavity and the nearest branch outer surface. Both are explicit positive
+caller values; the contract does not choose a design clearance.
 
 `branch_stub_length` is the exposed branch centreline length measured from the
 outer tangent surface of the header to the branch port. The total branch sweep
@@ -85,14 +90,16 @@ from the header centreline is therefore:
 main_outer_d / 2 + branch_stub_length
 ```
 
-The canonical header length is derived, not separately supplied:
+Define:
 
 ```text
-header_length = 2 * end_clearance + branch_spacing * (branch_count - 1)
+branch_pitch = branch_outer_d + branch_gap
+header_length = branch_outer_d + 2 * end_gap
+              + branch_pitch * (branch_count - 1)
 ```
 
-This removes an otherwise redundant degree of freedom and guarantees centered,
-repeatable branch placement.
+This removes redundant spacing/length degrees of freedom, prevents tangent branch
+or end contacts by construction, and guarantees centered repeatable placement.
 
 ### 2. Validation rules
 
@@ -105,15 +112,14 @@ Required rules:
 - `branch_count` is an integer in `[1, 12]`, with booleans rejected;
 - `2 * main_wall_t < main_outer_d`;
 - `2 * branch_wall_t < branch_outer_d`;
-- `end_clearance >= branch_outer_d / 2`;
-- `branch_spacing >= branch_outer_d` when `branch_count > 1`;
-- the derived `header_length` is finite and positive;
+- derived `branch_pitch` and `header_length` are finite and positive;
 - no semantic `split`, `merge`, `inlet`, `outlet`, flow-rate, pressure, material,
   process-run, or project-value field is accepted.
 
-The minimum spacing and clearance rules are geometric non-overlap boundaries,
-not design recommendations. No arbitrary maximum cap thickness or fabrication
-recommendation is introduced.
+Because `branch_gap` and `end_gap` are strictly positive, tangent branch shells and
+branch/end contacts are outside the valid domain. They are computational geometry
+boundaries, not fabrication or design recommendations. No arbitrary maximum cap
+thickness or project clearance is introduced.
 
 ### 3. Canonical solid
 
@@ -122,8 +128,8 @@ Use the existing BLUECAD unit convention and deterministic build123d boundary.
 The part consists of:
 
 1. a cylindrical header shell from `x = 0` to `x = header_length`;
-2. one solid circular cap from `x = header_length` to
-   `x = header_length + cap_thickness`;
+2. one solid circular cap with diameter exactly `main_outer_d`, extending from
+   `x = header_length` to `x = header_length + cap_thickness`;
 3. `branch_count` branch shells extending in `+y` from the header centreline to
    `y = main_outer_d / 2 + branch_stub_length`;
 4. explicit subtraction of:
@@ -146,7 +152,7 @@ Expose exactly these tube-interface ports:
 - `branch_1` through `branch_N`, ordered by increasing x position, each at:
 
 ```text
-x_i = end_clearance + branch_spacing * (i - 1)
+x_i = end_gap + branch_outer_d / 2 + branch_pitch * (i - 1)
 y_i = main_outer_d / 2 + branch_stub_length
 z_i = 0
 ```
@@ -220,10 +226,10 @@ Add bounded fixtures for:
 - one branch;
 - two branches;
 - twelve branches;
-- minimum valid spacing/clearance;
+- small positive branch/end gaps;
+- zero or negative branch/end gaps;
 - mismatched wall/diameter domains;
 - non-integer branch count;
-- branch overlap;
 - unknown parameters;
 - deterministic repeated build.
 
