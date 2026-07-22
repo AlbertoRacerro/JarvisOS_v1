@@ -11,9 +11,22 @@ from math import isfinite
 from pathlib import Path
 from typing import Any
 
+from app.modules.bluecad.capped_manifold import PARAM_NAMES as _ALLOWED_CAPPED_MANIFOLD_PARAMS
+
 GEOMETRY_SPEC_VERSION = "bluecad_geometry_spec_v0_1"
 SPEC_ID_PREFIX = "sha256:"
-SUPPORTED_PART_KINDS = frozenset({"tube_run", "bend", "joint", "manifold", "float", "anchor_mount", "harvest_module"})
+SUPPORTED_PART_KINDS = frozenset(
+    {
+        "tube_run",
+        "bend",
+        "joint",
+        "manifold",
+        "capped_manifold",
+        "float",
+        "anchor_mount",
+        "harvest_module",
+    }
+)
 _ALLOWED_TOP_LEVEL_KEYS = frozenset({"spec_version", "spec_id", "name", "parts", "connections", "declared"})
 _ALLOWED_PART_KEYS = frozenset({"part_id", "kind", "params", "frame"})
 _ALLOWED_FRAME_KEYS = frozenset({"origin", "direction"})
@@ -150,6 +163,32 @@ def _validate_part(part: Any, index: int, seen_part_ids: set[str]) -> None:
         _validate_wall({"outer_d": params["outer_d_main"], "wall_t": params["wall_t"]}, path)
         _validate_wall({"outer_d": params["out_d"], "wall_t": params["out_wall_t"]}, path)
         _validate_int_bounds(params["n_out"], f"{path}.params.n_out", minimum=1, maximum=12)
+    elif kind == "capped_manifold":
+        _validate_positive_params(
+            params,
+            _ALLOWED_CAPPED_MANIFOLD_PARAMS,
+            path,
+            required=_ALLOWED_CAPPED_MANIFOLD_PARAMS,
+        )
+        if params["main_wall_t"] * 2 >= params["main_outer_d"]:
+            _invalid(
+                f"{path}.params.main_wall_t",
+                "main_wall_t must be less than half of main_outer_d.",
+            )
+        if params["branch_wall_t"] * 2 >= params["branch_outer_d"]:
+            _invalid(
+                f"{path}.params.branch_wall_t",
+                "branch_wall_t must be less than half of branch_outer_d.",
+            )
+        _validate_int_bounds(params["branch_count"], f"{path}.params.branch_count", minimum=1, maximum=12)
+        branch_pitch = float(params["branch_outer_d"]) + float(params["branch_gap"])
+        header_length = (
+            float(params["branch_outer_d"])
+            + 2.0 * float(params["end_gap"])
+            + branch_pitch * (int(params["branch_count"]) - 1)
+        )
+        if not isfinite(branch_pitch) or not isfinite(header_length):
+            _invalid(f"{path}.params", "derived branch pitch and header length must be finite.")
     elif kind == "float":
         _validate_positive_params(params, _ALLOWED_FLOAT_PARAMS, path, required=_ALLOWED_FLOAT_PARAMS)
         _validate_int_bounds(params["n_mounts"], f"{path}.params.n_mounts", minimum=1, maximum=12)
