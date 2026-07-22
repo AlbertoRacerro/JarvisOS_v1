@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from jsonschema import Draft202012Validator, ValidationError
 
 from app.modules.bluecad.assembly import assemble_parts
 from app.modules.bluecad.builders import build_part
@@ -99,20 +100,19 @@ def test_schema_validator_and_prompt_expose_same_closed_contract() -> None:
     assert capped["additionalProperties"] is False
     assert capped["x-jarvis-relational-validator"] == CANONICAL_VALIDATOR
     assert set(capped["x-jarvis-relational-constraints"]) == RELATIONAL_CONSTRAINTS
-
-    valid_part = _spec(2)["parts"][0]
-    matching_branches = [
+    capped_part = next(
         item
         for item in part_schema["oneOf"]
-        if item["properties"]["kind"].get("const") == valid_part["kind"]
-    ]
-    assert len(matching_branches) == 1
-    capped_part = matching_branches[0]
+        if item["properties"]["kind"].get("const") == "capped_manifold"
+    )
     assert capped_part["properties"]["params"]["$ref"] == "#/$defs/cappedManifoldParams"
-    assert set(capped_part["required"]).issubset(valid_part)
-    assert set(valid_part).issubset(capped_part["properties"])
-    invalid_part = {**valid_part, "unexpected": 1.0}
-    assert not set(invalid_part).issubset(capped_part["properties"])
+
+    validator = Draft202012Validator(schema)
+    validator.validate(_spec(2))
+    invalid = _spec(2)
+    invalid["parts"][0]["unexpected"] = 1.0
+    with pytest.raises(ValidationError):
+        validator.validate(invalid)
 
     assert PROMPT_VERSION == "bluecad_ai_loop_v3"
     assert "capped_manifold" in SYSTEM_TEMPLATE
