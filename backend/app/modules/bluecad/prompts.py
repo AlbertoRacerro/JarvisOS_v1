@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-PROMPT_VERSION = "bluecad_ai_loop_v2"
+PROMPT_VERSION = "bluecad_ai_loop_v3"
 
 SYSTEM_TEMPLATE = """You output exactly one BLUECAD GeometrySpec v0 JSON object and nothing else.
 No prose, no explanation. A single JSON object, optionally wrapped in one ```json fenced block.
@@ -39,6 +39,12 @@ Use ONLY these kinds and ONLY the params listed for each; no other kinds or para
                  ports: port_a, port_b
 - manifold       params: {"outer_d_main": >0, "wall_t": >0, "length": >0, "n_out": 1..12 int,
                  "out_d": >0, "out_wall_t": >0, "spacing": >0}   ports: in_a, in_b, out_1..out_n
+- capped_manifold params: {"main_outer_d": >0, "main_wall_t": >0 (< main_outer_d/2),
+                 "branch_count": 1..12 int, "branch_outer_d": >0,
+                 "branch_wall_t": >0 (< branch_outer_d/2), "branch_gap": >0,
+                 "end_gap": >0, "branch_stub_length": >0, "cap_thickness": >0}
+                 ports: common, branch_1..branch_n
+                 branch_gap and end_gap are explicit clear distances; never infer project defaults.
 - float          params: {"outer_d": >0, "length": >0, "n_mounts": 1..12 int, "pad_d": >0}
                  ports: mount_1..mount_n
 - anchor_mount   params: {"base_w": >0, "base_l": >0, "base_t": >0, "eye_d": >0}   port: mount_a
@@ -48,7 +54,7 @@ Use ONLY these kinds and ONLY the params listed for each; no other kinds or para
 
 PORTS & CONNECTIONS: a connection joins two ports:
 {"from": "<part_id>.<port>", "to": "<other_id>.<port>"}.
-Two connected TUBE ports (port_a/port_b/in_*/out_*) must have matching outer_d and wall_t.
+Two connected TUBE ports (port_a/port_b/in_*/out_*/common/branch_*) must have matching outer_d and wall_t.
 PAD ports (mount_*) connect only to other pad ports with matching pad_d.
 Do NOT specify transforms -- placement is computed from the connections.
 
@@ -77,6 +83,14 @@ EXAMPLE -- a tube then a 90 degree bend, connected:
    {"part_id": "b1", "kind": "bend", "params": {"outer_d": 110.0, "wall_t": 4.0, "bend_radius": 400.0, "angle": 1.5708}}
  ],
  "connections": [{"from": "t1.port_b", "to": "b1.port_a"}]}
+
+EXAMPLE -- one capped two-branch header with explicit clear gaps:
+{"spec_version": "bluecad_geometry_spec_v0_1", "name": "two_branch_header",
+ "parts": [{"part_id": "m1", "kind": "capped_manifold", "params": {
+   "main_outer_d": 120.0, "main_wall_t": 5.0, "branch_count": 2,
+   "branch_outer_d": 60.0, "branch_wall_t": 3.0, "branch_gap": 20.0,
+   "end_gap": 20.0, "branch_stub_length": 80.0, "cap_thickness": 8.0}}],
+ "connections": []}
 """
 
 
