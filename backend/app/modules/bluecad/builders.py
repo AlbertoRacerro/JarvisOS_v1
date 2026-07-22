@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from app.modules.bluecad.capped_manifold import build_capped_manifold
 from app.modules.bluecad.models import BluecadError, BuiltPart, PortFrame
 
 
@@ -23,6 +24,8 @@ def build_part(part: dict[str, Any]) -> BuiltPart:
         return _build_socket_joint(part)
     if kind == "manifold":
         return _build_manifold(part)
+    if kind == "capped_manifold":
+        return build_capped_manifold(part)
     if kind == "float":
         return _build_float(part)
     if kind == "anchor_mount":
