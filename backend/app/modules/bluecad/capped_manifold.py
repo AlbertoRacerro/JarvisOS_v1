@@ -55,13 +55,12 @@ def build_capped_manifold(part: dict[str, Any]) -> BuiltPart:
         bd.Plane.YZ * bd.Circle(radius=main_inner_d / 2.0),
         amount=header_length,
     )
-    shape = header_outer - header_inner
-
     cap = bd.Pos(header_length, 0.0, 0.0) * bd.extrude(
         bd.Plane.YZ * bd.Circle(radius=main_outer_d / 2.0),
         amount=cap_thickness,
     )
-    shape = shape + cap
+    outer_shape = header_outer + cap
+    void_shape = header_inner
 
     ports: dict[str, PortFrame] = {
         "common": PortFrame(
@@ -89,7 +88,8 @@ def build_capped_manifold(part: dict[str, Any]) -> BuiltPart:
                 amount=branch_sweep_length,
             )
         )
-        shape = (shape + branch_outer) - branch_bore
+        outer_shape = outer_shape + branch_outer
+        void_shape = void_shape + branch_bore
         ports[f"branch_{index + 1}"] = PortFrame(
             (x, branch_sweep_length, 0.0),
             (0.0, 1.0, 0.0),
@@ -97,6 +97,7 @@ def build_capped_manifold(part: dict[str, Any]) -> BuiltPart:
             branch_wall_t,
         )
 
+    shape = outer_shape - void_shape
     main_radius = main_outer_d / 2.0
     branch_radius = branch_outer_d / 2.0
     radius = max(main_radius, branch_radius)
