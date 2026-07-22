@@ -56,16 +56,19 @@ before Codex or another coding agent may act on them.
    their contracts are reconciled with 059b, 061a/061b, and existing service boundaries.
 5. Draft and promote `068` HERMES-CONFIG-0 only after 066/067 are stable and a
    concrete Windows-first host-isolation boundary is selected.
-6. Preserve the merged `047`–`052` and `071` process-model, editable-binding,
-   forward-DOF, dependency-graph, stale-propagation, and deterministic M0 CAD-link
-   foundation.
-7. Promote and implement `072` before residual UI work. It must separate installed
-   geometry from the representative hydraulic path and establish explicit symmetric
-   topology before any multi-part CAD-LINK-1 claim; Hermes work must not indefinitely
-   displace measurable BlueRev engineering progress.
-8. Run `069` MEMORY-CONSOLIDATE-0 as the first Hermes dogfood only after 066–068
+6. Preserve the merged `047`–`052`, `071`, and `072` process-model, editable-binding,
+   forward-DOF, dependency-graph, stale-propagation, M0 CAD-link, and explicit
+   symmetric-topology foundation.
+7. Promote and implement `073` before any multi-part CAD-LINK-1 claim. The existing
+   through-header `manifold` has two common ports and is not an honest capped
+   split/merge boundary; do not leave an open main port or imply fluid-open branch
+   bores that the solid does not contain.
+8. Draft and promote `074` CAD-LINK-1 only after 073 is merged. It must consume a
+   fresh 072 manifest, require explicit spatial-layout authority, reconcile process
+   and CAD geometry, and fail closed rather than infer bend handedness or routing.
+9. Run `069` MEMORY-CONSOLIDATE-0 as the first Hermes dogfood only after 066–068
    are merged and the required local route is qualified.
-9. Continue `063`/`064`, `012` → `033`, and residual conversation/UI rows according
+10. Continue `063`/`064`, `012` → `033`, and residual conversation/UI rows according
    to dependencies, explicit maintainer priority, and measured value.
 
 Trigger-gated rows remain `planned` until their stated evidence exists. Always
@@ -156,7 +159,9 @@ PR overlaps the target files or runtime boundary.
 | 068 | planned | — | HERMES-CONFIG-0 | 066, 067 | Freeze a pinned/fingerprinted Hermes profile with passthrough-only model paths, Jarvis MCP only, host-level workspace isolation, explicit tool allowlist, disabled browser/computer/cron/proactive paths, and bounded delegation. |
 | 069 | planned | — | MEMORY-CONSOLIDATE-0 | 040, 042, 061a, 061b, 062, 066, 067, 068 | First Hermes dogfood: consolidate bounded accepted records/evidence into MemoryStore proposals with conflict preservation, provenance, grading, and cost evidence; never promote, overwrite, delete, or lower sensitivity. |
 | 071 | merged | [#147](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/147) | MODEL-SCENARIO-DOF-0: editable bindings, scenario runs, and degree-of-freedom inspection | 040, 043, 047 | Expose immutable value-free model input contracts, side-effect-free forward binding/DOF preview, parameter-backed or manual scenario bindings, existing-runner execution, and one bounded Domain Foundation panel; no inverse solver, targets, optimizer, automatic promotion, or embedded design defaults. |
-| 072 | in_review | [#172](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/172) | BLUEREV-PROCESS-3: explicit symmetric hydraulic topology M1 | 043, 047, 050, 051, 052, 071 | Add one deterministic fixed-topology closed loop with common supply/return sections and 1–12 identical parallel branches; separate installed geometry from the representative hydraulic path, emit a canonical topology manifest, and prove reduction to 047 without adding a generic network solver, CAD layout, automatic recompute, or UI. |
+| 072 | merged | [#172](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/172) | BLUEREV-PROCESS-3: explicit symmetric hydraulic topology M1 | 043, 047, 050, 051, 052, 071 | Add one deterministic fixed-topology closed loop with common supply/return sections and 1–12 identical parallel branches; separate installed geometry from the representative hydraulic path, emit a canonical topology manifest, and prove reduction to 047 without adding a generic network solver, CAD layout, automatic recompute, or UI. |
+| 073 | ready | — | BLUECAD-PRIMITIVE-1: fluid-open capped branch manifold | 005, 005b, 056 | Add one deterministic capped branch-header primitive with exactly one common port and 1–12 branch ports, explicit branch bores through the header wall, closed-end geometry, kernel-volume reconciliation, and property/conformance tests; no process link, layout solver, project defaults, or UI. |
+| 074 | planned | — | CAD-LINK-1: 072 M1 topology to deterministic multi-part BLUECAD | 038, 050, 051, 052, 071, 072, 073 | Convert a fresh 072 topology manifest into an idempotent multi-part BLUECAD candidate only through an explicit reviewed spatial-layout contract; reconcile process geometry, ports, volume/area, and lineage without inferring bend handedness, routing, or design defaults. |
 
 ## Superseded planning aliases and resolved collisions
 
