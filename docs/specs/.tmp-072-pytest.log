@@ -1,0 +1,38 @@
+.....F
+=================================== FAILURES ===================================
+_ test_invalid_cross_field_topology_fails_closed[overrides2-branch_bend_centerline_radius] _
+
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/test_invalid_cross_field_topol2')
+overrides = {'branch_bend_centerline_radius': (1.0, 'mm'), 'branch_bend_count': (0, '1')}
+field = 'branch_bend_centerline_radius'
+
+    @pytest.mark.parametrize(
+        ("overrides", "field"),
+        [
+            ({"parallel_path_count": (1.5, "1")}, "parallel_path_count"),
+            ({"branch_illuminated_bend_count": (3, "1")}, "branch_illuminated_bend_count"),
+            ({"branch_bend_count": (0, "1"), "branch_bend_centerline_radius": (1.0, "mm")}, "branch_bend_centerline_radius"),
+            ({"branch_bend_count": (0, "1"), "branch_bend_loss_coefficient_per_bend": (0.1, "1")}, "branch_bend_loss_coefficient_per_bend"),
+            ({"branch_bend_centerline_radius": (30.0, "mm")}, "branch_bend_centerline_radius"),
+            ({"branch_bend_angle": (181.0, "deg")}, "branch_bend_angle"),
+            ({"branch_tube_outer_diameter": (50.0, "mm")}, "branch_tube_outer_diameter"),
+            ({"common_tube_outer_diameter": (80.0, "mm")}, "common_tube_outer_diameter"),
+            ({"branch_illuminated_straight_length": (0.0, "m"), "branch_dark_straight_length": (0.0, "m"), "branch_bend_count": (0, "1"), "branch_illuminated_bend_count": (0, "1"), "branch_bend_centerline_radius": (0.0, "mm"), "branch_bend_angle": (0.0, "deg"), "branch_bend_loss_coefficient_per_bend": (0.0, "1")}, "branch_illuminated_straight_length"),
+        ],
+    )
+    def test_invalid_cross_field_topology_fails_closed(tmp_path, overrides, field):
+        completed = run_model(tmp_path, input_set(**overrides))
+        assert completed.returncode != 0
+        assert "bluerev_topology_error:" in completed.stderr
+>       assert field in completed.stderr
+E       AssertionError: assert 'branch_bend_centerline_radius' in 'bluerev_topology_error:input_domain_invalid:branch_illuminated_bend_count\n'
+E        +  where 'bluerev_topology_error:input_domain_invalid:branch_illuminated_bend_count\n' = CompletedProcess(args=['/opt/hostedtoolcache/Python/3.11.15/x64/bin/python', '/home/runner/work/JarvisOS_v1/JarvisOS_v...v0.py'], returncode=1, stdout='', stderr='bluerev_topology_error:input_domain_invalid:branch_illuminated_bend_count\n').stderr
+
+tests/test_bluerev_process_topology_m1.py:220: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_bluerev_process_topology_m1.py::test_invalid_cross_field_topology_fails_closed[overrides2-branch_bend_centerline_radius] - AssertionError: assert 'branch_bend_centerline_radius' in 'bluerev_topology_error:input_domain_invalid:branch_illuminated_bend_count\n'
+ +  where 'bluerev_topology_error:input_domain_invalid:branch_illuminated_bend_count\n' = CompletedProcess(args=['/opt/hostedtoolcache/Python/3.11.15/x64/bin/python', '/home/runner/work/JarvisOS_v1/JarvisOS_v...v0.py'], returncode=1, stdout='', stderr='bluerev_topology_error:input_domain_invalid:branch_illuminated_bend_count\n').stderr
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 5 passed in 1.25s
+
+exit_code=1
