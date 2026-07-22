@@ -77,6 +77,14 @@ The exact parameter object is:
 All dimensional values are millimetres. No field is optional and no field has a
 runtime or registration default.
 
+`branch_stub_length` is the exposed branch centreline length measured from the
+outer tangent surface of the header to the branch port. The total branch sweep
+from the header centreline is therefore:
+
+```text
+main_outer_d / 2 + branch_stub_length
+```
+
 The canonical header length is derived, not separately supplied:
 
 ```text
@@ -99,14 +107,13 @@ Required rules:
 - `2 * branch_wall_t < branch_outer_d`;
 - `end_clearance >= branch_outer_d / 2`;
 - `branch_spacing >= branch_outer_d` when `branch_count > 1`;
-- `branch_stub_length >= main_outer_d / 2`;
-- `cap_thickness <= main_outer_d`;
 - the derived `header_length` is finite and positive;
 - no semantic `split`, `merge`, `inlet`, `outlet`, flow-rate, pressure, material,
   process-run, or project-value field is accepted.
 
 The minimum spacing and clearance rules are geometric non-overlap boundaries,
-not design recommendations.
+not design recommendations. No arbitrary maximum cap thickness or fabrication
+recommendation is introduced.
 
 ### 3. Canonical solid
 
@@ -117,7 +124,8 @@ The part consists of:
 1. a cylindrical header shell from `x = 0` to `x = header_length`;
 2. one solid circular cap from `x = header_length` to
    `x = header_length + cap_thickness`;
-3. `branch_count` branch shells extending in `+y` from the header centreline;
+3. `branch_count` branch shells extending in `+y` from the header centreline to
+   `y = main_outer_d / 2 + branch_stub_length`;
 4. explicit subtraction of:
    - the common internal header cavity;
    - every branch inner bore through the header wall and into the common cavity.
@@ -160,7 +168,8 @@ The builder must return deterministic:
 - build manifest entry;
 - kernel shape.
 
-The bounding box must include the external cap thickness and all branch stubs.
+The bounding box must include the external cap thickness and the complete exposed
+branch stubs.
 
 Material volume must be taken from the final boolean-result solid, not from a
 naive sum that double-counts header/branch intersections. Tests must compare the
@@ -194,7 +203,9 @@ Required assembly fixtures:
 - common tube → capped manifold;
 - capped manifold branch → tube run;
 - two capped manifolds connected by 1, 2, and 12 identical straight branch paths;
-- the second manifold may be rotated through the existing frame/assembly mechanism;
+- the second manifold is rotated through the existing frame/assembly mechanism;
+- for the mirrored second manifold, branch `i` on the first manifold connects to
+  branch `N + 1 - i` on the second manifold so all x positions remain consistent;
 - all connected tube ports must remain coincident, opposed, and dimensionally
   conformant.
 
@@ -213,8 +224,6 @@ Add bounded fixtures for:
 - mismatched wall/diameter domains;
 - non-integer branch count;
 - branch overlap;
-- too-short branch stub;
-- cap thickness outside the allowed domain;
 - unknown parameters;
 - deterministic repeated build.
 
@@ -262,7 +271,7 @@ At minimum:
 - exact port order/frame tests;
 - boolean fluid-opening probes;
 - final-solid volume reconciliation;
-- multi-path assembly fixtures for 1, 2, and 12 branches;
+- mirrored multi-path assembly fixtures for 1, 2, and 12 branches;
 - canonicalization and repeated-build determinism;
 - regression tests proving existing `manifold` behavior and existing fixtures are
   unchanged;
