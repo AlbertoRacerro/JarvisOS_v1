@@ -238,13 +238,38 @@ version itself changes. This slice should preserve `bluecad_geometry_spec_v0_1`
 and add the part kind additively; do not create a broad v1 schema migration merely
 for one reviewed typed builder.
 
+### 9. AI-loop vocabulary contract
+
+The existing BLUECAD generation and repair system prompt is a closed vocabulary:
+it instructs the model that only the enumerated part kinds and parameters exist.
+The implementation must therefore update `backend/app/modules/bluecad/prompts.py`
+in the same slice.
+
+Required behavior:
+
+- add `capped_manifold` with the exact nine parameters and exact ports defined here;
+- explain that `branch_gap`, `end_gap`, and every other dimension are explicit
+  caller/model outputs and must not be invented from project defaults;
+- retain the existing warning against unknown kinds and parameters;
+- bump `PROMPT_VERSION` because the trusted generation contract changes;
+- add a valid bounded prompt example or focused contract wording sufficient for
+  generation and repair to emit schema-valid `capped_manifold` parts;
+- add tests proving the prompt vocabulary, Python validator, and JSON schema expose
+  the same part kind, parameter names, branch-count bound, and port naming rule.
+
+This prompt update does not authorize a provider call, automatic candidate run, or
+preference for this primitive. It only prevents the existing candidate path from
+claiming a closed vocabulary that omits an implemented valid kind.
+
 ## API and persistence
 
 No new API route, table, migration, candidate origin, artifact role, event type, or
 persistence record is required.
 
 The new primitive becomes available through existing GeometrySpec ingestion,
-build, candidate, mesh, FEM, artifact, and evidence paths.
+build, candidate, mesh, FEM, artifact, and evidence paths. Candidate availability
+includes the versioned prompt update in section 9; schema support alone is not
+sufficient.
 
 ## Acceptance criteria
 
@@ -263,10 +288,12 @@ Implementation is acceptable only when all of the following hold:
    FEM adapter, and real-tool proof do not regress.
 8. Same-environment repeated builds produce identical canonical GeometrySpec,
    manifest, ports, analytic metadata, and artifact digests.
-9. No provider call, AI job, process run, Parameter, CAD candidate, promotion,
-   automatic repair, or UI action occurs merely by validating or building the
-   primitive.
-10. CI and the BLUECAD real-tool proof pass on the exact implementation head.
+9. The versioned generation/repair prompt exposes the same exact capped-manifold
+   contract as the schema and validator, without adding defaults or dispatching AI.
+10. No provider call, AI job, process run, Parameter, CAD candidate, promotion,
+    automatic repair, or UI action occurs merely by validating or building the
+    primitive.
+11. CI and the BLUECAD real-tool proof pass on the exact implementation head.
 
 ## Required tests
 
@@ -279,6 +306,7 @@ At minimum:
 - final-solid volume reconciliation;
 - mirrored multi-path assembly fixtures for 1, 2, and 12 branches;
 - canonicalization and repeated-build determinism;
+- prompt/schema/validator vocabulary-conformance tests;
 - regression tests proving existing `manifold` behavior and existing fixtures are
   unchanged;
 - Gmsh/CalculiX real-tool regression through the existing proof workflow.
