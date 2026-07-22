@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -13,9 +14,10 @@ from app.modules.runner.safety import (
 
 MODEL_ID = "bluerev_process_topology_m1_v0"
 MODEL_LABEL = "bluerev-process-topology-m1-v0.1.0"
+CONTRACT_VERSION = "bluerev_process_topology_m1_v0_contract_1"
 MANIFEST_FILENAME = "topology_manifest.json"
 MANIFEST_ROLE = "bluerev_topology_manifest"
-MANIFEST_SCHEMA_VERSION = "0.1"
+MANIFEST_SCHEMA_VERSION = "bluerev_process_topology_m1_v0_1"
 
 
 def bundled_script_path() -> Path:
@@ -30,14 +32,18 @@ def bundled_contract_path() -> Path:
     )
 
 
+def bundled_schema_path() -> Path:
+    return (
+        Path(__file__).resolve().parents[4]
+        / "schemas"
+        / "bluerev_process_topology_m1_v0_1.schema.json"
+    )
+
+
 def canonical_input_sha256(input_payload: str) -> str:
-    try:
-        parsed = json.loads(input_payload)
-    except json.JSONDecodeError as exc:
-        raise RunnerSafetyError(
-            "runner_input_invalid",
-            "Topology input payload is invalid JSON.",
-        ) from exc
+    parsed = _load_finite_json(input_payload, code="runner_input_invalid")
+    if not isinstance(parsed, dict):
+        raise RunnerSafetyError("runner_input_invalid", "Topology input payload must be an object.")
     encoded = canonical_json(parsed)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
@@ -63,70 +69,83 @@ def validate_manifest(
     output_dir: Path,
     input_payload: str,
     result: dict[str, object],
-) -> dict[str, object]:
+    *,
+    max_bytes: int,
+) -> str:
+    unresolved_path = output_dir / MANIFEST_FILENAME
+    if unresolved_path.is_symlink():
+        raise RunnerSafetyError(
+            "runner_topology_manifest_invalid",
+            "Topology manifest must be a regular non-symlink file.",
+        )
     manifest_path = safe_artifact_path(output_dir, MANIFEST_FILENAME)
     if not manifest_path.exists() or not manifest_path.is_file():
         raise RunnerSafetyError(
             "runner_topology_manifest_missing",
             "Topology model did not produce topology_manifest.json.",
         )
+    raw = manifest_path.read_bytes()
+    if len(raw) > max_bytes:
+        raise RunnerSafetyError(
+            "runner_topology_manifest_too_large",
+            "Topology manifest exceeds the bounded JSON/artifact limit.",
+        )
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
         raise RunnerSafetyError(
             "runner_topology_manifest_invalid",
-            "Topology manifest is not valid JSON.",
+            "Topology manifest must be UTF-8 JSON.",
         ) from exc
+    manifest = _load_finite_json(text, code="runner_topology_manifest_invalid")
     if not isinstance(manifest, dict):
         raise RunnerSafetyError(
             "runner_topology_manifest_invalid",
             "Topology manifest must be an object.",
         )
-    required = {
-        "schema_version",
-        "model_id",
-        "model_label",
-        "input_sha256",
-        "topology",
-        "summary",
-        "limitations",
-        "topology_digest",
-    }
-    if set(manifest) != required:
+    canonical_bytes = canonical_json(manifest).encode("utf-8")
+    if raw != canonical_bytes:
         raise RunnerSafetyError(
-            "runner_topology_manifest_invalid",
-            "Topology manifest fields do not match the closed schema.",
+            "runner_topology_manifest_noncanonical",
+            "Topology manifest bytes are not the required canonical JSON serialization.",
         )
-    if manifest["schema_version"] != MANIFEST_SCHEMA_VERSION:
+
+    schema = _load_finite_json(
+        bundled_schema_path().read_text(encoding="utf-8"),
+        code="runner_topology_manifest_schema_invalid",
+    )
+    if not isinstance(schema, dict):
         raise RunnerSafetyError(
-            "runner_topology_manifest_invalid",
-            "Topology manifest schema version is invalid.",
+            "runner_topology_manifest_schema_invalid",
+            "Bundled topology manifest schema must be an object.",
         )
-    if manifest["model_id"] != MODEL_ID or manifest["model_label"] != MODEL_LABEL:
-        raise RunnerSafetyError(
-            "runner_topology_manifest_invalid",
-            "Topology manifest model identity is invalid.",
-        )
-    expected_input_sha = canonical_input_sha256(input_payload)
-    if manifest["input_sha256"] != expected_input_sha:
+    _validate_schema(manifest, schema)
+
+    expected_inputs = _load_finite_json(input_payload, code="runner_input_invalid")
+    if manifest.get("executed_inputs") != expected_inputs:
         raise RunnerSafetyError(
             "runner_topology_manifest_input_mismatch",
-            "Topology manifest input digest does not match the run input.",
+            "Topology manifest executed inputs do not match the canonical run input.",
         )
-    digest = manifest.get("topology_digest")
-    if not isinstance(digest, str) or len(digest) != 64:
+    expected_input_sha = canonical_input_sha256(input_payload)
+    if manifest.get("input_payload_sha256") != expected_input_sha:
         raise RunnerSafetyError(
-            "runner_topology_manifest_invalid",
-            "Topology manifest digest is invalid.",
+            "runner_topology_manifest_input_mismatch",
+            "Topology manifest input digest does not match the canonical run input.",
         )
-    unsigned = dict(manifest)
-    unsigned.pop("topology_digest")
-    expected_digest = hashlib.sha256(canonical_json(unsigned).encode("utf-8")).hexdigest()
-    if digest != expected_digest:
+
+    model_identity = manifest.get("model_identity")
+    if not isinstance(model_identity, dict) or model_identity != {
+        "model_id": MODEL_ID,
+        "version_label": MODEL_LABEL,
+        "input_contract_version": CONTRACT_VERSION,
+        "result_schema_version": 1,
+    }:
         raise RunnerSafetyError(
-            "runner_topology_manifest_digest_mismatch",
-            "Topology manifest digest verification failed.",
+            "runner_topology_manifest_identity_mismatch",
+            "Topology manifest model or contract identity is invalid.",
         )
+
     diagnostics = result.get("diagnostics")
     if not isinstance(diagnostics, dict):
         raise RunnerSafetyError(
@@ -135,42 +154,38 @@ def validate_manifest(
         )
     if diagnostics.get("model_id") != MODEL_ID or diagnostics.get("model_label") != MODEL_LABEL:
         raise RunnerSafetyError(
-            "runner_topology_manifest_invalid",
+            "runner_topology_manifest_identity_mismatch",
             "Topology result model identity is invalid.",
         )
-    if diagnostics.get("input_sha256") != expected_input_sha:
+    if diagnostics.get("input_payload_sha256") != expected_input_sha:
         raise RunnerSafetyError(
             "runner_topology_manifest_input_mismatch",
-            "Topology result input digest does not match the run input.",
+            "Topology result input digest does not match the canonical run input.",
         )
-    if diagnostics.get("topology_digest") != digest:
+
+    raw_sha256 = hashlib.sha256(raw).hexdigest()
+    if diagnostics.get("topology_manifest_sha256") != f"sha256:{raw_sha256}":
         raise RunnerSafetyError(
             "runner_topology_manifest_digest_mismatch",
-            "Topology result and manifest digests disagree.",
+            "Topology result and raw manifest SHA-256 disagree.",
         )
-    topology = manifest.get("topology")
-    if not isinstance(topology, dict) or topology.get("loop_count") != 1:
+    if diagnostics.get("m0_reduction_status") not in {
+        "exact_047_reduction",
+        "not_m0_reduction_case",
+    }:
         raise RunnerSafetyError(
             "runner_topology_manifest_invalid",
-            "Topology manifest must contain exactly one loop.",
+            "Topology result M0 reduction status is invalid.",
         )
-    path_count = topology.get("parallel_path_count")
-    if (
-        isinstance(path_count, bool)
-        or not isinstance(path_count, int)
-        or not 1 <= path_count <= 12
-    ):
+    if diagnostics.get("single_length_projection_status") not in {
+        "single_length_representable",
+        "not_single_length_representable",
+    }:
         raise RunnerSafetyError(
             "runner_topology_manifest_invalid",
-            "Topology path count is invalid.",
+            "Topology result single-length projection status is invalid.",
         )
-    components = topology.get("components")
-    if not isinstance(components, list) or len(components) != 8:
-        raise RunnerSafetyError(
-            "runner_topology_manifest_invalid",
-            "Topology manifest must contain the fixed eight component records.",
-        )
-    return manifest
+    return raw_sha256
 
 
 def runner_owned_artifacts() -> list[dict[str, str]]:
@@ -188,3 +203,106 @@ def runner_owned_artifacts() -> list[dict[str, str]]:
             "mime_type": "application/json",
         },
     ]
+
+
+def _load_finite_json(text: str, *, code: str) -> object:
+    def reject_constant(value: str) -> object:
+        raise ValueError(f"Non-finite JSON constant is forbidden: {value}")
+
+    try:
+        return json.loads(text, parse_constant=reject_constant)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise RunnerSafetyError(code, "JSON payload is malformed or non-finite.") from exc
+
+
+def _validate_schema(instance: object, schema: dict[str, object], path: str = "$") -> None:
+    if "const" in schema and instance != schema["const"]:
+        _schema_error(path, "value does not match const")
+    enum = schema.get("enum")
+    if isinstance(enum, list) and instance not in enum:
+        _schema_error(path, "value is not in enum")
+
+    expected_type = schema.get("type")
+    if isinstance(expected_type, str) and not _matches_type(instance, expected_type):
+        _schema_error(path, f"expected type {expected_type}")
+
+    if isinstance(instance, dict):
+        required = schema.get("required", [])
+        if isinstance(required, list):
+            missing = [key for key in required if key not in instance]
+            if missing:
+                _schema_error(path, f"missing required properties: {', '.join(missing)}")
+        properties = schema.get("properties", {})
+        if not isinstance(properties, dict):
+            _schema_error(path, "schema properties must be an object")
+        if schema.get("additionalProperties") is False:
+            extra = sorted(set(instance) - set(properties))
+            if extra:
+                _schema_error(path, f"additional properties are forbidden: {', '.join(extra)}")
+        for key, value in instance.items():
+            child_schema = properties.get(key)
+            if isinstance(child_schema, dict):
+                _validate_schema(value, child_schema, f"{path}.{key}")
+
+    if isinstance(instance, list):
+        min_items = schema.get("minItems")
+        max_items = schema.get("maxItems")
+        if isinstance(min_items, int) and len(instance) < min_items:
+            _schema_error(path, "array is shorter than minItems")
+        if isinstance(max_items, int) and len(instance) > max_items:
+            _schema_error(path, "array is longer than maxItems")
+        if schema.get("uniqueItems") is True:
+            encoded = [json.dumps(item, sort_keys=True, separators=(",", ":")) for item in instance]
+            if len(encoded) != len(set(encoded)):
+                _schema_error(path, "array items must be unique")
+        item_schema = schema.get("items")
+        if isinstance(item_schema, dict):
+            for index, value in enumerate(instance):
+                _validate_schema(value, item_schema, f"{path}[{index}]")
+
+    if isinstance(instance, str):
+        min_length = schema.get("minLength")
+        pattern = schema.get("pattern")
+        if isinstance(min_length, int) and len(instance) < min_length:
+            _schema_error(path, "string is shorter than minLength")
+        if isinstance(pattern, str) and re.fullmatch(pattern, instance) is None:
+            _schema_error(path, "string does not match pattern")
+
+    if isinstance(instance, (int, float)) and not isinstance(instance, bool):
+        minimum = schema.get("minimum")
+        maximum = schema.get("maximum")
+        exclusive_minimum = schema.get("exclusiveMinimum")
+        exclusive_maximum = schema.get("exclusiveMaximum")
+        if isinstance(minimum, (int, float)) and instance < minimum:
+            _schema_error(path, "number is below minimum")
+        if isinstance(maximum, (int, float)) and instance > maximum:
+            _schema_error(path, "number is above maximum")
+        if isinstance(exclusive_minimum, (int, float)) and instance <= exclusive_minimum:
+            _schema_error(path, "number is not above exclusiveMinimum")
+        if isinstance(exclusive_maximum, (int, float)) and instance >= exclusive_maximum:
+            _schema_error(path, "number is not below exclusiveMaximum")
+
+
+def _matches_type(instance: object, expected_type: str) -> bool:
+    if expected_type == "object":
+        return isinstance(instance, dict)
+    if expected_type == "array":
+        return isinstance(instance, list)
+    if expected_type == "string":
+        return isinstance(instance, str)
+    if expected_type == "boolean":
+        return isinstance(instance, bool)
+    if expected_type == "integer":
+        return isinstance(instance, int) and not isinstance(instance, bool)
+    if expected_type == "number":
+        return isinstance(instance, (int, float)) and not isinstance(instance, bool)
+    if expected_type == "null":
+        return instance is None
+    return False
+
+
+def _schema_error(path: str, message: str) -> None:
+    raise RunnerSafetyError(
+        "runner_topology_manifest_schema_invalid",
+        f"Topology manifest schema validation failed at {path}: {message}.",
+    )
