@@ -69,7 +69,7 @@ before Codex or another coding agent may act on them.
 9. Run `069` MEMORY-CONSOLIDATE-0 as the first Hermes dogfood only after 066–068
    are merged and the required local route is qualified.
 10. Continue `063`/`064`, `012` → `033`, and residual conversation/UI rows according
-    to dependencies, explicit maintainer priority, and measured value.
+   to dependencies, explicit maintainer priority, and measured value.
 
 Trigger-gated rows remain `planned` until their stated evidence exists. Always
 check rows marked `in_review` before choosing any `ready` spec and confirm no open
