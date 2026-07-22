@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from jsonschema import Draft202012Validator, ValidationError
 
 from app.modules.bluecad.assembly import assemble_parts
 from app.modules.bluecad.builders import build_part
@@ -85,7 +86,10 @@ def _shape_check(shape: object, attribute: str) -> bool:
 
 def test_schema_validator_and_prompt_expose_same_closed_contract() -> None:
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    part_schema = schema["$defs"]["part"]
     capped = schema["$defs"]["cappedManifoldParams"]
+    assert part_schema["unevaluatedProperties"] is False
+    assert "additionalProperties" not in part_schema
     assert set(capped["required"]) == PARAM_NAMES
     assert set(capped["properties"]) == PARAM_NAMES
     assert capped["additionalProperties"] is False
@@ -93,10 +97,18 @@ def test_schema_validator_and_prompt_expose_same_closed_contract() -> None:
     assert set(capped["x-jarvis-relational-constraints"]) == RELATIONAL_CONSTRAINTS
     capped_part = next(
         item
-        for item in schema["$defs"]["part"]["oneOf"]
+        for item in part_schema["oneOf"]
         if item["properties"]["kind"].get("const") == "capped_manifold"
     )
     assert capped_part["properties"]["params"]["$ref"] == "#/$defs/cappedManifoldParams"
+
+    validator = Draft202012Validator(schema)
+    validator.validate(_spec(2))
+    invalid = _spec(2)
+    invalid["parts"][0]["unexpected"] = 1.0
+    with pytest.raises(ValidationError):
+        validator.validate(invalid)
+
     assert PROMPT_VERSION == "bluecad_ai_loop_v3"
     assert "capped_manifold" in SYSTEM_TEMPLATE
     assert "ports: common, branch_1..branch_n" in SYSTEM_TEMPLATE
