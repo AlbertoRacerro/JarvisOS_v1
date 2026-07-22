@@ -1,0 +1,559 @@
+from pathlib import Path
+
+
+def replace_once(path: str, old: str, new: str) -> None:
+    target = Path(path)
+    text = target.read_text(encoding="utf-8")
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f"{path}: expected one match, found {count}: {old[:80]!r}")
+    target.write_text(text.replace(old, new), encoding="utf-8")
+
+
+service = "backend/app/modules/runner/service.py"
+safety = "backend/app/modules/runner/safety.py"
+routes = "backend/app/modules/runner/routes.py"
+
+replace_once(
+    service,
+    """from app.modules.runner.safety import (
+    BLUECAD_L2_REQUIRED_ARTIFACTS,
+    DEFAULT_TIMEOUT_SECONDS,
+    MAX_ARTIFACT_BYTES,
+    MAX_OUTPUT_JSON_BYTES,
+    MAX_STDERR_BYTES,
+    MAX_STDOUT_BYTES,
+    RunnerSafetyError,
+    canonical_json,
+    model_implementation_root,
+    preflight_script_policy,
+    run_root,
+    safe_artifact_path,
+    sha256_file,
+    validate_batch_growth_input,
+    validate_bluecad_l2_input,
+    validate_calc_v0_input,
+    validate_run_paths,
+    validate_script_path,
+)
+""",
+    """from app.modules.runner.safety import (
+    BLUECAD_L2_REQUIRED_ARTIFACTS,
+    DEFAULT_TIMEOUT_SECONDS,
+    MAX_ARTIFACT_BYTES,
+    MAX_OUTPUT_JSON_BYTES,
+    MAX_STDERR_BYTES,
+    MAX_STDOUT_BYTES,
+    RunnerSafetyError,
+    canonical_json,
+    model_implementation_root,
+    preflight_script_policy,
+    run_root,
+    safe_artifact_path,
+    sha256_file,
+    validate_batch_growth_input,
+    validate_bluecad_l2_input,
+    validate_calc_v0_input,
+    validate_run_paths,
+    validate_script_path,
+)
+from app.modules.runner.topology_m1 import (
+    MODEL_LABEL as BUNDLED_BLUEREV_TOPOLOGY_M1_LABEL,
+    bundled_contract_path as _bluerev_topology_m1_contract_path,
+    bundled_script_path as _bluerev_topology_m1_script_path,
+    is_exact_bundled_profile,
+    runner_owned_artifacts,
+    validate_manifest,
+)
+""",
+)
+replace_once(
+    service,
+    'BUNDLED_BLUEREV_PROCESS2_TITLE = "BlueRev buoyancy and optical screening bundled V0"\n',
+    'BUNDLED_BLUEREV_PROCESS2_TITLE = "BlueRev buoyancy and optical screening bundled V0"\n'
+    'BUNDLED_BLUEREV_TOPOLOGY_M1_TITLE = "BlueRev explicit symmetric process topology M1"\n',
+)
+registration = """
+
+
+def register_bundled_bluerev_topology_m1(workspace_id: str) -> ModelImplementationRead:
+    script_path = _bluerev_topology_m1_script_path()
+    contract_path = _bluerev_topology_m1_contract_path()
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    _, contract_sha256, _ = canonicalize_input_contract(contract)
+    script_sha256 = sha256_file(script_path)
+
+    with open_sqlite_connection() as connection:
+        _require_workspace(connection, workspace_id)
+        existing = connection.execute(
+            """
+            SELECT mv.*, a.sha256 AS script_sha256, a.stored_path AS script_path
+            FROM model_versions mv
+            JOIN artifacts a ON a.id = mv.implementation_artifact_id
+            WHERE mv.workspace_id = ?
+              AND mv.version_label = ?
+              AND mv.input_contract_sha256 = ?
+              AND a.sha256 = ?
+            ORDER BY mv.created_at ASC
+            LIMIT 1
+            """,
+            (
+                workspace_id,
+                BUNDLED_BLUEREV_TOPOLOGY_M1_LABEL,
+                contract_sha256,
+                script_sha256,
+            ),
+        ).fetchone()
+        if existing is not None:
+            return _model_implementation_from_row(existing)
+        model_spec = connection.execute(
+            """
+            SELECT id FROM model_specs
+            WHERE workspace_id = ? AND title = ?
+            ORDER BY created_at ASC
+            LIMIT 1
+            """,
+            (workspace_id, BUNDLED_BLUEREV_TOPOLOGY_M1_TITLE),
+        ).fetchone()
+
+    if model_spec is None:
+        created_spec = create_model_spec(
+            workspace_id,
+            ModelSpecCreate(
+                title=BUNDLED_BLUEREV_TOPOLOGY_M1_TITLE,
+                engineering_question=(
+                    "Evaluate caller-selected symmetric parallel-loop geometry, hydraulics, "
+                    "inventory, residence time, illuminated tube area, and pump power."
+                ),
+                scope=(
+                    "Reviewed 072 forward M1 model; all topology, geometry, property, "
+                    "operating, and loss-coefficient values are supplied per scenario."
+                ),
+            ),
+        )
+        model_spec_id = created_spec.id
+    else:
+        model_spec_id = str(model_spec["id"])
+
+    return create_model_implementation(
+        workspace_id,
+        ModelImplementationCreate(
+            model_spec_id=model_spec_id,
+            version_label=BUNDLED_BLUEREV_TOPOLOGY_M1_LABEL,
+            implementation_kind=CALC_V0_IMPLEMENTATION_KIND,
+            notes=(
+                "Bundled reviewed 072 symmetric topology M1 model with a value-free "
+                "input contract."
+            ),
+            script_text=script_path.read_text(encoding="utf-8"),
+            input_contract=contract,
+        ),
+    )
+"""
+replace_once(
+    service,
+    "\n\ndef get_model_implementation(workspace_id: str, model_version_id: str) -> ModelImplementationRead:\n",
+    registration
+    + "\n\ndef get_model_implementation(workspace_id: str, model_version_id: str) -> ModelImplementationRead:\n",
+)
+replace_once(
+    service,
+    """        if implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND:
+            preflight_script_policy(script_path, ast_import_allowlist=True)
+        elif implementation_kind == CALC_V0_IMPLEMENTATION_KIND:
+            preflight_script_policy(script_path, ast_policy=CALC_V0_IMPLEMENTATION_KIND)
+""",
+    """        if implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND:
+            preflight_script_policy(script_path, ast_import_allowlist=True)
+        elif implementation_kind == CALC_V0_IMPLEMENTATION_KIND:
+            topology_profile = is_exact_bundled_profile(model_version, script_sha)
+            preflight_script_policy(
+                script_path,
+                ast_policy=(
+                    "calc_v0_topology_m1"
+                    if topology_profile
+                    else CALC_V0_IMPLEMENTATION_KIND
+                ),
+            )
+""",
+)
+replace_once(
+    service,
+    """    script_path = validate_script_path(workspace_id, job["script_path"])
+    implementation_kind = job["implementation_kind"]
+    try:
+        preflight_script_policy(
+            script_path,
+            ast_policy=CALC_V0_IMPLEMENTATION_KIND if implementation_kind == CALC_V0_IMPLEMENTATION_KIND else None,
+            ast_import_allowlist=implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND,
+        )
+""",
+    """    script_path = validate_script_path(workspace_id, job["script_path"])
+    implementation_kind = job["implementation_kind"]
+    simulation_run = get_simulation_run_detail(workspace_id, simulation_run_id)
+    topology_profile = False
+    if implementation_kind == CALC_V0_IMPLEMENTATION_KIND:
+        if simulation_run.model_version_id is None:
+            raise RunnerSafetyError(
+                "runner_model_version_not_found",
+                "Simulation run has no model implementation.",
+            )
+        with open_sqlite_connection() as connection:
+            model_version = _load_model_version_with_artifact(
+                connection,
+                workspace_id,
+                simulation_run.model_version_id,
+            )
+        topology_profile = is_exact_bundled_profile(
+            model_version,
+            str(job["script_sha256"]),
+        )
+    try:
+        preflight_script_policy(
+            script_path,
+            ast_policy=(
+                "calc_v0_topology_m1"
+                if topology_profile
+                else CALC_V0_IMPLEMENTATION_KIND
+                if implementation_kind == CALC_V0_IMPLEMENTATION_KIND
+                else None
+            ),
+            ast_import_allowlist=implementation_kind == BLUECAD_L2_IMPLEMENTATION_KIND,
+        )
+""",
+)
+replace_once(
+    service,
+    """    simulation_run = get_simulation_run_detail(workspace_id, simulation_run_id)
+    if simulation_run.input_payload is None:
+""",
+    """    if simulation_run.input_payload is None:
+""",
+)
+replace_once(
+    service,
+    """        if implementation_kind == CALC_V0_IMPLEMENTATION_KIND:
+            calc_outputs = _validate_calc_v0_output(output)
+            output_payload = _canonical_result_json(output)
+            declared_artifacts = [
+                {
+                    "path": "result.json",
+                    "role": "calc_result_json",
+                    "artifact_type": "json",
+                    "mime_type": "application/json",
+                }
+            ]
+""",
+    """        if implementation_kind == CALC_V0_IMPLEMENTATION_KIND:
+            calc_outputs = _validate_calc_v0_output(output)
+            output_payload = _canonical_result_json(output)
+            if topology_profile:
+                if "artifacts" in output:
+                    raise RunnerSafetyError(
+                        "runner_topology_artifact_declaration_forbidden",
+                        "Topology M1 artifacts are runner-owned and cannot be declared by the script.",
+                    )
+                if simulation_run.input_payload is None:
+                    raise RunnerSafetyError(
+                        "runner_input_invalid",
+                        "Simulation run is missing input payload.",
+                    )
+                validate_manifest(output_dir, simulation_run.input_payload, output)
+                declared_artifacts = runner_owned_artifacts()
+            else:
+                declared_artifacts = [
+                    {
+                        "path": "result.json",
+                        "role": "calc_result_json",
+                        "artifact_type": "json",
+                        "mime_type": "application/json",
+                    }
+                ]
+""",
+)
+
+replace_once(
+    safety,
+    'ALLOWED_CALC_V0_IMPORT_ROOTS = frozenset({"json", "math", "statistics"})\n',
+    'ALLOWED_CALC_V0_IMPORT_ROOTS = frozenset({"json", "math", "statistics"})\n'
+    'ALLOWED_CALC_V0_TOPOLOGY_M1_IMPORT_ROOTS = ALLOWED_CALC_V0_IMPORT_ROOTS | frozenset({"hashlib"})\n',
+)
+replace_once(
+    safety,
+    """    elif ast_policy == "calc_v0":
+        preflight_calc_v0_ast_policy(text)
+""",
+    """    elif ast_policy == "calc_v0":
+        preflight_calc_v0_ast_policy(text)
+    elif ast_policy == "calc_v0_topology_m1":
+        preflight_calc_v0_topology_m1_ast_policy(text)
+""",
+)
+replace_once(
+    safety,
+    """def preflight_calc_v0_ast_policy(source: str) -> None:
+    _preflight_ast_policy(
+        source,
+        ALLOWED_CALC_V0_IMPORT_ROOTS,
+        FORBIDDEN_CALC_V0_NAME_REFERENCES,
+        enforce_calc_file_contract=True,
+    )
+""",
+    """def preflight_calc_v0_ast_policy(source: str) -> None:
+    _preflight_ast_policy(
+        source,
+        ALLOWED_CALC_V0_IMPORT_ROOTS,
+        FORBIDDEN_CALC_V0_NAME_REFERENCES,
+        enforce_calc_file_contract=True,
+    )
+
+
+def preflight_calc_v0_topology_m1_ast_policy(source: str) -> None:
+    _preflight_ast_policy(
+        source,
+        ALLOWED_CALC_V0_TOPOLOGY_M1_IMPORT_ROOTS,
+        FORBIDDEN_CALC_V0_NAME_REFERENCES,
+        enforce_calc_file_contract=True,
+        allow_topology_manifest=True,
+    )
+""",
+)
+replace_once(
+    safety,
+    """    *,
+    enforce_calc_file_contract: bool = False,
+) -> None:
+""",
+    """    *,
+    enforce_calc_file_contract: bool = False,
+    allow_topology_manifest: bool = False,
+) -> None:
+""",
+)
+replace_once(
+    safety,
+    "                _validate_calc_call_file_contract(node)\n",
+    "                _validate_calc_call_file_contract(node, allow_topology_manifest=allow_topology_manifest)\n",
+)
+replace_once(
+    safety,
+    """def _validate_calc_call_file_contract(node: ast.Call) -> None:
+    name = _call_name(node.func)
+    if name == "open":
+        _validate_calc_open_call(node)
+        return
+""",
+    """def _validate_calc_call_file_contract(
+    node: ast.Call,
+    *,
+    allow_topology_manifest: bool = False,
+) -> None:
+    name = _call_name(node.func)
+    if name == "open":
+        _validate_calc_open_call(
+            node,
+            allow_topology_manifest=allow_topology_manifest,
+        )
+        return
+""",
+)
+replace_once(
+    safety,
+    """def _validate_calc_open_call(node: ast.Call) -> None:
+    if not node.args or not isinstance(node.args[0], ast.Constant) or not isinstance(node.args[0].value, str):
+        raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 open() paths must be literal input.json or result.json.")
+    path = node.args[0].value
+    if path not in {"input.json", "result.json"}:
+        raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 scripts may only open input.json and result.json.")
+    mode = _calc_open_mode(node)
+    if path == "input.json" and mode != "r":
+        raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 input.json must be opened read-only text mode.")
+    if path == "result.json" and mode != "w":
+        raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 result.json must be opened write-only text truncate mode.")
+""",
+    """def _validate_calc_open_call(
+    node: ast.Call,
+    *,
+    allow_topology_manifest: bool = False,
+) -> None:
+    if not node.args or not isinstance(node.args[0], ast.Constant) or not isinstance(node.args[0].value, str):
+        raise RunnerSafetyError(
+            SANDBOX_VIOLATION,
+            "calc_v0 open() paths must be literal allowlisted filenames.",
+        )
+    path = node.args[0].value
+    allowed_paths = {"input.json", "result.json"}
+    if allow_topology_manifest:
+        allowed_paths.add("topology_manifest.json")
+    if path not in allowed_paths:
+        raise RunnerSafetyError(
+            SANDBOX_VIOLATION,
+            "calc_v0 script open() path is not allowlisted.",
+        )
+    mode = _calc_open_mode(node)
+    if path == "input.json" and mode != "r":
+        raise RunnerSafetyError(SANDBOX_VIOLATION, "calc_v0 input.json must be opened read-only text mode.")
+    if path in {"result.json", "topology_manifest.json"} and mode != "w":
+        raise RunnerSafetyError(
+            SANDBOX_VIOLATION,
+            f"calc_v0 {path} must be opened write-only text truncate mode.",
+        )
+""",
+)
+
+replace_once(
+    routes,
+    """    register_bundled_bluerev_process2,
+    run_runner_job,
+)
+""",
+    """    register_bundled_bluerev_process2,
+    register_bundled_bluerev_topology_m1,
+    run_runner_job,
+)
+""",
+)
+endpoint = """
+
+
+@router.post(
+    "/workspaces/{workspace_id}/bundled-models/bluerev-process-topology-m1-v0/register",
+    response_model=ModelImplementationRead,
+)
+def register_bundled_bluerev_topology_m1_endpoint(
+    workspace_id: str,
+) -> ModelImplementationRead:
+    try:
+        return register_bundled_bluerev_topology_m1(workspace_id)
+    except RunnerSafetyError as exc:
+        raise _runner_error(exc) from exc
+"""
+replace_once(
+    routes,
+    '\n\n@router.get("/workspaces/{workspace_id}/model-implementations", response_model=list[ModelImplementationRead])\n',
+    endpoint
+    + '\n\n@router.get("/workspaces/{workspace_id}/model-implementations", response_model=list[ModelImplementationRead])\n',
+)
+
+Path("backend/tests/test_bluerev_process_topology_m1_runner.py").write_text(
+    '''import json
+from collections.abc import Iterator
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.modules.runner.input_contracts import canonicalize_input_contract
+from app.modules.runner.safety import RunnerSafetyError, preflight_script_policy, sha256_file
+from app.modules.runner.topology_m1 import (
+    MODEL_LABEL,
+    bundled_contract_path,
+    bundled_script_path,
+    is_exact_bundled_profile,
+)
+
+
+@pytest.fixture
+def client(tmp_path, monkeypatch) -> Iterator[TestClient]:
+    monkeypatch.setenv("JARVISOS_DATA_ROOT", str(tmp_path / "JarvisOS"))
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    from app.core.bootstrap import initialize_storage
+    from app.main import create_app
+
+    initialize_storage(seed_default=True)
+    with TestClient(create_app()) as test_client:
+        yield test_client
+    get_settings.cache_clear()
+
+
+def _valid_input() -> dict[str, object]:
+    fixture = Path(__file__).parent / "fixtures" / "bluerev_process_topology_m1_valid.json"
+    return json.loads(fixture.read_text(encoding="utf-8"))
+
+
+def test_topology_m1_registration_preview_and_run(client: TestClient) -> None:
+    endpoint = "/workspaces/bluerev/bundled-models/bluerev-process-topology-m1-v0/register"
+    first = client.post(endpoint)
+    second = client.post(endpoint)
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    implementation = first.json()
+    assert second.json()["id"] == implementation["id"]
+    assert implementation["version_label"] == MODEL_LABEL
+    assert implementation["script_sha256"] == sha256_file(bundled_script_path())
+
+    preview = client.post(
+        f"/workspaces/bluerev/model-implementations/{implementation['id']}/binding-preview",
+        json={"bindings": _valid_input()},
+    )
+    assert preview.status_code == 200, preview.text
+    preview_body = preview.json()
+    assert preview_body["state"] == "ready"
+    assert preview_body["structural_input_dof"] == 26
+    assert preview_body["unresolved_input_dof"] == 0
+
+    created = client.post(
+        "/workspaces/bluerev/runner-jobs",
+        json={"model_version_id": implementation["id"], "input_set": _valid_input()},
+    )
+    assert created.status_code == 201, created.text
+    runner_job = created.json()["runner_job"]
+    executed = client.post(f"/runner-jobs/{runner_job['id']}/run")
+    assert executed.status_code == 200, executed.text
+    body = executed.json()
+    assert body["runner_job"]["status"] == "succeeded"
+    assert body["error"] is None
+    assert body["output"]["diagnostics"]["model_id"] == "bluerev_process_topology_m1_v0"
+
+    artifacts = client.get(
+        f"/workspaces/bluerev/simulation-runs/{body['simulation_run']['id']}/artifacts"
+    )
+    assert artifacts.status_code == 200, artifacts.text
+    rows = artifacts.json()
+    assert [(row["role"], row["filename"]) for row in rows] == [
+        ("calc_result_json", "result.json"),
+        ("bluerev_topology_manifest", "topology_manifest.json"),
+    ]
+    assert all(row["under_data_root"] for row in rows)
+    assert all(row["sha256"] and len(row["sha256"]) == 64 for row in rows)
+
+
+def test_exact_profile_requires_label_script_and_contract_hash() -> None:
+    contract = json.loads(bundled_contract_path().read_text(encoding="utf-8"))
+    _, contract_sha, _ = canonicalize_input_contract(contract)
+    script_sha = sha256_file(bundled_script_path())
+    exact = {
+        "implementation_kind": "calc_v0",
+        "version_label": MODEL_LABEL,
+        "script_sha256": script_sha,
+        "input_contract_sha256": contract_sha,
+    }
+    assert is_exact_bundled_profile(exact, script_sha) is True
+    for key, value in (
+        ("version_label", "wrong"),
+        ("script_sha256", "0" * 64),
+        ("input_contract_sha256", "0" * 64),
+    ):
+        changed = dict(exact)
+        changed[key] = value
+        assert is_exact_bundled_profile(changed, script_sha) is False
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import hashlib\\n",
+        "with open('topology_manifest.json', 'w', encoding='utf-8') as handle:\\n    handle.write('{}')\\n",
+    ],
+)
+def test_generic_calc_cannot_activate_topology_surface(tmp_path: Path, source: str) -> None:
+    script = tmp_path / "calc_v0.py"
+    script.write_text(source, encoding="utf-8")
+    with pytest.raises(RunnerSafetyError) as exc_info:
+        preflight_script_policy(script, ast_policy="calc_v0")
+    assert exc_info.value.code == "SANDBOX_VIOLATION"
+''',
+    encoding="utf-8",
+)
