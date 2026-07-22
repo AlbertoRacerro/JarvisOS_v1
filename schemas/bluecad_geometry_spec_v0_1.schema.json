@@ -42,7 +42,7 @@
       "type": "object"
     },
     "part": {
-      "additionalProperties": false,
+      "unevaluatedProperties": false,
       "oneOf": [
         {"properties": {"part_id": {"type": "string", "minLength": 1}, "kind": {"const": "tube_run"}, "params": {"$ref": "#/$defs/tubeRunParams"}, "frame": {"$ref": "#/$defs/frame"}}, "required": ["part_id", "kind", "params"], "type": "object"},
         {"properties": {"part_id": {"type": "string", "minLength": 1}, "kind": {"const": "bend"}, "params": {"$ref": "#/$defs/bendParams"}, "frame": {"$ref": "#/$defs/frame"}}, "required": ["part_id", "kind", "params"], "type": "object"},
