@@ -1,7 +1,7 @@
 # 074 — CAD-LINK-1: 072 M1 topology to deterministic multi-part BLUECAD
 
-Status: ready for implementation after this definition is merged. `docs/specs/STATUS.md`
-is authoritative.
+Status: ready for implementation after this definition is merged and the authoritative
+`docs/specs/STATUS.md` row is separately promoted to `ready`.
 
 Depends on: 038, 050, 051, 052, 071, 072, 073
 
@@ -75,7 +75,7 @@ A schema-valid, watertight assembly may still have:
 - the wrong illuminated/dark allocation;
 - the wrong manifold fluid volume;
 - branches connected in the wrong order;
-- colliding non-connected parts;
+- colliding or merely touching non-connected parts;
 - extra CAD volume not present in the process model;
 - omitted source lineage.
 
@@ -132,13 +132,18 @@ input payload:
 - `split_manifold_liquid_volume`;
 - `merge_manifold_liquid_volume`.
 
-Each referenced Parameter must:
+Each binding is validated independently. Its referenced Parameter must:
 
 - belong to the same workspace;
 - exist, be `accepted`, and be fresh;
 - still contain the exact executed value and unit;
-- use one compatible source name/unit role; accidental reuse under incompatible input
-  names fails closed.
+- be compatible with the bound input’s exact unit and value.
+
+The same `source_parameter_id` may drive more than one geometry input when each binding
+independently resolves to that same accepted fresh Parameter and its exact executed/current
+value and unit match. 074 does not impose artificial Parameter-ID uniqueness and does not
+infer compatibility from input names. Reuse fails only when an independently validated
+binding has an incompatible unit, value, workspace, status, freshness, or source snapshot.
 
 Temporary/manual 071 values remain valid for scenario exploration but cannot create the
 canonical 074 CAD link. Non-geometric hydraulic inputs and `reservoir_liquid_volume` are
@@ -352,8 +357,8 @@ The two manifolds may have different `end_gap`, `branch_stub_length`, and
 ### Common runs
 
 When `common_supply_length_m > 0`, create one `tube_run` with common outer diameter,
-common wall thickness, and exact length in millimetres. Connect its outer-facing
-`port_b` to `split_manifold.common`, leaving `port_a` as the supply boundary.
+common wall thickness, and source length converted to millimetres. Connect its `port_b`
+to `split_manifold.common`, leaving `port_a` as the supply boundary.
 
 When `common_return_length_m > 0`, create one equivalent common `tube_run` connected to
 `merge_manifold.common`, leaving its outer `port_a` as the return boundary.
@@ -427,15 +432,23 @@ The preflight must:
    assembly interface;
 6. compute split and merge fluid-cavity volumes from the same 073 void construction used
    to subtract the solid;
-7. reject positive-volume material interference between non-identical parts after an
-   axis-aligned bounding-box broad phase;
-8. allow only zero-volume face/edge contact at declared connections;
-9. return placed part frames, represented bounds, kernel cavity/material metrics, and
-   collision-pair diagnostics.
+7. evaluate every potentially intersecting material-part pair after an axis-aligned
+   bounding-box broad phase;
+8. for a declared connected pair, allow only the intended zero-volume mating boundary and
+   reject any positive-volume intersection;
+9. for a non-connected pair, reject positive-volume intersection **and** any shared face,
+   edge, or vertex contact;
+10. return placed part frames, represented bounds, kernel cavity/material metrics, and
+    collision/contact-pair diagnostics.
 
 The absolute positive-interference tolerance is `1e-6 mm3`. A larger intersection fails.
-This tolerance is a numerical classification threshold, not a fabrication clearance.
-No minimum physical clearance or manufacturability claim is added.
+For non-connected parts, any kernel-classified face/edge/vertex contact fails even when
+intersection volume is numerically zero. For declared connections, the implementation
+must prove the contact belongs to the intended coincident opposed port boundary rather
+than treating arbitrary tangency as a connection.
+
+These are deterministic contact-classification rules, not fabrication-clearance
+recommendations. No minimum physical clearance or manufacturability claim is added.
 
 To prevent geometry drift, 074 may make the smallest extraction in
 `capped_manifold.py` that exposes the already-constructed outer and void shapes to the
@@ -501,7 +514,7 @@ For each capped manifold, use the exact unioned 073 void shape:
 - all branch inner bores from header centreline to branch ports;
 - overlap counted once by the kernel union.
 
-Convert its kernel volume from mm3 to m3 and require exact tolerance agreement with the
+Convert its kernel volume from mm3 to m3 and require tolerance agreement with the
 corresponding executed 072 input:
 
 - split cavity ↔ `split_manifold_liquid_volume`;
@@ -533,7 +546,7 @@ Report, but do not compare to nonexistent 072 process authority:
 - complete CAD assembly material volume;
 - assembly bounding box;
 - manifold external surface area when readily available;
-- collision/interference evidence.
+- collision/interference/contact evidence.
 
 These values are CAD evidence, not new process outputs or accepted Parameters.
 
@@ -605,7 +618,7 @@ Any mismatch returns `409 cad_link_preview_stale` with zero writes and zero dire
 creation. Kernel preflight is rerun from current source/layout state; stored preview
 output is not trusted as execution authority.
 
-## Idempotency and concurrency
+## Idempotency, concurrency, and persistence mapping
 
 The canonical `preview_digest` is the execution identity.
 
@@ -615,15 +628,26 @@ table or alternate candidate store is added.
 - the first execute owns candidate creation for `(workspace_id, preview_digest)`;
 - a repeated or concurrent execute returns the existing linked candidate with
   `replayed=true` after verifying stored digests;
-- source manifest artifact identity/digest and canonical layout snapshot are included in
-  the existing source snapshot/reconciliation payloads;
 - no duplicate candidate, attempt, artifact, evidence, simulation, link, or AI row is
   created;
 - inconsistent stored state fails with `cad_link_persistence_inconsistent`.
 
-No database migration is expected. If current runtime inspection proves one additive
-column is strictly required for integrity rather than convenience, implementation must
-stop and report the conflict instead of silently expanding persistence scope.
+Existing persistence columns retain their established meanings:
+
+- source run, runner job, bundled model identity, exact topology-manifest identity/digests,
+  and independently validated Parameter bindings belong in the immutable source snapshot
+  and its digest;
+- canonical layout, external-boundary mapping, represented/excluded component inventory,
+  kernel preflight evidence, fixed tolerances, and process/CAD comparison checks belong in
+  the reconciliation payload and its digest;
+- `transformation_version`, `resolved_spec_digest`, `analysis_contract_digest`, and
+  `preview_digest` retain their existing dedicated identities.
+
+No mutable layout authority, overloaded source value, or second source of truth is stored
+in those payloads. No database migration is expected. If current runtime inspection proves
+one additive column is strictly required for integrity rather than convenience,
+implementation must stop and report the conflict instead of silently expanding
+persistence scope.
 
 ## Candidate, attempt, artifacts, and optional analysis
 
@@ -687,7 +711,7 @@ historical candidates and is not treated as a Parameter change.
 3. No model, heuristic, optimizer, report text, or project default fills a missing value.
 4. Preview is persistently side-effect free and kernel work is isolated and bounded.
 5. Execute is bound to one exact preview digest and rechecks all authority before writes.
-6. Route closure and collision failures block execution; parts are never stretched,
+6. Route closure and collision/contact failures block execution; parts are never stretched,
    trimmed, moved, deleted, or reordered to make the layout fit.
 7. Manifold process holdup must match the exact 073 fluid cavity; no inverse solve occurs.
 8. Pump/reservoir/support CAD is explicitly excluded and never represented by proxy
@@ -696,8 +720,8 @@ historical candidates and is not treated as a Parameter change.
 10. Zero provider calls and zero `ai_jobs` rows are produced.
 11. Existing BLUECAD validation/build/export and optional FEM remain deterministic or
     advisory; none owns process truth or promotion.
-12. No failed, timed-out, stale, collision-invalid, or unreconciled layout is represented
-    as successful.
+12. No failed, timed-out, stale, collision-invalid, contact-invalid, or unreconciled layout
+    is represented as successful.
 13. Historical candidates/artifacts remain immutable inspectable evidence.
 
 ## Error contract
@@ -723,6 +747,7 @@ Reuse applicable 052 codes and add bounded 072/layout-specific codes including a
 - `cad_link_layout_complexity_unsupported`;
 - `cad_link_layout_not_closable`;
 - `cad_link_layout_collision`;
+- `cad_link_layout_contact_invalid`;
 - `cad_link_kernel_unavailable`;
 - `cad_link_kernel_timeout`;
 - `cad_link_manifold_volume_unrepresentable`;
@@ -737,7 +762,7 @@ Expected response classes:
 - `404` for absent workspace-scoped source resources;
 - `409` for stale/changed run, artifact, Parameter, preview, or inconsistent replay;
 - `422` for ineligible source identity, invalid layout/domain, non-closing route,
-  collision, unrepresentable manifold volume, or reconciliation failure;
+  collision/contact, unrepresentable manifold volume, or reconciliation failure;
 - `503` for missing required kernel/native dependency;
 - `504` for bounded kernel preflight timeout;
 - `500` for unexpected infrastructure failure with no internal paths, SQL, source values,
@@ -769,37 +794,42 @@ or migration file is expected.
    topology-manifest artifact and accepted fresh geometry-driving Parameters.
 2. Wrong model/hash, malformed/copied/mismatched manifest, temporary geometry binding,
    stale run/Parameter, or changed source snapshot fails with zero writes.
-3. The layout contract is closed, finite, unit-unambiguous, default-free, and explicitly
+3. Each Parameter binding is independently validated; compatible reuse of the same
+   Parameter ID is allowed and incompatible value/unit/status/freshness reuse fails.
+4. The layout contract is closed, finite, unit-unambiguous, default-free, and explicitly
    supplies every manifold clearance and branch turn/straight-allocation decision.
-4. The resolved GeometrySpec contains exactly two capped manifolds, N identical route
+5. The resolved GeometrySpec contains exactly two capped manifolds, N identical route
    copies, only the positive-length common runs, deterministic IDs/order/connections, and
    no caller-owned spec fragment.
-5. Every 072 aggregate straight/bend/illumination quantity reconciles with the explicit
+6. Every 072 aggregate straight/bend/illumination quantity reconciles with the explicit
    branch route; no length or bend is invented, dropped, or redistributed silently.
-6. All N branches close on one mirrored merge placement and expose no unconnected internal
+7. All N branches close on one mirrored merge placement and expose no unconnected internal
    ports.
-7. Exactly two external common boundaries remain and pump/reservoir/support exclusions are
+8. Exactly two external common boundaries remain and pump/reservoir/support exclusions are
    explicit in preview, candidate notes, and link evidence.
-8. Split and merge kernel fluid-cavity volumes match the two 072 manifold-volume inputs;
+9. Split and merge kernel fluid-cavity volumes match the two 072 manifold-volume inputs;
    unrepresentable values block execution.
-9. Tube lengths, liquid volumes, external areas, and tube material volume reconcile with
-   072 within fixed recorded tolerances.
-10. Represented fluid volume equals total 072 inventory minus explicit reservoir volume;
+10. Tube lengths, liquid volumes, external areas, and tube material volume reconcile with
+    072 within fixed recorded tolerances.
+11. Represented fluid volume equals total 072 inventory minus explicit reservoir volume;
     reservoir volume is never placed into proxy CAD.
-11. Side-effect-free bounded preflight proves BREP validity, connection conformity,
-    route closure, exact boundaries, and no positive-volume non-connected collision.
-12. Preview returns one digest over source run/model/manifest/Parameters, layout,
+12. Side-effect-free bounded preflight proves BREP validity, connection conformity,
+    route closure, exact boundaries, no positive-volume interference, and no contact
+    between non-connected parts.
+13. Preview returns one digest over source run/model/manifest/Parameters, layout,
     transformation, spec, preflight, reconciliation, analysis contract, and tolerances.
-13. Execute rechecks the exact preview before writes; TOCTOU changes fail with zero writes.
-14. First execute creates one process-linked non-AI candidate/attempt/link and honest
+14. Execute rechecks the exact preview before writes; TOCTOU changes fail with zero writes.
+15. First execute creates one process-linked non-AI candidate/attempt/link and honest
     artifacts; repeated/concurrent execute is idempotent.
-15. Optional mesh/FEM reuses 038 and cannot rewrite process inputs/outputs or promote a
+16. Existing persistence fields retain their authority boundaries and no second mutable
+    layout/source store is introduced.
+17. Optional mesh/FEM reuses 038 and cannot rewrite process inputs/outputs or promote a
     result.
-16. Replacing one source geometry Parameter stales the dependency-reachable linked CAD and
+18. Replacing one source geometry Parameter stales the dependency-reachable linked CAD and
     downstream evidence through existing 050/051 behavior.
-17. Existing 052 M0 CAD link, 072 manifest validation, 073 primitive, AI loop, mesh/FEM,
+19. Existing 052 M0 CAD link, 072 manifest validation, 073 primitive, AI loop, mesh/FEM,
     and real-tool proof do not regress.
-18. Full backend CI, Ruff, the BLUECAD geometry canary, and the real-tool proof pass on the
+20. Full backend CI, Ruff, the BLUECAD geometry canary, and the real-tool proof pass on the
     exact implementation head.
 
 ## Required tests
@@ -813,8 +843,10 @@ Offline tests must cover at least:
 - zero, duplicate, cross-workspace, wrong-role, non-regular, malformed, non-canonical,
   schema-invalid, identity-mismatched, input-mismatched, or digest-mismatched manifest;
 - wrong model label, implementation kind, script hash, contract hash, or runner-job hash;
-- missing, temporary, stale, non-accepted, cross-workspace, changed, or incompatible reused
-  geometry Parameters.
+- missing, temporary, stale, non-accepted, cross-workspace, or changed geometry Parameters;
+- same Parameter ID reused compatibly across multiple inputs;
+- reused Parameter binding rejected when any independently checked value, unit, workspace,
+  status, freshness, or snapshot is incompatible.
 
 ### Layout contract
 
@@ -846,13 +878,20 @@ Offline tests must cover at least:
 - branch/common tube length, volume, area, and material reconciliation;
 - represented inventory equals total minus reservoir;
 - valid BREP/manifold results;
-- non-connected collision, self-intersection, manifold collision, and common-run collision
-  rejection;
+- positive-volume intersection rejection for connected and non-connected parts;
+- non-connected face, edge, and vertex contact rejection even at zero intersection volume;
+- declared connection accepted only when contact is the intended coincident opposed port
+  boundary;
+- self-intersection, manifold collision/contact, and common-run collision/contact rejection;
 - bounded worker timeout, crash, malformed response, and missing build123d/native dependency;
 - no persistent preview writes or directory creation.
 
-### Execution, evidence, and regression
+### Persistence, execution, evidence, and regression
 
+- source snapshot contains source run/model/manifest/Parameter authority and not layout
+  authority;
+- reconciliation payload contains canonical layout/boundary/preflight/exclusion/check
+  evidence and not mutable source values;
 - preview/execute TOCTOU rejection for run, artifact, Parameter, layout, analysis, and fixed
   version changes;
 - successful candidate/attempt/link/artifact/evidence creation with zero `ai_jobs`;
@@ -892,7 +931,8 @@ Implementation remains one spec but should be reviewed in this order:
 
 1. closed layout schema/canonicalizer and exact 072 source/manifest/Parameter authority;
 2. pure deterministic manifest + layout → GeometrySpec transformation and fixtures;
-3. bounded kernel preflight, shared 073 void extraction, collision and route-closure proof;
+3. bounded kernel preflight, shared 073 void extraction, collision/contact and route-closure
+   proof;
 4. process/CAD reconciliation and preview digest;
 5. execute/idempotency through the existing 052 link lifecycle and shared BLUECAD build;
 6. 050/051 lineage/staleness and optional 038 regression;
