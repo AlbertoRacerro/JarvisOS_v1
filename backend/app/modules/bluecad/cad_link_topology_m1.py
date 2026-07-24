@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import math
-from copy import deepcopy
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -17,6 +16,7 @@ TRANSFORMATION_VERSION = "bluerev_072_m1_planar_tubing_v0_1"
 IMPLEMENTATION_VERSION = "cad_link_072_v0_1"
 MAX_ROUTE_STEPS = 129
 MAX_RESOLVED_PARTS = 256
+_PI = Decimal("3.141592653589793")
 
 _TOP_LEVEL_KEYS = frozenset(
     {
@@ -60,16 +60,21 @@ def canonicalize_layout_spec(raw: dict[str, Any]) -> dict[str, Any]:
     _const(raw, "plane", "xy")
     _const(raw, "boundary_policy", BOUNDARY_POLICY)
 
-    canonical = {
+    return {
         "schema_version": LAYOUT_SCHEMA_VERSION,
         "layout_kind": LAYOUT_KIND,
         "plane": "xy",
         "boundary_policy": BOUNDARY_POLICY,
-        "split_manifold": _canonical_manifold(raw.get("split_manifold"), "split_manifold"),
-        "merge_manifold": _canonical_manifold(raw.get("merge_manifold"), "merge_manifold"),
+        "split_manifold": _canonical_manifold(
+            raw.get("split_manifold"),
+            "split_manifold",
+        ),
+        "merge_manifold": _canonical_manifold(
+            raw.get("merge_manifold"),
+            "merge_manifold",
+        ),
         "branch_route": _canonical_route(raw.get("branch_route")),
     }
-    return canonical
 
 
 def layout_digest(layout: dict[str, Any]) -> str:
@@ -149,7 +154,10 @@ def transform_topology_manifest(
             previous_endpoint = f"{part_id}.{exit_port}"
         merge_port = branch_count + 1 - branch_index
         connections.append(
-            {"from": previous_endpoint, "to": f"merge_manifold.branch_{merge_port}"}
+            {
+                "from": previous_endpoint,
+                "to": f"merge_manifold.branch_{merge_port}",
+            }
         )
 
     parts.append(
@@ -189,7 +197,7 @@ def transform_topology_manifest(
         "connections": connections,
     }
     resolved_spec = canonicalize_geometry_spec(raw_spec)
-    result = {
+    return {
         "implementation_version": IMPLEMENTATION_VERSION,
         "transformation_version": TRANSFORMATION_VERSION,
         "layout_spec": canonical_layout,
@@ -218,7 +226,6 @@ def transform_topology_manifest(
         ],
         "source_geometry": source,
     }
-    return result
 
 
 def _canonical_manifold(raw: Any, name: str) -> dict[str, float]:
@@ -242,14 +249,23 @@ def _canonical_route(raw: Any) -> dict[str, list[dict[str, Any]]]:
     _closed(raw, _ROUTE_KEYS, "branch_route")
     steps = raw.get("steps")
     if not isinstance(steps, list) or not steps:
-        _fail("cad_link_layout_schema_invalid", "branch_route.steps must be non-empty.")
+        _fail(
+            "cad_link_layout_schema_invalid",
+            "branch_route.steps must be non-empty.",
+        )
     if len(steps) > MAX_ROUTE_STEPS:
-        _fail("cad_link_layout_complexity_unsupported", "Route exceeds the 129-step bound.")
+        _fail(
+            "cad_link_layout_complexity_unsupported",
+            "Route exceeds the 129-step bound.",
+        )
 
     canonical: list[dict[str, Any]] = []
     for index, step in enumerate(steps):
         if not isinstance(step, dict):
-            _fail("cad_link_layout_schema_invalid", "Every route step must be an object.")
+            _fail(
+                "cad_link_layout_schema_invalid",
+                "Every route step must be an object.",
+            )
         kind = step.get("kind")
         if kind == "straight":
             _closed(step, _STRAIGHT_KEYS, f"branch_route.steps[{index}]")
@@ -273,7 +289,7 @@ def _canonical_route(raw: Any) -> dict[str, list[dict[str, Any]]]:
             ):
                 _fail(
                     "cad_link_layout_mismatch",
-                    "Adjacent straight steps with the same illumination are non-canonical.",
+                    "Adjacent same-illumination straight steps are non-canonical.",
                 )
         elif kind == "bend":
             _closed(step, _BEND_KEYS, f"branch_route.steps[{index}]")
@@ -287,126 +303,325 @@ def _canonical_route(raw: Any) -> dict[str, list[dict[str, Any]]]:
                 ),
             }
         else:
-            _fail("cad_link_layout_schema_invalid", "Unsupported branch route step kind.")
+            _fail(
+                "cad_link_layout_schema_invalid",
+                "Unsupported branch route step kind.",
+            )
         canonical.append(current)
     return {"steps": canonical}
 
 
 def _source_geometry(manifest: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(manifest, dict):
-        _fail("cad_link_topology_manifest_invalid", "Topology manifest must be an object.")
+        _fail(
+            "cad_link_topology_manifest_invalid",
+            "Topology manifest must be an object.",
+        )
     if manifest.get("schema_version") != "bluerev_process_topology_m1_v0_1":
-        _fail("cad_link_topology_manifest_identity_mismatch", "Topology manifest schema is invalid.")
+        _fail(
+            "cad_link_topology_manifest_identity_mismatch",
+            "Topology manifest schema is invalid.",
+        )
     if manifest.get("topology_kind") != "symmetric_parallel_closed_loop":
-        _fail("cad_link_topology_manifest_identity_mismatch", "Topology manifest kind is invalid.")
+        _fail(
+            "cad_link_topology_manifest_identity_mismatch",
+            "Topology manifest kind is invalid.",
+        )
 
     inputs = manifest.get("executed_inputs")
     geometry = manifest.get("geometry_totals")
     branch = manifest.get("branch_template")
-    if not isinstance(inputs, dict) or not isinstance(geometry, dict) or not isinstance(branch, dict):
-        _fail("cad_link_topology_manifest_invalid", "Topology manifest geometry is incomplete.")
+    if not all(isinstance(item, dict) for item in (inputs, geometry, branch)):
+        _fail(
+            "cad_link_topology_manifest_invalid",
+            "Topology manifest geometry is incomplete.",
+        )
     bend_group = branch.get("bend_group")
-    if not isinstance(bend_group, dict):
-        _fail("cad_link_topology_manifest_invalid", "Topology manifest bend group is missing.")
+    illuminated_group = branch.get("illuminated_straight")
+    dark_group = branch.get("dark_straight")
+    if not all(
+        isinstance(item, dict)
+        for item in (bend_group, illuminated_group, dark_group)
+    ):
+        _fail(
+            "cad_link_topology_manifest_invalid",
+            "Topology manifest branch template is incomplete.",
+        )
 
     branch_count = _input_int(inputs, "parallel_path_count", "1")
+    bend_count = _input_int(inputs, "branch_bend_count", "1")
+    illuminated_bend_count = _input_int(
+        inputs,
+        "branch_illuminated_bend_count",
+        "1",
+    )
     if not 1 <= branch_count <= 12:
-        _fail("cad_link_topology_manifest_invalid", "Topology branch count is outside V0 bounds.")
+        _fail(
+            "cad_link_topology_manifest_invalid",
+            "Topology branch count is outside V0 bounds.",
+        )
+    if bend_count < 0 or not 0 <= illuminated_bend_count <= bend_count:
+        _fail(
+            "cad_link_topology_manifest_invalid",
+            "Topology bend counts are inconsistent.",
+        )
 
-    branch_inner_mm = _input_decimal(inputs, "branch_tube_inner_diameter", "mm")
-    branch_outer_mm = _input_decimal(inputs, "branch_tube_outer_diameter", "mm")
-    common_inner_mm = _input_decimal(inputs, "common_tube_inner_diameter", "mm")
-    common_outer_mm = _input_decimal(inputs, "common_tube_outer_diameter", "mm")
+    branch_inner_mm = _input_decimal(
+        inputs,
+        "branch_tube_inner_diameter",
+        "mm",
+    )
+    branch_outer_mm = _input_decimal(
+        inputs,
+        "branch_tube_outer_diameter",
+        "mm",
+    )
+    common_inner_mm = _input_decimal(
+        inputs,
+        "common_tube_inner_diameter",
+        "mm",
+    )
+    common_outer_mm = _input_decimal(
+        inputs,
+        "common_tube_outer_diameter",
+        "mm",
+    )
+    if min(branch_inner_mm, branch_outer_mm, common_inner_mm, common_outer_mm) <= 0:
+        _fail(
+            "cad_link_topology_manifest_invalid",
+            "Topology tube diameters must be positive.",
+        )
     branch_wall_mm = (branch_outer_mm - branch_inner_mm) / Decimal(2)
     common_wall_mm = (common_outer_mm - common_inner_mm) / Decimal(2)
     if branch_wall_mm <= 0 or common_wall_mm <= 0:
-        _fail("cad_link_topology_manifest_invalid", "Topology tube wall thickness is invalid.")
+        _fail(
+            "cad_link_topology_manifest_invalid",
+            "Topology tube wall thickness is invalid.",
+        )
+
+    illuminated_straight_mm = _input_decimal(
+        inputs,
+        "branch_illuminated_straight_length",
+        "m",
+    ) * Decimal(1000)
+    dark_straight_mm = _input_decimal(
+        inputs,
+        "branch_dark_straight_length",
+        "m",
+    ) * Decimal(1000)
+    bend_radius_mm = _number_from_mapping(
+        bend_group,
+        "centerline_radius_m",
+        "bend radius",
+    ) * Decimal(1000)
+    bend_angle_deg = _number_from_mapping(
+        bend_group,
+        "angle_deg",
+        "bend angle",
+    )
+    bend_angle_rad = bend_angle_deg * _PI / Decimal(180)
+
+    supply_input_mm = _input_decimal(
+        inputs,
+        "common_supply_length",
+        "m",
+    ) * Decimal(1000)
+    return_input_mm = _input_decimal(
+        inputs,
+        "common_return_length",
+        "m",
+    ) * Decimal(1000)
+    supply_manifest_mm = _number_from_mapping(
+        geometry,
+        "common_supply_length_m",
+        "common supply length",
+    ) * Decimal(1000)
+    return_manifest_mm = _number_from_mapping(
+        geometry,
+        "common_return_length_m",
+        "common return length",
+    ) * Decimal(1000)
+
+    illuminated_manifest_mm = _number_from_mapping(
+        illuminated_group,
+        "length_m",
+        "illuminated branch length",
+    ) * Decimal(1000)
+    dark_manifest_mm = _number_from_mapping(
+        dark_group,
+        "length_m",
+        "dark branch length",
+    ) * Decimal(1000)
+    input_bend_radius_mm = _input_decimal(
+        inputs,
+        "branch_bend_centerline_radius",
+        "mm",
+    )
+    input_bend_angle_deg = _input_decimal(
+        inputs,
+        "branch_bend_angle",
+        "deg",
+    )
+
+    nonnegative = (
+        illuminated_straight_mm,
+        dark_straight_mm,
+        supply_input_mm,
+        return_input_mm,
+    )
+    if any(value < 0 for value in nonnegative):
+        _fail(
+            "cad_link_topology_manifest_invalid",
+            "Topology centreline lengths cannot be negative.",
+        )
+    if (
+        illuminated_manifest_mm != illuminated_straight_mm
+        or dark_manifest_mm != dark_straight_mm
+        or supply_manifest_mm != supply_input_mm
+        or return_manifest_mm != return_input_mm
+        or bend_radius_mm != input_bend_radius_mm
+        or bend_angle_deg != input_bend_angle_deg
+    ):
+        _fail(
+            "cad_link_topology_manifest_identity_mismatch",
+            "Topology manifest geometry differs from executed inputs.",
+        )
+    if bend_count > 0 and (bend_radius_mm <= 0 or bend_angle_rad <= 0):
+        _fail(
+            "cad_link_topology_manifest_invalid",
+            "A topology with bends requires positive radius and angle.",
+        )
+    if bend_count == 0 and (bend_radius_mm != 0 or bend_angle_rad != 0):
+        _fail(
+            "cad_link_topology_manifest_invalid",
+            "A zero-bend topology must have zero radius and angle.",
+        )
+
+    split_volume = _input_decimal(
+        inputs,
+        "split_manifold_liquid_volume",
+        "L",
+    ) / Decimal(1000)
+    merge_volume = _input_decimal(
+        inputs,
+        "merge_manifold_liquid_volume",
+        "L",
+    ) / Decimal(1000)
+    reservoir_volume = _number_from_mapping(
+        geometry,
+        "reservoir_liquid_volume_m3",
+        "reservoir volume",
+    )
+    total_inventory = _number_from_mapping(
+        geometry,
+        "total_liquid_inventory_m3",
+        "total inventory",
+    )
+    if min(split_volume, merge_volume, reservoir_volume, total_inventory) < 0:
+        _fail(
+            "cad_link_topology_manifest_invalid",
+            "Topology liquid volumes cannot be negative.",
+        )
+    if total_inventory < reservoir_volume:
+        _fail(
+            "cad_link_topology_manifest_invalid",
+            "Total inventory cannot be smaller than reservoir inventory.",
+        )
 
     result = {
         "branch_count": branch_count,
-        "branch_illuminated_straight_mm": _input_decimal(
-            inputs, "branch_illuminated_straight_length", "m"
-        )
-        * Decimal(1000),
-        "branch_dark_straight_mm": _input_decimal(
-            inputs, "branch_dark_straight_length", "m"
-        )
-        * Decimal(1000),
-        "bend_count": _input_int(inputs, "branch_bend_count", "1"),
-        "illuminated_bend_count": _input_int(
-            inputs, "branch_illuminated_bend_count", "1"
-        ),
-        "bend_radius_mm": _number_from_mapping(
-            bend_group, "centerline_radius_m", "bend radius"
-        )
-        * Decimal(1000),
-        "bend_angle_rad": _number_from_mapping(bend_group, "angle_deg", "bend angle")
-        * Decimal(str(math.pi))
-        / Decimal(180),
+        "branch_illuminated_straight_mm": illuminated_straight_mm,
+        "branch_dark_straight_mm": dark_straight_mm,
+        "bend_count": bend_count,
+        "illuminated_bend_count": illuminated_bend_count,
+        "bend_radius_mm": bend_radius_mm,
+        "bend_angle_rad": bend_angle_rad,
         "branch_inner_d_mm": branch_inner_mm,
         "branch_outer_d_mm": branch_outer_mm,
         "branch_wall_t_mm": branch_wall_mm,
         "common_inner_d_mm": common_inner_mm,
         "common_outer_d_mm": common_outer_mm,
         "common_wall_t_mm": common_wall_mm,
-        "common_supply_length_mm": _number_from_mapping(
-            geometry, "common_supply_length_m", "common supply length"
-        )
-        * Decimal(1000),
-        "common_return_length_mm": _number_from_mapping(
-            geometry, "common_return_length_m", "common return length"
-        )
-        * Decimal(1000),
-        "split_manifold_liquid_volume_m3": _input_decimal(
-            inputs, "split_manifold_liquid_volume", "L"
-        )
-        / Decimal(1000),
-        "merge_manifold_liquid_volume_m3": _input_decimal(
-            inputs, "merge_manifold_liquid_volume", "L"
-        )
-        / Decimal(1000),
-        "reservoir_liquid_volume_m3": _number_from_mapping(
-            geometry, "reservoir_liquid_volume_m3", "reservoir volume"
-        ),
-        "total_liquid_inventory_m3": _number_from_mapping(
-            geometry, "total_liquid_inventory_m3", "total inventory"
-        ),
+        "common_supply_length_mm": supply_input_mm,
+        "common_return_length_mm": return_input_mm,
+        "split_manifold_liquid_volume_m3": split_volume,
+        "merge_manifold_liquid_volume_m3": merge_volume,
+        "reservoir_liquid_volume_m3": reservoir_volume,
+        "total_liquid_inventory_m3": total_inventory,
     }
-    return {key: (_finite_float(value) if isinstance(value, Decimal) else value) for key, value in result.items()}
+    return {
+        key: _finite_float(value) if isinstance(value, Decimal) else value
+        for key, value in result.items()
+    }
 
 
-def _validate_layout_against_source(layout: dict[str, Any], source: dict[str, Any]) -> None:
+def _validate_layout_against_source(
+    layout: dict[str, Any],
+    source: dict[str, Any],
+) -> None:
     split_gap = _decimal(layout["split_manifold"]["branch_gap_mm"])
     merge_gap = _decimal(layout["merge_manifold"]["branch_gap_mm"])
     if source["branch_count"] > 1 and split_gap != merge_gap:
-        _fail("cad_link_layout_mismatch", "Split and merge branch pitch must be identical.")
+        _fail(
+            "cad_link_layout_mismatch",
+            "Split and merge branch pitch must be identical.",
+        )
 
     steps = layout["branch_route"]["steps"]
     bend_steps = [step for step in steps if step["kind"] == "bend"]
     if len(bend_steps) != source["bend_count"]:
-        _fail("cad_link_layout_mismatch", "Bend step count does not match the 072 topology.")
-    illuminated_bends = sum(step["illumination"] == "illuminated" for step in bend_steps)
+        _fail(
+            "cad_link_layout_mismatch",
+            "Bend step count does not match the 072 topology.",
+        )
+    illuminated_bends = sum(
+        step["illumination"] == "illuminated" for step in bend_steps
+    )
     if illuminated_bends != source["illuminated_bend_count"]:
-        _fail("cad_link_layout_mismatch", "Illuminated bend count does not match the 072 topology.")
+        _fail(
+            "cad_link_layout_mismatch",
+            "Illuminated bend count does not match the 072 topology.",
+        )
 
     illuminated_straight = sum(
-        (_decimal(step["length_mm"]) for step in steps if step["kind"] == "straight" and step["illumination"] == "illuminated"),
+        (
+            _decimal(step["length_mm"])
+            for step in steps
+            if step["kind"] == "straight"
+            and step["illumination"] == "illuminated"
+        ),
         Decimal(0),
     )
     dark_straight = sum(
-        (_decimal(step["length_mm"]) for step in steps if step["kind"] == "straight" and step["illumination"] == "dark"),
+        (
+            _decimal(step["length_mm"])
+            for step in steps
+            if step["kind"] == "straight"
+            and step["illumination"] == "dark"
+        ),
         Decimal(0),
     )
-    if illuminated_straight != _decimal(source["branch_illuminated_straight_mm"]):
-        _fail("cad_link_layout_mismatch", "Illuminated straight allocation does not match 072.")
+    if illuminated_straight != _decimal(
+        source["branch_illuminated_straight_mm"]
+    ):
+        _fail(
+            "cad_link_layout_mismatch",
+            "Illuminated straight allocation does not match 072.",
+        )
     if dark_straight != _decimal(source["branch_dark_straight_mm"]):
-        _fail("cad_link_layout_mismatch", "Dark straight allocation does not match 072.")
+        _fail(
+            "cad_link_layout_mismatch",
+            "Dark straight allocation does not match 072.",
+        )
 
     part_count = 2 + source["branch_count"] * len(steps)
     part_count += int(source["common_supply_length_mm"] > 0)
     part_count += int(source["common_return_length_mm"] > 0)
     if part_count > MAX_RESOLVED_PARTS:
-        _fail("cad_link_layout_complexity_unsupported", "Resolved layout exceeds the 256-part bound.")
+        _fail(
+            "cad_link_layout_complexity_unsupported",
+            "Resolved layout exceeds the 256-part bound.",
+        )
 
 
 def _manifold_part(
@@ -431,11 +646,20 @@ def _manifold_part(
     }
 
 
-def _tube_part(part_id: str, outer_d: float, wall_t: float, length: float) -> dict[str, Any]:
+def _tube_part(
+    part_id: str,
+    outer_d: float,
+    wall_t: float,
+    length: float,
+) -> dict[str, Any]:
     return {
         "part_id": part_id,
         "kind": "tube_run",
-        "params": {"outer_d": outer_d, "wall_t": wall_t, "length": length},
+        "params": {
+            "outer_d": outer_d,
+            "wall_t": wall_t,
+            "length": length,
+        },
     }
 
 
@@ -458,10 +682,17 @@ def _bend_part(
     }
 
 
-def _input_decimal(inputs: dict[str, Any], name: str, unit: str) -> Decimal:
+def _input_decimal(
+    inputs: dict[str, Any],
+    name: str,
+    unit: str,
+) -> Decimal:
     item = inputs.get(name)
     if not isinstance(item, dict) or item.get("unit") != unit:
-        _fail("cad_link_topology_manifest_invalid", f"Topology input {name} is invalid.")
+        _fail(
+            "cad_link_topology_manifest_invalid",
+            f"Topology input {name} is invalid.",
+        )
     return _decimal(item.get("value"))
 
 
@@ -469,26 +700,42 @@ def _input_int(inputs: dict[str, Any], name: str, unit: str) -> int:
     value = _input_decimal(inputs, name, unit)
     integer = int(value)
     if value != Decimal(integer):
-        _fail("cad_link_topology_manifest_invalid", f"Topology input {name} must be integral.")
+        _fail(
+            "cad_link_topology_manifest_invalid",
+            f"Topology input {name} must be integral.",
+        )
     return integer
 
 
-def _number_from_mapping(mapping: dict[str, Any], key: str, label: str) -> Decimal:
+def _number_from_mapping(
+    mapping: dict[str, Any],
+    key: str,
+    label: str,
+) -> Decimal:
     if key not in mapping:
-        _fail("cad_link_topology_manifest_invalid", f"Topology {label} is missing.")
+        _fail(
+            "cad_link_topology_manifest_invalid",
+            f"Topology {label} is missing.",
+        )
     return _decimal(mapping[key])
 
 
 def _positive_float(value: Any, label: str) -> float:
     number = _decimal(value)
     if number <= 0:
-        _fail("cad_link_layout_schema_invalid", f"{label} must be positive.")
+        _fail(
+            "cad_link_layout_schema_invalid",
+            f"{label} must be positive.",
+        )
     return _finite_float(number)
 
 
 def _decimal(value: Any) -> Decimal:
     if isinstance(value, bool) or value is None or isinstance(value, str):
-        _fail("cad_link_numeric_invalid", "Layout and manifest values must be finite JSON numbers.")
+        _fail(
+            "cad_link_numeric_invalid",
+            "Layout and manifest values must be finite JSON numbers.",
+        )
     try:
         number = Decimal(str(value))
     except (InvalidOperation, ValueError, TypeError) as exc:
@@ -497,18 +744,28 @@ def _decimal(value: Any) -> Decimal:
             "Layout and manifest values must be finite JSON numbers.",
         ) from exc
     if not number.is_finite():
-        _fail("cad_link_numeric_invalid", "Layout and manifest values must be finite JSON numbers.")
+        _fail(
+            "cad_link_numeric_invalid",
+            "Layout and manifest values must be finite JSON numbers.",
+        )
     return number
 
 
 def _finite_float(value: Decimal) -> float:
     number = float(value)
     if not math.isfinite(number):
-        _fail("cad_link_numeric_invalid", "A derived layout value is not representable.")
+        _fail(
+            "cad_link_numeric_invalid",
+            "A derived layout value is not representable.",
+        )
     return number
 
 
-def _closed(value: dict[str, Any], allowed: frozenset[str], label: str) -> None:
+def _closed(
+    value: dict[str, Any],
+    allowed: frozenset[str],
+    label: str,
+) -> None:
     extra = sorted(set(value) - allowed)
     missing = sorted(allowed - set(value))
     if extra or missing:
@@ -520,17 +777,24 @@ def _closed(value: dict[str, Any], allowed: frozenset[str], label: str) -> None:
 
 def _const(value: dict[str, Any], key: str, expected: str) -> None:
     if value.get(key) != expected:
-        _fail("cad_link_layout_schema_invalid", f"{key} must equal {expected}.")
+        _fail(
+            "cad_link_layout_schema_invalid",
+            f"{key} must equal {expected}.",
+        )
 
 
 def _enum(value: Any, allowed: set[str], label: str) -> str:
     if not isinstance(value, str) or value not in allowed:
-        _fail("cad_link_layout_schema_invalid", f"{label} is invalid.")
+        _fail(
+            "cad_link_layout_schema_invalid",
+            f"{label} is invalid.",
+        )
     return value
 
 
 def _digest(value: Any) -> str:
-    return "sha256:" + hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
+    payload = canonical_json(value)
+    return "sha256:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _fail(code: str, message: str) -> None:
