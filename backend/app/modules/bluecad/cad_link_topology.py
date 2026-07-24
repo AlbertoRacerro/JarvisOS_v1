@@ -114,7 +114,9 @@ def _build_preview(
         "reconciliation": reconciliation,
         "reconciliation_digest": digest(reconciliation),
         "analysis_contract": analysis_contract,
-        "analysis_contract_digest": digest(analysis_contract),
+        "analysis_contract_digest": (
+            None if analysis_contract is None else digest(analysis_contract)
+        ),
     }
     preview["preview_digest"] = digest(preview)
     return preview
