@@ -44,11 +44,11 @@ def run_kernel_preflight(
         (canonical_spec, canonical_boundaries),
         timeout_s=timeout_s,
     )
-    if not isinstance(payload, dict) or type(payload.get("ok")) is not bool:
+    if not isinstance(payload, dict) or not isinstance(payload.get("ok"), bool):
         raise _kernel_unavailable("CAD-link kernel preflight returned malformed evidence.")
     if not payload["ok"]:
         status_code = payload.get("status_code")
-        if type(status_code) is not int:
+        if not isinstance(status_code, int) or isinstance(status_code, bool):
             status_code = 503
         raise CadLinkError(
             str(payload.get("code") or "cad_link_kernel_unavailable"),
@@ -567,7 +567,8 @@ def _validate_port_contact_topology(
     if (
         not isinstance(edges, list)
         or not isinstance(faces, list)
-        or type(vertex_count) is not int
+        or not isinstance(vertex_count, int)
+        or isinstance(vertex_count, bool)
         or vertex_count != 0
         or len(edges) > MAX_CONTACT_TOPOLOGY_ITEMS
         or len(faces) > MAX_CONTACT_TOPOLOGY_ITEMS
@@ -759,7 +760,8 @@ def _point_matches(value: Any, expected: tuple[float, float, float]) -> bool:
         isinstance(value, list)
         and len(value) == 3
         and all(
-            type(value[index]) in (int, float)
+            isinstance(value[index], int | float)
+            and not isinstance(value[index], bool)
             and math.isclose(
                 float(value[index]),
                 expected[index],
@@ -968,7 +970,7 @@ def _shape_flag(shape: Any, attribute: str) -> bool:
 
 
 def _strict_number(value: Any) -> float:
-    if type(value) not in (int, float):
+    if not isinstance(value, int | float) or isinstance(value, bool):
         raise _contact_error()
     number = float(value)
     if not math.isfinite(number):
