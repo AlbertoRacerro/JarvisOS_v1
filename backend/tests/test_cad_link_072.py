@@ -20,7 +20,7 @@ def client(tmp_path, monkeypatch) -> Iterator[TestClient]:
     get_settings.cache_clear()
 
 
-def test_cad_link_072_routes_are_registered(client: TestClient) -> None:
+def test_cad_link_072_preview_route_is_registered(client: TestClient) -> None:
     routes = {
         (route.path, method)
         for route in client.app.routes
@@ -34,4 +34,20 @@ def test_cad_link_072_routes_are_registered(client: TestClient) -> None:
     assert (
         "/workspaces/{workspace_id}/bluecad/cad-link/072/execute",
         "POST",
-    ) in routes
+    ) not in routes
+
+
+def test_cad_link_072_preview_missing_run_fails_before_layout_or_kernel(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/workspaces/bluerev/bluecad/cad-link/072/preview",
+        json={
+            "source_simulation_run_id": "missing-run",
+            "layout_spec": {},
+            "analysis_spec": None,
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "cad_link_run_not_found"
