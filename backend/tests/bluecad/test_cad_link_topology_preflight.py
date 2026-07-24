@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import math
 from copy import deepcopy
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
+from app.modules.bluecad import cad_link_topology_preflight as preflight_module
 from app.modules.bluecad.cad_link import CadLinkError
 from app.modules.bluecad.cad_link_topology_contract import (
     BOUNDARY_POLICY,
@@ -14,6 +18,8 @@ from app.modules.bluecad.cad_link_topology_contract import (
     resolve_geometry_spec,
 )
 from app.modules.bluecad.cad_link_topology_preflight import (
+    _classify_pair_intersection,
+    _kernel_bbox,
     _validate_port_contact_topology,
     run_kernel_preflight,
 )
@@ -77,6 +83,47 @@ def _resolved() -> tuple[dict[str, object], dict[str, str]]:
     return spec, boundaries
 
 
+def _circle_bbox(
+    center: tuple[float, float, float],
+    direction: tuple[float, float, float],
+    radius: float,
+) -> dict[str, list[float]]:
+    magnitude = math.sqrt(sum(value**2 for value in direction))
+    normal = tuple(value / magnitude for value in direction)
+    extents = tuple(
+        radius * math.sqrt(max(0.0, 1.0 - normal[axis] ** 2))
+        for axis in range(3)
+    )
+    return {
+        "min": [center[axis] - extents[axis] for axis in range(3)],
+        "max": [center[axis] + extents[axis] for axis in range(3)],
+    }
+
+
+def _edge(
+    port: PortFrame,
+    radius: float,
+    *,
+    center: tuple[float, float, float] | None = None,
+) -> dict[str, object]:
+    origin = port.origin if center is None else center
+    return {
+        "radius_mm": radius,
+        "center_mm": list(origin),
+        "bbox_mm": _circle_bbox(origin, port.direction, radius),
+    }
+
+
+def _face(port: PortFrame) -> dict[str, object]:
+    outer_radius = float(port.outer_d) / 2.0
+    inner_radius = outer_radius - float(port.wall_t)
+    return {
+        "area_mm2": math.pi * (outer_radius**2 - inner_radius**2),
+        "center_mm": list(port.origin),
+        "bbox_mm": _circle_bbox(port.origin, port.direction, outer_radius),
+    }
+
+
 def test_kernel_preflight_closes_parallel_headers_without_writes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -84,12 +131,14 @@ def test_kernel_preflight_closes_parallel_headers_without_writes(
     pytest.importorskip("build123d", exc_type=ImportError)
     spec, boundaries = _resolved()
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(preflight_module, "_PREFLIGHT_PARENT_SENTINEL", "parent-only")
     before = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*"))
 
     evidence = run_kernel_preflight(spec, boundaries)
 
     after = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("*"))
     assert after == before
+    assert evidence["spawn_isolated"] is True
     assert evidence["part_count"] == 4
     assert evidence["connection_count"] == 4
     assert evidence["open_endpoints"] == sorted(boundaries.values())
@@ -101,36 +150,108 @@ def test_kernel_preflight_closes_parallel_headers_without_writes(
         check["brep_valid"] and check["manifold"]
         for check in evidence["kernel_checks"].values()
     )
+    assert all(
+        item["material_volume_mm3"] > 0.0
+        for item in evidence["placed_parts"].values()
+    )
+    pair_evaluation = evidence["pair_evaluation"]
+    assert pair_evaluation["evaluated_pair_count"] == (
+        pair_evaluation["broad_phase_candidate_count"]
+    )
+    assert pair_evaluation["total_pair_count"] == (
+        pair_evaluation["broad_phase_candidate_count"]
+        + pair_evaluation["broad_phase_skipped_count"]
+    )
 
 
 def test_edge_form_annular_contact_is_accepted() -> None:
     port = PortFrame((1.0, 2.0, 3.0), (1.0, 0.0, 0.0), 60.0, 5.0)
     topology = {
-        "edges": [
-            {"radius_mm": 30.0, "center_mm": [1.0, 2.0, 3.0]},
-            {"radius_mm": 25.0, "center_mm": [1.0, 2.0, 3.0]},
-        ],
+        "vertex_count": 0,
+        "edges": [_edge(port, 30.0), _edge(port, 25.0)],
         "faces": [],
     }
 
     _validate_port_contact_topology(port, topology)
 
 
-def test_extra_contact_outside_annulus_is_rejected() -> None:
-    port = PortFrame((1.0, 2.0, 3.0), (1.0, 0.0, 0.0), 60.0, 5.0)
+def test_face_form_annular_contact_is_accepted() -> None:
+    port = PortFrame((1.0, 2.0, 3.0), (0.0, 1.0, 0.0), 60.0, 5.0)
     topology = {
-        "edges": [
-            {"radius_mm": 30.0, "center_mm": [1.0, 2.0, 3.0]},
-            {"radius_mm": 25.0, "center_mm": [1.0, 2.0, 3.0]},
-            {"radius_mm": 35.0, "center_mm": [1.0, 2.0, 3.0]},
-        ],
+        "vertex_count": 0,
+        "edges": [],
+        "faces": [_face(port)],
+    }
+
+    _validate_port_contact_topology(port, topology)
+
+
+@pytest.mark.parametrize("mutation", ["extra_radius", "off_center", "vertex", "off_plane"])
+def test_invalid_contact_outside_annulus_is_rejected(mutation: str) -> None:
+    port = PortFrame((1.0, 2.0, 3.0), (1.0, 0.0, 0.0), 60.0, 5.0)
+    edges = [_edge(port, 30.0), _edge(port, 25.0)]
+    topology: dict[str, Any] = {
+        "vertex_count": 0,
+        "edges": edges,
         "faces": [],
     }
+    if mutation == "extra_radius":
+        edges.append(_edge(port, 35.0))
+    elif mutation == "off_center":
+        edges[0] = _edge(port, 30.0, center=(1.0, 2.1, 3.0))
+    elif mutation == "vertex":
+        topology["vertex_count"] = 1
+    elif mutation == "off_plane":
+        edges[0] = _edge(port, 30.0, center=(1.1, 2.0, 3.0))
 
     with pytest.raises(CadLinkError) as exc_info:
         _validate_port_contact_topology(port, topology)
 
     assert exc_info.value.code == "cad_link_layout_contact_invalid"
+
+
+class _ExplodingTopology:
+    volume = 1.0
+
+    def faces(self):
+        raise AssertionError("topology must not be enumerated before volume rejection")
+
+
+class _ShapeWithIntersection:
+    def intersect(self, _other):
+        return _ExplodingTopology()
+
+
+def test_positive_volume_collision_is_classified_before_topology_enumeration() -> None:
+    with pytest.raises(CadLinkError) as exc_info:
+        _classify_pair_intersection(_ShapeWithIntersection(), object())
+
+    assert exc_info.value.code == "cad_link_layout_collision"
+
+
+class _Vector:
+    def __init__(self, x: float, y: float, z: float):
+        self.X = x
+        self.Y = y
+        self.Z = z
+
+
+class _ShapeWithBounds:
+    def __init__(self):
+        self._bbox = SimpleNamespace(
+            min=_Vector(-10.0, -20.0, -30.0),
+            max=_Vector(40.0, 50.0, 60.0),
+        )
+
+    def bounding_box(self):
+        return self._bbox
+
+
+def test_kernel_bbox_uses_shape_extrema() -> None:
+    assert _kernel_bbox(_ShapeWithBounds()) == (
+        (-10.0, -20.0, -30.0),
+        (40.0, 50.0, 60.0),
+    )
 
 
 def test_kernel_preflight_rejects_duplicate_boundary() -> None:
