@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from app.modules.bluecad.models import BluecadError, BuiltPart, PortFrame
@@ -22,8 +23,23 @@ PARAM_NAMES = frozenset(
 )
 
 
+@dataclass(frozen=True)
+class CappedManifoldKernelGeometry:
+    """One authoritative 073 construction shared by the builder and 074 preflight."""
+
+    part: BuiltPart
+    outer_shape: Any
+    void_shape: Any
+
+
 def build_capped_manifold(part: dict[str, Any]) -> BuiltPart:
     """Build one capped header with a common opening and open branch bores."""
+
+    return build_capped_manifold_kernel(part).part
+
+
+def build_capped_manifold_kernel(part: dict[str, Any]) -> CappedManifoldKernelGeometry:
+    """Return the exact solid plus the outer/void shapes used to construct it."""
 
     p = part["params"]
     main_outer_d = float(p["main_outer_d"])
@@ -102,12 +118,16 @@ def build_capped_manifold(part: dict[str, Any]) -> BuiltPart:
     branch_radius = branch_outer_d / 2.0
     radius = max(main_radius, branch_radius)
     volume = float(shape.volume)
-    if volume <= 0.0:
+    void_volume = float(void_shape.volume)
+    if volume <= 0.0 or void_volume <= 0.0:
         raise BluecadError(
             "KERNEL_ERROR",
-            {"part_id": part["part_id"], "message": "capped manifold solid has non-positive volume"},
+            {
+                "part_id": part["part_id"],
+                "message": "capped manifold solid and fluid cavity must have positive volume",
+            },
         )
-    return BuiltPart(
+    built = BuiltPart(
         part_id=part["part_id"],
         kind=PART_KIND,
         volume_mm3=volume,
@@ -117,4 +137,9 @@ def build_capped_manifold(part: dict[str, Any]) -> BuiltPart:
         ),
         ports=ports,
         shape=shape,
+    )
+    return CappedManifoldKernelGeometry(
+        part=built,
+        outer_shape=outer_shape,
+        void_shape=void_shape,
     )
