@@ -78,7 +78,7 @@ PR overlaps the target files or runtime boundary.
 ## Registry
 
 | Spec | Status | Implementation PR | Name | Depends on | Description |
-| --- | --- | --- | --- | --- | --- |
+| --- | --- | --- | --- | --- | --- | --- |
 | 001 | merged | [#4](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/4) | Parameter/Assumption schema freeze + Requirement record | — | Freeze engineering-record units, provenance, uncertainty fields, and requirement CRUD with additive migration behavior. |
 | 002 | merged | [#7](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/7) | Local route smoke matrix + routing eval set | 001 | Add repeatable local-route measurements and an offline routing evaluation set without making live model calls in CI. |
 | 003 | merged | [#8](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/8) | ESCALATE-CONFIRM-0 | 002 | Add a non-executing external escalation proposal and explicit user-confirmed execution path with cost, context-exclusion, and ledger controls. |
@@ -161,7 +161,7 @@ PR overlaps the target files or runtime boundary.
 | 071 | merged | [#147](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/147) | MODEL-SCENARIO-DOF-0: editable bindings, scenario runs, and degree-of-freedom inspection | 040, 043, 047 | Expose immutable value-free model input contracts, side-effect-free forward binding/DOF preview, parameter-backed or manual scenario bindings, existing-runner execution, and one bounded Domain Foundation panel; no inverse solver, targets, optimizer, automatic promotion, or embedded design defaults. |
 | 072 | merged | [#172](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/172) | BLUEREV-PROCESS-3: explicit symmetric hydraulic topology M1 | 043, 047, 050, 051, 052, 071 | Add one deterministic fixed-topology closed loop with common supply/return sections and 1–12 identical parallel branches; separate installed geometry from the representative hydraulic path, emit a canonical topology manifest, and prove reduction to 047 without adding a generic network solver, CAD layout, automatic recompute, or UI. |
 | 073 | merged | [#174](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/174) | BLUECAD-PRIMITIVE-1: fluid-open capped branch manifold | 005, 005b, 056 | Add one deterministic capped branch-header primitive with exactly one common port and 1–12 branch ports, explicit branch bores through the header wall, closed-end geometry, kernel-volume reconciliation, and property/conformance tests; no process link, layout solver, project defaults, or UI. |
-| 074 | ready | — | CAD-LINK-1: 072 M1 topology to deterministic multi-part BLUECAD | 038, 050, 051, 052, 071, 072, 073 | Convert a fresh 072 topology manifest into an idempotent multi-part BLUECAD candidate only through an explicit reviewed spatial-layout contract; reconcile process geometry, ports, volume/area, and lineage without inferring bend handedness, routing, or design defaults. |
+| 074 | in_review | [#182](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/182) | CAD-LINK-1: 072 M1 topology to deterministic multi-part BLUECAD | 038, 050, 051, 052, 071, 072, 073 | Convert a fresh 072 topology manifest into an idempotent multi-part BLUECAD candidate only through an explicit reviewed spatial-layout contract; reconcile process geometry, ports, volume/area, and lineage without inferring bend handedness, routing, or design defaults. |
 
 ## Superseded planning aliases and resolved collisions
 
