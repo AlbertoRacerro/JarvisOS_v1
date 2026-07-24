@@ -18,7 +18,11 @@ SCHEMA_PATH = REPO_ROOT / "schemas" / "bluerev_cad_layout_m1_v0_1.schema.json"
 
 
 def _input(value: float | int, unit: str) -> dict[str, object]:
-    return {"value": value, "unit": unit, "source_parameter_id": f"parameter-{unit}-{value}"}
+    return {
+        "value": value,
+        "unit": unit,
+        "source_parameter_id": f"parameter-{unit}-{value}",
+    }
 
 
 def _manifest(
@@ -31,14 +35,19 @@ def _manifest(
     common_supply_m: float = 1.0,
     common_return_m: float = 1.5,
 ) -> dict:
+    bend_radius_mm = 100.0 if bend_count else 0.0
+    bend_angle_deg = 90.0 if bend_count else 0.0
     inputs = {
         "parallel_path_count": _input(branch_count, "1"),
-        "branch_illuminated_straight_length": _input(illuminated_straight_m, "m"),
+        "branch_illuminated_straight_length": _input(
+            illuminated_straight_m,
+            "m",
+        ),
         "branch_dark_straight_length": _input(dark_straight_m, "m"),
         "branch_bend_count": _input(bend_count, "1"),
         "branch_illuminated_bend_count": _input(illuminated_bends, "1"),
-        "branch_bend_centerline_radius": _input(100.0, "mm"),
-        "branch_bend_angle": _input(90.0, "deg"),
+        "branch_bend_centerline_radius": _input(bend_radius_mm, "mm"),
+        "branch_bend_angle": _input(bend_angle_deg, "deg"),
         "common_supply_length": _input(common_supply_m, "m"),
         "common_return_length": _input(common_return_m, "m"),
         "branch_tube_inner_diameter": _input(50.0, "mm"),
@@ -53,10 +62,12 @@ def _manifest(
         "topology_kind": "symmetric_parallel_closed_loop",
         "executed_inputs": inputs,
         "branch_template": {
+            "illuminated_straight": {"length_m": illuminated_straight_m},
             "bend_group": {
-                "centerline_radius_m": 0.1,
-                "angle_deg": 90.0,
-            }
+                "centerline_radius_m": bend_radius_mm / 1000.0,
+                "angle_deg": bend_angle_deg,
+            },
+            "dark_straight": {"length_m": dark_straight_m},
         },
         "geometry_totals": {
             "common_supply_length_m": common_supply_m,
@@ -87,10 +98,26 @@ def _layout() -> dict:
         },
         "branch_route": {
             "steps": [
-                {"kind": "straight", "length_mm": 10000.0, "illumination": "illuminated"},
-                {"kind": "bend", "turn": "left", "illumination": "illuminated"},
-                {"kind": "straight", "length_mm": 2000.0, "illumination": "dark"},
-                {"kind": "bend", "turn": "right", "illumination": "dark"},
+                {
+                    "kind": "straight",
+                    "length_mm": 10000.0,
+                    "illumination": "illuminated",
+                },
+                {
+                    "kind": "bend",
+                    "turn": "left",
+                    "illumination": "illuminated",
+                },
+                {
+                    "kind": "straight",
+                    "length_mm": 2000.0,
+                    "illumination": "dark",
+                },
+                {
+                    "kind": "bend",
+                    "turn": "right",
+                    "illumination": "dark",
+                },
             ]
         },
     }
@@ -106,7 +133,8 @@ def test_layout_schema_and_python_contract_match() -> None:
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     assert schema["properties"]["schema_version"]["const"] == LAYOUT_SCHEMA_VERSION
     assert schema["additionalProperties"] is False
-    assert schema["properties"]["branch_route"]["properties"]["steps"]["maxItems"] == 129
+    steps = schema["properties"]["branch_route"]["properties"]["steps"]
+    assert steps["maxItems"] == 129
     assert set(schema["$defs"]["manifold_layout"]["required"]) == {
         "branch_gap_mm",
         "end_gap_mm",
@@ -121,11 +149,26 @@ def test_layout_schema_and_python_contract_match() -> None:
     [
         lambda layout: layout.__setitem__("unknown", 1),
         lambda layout: layout["split_manifold"].__setitem__("unknown", 1),
-        lambda layout: layout["branch_route"]["steps"][0].__setitem__("unit", "mm"),
-        lambda layout: layout["split_manifold"].__setitem__("branch_gap_mm", 0.0),
-        lambda layout: layout["split_manifold"].__setitem__("branch_gap_mm", True),
-        lambda layout: layout["split_manifold"].__setitem__("branch_gap_mm", "20"),
-        lambda layout: layout["split_manifold"].__setitem__("branch_gap_mm", float("inf")),
+        lambda layout: layout["branch_route"]["steps"][0].__setitem__(
+            "unit",
+            "mm",
+        ),
+        lambda layout: layout["split_manifold"].__setitem__(
+            "branch_gap_mm",
+            0.0,
+        ),
+        lambda layout: layout["split_manifold"].__setitem__(
+            "branch_gap_mm",
+            True,
+        ),
+        lambda layout: layout["split_manifold"].__setitem__(
+            "branch_gap_mm",
+            "20",
+        ),
+        lambda layout: layout["split_manifold"].__setitem__(
+            "branch_gap_mm",
+            float("inf"),
+        ),
         lambda layout: layout.__setitem__("plane", "xz"),
         lambda layout: layout["branch_route"].__setitem__("steps", []),
     ],
@@ -140,13 +183,25 @@ def test_closed_layout_rejects_unknown_or_invalid_values(mutation) -> None:
 def test_redundant_adjacent_straights_are_rejected() -> None:
     layout = _layout()
     layout["branch_route"]["steps"] = [
-        {"kind": "straight", "length_mm": 4000.0, "illumination": "illuminated"},
-        {"kind": "straight", "length_mm": 6000.0, "illumination": "illuminated"},
+        {
+            "kind": "straight",
+            "length_mm": 4000.0,
+            "illumination": "illuminated",
+        },
+        {
+            "kind": "straight",
+            "length_mm": 6000.0,
+            "illumination": "illuminated",
+        },
         {"kind": "bend", "turn": "left", "illumination": "illuminated"},
         {"kind": "straight", "length_mm": 2000.0, "illumination": "dark"},
         {"kind": "bend", "turn": "right", "illumination": "dark"},
     ]
-    _expect_error("cad_link_layout_mismatch", canonicalize_layout_spec, layout)
+    _expect_error(
+        "cad_link_layout_mismatch",
+        canonicalize_layout_spec,
+        layout,
+    )
 
 
 def test_transform_has_exact_order_connections_and_right_bend_traversal() -> None:
@@ -173,8 +228,14 @@ def test_transform_has_exact_order_connections_and_right_bend_traversal() -> Non
         "merge_manifold",
         "common_return",
     ]
-    assert {"from": "common_supply.port_b", "to": "split_manifold.common"} in spec["connections"]
-    assert {"from": "common_return.port_b", "to": "merge_manifold.common"} in spec["connections"]
+    assert {
+        "from": "common_supply.port_b",
+        "to": "split_manifold.common",
+    } in spec["connections"]
+    assert {
+        "from": "common_return.port_b",
+        "to": "merge_manifold.common",
+    } in spec["connections"]
     assert {
         "from": "branch_1_step_3.port_b",
         "to": "branch_1_step_4.port_b",
@@ -209,10 +270,16 @@ def test_zero_common_lengths_omit_parts_and_remap_boundaries() -> None:
     layout = _layout()
     layout["merge_manifold"]["branch_gap_mm"] = 25.0
     layout["branch_route"]["steps"] = [
-        {"kind": "straight", "length_mm": 10000.0, "illumination": "illuminated"}
+        {
+            "kind": "straight",
+            "length_mm": 10000.0,
+            "illumination": "illuminated",
+        }
     ]
     result = transform_topology_manifest(manifest, layout)
-    assert [part["part_id"] for part in result["resolved_geometry_spec"]["parts"]] == [
+    assert [
+        part["part_id"] for part in result["resolved_geometry_spec"]["parts"]
+    ] == [
         "split_manifold",
         "branch_1_step_1",
         "merge_manifold",
@@ -226,21 +293,37 @@ def test_zero_common_lengths_omit_parts_and_remap_boundaries() -> None:
 def test_multi_branch_pitch_must_match_exactly() -> None:
     layout = _layout()
     layout["merge_manifold"]["branch_gap_mm"] = 20.0000001
-    _expect_error("cad_link_layout_mismatch", transform_topology_manifest, _manifest(), layout)
+    _expect_error(
+        "cad_link_layout_mismatch",
+        transform_topology_manifest,
+        _manifest(),
+        layout,
+    )
 
 
 @pytest.mark.parametrize(
     "mutator",
     [
         lambda layout: layout["branch_route"]["steps"].pop(),
-        lambda layout: layout["branch_route"]["steps"][0].__setitem__("length_mm", 9999.0),
-        lambda layout: layout["branch_route"]["steps"][1].__setitem__("illumination", "dark"),
+        lambda layout: layout["branch_route"]["steps"][0].__setitem__(
+            "length_mm",
+            9999.0,
+        ),
+        lambda layout: layout["branch_route"]["steps"][1].__setitem__(
+            "illumination",
+            "dark",
+        ),
     ],
 )
 def test_route_aggregates_must_match_manifest(mutator) -> None:
     layout = _layout()
     mutator(layout)
-    _expect_error("cad_link_layout_mismatch", transform_topology_manifest, _manifest(), layout)
+    _expect_error(
+        "cad_link_layout_mismatch",
+        transform_topology_manifest,
+        _manifest(),
+        layout,
+    )
 
 
 def test_step_and_resolved_part_complexity_bounds_fail_closed() -> None:
@@ -249,7 +332,11 @@ def test_step_and_resolved_part_complexity_bounds_fail_closed() -> None:
         {"kind": "bend", "turn": "left", "illumination": "dark"}
         for _ in range(130)
     ]
-    _expect_error("cad_link_layout_complexity_unsupported", canonicalize_layout_spec, layout)
+    _expect_error(
+        "cad_link_layout_complexity_unsupported",
+        canonicalize_layout_spec,
+        layout,
+    )
 
     manifest = _manifest(
         branch_count=12,
@@ -269,3 +356,40 @@ def test_step_and_resolved_part_complexity_bounds_fail_closed() -> None:
         manifest,
         layout,
     )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda manifest: manifest["executed_inputs"][
+            "branch_illuminated_straight_length"
+        ].__setitem__("value", -1.0),
+        lambda manifest: manifest["executed_inputs"][
+            "branch_illuminated_bend_count"
+        ].__setitem__("value", 3),
+        lambda manifest: manifest["branch_template"]["bend_group"].__setitem__(
+            "angle_deg",
+            0.0,
+        ),
+        lambda manifest: manifest["geometry_totals"].__setitem__(
+            "common_supply_length_m",
+            2.0,
+        ),
+        lambda manifest: manifest["branch_template"][
+            "illuminated_straight"
+        ].__setitem__("length_m", 9.0),
+        lambda manifest: manifest["geometry_totals"].__setitem__(
+            "total_liquid_inventory_m3",
+            0.05,
+        ),
+    ],
+)
+def test_invalid_or_inconsistent_source_geometry_fails_closed(mutation) -> None:
+    manifest = _manifest()
+    mutation(manifest)
+    with pytest.raises(TopologyCadLinkError) as exc_info:
+        transform_topology_manifest(manifest, _layout())
+    assert exc_info.value.code in {
+        "cad_link_topology_manifest_invalid",
+        "cad_link_topology_manifest_identity_mismatch",
+    }
