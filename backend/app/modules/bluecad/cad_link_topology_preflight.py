@@ -18,8 +18,10 @@ from app.modules.bluecad.spec import canonicalize_geometry_spec
 PREFLIGHT_TIMEOUT_SECONDS = 30.0
 INTERFERENCE_ABS_TOL_MM3 = 1e-6
 COINCIDENCE_ABS_TOL_MM = 1e-6
+CONTACT_RADIUS_ABS_TOL_MM = 1e-6
 CONTACT_AREA_REL_TOL = 1e-6
 CONTACT_AREA_ABS_TOL_MM2 = 1e-6
+MAX_CONTACT_TOPOLOGY_ITEMS = 64
 MAX_EVIDENCE_BYTES = 2_000_000
 
 
@@ -57,7 +59,7 @@ def run_kernel_preflight(
             "CAD-link kernel preflight exited without bounded evidence.",
             status_code=503,
         ) from exc
-    if not isinstance(payload, dict) or type(payload.get("ok")) is not bool:
+    if not isinstance(payload, dict) or not isinstance(payload.get("ok"), bool):
         raise CadLinkError(
             "cad_link_kernel_unavailable",
             "CAD-link kernel preflight returned malformed evidence.",
@@ -94,6 +96,7 @@ def _preflight_worker(
 ) -> None:
     try:
         evidence = _build_preflight_evidence(resolved_spec, boundaries)
+        result_queue.put({"ok": True, "evidence": evidence})
     except CadLinkError as exc:
         result_queue.put(
             {
@@ -230,8 +233,7 @@ def _build_preflight_evidence(
     for left_id, right_id in combinations(parts, 2):
         left = parts[left_id]
         right = parts[right_id]
-        pair_key = frozenset((left_id, right_id))
-        connections = declared_pairs.get(pair_key, [])
+        connections = declared_pairs.get(frozenset((left_id, right_id)), [])
         connected = bool(connections)
         if len(connections) > 1:
             raise CadLinkError(
@@ -391,21 +393,84 @@ def _validate_declared_contact(
             "Declared connection ports are not coincident, opposed, and conformant.",
             status_code=422,
         )
-    outer_d = float(left_port.outer_d or 0.0)
-    wall_t = float(left_port.wall_t or 0.0)
-    inner_d = outer_d - 2.0 * wall_t
-    expected_area = math.pi / 4.0 * (outer_d**2 - inner_d**2)
-    if topology["face_count"] < 1 or not math.isclose(
-        float(topology["face_area_mm2"]),
-        expected_area,
-        rel_tol=CONTACT_AREA_REL_TOL,
-        abs_tol=CONTACT_AREA_ABS_TOL_MM2,
-    ):
-        raise CadLinkError(
-            "cad_link_layout_contact_invalid",
-            "Declared connection contact is not the intended annular mating boundary.",
-            status_code=422,
-        )
+    _validate_port_contact_topology(left_port, topology)
+
+
+def _validate_port_contact_topology(
+    port: PortFrame,
+    topology: Mapping[str, Any],
+) -> None:
+    """Accept only the exact annular mating boundary, in face or circular-edge form."""
+
+    outer_radius = float(port.outer_d or 0.0) / 2.0
+    wall_t = float(port.wall_t or 0.0)
+    inner_radius = outer_radius - wall_t
+    if inner_radius <= 0.0 or outer_radius <= inner_radius:
+        raise _contact_error()
+
+    edges = topology.get("edges")
+    faces = topology.get("faces")
+    if not isinstance(edges, list) or not isinstance(faces, list):
+        raise _contact_error()
+    if not 1 <= len(edges) <= MAX_CONTACT_TOPOLOGY_ITEMS:
+        raise _contact_error()
+
+    classified_radii: set[str] = set()
+    for edge in edges:
+        if not isinstance(edge, Mapping):
+            raise _contact_error()
+        radius = edge.get("radius_mm")
+        center = edge.get("center_mm")
+        if not isinstance(radius, (int, float)) or isinstance(radius, bool):
+            raise _contact_error()
+        if not _point_matches(center, port.origin):
+            raise _contact_error()
+        if math.isclose(
+            float(radius),
+            inner_radius,
+            rel_tol=CONTACT_AREA_REL_TOL,
+            abs_tol=CONTACT_RADIUS_ABS_TOL_MM,
+        ):
+            classified_radii.add("inner")
+        elif math.isclose(
+            float(radius),
+            outer_radius,
+            rel_tol=CONTACT_AREA_REL_TOL,
+            abs_tol=CONTACT_RADIUS_ABS_TOL_MM,
+        ):
+            classified_radii.add("outer")
+        else:
+            raise _contact_error()
+    if classified_radii != {"inner", "outer"}:
+        raise _contact_error()
+
+    expected_area = math.pi * (outer_radius**2 - inner_radius**2)
+    if len(faces) > MAX_CONTACT_TOPOLOGY_ITEMS:
+        raise _contact_error()
+    for face in faces:
+        if not isinstance(face, Mapping):
+            raise _contact_error()
+        area = face.get("area_mm2")
+        center = face.get("center_mm")
+        if not isinstance(area, (int, float)) or isinstance(area, bool):
+            raise _contact_error()
+        if not math.isclose(
+            float(area),
+            expected_area,
+            rel_tol=CONTACT_AREA_REL_TOL,
+            abs_tol=CONTACT_AREA_ABS_TOL_MM2,
+        ):
+            raise _contact_error()
+        if center is not None and not _point_on_port_plane(center, port):
+            raise _contact_error()
+
+
+def _contact_error() -> CadLinkError:
+    return CadLinkError(
+        "cad_link_layout_contact_invalid",
+        "Declared connection contact is not confined to the intended annular mating boundary.",
+        status_code=422,
+    )
 
 
 def _ports_mate(left: PortFrame, right: PortFrame) -> bool:
@@ -430,6 +495,30 @@ def _ports_match(left: PortFrame, right: PortFrame) -> bool:
         and left.wall_t == right.wall_t
         and left.pad_d == right.pad_d
     )
+
+
+def _point_matches(value: Any, expected: tuple[float, float, float]) -> bool:
+    return isinstance(value, list) and len(value) == 3 and all(
+        isinstance(value[index], (int, float))
+        and not isinstance(value[index], bool)
+        and math.isclose(
+            float(value[index]),
+            expected[index],
+            abs_tol=COINCIDENCE_ABS_TOL_MM,
+        )
+        for index in range(3)
+    )
+
+
+def _point_on_port_plane(value: Any, port: PortFrame) -> bool:
+    if not isinstance(value, list) or len(value) != 3:
+        return False
+    try:
+        delta = tuple(float(value[index]) - port.origin[index] for index in range(3))
+    except (TypeError, ValueError, OverflowError):
+        return False
+    axial = sum(delta[index] * port.direction[index] for index in range(3))
+    return math.isfinite(axial) and abs(axial) <= COINCIDENCE_ABS_TOL_MM
 
 
 def _points_close(
@@ -480,19 +569,77 @@ def _intersection_evidence(intersection: Any) -> dict[str, Any]:
             "edge_count": 0,
             "vertex_count": 0,
             "face_area_mm2": 0.0,
+            "faces": [],
+            "edges": [],
         }
     faces = list(intersection.faces()) if hasattr(intersection, "faces") else []
     edges = list(intersection.edges()) if hasattr(intersection, "edges") else []
     vertices = list(intersection.vertices()) if hasattr(intersection, "vertices") else []
+    if len(faces) > MAX_CONTACT_TOPOLOGY_ITEMS or len(edges) > MAX_CONTACT_TOPOLOGY_ITEMS:
+        raise CadLinkError(
+            "cad_link_kernel_evidence_too_large",
+            "Kernel contact topology exceeds the bounded evidence domain.",
+            status_code=503,
+        )
+    face_items = [
+        {
+            "area_mm2": _finite(float(getattr(face, "area", 0.0) or 0.0)),
+            "center_mm": _shape_center(face),
+        }
+        for face in faces
+    ]
+    edge_items = [
+        {
+            "radius_mm": _shape_number(edge, "radius"),
+            "center_mm": _shape_point(edge, "arc_center"),
+        }
+        for edge in edges
+    ]
     return {
         "volume_mm3": _finite(float(getattr(intersection, "volume", 0.0) or 0.0)),
         "face_count": len(faces),
         "edge_count": len(edges),
         "vertex_count": len(vertices),
-        "face_area_mm2": _finite(
-            sum(float(getattr(face, "area", 0.0) or 0.0) for face in faces)
-        ),
+        "face_area_mm2": _finite(sum(item["area_mm2"] for item in face_items)),
+        "faces": face_items,
+        "edges": edge_items,
     }
+
+
+def _shape_number(shape: Any, attribute: str) -> float | None:
+    try:
+        value = getattr(shape, attribute)
+        value = value() if callable(value) else value
+        return _finite(float(value))
+    except (AttributeError, TypeError, ValueError, OverflowError):
+        return None
+
+
+def _shape_point(shape: Any, attribute: str) -> list[float] | None:
+    try:
+        value = getattr(shape, attribute)
+        value = value() if callable(value) else value
+        return _vector_list(value)
+    except (AttributeError, TypeError, ValueError, OverflowError):
+        return None
+
+
+def _shape_center(shape: Any) -> list[float] | None:
+    try:
+        value = shape.center()
+        return _vector_list(value)
+    except (AttributeError, TypeError, ValueError, OverflowError):
+        return None
+
+
+def _vector_list(value: Any) -> list[float]:
+    coordinates: list[float] = []
+    for index, attribute in enumerate(("X", "Y", "Z")):
+        component = getattr(value, attribute, None)
+        if component is None:
+            component = value[index]
+        coordinates.append(_finite(float(component)))
+    return coordinates
 
 
 def _bbox_may_contact(
