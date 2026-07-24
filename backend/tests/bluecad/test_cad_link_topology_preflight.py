@@ -13,7 +13,11 @@ from app.modules.bluecad.cad_link_topology_contract import (
     canonicalize_layout,
     resolve_geometry_spec,
 )
-from app.modules.bluecad.cad_link_topology_preflight import run_kernel_preflight
+from app.modules.bluecad.cad_link_topology_preflight import (
+    _validate_port_contact_topology,
+    run_kernel_preflight,
+)
+from app.modules.bluecad.models import PortFrame
 
 
 def _manifest() -> dict[str, object]:
@@ -97,6 +101,36 @@ def test_kernel_preflight_closes_parallel_headers_without_writes(
         check["brep_valid"] and check["manifold"]
         for check in evidence["kernel_checks"].values()
     )
+
+
+def test_edge_form_annular_contact_is_accepted() -> None:
+    port = PortFrame((1.0, 2.0, 3.0), (1.0, 0.0, 0.0), 60.0, 5.0)
+    topology = {
+        "edges": [
+            {"radius_mm": 30.0, "center_mm": [1.0, 2.0, 3.0]},
+            {"radius_mm": 25.0, "center_mm": [1.0, 2.0, 3.0]},
+        ],
+        "faces": [],
+    }
+
+    _validate_port_contact_topology(port, topology)
+
+
+def test_extra_contact_outside_annulus_is_rejected() -> None:
+    port = PortFrame((1.0, 2.0, 3.0), (1.0, 0.0, 0.0), 60.0, 5.0)
+    topology = {
+        "edges": [
+            {"radius_mm": 30.0, "center_mm": [1.0, 2.0, 3.0]},
+            {"radius_mm": 25.0, "center_mm": [1.0, 2.0, 3.0]},
+            {"radius_mm": 35.0, "center_mm": [1.0, 2.0, 3.0]},
+        ],
+        "faces": [],
+    }
+
+    with pytest.raises(CadLinkError) as exc_info:
+        _validate_port_contact_topology(port, topology)
+
+    assert exc_info.value.code == "cad_link_layout_contact_invalid"
 
 
 def test_kernel_preflight_rejects_duplicate_boundary() -> None:
