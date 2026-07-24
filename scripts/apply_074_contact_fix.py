@@ -1,48 +1,45 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 PATH = Path("backend/app/modules/bluecad/cad_link_topology_preflight.py")
 text = PATH.read_text(encoding="utf-8")
 
 
-def replace_once(old: str, new: str) -> None:
+def replace_function(name: str, replacement: str) -> None:
     global text
-    count = text.count(old)
-    if count != 1:
-        raise SystemExit(f"expected exactly one replacement target, found {count}: {old[:80]!r}")
-    text = text.replace(old, new, 1)
+    pattern = re.compile(rf"(?ms)^def {re.escape(name)}\(.*?(?=^def |\Z)")
+    matches = list(pattern.finditer(text))
+    if len(matches) != 1:
+        raise SystemExit(f"expected one function {name}, found {len(matches)}")
+    match = matches[0]
+    text = text[: match.start()] + replacement.rstrip() + "\n\n\n" + text[match.end() :]
 
 
-replace_once(
-    '''CONTACT_AREA_ABS_TOL_MM2 = 1e-6
-MAX_CONTACT_TOPOLOGY_ITEMS = 64
-''',
-    '''CONTACT_AREA_ABS_TOL_MM2 = 1e-6
-CONTACT_NEIGHBORHOOD_AXIAL_MM = 1e-4
-CONTACT_NEIGHBORHOOD_RADIAL_MM = 1e-4
-MAX_CONTACT_TOPOLOGY_ITEMS = 64
-MAX_PART_FACE_COUNT = 128
-''',
+if "CONTACT_NEIGHBORHOOD_AXIAL_MM" not in text:
+    marker = "CONTACT_AREA_ABS_TOL_MM2 = 1e-6\nMAX_CONTACT_TOPOLOGY_ITEMS = 64\n"
+    if text.count(marker) != 1:
+        raise SystemExit("contact constant marker missing")
+    text = text.replace(
+        marker,
+        "CONTACT_AREA_ABS_TOL_MM2 = 1e-6\n"
+        "CONTACT_NEIGHBORHOOD_AXIAL_MM = 1e-4\n"
+        "CONTACT_NEIGHBORHOOD_RADIAL_MM = 1e-4\n"
+        "MAX_CONTACT_TOPOLOGY_ITEMS = 64\n"
+        "MAX_PART_FACE_COUNT = 128\n",
+        1,
+    )
+
+loop_pattern = re.compile(
+    r"(?ms)^        topology = _classify_pair_intersection\(left\.shape, right\.shape\)\n"
+    r"        has_contact = any\(\n"
+    r".*?^            zero_contact_candidate_count \+= 1\n"
 )
-
-replace_once(
-    '''        topology = _classify_pair_intersection(left.shape, right.shape)
-        has_contact = any(
-            topology[key] > 0 for key in ("face_count", "edge_count", "vertex_count")
-        )
-        if connected:
-            _validate_declared_contact(parts, pair_connections[0], topology)
-        elif has_contact:
-            raise CadLinkError(
-                "cad_link_layout_contact_invalid",
-                "Non-connected parts share a face, edge, or vertex.",
-                status_code=422,
-            )
-        else:
-            zero_contact_candidate_count += 1
-''',
-    '''        topology = _classify_pair_intersection(left.shape, right.shape)
+loop_matches = list(loop_pattern.finditer(text))
+if len(loop_matches) != 1:
+    raise SystemExit(f"expected one pair-classification loop block, found {len(loop_matches)}")
+loop_replacement = '''        topology = _classify_pair_intersection(left.shape, right.shape)
         minimum_distance = _strict_number(topology.get("minimum_distance_mm"))
         has_topology = any(
             topology[key] > 0 for key in ("face_count", "edge_count", "vertex_count")
@@ -60,23 +57,11 @@ replace_once(
             )
         else:
             zero_contact_candidate_count += 1
-''',
-)
+'''
+text = loop_pattern.sub(loop_replacement, text, count=1)
 
-replace_once(
-    '''def _classify_pair_intersection(left_shape: Any, right_shape: Any) -> dict[str, Any]:
-    intersection = _shape_intersection(left_shape, right_shape)
-    volume = 0.0 if intersection is None else _finite(_shape_volume(intersection))
-    if volume > INTERFERENCE_ABS_TOL_MM3:
-        raise CadLinkError(
-            "cad_link_layout_collision",
-            "Placed parts have positive-volume interference.",
-            status_code=422,
-        )
-    topology = _intersection_topology(intersection)
-    topology["volume_mm3"] = volume
-    return topology
-''',
+replace_function(
+    "_classify_pair_intersection",
     '''def _classify_pair_intersection(left_shape: Any, right_shape: Any) -> dict[str, Any]:
     intersection = _shape_intersection(left_shape, right_shape)
     volume = 0.0 if intersection is None else _finite(_shape_volume(intersection))
@@ -90,30 +75,11 @@ replace_once(
     topology = _intersection_topology(intersection)
     topology["volume_mm3"] = volume
     topology["minimum_distance_mm"] = minimum_distance
-    return topology
-''',
+    return topology''',
 )
 
-replace_once(
-    '''def _validate_declared_contact(
-    parts: Mapping[str, BuiltPart],
-    connection: Mapping[str, str],
-    topology: Mapping[str, Any],
-) -> None:
-    left_id, left_port_name = connection["from"].split(".", 1)
-    right_id, right_port_name = connection["to"].split(".", 1)
-    left_port = parts[left_id].ports[left_port_name]
-    right_port = parts[right_id].ports[right_port_name]
-    if not _ports_mate(left_port, right_port):
-        raise CadLinkError(
-            "cad_link_layout_contact_invalid",
-            "Declared connection ports are not coincident, opposed, and conformant.",
-            status_code=422,
-        )
-    _validate_port_contact_topology(left_port, topology)
-
-
-''',
+replace_function(
+    "_validate_declared_contact",
     '''def _validate_declared_contact(
     parts: Mapping[str, BuiltPart],
     connection: Mapping[str, str],
@@ -273,20 +239,11 @@ def _allowed_contact_neighborhood(port: PortFrame) -> Any:
         port.origin[index] - CONTACT_NEIGHBORHOOD_AXIAL_MM * direction[index]
         for index in range(3)
     )
-    return bd.Pos(*start) * bd.Rot(Z=math.degrees(angle)) * local
-
-
-''',
+    return bd.Pos(*start) * bd.Rot(Z=math.degrees(angle)) * local''',
 )
 
-replace_once(
-    '''def _shape_volume(shape: Any) -> float:
-    value = getattr(shape, "volume", 0.0)
-    value = value() if callable(value) else value
-    return float(value or 0.0)
-
-
-''',
+replace_function(
+    "_shape_volume",
     '''def _shape_volume(shape: Any) -> float:
     value = getattr(shape, "volume", 0.0)
     value = value() if callable(value) else value
@@ -306,10 +263,7 @@ def _shape_distance(left: Any, right: Any) -> float:
         raise _kernel_unavailable(
             "CAD-link kernel returned a negative shape distance."
         )
-    return distance
-
-
-''',
+    return distance''',
 )
 
 PATH.write_text(text, encoding="utf-8")
