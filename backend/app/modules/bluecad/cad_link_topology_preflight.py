@@ -5,9 +5,8 @@ from __future__ import annotations
 import json
 import math
 import multiprocessing as mp
-import queue
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from itertools import combinations
 from typing import Any
 
@@ -23,6 +22,11 @@ CONTACT_AREA_REL_TOL = 1e-6
 CONTACT_AREA_ABS_TOL_MM2 = 1e-6
 MAX_CONTACT_TOPOLOGY_ITEMS = 64
 MAX_EVIDENCE_BYTES = 2_000_000
+MAX_WIRE_BYTES = 2_100_000
+_WORKER_JOIN_GRACE_SECONDS = 1.0
+
+# Test sentinel: spawn starts with the module default, whereas fork inherits parent mutation.
+_PREFLIGHT_PARENT_SENTINEL: str | None = None
 
 
 def run_kernel_preflight(
@@ -31,56 +35,32 @@ def run_kernel_preflight(
     *,
     timeout_s: float = PREFLIGHT_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
-    """Run one isolated, file-free build123d preflight and return bounded JSON evidence."""
+    """Run one spawned, file-free build123d preflight and return bounded JSON evidence."""
 
     canonical_spec = canonicalize_geometry_spec(resolved_spec)
     canonical_boundaries = _canonical_boundaries(boundaries)
-    result_queue: mp.Queue[dict[str, Any]] = mp.Queue(maxsize=1)
-    process = mp.Process(
-        target=_preflight_worker,
-        args=(canonical_spec, canonical_boundaries, result_queue),
-        daemon=True,
+    payload = _run_spawned_json(
+        _preflight_payload,
+        (canonical_spec, canonical_boundaries),
+        timeout_s=timeout_s,
     )
-    process.start()
-    process.join(timeout_s)
-    if process.is_alive():
-        process.kill()
-        process.join()
-        raise CadLinkError(
-            "cad_link_kernel_timeout",
-            "CAD-link kernel preflight timed out.",
-            status_code=504,
-        )
-    try:
-        payload = result_queue.get_nowait()
-    except queue.Empty as exc:
-        raise CadLinkError(
-            "cad_link_kernel_unavailable",
-            "CAD-link kernel preflight exited without bounded evidence.",
-            status_code=503,
-        ) from exc
-    if not isinstance(payload, dict) or not isinstance(payload.get("ok"), bool):
-        raise CadLinkError(
-            "cad_link_kernel_unavailable",
-            "CAD-link kernel preflight returned malformed evidence.",
-            status_code=503,
-        )
+    if not isinstance(payload, dict) or type(payload.get("ok")) is not bool:
+        raise _kernel_unavailable("CAD-link kernel preflight returned malformed evidence.")
     if not payload["ok"]:
+        status_code = payload.get("status_code")
+        if type(status_code) is not int:
+            status_code = 503
         raise CadLinkError(
             str(payload.get("code") or "cad_link_kernel_unavailable"),
             str(payload.get("message") or "CAD-link kernel preflight failed."),
-            status_code=int(payload.get("status_code") or 503),
+            status_code=status_code,
         )
     evidence = payload.get("evidence")
     if not isinstance(evidence, dict):
-        raise CadLinkError(
-            "cad_link_kernel_unavailable",
-            "CAD-link kernel preflight returned malformed evidence.",
-            status_code=503,
-        )
+        raise _kernel_unavailable("CAD-link kernel preflight returned malformed evidence.")
     _assert_finite_json(evidence)
-    encoded = json.dumps(evidence, sort_keys=True, separators=(",", ":"), allow_nan=False)
-    if len(encoded.encode("utf-8")) > MAX_EVIDENCE_BYTES:
+    encoded = _canonical_json_bytes(evidence)
+    if len(encoded) > MAX_EVIDENCE_BYTES:
         raise CadLinkError(
             "cad_link_kernel_evidence_too_large",
             "CAD-link kernel evidence exceeds the bounded response size.",
@@ -89,55 +69,183 @@ def run_kernel_preflight(
     return evidence
 
 
-def _preflight_worker(
-    resolved_spec: dict[str, Any],
-    boundaries: dict[str, str],
-    result_queue: mp.Queue[dict[str, Any]],
+def _run_spawned_json(
+    target: Callable[..., dict[str, Any]],
+    args: tuple[Any, ...],
+    *,
+    timeout_s: float,
+) -> dict[str, Any]:
+    """Run a picklable target under spawn and receive one bounded JSON message."""
+
+    if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)):
+        raise _kernel_unavailable("CAD-link kernel timeout is invalid.")
+    timeout = float(timeout_s)
+    if not math.isfinite(timeout) or timeout < 0.0:
+        raise _kernel_unavailable("CAD-link kernel timeout is invalid.")
+
+    context = mp.get_context("spawn")
+    receive_conn, send_conn = context.Pipe(duplex=False)
+    process = context.Process(
+        target=_json_worker_entry,
+        args=(target, args, send_conn),
+        daemon=True,
+    )
+    try:
+        process.start()
+    except Exception as exc:
+        receive_conn.close()
+        send_conn.close()
+        raise _kernel_unavailable("CAD-link kernel worker could not start.") from exc
+    finally:
+        try:
+            send_conn.close()
+        except OSError:
+            pass
+
+    raw: bytes | None = None
+    try:
+        if receive_conn.poll(timeout):
+            try:
+                raw = receive_conn.recv_bytes(MAX_WIRE_BYTES)
+            except (EOFError, OSError, ValueError) as exc:
+                raise _kernel_unavailable(
+                    "CAD-link kernel preflight returned malformed evidence."
+                ) from exc
+        else:
+            if process.is_alive():
+                process.kill()
+                process.join()
+                raise CadLinkError(
+                    "cad_link_kernel_timeout",
+                    "CAD-link kernel preflight timed out.",
+                    status_code=504,
+                )
+            raise _kernel_unavailable(
+                "CAD-link kernel preflight exited without bounded evidence."
+            )
+    finally:
+        receive_conn.close()
+        process.join(_WORKER_JOIN_GRACE_SECONDS)
+        if process.is_alive():
+            process.kill()
+            process.join()
+
+    if raw is None:
+        raise _kernel_unavailable(
+            "CAD-link kernel preflight exited without bounded evidence."
+        )
+    if process.exitcode not in (0, None):
+        raise _kernel_unavailable("CAD-link kernel worker crashed.")
+    try:
+        text = raw.decode("utf-8")
+        payload = json.loads(text, parse_constant=_reject_json_constant)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise _kernel_unavailable(
+            "CAD-link kernel preflight returned malformed evidence."
+        ) from exc
+    if not isinstance(payload, dict):
+        raise _kernel_unavailable(
+            "CAD-link kernel preflight returned malformed evidence."
+        )
+    _assert_finite_json(payload)
+    return payload
+
+
+def _json_worker_entry(
+    target: Callable[..., dict[str, Any]],
+    args: tuple[Any, ...],
+    send_conn: Any,
 ) -> None:
     try:
-        evidence = _build_preflight_evidence(resolved_spec, boundaries)
-        result_queue.put({"ok": True, "evidence": evidence})
-    except CadLinkError as exc:
-        result_queue.put(
-            {
-                "ok": False,
-                "code": exc.code,
-                "message": exc.message,
-                "status_code": exc.status_code,
-            }
-        )
-    except BluecadError as exc:
-        code = (
-            "cad_link_layout_not_closable"
-            if exc.code == "PORT_MISMATCH"
-            else "cad_link_kernel_unavailable"
-        )
-        result_queue.put(
-            {
-                "ok": False,
-                "code": code,
-                "message": "CAD assembly preflight failed.",
-                "status_code": 422 if exc.code == "PORT_MISMATCH" else 503,
-            }
-        )
-    except ImportError:
-        result_queue.put(
-            {
-                "ok": False,
-                "code": "cad_link_kernel_unavailable",
-                "message": "The required CAD kernel is unavailable.",
-                "status_code": 503,
-            }
-        )
-    except Exception:
-        result_queue.put(
-            {
+        try:
+            payload = target(*args)
+            if not isinstance(payload, dict):
+                payload = {
+                    "ok": False,
+                    "code": "cad_link_kernel_unavailable",
+                    "message": "CAD-link kernel preflight returned malformed evidence.",
+                    "status_code": 503,
+                }
+        except Exception:
+            payload = {
                 "ok": False,
                 "code": "cad_link_kernel_unavailable",
                 "message": "CAD-link kernel preflight failed without safe evidence.",
                 "status_code": 503,
             }
-        )
+        try:
+            raw = _canonical_json_bytes(payload)
+        except (TypeError, ValueError, CadLinkError):
+            raw = _canonical_json_bytes(
+                {
+                    "ok": False,
+                    "code": "cad_link_kernel_unavailable",
+                    "message": "CAD-link kernel preflight returned malformed evidence.",
+                    "status_code": 503,
+                }
+            )
+        if len(raw) > MAX_EVIDENCE_BYTES:
+            raw = _canonical_json_bytes(
+                {
+                    "ok": False,
+                    "code": "cad_link_kernel_evidence_too_large",
+                    "message": "CAD-link kernel evidence exceeds the bounded response size.",
+                    "status_code": 503,
+                }
+            )
+        send_conn.send_bytes(raw)
+    finally:
+        send_conn.close()
+
+
+def _preflight_payload(
+    resolved_spec: dict[str, Any],
+    boundaries: dict[str, str],
+) -> dict[str, Any]:
+    if _PREFLIGHT_PARENT_SENTINEL is not None:
+        return {
+            "ok": False,
+            "code": "cad_link_kernel_unavailable",
+            "message": "CAD-link kernel worker inherited parent-only state.",
+            "status_code": 503,
+        }
+    try:
+        return {
+            "ok": True,
+            "evidence": _build_preflight_evidence(resolved_spec, boundaries),
+        }
+    except CadLinkError as exc:
+        return {
+            "ok": False,
+            "code": exc.code,
+            "message": exc.message,
+            "status_code": exc.status_code,
+        }
+    except BluecadError as exc:
+        return {
+            "ok": False,
+            "code": (
+                "cad_link_layout_not_closable"
+                if exc.code == "PORT_MISMATCH"
+                else "cad_link_kernel_unavailable"
+            ),
+            "message": "CAD assembly preflight failed.",
+            "status_code": 422 if exc.code == "PORT_MISMATCH" else 503,
+        }
+    except ImportError:
+        return {
+            "ok": False,
+            "code": "cad_link_kernel_unavailable",
+            "message": "The required CAD kernel is unavailable.",
+            "status_code": 503,
+        }
+    except Exception:
+        return {
+            "ok": False,
+            "code": "cad_link_kernel_unavailable",
+            "message": "CAD-link kernel preflight failed without safe evidence.",
+            "status_code": 503,
+        }
 
 
 def _build_preflight_evidence(
@@ -176,47 +284,55 @@ def _build_preflight_evidence(
             status_code=422,
         )
 
-    kernel_checks = {
-        part_id: {
-            "brep_valid": _shape_flag(part.shape, "is_valid"),
-            "manifold": _shape_flag(part.shape, "is_manifold"),
-        }
-        for part_id, part in parts.items()
-    }
-    if not all(
-        item["brep_valid"] and item["manifold"] for item in kernel_checks.values()
-    ):
-        raise CadLinkError(
-            "cad_link_geometry_invalid",
-            "One or more placed parts failed BREP or manifold validation.",
-            status_code=422,
-        )
-
+    kernel_checks: dict[str, dict[str, bool]] = {}
     placed_frames: dict[str, dict[str, Any]] = {}
+    kernel_bboxes: dict[
+        str, tuple[tuple[float, float, float], tuple[float, float, float]]
+    ] = {}
+    material_volumes: dict[str, float] = {}
     for part_id, placed in parts.items():
+        kernel_checks[part_id] = {
+            "brep_valid": _shape_flag(placed.shape, "is_valid"),
+            "manifold": _shape_flag(placed.shape, "is_manifold"),
+        }
+        if not (
+            kernel_checks[part_id]["brep_valid"]
+            and kernel_checks[part_id]["manifold"]
+        ):
+            raise CadLinkError(
+                "cad_link_geometry_invalid",
+                "One or more placed parts failed BREP or manifold validation.",
+                status_code=422,
+            )
         local = build_part(part_specs[part_id])
         rotation, translation = _infer_placement(local, placed)
         placed_frames[part_id] = {
             "rotation_z_rad": rotation,
             "translation_mm": list(translation),
         }
+        kernel_bboxes[part_id] = _kernel_bbox(placed.shape)
+        material_volume = _finite(_shape_volume(placed.shape))
+        if material_volume <= 0.0:
+            raise CadLinkError(
+                "cad_link_geometry_invalid",
+                "One or more placed parts has non-positive kernel material volume.",
+                status_code=422,
+            )
+        material_volumes[part_id] = material_volume
 
     cavity_evidence: dict[str, dict[str, Any]] = {}
     for part_id in ("split_manifold", "merge_manifold"):
         kernel = build_capped_manifold_kernel(part_specs[part_id])
-        rotation = float(placed_frames[part_id]["rotation_z_rad"])
-        translation = tuple(
-            float(value) for value in placed_frames[part_id]["translation_mm"]
-        )
+        frame = placed_frames[part_id]
+        rotation = float(frame["rotation_z_rad"])
+        translation = tuple(float(value) for value in frame["translation_mm"])
         placed_void = _place_shape(kernel.void_shape, rotation, translation)
+        cavity_volume = _finite(_shape_volume(placed_void))
         cavity_evidence[part_id] = {
-            "volume_mm3": _finite(float(placed_void.volume)),
+            "volume_mm3": cavity_volume,
             "brep_valid": _shape_flag(placed_void, "is_valid"),
         }
-        if (
-            cavity_evidence[part_id]["volume_mm3"] <= 0.0
-            or not cavity_evidence[part_id]["brep_valid"]
-        ):
+        if cavity_volume <= 0.0 or not cavity_evidence[part_id]["brep_valid"]:
             raise CadLinkError(
                 "cad_link_manifold_volume_unrepresentable",
                 "A manifold fluid cavity is not a positive valid BREP.",
@@ -227,21 +343,32 @@ def _build_preflight_evidence(
     for connection in spec.get("connections", []):
         left_id = connection["from"].split(".", 1)[0]
         right_id = connection["to"].split(".", 1)[0]
-        declared_pairs.setdefault(frozenset((left_id, right_id)), []).append(connection)
+        declared_pairs.setdefault(frozenset((left_id, right_id)), []).append(
+            connection
+        )
 
-    pair_diagnostics: list[dict[str, Any]] = []
+    contact_pairs: list[dict[str, Any]] = []
+    total_pair_count = 0
+    broad_phase_candidate_count = 0
+    broad_phase_skipped_count = 0
+    zero_contact_candidate_count = 0
     for left_id, right_id in combinations(parts, 2):
+        total_pair_count += 1
         left = parts[left_id]
         right = parts[right_id]
-        connections = declared_pairs.get(frozenset((left_id, right_id)), [])
-        connected = bool(connections)
-        if len(connections) > 1:
+        pair_connections = declared_pairs.get(frozenset((left_id, right_id)), [])
+        connected = bool(pair_connections)
+        if len(pair_connections) > 1:
             raise CadLinkError(
                 "cad_link_layout_not_closable",
                 "A material-part pair has multiple declared connections.",
                 status_code=422,
             )
-        if not _bbox_may_contact(left.bbox_mm, right.bbox_mm):
+        if not _bbox_may_contact(
+            kernel_bboxes[left_id],
+            kernel_bboxes[right_id],
+        ):
+            broad_phase_skipped_count += 1
             if connected:
                 raise CadLinkError(
                     "cad_link_layout_contact_invalid",
@@ -249,26 +376,24 @@ def _build_preflight_evidence(
                     status_code=422,
                 )
             continue
-        topology = _intersection_evidence(_shape_intersection(left.shape, right.shape))
-        if topology["volume_mm3"] > INTERFERENCE_ABS_TOL_MM3:
-            raise CadLinkError(
-                "cad_link_layout_collision",
-                "Placed parts have positive-volume interference.",
-                status_code=422,
-            )
+
+        broad_phase_candidate_count += 1
+        topology = _classify_pair_intersection(left.shape, right.shape)
         has_contact = any(
             topology[key] > 0 for key in ("face_count", "edge_count", "vertex_count")
         )
         if connected:
-            _validate_declared_contact(parts, connections[0], topology)
+            _validate_declared_contact(parts, pair_connections[0], topology)
         elif has_contact:
             raise CadLinkError(
                 "cad_link_layout_contact_invalid",
                 "Non-connected parts share a face, edge, or vertex.",
                 status_code=422,
             )
+        else:
+            zero_contact_candidate_count += 1
         if connected or has_contact:
-            pair_diagnostics.append(
+            contact_pairs.append(
                 {
                     "part_a": left_id,
                     "part_b": right_id,
@@ -278,37 +403,47 @@ def _build_preflight_evidence(
             )
 
     bbox_min = [
-        min(part.bbox_mm[0][axis] for part in parts.values()) for axis in range(3)
+        min(kernel_bboxes[part_id][0][axis] for part_id in parts)
+        for axis in range(3)
     ]
     bbox_max = [
-        max(part.bbox_mm[1][axis] for part in parts.values()) for axis in range(3)
+        max(kernel_bboxes[part_id][1][axis] for part_id in parts)
+        for axis in range(3)
     ]
     evidence = {
         "worker_timeout_seconds": PREFLIGHT_TIMEOUT_SECONDS,
+        "spawn_isolated": True,
         "part_count": len(parts),
         "connection_count": len(spec.get("connections", [])),
         "external_boundaries": boundaries,
         "open_endpoints": open_endpoints,
         "kernel_checks": kernel_checks,
         "manifold_cavities": cavity_evidence,
-        "assembly_material_volume_mm3": _finite(
-            sum(part.volume_mm3 for part in parts.values())
-        ),
+        "assembly_material_volume_mm3": _finite(sum(material_volumes.values())),
         "assembly_bbox_mm": {"min": bbox_min, "max": bbox_max},
         "placed_parts": {
             part_id: {
                 "frame": placed_frames[part_id],
                 "bbox_mm": {
-                    "min": list(part.bbox_mm[0]),
-                    "max": list(part.bbox_mm[1]),
+                    "min": list(kernel_bboxes[part_id][0]),
+                    "max": list(kernel_bboxes[part_id][1]),
                 },
+                "material_volume_mm3": material_volumes[part_id],
                 "ports": {
-                    name: port.as_dict() for name, port in sorted(part.ports.items())
+                    name: port.as_dict()
+                    for name, port in sorted(part.ports.items())
                 },
             }
             for part_id, part in parts.items()
         },
-        "contact_pairs": pair_diagnostics,
+        "contact_pairs": contact_pairs,
+        "pair_evaluation": {
+            "total_pair_count": total_pair_count,
+            "broad_phase_candidate_count": broad_phase_candidate_count,
+            "broad_phase_skipped_count": broad_phase_skipped_count,
+            "evaluated_pair_count": broad_phase_candidate_count,
+            "zero_contact_candidate_count": zero_contact_candidate_count,
+        },
         "positive_interference_tolerance_mm3": INTERFERENCE_ABS_TOL_MM3,
     }
     _assert_finite_json(evidence)
@@ -349,9 +484,9 @@ def _infer_placement(
     port_name = sorted(local.ports)[0]
     local_port = local.ports[port_name]
     placed_port = placed.ports[port_name]
-    rotation = math.atan2(placed_port.direction[1], placed_port.direction[0]) - math.atan2(
-        local_port.direction[1], local_port.direction[0]
-    )
+    rotation = math.atan2(
+        placed_port.direction[1], placed_port.direction[0]
+    ) - math.atan2(local_port.direction[1], local_port.direction[0])
     rotated_origin = _rotate(local_port.origin, rotation)
     translation = tuple(
         placed_port.origin[axis] - rotated_origin[axis] for axis in range(3)
@@ -378,6 +513,20 @@ def _place_shape(
     return bd.Pos(*translation) * bd.Rot(Z=math.degrees(rotation_z_rad)) * shape
 
 
+def _classify_pair_intersection(left_shape: Any, right_shape: Any) -> dict[str, Any]:
+    intersection = _shape_intersection(left_shape, right_shape)
+    volume = 0.0 if intersection is None else _finite(_shape_volume(intersection))
+    if volume > INTERFERENCE_ABS_TOL_MM3:
+        raise CadLinkError(
+            "cad_link_layout_collision",
+            "Placed parts have positive-volume interference.",
+            status_code=422,
+        )
+    topology = _intersection_topology(intersection)
+    topology["volume_mm3"] = volume
+    return topology
+
+
 def _validate_declared_contact(
     parts: Mapping[str, BuiltPart],
     connection: Mapping[str, str],
@@ -400,68 +549,162 @@ def _validate_port_contact_topology(
     port: PortFrame,
     topology: Mapping[str, Any],
 ) -> None:
-    """Accept only the exact annular mating boundary, in face or circular-edge form."""
+    """Accept only one annular face or its two exact circular boundary edges."""
 
     outer_radius = float(port.outer_d or 0.0) / 2.0
     wall_t = float(port.wall_t or 0.0)
     inner_radius = outer_radius - wall_t
-    if inner_radius <= 0.0 or outer_radius <= inner_radius:
+    if (
+        port.interface != "tube"
+        or inner_radius <= 0.0
+        or outer_radius <= inner_radius
+    ):
         raise _contact_error()
 
     edges = topology.get("edges")
     faces = topology.get("faces")
-    if not isinstance(edges, list) or not isinstance(faces, list):
-        raise _contact_error()
-    if not 1 <= len(edges) <= MAX_CONTACT_TOPOLOGY_ITEMS:
+    vertex_count = topology.get("vertex_count")
+    if (
+        not isinstance(edges, list)
+        or not isinstance(faces, list)
+        or type(vertex_count) is not int
+        or vertex_count != 0
+        or len(edges) > MAX_CONTACT_TOPOLOGY_ITEMS
+        or len(faces) > MAX_CONTACT_TOPOLOGY_ITEMS
+    ):
         raise _contact_error()
 
-    classified_radii: set[str] = set()
+    if len(faces) == 1:
+        _validate_annular_face(
+            port,
+            faces[0],
+            inner_radius=inner_radius,
+            outer_radius=outer_radius,
+        )
+        if edges:
+            _validate_annular_edges(
+                port,
+                edges,
+                inner_radius=inner_radius,
+                outer_radius=outer_radius,
+            )
+        return
+    if len(faces) == 0 and len(edges) == 2:
+        _validate_annular_edges(
+            port,
+            edges,
+            inner_radius=inner_radius,
+            outer_radius=outer_radius,
+        )
+        return
+    raise _contact_error()
+
+
+def _validate_annular_edges(
+    port: PortFrame,
+    edges: list[Any],
+    *,
+    inner_radius: float,
+    outer_radius: float,
+) -> None:
+    if len(edges) != 2:
+        raise _contact_error()
+    classified: set[str] = set()
     for edge in edges:
         if not isinstance(edge, Mapping):
             raise _contact_error()
-        radius = edge.get("radius_mm")
+        radius = _strict_number(edge.get("radius_mm"))
         center = edge.get("center_mm")
-        if not isinstance(radius, (int, float)) or isinstance(radius, bool):
-            raise _contact_error()
+        bbox = edge.get("bbox_mm")
         if not _point_matches(center, port.origin):
             raise _contact_error()
+        _validate_planar_round_bbox(
+            bbox,
+            port,
+            radius=radius,
+        )
         if math.isclose(
-            float(radius),
+            radius,
             inner_radius,
             rel_tol=CONTACT_AREA_REL_TOL,
             abs_tol=CONTACT_RADIUS_ABS_TOL_MM,
         ):
-            classified_radii.add("inner")
+            classified.add("inner")
         elif math.isclose(
-            float(radius),
+            radius,
             outer_radius,
             rel_tol=CONTACT_AREA_REL_TOL,
             abs_tol=CONTACT_RADIUS_ABS_TOL_MM,
         ):
-            classified_radii.add("outer")
+            classified.add("outer")
         else:
             raise _contact_error()
-    if classified_radii != {"inner", "outer"}:
+    if classified != {"inner", "outer"}:
         raise _contact_error()
 
-    expected_area = math.pi * (outer_radius**2 - inner_radius**2)
-    if len(faces) > MAX_CONTACT_TOPOLOGY_ITEMS:
+
+def _validate_annular_face(
+    port: PortFrame,
+    face: Any,
+    *,
+    inner_radius: float,
+    outer_radius: float,
+) -> None:
+    if not isinstance(face, Mapping):
         raise _contact_error()
-    for face in faces:
-        if not isinstance(face, Mapping):
-            raise _contact_error()
-        area = face.get("area_mm2")
-        center = face.get("center_mm")
-        if not isinstance(area, (int, float)) or isinstance(area, bool):
-            raise _contact_error()
+    area = _strict_number(face.get("area_mm2"))
+    center = face.get("center_mm")
+    bbox = face.get("bbox_mm")
+    expected_area = math.pi * (outer_radius**2 - inner_radius**2)
+    if not math.isclose(
+        area,
+        expected_area,
+        rel_tol=CONTACT_AREA_REL_TOL,
+        abs_tol=CONTACT_AREA_ABS_TOL_MM2,
+    ):
+        raise _contact_error()
+    if not _point_matches(center, port.origin):
+        raise _contact_error()
+    _validate_planar_round_bbox(
+        bbox,
+        port,
+        radius=outer_radius,
+    )
+
+
+def _validate_planar_round_bbox(
+    bbox: Any,
+    port: PortFrame,
+    *,
+    radius: float,
+) -> None:
+    if not isinstance(bbox, Mapping):
+        raise _contact_error()
+    minimum = bbox.get("min")
+    maximum = bbox.get("max")
+    if not (
+        isinstance(minimum, list)
+        and isinstance(maximum, list)
+        and len(minimum) == 3
+        and len(maximum) == 3
+    ):
+        raise _contact_error()
+    direction = _unit_vector(port.direction)
+    for axis in range(3):
+        extent = radius * math.sqrt(max(0.0, 1.0 - direction[axis] ** 2))
+        expected_min = port.origin[axis] - extent
+        expected_max = port.origin[axis] + extent
         if not math.isclose(
-            float(area),
-            expected_area,
+            _strict_number(minimum[axis]),
+            expected_min,
             rel_tol=CONTACT_AREA_REL_TOL,
-            abs_tol=CONTACT_AREA_ABS_TOL_MM2,
+            abs_tol=COINCIDENCE_ABS_TOL_MM,
+        ) or not math.isclose(
+            _strict_number(maximum[axis]),
+            expected_max,
+            rel_tol=CONTACT_AREA_REL_TOL,
+            abs_tol=COINCIDENCE_ABS_TOL_MM,
         ):
-            raise _contact_error()
-        if center is not None and not _point_on_port_plane(center, port):
             raise _contact_error()
 
 
@@ -478,8 +721,18 @@ def _ports_mate(left: PortFrame, right: PortFrame) -> bool:
         _points_close(left.origin, right.origin)
         and _directions_opposed(left.direction, right.direction)
         and left.interface == right.interface == "tube"
-        and math.isclose(float(left.outer_d), float(right.outer_d), rel_tol=1e-12)
-        and math.isclose(float(left.wall_t), float(right.wall_t), rel_tol=1e-12)
+        and math.isclose(
+            float(left.outer_d),
+            float(right.outer_d),
+            rel_tol=1e-12,
+            abs_tol=COINCIDENCE_ABS_TOL_MM,
+        )
+        and math.isclose(
+            float(left.wall_t),
+            float(right.wall_t),
+            rel_tol=1e-12,
+            abs_tol=COINCIDENCE_ABS_TOL_MM,
+        )
     )
 
 
@@ -487,7 +740,11 @@ def _ports_match(left: PortFrame, right: PortFrame) -> bool:
     return (
         _points_close(left.origin, right.origin)
         and all(
-            math.isclose(left.direction[index], right.direction[index], abs_tol=1e-9)
+            math.isclose(
+                left.direction[index],
+                right.direction[index],
+                abs_tol=1e-9,
+            )
             for index in range(3)
         )
         and left.interface == right.interface
@@ -498,27 +755,19 @@ def _ports_match(left: PortFrame, right: PortFrame) -> bool:
 
 
 def _point_matches(value: Any, expected: tuple[float, float, float]) -> bool:
-    return isinstance(value, list) and len(value) == 3 and all(
-        isinstance(value[index], (int, float))
-        and not isinstance(value[index], bool)
-        and math.isclose(
-            float(value[index]),
-            expected[index],
-            abs_tol=COINCIDENCE_ABS_TOL_MM,
+    return (
+        isinstance(value, list)
+        and len(value) == 3
+        and all(
+            type(value[index]) in (int, float)
+            and math.isclose(
+                float(value[index]),
+                expected[index],
+                abs_tol=COINCIDENCE_ABS_TOL_MM,
+            )
+            for index in range(3)
         )
-        for index in range(3)
     )
-
-
-def _point_on_port_plane(value: Any, port: PortFrame) -> bool:
-    if not isinstance(value, list) or len(value) != 3:
-        return False
-    try:
-        delta = tuple(float(value[index]) - port.origin[index] for index in range(3))
-    except (TypeError, ValueError, OverflowError):
-        return False
-    axial = sum(delta[index] * port.direction[index] for index in range(3))
-    return math.isfinite(axial) and abs(axial) <= COINCIDENCE_ABS_TOL_MM
 
 
 def _points_close(
@@ -526,7 +775,11 @@ def _points_close(
     right: tuple[float, float, float],
 ) -> bool:
     return all(
-        math.isclose(left[index], right[index], abs_tol=COINCIDENCE_ABS_TOL_MM)
+        math.isclose(
+            left[index],
+            right[index],
+            abs_tol=COINCIDENCE_ABS_TOL_MM,
+        )
         for index in range(3)
     )
 
@@ -539,6 +792,15 @@ def _directions_opposed(
         math.isclose(left[index], -right[index], abs_tol=1e-9)
         for index in range(3)
     )
+
+
+def _unit_vector(
+    value: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    magnitude = math.sqrt(sum(component**2 for component in value))
+    if not math.isfinite(magnitude) or magnitude <= 0.0:
+        raise _contact_error()
+    return tuple(component / magnitude for component in value)
 
 
 def _rotate(
@@ -561,21 +823,31 @@ def _shape_intersection(left: Any, right: Any) -> Any:
         return left & right
 
 
-def _intersection_evidence(intersection: Any) -> dict[str, Any]:
+def _shape_volume(shape: Any) -> float:
+    value = getattr(shape, "volume", 0.0)
+    value = value() if callable(value) else value
+    return float(value or 0.0)
+
+
+def _intersection_topology(intersection: Any) -> dict[str, Any]:
     if intersection is None:
         return {
-            "volume_mm3": 0.0,
             "face_count": 0,
             "edge_count": 0,
             "vertex_count": 0,
             "face_area_mm2": 0.0,
             "faces": [],
             "edges": [],
+            "representation": "empty",
         }
     faces = list(intersection.faces()) if hasattr(intersection, "faces") else []
     edges = list(intersection.edges()) if hasattr(intersection, "edges") else []
     vertices = list(intersection.vertices()) if hasattr(intersection, "vertices") else []
-    if len(faces) > MAX_CONTACT_TOPOLOGY_ITEMS or len(edges) > MAX_CONTACT_TOPOLOGY_ITEMS:
+    if (
+        len(faces) > MAX_CONTACT_TOPOLOGY_ITEMS
+        or len(edges) > MAX_CONTACT_TOPOLOGY_ITEMS
+        or len(vertices) > MAX_CONTACT_TOPOLOGY_ITEMS
+    ):
         raise CadLinkError(
             "cad_link_kernel_evidence_too_large",
             "Kernel contact topology exceeds the bounded evidence domain.",
@@ -585,6 +857,7 @@ def _intersection_evidence(intersection: Any) -> dict[str, Any]:
         {
             "area_mm2": _finite(float(getattr(face, "area", 0.0) or 0.0)),
             "center_mm": _shape_center(face),
+            "bbox_mm": _bbox_payload(_kernel_bbox(face)),
         }
         for face in faces
     ]
@@ -592,18 +865,54 @@ def _intersection_evidence(intersection: Any) -> dict[str, Any]:
         {
             "radius_mm": _shape_number(edge, "radius"),
             "center_mm": _shape_point(edge, "arc_center"),
+            "bbox_mm": _bbox_payload(_kernel_bbox(edge)),
         }
         for edge in edges
     ]
+    if faces:
+        representation = "face"
+    elif edges:
+        representation = "edge"
+    elif vertices:
+        representation = "vertex"
+    else:
+        representation = "empty"
     return {
-        "volume_mm3": _finite(float(getattr(intersection, "volume", 0.0) or 0.0)),
         "face_count": len(faces),
         "edge_count": len(edges),
         "vertex_count": len(vertices),
-        "face_area_mm2": _finite(sum(item["area_mm2"] for item in face_items)),
+        "face_area_mm2": _finite(
+            sum(item["area_mm2"] for item in face_items)
+        ),
         "faces": face_items,
         "edges": edge_items,
+        "representation": representation,
     }
+
+
+def _kernel_bbox(
+    shape: Any,
+) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    try:
+        bbox_value = getattr(shape, "bounding_box")
+        bbox = bbox_value() if callable(bbox_value) else bbox_value
+        minimum = _vector_tuple(getattr(bbox, "min"))
+        maximum = _vector_tuple(getattr(bbox, "max"))
+    except (AttributeError, TypeError, ValueError, OverflowError) as exc:
+        raise _kernel_unavailable(
+            "CAD-link kernel produced invalid bounding-box evidence."
+        ) from exc
+    if any(minimum[axis] > maximum[axis] for axis in range(3)):
+        raise _kernel_unavailable(
+            "CAD-link kernel produced invalid bounding-box evidence."
+        )
+    return minimum, maximum
+
+
+def _bbox_payload(
+    bbox: tuple[tuple[float, float, float], tuple[float, float, float]],
+) -> dict[str, list[float]]:
+    return {"min": list(bbox[0]), "max": list(bbox[1])}
 
 
 def _shape_number(shape: Any, attribute: str) -> float | None:
@@ -619,7 +928,7 @@ def _shape_point(shape: Any, attribute: str) -> list[float] | None:
     try:
         value = getattr(shape, attribute)
         value = value() if callable(value) else value
-        return _vector_list(value)
+        return list(_vector_tuple(value))
     except (AttributeError, TypeError, ValueError, OverflowError):
         return None
 
@@ -627,19 +936,19 @@ def _shape_point(shape: Any, attribute: str) -> list[float] | None:
 def _shape_center(shape: Any) -> list[float] | None:
     try:
         value = shape.center()
-        return _vector_list(value)
+        return list(_vector_tuple(value))
     except (AttributeError, TypeError, ValueError, OverflowError):
         return None
 
 
-def _vector_list(value: Any) -> list[float]:
+def _vector_tuple(value: Any) -> tuple[float, float, float]:
     coordinates: list[float] = []
     for index, attribute in enumerate(("X", "Y", "Z")):
         component = getattr(value, attribute, None)
         if component is None:
             component = value[index]
         coordinates.append(_finite(float(component)))
-    return coordinates
+    return tuple(coordinates)  # type: ignore[return-value]
 
 
 def _bbox_may_contact(
@@ -658,14 +967,41 @@ def _shape_flag(shape: Any, attribute: str) -> bool:
     return bool(value() if callable(value) else value)
 
 
+def _strict_number(value: Any) -> float:
+    if type(value) not in (int, float):
+        raise _contact_error()
+    number = float(value)
+    if not math.isfinite(number):
+        raise _contact_error()
+    return number
+
+
 def _finite(value: float) -> float:
     if not math.isfinite(value):
-        raise CadLinkError(
-            "cad_link_kernel_unavailable",
-            "CAD-link kernel produced a non-finite value.",
-            status_code=503,
-        )
+        raise _kernel_unavailable("CAD-link kernel produced a non-finite value.")
     return value
+
+
+def _canonical_json_bytes(value: Any) -> bytes:
+    _assert_finite_json(value)
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+
+
+def _reject_json_constant(value: str) -> object:
+    raise ValueError(f"Non-finite JSON constant is forbidden: {value}")
+
+
+def _kernel_unavailable(message: str) -> CadLinkError:
+    return CadLinkError(
+        "cad_link_kernel_unavailable",
+        message,
+        status_code=503,
+    )
 
 
 def _assert_finite_json(value: Any) -> None:
@@ -681,15 +1017,11 @@ def _assert_finite_json(value: Any) -> None:
     if isinstance(value, dict):
         for key, item in value.items():
             if not isinstance(key, str):
-                raise CadLinkError(
-                    "cad_link_kernel_unavailable",
-                    "CAD-link kernel evidence has non-string object keys.",
-                    status_code=503,
+                raise _kernel_unavailable(
+                    "CAD-link kernel evidence has non-string object keys."
                 )
             _assert_finite_json(item)
         return
-    raise CadLinkError(
-        "cad_link_kernel_unavailable",
-        "CAD-link kernel evidence contains an unsupported value.",
-        status_code=503,
+    raise _kernel_unavailable(
+        "CAD-link kernel evidence contains an unsupported value."
     )
