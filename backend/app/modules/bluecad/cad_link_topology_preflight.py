@@ -896,10 +896,10 @@ def _kernel_bbox(
     shape: Any,
 ) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
     try:
-        bbox_value = getattr(shape, "bounding_box")
+        bbox_value = shape.bounding_box
         bbox = bbox_value() if callable(bbox_value) else bbox_value
-        minimum = _vector_tuple(getattr(bbox, "min"))
-        maximum = _vector_tuple(getattr(bbox, "max"))
+        minimum = _vector_tuple(bbox.min)
+        maximum = _vector_tuple(bbox.max)
     except (AttributeError, TypeError, ValueError, OverflowError) as exc:
         raise _kernel_unavailable(
             "CAD-link kernel produced invalid bounding-box evidence."
