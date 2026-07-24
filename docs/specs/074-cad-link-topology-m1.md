@@ -1,9 +1,5 @@
 # 074 — CAD-LINK-1: 072 M1 topology to deterministic multi-part BLUECAD
 
-Status: definition complete. Implementation may start only after this definition is
-merged and the authoritative `docs/specs/STATUS.md` row is separately promoted to
-`ready`.
-
 Depends on: 038, 050, 051, 052, 071, 072, 073
 
 ## Goal
