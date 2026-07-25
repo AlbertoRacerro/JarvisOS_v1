@@ -33,7 +33,9 @@ jobs:
           pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Apply Codex review fixes
-        run: python scripts/patch_074_codex_review.py
+        run: |
+          python scripts/patch_074_codex_review.py
+          python scripts/patch_074_codex_review_followup.py
 
       - name: Normalize focused review fixes
         working-directory: backend
@@ -75,7 +77,7 @@ jobs:
         run: |
           git fetch origin master
           git checkout origin/master -- .github/workflows/ci.yml
-          git rm -f scripts/patch_074_codex_review.py
+          git rm -f scripts/patch_074_codex_review.py scripts/patch_074_codex_review_followup.py
           git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
