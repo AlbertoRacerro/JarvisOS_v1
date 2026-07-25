@@ -190,6 +190,27 @@ test = test.replace(
     "WHERE id = 'geometry-count-shared'",
     "WHERE id = 'golden-parallel_path_count'",
 )
+status_assert = '''    assert first_payload["candidate"]["status"] == "valid"
+'''
+diagnostic_assert = '''    with open_sqlite_connection() as connection:
+        report_row = connection.execute(
+            """
+            SELECT a.stored_path
+            FROM bluecad_candidates c
+            LEFT JOIN artifacts a ON a.id = c.report_artifact_id
+            WHERE c.id = ?
+            """,
+            (first_payload["candidate"]["id"],),
+        ).fetchone()
+    report_payload = (
+        None
+        if report_row is None or report_row["stored_path"] is None
+        else json.loads(Path(report_row["stored_path"]).read_text(encoding="utf-8"))
+    )
+    assert first_payload["candidate"]["status"] == "valid", report_payload
+'''
+if "report_payload = (" not in test:
+    test = replace_once(test, status_assert, diagnostic_assert, "validation report diagnostic")
 marker = '''    second = client.post(
         "/workspaces/bluerev/bluecad/cad-link/072/execute",
         json=request,
