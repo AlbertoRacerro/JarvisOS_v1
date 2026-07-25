@@ -27,6 +27,7 @@ from app.modules.bluecad.cad_link_topology_source import (
 from app.modules.bluecad.models import BluecadLoopConfig
 
 __all__ = [
+    "CadLink072ExecuteRequest",
     "CadLink072PreviewRequest",
     "GEOMETRY_PARAMETER_INPUTS",
     "preview_cad_link_072",
@@ -45,6 +46,10 @@ class CadLink072PreviewRequest(BaseModel):
         if self.analysis_spec is not None:
             BluecadLoopConfig(analysis_spec=self.analysis_spec)
         return self
+
+
+class CadLink072ExecuteRequest(CadLink072PreviewRequest):
+    preview_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
 
 
 def preview_cad_link_072(
@@ -79,13 +84,26 @@ def _build_preview(
         layout,
     )
     preflight = run_kernel_preflight(resolved_spec, boundaries)
-    reconciliation = reconcile_topology(
+    process_reconciliation = reconcile_topology(
         source["manifest"],
         layout,
         resolved_spec,
         preflight,
     )
     analysis_contract = _canonical_analysis_contract(payload.analysis_spec)
+    layout_digest = digest(layout)
+    preflight_digest = digest(preflight)
+    reconciliation = {
+        "schema_version": "cad_link_072_link_evidence_v0_1",
+        "layout_spec": layout,
+        "layout_digest": layout_digest,
+        "external_boundaries": boundaries,
+        "component_inventory": component_inventory,
+        "kernel_preflight": preflight,
+        "kernel_preflight_digest": preflight_digest,
+        "tolerances": dict(TOLERANCES),
+        "process_cad_reconciliation": process_reconciliation,
+    }
 
     preview: dict[str, Any] = {
         "workspace_id": workspace_id,
@@ -98,7 +116,7 @@ def _build_preview(
         "source_snapshot": source["source_snapshot"],
         "source_snapshot_digest": digest(source["source_snapshot"]),
         "layout_spec": layout,
-        "layout_digest": digest(layout),
+        "layout_digest": layout_digest,
         "transformation_version": TRANSFORMATION_VERSION,
         "implementation_version": IMPLEMENTATION_VERSION,
         "resolved_spec": resolved_spec,
@@ -109,7 +127,7 @@ def _build_preview(
         "external_boundaries": boundaries,
         "component_inventory": component_inventory,
         "kernel_preflight": preflight,
-        "kernel_preflight_digest": digest(preflight),
+        "kernel_preflight_digest": preflight_digest,
         "tolerances": dict(TOLERANCES),
         "reconciliation": reconciliation,
         "reconciliation_digest": digest(reconciliation),
