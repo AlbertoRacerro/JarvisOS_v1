@@ -39,13 +39,19 @@ jobs:
           path = Path('scripts/harden_074_source.py')
           text = path.read_text(encoding='utf-8')
           text = text.replace('model.get("script_status")', 'model["script_status"]')
+          path.write_text(text, encoding='utf-8')
+          PY
+          python scripts/harden_074_source.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('backend/app/modules/bluecad/cad_link_topology_source.py')
+          text = path.read_text(encoding='utf-8')
           text = text.replace(
               'from app.modules.bluecad.cad_link_topology_contract import input_decimal\n',
               '',
           )
           path.write_text(text, encoding='utf-8')
           PY
-          python scripts/harden_074_source.py
 
       - name: Ruff focused source authority
         working-directory: backend
