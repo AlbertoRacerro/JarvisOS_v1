@@ -8,7 +8,7 @@ import queue
 from pathlib import Path
 from typing import Any
 
-from app.modules.bluecad.export import build_artifacts
+from app.modules.bluecad.export import ARTIFACT_NAMES, build_artifacts
 from app.modules.bluecad.models import BluecadError, BuildResult
 from app.modules.bluecad.spec import (
     SpecValidationError,
@@ -43,7 +43,13 @@ def build_geometry_spec(
         if process.is_alive():
             process.kill()
             process.join()
-            error = BluecadError("TIMEOUT", {"timeout_s": timeout_s})
+            error = BluecadError(
+                "TIMEOUT",
+                {
+                    "timeout_s": timeout_s,
+                    "partial_artifacts": _partial_artifact_sizes(out_path),
+                },
+            )
         else:
             process.join()
             error = BluecadError(
@@ -51,6 +57,7 @@ def build_geometry_spec(
                 {
                     "message": "worker exited without returning a result",
                     "exitcode": process.exitcode,
+                    "partial_artifacts": _partial_artifact_sizes(out_path),
                 },
             )
         report = write_validation_report(canonical, out_path, error=error)
@@ -132,6 +139,17 @@ def build_geometry_spec_file(
             report["errors"],
         )
     return build_geometry_spec(spec, out_dir, timeout_s=timeout_s)
+
+
+def _partial_artifact_sizes(out_path: Path) -> dict[str, int | None]:
+    evidence: dict[str, int | None] = {}
+    for name in ARTIFACT_NAMES:
+        path = out_path / name
+        try:
+            evidence[name] = path.stat().st_size if path.is_file() else None
+        except OSError:
+            evidence[name] = None
+    return evidence
 
 
 def _worker(
