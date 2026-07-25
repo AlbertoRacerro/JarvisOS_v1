@@ -35,16 +35,20 @@ jobs:
       - name: Apply Codex review fixes
         run: python scripts/patch_074_codex_review.py
 
-      - name: Ruff focused review fixes
+      - name: Normalize focused review fixes
         working-directory: backend
-        run: >-
-          python -m ruff check
-          app/modules/bluecad/cad_link_topology_execute.py
-          app/modules/bluecad/cad_link_topology_preflight.py
-          app/modules/bluecad/service.py
-          tests/bluecad/test_cad_link_topology_concurrency.py
-          tests/bluecad/test_cad_link_topology_preflight.py
-          tests/bluecad/test_build_service_spawn.py
+        run: |
+          files=(
+            app/modules/bluecad/cad_link_topology_execute.py
+            app/modules/bluecad/cad_link_topology_preflight.py
+            app/modules/bluecad/service.py
+            tests/bluecad/test_cad_link_topology_concurrency.py
+            tests/bluecad/test_cad_link_topology_preflight.py
+            tests/bluecad/test_build_service_spawn.py
+          )
+          python -m ruff check --fix "${files[@]}"
+          python -m ruff format "${files[@]}"
+          python -m ruff check "${files[@]}"
 
       - name: Pytest focused review fixes
         working-directory: backend
