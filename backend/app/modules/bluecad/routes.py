@@ -19,9 +19,11 @@ from app.modules.bluecad.cad_link import (
     preview_cad_link_047,
 )
 from app.modules.bluecad.cad_link_topology import (
+    CadLink072ExecuteRequest,
     CadLink072PreviewRequest,
     preview_cad_link_072,
 )
+from app.modules.bluecad.cad_link_topology_execute import execute_cad_link_072
 from app.modules.bluecad.ledger import archive_candidate, get_candidate, list_candidates, mark_promoted
 from app.modules.bluecad.loop import create_bluecad_candidate
 from app.modules.bluecad.models import BluecadCandidateCreate, BluecadCandidateRead
@@ -113,6 +115,16 @@ def preview_cad_link_072_endpoint(
 ) -> dict[str, object]:
     try:
         return preview_cad_link_072(workspace_id, payload)
+    except CadLinkError as exc:
+        raise _cad_link_error(exc) from exc
+
+
+@router.post("/cad-link/072/execute", response_model=CadLinkExecuteResponse)
+def execute_cad_link_072_endpoint(
+    workspace_id: str, payload: CadLink072ExecuteRequest
+) -> CadLinkExecuteResponse:
+    try:
+        return execute_cad_link_072(workspace_id, payload)
     except CadLinkError as exc:
         raise _cad_link_error(exc) from exc
 
