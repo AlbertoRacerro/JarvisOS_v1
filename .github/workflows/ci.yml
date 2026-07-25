@@ -29,11 +29,17 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
-      - name: Apply lineage patch
-        run: python scripts/patch_074_flowsheet.py
-      - name: Ruff focused lineage
+      - name: Apply focused Spec 074 patches
+        run: |
+          python scripts/patch_074_flowsheet.py
+          python scripts/patch_074_execute_timeout.py
+      - name: Ruff focused Spec 074
         working-directory: backend
-        run: python -m ruff check app/modules/flowsheet/service.py tests/test_cad_link_topology_execute.py
+        run: |
+          python -m ruff check \
+            app/modules/bluecad/cad_link_topology_execute.py \
+            app/modules/flowsheet/service.py \
+            tests/test_cad_link_topology_execute.py
       - name: Pytest focused execute
         working-directory: backend
         shell: bash
@@ -52,12 +58,16 @@ jobs:
         run: |
           git fetch origin master
           git checkout origin/master -- .github/workflows/ci.yml
-          git rm -f scripts/patch_074_flowsheet.py
+          git rm -f scripts/patch_074_flowsheet.py scripts/patch_074_execute_timeout.py
           git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add backend/app/modules/flowsheet/service.py backend/tests/test_cad_link_topology_execute.py .github/workflows/ci.yml
-          git commit -m "Add Spec 074 M1 topology lineage"
+          git add \
+            backend/app/modules/bluecad/cad_link_topology_execute.py \
+            backend/app/modules/flowsheet/service.py \
+            backend/tests/test_cad_link_topology_execute.py \
+            .github/workflows/ci.yml
+          git commit -m "Complete Spec 074 execute lineage and bounded build"
           git push origin HEAD:impl-074
 
   backend:
