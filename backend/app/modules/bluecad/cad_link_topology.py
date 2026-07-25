@@ -26,7 +26,7 @@ from app.modules.bluecad.cad_link_topology_source import (
 )
 from app.modules.bluecad.models import BluecadLoopConfig
 
-BUILD_TIMEOUT_SECONDS = 120.0
+BUILD_TIMEOUT_SECONDS = 35.0
 
 __all__ = [
     "BUILD_TIMEOUT_SECONDS",
