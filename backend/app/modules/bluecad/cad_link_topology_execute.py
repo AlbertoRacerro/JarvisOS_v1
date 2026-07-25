@@ -7,6 +7,7 @@ import json
 import math
 import shutil
 import sqlite3
+import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,8 @@ REPRESENTATION_NOTES = (
     "not represented: pump, reservoir vessel, supports, floats, anchors, "
     "instrumentation; CAD boundary: open supply inlet and open return outlet"
 )
+_REPLAY_POLL_SECONDS = 0.05
+_REPLAY_WAIT_SECONDS = BUILD_TIMEOUT_SECONDS + 5.0
 
 
 def execute_cad_link_072(
@@ -431,15 +434,36 @@ def _replay_response(
         ):
             raise _persistence_inconsistent()
 
-    candidate = get_candidate(workspace_id, str(row["child_candidate_id"]))
-    if candidate is None:
-        raise _persistence_inconsistent()
+    candidate = _wait_for_replay_candidate(
+        workspace_id,
+        str(row["child_candidate_id"]),
+    )
     return CadLinkExecuteResponse(
         candidate=candidate,
         link_id=str(row["id"]),
         preview_digest=str(row["preview_digest"]),
         replayed=True,
     )
+
+
+def _wait_for_replay_candidate(
+    workspace_id: str,
+    candidate_id: str,
+) -> Any:
+    deadline = time.monotonic() + _REPLAY_WAIT_SECONDS
+    while True:
+        candidate = get_candidate(workspace_id, candidate_id)
+        if candidate is None:
+            raise _persistence_inconsistent()
+        if candidate.status != "generating":
+            return candidate
+        if time.monotonic() >= deadline:
+            raise CadLinkError(
+                "cad_link_execution_in_progress",
+                "The matching topology CAD-link execution is still in progress.",
+                status_code=409,
+            )
+        time.sleep(_REPLAY_POLL_SECONDS)
 
 
 def _json_object(raw: Any) -> dict[str, Any]:

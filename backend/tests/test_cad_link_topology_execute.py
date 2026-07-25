@@ -372,3 +372,55 @@ def test_execute_build_failure_parks_inspectable_candidate_without_ai(
         / candidate_id
         / "attempt_01"
     ).exists()
+
+
+
+def test_replay_waits_for_generating_candidate(client: TestClient, monkeypatch) -> None:
+    import threading
+    import time
+    from uuid import uuid4
+
+    import app.modules.bluecad.cad_link_topology_execute as execute_module
+    from app.modules.events.service import utc_now
+
+    candidate_id = str(uuid4())
+    now = utc_now()
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO bluecad_candidates (
+                id, workspace_id, brief_text, brief_digest, status,
+                parked_reason, spec_artifact_id, glb_artifact_id,
+                report_artifact_id, promoted_decision_id, origin,
+                parent_candidate_id, loop_config_json, created_at,
+                updated_at, notes
+            ) VALUES (?, 'bluerev', 'concurrency probe', ?, 'generating',
+                NULL, NULL, NULL, NULL, NULL, 'process_linked', NULL,
+                '{}', ?, ?, 'concurrency probe')
+            """,
+            (candidate_id, "sha256:" + "1" * 64, now, now),
+        )
+        connection.commit()
+
+    monkeypatch.setattr(execute_module, "_REPLAY_WAIT_SECONDS", 1.0)
+    monkeypatch.setattr(execute_module, "_REPLAY_POLL_SECONDS", 0.01)
+
+    def complete_candidate() -> None:
+        time.sleep(0.1)
+        with open_sqlite_connection() as connection:
+            connection.execute(
+                "UPDATE bluecad_candidates SET status = 'valid', updated_at = ? WHERE id = ?",
+                (utc_now(), candidate_id),
+            )
+            connection.commit()
+
+    worker = threading.Thread(target=complete_candidate)
+    worker.start()
+    started = time.monotonic()
+    candidate = execute_module._wait_for_replay_candidate("bluerev", candidate_id)
+    elapsed = time.monotonic() - started
+    worker.join()
+
+    assert candidate.id == candidate_id
+    assert candidate.status == "valid"
+    assert elapsed >= 0.08
