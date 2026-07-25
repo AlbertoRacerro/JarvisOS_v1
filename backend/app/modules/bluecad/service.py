@@ -40,7 +40,28 @@ def build_geometry_spec(
         args=(canonical, str(out_path), result_queue),
         daemon=True,
     )
-    process.start()
+    try:
+        process.start()
+    except Exception as exc:
+        result_queue.close()
+        error = BluecadError(
+            "KERNEL_ERROR",
+            {
+                "message": "build worker could not start",
+                "type": type(exc).__name__,
+            },
+        )
+        report = write_validation_report(canonical, out_path, error=error)
+        return BuildResult(
+            canonical["spec_id"],
+            out_path,
+            None,
+            out_path / "validation_report.json",
+            None,
+            report,
+            "error",
+            [error.as_report_error()],
+        )
     payload: dict[str, Any] | None = None
     worker_exited = False
     deadline = time.monotonic() + timeout_s
@@ -50,9 +71,7 @@ def build_geometry_spec(
             if remaining <= 0.0:
                 break
             try:
-                payload = result_queue.get(
-                    timeout=min(_WORKER_POLL_SECONDS, remaining)
-                )
+                payload = result_queue.get(timeout=min(_WORKER_POLL_SECONDS, remaining))
             except queue.Empty:
                 if process.is_alive():
                     continue

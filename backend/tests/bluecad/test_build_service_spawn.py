@@ -96,3 +96,44 @@ def test_dead_worker_is_detected_without_waiting_full_timeout(
     assert result.errors[0]["code"] == "KERNEL_ERROR"
     assert observed_timeouts
     assert max(observed_timeouts) <= service._WORKER_POLL_SECONDS
+
+
+def test_worker_start_failure_returns_bounded_error_result(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    import app.modules.bluecad.service as service
+
+    class StartQueue:
+        def close(self) -> None:
+            return None
+
+    class StartFailProcess:
+        def start(self) -> None:
+            raise RuntimeError("process capacity exhausted")
+
+    class StartFailContext:
+        def Queue(self, *, maxsize: int) -> StartQueue:
+            assert maxsize == 1
+            return StartQueue()
+
+        def Process(self, **kwargs: Any) -> StartFailProcess:
+            assert kwargs["daemon"] is True
+            return StartFailProcess()
+
+    monkeypatch.setattr(
+        service.mp,
+        "get_context",
+        lambda method: StartFailContext() if method == "spawn" else None,
+    )
+
+    result = service.build_geometry_spec(
+        _tube_spec(),
+        tmp_path / "start-failure",
+        timeout_s=10.0,
+    )
+
+    assert result.verdict == "error"
+    assert result.errors[0]["code"] == "KERNEL_ERROR"
+    assert result.report_path.is_file()
+    assert result.report["errors"][0]["detail"]["message"] == ("build worker could not start")

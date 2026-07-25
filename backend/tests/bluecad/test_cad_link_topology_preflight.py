@@ -19,6 +19,7 @@ from app.modules.bluecad.cad_link_topology_contract import (
 )
 from app.modules.bluecad.cad_link_topology_preflight import (
     _classify_pair_intersection,
+    _has_topological_contact,
     _kernel_bbox,
     _validate_port_contact_topology,
     run_kernel_preflight,
@@ -90,10 +91,7 @@ def _circle_bbox(
 ) -> dict[str, list[float]]:
     magnitude = math.sqrt(sum(value**2 for value in direction))
     normal = tuple(value / magnitude for value in direction)
-    extents = tuple(
-        radius * math.sqrt(max(0.0, 1.0 - normal[axis] ** 2))
-        for axis in range(3)
-    )
+    extents = tuple(radius * math.sqrt(max(0.0, 1.0 - normal[axis] ** 2)) for axis in range(3))
     return {
         "min": [center[axis] - extents[axis] for axis in range(3)],
         "max": [center[axis] + extents[axis] for axis in range(3)],
@@ -146,21 +144,12 @@ def test_kernel_preflight_closes_parallel_headers_without_writes(
     assert evidence["manifold_cavities"]["merge_manifold"]["volume_mm3"] > 0.0
     assert len(evidence["contact_pairs"]) == 4
     assert all(pair["declared_connection"] for pair in evidence["contact_pairs"])
-    assert all(
-        check["brep_valid"] and check["manifold"]
-        for check in evidence["kernel_checks"].values()
-    )
-    assert all(
-        item["material_volume_mm3"] > 0.0
-        for item in evidence["placed_parts"].values()
-    )
+    assert all(check["brep_valid"] and check["manifold"] for check in evidence["kernel_checks"].values())
+    assert all(item["material_volume_mm3"] > 0.0 for item in evidence["placed_parts"].values())
     pair_evaluation = evidence["pair_evaluation"]
-    assert pair_evaluation["evaluated_pair_count"] == (
-        pair_evaluation["broad_phase_candidate_count"]
-    )
+    assert pair_evaluation["evaluated_pair_count"] == (pair_evaluation["broad_phase_candidate_count"])
     assert pair_evaluation["total_pair_count"] == (
-        pair_evaluation["broad_phase_candidate_count"]
-        + pair_evaluation["broad_phase_skipped_count"]
+        pair_evaluation["broad_phase_candidate_count"] + pair_evaluation["broad_phase_skipped_count"]
     )
 
 
@@ -276,3 +265,25 @@ def test_kernel_preflight_timeout_fails_closed() -> None:
         "cad_link_kernel_timeout",
         "cad_link_kernel_unavailable",
     }
+
+
+def test_positive_submicron_gap_is_not_classified_as_contact() -> None:
+    topology = {
+        "minimum_distance_mm": 5e-7,
+        "face_count": 0,
+        "edge_count": 0,
+        "vertex_count": 0,
+    }
+
+    assert _has_topological_contact(topology) is False
+
+
+def test_actual_topological_contact_is_classified() -> None:
+    topology = {
+        "minimum_distance_mm": 0.0,
+        "face_count": 0,
+        "edge_count": 0,
+        "vertex_count": 1,
+    }
+
+    assert _has_topological_contact(topology) is True
