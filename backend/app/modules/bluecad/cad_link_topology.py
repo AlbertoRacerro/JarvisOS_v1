@@ -102,6 +102,8 @@ def _build_preview(
         "kernel_preflight": preflight,
         "kernel_preflight_digest": preflight_digest,
         "tolerances": dict(TOLERANCES),
+        "checks": process_reconciliation["checks"],
+        "structural_checks": process_reconciliation["structural_checks"],
         "process_cad_reconciliation": process_reconciliation,
     }
 
