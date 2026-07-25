@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import multiprocessing as mp
 import queue
+import time
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ from app.modules.bluecad.validate import write_validation_report
 
 DEFAULT_TIMEOUT_SECONDS = 30.0
 _WORKER_JOIN_GRACE_SECONDS = 1.0
+_WORKER_POLL_SECONDS = 0.1
 _BUILD_PHASE_FILENAME = ".bluecad_build_phase"
 
 
@@ -39,42 +41,63 @@ def build_geometry_spec(
         daemon=True,
     )
     process.start()
+    payload: dict[str, Any] | None = None
+    worker_exited = False
+    deadline = time.monotonic() + timeout_s
     try:
-        payload = result_queue.get(timeout=timeout_s)
-    except queue.Empty:
-        if process.is_alive():
-            process.kill()
-            process.join()
-            error = BluecadError(
-                "TIMEOUT",
-                {
-                    "timeout_s": timeout_s,
-                    "phase": _read_and_remove_build_phase(out_path),
-                    "partial_artifacts": _partial_artifact_sizes(out_path),
-                },
+        while payload is None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0.0:
+                break
+            try:
+                payload = result_queue.get(
+                    timeout=min(_WORKER_POLL_SECONDS, remaining)
+                )
+            except queue.Empty:
+                if process.is_alive():
+                    continue
+                process.join()
+                try:
+                    payload = result_queue.get(timeout=_WORKER_POLL_SECONDS)
+                except queue.Empty:
+                    worker_exited = True
+                break
+
+        if payload is None:
+            if process.is_alive():
+                process.kill()
+                process.join()
+                error = BluecadError(
+                    "TIMEOUT",
+                    {
+                        "timeout_s": timeout_s,
+                        "phase": _read_and_remove_build_phase(out_path),
+                        "partial_artifacts": _partial_artifact_sizes(out_path),
+                    },
+                )
+            else:
+                if not worker_exited:
+                    process.join()
+                error = BluecadError(
+                    "KERNEL_ERROR",
+                    {
+                        "message": "worker exited without returning a result",
+                        "exitcode": process.exitcode,
+                        "phase": _read_and_remove_build_phase(out_path),
+                        "partial_artifacts": _partial_artifact_sizes(out_path),
+                    },
+                )
+            report = write_validation_report(canonical, out_path, error=error)
+            return BuildResult(
+                canonical["spec_id"],
+                out_path,
+                None,
+                out_path / "validation_report.json",
+                None,
+                report,
+                "error",
+                [error.as_report_error()],
             )
-        else:
-            process.join()
-            error = BluecadError(
-                "KERNEL_ERROR",
-                {
-                    "message": "worker exited without returning a result",
-                    "exitcode": process.exitcode,
-                    "phase": _read_and_remove_build_phase(out_path),
-                    "partial_artifacts": _partial_artifact_sizes(out_path),
-                },
-            )
-        report = write_validation_report(canonical, out_path, error=error)
-        return BuildResult(
-            canonical["spec_id"],
-            out_path,
-            None,
-            out_path / "validation_report.json",
-            None,
-            report,
-            "error",
-            [error.as_report_error()],
-        )
     finally:
         result_queue.close()
 
