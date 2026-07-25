@@ -105,6 +105,7 @@ def _create_golden_source_run(client: TestClient) -> str:
         "branch_illuminated_bend_count": 0,
         "branch_bend_centerline_radius": 0.0,
         "branch_bend_angle": 0.0,
+        "branch_bend_loss_coefficient_per_bend": 0.0,
         "common_supply_length": 0.0,
         "common_return_length": 0.0,
         "branch_tube_inner_diameter": 50.0,
@@ -173,7 +174,7 @@ def _create_golden_source_run(client: TestClient) -> str:
     runner_job_id = created.json()["runner_job"]["id"]
     executed = client.post(f"/runner-jobs/{runner_job_id}/run")
     assert executed.status_code == 200, executed.text
-    assert executed.json()["runner_job"]["status"] == "succeeded"
+    assert executed.json()["runner_job"]["status"] == "succeeded", executed.text
     return executed.json()["simulation_run"]["id"]
 
 
