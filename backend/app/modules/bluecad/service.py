@@ -31,8 +31,9 @@ def build_geometry_spec(
     canonical = canonicalize_geometry_spec(spec)
     out_path = Path(out_dir)
     out_path.mkdir(parents=True, exist_ok=True)
-    result_queue: mp.Queue[dict[str, Any]] = mp.Queue(maxsize=1)
-    process = mp.Process(
+    context = mp.get_context("spawn")
+    result_queue = context.Queue(maxsize=1)
+    process = context.Process(
         target=_worker,
         args=(canonical, str(out_path), result_queue),
         daemon=True,
@@ -173,7 +174,7 @@ def _read_and_remove_build_phase(out_path: Path) -> str | None:
 def _worker(
     spec: dict[str, Any],
     out_dir: str,
-    result_queue: mp.Queue[dict[str, Any]],
+    result_queue: Any,
 ) -> None:
     try:
         manifest = build_artifacts(spec, out_dir)
