@@ -26,7 +26,10 @@ from app.modules.bluecad.cad_link_topology_source import (
 )
 from app.modules.bluecad.models import BluecadLoopConfig
 
+BUILD_TIMEOUT_SECONDS = 120.0
+
 __all__ = [
+    "BUILD_TIMEOUT_SECONDS",
     "CadLink072ExecuteRequest",
     "CadLink072PreviewRequest",
     "GEOMETRY_PARAMETER_INPUTS",
@@ -93,6 +96,7 @@ def _build_preview(
     analysis_contract = _canonical_analysis_contract(payload.analysis_spec)
     layout_digest = digest(layout)
     preflight_digest = digest(preflight)
+    execution_policy = {"build_timeout_seconds": BUILD_TIMEOUT_SECONDS}
     reconciliation = {
         "schema_version": "cad_link_072_link_evidence_v0_1",
         "layout_spec": layout,
@@ -102,6 +106,7 @@ def _build_preview(
         "kernel_preflight": preflight,
         "kernel_preflight_digest": preflight_digest,
         "tolerances": dict(TOLERANCES),
+        "execution_policy": execution_policy,
         "checks": process_reconciliation["checks"],
         "structural_checks": process_reconciliation["structural_checks"],
         "process_cad_reconciliation": process_reconciliation,
@@ -121,6 +126,7 @@ def _build_preview(
         "layout_digest": layout_digest,
         "transformation_version": TRANSFORMATION_VERSION,
         "implementation_version": IMPLEMENTATION_VERSION,
+        "execution_policy": execution_policy,
         "resolved_spec": resolved_spec,
         "spec_id": resolved_spec["spec_id"],
         "resolved_spec_digest": str(resolved_spec["spec_id"]),
