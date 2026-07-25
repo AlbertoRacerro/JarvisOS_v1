@@ -52,12 +52,24 @@ jobs:
 
       - name: Pytest focused review fixes
         working-directory: backend
-        run: >-
-          python -m pytest -q
-          tests/bluecad/test_cad_link_topology_concurrency.py
-          tests/bluecad/test_cad_link_topology_preflight.py
-          tests/bluecad/test_build_service_spawn.py
-          tests/test_cad_link_topology_execute.py
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m pytest -vv \
+            tests/bluecad/test_cad_link_topology_concurrency.py \
+            tests/bluecad/test_cad_link_topology_preflight.py \
+            tests/bluecad/test_build_service_spawn.py \
+            tests/test_cad_link_topology_execute.py \
+            2>&1 | tee "$RUNNER_TEMP/cad-link-074-review-fixes.log"
+
+      - name: Upload focused diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cad-link-074-review-fix-diagnostics
+          path: ${{ runner.temp }}/cad-link-074-review-fixes.log
+          if-no-files-found: warn
+          retention-days: 2
 
       - name: Restore canonical CI and push
         run: |
