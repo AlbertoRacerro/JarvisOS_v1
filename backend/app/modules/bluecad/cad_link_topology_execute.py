@@ -21,7 +21,7 @@ from app.modules.bluecad.cad_link_topology import (
     BUILD_TIMEOUT_SECONDS,
     CadLink072ExecuteRequest,
     CadLink072PreviewRequest,
-    _build_preview,
+    _rebuild_preview_without_kernel,
     preview_cad_link_072,
 )
 from app.modules.bluecad.cad_link_topology_contract import TRANSFORMATION_VERSION
@@ -94,6 +94,7 @@ def execute_cad_link_072(
                         connection,
                         workspace_id,
                         preview_request,
+                        preview["kernel_preflight"],
                     )
                     _require_preview_digest(current, payload.preview_digest)
                     row = connection.execute(
@@ -374,9 +375,15 @@ def _preview_from_connection(
     connection: sqlite3.Connection,
     workspace_id: str,
     request: CadLink072PreviewRequest,
+    kernel_preflight: dict[str, Any],
 ) -> dict[str, Any]:
     try:
-        return _build_preview(connection, workspace_id, request)
+        return _rebuild_preview_without_kernel(
+            connection,
+            workspace_id,
+            request,
+            kernel_preflight,
+        )
     except CadLinkError as exc:
         if exc.code.startswith("cad_link_kernel_"):
             raise

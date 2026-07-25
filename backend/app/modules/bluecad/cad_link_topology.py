@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from copy import deepcopy
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -76,6 +77,37 @@ def _build_preview(
     workspace_id: str,
     payload: CadLink072PreviewRequest,
 ) -> dict[str, Any]:
+    return _build_preview_evidence(
+        connection,
+        workspace_id,
+        payload,
+        kernel_preflight=None,
+    )
+
+
+def _rebuild_preview_without_kernel(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    payload: CadLink072PreviewRequest,
+    kernel_preflight: dict[str, Any],
+) -> dict[str, Any]:
+    """Recheck mutable authority under a short transaction without kernel work."""
+
+    return _build_preview_evidence(
+        connection,
+        workspace_id,
+        payload,
+        kernel_preflight=kernel_preflight,
+    )
+
+
+def _build_preview_evidence(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    payload: CadLink072PreviewRequest,
+    *,
+    kernel_preflight: dict[str, Any] | None,
+) -> dict[str, Any]:
     source = load_topology_source(
         connection,
         workspace_id,
@@ -86,7 +118,9 @@ def _build_preview(
         source["manifest"],
         layout,
     )
-    preflight = run_kernel_preflight(resolved_spec, boundaries)
+    preflight = (
+        run_kernel_preflight(resolved_spec, boundaries) if kernel_preflight is None else deepcopy(kernel_preflight)
+    )
     process_reconciliation = reconcile_topology(
         source["manifest"],
         layout,
@@ -140,9 +174,7 @@ def _build_preview(
         "reconciliation": reconciliation,
         "reconciliation_digest": digest(reconciliation),
         "analysis_contract": analysis_contract,
-        "analysis_contract_digest": (
-            None if analysis_contract is None else digest(analysis_contract)
-        ),
+        "analysis_contract_digest": (None if analysis_contract is None else digest(analysis_contract)),
     }
     preview["preview_digest"] = digest(preview)
     return preview

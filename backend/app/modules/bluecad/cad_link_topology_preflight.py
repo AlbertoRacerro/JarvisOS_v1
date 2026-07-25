@@ -615,9 +615,7 @@ def _validate_no_extra_contact(
         raise _contact_error()
     residual_distance = _shape_distance(left_residual, right_residual)
     residual_topology = _intersection_topology(residual_intersection)
-    if residual_distance <= COINCIDENCE_ABS_TOL_MM or any(
-        residual_topology[key] > 0 for key in ("face_count", "edge_count", "vertex_count")
-    ):
+    if _has_topological_contact(residual_topology):
         raise _contact_error()
     return residual_distance
 

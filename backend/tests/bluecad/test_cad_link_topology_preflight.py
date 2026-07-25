@@ -21,6 +21,7 @@ from app.modules.bluecad.cad_link_topology_preflight import (
     _classify_pair_intersection,
     _has_topological_contact,
     _kernel_bbox,
+    _validate_no_extra_contact,
     _validate_port_contact_topology,
     run_kernel_preflight,
 )
@@ -287,3 +288,50 @@ def test_actual_topological_contact_is_classified() -> None:
     }
 
     assert _has_topological_contact(topology) is True
+
+
+def test_connected_residual_positive_submicron_gap_is_allowed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ResidualShape:
+        def __sub__(self, _other):
+            return self
+
+    left = ResidualShape()
+    right = ResidualShape()
+    residual_intersection = object()
+    port = PortFrame((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), 60.0, 5.0)
+
+    monkeypatch.setattr(
+        preflight_module,
+        "_allowed_contact_neighborhood",
+        lambda _port: object(),
+    )
+    monkeypatch.setattr(
+        preflight_module,
+        "_shape_intersection",
+        lambda *_args: residual_intersection,
+    )
+    monkeypatch.setattr(
+        preflight_module,
+        "_shape_volume",
+        lambda shape: 0.0 if shape is residual_intersection else 1.0,
+    )
+    monkeypatch.setattr(
+        preflight_module,
+        "_shape_distance",
+        lambda *_args: 5e-7,
+    )
+    monkeypatch.setattr(
+        preflight_module,
+        "_intersection_topology",
+        lambda _shape: {
+            "face_count": 0,
+            "edge_count": 0,
+            "vertex_count": 0,
+            "faces": [],
+            "edges": [],
+        },
+    )
+
+    assert _validate_no_extra_contact(left, right, port) == pytest.approx(5e-7)

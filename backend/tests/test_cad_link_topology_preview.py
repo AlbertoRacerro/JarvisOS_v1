@@ -73,9 +73,7 @@ def _create_source_run(client: TestClient) -> str:
         for name in GEOMETRY_PARAMETER_INPUTS:
             item = payload[name]
             parameter_id = (
-                shared_count_id
-                if name in {"parallel_path_count", "branch_bend_count"}
-                else f"geometry-{name}"
+                shared_count_id if name in {"parallel_path_count", "branch_bend_count"} else f"geometry-{name}"
             )
             item["source_parameter_id"] = parameter_id
             connection.execute(
@@ -97,9 +95,7 @@ def _create_source_run(client: TestClient) -> str:
             )
         connection.commit()
 
-    registered = client.post(
-        "/workspaces/bluerev/bundled-models/bluerev-process-topology-m1-v0/register"
-    )
+    registered = client.post("/workspaces/bluerev/bundled-models/bluerev-process-topology-m1-v0/register")
     assert registered.status_code == 200, registered.text
     created = client.post(
         "/workspaces/bluerev/runner-jobs",
@@ -126,11 +122,7 @@ def _table_counts() -> dict[str, int]:
     )
     with open_sqlite_connection() as connection:
         return {
-            table: int(
-                connection.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()[
-                    "count"
-                ]
-            )
+            table: int(connection.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()["count"])
             for table in tables
         }
 
@@ -228,9 +220,7 @@ def test_preview_is_deterministic_allows_compatible_parameter_reuse_and_writes_n
     }
     before_counts = _table_counts()
     data_root = build_paths().data_root
-    before_files = sorted(
-        path.relative_to(data_root) for path in data_root.rglob("*") if path.is_file()
-    )
+    before_files = sorted(path.relative_to(data_root) for path in data_root.rglob("*") if path.is_file())
 
     first = client.post(
         "/workspaces/bluerev/bluecad/cad-link/072/preview",
@@ -244,21 +234,55 @@ def test_preview_is_deterministic_allows_compatible_parameter_reuse_and_writes_n
     assert first.status_code == 200, first.text
     assert second.status_code == 200, second.text
     assert first.json()["preview_digest"] == second.json()["preview_digest"]
-    assert first.json()["source_snapshot_digest"] == second.json()[
-        "source_snapshot_digest"
-    ]
+    assert first.json()["source_snapshot_digest"] == second.json()["source_snapshot_digest"]
     snapshots = first.json()["source_geometry_parameters"]
     assert snapshots["parallel_path_count"]["parameter_id"] == "geometry-count-shared"
     assert snapshots["branch_bend_count"]["parameter_id"] == "geometry-count-shared"
+    manifest_snapshot = first.json()["source_snapshot"]["topology_manifest_payload"]
+    executed_inputs = manifest_snapshot["executed_inputs"]
+    assert executed_inputs["reservoir_liquid_volume"] == _input_payload()["reservoir_liquid_volume"]
+    assert set(executed_inputs) > set(GEOMETRY_PARAMETER_INPUTS)
     assert first.json()["resolved_part_count"] == 12
     assert first.json()["resolved_connection_count"] == 12
     assert all(check["passed"] for check in first.json()["reconciliation"]["checks"])
     assert _table_counts() == before_counts
-    after_files = sorted(
-        path.relative_to(data_root) for path in data_root.rglob("*") if path.is_file()
-    )
+    after_files = sorted(path.relative_to(data_root) for path in data_root.rglob("*") if path.is_file())
     assert after_files == before_files
 
+
+def test_transactional_recheck_reuses_fresh_kernel_evidence_without_kernel_work(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.modules.bluecad import cad_link_topology
+
+    simulation_run_id = _create_source_run(client)
+    request = cad_link_topology.CadLink072PreviewRequest(
+        source_simulation_run_id=simulation_run_id,
+        layout_spec=_layout(),
+        analysis_spec=None,
+    )
+    monkeypatch.setattr(cad_link_topology, "run_kernel_preflight", _fake_preflight)
+    initial = cad_link_topology.preview_cad_link_072("bluerev", request)
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("kernel preflight must run outside the SQLite writer lock")
+
+    monkeypatch.setattr(cad_link_topology, "run_kernel_preflight", fail_if_called)
+    with open_sqlite_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            current = cad_link_topology._rebuild_preview_without_kernel(
+                connection,
+                "bluerev",
+                request,
+                initial["kernel_preflight"],
+            )
+        finally:
+            connection.rollback()
+
+    assert current["preview_digest"] == initial["preview_digest"]
+    assert current["kernel_preflight_digest"] == initial["kernel_preflight_digest"]
 
 
 def _preview_request(simulation_run_id: str) -> dict[str, object]:
@@ -284,10 +308,12 @@ def test_source_authority_rejects_tampered_script_artifact_bytes(
             (simulation_run_id,),
         ).fetchone()
         assert row is not None
-        tampered_path = Path(connection.execute(
-            "SELECT stored_path FROM artifacts WHERE id = ?",
-            (row["implementation_artifact_id"],),
-        ).fetchone()["stored_path"]).with_name("tampered-topology-script.py")
+        tampered_path = Path(
+            connection.execute(
+                "SELECT stored_path FROM artifacts WHERE id = ?",
+                (row["implementation_artifact_id"],),
+            ).fetchone()["stored_path"]
+        ).with_name("tampered-topology-script.py")
         tampered_path.write_text("print('tampered')\n", encoding="utf-8")
         connection.execute(
             "UPDATE artifacts SET stored_path = ? WHERE id = ?",
@@ -369,17 +395,15 @@ def test_manifest_geometry_agreement_rejects_semantic_drift() -> None:
     supply_volume = math.pi * common_inner**2 / 4.0 * supply
     return_volume = math.pi * common_inner**2 / 4.0 * ret
     manifold_volume = (
-        float(inputs["split_manifold_liquid_volume"]["value"])
-        + float(inputs["merge_manifold_liquid_volume"]["value"])
+        float(inputs["split_manifold_liquid_volume"]["value"]) + float(inputs["merge_manifold_liquid_volume"]["value"])
     ) / 1000.0
     reservoir_volume = float(inputs["reservoir_liquid_volume"]["value"]) / 1000.0
     illuminated_area = n * math.pi * branch_outer * (li + illuminated_bends * arc)
     dark_area = n * math.pi * branch_outer * (ld + dark_bends * arc)
     common_area = math.pi * common_outer * (supply + ret)
-    material_volume = (
-        n * math.pi * (branch_outer**2 - branch_inner**2) / 4.0 * branch_length
-        + math.pi * (common_outer**2 - common_inner**2) / 4.0 * (supply + ret)
-    )
+    material_volume = n * math.pi * (branch_outer**2 - branch_inner**2) / 4.0 * branch_length + math.pi * (
+        common_outer**2 - common_inner**2
+    ) / 4.0 * (supply + ret)
     manifest = {
         "executed_inputs": inputs,
         "symmetry": {"parallel_path_count": n},
@@ -421,7 +445,11 @@ def test_manifest_geometry_agreement_rejects_semantic_drift() -> None:
             "common_return_liquid_volume_m3": return_volume,
             "manifold_liquid_volume_total_m3": manifold_volume,
             "reservoir_liquid_volume_m3": reservoir_volume,
-            "total_liquid_inventory_m3": branch_volume + supply_volume + return_volume + manifold_volume + reservoir_volume,
+            "total_liquid_inventory_m3": branch_volume
+            + supply_volume
+            + return_volume
+            + manifold_volume
+            + reservoir_volume,
             "illuminated_branch_external_area_m2": illuminated_area,
             "dark_branch_external_area_m2": dark_area,
             "common_external_area_m2": common_area,

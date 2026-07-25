@@ -171,12 +171,8 @@ def load_topology_source(
             "id": simulation_run_id,
             "status": str(run["status"]),
             "model_version_id": str(run["model_version_id"]),
-            "input_payload_sha256": _digest(
-                _json_object(run["input_payload"], "cad_link_topology_manifest_invalid")
-            ),
-            "output_payload_sha256": _digest(
-                _json_object(run["output_payload"], "cad_link_topology_manifest_invalid")
-            ),
+            "input_payload_sha256": _digest(_json_object(run["input_payload"], "cad_link_topology_manifest_invalid")),
+            "output_payload_sha256": _digest(_json_object(run["output_payload"], "cad_link_topology_manifest_invalid")),
         },
         "runner_job": {
             "id": str(job["id"]),
@@ -186,6 +182,7 @@ def load_topology_source(
         },
         "model_identity": model_identity,
         "topology_manifest": artifact_snapshot,
+        "topology_manifest_payload": json.loads(canonical_json(manifest)),
         "geometry_parameters": parameter_snapshots,
     }
     return {
@@ -443,7 +440,11 @@ def _validate_manifest_geometry_agreement(manifest: Mapping[str, Any]) -> None:
     parallel_count_value = input_value("parallel_path_count")
     bend_count_value = input_value("branch_bend_count")
     illuminated_bend_count_value = input_value("branch_illuminated_bend_count")
-    if not parallel_count_value.is_integer() or not bend_count_value.is_integer() or not illuminated_bend_count_value.is_integer():
+    if (
+        not parallel_count_value.is_integer()
+        or not bend_count_value.is_integer()
+        or not illuminated_bend_count_value.is_integer()
+    ):
         raise CadLinkError(
             "cad_link_topology_manifest_identity_mismatch",
             "Topology manifest integer geometry disagrees with executed inputs.",
@@ -480,8 +481,7 @@ def _validate_manifest_geometry_agreement(manifest: Mapping[str, Any]) -> None:
     common_supply_volume_m3 = common_area_m2 * common_supply_m
     common_return_volume_m3 = common_area_m2 * common_return_m
     manifold_volume_m3 = (
-        input_value("split_manifold_liquid_volume")
-        + input_value("merge_manifold_liquid_volume")
+        input_value("split_manifold_liquid_volume") + input_value("merge_manifold_liquid_volume")
     ) / 1000.0
     reservoir_volume_m3 = input_value("reservoir_liquid_volume") / 1000.0
     total_inventory_m3 = (
@@ -500,8 +500,7 @@ def _validate_manifest_geometry_agreement(manifest: Mapping[str, Any]) -> None:
     branch_wall_area_m2 = math.pi * (branch_outer_m**2 - branch_inner_m**2) / 4.0
     common_wall_area_m2 = math.pi * (common_outer_m**2 - common_inner_m**2) / 4.0
     tube_material_volume_m3 = (
-        parallel_count * branch_wall_area_m2 * branch_length_each_m
-        + common_wall_area_m2 * common_length_m
+        parallel_count * branch_wall_area_m2 * branch_length_each_m + common_wall_area_m2 * common_length_m
     )
 
     exact_counts = (
@@ -572,11 +571,7 @@ def _require_fresh(
     ).fetchone()
     if row is None:
         return
-    code = (
-        "cad_link_run_stale"
-        if record_ref.startswith("simulation_run:")
-        else "cad_link_parameter_stale"
-    )
+    code = "cad_link_run_stale" if record_ref.startswith("simulation_run:") else "cad_link_parameter_stale"
     raise CadLinkError(code, "A required CAD-link source record is stale.", status_code=409)
 
 
