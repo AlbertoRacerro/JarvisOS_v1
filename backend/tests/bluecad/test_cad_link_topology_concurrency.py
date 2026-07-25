@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -157,9 +158,15 @@ def test_abandoned_reservation_is_parked_and_attempt_is_finished(
 
     assert candidate.status == "parked"
     assert candidate.parked_reason == "cad_link_failed"
+    assert candidate.notes is not None
+    assert "cad_link_abandoned_reservation" in candidate.notes
     with open_sqlite_connection() as connection:
-        attempt = connection.execute("SELECT * FROM bluecad_attempts WHERE id = ?", (attempt_id,)).fetchone()
+        attempt = connection.execute(
+            "SELECT * FROM bluecad_attempts WHERE id = ?", (attempt_id,)
+        ).fetchone()
         assert attempt is not None
         assert attempt["build_outcome"] == "cad_link_abandoned"
         assert attempt["validation_verdict"] == "fail"
         assert attempt["finished_at"] is not None
+        details = json.loads(attempt["error_detail_json"])
+        assert details["reason"] == "reservation_lease_expired"
