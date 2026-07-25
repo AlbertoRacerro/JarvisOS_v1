@@ -258,3 +258,179 @@ def test_preview_is_deterministic_allows_compatible_parameter_reuse_and_writes_n
         path.relative_to(data_root) for path in data_root.rglob("*") if path.is_file()
     )
     assert after_files == before_files
+
+
+
+def _preview_request(simulation_run_id: str) -> dict[str, object]:
+    return {
+        "source_simulation_run_id": simulation_run_id,
+        "layout_spec": _layout(),
+        "analysis_spec": None,
+    }
+
+
+def test_source_authority_rejects_tampered_script_artifact_bytes(
+    client: TestClient,
+) -> None:
+    simulation_run_id = _create_source_run(client)
+    with open_sqlite_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT mv.implementation_artifact_id
+            FROM simulation_runs sr
+            JOIN model_versions mv ON mv.id = sr.model_version_id
+            WHERE sr.id = ? AND sr.workspace_id = 'bluerev'
+            """,
+            (simulation_run_id,),
+        ).fetchone()
+        assert row is not None
+        tampered_path = Path(connection.execute(
+            "SELECT stored_path FROM artifacts WHERE id = ?",
+            (row["implementation_artifact_id"],),
+        ).fetchone()["stored_path"]).with_name("tampered-topology-script.py")
+        tampered_path.write_text("print('tampered')\n", encoding="utf-8")
+        connection.execute(
+            "UPDATE artifacts SET stored_path = ? WHERE id = ?",
+            (str(tampered_path), row["implementation_artifact_id"]),
+        )
+        connection.commit()
+
+    response = client.post(
+        "/workspaces/bluerev/bluecad/cad-link/072/preview",
+        json=_preview_request(simulation_run_id),
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"]["code"] == "cad_link_model_identity_mismatch"
+
+
+def test_source_authority_missing_expected_manifest_path_fails_closed(
+    client: TestClient,
+) -> None:
+    simulation_run_id = _create_source_run(client)
+    with open_sqlite_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT a.id AS artifact_id, a.stored_path
+            FROM run_artifacts ra
+            JOIN artifacts a ON a.id = ra.artifact_id
+            WHERE ra.workspace_id = 'bluerev'
+              AND ra.simulation_run_id = ?
+              AND ra.role = 'bluerev_topology_manifest'
+            """,
+            (simulation_run_id,),
+        ).fetchone()
+        assert row is not None
+        original = Path(row["stored_path"])
+        moved = original.parent.parent / "moved-topology-manifest.json"
+        original.rename(moved)
+        connection.execute(
+            "UPDATE artifacts SET stored_path = ? WHERE id = ?",
+            (str(moved), row["artifact_id"]),
+        )
+        connection.commit()
+
+    response = client.post(
+        "/workspaces/bluerev/bluecad/cad-link/072/preview",
+        json=_preview_request(simulation_run_id),
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"]["code"] == "cad_link_topology_manifest_invalid"
+
+
+def test_manifest_geometry_agreement_rejects_semantic_drift() -> None:
+    import math
+
+    from app.modules.bluecad.cad_link import CadLinkError
+    from app.modules.bluecad.cad_link_topology_source import (
+        _validate_manifest_geometry_agreement,
+    )
+
+    inputs = _input_payload()
+    n = int(inputs["parallel_path_count"]["value"])
+    bend_count = int(inputs["branch_bend_count"]["value"])
+    illuminated_bends = int(inputs["branch_illuminated_bend_count"]["value"])
+    dark_bends = bend_count - illuminated_bends
+    li = float(inputs["branch_illuminated_straight_length"]["value"])
+    ld = float(inputs["branch_dark_straight_length"]["value"])
+    rb = float(inputs["branch_bend_centerline_radius"]["value"]) / 1000.0
+    angle = float(inputs["branch_bend_angle"]["value"])
+    arc = rb * math.radians(angle)
+    bend_total = bend_count * arc
+    branch_length = li + ld + bend_total
+    supply = float(inputs["common_supply_length"]["value"])
+    ret = float(inputs["common_return_length"]["value"])
+    branch_inner = float(inputs["branch_tube_inner_diameter"]["value"]) / 1000.0
+    branch_outer = float(inputs["branch_tube_outer_diameter"]["value"]) / 1000.0
+    common_inner = float(inputs["common_tube_inner_diameter"]["value"]) / 1000.0
+    common_outer = float(inputs["common_tube_outer_diameter"]["value"]) / 1000.0
+    branch_wall = (branch_outer - branch_inner) / 2.0
+    common_wall = (common_outer - common_inner) / 2.0
+    branch_volume = n * math.pi * branch_inner**2 / 4.0 * branch_length
+    supply_volume = math.pi * common_inner**2 / 4.0 * supply
+    return_volume = math.pi * common_inner**2 / 4.0 * ret
+    manifold_volume = (
+        float(inputs["split_manifold_liquid_volume"]["value"])
+        + float(inputs["merge_manifold_liquid_volume"]["value"])
+    ) / 1000.0
+    reservoir_volume = float(inputs["reservoir_liquid_volume"]["value"]) / 1000.0
+    illuminated_area = n * math.pi * branch_outer * (li + illuminated_bends * arc)
+    dark_area = n * math.pi * branch_outer * (ld + dark_bends * arc)
+    common_area = math.pi * common_outer * (supply + ret)
+    material_volume = (
+        n * math.pi * (branch_outer**2 - branch_inner**2) / 4.0 * branch_length
+        + math.pi * (common_outer**2 - common_inner**2) / 4.0 * (supply + ret)
+    )
+    manifest = {
+        "executed_inputs": inputs,
+        "symmetry": {"parallel_path_count": n},
+        "branch_template": {
+            "illuminated_straight": {
+                "length_m": li,
+                "inner_diameter_m": branch_inner,
+                "outer_diameter_m": branch_outer,
+                "wall_thickness_m": branch_wall,
+            },
+            "dark_straight": {
+                "length_m": ld,
+                "inner_diameter_m": branch_inner,
+                "outer_diameter_m": branch_outer,
+                "wall_thickness_m": branch_wall,
+            },
+            "bend_group": {
+                "bend_count_each": bend_count,
+                "illuminated_bend_count_each": illuminated_bends,
+                "dark_bend_count_each": dark_bends,
+                "arc_length_each_m": arc,
+                "total_length_each_m": bend_total,
+                "centerline_radius_m": rb,
+                "angle_deg": angle,
+            },
+        },
+        "geometry_totals": {
+            "branch_centerline_length_each_m": branch_length,
+            "common_supply_length_m": supply,
+            "common_return_length_m": ret,
+            "common_inner_diameter_m": common_inner,
+            "common_outer_diameter_m": common_outer,
+            "common_wall_thickness_m": common_wall,
+            "installed_branch_centerline_length_total_m": n * branch_length,
+            "installed_tube_centerline_length_total_m": n * branch_length + supply + ret,
+            "representative_hydraulic_path_length_m": supply + branch_length + ret,
+            "branch_liquid_volume_total_m3": branch_volume,
+            "common_supply_liquid_volume_m3": supply_volume,
+            "common_return_liquid_volume_m3": return_volume,
+            "manifold_liquid_volume_total_m3": manifold_volume,
+            "reservoir_liquid_volume_m3": reservoir_volume,
+            "total_liquid_inventory_m3": branch_volume + supply_volume + return_volume + manifold_volume + reservoir_volume,
+            "illuminated_branch_external_area_m2": illuminated_area,
+            "dark_branch_external_area_m2": dark_area,
+            "common_external_area_m2": common_area,
+            "tube_external_area_total_m2": illuminated_area + dark_area + common_area,
+            "tube_material_volume_proxy_m3": material_volume,
+        },
+    }
+    _validate_manifest_geometry_agreement(manifest)
+    manifest["geometry_totals"]["installed_tube_centerline_length_total_m"] += 1.0
+    with pytest.raises(CadLinkError) as exc_info:
+        _validate_manifest_geometry_agreement(manifest)
+    assert exc_info.value.code == "cad_link_topology_manifest_identity_mismatch"
