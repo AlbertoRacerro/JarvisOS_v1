@@ -6,63 +6,12 @@ on:
     branches: [master]
 
 jobs:
-  fix-074-execute-lint:
-    if: github.event_name == 'pull_request' && github.head_ref == 'impl-074'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
-          fetch-depth: 0
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: |
-            backend/requirements.txt
-            backend/requirements-dev.txt
-      - name: Install dependencies
-        working-directory: backend
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt -r requirements-dev.txt
-      - name: Apply and verify Ruff fixes
-        working-directory: backend
-        run: |
-          python -m ruff check --fix \
-            app/modules/bluecad/cad_link_topology.py \
-            app/modules/bluecad/cad_link_topology_execute.py \
-            app/modules/bluecad/routes.py \
-            tests/test_cad_link_072.py
-          python -m ruff check \
-            app/modules/bluecad/cad_link_topology.py \
-            app/modules/bluecad/cad_link_topology_execute.py \
-            app/modules/bluecad/routes.py \
-            tests/test_cad_link_072.py
-          git diff --check
-      - name: Restore canonical CI and push
-        run: |
-          git fetch origin master
-          git checkout origin/master -- .github/workflows/ci.yml
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add \
-            backend/app/modules/bluecad/cad_link_topology.py \
-            backend/app/modules/bluecad/cad_link_topology_execute.py \
-            backend/app/modules/bluecad/routes.py \
-            backend/tests/test_cad_link_072.py \
-            .github/workflows/ci.yml
-          git commit -m "Normalize Spec 074 execute imports"
-          git push origin HEAD:impl-074
-
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -70,6 +19,7 @@ jobs:
           cache-dependency-path: |
             backend/requirements.txt
             backend/requirements-dev.txt
+
       - name: Spec status registry gate
         run: |
           python scripts/check_spec_status.py --self-test
@@ -78,15 +28,18 @@ jobs:
           else
             python scripts/check_spec_status.py
           fi
+
       - name: Manual review tooling offline gate
         run: |
           python scripts/cheap_review.py --self-test
           python scripts/manual_review.py --self-test
+
       - name: Install dependencies
         working-directory: backend
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
+
       - name: BLUECAD license-boundary import gate
         run: |
           python - <<'PY'
@@ -99,21 +52,25 @@ jobs:
           src_root = Path("frontend/src")
           if src_root.exists():
               paths.extend(path for path in src_root.rglob("*") if path.suffix in {".ts", ".tsx"})
+
           violations = []
           for path in paths:
               for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
                   if pattern.search(line):
                       violations.append(f"{path}:{lineno}: {line.strip()}")
+
           if violations:
               print("Forbidden in-process GPL tool imports found:")
               print("\n".join(violations))
               sys.exit(1)
           PY
+
       - name: Ruff
         working-directory: backend
         run: >-
           python -m ruff check app tests ../scripts/check_spec_status.py
           ../scripts/cheap_review.py ../scripts/manual_review.py
+
       - name: Pytest
         working-directory: backend
         run: python -m pytest -q
@@ -125,6 +82,7 @@ jobs:
       JARVISOS_BLUECAD_CANARY_PROFILE: ubuntu24-py311
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -132,11 +90,13 @@ jobs:
           cache-dependency-path: |
             backend/requirements.txt
             backend/requirements-dev.txt
+
       - name: Install dependencies
         working-directory: backend
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
+
       - name: Run canonical canary, bounded property suite, and capped-manifold kernel proof
         id: property
         working-directory: backend
@@ -157,6 +117,7 @@ jobs:
           echo "status=$status" >> "$GITHUB_OUTPUT"
           echo "elapsed=$elapsed" >> "$GITHUB_OUTPUT"
           exit 0
+
       - name: Upload bounded canary diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -167,6 +128,7 @@ jobs:
             ${{ runner.temp }}/bluecad-property-canary-actual.json
           if-no-files-found: warn
           retention-days: 14
+
       - name: Enforce property and time gates
         if: always()
         shell: bash

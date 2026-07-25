@@ -7,8 +7,9 @@ import json
 import math
 import shutil
 import sqlite3
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
