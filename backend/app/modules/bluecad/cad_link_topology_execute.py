@@ -15,6 +15,7 @@ from uuid import uuid4
 from app.core.database import open_sqlite_connection
 from app.modules.bluecad.cad_link import CadLinkError, CadLinkExecuteResponse
 from app.modules.bluecad.cad_link_topology import (
+    BUILD_TIMEOUT_SECONDS,
     CadLink072ExecuteRequest,
     CadLink072PreviewRequest,
     _build_preview,
@@ -194,7 +195,11 @@ def execute_cad_link_072(
             canonical_json(preview["resolved_spec"]) + "\n",
             encoding="utf-8",
         )
-        result = build_geometry_spec(preview["resolved_spec"], out_dir)
+        result = build_geometry_spec(
+            preview["resolved_spec"],
+            out_dir,
+            timeout_s=BUILD_TIMEOUT_SECONDS,
+        )
         _append_topology_reconciliation(result, preview["reconciliation"])
         source_ref = f"bluecad_candidate:{candidate_id}:attempt:1"
         spec_artifact_id = register_artifact(

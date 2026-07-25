@@ -343,7 +343,7 @@ def _load_workspace_rows(connection: sqlite3.Connection, workspace_id: str) -> d
         ),
         "run_artifact": ("SELECT simulation_run_id, artifact_id, role FROM run_artifacts WHERE workspace_id = ?"),
         "cad_link": (
-            "SELECT source_simulation_run_id, child_candidate_id "
+            "SELECT source_simulation_run_id, child_candidate_id, transformation_version "
             "FROM bluecad_cad_links WHERE workspace_id = ?"
         ),
     }
@@ -541,12 +541,18 @@ def _add_foreign_key_edges(builder: _GraphBuilder, rows: dict[str, list[dict[str
         for row in rows[kind]:
             _add_ai_proposal_edge(builder, row, _ref(kind, row["id"]), source_field)
     for row in rows["cad_link"]:
+        relation = (
+            "m1_topology_geometry_link"
+            if row.get("transformation_version")
+            == "bluerev_072_m1_planar_tubing_v0_1"
+            else "m0_geometry_link"
+        )
         _add_typed_edge(
             builder,
             "simulation_run",
             row.get("source_simulation_run_id"),
             _ref("bluecad_candidate", row.get("child_candidate_id")),
-            "m0_geometry_link",
+            relation,
             "dependency",
             "bluecad_cad_links.source_simulation_run_id",
         )
