@@ -39,6 +39,10 @@ jobs:
           path = Path('scripts/harden_074_source.py')
           text = path.read_text(encoding='utf-8')
           text = text.replace('model.get("script_status")', 'model["script_status"]')
+          text = text.replace(
+              'from app.modules.bluecad.cad_link_topology_contract import input_decimal\n',
+              '',
+          )
           path.write_text(text, encoding='utf-8')
           PY
           python scripts/harden_074_source.py
