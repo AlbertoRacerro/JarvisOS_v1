@@ -20,7 +20,7 @@ def client(tmp_path, monkeypatch) -> Iterator[TestClient]:
     get_settings.cache_clear()
 
 
-def test_cad_link_072_preview_route_is_registered(client: TestClient) -> None:
+def test_cad_link_072_routes_are_registered(client: TestClient) -> None:
     routes = {
         (route.path, method)
         for route in client.app.routes
@@ -34,7 +34,7 @@ def test_cad_link_072_preview_route_is_registered(client: TestClient) -> None:
     assert (
         "/workspaces/{workspace_id}/bluecad/cad-link/072/execute",
         "POST",
-    ) not in routes
+    ) in routes
 
 
 def test_cad_link_072_preview_missing_run_fails_before_layout_or_kernel(
