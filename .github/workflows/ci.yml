@@ -45,7 +45,10 @@ jobs:
 
       - name: Ruff focused source authority
         working-directory: backend
-        run: python -m ruff check app/modules/bluecad/cad_link_topology_source.py tests/test_cad_link_topology_preview.py
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m ruff check app/modules/bluecad/cad_link_topology_source.py tests/test_cad_link_topology_preview.py 2>&1 | tee "$RUNNER_TEMP/harden-074-ruff.log"
 
       - name: Pytest focused source authority
         working-directory: backend
@@ -59,7 +62,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: harden-074-source-diagnostics
-          path: ${{ runner.temp }}/harden-074-source.log
+          path: |
+            ${{ runner.temp }}/harden-074-ruff.log
+            ${{ runner.temp }}/harden-074-source.log
           if-no-files-found: warn
           retention-days: 2
 
