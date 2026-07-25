@@ -6,6 +6,90 @@ on:
     branches: [master]
 
 jobs:
+  apply-074-second-review-fixes:
+    if: github.event_name == 'pull_request' && github.head_ref == 'impl-074'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Apply second-review fixes
+        run: python scripts/patch_074_codex_rereview.py
+
+      - name: Normalize focused second-review fixes
+        working-directory: backend
+        run: |
+          files=(
+            app/modules/bluecad/cad_link_topology.py
+            app/modules/bluecad/cad_link_topology_execute.py
+            app/modules/bluecad/cad_link_topology_source.py
+            app/modules/bluecad/cad_link_topology_preflight.py
+            tests/test_cad_link_topology_preview.py
+            tests/bluecad/test_cad_link_topology_preflight.py
+          )
+          python -m ruff check --fix "${files[@]}"
+          python -m ruff format "${files[@]}"
+          python -m ruff check "${files[@]}"
+
+      - name: Pytest focused second-review fixes
+        working-directory: backend
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m pytest -vv \
+            tests/test_cad_link_topology_preview.py \
+            tests/bluecad/test_cad_link_topology_preflight.py \
+            tests/test_cad_link_topology_execute.py \
+            tests/bluecad/test_cad_link_topology_concurrency.py \
+            2>&1 | tee "$RUNNER_TEMP/cad-link-074-second-review.log"
+
+      - name: Upload focused diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cad-link-074-second-review-diagnostics
+          path: ${{ runner.temp }}/cad-link-074-second-review.log
+          if-no-files-found: warn
+          retention-days: 2
+
+      - name: Restore canonical CI and push
+        run: |
+          git fetch origin master
+          git checkout origin/master -- .github/workflows/ci.yml
+          git rm -f scripts/patch_074_codex_rereview.py
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            backend/app/modules/bluecad/cad_link_topology.py \
+            backend/app/modules/bluecad/cad_link_topology_execute.py \
+            backend/app/modules/bluecad/cad_link_topology_source.py \
+            backend/app/modules/bluecad/cad_link_topology_preflight.py \
+            backend/tests/test_cad_link_topology_preview.py \
+            backend/tests/bluecad/test_cad_link_topology_preflight.py \
+            .github/workflows/ci.yml
+          git commit -m "Fix Spec 074 second review findings"
+          git push origin HEAD:impl-074
+
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 15
