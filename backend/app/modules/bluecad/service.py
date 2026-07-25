@@ -19,6 +19,7 @@ from app.modules.bluecad.validate import write_validation_report
 
 DEFAULT_TIMEOUT_SECONDS = 30.0
 _WORKER_JOIN_GRACE_SECONDS = 1.0
+_BUILD_PHASE_FILENAME = ".bluecad_build_phase"
 
 
 def build_geometry_spec(
@@ -47,6 +48,7 @@ def build_geometry_spec(
                 "TIMEOUT",
                 {
                     "timeout_s": timeout_s,
+                    "phase": _read_and_remove_build_phase(out_path),
                     "partial_artifacts": _partial_artifact_sizes(out_path),
                 },
             )
@@ -57,6 +59,7 @@ def build_geometry_spec(
                 {
                     "message": "worker exited without returning a result",
                     "exitcode": process.exitcode,
+                    "phase": _read_and_remove_build_phase(out_path),
                     "partial_artifacts": _partial_artifact_sizes(out_path),
                 },
             )
@@ -78,6 +81,7 @@ def build_geometry_spec(
     if process.is_alive():
         process.kill()
         process.join()
+    _read_and_remove_build_phase(out_path)
     if payload["ok"]:
         manifest = payload["manifest"]
         report = write_validation_report(canonical, out_path)
@@ -150,6 +154,20 @@ def _partial_artifact_sizes(out_path: Path) -> dict[str, int | None]:
         except OSError:
             evidence[name] = None
     return evidence
+
+
+def _read_and_remove_build_phase(out_path: Path) -> str | None:
+    path = out_path / _BUILD_PHASE_FILENAME
+    try:
+        value = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    finally:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+    return value[:64] or None
 
 
 def _worker(
