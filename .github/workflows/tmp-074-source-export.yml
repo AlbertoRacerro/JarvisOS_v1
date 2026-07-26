@@ -1,0 +1,24 @@
+name: Temporary 074 source export
+
+on:
+  push:
+    branches: [impl-074]
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tmp-074-source-files
+          path: |
+            backend/app/modules/bluecad/cad_link_topology_execute.py
+            backend/app/modules/bluecad/models.py
+            backend/tests/bluecad/test_cad_link_topology_concurrency.py
+          if-no-files-found: error
+          retention-days: 1
