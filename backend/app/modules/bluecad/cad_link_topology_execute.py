@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import mimetypes
 import shutil
 import sqlite3
 import threading
@@ -26,11 +27,12 @@ from app.modules.bluecad.cad_link_topology import (
 )
 from app.modules.bluecad.cad_link_topology_contract import TRANSFORMATION_VERSION
 from app.modules.bluecad.cad_link_topology_source import digest
-from app.modules.bluecad.evidence import record_validation_evidence
+from app.modules.bluecad.evidence import map_validation_evidence
+from app.modules.bluecad.export import sha256_file
 from app.modules.bluecad.ledger import (
+    _artifact_storage_path,
     candidate_work_dir,
     get_candidate,
-    register_artifact,
 )
 from app.modules.bluecad.loop import _run_simulation_stage
 from app.modules.bluecad.service import build_geometry_spec
@@ -240,72 +242,38 @@ def execute_cad_link_072(
             timeout_s=BUILD_TIMEOUT_SECONDS,
         )
         _append_topology_reconciliation(result, preview["reconciliation"])
-        source_ref = f"bluecad_candidate:{candidate_id}:attempt:1"
-        spec_artifact_id = register_artifact(
-            workspace_id,
-            spec_path,
-            role="bluecad_spec",
-            source_ref=source_ref,
-            producer_notes=ARTIFACT_PRODUCER,
-        )
-        report_artifact_id = register_artifact(
-            workspace_id,
-            _require_path(result.report_path, out_dir / "validation_report.json"),
-            role="bluecad_report",
-            source_ref=source_ref,
-            producer_notes=ARTIFACT_PRODUCER,
-        )
-        if result.manifest_path is not None and result.manifest_path.exists():
-            manifest_artifact_id = register_artifact(
-                workspace_id,
-                result.manifest_path,
-                role="bluecad_manifest",
-                source_ref=source_ref,
-                producer_notes=ARTIFACT_PRODUCER,
-            )
-        glb_path = out_dir / "model.glb"
-        if glb_path.exists():
-            glb_artifact_id = register_artifact(
-                workspace_id,
-                glb_path,
-                role="bluecad_glb",
-                source_ref=source_ref,
-                producer_notes=ARTIFACT_PRODUCER,
-            )
-
         verdict = "pass" if result.report.get("verdict") == "pass" else "fail"
         build_outcome = (
             "ok" if result.verdict != "error" else _build_error_code(result.errors)
         )
-        _finish_reserved_attempt(
+        artifact_ids = _commit_reserved_build_result(
             workspace_id,
             candidate_id,
             attempt_id,
+            spec_path=spec_path,
+            report_path=_require_path(
+                result.report_path,
+                out_dir / "validation_report.json",
+            ),
+            manifest_path=(
+                result.manifest_path
+                if result.manifest_path is not None and result.manifest_path.exists()
+                else None
+            ),
+            glb_path=(out_dir / "model.glb" if (out_dir / "model.glb").exists() else None),
+            report=result.report,
             build_outcome=build_outcome,
             validation_verdict=verdict,
-            spec_artifact_id=spec_artifact_id,
-            report_artifact_id=report_artifact_id,
-            manifest_artifact_id=manifest_artifact_id,
             error_detail={
                 "transformation_version": TRANSFORMATION_VERSION,
                 "preview_digest": preview["preview_digest"],
             },
         )
+        spec_artifact_id = artifact_ids["spec"]
+        report_artifact_id = artifact_ids["report"]
+        manifest_artifact_id = artifact_ids["manifest"]
+        glb_artifact_id = artifact_ids["glb"]
         attempt_finished = True
-        _transition_reserved_candidate_to_validating(
-            workspace_id,
-            candidate_id,
-            spec_artifact_id=spec_artifact_id,
-            glb_artifact_id=glb_artifact_id,
-            report_artifact_id=report_artifact_id,
-        )
-        record_validation_evidence(
-            workspace_id,
-            candidate_id,
-            attempt_id,
-            result.report,
-            report_artifact_id=report_artifact_id,
-        )
         if verdict == "pass":
             _complete_valid_candidate_after_analysis(
                 workspace_id,
@@ -434,6 +402,9 @@ def _complete_valid_candidate_after_analysis(
         producer_notes=ARTIFACT_PRODUCER,
         required_candidate_status="validating",
     )
+    candidate = get_candidate(workspace_id, candidate_id)
+    if candidate is not None and candidate.status in _TERMINAL_REPLAY_STATUSES:
+        raise _ReservationOwnershipLost()
     _require_terminal_analysis_stage(
         workspace_id,
         candidate_id,
@@ -880,6 +851,189 @@ def _recover_abandoned_reservation(
     if candidate is None:
         raise _persistence_inconsistent()
     return candidate
+
+
+def _commit_reserved_build_result(
+    workspace_id: str,
+    candidate_id: str,
+    attempt_id: str,
+    *,
+    spec_path: Path,
+    report_path: Path,
+    manifest_path: Path | None,
+    glb_path: Path | None,
+    report: dict[str, Any],
+    build_outcome: str,
+    validation_verdict: str,
+    error_detail: dict[str, Any],
+) -> dict[str, str | None]:
+    source_ref = f"bluecad_candidate:{candidate_id}:attempt:1"
+    artifact_sources: list[tuple[str, str, Path]] = [
+        ("spec", "bluecad_spec", spec_path),
+        ("report", "bluecad_report", report_path),
+    ]
+    if manifest_path is not None:
+        artifact_sources.append(("manifest", "bluecad_manifest", manifest_path))
+    if glb_path is not None:
+        artifact_sources.append(("glb", "bluecad_glb", glb_path))
+
+    staged: list[dict[str, Any]] = []
+    try:
+        for key, role, source_path in artifact_sources:
+            artifact_id = str(uuid4())
+            stored_path = _artifact_storage_path(
+                workspace_id,
+                artifact_id,
+                source_path.name,
+            )
+            stored_path.parent.mkdir(parents=True, exist_ok=False)
+            shutil.copy2(source_path, stored_path)
+            staged.append(
+                {
+                    "key": key,
+                    "id": artifact_id,
+                    "role": role,
+                    "stored_path": stored_path,
+                    "mime_type": (
+                        mimetypes.guess_type(stored_path.name)[0]
+                        or "application/octet-stream"
+                    ),
+                    "sha256": sha256_file(stored_path),
+                }
+            )
+
+        ids = {item["key"]: str(item["id"]) for item in staged}
+        evidence = map_validation_evidence(
+            workspace_id,
+            candidate_id,
+            attempt_id,
+            report,
+            report_artifact_id=ids["report"],
+        )
+        now = utc_now()
+        with open_sqlite_connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            owner = connection.execute(
+                """
+                SELECT 1 FROM bluecad_candidates
+                WHERE workspace_id = ? AND id = ? AND status = 'generating'
+                """,
+                (workspace_id, candidate_id),
+            ).fetchone()
+            attempt = connection.execute(
+                """
+                SELECT 1 FROM bluecad_attempts
+                WHERE id = ? AND candidate_id = ? AND finished_at IS NULL
+                """,
+                (attempt_id, candidate_id),
+            ).fetchone()
+            if owner is None or attempt is None:
+                connection.rollback()
+                raise _ReservationOwnershipLost()
+
+            for item in staged:
+                stored_path = item["stored_path"]
+                connection.execute(
+                    """
+                    INSERT INTO artifacts (
+                        id, workspace_id, filename, stored_path, artifact_type,
+                        mime_type, sha256, source_ref, status, created_at, notes
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'registered', ?, ?)
+                    """,
+                    (
+                        item["id"],
+                        workspace_id,
+                        stored_path.name,
+                        str(stored_path),
+                        item["role"],
+                        item["mime_type"],
+                        item["sha256"],
+                        source_ref,
+                        now,
+                        ARTIFACT_PRODUCER,
+                    ),
+                )
+
+            attempt_update = connection.execute(
+                """
+                UPDATE bluecad_attempts
+                SET proposal_outcome = 'not_applicable', build_outcome = ?,
+                    validation_verdict = ?, spec_artifact_id = ?,
+                    report_artifact_id = ?, manifest_artifact_id = ?,
+                    finished_at = ?, error_detail_json = ?
+                WHERE id = ? AND candidate_id = ? AND finished_at IS NULL
+                  AND EXISTS (
+                      SELECT 1 FROM bluecad_candidates c
+                      WHERE c.workspace_id = ? AND c.id = ?
+                        AND c.status = 'generating'
+                  )
+                """,
+                (
+                    build_outcome,
+                    validation_verdict,
+                    ids["spec"],
+                    ids["report"],
+                    ids.get("manifest"),
+                    now,
+                    canonical_json(error_detail),
+                    attempt_id,
+                    candidate_id,
+                    workspace_id,
+                    candidate_id,
+                ),
+            )
+            candidate_update = connection.execute(
+                """
+                UPDATE bluecad_candidates
+                SET spec_artifact_id = ?, glb_artifact_id = ?,
+                    report_artifact_id = ?, status = 'validating', updated_at = ?
+                WHERE workspace_id = ? AND id = ? AND status = 'generating'
+                """,
+                (
+                    ids["spec"],
+                    ids.get("glb"),
+                    ids["report"],
+                    now,
+                    workspace_id,
+                    candidate_id,
+                ),
+            )
+            if attempt_update.rowcount != 1 or candidate_update.rowcount != 1:
+                connection.rollback()
+                raise _ReservationOwnershipLost()
+
+            connection.execute(
+                """
+                INSERT INTO evidence_records (
+                    id, workspace_id, kind, verdict, metrics_json, source_run_id,
+                    candidate_id, attempt_id, report_artifact_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(uuid4()),
+                    evidence.workspace_id,
+                    evidence.kind,
+                    evidence.verdict,
+                    evidence.metrics_json,
+                    evidence.source_run_id,
+                    evidence.candidate_id,
+                    evidence.attempt_id,
+                    evidence.report_artifact_id,
+                    now,
+                ),
+            )
+            connection.commit()
+
+        return {
+            "spec": ids["spec"],
+            "report": ids["report"],
+            "manifest": ids.get("manifest"),
+            "glb": ids.get("glb"),
+        }
+    except Exception:
+        for item in staged:
+            shutil.rmtree(Path(item["stored_path"]).parent, ignore_errors=True)
+        raise
 
 
 def _finish_reserved_attempt(
