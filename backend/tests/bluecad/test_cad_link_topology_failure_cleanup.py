@@ -205,7 +205,7 @@ def test_parking_failure_still_stops_reservation_heartbeat(
         raise RuntimeError("forced parking failure")
 
     monkeypatch.setattr(execute_module, "build_geometry_spec", fail_build)
-    monkeypatch.setattr(execute_module, "park_candidate", fail_park)
+    monkeypatch.setattr(execute_module, "_park_reserved_candidate", fail_park)
     monkeypatch.setattr(
         execute_module,
         "_stop_reservation_heartbeat",
