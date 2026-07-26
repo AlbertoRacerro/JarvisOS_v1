@@ -8,8 +8,6 @@ from app.core.database import open_sqlite_connection
 from app.modules.runner import service as _base
 from app.modules.runner.input_contracts import canonicalize_input_contract
 from app.modules.runner.models import (
-    BindingPreviewRequest,
-    BindingPreviewResponse,
     ModelImplementationCreate,
     ModelImplementationRead,
     RunnerJobCreate,
