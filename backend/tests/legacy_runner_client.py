@@ -16,6 +16,9 @@ from app.modules.runner.service import (
 )
 
 _RUN_PATH = re.compile(r"^/runner-jobs/([^/]+)/run$")
+_BUNDLED_047_REGISTER_PATH = (
+    "/workspaces/bluerev/bundled-models/bluerev-geometry-hydraulics-v0/register"
+)
 
 
 @dataclass(frozen=True)
@@ -31,6 +34,28 @@ class LegacyServiceResponse:
 
     def json(self) -> Any:
         return self.payload
+
+
+class Bundled047TestClient:
+    """Map the historical 047 source-upload fixture to real bundled registration."""
+
+    def __init__(self, client: TestClient) -> None:
+        self._client = client
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._client, name)
+
+    def get(self, url: str, **kwargs: Any) -> Any:
+        return self._client.get(url, **kwargs)
+
+    def post(self, url: str, *, json: dict[str, Any] | None = None, **kwargs: Any) -> Any:
+        payload = json or {}
+        if url.endswith("/model-implementations") and "script_text" in payload:
+            response = self._client.post(_BUNDLED_047_REGISTER_PATH, **kwargs)
+            if response.status_code != 200:
+                return response
+            return LegacyServiceResponse(201, response.json())
+        return self._client.post(url, json=json, **kwargs)
 
 
 class LegacyRunnerTestClient:
