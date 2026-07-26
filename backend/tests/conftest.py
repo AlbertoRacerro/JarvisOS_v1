@@ -17,13 +17,13 @@ from app.core.config import DEFAULT_DATA_ROOT, get_settings
 from fastapi.testclient import TestClient
 from tests.legacy_runner_client import Bundled047TestClient, LegacyRunnerTestClient
 
-_BUNDLED_047_MODULE = "tests.test_bluerev_geometry_hydraulics_v0"
-_LEGACY_RUNNER_MODULES = frozenset(
+_BUNDLED_047_FILE = "test_bluerev_geometry_hydraulics_v0.py"
+_LEGACY_RUNNER_FILES = frozenset(
     {
-        "tests.test_model_scenario_dof",
-        "tests.test_python_runner",
-        "tests.test_python_runner_bluecad_l2",
-        "tests.test_python_runner_calc_v0",
+        "test_model_scenario_dof.py",
+        "test_python_runner.py",
+        "test_python_runner_bluecad_l2.py",
+        "test_python_runner_calc_v0.py",
     }
 )
 
@@ -39,7 +39,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_fixture_setup(fixturedef, request):
-    """Scope legacy runner adapters to the exact historical test modules."""
+    """Scope legacy runner adapters to the exact historical test files."""
 
     outcome = yield
     if fixturedef.argname != "client":
@@ -47,11 +47,10 @@ def pytest_fixture_setup(fixturedef, request):
     result = outcome.get_result()
     if not isinstance(result, TestClient):
         return
-    module = getattr(request.node, "module", None)
-    module_name = getattr(module, "__name__", "")
-    if module_name == _BUNDLED_047_MODULE:
+    filename = Path(str(request.node.path)).name
+    if filename == _BUNDLED_047_FILE:
         outcome.force_result(Bundled047TestClient(result))
-    elif module_name in _LEGACY_RUNNER_MODULES:
+    elif filename in _LEGACY_RUNNER_FILES:
         outcome.force_result(LegacyRunnerTestClient(result))
 
 
