@@ -169,7 +169,13 @@ def promote_candidate_endpoint(workspace_id: str, candidate_id: str) -> BluecadC
 
 @router.post("/candidates/{candidate_id}/archive", response_model=BluecadCandidateRead)
 def archive_candidate_endpoint(workspace_id: str, candidate_id: str) -> BluecadCandidateRead:
-    candidate = archive_candidate(workspace_id, candidate_id)
+    try:
+        candidate = archive_candidate(workspace_id, candidate_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": str(exc)},
+        ) from exc
     if candidate is None:
         raise HTTPException(status_code=404, detail={"error": "BLUECAD candidate not found."})
     return candidate

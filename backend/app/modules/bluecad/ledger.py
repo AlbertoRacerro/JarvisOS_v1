@@ -160,15 +160,29 @@ def archive_candidate(workspace_id: str, candidate_id: str) -> BluecadCandidateR
     now = utc_now()
     with open_sqlite_connection() as connection:
         row = connection.execute(
-            "SELECT id FROM bluecad_candidates WHERE workspace_id = ? AND id = ?",
+            """
+            SELECT status
+            FROM bluecad_candidates
+            WHERE workspace_id = ? AND id = ?
+            """,
             (workspace_id, candidate_id),
         ).fetchone()
         if row is None:
             return None
-        connection.execute(
-            "UPDATE bluecad_candidates SET status = 'archived', updated_at = ? WHERE id = ?",
-            (now, candidate_id),
+        if str(row["status"]) in {"generating", "validating"}:
+            raise ValueError("Active BLUECAD candidates may not be archived.")
+        cursor = connection.execute(
+            """
+            UPDATE bluecad_candidates
+            SET status = 'archived', updated_at = ?
+            WHERE workspace_id = ? AND id = ?
+              AND status NOT IN ('generating', 'validating')
+            """,
+            (now, workspace_id, candidate_id),
         )
+        if cursor.rowcount != 1:
+            connection.rollback()
+            raise ValueError("Active BLUECAD candidates may not be archived.")
         connection.commit()
     return get_candidate(workspace_id, candidate_id)
 
