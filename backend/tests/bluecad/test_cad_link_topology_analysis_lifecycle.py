@@ -198,8 +198,16 @@ def test_candidate_becomes_valid_only_after_terminal_requested_analysis(
         build: dict[str, object],
         *,
         producer_notes: str | None = None,
+        required_candidate_status: str | None = None,
     ) -> None:
-        del workspace_id, attempt_no, analysis_spec, build, producer_notes
+        del (
+            workspace_id,
+            attempt_no,
+            analysis_spec,
+            build,
+            producer_notes,
+            required_candidate_status,
+        )
         with open_sqlite_connection() as connection:
             row = connection.execute(
                 "SELECT status FROM bluecad_candidates WHERE id = ?",
@@ -250,3 +258,56 @@ def test_missing_terminal_analysis_evidence_cannot_produce_valid_candidate(
             "SELECT status FROM bluecad_candidates WHERE id = ?", (candidate_id,)
         ).fetchone()["status"]
     assert status == "validating"
+
+
+def test_recovery_fences_late_analysis_creation_and_completion(
+    initialized_storage,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.modules.bluecad.cad_link_topology_execute as execute_module
+    import app.modules.bluecad.loop as loop_module
+
+    old = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
+    candidate_id, attempt_id = _seed_candidate(
+        status="validating",
+        updated_at=old,
+    )
+    run_id = _insert_analysis_run(attempt_id=attempt_id, status="running")
+    monkeypatch.setattr(execute_module, "_ABANDONED_RESERVATION_SECONDS", 1.0)
+
+    recovered = execute_module._recover_abandoned_reservation(
+        "bluerev",
+        candidate_id,
+    )
+    assert recovered is not None and recovered.status == "parked"
+
+    loop_module._complete_simulation_run(
+        run_id,
+        {"verdict": "pass"},
+        {"verdict": "pass"},
+    )
+    with pytest.raises(RuntimeError, match="no longer owns"):
+        loop_module._create_simulation_run(
+            "bluerev",
+            candidate_id,
+            attempt_id,
+            {"schema_version": "probe"},
+            required_candidate_status="validating",
+        )
+
+    with open_sqlite_connection() as connection:
+        rows = connection.execute(
+            "SELECT id, status, output_payload FROM simulation_runs WHERE run_label = ?",
+            (f"bluecad_attempt_{attempt_id}",),
+        ).fetchall()
+        candidate_status = connection.execute(
+            "SELECT status FROM bluecad_candidates WHERE id = ?",
+            (candidate_id,),
+        ).fetchone()["status"]
+    assert len(rows) == 1
+    assert rows[0]["id"] == run_id
+    assert rows[0]["status"] == "failed"
+    assert json.loads(rows[0]["output_payload"])["error"]["code"] == (
+        "cad_link_analysis_lease_expired"
+    )
+    assert candidate_status == "parked"

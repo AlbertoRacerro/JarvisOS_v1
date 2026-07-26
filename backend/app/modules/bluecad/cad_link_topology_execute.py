@@ -29,12 +29,8 @@ from app.modules.bluecad.cad_link_topology_source import digest
 from app.modules.bluecad.evidence import record_validation_evidence
 from app.modules.bluecad.ledger import (
     candidate_work_dir,
-    finish_attempt,
     get_candidate,
-    mark_candidate_valid,
-    park_candidate,
     register_artifact,
-    update_candidate_artifacts,
 )
 from app.modules.bluecad.loop import _run_simulation_stage
 from app.modules.bluecad.service import build_geometry_spec
@@ -63,6 +59,10 @@ _ABANDONED_RESERVATION_SECONDS = 30.0
 _TERMINAL_REPLAY_STATUSES = frozenset({"valid", "parked", "archived"})
 _IN_PROGRESS_REPLAY_STATUSES = frozenset({"generating", "validating"})
 _ANALYSIS_TERMINAL_STATUSES = frozenset({"completed", "failed"})
+
+
+class _ReservationOwnershipLost(RuntimeError):
+    """Raised when recovery or another terminal transition wins the CAS."""
 
 
 def execute_cad_link_072(
@@ -277,9 +277,10 @@ def execute_cad_link_072(
         build_outcome = (
             "ok" if result.verdict != "error" else _build_error_code(result.errors)
         )
-        finish_attempt(
+        _finish_reserved_attempt(
+            workspace_id,
+            candidate_id,
             attempt_id,
-            proposal_outcome="not_applicable",
             build_outcome=build_outcome,
             validation_verdict=verdict,
             spec_artifact_id=spec_artifact_id,
@@ -291,7 +292,8 @@ def execute_cad_link_072(
             },
         )
         attempt_finished = True
-        update_candidate_artifacts(
+        _transition_reserved_candidate_to_validating(
+            workspace_id,
             candidate_id,
             spec_artifact_id=spec_artifact_id,
             glb_artifact_id=glb_artifact_id,
@@ -320,17 +322,40 @@ def execute_cad_link_072(
                 },
             )
         else:
-            park_candidate(
+            _park_reserved_candidate(
+                workspace_id,
                 candidate_id,
                 "cad_link_failed",
                 notes="Deterministic topology CAD-link validation failed.",
             )
+    except _ReservationOwnershipLost as exc:
+        _stop_reservation_heartbeat(lease_stop, lease_thread)
+        candidate = get_candidate(workspace_id, candidate_id)
+        if candidate is not None and candidate.status in _TERMINAL_REPLAY_STATUSES:
+            return CadLinkExecuteResponse(
+                candidate=candidate,
+                link_id=link_id,
+                preview_digest=payload.preview_digest,
+                replayed=True,
+            )
+        raise CadLinkError(
+            "cad_link_persistence_inconsistent",
+            "The topology CAD-link reservation lost ownership without a terminal result.",
+            status_code=500,
+        ) from exc
     except Exception as exc:
         try:
             if attempt_finished:
-                _best_effort_note_post_validation_failure(attempt_id, exc)
+                _best_effort_note_post_validation_failure(
+                    workspace_id,
+                    candidate_id,
+                    attempt_id,
+                    exc,
+                )
             else:
                 _best_effort_finish_failed_attempt(
+                    workspace_id,
+                    candidate_id,
                     attempt_id,
                     exc,
                     spec_artifact_id=spec_artifact_id,
@@ -346,7 +371,8 @@ def execute_cad_link_072(
                     "The topology CAD-link analysis could not be finalized safely.",
                     status_code=500,
                 ) from exc
-            park_candidate(
+            _park_reserved_candidate(
+                workspace_id,
                 candidate_id,
                 "cad_link_failed",
                 notes=f"cad_link_execution_error={type(exc).__name__}; {REPRESENTATION_NOTES}",
@@ -406,6 +432,7 @@ def _complete_valid_candidate_after_analysis(
         analysis_spec,
         build,
         producer_notes=ARTIFACT_PRODUCER,
+        required_candidate_status="validating",
     )
     _require_terminal_analysis_stage(
         workspace_id,
@@ -413,7 +440,7 @@ def _complete_valid_candidate_after_analysis(
         attempt_id,
         analysis_spec,
     )
-    mark_candidate_valid(candidate_id)
+    _mark_reserved_candidate_valid(workspace_id, candidate_id)
 
 
 def _require_terminal_analysis_stage(
@@ -605,7 +632,7 @@ def _reservation_heartbeat(
     while not stop_event.wait(_RESERVATION_HEARTBEAT_SECONDS):
         try:
             with open_sqlite_connection() as connection:
-                connection.execute(
+                cursor = connection.execute(
                     """
                     UPDATE bluecad_candidates
                     SET updated_at = ?
@@ -615,6 +642,8 @@ def _reservation_heartbeat(
                     (utc_now(), workspace_id, candidate_id),
                 )
                 connection.commit()
+                if cursor.rowcount != 1:
+                    return
         except sqlite3.Error:
             continue
 
@@ -779,9 +808,27 @@ def _recover_abandoned_reservation(
             }
         )
         detail_json = canonical_json(details)
+        notes = str(row["notes"] or "").strip()
+        notes = f"{notes}; {suffix}" if notes else suffix
+
+        # This compare-and-set is the ownership fence. Because it is first inside
+        # BEGIN IMMEDIATE, either recovery wins and all old-owner transitions fail,
+        # or a live transition wins before recovery observes the row.
+        candidate_update = connection.execute(
+            """
+            UPDATE bluecad_candidates
+            SET status = 'parked', parked_reason = 'cad_link_failed',
+                notes = ?, updated_at = ?
+            WHERE workspace_id = ? AND id = ? AND status = ?
+            """,
+            (notes, now, workspace_id, candidate_id, status),
+        )
+        if candidate_update.rowcount != 1:
+            connection.rollback()
+            return None
 
         if row["finished_at"] is None:
-            connection.execute(
+            attempt_update = connection.execute(
                 """
                 UPDATE bluecad_attempts
                 SET build_outcome = 'cad_link_abandoned',
@@ -793,14 +840,17 @@ def _recover_abandoned_reservation(
                 (now, detail_json, row["attempt_id"]),
             )
         else:
-            connection.execute(
+            attempt_update = connection.execute(
                 """
                 UPDATE bluecad_attempts
                 SET error_detail_json = ?
-                WHERE id = ?
+                WHERE id = ? AND finished_at IS NOT NULL
                 """,
                 (detail_json, row["attempt_id"]),
             )
+        if attempt_update.rowcount != 1:
+            connection.rollback()
+            raise _persistence_inconsistent()
 
         if status == "validating":
             connection.execute(
@@ -824,23 +874,131 @@ def _recover_abandoned_reservation(
                 ),
             )
 
-        notes = str(row["notes"] or "").strip()
-        notes = f"{notes}; {suffix}" if notes else suffix
-        connection.execute(
-            """
-            UPDATE bluecad_candidates
-            SET status = 'parked', parked_reason = 'cad_link_failed',
-                notes = ?, updated_at = ?
-            WHERE workspace_id = ? AND id = ? AND status = ?
-            """,
-            (notes, now, workspace_id, candidate_id, status),
-        )
         connection.commit()
 
     candidate = get_candidate(workspace_id, candidate_id)
     if candidate is None:
         raise _persistence_inconsistent()
     return candidate
+
+
+def _finish_reserved_attempt(
+    workspace_id: str,
+    candidate_id: str,
+    attempt_id: str,
+    *,
+    build_outcome: str,
+    validation_verdict: str,
+    spec_artifact_id: str | None,
+    report_artifact_id: str | None,
+    manifest_artifact_id: str | None,
+    error_detail: dict[str, Any],
+) -> None:
+    with open_sqlite_connection() as connection:
+        cursor = connection.execute(
+            """
+            UPDATE bluecad_attempts
+            SET proposal_outcome = 'not_applicable',
+                build_outcome = ?, validation_verdict = ?,
+                spec_artifact_id = ?, report_artifact_id = ?,
+                manifest_artifact_id = ?, finished_at = ?,
+                error_detail_json = ?
+            WHERE id = ? AND finished_at IS NULL
+              AND EXISTS (
+                  SELECT 1 FROM bluecad_candidates c
+                  WHERE c.workspace_id = ? AND c.id = ?
+                    AND c.status = 'generating'
+              )
+            """,
+            (
+                build_outcome,
+                validation_verdict,
+                spec_artifact_id,
+                report_artifact_id,
+                manifest_artifact_id,
+                utc_now(),
+                canonical_json(error_detail),
+                attempt_id,
+                workspace_id,
+                candidate_id,
+            ),
+        )
+        if cursor.rowcount != 1:
+            connection.rollback()
+            raise _ReservationOwnershipLost()
+        connection.commit()
+
+
+def _transition_reserved_candidate_to_validating(
+    workspace_id: str,
+    candidate_id: str,
+    *,
+    spec_artifact_id: str | None,
+    glb_artifact_id: str | None,
+    report_artifact_id: str | None,
+) -> None:
+    with open_sqlite_connection() as connection:
+        cursor = connection.execute(
+            """
+            UPDATE bluecad_candidates
+            SET spec_artifact_id = COALESCE(?, spec_artifact_id),
+                glb_artifact_id = COALESCE(?, glb_artifact_id),
+                report_artifact_id = COALESCE(?, report_artifact_id),
+                status = 'validating', updated_at = ?
+            WHERE workspace_id = ? AND id = ? AND status = 'generating'
+            """,
+            (
+                spec_artifact_id,
+                glb_artifact_id,
+                report_artifact_id,
+                utc_now(),
+                workspace_id,
+                candidate_id,
+            ),
+        )
+        if cursor.rowcount != 1:
+            connection.rollback()
+            raise _ReservationOwnershipLost()
+        connection.commit()
+
+
+def _mark_reserved_candidate_valid(workspace_id: str, candidate_id: str) -> None:
+    with open_sqlite_connection() as connection:
+        cursor = connection.execute(
+            """
+            UPDATE bluecad_candidates
+            SET status = 'valid', parked_reason = NULL, updated_at = ?
+            WHERE workspace_id = ? AND id = ? AND status = 'validating'
+            """,
+            (utc_now(), workspace_id, candidate_id),
+        )
+        if cursor.rowcount != 1:
+            connection.rollback()
+            raise _ReservationOwnershipLost()
+        connection.commit()
+
+
+def _park_reserved_candidate(
+    workspace_id: str,
+    candidate_id: str,
+    reason: str,
+    *,
+    notes: str | None,
+) -> None:
+    with open_sqlite_connection() as connection:
+        cursor = connection.execute(
+            """
+            UPDATE bluecad_candidates
+            SET status = 'parked', parked_reason = ?, notes = ?, updated_at = ?
+            WHERE workspace_id = ? AND id = ?
+              AND status IN ('generating', 'validating')
+            """,
+            (reason, notes, utc_now(), workspace_id, candidate_id),
+        )
+        if cursor.rowcount != 1:
+            connection.rollback()
+            raise _ReservationOwnershipLost()
+        connection.commit()
 
 
 def _timestamp_age_seconds(value: Any, current: str) -> float:
@@ -962,6 +1120,8 @@ def _require_path(path: Path | None, fallback: Path) -> Path:
 
 
 def _best_effort_finish_failed_attempt(
+    workspace_id: str,
+    candidate_id: str,
     attempt_id: str,
     exc: Exception,
     *,
@@ -970,9 +1130,10 @@ def _best_effort_finish_failed_attempt(
     manifest_artifact_id: str | None,
 ) -> None:
     try:
-        finish_attempt(
+        _finish_reserved_attempt(
+            workspace_id,
+            candidate_id,
             attempt_id,
-            proposal_outcome="not_applicable",
             build_outcome="cad_link_execution_error",
             validation_verdict="fail",
             spec_artifact_id=spec_artifact_id,
@@ -988,16 +1149,47 @@ def _best_effort_finish_failed_attempt(
 
 
 def _best_effort_note_post_validation_failure(
+    workspace_id: str,
+    candidate_id: str,
     attempt_id: str,
     exc: Exception,
 ) -> None:
     try:
-        finish_attempt(
-            attempt_id,
-            error_detail={
-                "post_validation_error_type": type(exc).__name__,
-            },
-        )
+        with open_sqlite_connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                """
+                SELECT a.error_detail_json
+                FROM bluecad_attempts a
+                JOIN bluecad_candidates c ON c.id = a.candidate_id
+                WHERE a.id = ? AND a.finished_at IS NOT NULL
+                  AND c.workspace_id = ? AND c.id = ?
+                  AND c.status IN ('generating', 'validating')
+                """,
+                (attempt_id, workspace_id, candidate_id),
+            ).fetchone()
+            if row is None:
+                connection.rollback()
+                return
+            details = _json_object_or_empty(row["error_detail_json"])
+            details["post_validation_error_type"] = type(exc).__name__
+            cursor = connection.execute(
+                """
+                UPDATE bluecad_attempts
+                SET error_detail_json = ?
+                WHERE id = ? AND finished_at IS NOT NULL
+                  AND EXISTS (
+                      SELECT 1 FROM bluecad_candidates c
+                      WHERE c.workspace_id = ? AND c.id = ?
+                        AND c.status IN ('generating', 'validating')
+                  )
+                """,
+                (canonical_json(details), attempt_id, workspace_id, candidate_id),
+            )
+            if cursor.rowcount != 1:
+                connection.rollback()
+                return
+            connection.commit()
     except Exception:
         return
 

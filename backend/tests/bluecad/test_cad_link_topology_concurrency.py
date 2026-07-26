@@ -225,3 +225,88 @@ def test_replay_wait_covers_bounded_optional_analysis() -> None:
     assert execute_module._replay_wait_seconds(
         {"analysis_contract": _analysis_spec(300.0)}
     ) == expected_custom
+
+
+def test_recovered_owner_cannot_reopen_candidate_or_attempt(
+    initialized_storage,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.modules.bluecad.cad_link_topology_execute as execute_module
+
+    candidate_id = str(uuid4())
+    attempt_id = str(uuid4())
+    old = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO bluecad_candidates (
+                id, workspace_id, brief_text, brief_digest, status,
+                parked_reason, spec_artifact_id, glb_artifact_id,
+                report_artifact_id, promoted_decision_id, origin,
+                parent_candidate_id, loop_config_json, created_at,
+                updated_at, notes
+            ) VALUES (?, 'bluerev', 'owner fence probe', ?, 'generating',
+                NULL, NULL, NULL, NULL, NULL, 'process_linked', NULL,
+                '{}', ?, ?, 'owner fence probe')
+            """,
+            (candidate_id, "sha256:" + "6" * 64, old, old),
+        )
+        connection.execute(
+            """
+            INSERT INTO bluecad_attempts (
+                id, candidate_id, attempt_no, route_class,
+                proposal_ai_job_id, proposal_outcome, build_outcome,
+                validation_verdict, spec_artifact_id, report_artifact_id,
+                manifest_artifact_id, started_at, finished_at, error_detail_json
+            ) VALUES (?, ?, 1, 'deterministic:cad_link:072', NULL,
+                'not_applicable', NULL, NULL, NULL, NULL, NULL, ?, NULL, NULL)
+            """,
+            (attempt_id, candidate_id, old),
+        )
+        connection.commit()
+    monkeypatch.setattr(execute_module, "_ABANDONED_RESERVATION_SECONDS", 1.0)
+
+    recovered = execute_module._recover_abandoned_reservation(
+        "bluerev",
+        candidate_id,
+    )
+    assert recovered is not None and recovered.status == "parked"
+
+    with pytest.raises(execute_module._ReservationOwnershipLost):
+        execute_module._finish_reserved_attempt(
+            "bluerev",
+            candidate_id,
+            attempt_id,
+            build_outcome="ok",
+            validation_verdict="pass",
+            spec_artifact_id="late-spec",
+            report_artifact_id="late-report",
+            manifest_artifact_id=None,
+            error_detail={"late": True},
+        )
+    with pytest.raises(execute_module._ReservationOwnershipLost):
+        execute_module._transition_reserved_candidate_to_validating(
+            "bluerev",
+            candidate_id,
+            spec_artifact_id="late-spec",
+            glb_artifact_id=None,
+            report_artifact_id="late-report",
+        )
+    with pytest.raises(execute_module._ReservationOwnershipLost):
+        execute_module._mark_reserved_candidate_valid("bluerev", candidate_id)
+
+    with open_sqlite_connection() as connection:
+        candidate = connection.execute(
+            "SELECT status, spec_artifact_id, report_artifact_id FROM bluecad_candidates WHERE id = ?",
+            (candidate_id,),
+        ).fetchone()
+        attempt = connection.execute(
+            "SELECT build_outcome, validation_verdict FROM bluecad_attempts WHERE id = ?",
+            (attempt_id,),
+        ).fetchone()
+    assert candidate is not None and attempt is not None
+    assert candidate["status"] == "parked"
+    assert candidate["spec_artifact_id"] is None
+    assert candidate["report_artifact_id"] is None
+    assert attempt["build_outcome"] == "cad_link_abandoned"
+    assert attempt["validation_verdict"] == "fail"

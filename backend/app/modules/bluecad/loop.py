@@ -161,6 +161,7 @@ def _run_simulation_stage(
     build: dict[str, Any],
     *,
     producer_notes: str | None = None,
+    required_candidate_status: str | None = None,
 ) -> None:
     if analysis_spec_without_geometry is None:
         return
@@ -168,7 +169,13 @@ def _run_simulation_stage(
         out_dir = candidate_work_dir(workspace_id, candidate_id, attempt_no) / "simulation"
         out_dir.mkdir(parents=True, exist_ok=True)
         analysis_spec = _analysis_spec_with_geometry(analysis_spec_without_geometry, build)
-        source_run_id = _create_simulation_run(workspace_id, candidate_id, attempt_id, analysis_spec)
+        source_run_id = _create_simulation_run(
+            workspace_id,
+            candidate_id,
+            attempt_id,
+            analysis_spec,
+            required_candidate_status=required_candidate_status,
+        )
     except Exception:
         return
     source_ref = f"bluecad_candidate:{candidate_id}:attempt:{attempt_no}:sim:{source_run_id}"
@@ -269,31 +276,65 @@ def _register_sim_report(
     )
 
 
-def _create_simulation_run(workspace_id: str, candidate_id: str, attempt_id: str, analysis_spec: dict[str, Any]) -> str:
+def _create_simulation_run(
+    workspace_id: str,
+    candidate_id: str,
+    attempt_id: str,
+    analysis_spec: dict[str, Any],
+    *,
+    required_candidate_status: str | None = None,
+) -> str:
     from uuid import uuid4
 
     run_id = str(uuid4())
     now = utc_now()
+    values = (
+        run_id,
+        workspace_id,
+        f"bluecad_attempt_{attempt_id}",
+        json.dumps(
+            {"candidate_id": candidate_id, "attempt_id": attempt_id},
+            sort_keys=True,
+        ),
+        json.dumps(analysis_spec, sort_keys=True),
+        now,
+        now,
+        "BLUECAD advisory synchronous mesh/FEM stage.",
+    )
     with open_sqlite_connection() as connection:
-        connection.execute(
-            """
-            INSERT INTO simulation_runs (
-                id, workspace_id, model_version_id, run_label, status,
-                input_payload, parameter_payload, output_payload, started_at,
-                completed_at, created_at, notes
-            ) VALUES (?, ?, NULL, ?, 'running', ?, ?, NULL, ?, NULL, ?, ?)
-            """,
-            (
-                run_id,
-                workspace_id,
-                f"bluecad_attempt_{attempt_id}",
-                json.dumps({"candidate_id": candidate_id, "attempt_id": attempt_id}, sort_keys=True),
-                json.dumps(analysis_spec, sort_keys=True),
-                now,
-                now,
-                "BLUECAD advisory synchronous mesh/FEM stage.",
-            ),
-        )
+        if required_candidate_status is None:
+            cursor = connection.execute(
+                """
+                INSERT INTO simulation_runs (
+                    id, workspace_id, model_version_id, run_label, status,
+                    input_payload, parameter_payload, output_payload, started_at,
+                    completed_at, created_at, notes
+                ) VALUES (?, ?, NULL, ?, 'running', ?, ?, NULL, ?, NULL, ?, ?)
+                """,
+                values,
+            )
+        else:
+            cursor = connection.execute(
+                """
+                INSERT INTO simulation_runs (
+                    id, workspace_id, model_version_id, run_label, status,
+                    input_payload, parameter_payload, output_payload, started_at,
+                    completed_at, created_at, notes
+                )
+                SELECT ?, ?, NULL, ?, 'running', ?, ?, NULL, ?, NULL, ?, ?
+                FROM bluecad_candidates
+                WHERE workspace_id = ? AND id = ? AND status = ?
+                """,
+                (
+                    *values,
+                    workspace_id,
+                    candidate_id,
+                    required_candidate_status,
+                ),
+            )
+        if cursor.rowcount != 1:
+            connection.rollback()
+            raise RuntimeError("BLUECAD candidate no longer owns the analysis stage")
         connection.commit()
     return run_id
 
@@ -307,7 +348,7 @@ def _complete_simulation_run(source_run_id: str, mesh_result: dict[str, Any], fe
                 """
                 UPDATE simulation_runs
                 SET status = 'completed', output_payload = ?, completed_at = ?
-                WHERE id = ?
+                WHERE id = ? AND status = 'running'
                 """,
                 (canonical_json(output_payload), completed_at, source_run_id),
             )
@@ -325,7 +366,7 @@ def _best_effort_fail_simulation_run(source_run_id: str, error_code: str) -> Non
                 """
                 UPDATE simulation_runs
                 SET status = 'failed', output_payload = ?, completed_at = ?
-                WHERE id = ?
+                WHERE id = ? AND status = 'running'
                 """,
                 (canonical_json(output_payload), completed_at, source_run_id),
             )
