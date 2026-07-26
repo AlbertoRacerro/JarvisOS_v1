@@ -220,3 +220,75 @@ def test_parking_failure_still_stops_reservation_heartbeat(
     assert response.status_code == 500, response.text
     assert response.json()["detail"]["code"] == "cad_link_persistence_failed"
     assert stopped == [(stop_marker, thread_marker)]
+
+
+
+# Regression: recovery may win while the original owner is handling a build error.
+def test_recovered_candidate_replays_when_failure_finalization_loses_ownership(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    SUPPORT._use_in_process_kernel(monkeypatch)
+    simulation_run_id = SUPPORT._create_golden_source_run(client)
+    preview = SUPPORT._preview(client, simulation_run_id)
+    request = SUPPORT._execute_request(
+        simulation_run_id,
+        str(preview["preview_digest"]),
+    )
+
+    import app.modules.bluecad.cad_link_topology_execute as execute_module
+
+    stop_marker = object()
+    thread_marker = object()
+    stopped: list[tuple[object, object]] = []
+    monkeypatch.setattr(
+        execute_module,
+        "_start_reservation_heartbeat",
+        lambda *_args, **_kwargs: (stop_marker, thread_marker),
+    )
+
+    def fail_build(*_args: Any, **_kwargs: Any):
+        raise RuntimeError("forced build failure after recovery")
+
+    def recover_then_lose(
+        workspace_id: str,
+        candidate_id: str,
+        *_args: Any,
+        **_kwargs: Any,
+    ) -> None:
+        with open_sqlite_connection() as connection:
+            connection.execute(
+                """
+                UPDATE bluecad_candidates
+                SET status = 'parked', parked_reason = 'cad_link_failed',
+                    updated_at = ?
+                WHERE workspace_id = ? AND id = ?
+                """,
+                (utc_now(), workspace_id, candidate_id),
+            )
+            connection.commit()
+        raise execute_module._ReservationOwnershipLost()
+
+    monkeypatch.setattr(execute_module, "build_geometry_spec", fail_build)
+    monkeypatch.setattr(
+        execute_module,
+        "_park_reserved_candidate",
+        recover_then_lose,
+    )
+    monkeypatch.setattr(
+        execute_module,
+        "_stop_reservation_heartbeat",
+        lambda stop, thread: stopped.append((stop, thread)),
+    )
+
+    response = client.post(
+        "/workspaces/bluerev/bluecad/cad-link/072/execute",
+        json=request,
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["replayed"] is True
+    assert body["candidate"]["status"] == "parked"
+    assert body["candidate"]["parked_reason"] == "cad_link_failed"
+    assert stopped == [(stop_marker, thread_marker)]

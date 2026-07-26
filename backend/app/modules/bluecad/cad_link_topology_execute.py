@@ -355,6 +355,23 @@ def execute_cad_link_072(
                 )
             ):
                 _best_effort_cleanup_unregistered(out_dir)
+        except _ReservationOwnershipLost as ownership_exc:
+            candidate = get_candidate(workspace_id, candidate_id)
+            if (
+                candidate is not None
+                and candidate.status in _TERMINAL_REPLAY_STATUSES
+            ):
+                return CadLinkExecuteResponse(
+                    candidate=candidate,
+                    link_id=link_id,
+                    preview_digest=payload.preview_digest,
+                    replayed=True,
+                )
+            raise CadLinkError(
+                "cad_link_persistence_inconsistent",
+                "The topology CAD-link reservation lost ownership without a terminal result.",
+                status_code=500,
+            ) from ownership_exc
         except Exception as finalization_exc:
             raise CadLinkError(
                 "cad_link_persistence_failed",
