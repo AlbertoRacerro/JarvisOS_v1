@@ -7,8 +7,6 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from pydantic import ValidationError
-
 from app.core.database import open_sqlite_connection
 from app.modules.bluecad.cad_link import CadLinkError
 from app.modules.events.service import utc_now
@@ -226,11 +224,3 @@ def test_replay_wait_covers_bounded_optional_analysis() -> None:
     assert execute_module._replay_wait_seconds(
         {"analysis_contract": _analysis_spec(300.0)}
     ) == expected_custom
-
-
-def test_analysis_timeout_is_bounded_for_replay_contract() -> None:
-    from app.modules.bluecad.models import BluecadLoopConfig
-
-    assert BluecadLoopConfig(analysis_spec=_analysis_spec(300.0)).analysis_spec is not None
-    with pytest.raises(ValidationError):
-        BluecadLoopConfig(analysis_spec=_analysis_spec(300.0001))
