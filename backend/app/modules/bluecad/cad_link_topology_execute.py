@@ -37,7 +37,6 @@ from app.modules.bluecad.ledger import (
     update_candidate_artifacts,
 )
 from app.modules.bluecad.loop import _run_simulation_stage
-from app.modules.bluecad.models import DEFAULT_ANALYSIS_TIMEOUT_SECONDS
 from app.modules.bluecad.service import build_geometry_spec
 from app.modules.bluecad.spec import canonical_json
 from app.modules.events.service import utc_now
@@ -53,6 +52,7 @@ REPRESENTATION_NOTES = (
 )
 _REPLAY_POLL_SECONDS = 0.05
 _REPLAY_WAIT_SECONDS = BUILD_TIMEOUT_SECONDS + 5.0
+_DEFAULT_ANALYSIS_TIMEOUT_SECONDS = 60.0
 _MESH_ATTEMPT_COUNT = 2
 _MESH_ATTEMPT_TIMEOUT_SECONDS = 60.0
 _ANALYSIS_COMPLETION_MARGIN_SECONDS = 30.0
@@ -221,8 +221,13 @@ def execute_cad_link_072(
     manifest_artifact_id: str | None = None
     glb_artifact_id: str | None = None
     attempt_finished = False
-    lease_stop, lease_thread = _start_reservation_heartbeat(workspace_id, candidate_id)
+    lease_stop: threading.Event | None = None
+    lease_thread: threading.Thread | None = None
     try:
+        lease_stop, lease_thread = _start_reservation_heartbeat(
+            workspace_id,
+            candidate_id,
+        )
         out_dir.mkdir(parents=True, exist_ok=False)
         spec_path = out_dir / "geometry_spec.json"
         spec_path.write_text(
@@ -331,6 +336,16 @@ def execute_cad_link_072(
                 report_artifact_id=report_artifact_id,
                 manifest_artifact_id=manifest_artifact_id,
             )
+        if not _ensure_analysis_runs_terminal_before_parking(
+            workspace_id,
+            attempt_id,
+        ):
+            _stop_reservation_heartbeat(lease_stop, lease_thread)
+            raise CadLinkError(
+                "cad_link_persistence_failed",
+                "The topology CAD-link analysis could not be finalized safely.",
+                status_code=500,
+            ) from exc
         park_candidate(
             candidate_id,
             "cad_link_failed",
@@ -413,11 +428,78 @@ def _require_terminal_analysis_stage(
             """,
             (workspace_id, run_label),
         ).fetchall()
-    if len(rows) != 1 or str(rows[0]["status"]) not in _ANALYSIS_TERMINAL_STATUSES:
+    if len(rows) != 1:
         raise RuntimeError(
             "requested advisory analysis did not persist exactly one terminal run "
             f"for candidate {candidate_id}"
         )
+    status = str(rows[0]["status"])
+    if status in _ANALYSIS_TERMINAL_STATUSES:
+        return
+    if status == "running":
+        _fail_nonterminal_analysis_run(str(rows[0]["id"]))
+    raise RuntimeError(
+        "requested advisory analysis did not persist exactly one terminal run "
+        f"for candidate {candidate_id}"
+    )
+
+
+def _fail_nonterminal_analysis_run(run_id: str) -> None:
+    completed_at = utc_now()
+    output_payload = canonical_json(
+        {
+            "status": "failed",
+            "error": {"code": "cad_link_analysis_completion_persistence_failed"},
+            "mesh_verdict": None,
+            "fem_verdict": None,
+        }
+    )
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            """
+            UPDATE simulation_runs
+            SET status = 'failed', output_payload = ?, completed_at = ?
+            WHERE id = ? AND status = 'running'
+            """,
+            (output_payload, completed_at, run_id),
+        )
+        connection.commit()
+
+
+def _ensure_analysis_runs_terminal_before_parking(
+    workspace_id: str,
+    attempt_id: str,
+) -> bool:
+    run_label = f"bluecad_attempt_{attempt_id}"
+    try:
+        with open_sqlite_connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, status
+                FROM simulation_runs
+                WHERE workspace_id = ? AND run_label = ?
+                ORDER BY created_at ASC, id ASC
+                """,
+                (workspace_id, run_label),
+            ).fetchall()
+        if not rows:
+            return True
+        if len(rows) != 1:
+            return False
+        status = str(rows[0]["status"])
+        if status in _ANALYSIS_TERMINAL_STATUSES:
+            return True
+        if status != "running":
+            return False
+        _fail_nonterminal_analysis_run(str(rows[0]["id"]))
+        with open_sqlite_connection() as connection:
+            row = connection.execute(
+                "SELECT status FROM simulation_runs WHERE id = ?",
+                (rows[0]["id"],),
+            ).fetchone()
+        return row is not None and str(row["status"]) in _ANALYSIS_TERMINAL_STATUSES
+    except sqlite3.Error:
+        return False
 
 
 def _preview_for_execute(
@@ -499,9 +581,11 @@ def _start_reservation_heartbeat(
 
 
 def _stop_reservation_heartbeat(
-    stop_event: threading.Event,
-    thread: threading.Thread,
+    stop_event: threading.Event | None,
+    thread: threading.Thread | None,
 ) -> None:
+    if stop_event is None or thread is None:
+        return
     stop_event.set()
     thread.join(timeout=1.0)
 
@@ -589,7 +673,7 @@ def _replay_wait_seconds(preview: Mapping[str, Any]) -> float:
     if not isinstance(analysis_contract, Mapping):
         raise _persistence_inconsistent()
     fem_timeout = float(
-        analysis_contract.get("timeout_s", DEFAULT_ANALYSIS_TIMEOUT_SECONDS)
+        analysis_contract.get("timeout_s", _DEFAULT_ANALYSIS_TIMEOUT_SECONDS)
     )
     if not math.isfinite(fem_timeout) or fem_timeout <= 0:
         raise _persistence_inconsistent()
