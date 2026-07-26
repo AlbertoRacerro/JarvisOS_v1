@@ -12,6 +12,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Upload runner cleanup checkout
+        uses: actions/upload-artifact@v4
+        with:
+          name: runner-cleanup-checkout
+          path: |
+            backend
+            docs
+            scripts
+            .github/workflows/ci.yml
+          if-no-files-found: error
+          retention-days: 1
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
