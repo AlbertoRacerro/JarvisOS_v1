@@ -37,21 +37,18 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
-@pytest.hookimpl(hookwrapper=True)
-def pytest_fixture_setup(fixturedef, request):
-    """Scope legacy runner adapters to the exact historical test files."""
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_call(item: pytest.Item) -> None:
+    """Replace only the resolved client argument of named historical tests."""
 
-    outcome = yield
-    if fixturedef.argname != "client":
+    client = getattr(item, "funcargs", {}).get("client")
+    if not isinstance(client, TestClient):
         return
-    result = outcome.get_result()
-    if not isinstance(result, TestClient):
-        return
-    filename = Path(str(request.node.path)).name
+    filename = Path(str(item.path)).name
     if filename == _BUNDLED_047_FILE:
-        outcome.force_result(Bundled047TestClient(result))
+        item.funcargs["client"] = Bundled047TestClient(client)
     elif filename in _LEGACY_RUNNER_FILES:
-        outcome.force_result(LegacyRunnerTestClient(result))
+        item.funcargs["client"] = LegacyRunnerTestClient(client)
 
 
 @pytest.fixture(autouse=True)
