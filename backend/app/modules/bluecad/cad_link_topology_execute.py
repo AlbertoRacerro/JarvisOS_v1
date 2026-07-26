@@ -37,6 +37,7 @@ from app.modules.bluecad.ledger import (
     update_candidate_artifacts,
 )
 from app.modules.bluecad.loop import _run_simulation_stage
+from app.modules.bluecad.models import DEFAULT_ANALYSIS_TIMEOUT_SECONDS
 from app.modules.bluecad.service import build_geometry_spec
 from app.modules.bluecad.spec import canonical_json
 from app.modules.events.service import utc_now
@@ -52,6 +53,9 @@ REPRESENTATION_NOTES = (
 )
 _REPLAY_POLL_SECONDS = 0.05
 _REPLAY_WAIT_SECONDS = BUILD_TIMEOUT_SECONDS + 5.0
+_MESH_ATTEMPT_COUNT = 2
+_MESH_ATTEMPT_TIMEOUT_SECONDS = 60.0
+_ANALYSIS_COMPLETION_MARGIN_SECONDS = 30.0
 _RESERVATION_POLL_SECONDS = 0.05
 _RESERVATION_WAIT_SECONDS = BUILD_TIMEOUT_SECONDS + 5.0
 _RESERVATION_HEARTBEAT_SECONDS = 5.0
@@ -568,6 +572,7 @@ def _replay_response(
     candidate = _wait_for_replay_candidate(
         workspace_id,
         str(row["child_candidate_id"]),
+        wait_seconds=_replay_wait_seconds(preview),
     )
     return CadLinkExecuteResponse(
         candidate=candidate,
@@ -577,11 +582,33 @@ def _replay_response(
     )
 
 
+def _replay_wait_seconds(preview: Mapping[str, Any]) -> float:
+    analysis_contract = preview.get("analysis_contract")
+    if analysis_contract is None:
+        return _REPLAY_WAIT_SECONDS
+    if not isinstance(analysis_contract, Mapping):
+        raise _persistence_inconsistent()
+    fem_timeout = float(
+        analysis_contract.get("timeout_s", DEFAULT_ANALYSIS_TIMEOUT_SECONDS)
+    )
+    if not math.isfinite(fem_timeout) or fem_timeout <= 0:
+        raise _persistence_inconsistent()
+    return (
+        BUILD_TIMEOUT_SECONDS
+        + _MESH_ATTEMPT_COUNT * _MESH_ATTEMPT_TIMEOUT_SECONDS
+        + fem_timeout
+        + _ANALYSIS_COMPLETION_MARGIN_SECONDS
+    )
+
+
 def _wait_for_replay_candidate(
     workspace_id: str,
     candidate_id: str,
+    *,
+    wait_seconds: float | None = None,
 ) -> Any:
-    deadline = time.monotonic() + _REPLAY_WAIT_SECONDS
+    bounded_wait = _REPLAY_WAIT_SECONDS if wait_seconds is None else wait_seconds
+    deadline = time.monotonic() + bounded_wait
     while True:
         candidate = get_candidate(workspace_id, candidate_id)
         if candidate is None:
