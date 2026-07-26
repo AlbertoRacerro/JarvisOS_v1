@@ -28,9 +28,11 @@ from app.modules.bluecad.cad_link_topology_source import (
 from app.modules.bluecad.models import BluecadLoopConfig
 
 BUILD_TIMEOUT_SECONDS = 35.0
+MAX_CAD_LINK_ANALYSIS_TIMEOUT_SECONDS = 300.0
 
 __all__ = [
     "BUILD_TIMEOUT_SECONDS",
+    "MAX_CAD_LINK_ANALYSIS_TIMEOUT_SECONDS",
     "CadLink072ExecuteRequest",
     "CadLink072PreviewRequest",
     "GEOMETRY_PARAMETER_INPUTS",
@@ -47,8 +49,7 @@ class CadLink072PreviewRequest(BaseModel):
 
     @model_validator(mode="after")
     def _validate_analysis_spec(self) -> CadLink072PreviewRequest:
-        if self.analysis_spec is not None:
-            BluecadLoopConfig(analysis_spec=self.analysis_spec)
+        _canonical_analysis_contract(self.analysis_spec)
         return self
 
 
@@ -119,7 +120,9 @@ def _build_preview_evidence(
         layout,
     )
     preflight = (
-        run_kernel_preflight(resolved_spec, boundaries) if kernel_preflight is None else deepcopy(kernel_preflight)
+        run_kernel_preflight(resolved_spec, boundaries)
+        if kernel_preflight is None
+        else deepcopy(kernel_preflight)
     )
     process_reconciliation = reconcile_topology(
         source["manifest"],
@@ -174,11 +177,23 @@ def _build_preview_evidence(
         "reconciliation": reconciliation,
         "reconciliation_digest": digest(reconciliation),
         "analysis_contract": analysis_contract,
-        "analysis_contract_digest": (None if analysis_contract is None else digest(analysis_contract)),
+        "analysis_contract_digest": (
+            None if analysis_contract is None else digest(analysis_contract)
+        ),
     }
     preview["preview_digest"] = digest(preview)
     return preview
 
 
 def _canonical_analysis_contract(value: dict[str, Any] | None) -> Any:
-    return BluecadLoopConfig(analysis_spec=value).analysis_spec
+    analysis_contract = BluecadLoopConfig(analysis_spec=value).analysis_spec
+    if analysis_contract is not None:
+        timeout_s = analysis_contract.get("timeout_s")
+        if (
+            timeout_s is not None
+            and float(timeout_s) > MAX_CAD_LINK_ANALYSIS_TIMEOUT_SECONDS
+        ):
+            raise ValueError(
+                "CAD-LINK-1 analysis timeout exceeds the 300-second lifecycle bound"
+            )
+    return analysis_contract
