@@ -326,42 +326,49 @@ def execute_cad_link_072(
                 notes="Deterministic topology CAD-link validation failed.",
             )
     except Exception as exc:
-        if attempt_finished:
-            _best_effort_note_post_validation_failure(attempt_id, exc)
-        else:
-            _best_effort_finish_failed_attempt(
+        try:
+            if attempt_finished:
+                _best_effort_note_post_validation_failure(attempt_id, exc)
+            else:
+                _best_effort_finish_failed_attempt(
+                    attempt_id,
+                    exc,
+                    spec_artifact_id=spec_artifact_id,
+                    report_artifact_id=report_artifact_id,
+                    manifest_artifact_id=manifest_artifact_id,
+                )
+            if not _ensure_analysis_runs_terminal_before_parking(
+                workspace_id,
                 attempt_id,
-                exc,
-                spec_artifact_id=spec_artifact_id,
-                report_artifact_id=report_artifact_id,
-                manifest_artifact_id=manifest_artifact_id,
+            ):
+                raise CadLinkError(
+                    "cad_link_persistence_failed",
+                    "The topology CAD-link analysis could not be finalized safely.",
+                    status_code=500,
+                ) from exc
+            park_candidate(
+                candidate_id,
+                "cad_link_failed",
+                notes=f"cad_link_execution_error={type(exc).__name__}; {REPRESENTATION_NOTES}",
             )
-        if not _ensure_analysis_runs_terminal_before_parking(
-            workspace_id,
-            attempt_id,
-        ):
-            _stop_reservation_heartbeat(lease_stop, lease_thread)
+            if all(
+                artifact_id is None
+                for artifact_id in (
+                    spec_artifact_id,
+                    report_artifact_id,
+                    manifest_artifact_id,
+                    glb_artifact_id,
+                )
+            ):
+                _best_effort_cleanup_unregistered(out_dir)
+        except Exception as finalization_exc:
             raise CadLinkError(
                 "cad_link_persistence_failed",
-                "The topology CAD-link analysis could not be finalized safely.",
+                "The deterministic topology CAD-link failure could not be finalized coherently.",
                 status_code=500,
-            ) from exc
-        park_candidate(
-            candidate_id,
-            "cad_link_failed",
-            notes=f"cad_link_execution_error={type(exc).__name__}; {REPRESENTATION_NOTES}",
-        )
-        if all(
-            artifact_id is None
-            for artifact_id in (
-                spec_artifact_id,
-                report_artifact_id,
-                manifest_artifact_id,
-                glb_artifact_id,
-            )
-        ):
-            _best_effort_cleanup_unregistered(out_dir)
-        _stop_reservation_heartbeat(lease_stop, lease_thread)
+            ) from finalization_exc
+        finally:
+            _stop_reservation_heartbeat(lease_stop, lease_thread)
         raise CadLinkError(
             "cad_link_persistence_failed",
             "The deterministic topology CAD-link build did not complete coherently.",

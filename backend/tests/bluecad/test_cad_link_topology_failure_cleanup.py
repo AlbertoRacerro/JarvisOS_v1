@@ -171,3 +171,49 @@ def test_heartbeat_start_failure_parks_reserved_candidate(
     assert candidate["parked_reason"] == "cad_link_failed"
     assert attempt["build_outcome"] == "cad_link_execution_error"
     assert attempt["finished_at"] is not None
+def test_parking_failure_still_stops_reservation_heartbeat(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    SUPPORT._use_in_process_kernel(monkeypatch)
+    simulation_run_id = SUPPORT._create_golden_source_run(client)
+    preview = SUPPORT._preview(client, simulation_run_id)
+    request = SUPPORT._execute_request(
+        simulation_run_id,
+        str(preview["preview_digest"]),
+    )
+
+    import app.modules.bluecad.cad_link_topology_execute as execute_module
+
+    stop_marker = object()
+    thread_marker = object()
+    stopped: list[tuple[object, object]] = []
+
+    monkeypatch.setattr(
+        execute_module,
+        "_start_reservation_heartbeat",
+        lambda *_args, **_kwargs: (stop_marker, thread_marker),
+    )
+
+    def fail_build(*_args: Any, **_kwargs: Any):
+        raise RuntimeError("forced build failure before parking")
+
+    def fail_park(*_args: Any, **_kwargs: Any):
+        raise RuntimeError("forced parking failure")
+
+    monkeypatch.setattr(execute_module, "build_geometry_spec", fail_build)
+    monkeypatch.setattr(execute_module, "park_candidate", fail_park)
+    monkeypatch.setattr(
+        execute_module,
+        "_stop_reservation_heartbeat",
+        lambda stop, thread: stopped.append((stop, thread)),
+    )
+
+    response = client.post(
+        "/workspaces/bluerev/bluecad/cad-link/072/execute",
+        json=request,
+    )
+
+    assert response.status_code == 500, response.text
+    assert response.json()["detail"]["code"] == "cad_link_persistence_failed"
+    assert stopped == [(stop_marker, thread_marker)]
