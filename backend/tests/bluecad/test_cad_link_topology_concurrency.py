@@ -227,6 +227,7 @@ def test_replay_wait_covers_bounded_optional_analysis() -> None:
     ) == expected_custom
 
 
+# Regression: recovery wins the reservation CAS permanently.
 def test_recovered_owner_cannot_reopen_candidate_or_attempt(
     initialized_storage,
     monkeypatch: pytest.MonkeyPatch,
