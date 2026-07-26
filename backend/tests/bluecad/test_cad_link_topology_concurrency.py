@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+
 from app.core.database import open_sqlite_connection
 from app.modules.bluecad.cad_link import CadLinkError
 from app.modules.events.service import utc_now
