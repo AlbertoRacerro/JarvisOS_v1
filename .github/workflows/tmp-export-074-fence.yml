@@ -1,0 +1,26 @@
+name: Temporary 074 fence source export
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tmp-074-fence-sources
+          path: |
+            backend/app/modules/bluecad/cad_link_topology_execute.py
+            backend/app/modules/bluecad/loop.py
+            backend/tests/bluecad/test_cad_link_topology_concurrency.py
+            backend/tests/bluecad/test_cad_link_topology_analysis_lifecycle.py
+            backend/tests/bluecad/test_cad_link_topology_failure_cleanup.py
+          if-no-files-found: error
+          retention-days: 1
