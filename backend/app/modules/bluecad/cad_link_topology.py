@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.database import open_sqlite_connection
+from app.modules.bluecad.cad_link import CadLinkError
 from app.modules.bluecad.cad_link_topology_contract import (
     IMPLEMENTATION_VERSION,
     TRANSFORMATION_VERSION,
     canonicalize_layout,
+    input_decimal,
     resolve_geometry_spec,
 )
 from app.modules.bluecad.cad_link_topology_preflight import run_kernel_preflight
@@ -114,6 +117,7 @@ def _build_preview_evidence(
         workspace_id,
         payload.source_simulation_run_id,
     )
+    _require_representable_source_manifold_volumes(source["manifest"])
     layout = canonicalize_layout(source["manifest"], payload.layout_spec)
     resolved_spec, boundaries, component_inventory = resolve_geometry_spec(
         source["manifest"],
@@ -183,6 +187,20 @@ def _build_preview_evidence(
     }
     preview["preview_digest"] = digest(preview)
     return preview
+
+
+def _require_representable_source_manifold_volumes(
+    manifest: Mapping[str, Any],
+) -> tuple[float, float]:
+    split_m3 = float(input_decimal(manifest, "split_manifold_liquid_volume")) * 1e-3
+    merge_m3 = float(input_decimal(manifest, "merge_manifold_liquid_volume")) * 1e-3
+    if split_m3 <= 0.0 or merge_m3 <= 0.0:
+        raise CadLinkError(
+            "cad_link_manifold_volume_unrepresentable",
+            "Source manifold liquid volume is not representable as a positive cavity.",
+            status_code=422,
+        )
+    return split_m3, merge_m3
 
 
 def _canonical_analysis_contract(value: dict[str, Any] | None) -> Any:
