@@ -19,6 +19,8 @@ from app.modules.ai.settings import get_ai_settings
 from app.modules.bluecad.evidence import (
     map_fem_static_evidence,
     map_mesh_quality_evidence,
+    record_fem_static_evidence,
+    record_mesh_quality_evidence,
     record_validation_evidence,
 )
 from app.modules.bluecad.export import sha256_file
@@ -190,23 +192,39 @@ def _run_simulation_stage(
     except Exception as exc:  # noqa: BLE001 - sim failures are advisory evidence only.
         mesh_result = _mesh_error_result(exc, analysis_spec)
     try:
-        _persist_sim_evidence(
-            workspace_id,
-            candidate_id,
-            attempt_id,
-            source_run_id,
-            out_dir / "mesh_result.json",
-            mesh_result,
-            source_ref,
-            evidence_builder=lambda artifact_id: map_mesh_quality_evidence(
+        if required_candidate_status is None:
+            mesh_report_artifact_id = _register_sim_report(
+                workspace_id,
+                out_dir / "mesh_result.json",
+                mesh_result,
+                source_ref,
+                producer_notes=producer_notes,
+            )
+            mesh_evidence_id = record_mesh_quality_evidence(
                 workspace_id,
                 mesh_result,
                 source_run_id=source_run_id,
-                report_artifact_id=artifact_id,
-            ),
-            producer_notes=producer_notes,
-            required_candidate_status=required_candidate_status,
-        )
+                report_artifact_id=mesh_report_artifact_id,
+            )
+            _link_sim_evidence_context(mesh_evidence_id, candidate_id, attempt_id)
+        else:
+            _persist_sim_evidence(
+                workspace_id,
+                candidate_id,
+                attempt_id,
+                source_run_id,
+                out_dir / "mesh_result.json",
+                mesh_result,
+                source_ref,
+                evidence_builder=lambda artifact_id: map_mesh_quality_evidence(
+                    workspace_id,
+                    mesh_result,
+                    source_run_id=source_run_id,
+                    report_artifact_id=artifact_id,
+                ),
+                producer_notes=producer_notes,
+                required_candidate_status=required_candidate_status,
+            )
     except Exception:
         _best_effort_fail_simulation_run(
             source_run_id,
@@ -228,24 +246,41 @@ def _run_simulation_stage(
             fem_report = {"verdict": "error", "checks": [], "errors": [{"code": "TIER3_ERROR", "detail": {"message": str(exc), "type": type(exc).__name__}}]}
     fem_payload = {"result_summary": fem_summary, "report": fem_report}
     try:
-        _persist_sim_evidence(
-            workspace_id,
-            candidate_id,
-            attempt_id,
-            source_run_id,
-            out_dir / "fem_result.json",
-            fem_payload,
-            source_ref,
-            evidence_builder=lambda artifact_id: map_fem_static_evidence(
+        if required_candidate_status is None:
+            fem_report_artifact_id = _register_sim_report(
+                workspace_id,
+                out_dir / "fem_result.json",
+                fem_payload,
+                source_ref,
+                producer_notes=producer_notes,
+            )
+            fem_evidence_id = record_fem_static_evidence(
                 workspace_id,
                 fem_summary,
                 fem_report,
                 source_run_id=source_run_id,
-                report_artifact_id=artifact_id,
-            ),
-            producer_notes=producer_notes,
-            required_candidate_status=required_candidate_status,
-        )
+                report_artifact_id=fem_report_artifact_id,
+            )
+            _link_sim_evidence_context(fem_evidence_id, candidate_id, attempt_id)
+        else:
+            _persist_sim_evidence(
+                workspace_id,
+                candidate_id,
+                attempt_id,
+                source_run_id,
+                out_dir / "fem_result.json",
+                fem_payload,
+                source_ref,
+                evidence_builder=lambda artifact_id: map_fem_static_evidence(
+                    workspace_id,
+                    fem_summary,
+                    fem_report,
+                    source_run_id=source_run_id,
+                    report_artifact_id=artifact_id,
+                ),
+                producer_notes=producer_notes,
+                required_candidate_status=required_candidate_status,
+            )
     except Exception:
         _best_effort_fail_simulation_run(
             source_run_id,
@@ -253,6 +288,48 @@ def _run_simulation_stage(
         )
         return
     _complete_simulation_run(source_run_id, mesh_result, fem_summary, fem_report)
+
+
+def _link_sim_evidence_context(
+    record_id: str,
+    candidate_id: str,
+    attempt_id: str,
+) -> None:
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            "UPDATE evidence_records SET candidate_id = ?, attempt_id = ? WHERE id = ?",
+            (candidate_id, attempt_id, record_id),
+        )
+        connection.commit()
+
+
+def _register_sim_report(
+    workspace_id: str,
+    path: Path,
+    payload: dict[str, Any],
+    source_ref: str,
+    *,
+    producer_notes: str | None = None,
+) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    if producer_notes is None:
+        return register_artifact(
+            workspace_id,
+            path,
+            role="bluecad_sim_report",
+            source_ref=source_ref,
+        )
+    return register_artifact(
+        workspace_id,
+        path,
+        role="bluecad_sim_report",
+        source_ref=source_ref,
+        producer_notes=producer_notes,
+    )
 
 
 def _analysis_spec_with_geometry(analysis_spec_without_geometry: dict[str, Any], build: dict[str, Any]) -> dict[str, Any]:
