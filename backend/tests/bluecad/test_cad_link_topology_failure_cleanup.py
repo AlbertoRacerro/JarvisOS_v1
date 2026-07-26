@@ -173,6 +173,7 @@ def test_heartbeat_start_failure_parks_reserved_candidate(
     assert attempt["finished_at"] is not None
 
 
+# Regression: a parking persistence error must never leave a live reservation heartbeat.
 def test_parking_failure_still_stops_reservation_heartbeat(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
