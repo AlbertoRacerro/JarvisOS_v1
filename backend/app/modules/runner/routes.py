@@ -1,9 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from app.modules.runner.api_models import ModelImplementationCreateRequest
 from app.modules.runner.models import (
     BindingPreviewRequest,
     BindingPreviewResponse,
-    ModelImplementationCreate,
     ModelImplementationRead,
     RunArtifactRead,
     RunLogRead,
@@ -12,8 +12,8 @@ from app.modules.runner.models import (
     RunnerJobRunResponse,
     SimulationRunDetail,
 )
-from app.modules.runner.safety import RunnerSafetyError
-from app.modules.runner.service import (
+from app.modules.runner.origin import require_allowed_mutating_origin
+from app.modules.runner.public_service import (
     create_model_implementation,
     create_runner_job,
     get_simulation_run_detail,
@@ -27,8 +27,9 @@ from app.modules.runner.service import (
     register_bundled_bluerev_topology_m1,
     run_runner_job,
 )
+from app.modules.runner.safety import RunnerSafetyError
 
-router = APIRouter(tags=["runner"])
+router = APIRouter(tags=["runner"], dependencies=[Depends(require_allowed_mutating_origin)])
 
 
 def _runner_error(exc: RunnerSafetyError) -> HTTPException:
@@ -51,7 +52,7 @@ def _runner_error(exc: RunnerSafetyError) -> HTTPException:
 )
 def create_model_implementation_endpoint(
     workspace_id: str,
-    payload: ModelImplementationCreate,
+    payload: ModelImplementationCreateRequest,
 ) -> ModelImplementationRead:
     try:
         return create_model_implementation(workspace_id, payload)
@@ -96,7 +97,6 @@ def register_bundled_bluerev_process2_endpoint(
         return register_bundled_bluerev_process2(workspace_id)
     except RunnerSafetyError as exc:
         raise _runner_error(exc) from exc
-
 
 
 @router.post(
