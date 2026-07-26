@@ -80,7 +80,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: runner-cleanup-pytest-results
-          path: backend/pytest-results.xml
+          path: |
+            backend/pytest-results.xml
+            backend/tests/test_bluerev_geometry_hydraulics_v0.py
+            backend/tests/test_model_scenario_dof.py
+            backend/tests/test_python_runner.py
+            backend/tests/test_python_runner_bluecad_l2.py
+            backend/tests/test_python_runner_calc_v0.py
           if-no-files-found: warn
           retention-days: 1
 
