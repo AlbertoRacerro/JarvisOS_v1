@@ -1,19 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
-from app.modules.runner.models import (
-    BindingPreviewRequest,
-    BindingPreviewResponse,
-    ModelImplementationCreate,
-    ModelImplementationRead,
-    RunArtifactRead,
-    RunLogRead,
-    RunnerJobCreate,
-    RunnerJobCreateResponse,
-    RunnerJobRunResponse,
-    SimulationRunDetail,
-)
-from app.modules.runner.safety import RunnerSafetyError
-from app.modules.runner.service import (
+from app.modules.runner.guarded_service import (
     create_model_implementation,
     create_runner_job,
     get_simulation_run_detail,
@@ -27,6 +14,20 @@ from app.modules.runner.service import (
     register_bundled_bluerev_topology_m1,
     run_runner_job,
 )
+from app.modules.runner.models import (
+    BindingPreviewRequest,
+    BindingPreviewResponse,
+    ModelImplementationRead,
+    RunArtifactRead,
+    RunLogRead,
+    RunnerJobCreate,
+    RunnerJobCreateResponse,
+    RunnerJobRunResponse,
+    SimulationRunDetail,
+)
+from app.modules.runner.origin import require_runner_origin
+from app.modules.runner.public_models import PublicModelImplementationCreate
+from app.modules.runner.safety import RunnerSafetyError
 
 router = APIRouter(tags=["runner"])
 
@@ -48,10 +49,11 @@ def _runner_error(exc: RunnerSafetyError) -> HTTPException:
     "/workspaces/{workspace_id}/model-implementations",
     response_model=ModelImplementationRead,
     status_code=201,
+    dependencies=[Depends(require_runner_origin)],
 )
 def create_model_implementation_endpoint(
     workspace_id: str,
-    payload: ModelImplementationCreate,
+    payload: PublicModelImplementationCreate,
 ) -> ModelImplementationRead:
     try:
         return create_model_implementation(workspace_id, payload)
@@ -62,6 +64,7 @@ def create_model_implementation_endpoint(
 @router.post(
     "/workspaces/{workspace_id}/bundled-models/bluerev-geometry-hydraulics-v0/register",
     response_model=ModelImplementationRead,
+    dependencies=[Depends(require_runner_origin)],
 )
 def register_bundled_bluerev_process0_endpoint(
     workspace_id: str,
@@ -75,6 +78,7 @@ def register_bundled_bluerev_process0_endpoint(
 @router.post(
     "/workspaces/{workspace_id}/bundled-models/bluerev-biomass-nutrients-harvest-v0/register",
     response_model=ModelImplementationRead,
+    dependencies=[Depends(require_runner_origin)],
 )
 def register_bundled_bluerev_process1_endpoint(
     workspace_id: str,
@@ -88,6 +92,7 @@ def register_bundled_bluerev_process1_endpoint(
 @router.post(
     "/workspaces/{workspace_id}/bundled-models/bluerev-buoyancy-optical-screening-v0/register",
     response_model=ModelImplementationRead,
+    dependencies=[Depends(require_runner_origin)],
 )
 def register_bundled_bluerev_process2_endpoint(
     workspace_id: str,
@@ -98,10 +103,10 @@ def register_bundled_bluerev_process2_endpoint(
         raise _runner_error(exc) from exc
 
 
-
 @router.post(
     "/workspaces/{workspace_id}/bundled-models/bluerev-process-topology-m1-v0/register",
     response_model=ModelImplementationRead,
+    dependencies=[Depends(require_runner_origin)],
 )
 def register_bundled_bluerev_topology_m1_endpoint(
     workspace_id: str,
@@ -112,7 +117,10 @@ def register_bundled_bluerev_topology_m1_endpoint(
         raise _runner_error(exc) from exc
 
 
-@router.get("/workspaces/{workspace_id}/model-implementations", response_model=list[ModelImplementationRead])
+@router.get(
+    "/workspaces/{workspace_id}/model-implementations",
+    response_model=list[ModelImplementationRead],
+)
 def list_model_implementations_endpoint(workspace_id: str) -> list[ModelImplementationRead]:
     try:
         return list_model_implementations(workspace_id)
@@ -135,15 +143,27 @@ def preview_model_bindings_endpoint(
         raise _runner_error(exc) from exc
 
 
-@router.post("/workspaces/{workspace_id}/runner-jobs", response_model=RunnerJobCreateResponse, status_code=201)
-def create_runner_job_endpoint(workspace_id: str, payload: RunnerJobCreate) -> RunnerJobCreateResponse:
+@router.post(
+    "/workspaces/{workspace_id}/runner-jobs",
+    response_model=RunnerJobCreateResponse,
+    status_code=201,
+    dependencies=[Depends(require_runner_origin)],
+)
+def create_runner_job_endpoint(
+    workspace_id: str,
+    payload: RunnerJobCreate,
+) -> RunnerJobCreateResponse:
     try:
         return create_runner_job(workspace_id, payload)
     except RunnerSafetyError as exc:
         raise _runner_error(exc) from exc
 
 
-@router.post("/runner-jobs/{runner_job_id}/run", response_model=RunnerJobRunResponse)
+@router.post(
+    "/runner-jobs/{runner_job_id}/run",
+    response_model=RunnerJobRunResponse,
+    dependencies=[Depends(require_runner_origin)],
+)
 def run_runner_job_endpoint(runner_job_id: str) -> RunnerJobRunResponse:
     try:
         return run_runner_job(runner_job_id)
@@ -151,16 +171,28 @@ def run_runner_job_endpoint(runner_job_id: str) -> RunnerJobRunResponse:
         raise _runner_error(exc) from exc
 
 
-@router.get("/workspaces/{workspace_id}/simulation-runs/{simulation_run_id}", response_model=SimulationRunDetail)
-def get_simulation_run_endpoint(workspace_id: str, simulation_run_id: str) -> SimulationRunDetail:
+@router.get(
+    "/workspaces/{workspace_id}/simulation-runs/{simulation_run_id}",
+    response_model=SimulationRunDetail,
+)
+def get_simulation_run_endpoint(
+    workspace_id: str,
+    simulation_run_id: str,
+) -> SimulationRunDetail:
     try:
         return get_simulation_run_detail(workspace_id, simulation_run_id)
     except RunnerSafetyError as exc:
         raise _runner_error(exc) from exc
 
 
-@router.get("/workspaces/{workspace_id}/simulation-runs/{simulation_run_id}/logs", response_model=list[RunLogRead])
-def list_run_logs_endpoint(workspace_id: str, simulation_run_id: str) -> list[RunLogRead]:
+@router.get(
+    "/workspaces/{workspace_id}/simulation-runs/{simulation_run_id}/logs",
+    response_model=list[RunLogRead],
+)
+def list_run_logs_endpoint(
+    workspace_id: str,
+    simulation_run_id: str,
+) -> list[RunLogRead]:
     try:
         return list_run_logs(workspace_id, simulation_run_id)
     except RunnerSafetyError as exc:
@@ -171,7 +203,10 @@ def list_run_logs_endpoint(workspace_id: str, simulation_run_id: str) -> list[Ru
     "/workspaces/{workspace_id}/simulation-runs/{simulation_run_id}/artifacts",
     response_model=list[RunArtifactRead],
 )
-def list_run_artifacts_endpoint(workspace_id: str, simulation_run_id: str) -> list[RunArtifactRead]:
+def list_run_artifacts_endpoint(
+    workspace_id: str,
+    simulation_run_id: str,
+) -> list[RunArtifactRead]:
     try:
         return list_run_artifacts(workspace_id, simulation_run_id)
     except RunnerSafetyError as exc:
