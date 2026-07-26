@@ -1,3 +1,4 @@
+# ruff: noqa: E402, I001
 from __future__ import annotations
 
 import sys
@@ -12,12 +13,9 @@ for path in (ROOT / "backend", ROOT / "scripts"):
     if path_text not in sys.path:
         sys.path.insert(0, path_text)
 
-from app.core.config import DEFAULT_DATA_ROOT, get_settings  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-from tests.legacy_runner_client import (  # noqa: E402
-    Bundled047TestClient,
-    LegacyRunnerTestClient,
-)
+from app.core.config import DEFAULT_DATA_ROOT, get_settings
+from fastapi.testclient import TestClient
+from tests.legacy_runner_client import Bundled047TestClient, LegacyRunnerTestClient
 
 _BUNDLED_047_MODULE = "tests.test_bluerev_geometry_hydraulics_v0"
 _LEGACY_RUNNER_MODULES = frozenset(
