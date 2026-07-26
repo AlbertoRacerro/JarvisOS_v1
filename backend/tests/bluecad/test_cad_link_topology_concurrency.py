@@ -9,6 +9,7 @@ from uuid import uuid4
 import pytest
 
 from app.core.database import open_sqlite_connection
+from app.core.paths import build_paths
 from app.modules.bluecad.cad_link import CadLinkError
 from app.modules.events.service import utc_now
 
@@ -311,3 +312,93 @@ def test_recovered_owner_cannot_reopen_candidate_or_attempt(
     assert candidate["report_artifact_id"] is None
     assert attempt["build_outcome"] == "cad_link_abandoned"
     assert attempt["validation_verdict"] == "fail"
+
+
+# Regression: recovery must win before any artifact/evidence registration commits.
+def test_recovered_owner_cannot_register_orphan_artifacts(
+    initialized_storage,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    import app.modules.bluecad.cad_link_topology_execute as execute_module
+
+    candidate_id = str(uuid4())
+    attempt_id = str(uuid4())
+    old = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO bluecad_candidates (
+                id, workspace_id, brief_text, brief_digest, status,
+                parked_reason, spec_artifact_id, glb_artifact_id,
+                report_artifact_id, promoted_decision_id, origin,
+                parent_candidate_id, loop_config_json, created_at,
+                updated_at, notes
+            ) VALUES (?, 'bluerev', 'artifact fence probe', ?, 'generating',
+                NULL, NULL, NULL, NULL, NULL, 'process_linked', NULL,
+                '{}', ?, ?, 'artifact fence probe')
+            """,
+            (candidate_id, "sha256:" + "7" * 64, old, old),
+        )
+        connection.execute(
+            """
+            INSERT INTO bluecad_attempts (
+                id, candidate_id, attempt_no, route_class,
+                proposal_ai_job_id, proposal_outcome, build_outcome,
+                validation_verdict, spec_artifact_id, report_artifact_id,
+                manifest_artifact_id, started_at, finished_at, error_detail_json
+            ) VALUES (?, ?, 1, 'deterministic:cad_link:072', NULL,
+                'not_applicable', NULL, NULL, NULL, NULL, NULL, ?, NULL, NULL)
+            """,
+            (attempt_id, candidate_id, old),
+        )
+        connection.commit()
+    monkeypatch.setattr(execute_module, "_ABANDONED_RESERVATION_SECONDS", 1.0)
+    recovered = execute_module._recover_abandoned_reservation(
+        "bluerev",
+        candidate_id,
+    )
+    assert recovered is not None and recovered.status == "parked"
+
+    spec_path = tmp_path / "geometry_spec.json"
+    report_path = tmp_path / "validation_report.json"
+    spec_path.write_text("{}\n", encoding="utf-8")
+    report_path.write_text("{}\n", encoding="utf-8")
+    with pytest.raises(execute_module._ReservationOwnershipLost):
+        execute_module._commit_reserved_build_result(
+            "bluerev",
+            candidate_id,
+            attempt_id,
+            spec_path=spec_path,
+            report_path=report_path,
+            manifest_path=None,
+            glb_path=None,
+            report={"verdict": "pass", "checks": [], "errors": []},
+            build_outcome="ok",
+            validation_verdict="pass",
+            error_detail={"late": True},
+        )
+
+    with open_sqlite_connection() as connection:
+        artifact_count = connection.execute(
+            "SELECT COUNT(*) FROM artifacts WHERE workspace_id = 'bluerev'"
+        ).fetchone()[0]
+        evidence_count = connection.execute(
+            "SELECT COUNT(*) FROM evidence_records WHERE candidate_id = ?",
+            (candidate_id,),
+        ).fetchone()[0]
+        candidate = connection.execute(
+            """
+            SELECT status, spec_artifact_id, glb_artifact_id, report_artifact_id
+            FROM bluecad_candidates WHERE id = ?
+            """,
+            (candidate_id,),
+        ).fetchone()
+    assert artifact_count == 0
+    assert evidence_count == 0
+    assert candidate is not None and candidate["status"] == "parked"
+    assert candidate["spec_artifact_id"] is None
+    assert candidate["glb_artifact_id"] is None
+    assert candidate["report_artifact_id"] is None
+    artifact_root = build_paths().artifacts_dir / "bluerev" / "bluecad"
+    assert not artifact_root.exists() or not any(artifact_root.rglob("*"))
