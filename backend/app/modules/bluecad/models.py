@@ -137,6 +137,8 @@ def _transform_bbox(bbox: tuple[tuple[float, float, float], tuple[float, float, 
 CandidateStatus = Literal["generating", "validating", "valid", "parked", "archived"]
 ParkedReason = Literal["attempts_exhausted", "budget_blocked", "policy_blocked", "malformed_repeated", "user_cancelled", "cad_link_failed"]
 CandidateOrigin = Literal["ai", "parametric_variant", "process_linked"]
+DEFAULT_ANALYSIS_TIMEOUT_SECONDS = 60.0
+MAX_ANALYSIS_TIMEOUT_SECONDS = 300.0
 ProposalOutcome = Literal["ok", "malformed", "provider_error", "blocked", "not_applicable"]
 ValidationVerdict = Literal["pass", "fail"]
 
@@ -248,7 +250,11 @@ class _AnalysisSpecWithoutGeometry(BaseModel):
     loads: list[_AnalysisLoad]
     mesh: _AnalysisMesh
     pass_criteria: list[_AnalysisPassCriterion]
-    timeout_s: float | None = Field(default=None, gt=0)
+    timeout_s: float | None = Field(
+        default=None,
+        gt=0,
+        le=MAX_ANALYSIS_TIMEOUT_SECONDS,
+    )
 
 
 class BluecadLoopConfig(BaseModel):
