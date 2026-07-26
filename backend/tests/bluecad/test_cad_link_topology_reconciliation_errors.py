@@ -30,6 +30,7 @@ def test_zero_source_manifold_volume_fails_before_layout_or_reconciliation(
     zero_name: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The source contract is rejected before any layout, kernel, or reconciliation work.
     manifest = _manifest()
     manifest["executed_inputs"][zero_name]["value"] = 0.0
     monkeypatch.setattr(
