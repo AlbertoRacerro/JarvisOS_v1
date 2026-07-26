@@ -18,6 +18,7 @@ from app.modules.runner.public_models import PublicModelImplementationCreate
 from app.modules.runner.safety import RunnerSafetyError, sha256_file
 
 RUNNER_SCRIPT_POLICY_VIOLATION = "RUNNER_SCRIPT_POLICY_VIOLATION"
+_LEGACY_SANDBOX_VIOLATION = "SANDBOX_VIOLATION"
 
 
 def create_model_implementation(
@@ -53,13 +54,36 @@ def create_runner_job(
 ) -> RunnerJobCreateResponse:
     model_version = _load_model_version(workspace_id, payload.model_version_id)
     _require_exact_bundled(model_version)
-    return _base.create_runner_job(workspace_id, payload)
+    try:
+        return _base.create_runner_job(workspace_id, payload)
+    except RunnerSafetyError as exc:
+        translated = _translate_policy_error(exc)
+        if translated is exc:
+            raise
+        raise translated from exc
 
 
 def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
     model_version = _load_job_model_version(runner_job_id)
     _require_exact_bundled(model_version)
-    return _base.run_runner_job(runner_job_id)
+    try:
+        response = _base.run_runner_job(runner_job_id)
+    except RunnerSafetyError as exc:
+        translated = _translate_policy_error(exc)
+        if translated is exc:
+            raise
+        raise translated from exc
+    if response.error and response.error.get("code") == _LEGACY_SANDBOX_VIOLATION:
+        error = dict(response.error)
+        error["code"] = RUNNER_SCRIPT_POLICY_VIOLATION
+        return response.model_copy(update={"error": error})
+    return response
+
+
+def _translate_policy_error(exc: RunnerSafetyError) -> RunnerSafetyError:
+    if exc.code == _LEGACY_SANDBOX_VIOLATION:
+        return RunnerSafetyError(RUNNER_SCRIPT_POLICY_VIOLATION, exc.message)
+    return exc
 
 
 def _require_exact_bundled(model_version: dict[str, Any]) -> None:
