@@ -171,6 +171,8 @@ def test_heartbeat_start_failure_parks_reserved_candidate(
     assert candidate["parked_reason"] == "cad_link_failed"
     assert attempt["build_outcome"] == "cad_link_execution_error"
     assert attempt["finished_at"] is not None
+
+
 def test_parking_failure_still_stops_reservation_heartbeat(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
