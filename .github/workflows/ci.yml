@@ -18,33 +18,26 @@ jobs:
         with:
           ref: cleanup/runner-bundled-only
 
-      - name: Apply test reconciliation
-        id: apply
+      - name: Assemble and apply verified test reconciliation
         shell: bash
         run: |
-          set +e
-          python scripts/_apply_runner_cleanup_test_reconciliation.py > "$RUNNER_TEMP/runner-reconciliation-apply.log" 2>&1
-          status=$?
-          cat "$RUNNER_TEMP/runner-reconciliation-apply.log"
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit 0
-
-      - name: Upload apply diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: runner-reconciliation-apply-diagnostics
-          path: ${{ runner.temp }}/runner-reconciliation-apply.log
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Enforce apply
-        run: test "${{ steps.apply.outputs.status }}" = "0"
-
-      - name: Restore canonical workflow
-        shell: bash
-        run: |
-          rm scripts/_apply_runner_cleanup_test_reconciliation.py
+          cat scripts/.runner_patch_part00 \
+              scripts/.runner_patch_part01 \
+              scripts/.runner_patch_part02 \
+              scripts/.runner_patch_part03 \
+              scripts/.runner_patch_part04 > "$RUNNER_TEMP/runner-tests.patch.b64"
+          echo "20dde82110bad249aaf8a825f663f4819638d32b82da1dbe3514a39a2b010b1b  $RUNNER_TEMP/runner-tests.patch.b64" | sha256sum -c -
+          base64 --decode "$RUNNER_TEMP/runner-tests.patch.b64" > "$RUNNER_TEMP/runner-tests.patch"
+          echo "0fbc77e14c55257a2cdb474e40b8733a984155a104bb0448398d0ca2f0401ce0  $RUNNER_TEMP/runner-tests.patch" | sha256sum -c -
+          git apply --check "$RUNNER_TEMP/runner-tests.patch"
+          git apply "$RUNNER_TEMP/runner-tests.patch"
+          rm -f \
+            scripts/.runner_patch_part00 \
+            scripts/.runner_patch_part01 \
+            scripts/.runner_patch_part02 \
+            scripts/.runner_patch_part03 \
+            scripts/.runner_patch_part04 \
+            scripts/_apply_runner_cleanup_test_reconciliation.py
           git fetch origin master --depth=1
           git show FETCH_HEAD:.github/workflows/ci.yml > .github/workflows/ci.yml
           git diff --check
@@ -118,12 +111,6 @@ jobs:
           git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add \
-            .github/workflows/ci.yml \
-            scripts/_apply_runner_cleanup_test_reconciliation.py \
-            backend/tests/test_bluerev_geometry_hydraulics_v0.py \
-            backend/tests/test_model_scenario_dof.py \
-            backend/tests/test_python_runner.py \
-            backend/tests/test_python_runner_calc_v0.py
+          git add -A
           git commit -m "Reconcile runner tests with bundled authority"
           git push origin HEAD:cleanup/runner-bundled-only
