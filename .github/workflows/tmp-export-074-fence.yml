@@ -18,6 +18,7 @@ jobs:
           name: tmp-074-fence-sources
           path: |
             backend/app/modules/bluecad/cad_link_topology_execute.py
+            backend/app/modules/bluecad/ledger.py
             backend/app/modules/bluecad/loop.py
             backend/tests/bluecad/test_cad_link_topology_concurrency.py
             backend/tests/bluecad/test_cad_link_topology_analysis_lifecycle.py
