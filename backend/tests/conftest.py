@@ -1,3 +1,4 @@
+# ruff: noqa: E402, I001
 from __future__ import annotations
 
 import sys
@@ -12,7 +13,19 @@ for path in (ROOT / "backend", ROOT / "scripts"):
     if path_text not in sys.path:
         sys.path.insert(0, path_text)
 
-from app.core.config import DEFAULT_DATA_ROOT, get_settings  # noqa: E402
+from app.core.config import DEFAULT_DATA_ROOT, get_settings
+from fastapi.testclient import TestClient
+from tests.legacy_runner_client import Bundled047TestClient, LegacyRunnerTestClient
+
+_BUNDLED_047_FILE = "test_bluerev_geometry_hydraulics_v0.py"
+_LEGACY_RUNNER_FILES = frozenset(
+    {
+        "test_model_scenario_dof.py",
+        "test_python_runner.py",
+        "test_python_runner_bluecad_l2.py",
+        "test_python_runner_calc_v0.py",
+    }
+)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -22,6 +35,20 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=False,
         help="Fail instead of skipping when the hash-verified Gmsh/CalculiX proof toolchain is unavailable.",
     )
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_call(item: pytest.Item) -> None:
+    """Replace only the resolved client argument of named historical tests."""
+
+    client = getattr(item, "funcargs", {}).get("client")
+    if not isinstance(client, TestClient):
+        return
+    filename = Path(str(item.path)).name
+    if filename == _BUNDLED_047_FILE:
+        item.funcargs["client"] = Bundled047TestClient(client)
+    elif filename in _LEGACY_RUNNER_FILES:
+        item.funcargs["client"] = LegacyRunnerTestClient(client)
 
 
 @pytest.fixture(autouse=True)
