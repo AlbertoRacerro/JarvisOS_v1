@@ -311,3 +311,38 @@ def test_recovery_fences_late_analysis_creation_and_completion(
         "cad_link_analysis_lease_expired"
     )
     assert candidate_status == "parked"
+
+
+# Regression: a recovered terminal candidate must surface as ownership loss,
+# not as a missing-analysis 500 path.
+def test_recovery_before_analysis_creation_preserves_ownership_loss(
+    initialized_storage,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.modules.bluecad.cad_link_topology_execute as execute_module
+
+    old = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
+    candidate_id, attempt_id = _seed_candidate(
+        status="validating",
+        updated_at=old,
+    )
+    monkeypatch.setattr(execute_module, "_ABANDONED_RESERVATION_SECONDS", 1.0)
+    recovered = execute_module._recover_abandoned_reservation(
+        "bluerev",
+        candidate_id,
+    )
+    assert recovered is not None and recovered.status == "parked"
+    monkeypatch.setattr(
+        execute_module,
+        "_run_simulation_stage",
+        lambda *_args, **_kwargs: None,
+    )
+
+    with pytest.raises(execute_module._ReservationOwnershipLost):
+        execute_module._complete_valid_candidate_after_analysis(
+            "bluerev",
+            candidate_id,
+            attempt_id,
+            {"schema_version": "probe"},
+            {},
+        )
