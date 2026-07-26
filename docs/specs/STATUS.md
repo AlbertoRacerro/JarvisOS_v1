@@ -59,13 +59,11 @@ before Codex or another coding agent may act on them.
 6. Preserve the merged `047`–`052`, `071`, and `072` process-model, editable-binding,
    forward-DOF, dependency-graph, stale-propagation, M0 CAD-link, and explicit
    symmetric-topology foundation.
-7. Promote and implement `073` before any multi-part CAD-LINK-1 claim. The existing
-   through-header `manifold` has two common ports and is not an honest capped
-   split/merge boundary; do not leave an open main port or imply fluid-open branch
-   bores that the solid does not contain.
-8. Draft and promote `074` CAD-LINK-1 only after 073 is merged. It must consume a
-   fresh 072 manifest, require explicit spatial-layout authority, reconcile process
-   and CAD geometry, and fail closed rather than infer bend handedness or routing.
+7. Complete the in-review `074` implementation without weakening its fresh-manifest,
+   explicit-layout, reconciliation, idempotency, and fail-closed boundaries.
+8. Define, review, and promote `075` only after the bundled-only runner cleanup is
+   merged; derive the process kernel from exact 047 reproduction rather than from an
+   abstract simulator design.
 9. Run `069` MEMORY-CONSOLIDATE-0 as the first Hermes dogfood only after 066–068
    are merged and the required local route is qualified.
 10. Continue `063`/`064`, `012` → `033`, and residual conversation/UI rows according
@@ -93,11 +91,11 @@ PR overlaps the target files or runtime boundary.
 | 009 | merged | [#35](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/35) | BLUECAD CalculiX FEM adapter | 008 | Assemble deterministic static CalculiX decks, run the registered solver, parse result summaries, and evaluate Tier 3 criteria. |
 | 010 | merged | [#20](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/20), [#26](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/26), [#28](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/28) | BLUECAD AI loop v0 | 005 | Add the bounded candidate/attempt loop, safe-default parking, prompt/schema flow, validation, repair attempts, and traceable prompt versions. |
 | 011 | planned | — | Core Team review panel | 034 | Add advisory persona reviews over artifacts and evidence; personas are bounded configurations, not autonomous authorities or a fake swarm. |
-| 012 | planned | — | L2 ephemeral free-script proposals | 010, 016 | Accelerate one-design-only AI script proposals through the existing hashed/AST-checked `bluecad_l2_v0` path; scripts remain reviewed local-trusted code, not hostile-code sandbox input, and automatic untrusted execution requires 045 isolation evidence. |
+| 012 | planned | — | L2 ephemeral free-script proposals | 010, 016 | Trigger-gated only: reopen after non-loopback access, a second user, remote-agent/Hermes/MCP runner reachability, or a demonstrated need for non-bundled execution, and only behind a separate proven OS-isolation specification. |
 | 013 | planned | — | Tier 2 domain-validator plugin interface | 005, 010 | Define a narrow plugin boundary for BlueRev-specific engineering checks that emit deterministic validation evidence without letting plugins own routing, memory, or promotion. |
 | 014 | planned | — | OpenFOAM CFD case-bundle adapter v0 | 007, 008, 049 | Produce inspectable OpenFOAM case bundles and evidence only when process/light proxies leave a concrete decision unresolved; no generic CFD platform or automatic solver authority. |
 | 015 | merged | [#33](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/33) | PROVIDER-GW-1 | 003 | Replace hardcoded bindings with a validated provider registry and generic OpenAI-compatible adapter while preserving safe defaults. |
-| 016 | merged | [#39](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/39) | RUNNER-EXT-1: BLUECAD L2 | 005, 007 | Extend the bounded runner with a hashed, AST-checked `bluecad_l2_v0` implementation kind and strict GeometrySpec/artifact contracts. |
+| 016 | merged | [#39](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/39) | RUNNER-EXT-1: BLUECAD L2 | 005, 007 | Historical hashed/AST-checked `bluecad_l2_v0` contract; normal instantiation is disabled by the bundled-only runner cleanup, and hostile-code execution was never proven. |
 | 017 | merged | [#37](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/37) | Autonomous three-tier review | 004 | Historical automatic chain; Cheap, Senior, and Expert reviews are now explicit maintainer actions with no automatic Codex or label actuation. |
 | 018 | merged | [#33](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/33), [#43](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/43) | PROVIDER-GW-2 | 015 | Complete provider-cap/fallback enforcement and correct provider usage accounting while preserving explicit routing and audit controls. |
 | 019 | merged | [#40](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/40), [#41](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/41), [#44](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/44) | Senior review hardening | 017 | Retain bounded requests, streaming, parsing, staleness, and diagnostics for manually dispatched reviews only. |
@@ -127,7 +125,7 @@ PR overlaps the target files or runtime boundary.
 | 042 | merged | [#56](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/56) | CONTEXT-PACK-1 | 040 | Add deterministic, budgeted, inspectable record selection with FTS/LIKE fallback and a side-effect-free preview endpoint. |
 | 043 | merged | [#52](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/52) | CALC-1 | 016, 040 | Add a narrow `calc_v0` runner contract with AST policy, unit-bearing JSON outputs, deterministic artifacts, and parameter proposals. |
 | 044 | merged | [#62](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/62) | EVIDENCE-BRIDGE-1 | 042 | Add typed validation/mesh/FEM evidence records and deterministic bounded evidence lines for context packs. |
-| 045 | planned | — | Runner hardening boundary | 043 | Define the next measured isolation step and prevent policy-guarded local Python execution from being represented as an OS-level hostile-code sandbox. |
+| 045 | cancelled | — | Runner hardening boundary | 043 | Retired as a standalone isolation program for the current single-user loopback product. The bounded bundled-only cleanup is unnumbered. Reopen only for non-loopback access, a second user, remote-agent/Hermes/MCP runner reachability, or demonstrated non-bundled execution need. |
 | 046 | planned | — | Alternative design loop | 006b, 011, 038 | Trigger only after the review panel proves useful: explain a failed FEM result, propose a bounded alternative, build it, and compare variants without auto-promotion. |
 | 047 | merged | [#143](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/143) | BLUEREV-PROCESS-0: geometry, hydraulics, and pumping | 043 | Ship the caller-parameterized forward `calc_v0` model for geometry, hydraulics, residence/turnover, and pumping; formulas, units, correlations, and validity domains are versioned, while all nine project/operating values remain editable bindings and numerical fixtures validate equations only. |
 | 048 | merged | [#150](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/150) | BLUEREV-PROCESS-1: biomass, nutrients, gas, harvest, and energy/cost KPIs | 043, 047 | Port ranks 8–18 while correcting productive-volume, recovery-balance, and pump-only-vs-total KPI errors; include a `preliminary_economic_evaluation_v0` output family (`variable_opex_rate`, `specific_variable_cost`, `gross_margin_proxy`) with explicit `economic_boundary` and `economic_basis` fields and per-input uncertainty/provenance, so design alternatives are economically comparable without implying a full TEA; `gross_margin_proxy` must support an explicit `not_computable` outcome when price, recovery, or time basis is unavailable rather than silently substituting zero or emitting a partial value; every claim carries units, assumptions, provenance, and verification cases. |
@@ -161,12 +159,14 @@ PR overlaps the target files or runtime boundary.
 | 071 | merged | [#147](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/147) | MODEL-SCENARIO-DOF-0: editable bindings, scenario runs, and degree-of-freedom inspection | 040, 043, 047 | Expose immutable value-free model input contracts, side-effect-free forward binding/DOF preview, parameter-backed or manual scenario bindings, existing-runner execution, and one bounded Domain Foundation panel; no inverse solver, targets, optimizer, automatic promotion, or embedded design defaults. |
 | 072 | merged | [#172](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/172) | BLUEREV-PROCESS-3: explicit symmetric hydraulic topology M1 | 043, 047, 050, 051, 052, 071 | Add one deterministic fixed-topology closed loop with common supply/return sections and 1–12 identical parallel branches; separate installed geometry from the representative hydraulic path, emit a canonical topology manifest, and prove reduction to 047 without adding a generic network solver, CAD layout, automatic recompute, or UI. |
 | 073 | merged | [#174](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/174) | BLUECAD-PRIMITIVE-1: fluid-open capped branch manifold | 005, 005b, 056 | Add one deterministic capped branch-header primitive with exactly one common port and 1–12 branch ports, explicit branch bores through the header wall, closed-end geometry, kernel-volume reconciliation, and property/conformance tests; no process link, layout solver, project defaults, or UI. |
-| 074 | ready | — | CAD-LINK-1: 072 M1 topology to deterministic multi-part BLUECAD | 038, 050, 051, 052, 071, 072, 073 | Convert a fresh 072 topology manifest into an idempotent multi-part BLUECAD candidate only through an explicit reviewed spatial-layout contract; reconcile process geometry, ports, volume/area, and lineage without inferring bend handedness, routing, or design defaults. |
+| 074 | in_review | [#183](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/183) | CAD-LINK-1: 072 M1 topology to deterministic multi-part BLUECAD | 038, 050, 051, 052, 071, 072, 073 | Convert a fresh 072 topology manifest into an idempotent multi-part BLUECAD candidate only through an explicit reviewed spatial-layout contract; reconcile process geometry, ports, volume/area, and lineage without inferring bend handedness, routing, or design defaults. |
+| 075 | planned | — | PROCESS-KERNEL-1: streams, components, units, and unit operations | 043, 047, 048, 071 | Re-express validated 047 as an acyclic flowsheet of typed material/scalar ports and reusable blocks, add additive unit-contract v2 and component/stream foundations, and require exact canonical 047 result identity before broader solver work. |
 
 ## Superseded planning aliases and resolved collisions
 
 - Historical `045 = AGENT-ORCH` references are superseded by `060`; `045` is
-  already owned by the runner-hardening boundary.
+  cancelled as a standalone isolation program and may be reopened only by its
+  explicit product-reachability or non-bundled-execution triggers.
 - Historical `057 = Workspace home`, `057b`, and `057c` references are
   superseded by `058`, `058b`, and `058c`; `057` remains the cancelled
   SPEC-LEDGER-0 and must not be reused.
