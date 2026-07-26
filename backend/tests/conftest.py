@@ -13,6 +13,21 @@ for path in (ROOT / "backend", ROOT / "scripts"):
         sys.path.insert(0, path_text)
 
 from app.core.config import DEFAULT_DATA_ROOT, get_settings  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+from tests.legacy_runner_client import (  # noqa: E402
+    Bundled047TestClient,
+    LegacyRunnerTestClient,
+)
+
+_BUNDLED_047_MODULE = "tests.test_bluerev_geometry_hydraulics_v0"
+_LEGACY_RUNNER_MODULES = frozenset(
+    {
+        "tests.test_model_scenario_dof",
+        "tests.test_python_runner",
+        "tests.test_python_runner_bluecad_l2",
+        "tests.test_python_runner_calc_v0",
+    }
+)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -22,6 +37,24 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         default=False,
         help="Fail instead of skipping when the hash-verified Gmsh/CalculiX proof toolchain is unavailable.",
     )
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_fixture_setup(fixturedef, request):
+    """Scope legacy runner adapters to the exact historical test modules."""
+
+    outcome = yield
+    if fixturedef.argname != "client":
+        return
+    result = outcome.get_result()
+    if not isinstance(result, TestClient):
+        return
+    module = getattr(request.node, "module", None)
+    module_name = getattr(module, "__name__", "")
+    if module_name == _BUNDLED_047_MODULE:
+        outcome.force_result(Bundled047TestClient(result))
+    elif module_name in _LEGACY_RUNNER_MODULES:
+        outcome.force_result(LegacyRunnerTestClient(result))
 
 
 @pytest.fixture(autouse=True)
