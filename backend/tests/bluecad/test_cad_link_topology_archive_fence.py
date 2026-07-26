@@ -48,6 +48,7 @@ def _seed_candidate(status: str) -> str:
     return candidate_id
 
 
+# Regression: lifecycle ownership cannot be bypassed through the generic archive route.
 @pytest.mark.parametrize("status", ["generating", "validating"])
 def test_active_cad_link_reservations_cannot_be_archived(
     client: TestClient,
