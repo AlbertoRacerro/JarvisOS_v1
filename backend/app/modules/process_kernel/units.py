@@ -46,6 +46,29 @@ _SEMANTIC_DEFINITIONS = (
 )
 SEMANTIC_UNITS: Final = MappingProxyType({item.token: item for item in _SEMANTIC_DEFINITIONS})
 
+# Historical JarvisOS contracts intentionally use compact engineering tokens such
+# as kg/m3 and m/s2. Pint does not parse every compact exponent form consistently,
+# so only this closed reviewed set is translated before parsing. Unknown ordinary
+# tokens still go directly through Pint and no prefix/suffix inference is added.
+_PINT_UNIT_ALIASES: Final = MappingProxyType(
+    {
+        "1": "dimensionless",
+        "m": "meter",
+        "mm": "millimeter",
+        "cm": "centimeter",
+        "m2": "meter**2",
+        "m3": "meter**3",
+        "L": "liter",
+        "m/s": "meter/second",
+        "cm/s": "centimeter/second",
+        "m/s2": "meter/second**2",
+        "kg/m3": "kilogram/meter**3",
+        "g/cm3": "gram/centimeter**3",
+        "Pa*s": "pascal*second",
+        "mPa*s": "millipascal*second",
+    }
+)
+
 _DIMENSION_REFERENCE_UNITS: Final = MappingProxyType(
     {
         "dimensionless": "dimensionless",
@@ -105,8 +128,9 @@ def resolve_unit(token: str) -> ResolvedUnit:
         )
 
     registry = unit_registry()
+    pint_expression = _PINT_UNIT_ALIASES.get(token, token)
     try:
-        unit = registry.Unit(token)
+        unit = registry.Unit(pint_expression)
     except (UndefinedUnitError, ValueError) as exc:
         raise ProcessKernelError("unit_unknown", f"Unknown unit token: {token}.") from exc
     physical_dimension = _physical_dimension_for(unit)
