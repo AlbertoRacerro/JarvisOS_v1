@@ -5,6 +5,7 @@ from types import MappingProxyType
 from typing import Mapping
 
 from .blocks import Fitting, Pipe, Pump, Reservoir
+from .canonical import canonical_sha256
 from .errors import ProcessKernelError
 from .flowsheet import (
     ExternalMaterialInput,
@@ -31,6 +32,25 @@ EXPECTED_UNITS = MappingProxyType(
         "minor_loss_coefficient": "1",
         "pump_efficiency": "1",
     }
+)
+OUTPUT_ORDER = (
+    "tube_hydraulic_cross_section_area",
+    "tube_liquid_volume",
+    "total_liquid_inventory",
+    "external_illuminated_area_proxy",
+    "internal_wetted_area_to_tube_volume",
+    "external_area_to_tube_volume_proxy",
+    "circulation_flow_rate",
+    "tube_nominal_transit_time",
+    "total_inventory_turnover_time",
+    "reynolds_number",
+    "darcy_friction_factor",
+    "major_pressure_loss",
+    "minor_pressure_loss",
+    "total_pressure_loss",
+    "equivalent_static_head",
+    "hydraulic_power",
+    "pump_electric_power",
 )
 
 
@@ -60,6 +80,132 @@ def build_047_flowsheet() -> ProcessFlowsheet:
         profile_constants={"standard_gravity": STANDARD_GRAVITY},
         result_assembler_identity=ASSEMBLER_ID,
     )
+
+
+def flowsheet_profile_payload() -> dict[str, object]:
+    flowsheet = build_047_flowsheet()
+    return {
+        "schema_version": flowsheet.schema_version,
+        "model_identity": flowsheet.model_identity,
+        "semantic_unit_registry_identity": flowsheet.semantic_unit_registry_identity,
+        "blocks": [
+            {
+                "block_id": block_id,
+                "block_type": type(block).__name__,
+                "material_inlets": [
+                    {
+                        "name": name,
+                        "required_stream_fields": list(port.required_stream_fields),
+                        "composition_required": port.composition_required,
+                    }
+                    for name, port in sorted(block.material_inlets.items())
+                ],
+                "scalar_inlets": [
+                    {
+                        "name": name,
+                        "unit": port.unit,
+                        "physical_dimension": port.physical_dimension,
+                        "semantic_basis": port.semantic_basis,
+                    }
+                    for name, port in sorted(block.scalar_inlets.items())
+                ],
+                "material_outlets": [
+                    {
+                        "name": name,
+                        "required_stream_fields": list(port.required_stream_fields),
+                        "composition_required": port.composition_required,
+                    }
+                    for name, port in sorted(block.material_outlets.items())
+                ],
+                "scalar_outlets": [
+                    {
+                        "name": name,
+                        "unit": port.unit,
+                        "physical_dimension": port.physical_dimension,
+                        "semantic_basis": port.semantic_basis,
+                    }
+                    for name, port in sorted(block.scalar_outlets.items())
+                ],
+                "caller_parameters": list(block.caller_parameters),
+                "profile_constants": list(block.profile_constants),
+            }
+            for block_id, block in sorted(flowsheet.blocks.items())
+        ],
+        "material_connections": [
+            {
+                "source_block_id": item.source_block_id,
+                "source_port": item.source_port,
+                "target_block_id": item.target_block_id,
+                "target_port": item.target_port,
+            }
+            for item in flowsheet.material_connections
+        ],
+        "scalar_connections": [
+            {
+                "source_block_id": item.source_block_id,
+                "source_port": item.source_port,
+                "target_block_id": item.target_block_id,
+                "target_port": item.target_port,
+            }
+            for item in flowsheet.scalar_connections
+        ],
+        "external_material_inputs": [
+            {
+                "target_block_id": item.target_block_id,
+                "target_port": item.target_port,
+                "stream_id": item.stream_id,
+            }
+            for item in flowsheet.external_material_inputs
+        ],
+        "profile_constants": dict(sorted(flowsheet.profile_constants.items())),
+        "result_assembler_identity": flowsheet.result_assembler_identity,
+    }
+
+
+def flowsheet_profile_sha256() -> str:
+    return canonical_sha256(flowsheet_profile_payload())
+
+
+def profile_constants_payload() -> dict[str, object]:
+    return {
+        "standard_gravity": {
+            "value": STANDARD_GRAVITY,
+            "unit": "m/s2",
+            "physical_dimension": "acceleration",
+            "authority": "merged 047 model constant",
+        }
+    }
+
+
+def profile_constants_sha256() -> str:
+    return canonical_sha256(profile_constants_payload())
+
+
+def assembler_contract_payload() -> dict[str, object]:
+    return {
+        "assembler_identity": ASSEMBLER_ID,
+        "output_order": list(OUTPUT_ORDER),
+        "dynamic_diagnostics": {
+            "friction_correlation": "pipe.diagnostics.friction_correlation",
+        },
+        "fixed_diagnostics": {
+            "model_id": MODEL_ID,
+            "model_fidelity": "M0_static_screening",
+            "friction_factor_convention": "Darcy",
+            "circulation_semantics": "closed_loop_recirculation",
+            "time_semantics": ["tube_nominal_transit_time", "total_inventory_turnover_time"],
+            "external_area_is_proxy": True,
+            "pump_curve_not_applied": True,
+            "npsh_not_evaluated": True,
+            "transient_pressure_not_evaluated": True,
+            "minor_loss_coefficient_provisional": True,
+            "workbook_runtime_dependency": False,
+        },
+    }
+
+
+def assembler_contract_sha256() -> str:
+    return canonical_sha256(assembler_contract_payload())
 
 
 def execute_047_process_kernel(values: Mapping[str, float]) -> dict[str, object]:
