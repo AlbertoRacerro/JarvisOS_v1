@@ -9,7 +9,7 @@ try:
     from app.core.topology import TopologyError, deterministic_topological_order
 except ModuleNotFoundError:  # bundled runner package
     from .topology import TopologyError, deterministic_topological_order
-from .contracts import BlockResult, MaterialPort, UnitOperation
+from .contracts import BlockResult, UnitOperation
 from .errors import ProcessKernelError
 from .streams import MaterialStream
 
