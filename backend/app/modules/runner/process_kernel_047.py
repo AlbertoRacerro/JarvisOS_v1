@@ -31,6 +31,8 @@ MODEL_LABEL = "bluerev-geometry-hydraulics-process-kernel-v1.0.0"
 MODEL_TITLE = "BlueRev geometry and hydraulics process kernel V1"
 PROFILE_ID = "bluerev_geometry_hydraulics_process_kernel_v1"
 CONTRACT_VERSION = "bluerev_geometry_hydraulics_process_kernel_contract_v2"
+AST_POLICY_ID = "calc_v0_process_kernel_v1"
+ALLOWED_IMPORT_ROOTS = ("json", "math", "process_kernel")
 BUNDLE_MANIFEST_FILENAME = "process_kernel_bundle_manifest.json"
 PROCESS_PACKAGE_FILENAMES = (
     "__init__.py",
@@ -107,6 +109,8 @@ def expected_bundle_manifest() -> dict[str, object]:
         "profile_id": PROFILE_ID,
         "model_label": MODEL_LABEL,
         "contract_version": CONTRACT_VERSION,
+        "ast_policy_id": AST_POLICY_ID,
+        "allowed_import_roots": list(ALLOWED_IMPORT_ROOTS),
         "contract_sha256": expected_contract_sha256(),
         "semantic_unit_registry_sha256": semantic_registry_sha256(),
         "component_catalog_sha256": component_catalog_sha256(),
