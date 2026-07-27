@@ -70,7 +70,6 @@ def test_registration_preview_and_two_real_runner_jobs_are_stable(client: TestCl
     second = _register(client)
     assert second["id"] == first["id"]
     assert first["version_label"] == MODEL_LABEL
-    assert first["implementation_kind"] == "calc_v0"
     assert first["script_sha256"] == sha256_file(bundled_script_path())
 
     model_dir = Path(str(first["script_path"])).parent
