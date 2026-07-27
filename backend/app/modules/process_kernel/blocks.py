@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 
 from .contracts import BlockResult, MaterialPort, ScalarPort
@@ -64,7 +64,7 @@ class Reservoir:
             raise ProcessKernelError("reservoir_parameters_invalid", "Reservoir volume must be nonnegative.")
         reservoir_volume = reservoir_liquid_volume / 1000.0
         return BlockResult(
-            material_outputs={"outlet": material_inputs["inlet"]},
+            material_outputs={"outlet": replace(material_inputs["inlet"])},
             scalar_outputs={"reservoir_liquid_volume_m3": reservoir_volume},
         )
 
@@ -228,7 +228,7 @@ class Fitting:
             raise ProcessKernelError("fitting_parameters_invalid", "Minor-loss coefficient must be nonnegative.")
         minor_pressure_loss = loss_coefficient * dynamic_pressure
         return BlockResult(
-            material_outputs={"outlet": material_inputs["inlet"]},
+            material_outputs={"outlet": replace(material_inputs["inlet"])},
             scalar_outputs={"minor_pressure_loss": minor_pressure_loss},
         )
 
@@ -318,7 +318,7 @@ class Pump:
         hydraulic_power = total_pressure_loss * volumetric_flow
         pump_electric_power = hydraulic_power / pump_efficiency
         return BlockResult(
-            material_outputs={"outlet": stream},
+            material_outputs={"outlet": replace(stream)},
             scalar_outputs={
                 "total_pressure_loss": total_pressure_loss,
                 "equivalent_static_head": equivalent_static_head,
