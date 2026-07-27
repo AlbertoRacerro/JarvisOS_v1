@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Mapping
 
 from .blocks import Fitting, Pipe, Pump, Reservoir
 from .canonical import canonical_sha256
