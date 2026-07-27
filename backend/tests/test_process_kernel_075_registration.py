@@ -56,6 +56,34 @@ def test_registration_metadata_identifies_server_owned_authority(client: TestCli
     assert "caller-supplied" not in " ".join(str(value).lower() for value in row)
 
 
+@pytest.mark.parametrize(
+    "authority_field",
+    [
+        "source",
+        "script_path",
+        "import_roots",
+        "environment",
+        "profile_constants",
+        "semantic_registry",
+        "trusted",
+    ],
+)
+def test_registration_rejects_authority_shaped_bodies(
+    client: TestClient,
+    authority_field: str,
+) -> None:
+    response = client.post(
+        "/workspaces/bluerev/bundled-models/bluerev-process-kernel-047-v1/register",
+        json={authority_field: "caller-controlled"},
+    )
+
+    assert response.status_code == 422, response.text
+    assert any(
+        error["type"] == "extra_forbidden" and error["loc"][-1] == authority_field
+        for error in response.json()["detail"]
+    )
+
+
 def test_missing_complete_bundle_is_not_silently_reinstalled(client: TestClient) -> None:
     implementation = _register(client)
     model_dir = Path(str(implementation["script_path"])).parent
