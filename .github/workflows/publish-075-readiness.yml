@@ -3,6 +3,8 @@ name: Publish spec 075 readiness decision
 on:
   push:
     branches: [spec/075-readiness]
+  pull_request:
+    branches: [master]
 
 permissions:
   contents: write
