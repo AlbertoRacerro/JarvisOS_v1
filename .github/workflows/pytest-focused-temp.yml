@@ -1,8 +1,7 @@
 name: Pytest Focused Temporary
 
 on:
-  push:
-    branches: [spec/075-process-kernel-1]
+  pull_request:
 
 # Temporary same-branch diagnostic; removed after reading the artifact.
 jobs:
