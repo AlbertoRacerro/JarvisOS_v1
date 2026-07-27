@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from math import isfinite
 from types import MappingProxyType
-from typing import Final, Mapping
+from typing import Final
 
 from .canonical import canonical_json_bytes, canonical_sha256
 from .errors import ProcessKernelError
