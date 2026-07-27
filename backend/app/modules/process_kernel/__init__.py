@@ -7,7 +7,7 @@ from .components import (
 from .contracts import BlockResult, MaterialPort, ScalarPort, UnitOperation
 from .errors import ProcessKernelError
 from .flowsheet import ProcessFlowsheet
-from .profile_047 import execute_047_process_kernel
+from .profile_047 import EXPECTED_UNITS, execute_047_process_kernel
 from .streams import MaterialStream
 from .units import (
     SEMANTIC_UNIT_REGISTRY_VERSION,
@@ -20,6 +20,7 @@ __all__ = [
     "BlockResult",
     "COMPONENT_CATALOG",
     "Component",
+    "EXPECTED_UNITS",
     "Fitting",
     "MaterialPort",
     "MaterialStream",
