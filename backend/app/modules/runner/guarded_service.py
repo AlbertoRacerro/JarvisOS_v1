@@ -14,6 +14,13 @@ from app.modules.runner.models import (
     RunnerJobCreateResponse,
     RunnerJobRunResponse,
 )
+from app.modules.runner.process_kernel_047 import (
+    is_exact_bundled_profile as is_exact_process_kernel_profile,
+)
+from app.modules.runner.process_kernel_registration import (
+    normalize_process_kernel_input,
+    register_bundled_process_kernel,
+)
 from app.modules.runner.public_models import PublicModelImplementationCreate
 from app.modules.runner.safety import RunnerSafetyError, sha256_file
 
@@ -54,6 +61,10 @@ def create_runner_job(
 ) -> RunnerJobCreateResponse:
     model_version = _load_model_version(workspace_id, payload.model_version_id)
     _require_exact_bundled(model_version)
+    stored_sha = str(model_version["script_sha256"])
+    if is_exact_process_kernel_profile(model_version, stored_sha):
+        normalized = normalize_process_kernel_input(workspace_id, payload.input_set)
+        payload = payload.model_copy(update={"input_set": normalized})
     try:
         return _base.create_runner_job(workspace_id, payload)
     except RunnerSafetyError as exc:
@@ -111,6 +122,9 @@ def _is_exact_bundled(model_version: dict[str, Any]) -> bool:
 
     if kind != _base.CALC_V0_IMPLEMENTATION_KIND:
         return False
+
+    if is_exact_process_kernel_profile(model_version, stored_sha):
+        return True
 
     if _base.is_exact_bundled_profile(model_version, stored_sha):
         return True
@@ -178,7 +192,7 @@ def _load_job_model_version(runner_job_id: str) -> dict[str, Any]:
     return dict(row)
 
 
-# Read-only and exact bundled registration paths remain owned by the existing service.
+# Read-only and exact bundled registration paths remain owned by reviewed services.
 list_model_implementations = _base.list_model_implementations
 preview_model_bindings = _base.preview_model_bindings
 register_bundled_bluerev_process0 = _base.register_bundled_bluerev_process0
