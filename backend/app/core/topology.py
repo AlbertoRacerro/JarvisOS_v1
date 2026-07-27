@@ -5,10 +5,17 @@ from collections.abc import Iterable
 
 
 class TopologyError(ValueError):
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        residual_nodes: tuple[str, ...] = (),
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
+        self.residual_nodes = residual_nodes
 
 
 def deterministic_topological_order(
@@ -43,7 +50,11 @@ def deterministic_topological_order(
         if source not in node_set or target not in node_set:
             raise TopologyError("topology_edge_unknown_node", "Edge references an unknown node.")
         if source == target:
-            raise TopologyError("topology_cycle", "Self-cycles are not allowed.")
+            raise TopologyError(
+                "topology_cycle",
+                "Self-cycles are not allowed.",
+                residual_nodes=(source,),
+            )
         if edge in seen_edges:
             continue
         seen_edges.add(edge)
@@ -62,5 +73,10 @@ def deterministic_topological_order(
                 heapq.heappush(ready, target)
 
     if len(ordered) != len(nodes):
-        raise TopologyError("topology_cycle", "Graph contains a directed cycle.")
+        residual_nodes = tuple(sorted(node for node, degree in indegree.items() if degree > 0))
+        raise TopologyError(
+            "topology_cycle",
+            "Graph contains a directed cycle.",
+            residual_nodes=residual_nodes,
+        )
     return tuple(ordered)
