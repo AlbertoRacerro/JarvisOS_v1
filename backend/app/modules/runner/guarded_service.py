@@ -19,7 +19,7 @@ from app.modules.runner.process_kernel_047 import (
 )
 from app.modules.runner.process_kernel_registration import (
     normalize_process_kernel_input,
-    register_bundled_process_kernel,
+    register_bundled_process_kernel as _register_bundled_process_kernel,
 )
 from app.modules.runner.public_models import PublicModelImplementationCreate
 from app.modules.runner.safety import RunnerSafetyError, sha256_file
@@ -199,6 +199,7 @@ register_bundled_bluerev_process0 = _base.register_bundled_bluerev_process0
 register_bundled_bluerev_process1 = _base.register_bundled_bluerev_process1
 register_bundled_bluerev_process2 = _base.register_bundled_bluerev_process2
 register_bundled_bluerev_topology_m1 = _base.register_bundled_bluerev_topology_m1
+register_bundled_process_kernel = _register_bundled_process_kernel
 get_simulation_run_detail = _base.get_simulation_run_detail
 list_run_artifacts = _base.list_run_artifacts
 list_run_logs = _base.list_run_logs
