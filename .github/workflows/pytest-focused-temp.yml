@@ -32,7 +32,6 @@ jobs:
             tests/test_flowsheet_shared_topology.py \
             tests/test_bluerev_geometry_hydraulics_v0.py \
             tests/test_bluerev_geometry_hydraulics_v0_laminar.py \
-            tests/test_runner_boundary.py \
             > "$RUNNER_TEMP/pytest-focused-output.txt" 2>&1
           status=$?
           echo "$status" > "$RUNNER_TEMP/pytest-focused-status.txt"
