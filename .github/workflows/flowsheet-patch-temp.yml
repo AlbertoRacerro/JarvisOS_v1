@@ -1,0 +1,121 @@
+name: Flowsheet Patch Temporary
+
+on:
+  push:
+    branches: [spec/075-process-kernel-1]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: spec/075-process-kernel-1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Apply exact extraction patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("backend/app/modules/flowsheet/service.py")
+          text = path.read_text(encoding="utf-8")
+          if "from app.core.topology import TopologyError, deterministic_topological_order" in text:
+              print("Shared topology import already present; no patch required.")
+              raise SystemExit(0)
+
+          old_import = "import hashlib\nimport heapq\nimport json\n"
+          new_import = "import hashlib\nimport json\n"
+          if text.count(old_import) != 1:
+              raise SystemExit("Expected heapq import block was not found exactly once.")
+          text = text.replace(old_import, new_import, 1)
+
+          database_import = "from app.core.database import open_sqlite_connection\n"
+          topology_import = (
+              "from app.core.database import open_sqlite_connection\n"
+              "from app.core.topology import TopologyError, deterministic_topological_order\n"
+          )
+          if text.count(database_import) != 1:
+              raise SystemExit("Expected database import was not found exactly once.")
+          text = text.replace(database_import, topology_import, 1)
+
+          old_function = '''def _topological_projection(
+              nodes: dict[str, FlowsheetNodeRead],
+              edges: list[FlowsheetEdgeRead],
+          ) -> tuple[bool, list[str] | None, list[list[str]]]:
+              adjacency = {node_ref: set() for node_ref in nodes}
+              indegree = {node_ref: 0 for node_ref in nodes}
+              for edge in edges:
+                  if edge.edge_class != "dependency":
+                      continue
+                  if edge.downstream_ref not in adjacency[edge.upstream_ref]:
+                      adjacency[edge.upstream_ref].add(edge.downstream_ref)
+                      indegree[edge.downstream_ref] += 1
+              queue = [node_ref for node_ref, degree in indegree.items() if degree == 0]
+              heapq.heapify(queue)
+              order: list[str] = []
+              while queue:
+                  node_ref = heapq.heappop(queue)
+                  order.append(node_ref)
+                  for downstream in sorted(adjacency[node_ref]):
+                      indegree[downstream] -= 1
+                      if indegree[downstream] == 0:
+                          heapq.heappush(queue, downstream)
+              if len(order) == len(nodes):
+                  return True, order, []
+              cyclic_nodes = {node_ref for node_ref, degree in indegree.items() if degree > 0}
+              cycles = _find_directed_cycles(adjacency, cyclic_nodes)
+              return False, None, cycles
+          '''
+          new_function = '''def _topological_projection(
+              nodes: dict[str, FlowsheetNodeRead],
+              edges: list[FlowsheetEdgeRead],
+          ) -> tuple[bool, list[str] | None, list[list[str]]]:
+              adjacency = {node_ref: set() for node_ref in nodes}
+              dependency_edges: list[tuple[str, str]] = []
+              for edge in edges:
+                  if edge.edge_class != "dependency":
+                      continue
+                  pair = (edge.upstream_ref, edge.downstream_ref)
+                  if edge.downstream_ref not in adjacency[edge.upstream_ref]:
+                      adjacency[edge.upstream_ref].add(edge.downstream_ref)
+                      dependency_edges.append(pair)
+              try:
+                  order = deterministic_topological_order(
+                      nodes,
+                      dependency_edges,
+                      max_nodes=MAX_GRAPH_NODES,
+                      max_edges=MAX_GRAPH_EDGES,
+                  )
+              except TopologyError as exc:
+                  if exc.code != "topology_cycle":
+                      raise FlowsheetError(
+                          "flowsheet_graph_invalid",
+                          "Flowsheet dependency graph is invalid.",
+                      ) from exc
+                  cyclic_nodes = set(exc.residual_nodes) or set(nodes)
+                  cycles = _find_directed_cycles(adjacency, cyclic_nodes)
+                  return False, None, cycles
+              return True, list(order), []
+          '''
+          if text.count(old_function) != 1:
+              raise SystemExit("Expected topological projection was not found exactly once.")
+          text = text.replace(old_function, new_function, 1)
+          path.write_text(text, encoding="utf-8")
+          PY
+      - name: Commit exact patch
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/app/modules/flowsheet/service.py
+          git commit -m "Share deterministic topology with FLOWSHEET-1"
+          git push origin HEAD:spec/075-process-kernel-1
