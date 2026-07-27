@@ -4,6 +4,7 @@ on:
   push:
     branches: [spec/075-process-kernel-1]
 
+# Temporary same-branch diagnostic; removed after reading the artifact.
 jobs:
   pytest-focused:
     runs-on: ubuntu-latest
