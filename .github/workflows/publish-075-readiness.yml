@@ -25,38 +25,72 @@ jobs:
           test "$(git rev-parse HEAD)" = "1f49a56580633f4399924402c0d08a08085827ab"
           python - <<'PY'
           from pathlib import Path
+          import re
 
           spec_path = Path("docs/specs/075-process-kernel-1.md")
           spec = spec_path.read_text(encoding="utf-8")
-          replacements = {
-              "**Implementation preconditions:** the bundled-only runner cleanup is merged; 074 remains independently owned by PR #183  ":
-                  "**Implementation preconditions:** the bundled-only runner cleanup and 074 implementation are merged  ",
-              "**Definition status:** reviewed draft; registry remains `planned`  ":
-                  "**Definition status:** reviewed and promoted; registry is `ready`  ",
-          }
-          for old, new in replacements.items():
-              if spec.count(old) != 1:
-                  raise SystemExit(f"expected exact spec text once: {old}")
-              spec = spec.replace(old, new)
+          spec, count = re.subn(
+              r"\*\*Implementation preconditions:\*\*[^\n]*\n",
+              "**Implementation preconditions:** the bundled-only runner cleanup and 074 implementation are merged  \n",
+              spec,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit("implementation precondition metadata not found")
+          spec, count = re.subn(
+              r"\*\*Definition status:\*\*[^\n]*\n",
+              "**Definition status:** reviewed and promoted; registry is `ready`  \n",
+              spec,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit("definition status metadata not found")
 
-          marker = """- implementation slices and ownership are explicit.\n\n### Implementation PR\n"""
-          insertion = """- implementation slices and ownership are explicit.\n\n### Readiness decision and implementation ownership\n\nThe 2026-07-27 readiness review confirmed that the definition is merged in PR #187, the bundled-only runner cleanup is merged in PR #186, 074 is merged in PR #183 and registry-reconciled in PR #188, all definition review threads are resolved, and no open PR overlaps the runner, input-contract, ordering, or process-kernel target files.\n\nOne branch, `impl-075`, and one implementation PR own delivery. The implementation PR is divided into three internal work packages:\n\n1. **WP1 — Process contracts and records.** Own the new `backend/app/modules/process_kernel/` package and focused tests for semantic units, components, immutable streams, ports, block/result contracts, and graph validation.\n2. **WP2 — Shared deterministic boundaries.** Make only additive, reviewed changes to `backend/app/core/schema.py` and `backend/app/modules/runner/input_contracts.py`; add one pure `backend/app/core/topology.py` utility; and make extraction-only changes in `backend/app/modules/flowsheet/service.py`. Schema v1 and existing FLOWSHEET-1 behavior remain exact.\n3. **WP3 — Exact 047 runner profile and proof.** Own the new server-known multi-file profile under `backend/app/modules/runner/examples/`, bounded profile registration/verification changes in runner services, the fixed 047 assembler, and side-by-side identity plus real-runner tests.\n\nThe existing `backend/app/modules/runner/examples/bluerev_geometry_hydraulics_v0.py`, its v1 contract, canonical fixtures, and historical digests are read-only reference authority and may not be changed. No parallel implementation PR may modify these shared files while 075 is active.\n\n### Implementation PR\n"""
-          if spec.count(marker) != 1:
-              raise SystemExit("expected promotion marker once")
-          spec_path.write_text(spec.replace(marker, insertion), encoding="utf-8")
+          marker = "- implementation slices and ownership are explicit.\n\n### Implementation PR\n"
+          insertion = """- implementation slices and ownership are explicit.
+
+### Readiness decision and implementation ownership
+
+The 2026-07-27 readiness review confirmed that the definition is merged in PR #187, the bundled-only runner cleanup is merged in PR #186, 074 is merged in PR #183 and registry-reconciled in PR #188, all definition review threads are resolved, and no open PR overlaps the runner, input-contract, ordering, or process-kernel target files.
+
+One branch, `impl-075`, and one implementation PR own delivery. The implementation PR is divided into three internal work packages:
+
+1. **WP1 — Process contracts and records.** Own the new `backend/app/modules/process_kernel/` package and focused tests for semantic units, components, immutable streams, ports, block/result contracts, and graph validation.
+2. **WP2 — Shared deterministic boundaries.** Make only additive, reviewed changes to `backend/app/core/schema.py` and `backend/app/modules/runner/input_contracts.py`; add one pure `backend/app/core/topology.py` utility; and make extraction-only changes in `backend/app/modules/flowsheet/service.py`. Schema v1 and existing FLOWSHEET-1 behavior remain exact.
+3. **WP3 — Exact 047 runner profile and proof.** Own the new server-known multi-file profile under `backend/app/modules/runner/examples/`, bounded profile registration/verification changes in runner services, the fixed 047 assembler, and side-by-side identity plus real-runner tests.
+
+The existing `backend/app/modules/runner/examples/bluerev_geometry_hydraulics_v0.py`, its v1 contract, canonical fixtures, and historical digests are read-only reference authority and may not be changed. No parallel implementation PR may modify these shared files while 075 is active.
+
+### Implementation PR
+"""
+          if marker not in spec:
+              raise SystemExit("promotion marker not found")
+          spec_path.write_text(spec.replace(marker, insertion, 1), encoding="utf-8")
 
           status_path = Path("docs/specs/STATUS.md")
           status = status_path.read_text(encoding="utf-8")
-          old_priority = """8. Review and promote planned `075` only from exact 047 reproduction; the bundled-only\n   runner cleanup and definition are merged, but implementation remains unauthorized until\n   a separate readiness decision.\n"""
-          new_priority = """8. Implement ready `075` only from exact 047 reproduction through one bounded implementation\n   PR; preserve the merged 047 files, v1 contract, canonical fixtures, and bundled-only runner\n   boundary throughout all work packages.\n"""
-          if status.count(old_priority) != 1:
-              raise SystemExit("expected exact 075 priority text once")
-          status = status.replace(old_priority, new_priority)
-          old_row = "| 075 | planned | — | PROCESS-KERNEL-1: streams, components, units, and unit operations | 043, 047, 048, 071 |"
-          new_row = "| 075 | ready | — | PROCESS-KERNEL-1: streams, components, units, and unit operations | 043, 047, 048, 071 |"
-          if status.count(old_row) != 1:
-              raise SystemExit("expected exact 075 registry row once")
-          status_path.write_text(status.replace(old_row, new_row), encoding="utf-8")
+          status, count = re.subn(
+              r"8\. Review and promote planned `075` only from exact 047 reproduction; the bundled-only\n"
+              r"\s+runner cleanup and definition are merged, but implementation remains unauthorized until\n"
+              r"\s+a separate readiness decision\.\n",
+              "8. Implement ready `075` only from exact 047 reproduction through one bounded implementation\n"
+              "   PR; preserve the merged 047 files, v1 contract, canonical fixtures, and bundled-only runner\n"
+              "   boundary throughout all work packages.\n",
+              status,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit("075 priority text not found")
+          status, count = re.subn(
+              r"^\| 075 \| planned \| — \| PROCESS-KERNEL-1:",
+              "| 075 | ready | — | PROCESS-KERNEL-1:",
+              status,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          if count != 1:
+              raise SystemExit("075 registry row not found")
+          status_path.write_text(status, encoding="utf-8")
           PY
           git diff --check
           actual="$(git diff --name-only | sort)"
