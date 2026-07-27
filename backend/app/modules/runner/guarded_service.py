@@ -19,6 +19,8 @@ from app.modules.runner.process_kernel_047 import (
 )
 from app.modules.runner.process_kernel_registration import (
     normalize_process_kernel_input,
+)
+from app.modules.runner.process_kernel_registration import (
     register_bundled_process_kernel as _register_bundled_process_kernel,
 )
 from app.modules.runner.public_models import PublicModelImplementationCreate
