@@ -222,8 +222,7 @@ def test_parking_failure_still_stops_reservation_heartbeat(
     assert stopped == [(stop_marker, thread_marker)]
 
 
-
-# Regression: recovery may win while the original owner is handling a build error.
+# Regression: a recovered terminal reservation must replay instead of returning 500.
 def test_recovered_candidate_replays_when_failure_finalization_loses_ownership(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
