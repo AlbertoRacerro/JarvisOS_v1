@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import Any
 
 from app.modules.process_kernel.components import component_catalog_sha256
+from app.modules.process_kernel.profile_047 import (
+    assembler_contract_sha256,
+    flowsheet_profile_sha256,
+    profile_constants_sha256,
+)
 from app.modules.process_kernel.units import semantic_registry_sha256
 from app.modules.runner.input_contracts import (
     ModelInputContractV2,
@@ -102,6 +107,9 @@ def expected_bundle_manifest() -> dict[str, object]:
         "contract_sha256": expected_contract_sha256(),
         "semantic_unit_registry_sha256": semantic_registry_sha256(),
         "component_catalog_sha256": component_catalog_sha256(),
+        "flowsheet_profile_sha256": flowsheet_profile_sha256(),
+        "profile_constants_sha256": profile_constants_sha256(),
+        "assembler_contract_sha256": assembler_contract_sha256(),
         "entrypoint_sha256": sha256_file(bundled_script_path()),
         "files": files,
     }
