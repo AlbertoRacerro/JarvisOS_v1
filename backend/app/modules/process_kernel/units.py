@@ -162,6 +162,7 @@ def _physical_dimension_for(unit: object) -> str:
     registry = unit_registry()
     dimensionality = registry.get_dimensionality(unit)
     for name, reference in _DIMENSION_REFERENCE_UNITS.items():
-        if dimensionality == registry.get_dimensionality(reference):
+        reference_dimensionality = registry.get_dimensionality(registry.Unit(reference))
+        if dimensionality == reference_dimensionality:
             return name
     raise ProcessKernelError("unit_dimension_unsupported", "Unit dimension is outside PROCESS-KERNEL-1.")
