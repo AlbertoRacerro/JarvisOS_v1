@@ -163,7 +163,9 @@ def test_cross_basis_lookalike_and_dimension_mismatch_fail_closed(
 def test_v2_domain_is_applied_after_unit_conversion() -> None:
     valid = _canonical_input()
     valid["pump_efficiency"] = {"value": 35.0, "unit": "percent"}
-    assert normalize_input_set(valid)["pump_efficiency"] == {"value": 0.35, "unit": "1"}
+    normalized = normalize_input_set(valid)["pump_efficiency"]
+    assert normalized["unit"] == "1"
+    assert normalized["value"] == pytest.approx(0.35, rel=0.0, abs=1e-15)
 
     invalid = _canonical_input()
     invalid["pump_efficiency"] = {"value": 101.0, "unit": "percent"}
