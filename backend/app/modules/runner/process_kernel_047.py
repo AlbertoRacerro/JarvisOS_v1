@@ -32,6 +32,7 @@ from app.modules.runner.safety import (
     sha256_file,
 )
 
+BUNDLE_SCHEMA_VERSION = 1
 MODEL_LABEL = "bluerev-geometry-hydraulics-process-kernel-v1.0.0"
 MODEL_TITLE = "BlueRev geometry and hydraulics process kernel V1"
 PROFILE_ID = "bluerev_geometry_hydraulics_process_kernel_v1"
@@ -111,7 +112,7 @@ def expected_bundle_manifest() -> dict[str, object]:
         for source, target_path in bundle_source_entries()
     ]
     return {
-        "schema_version": 1,
+        "schema_version": BUNDLE_SCHEMA_VERSION,
         "profile_id": PROFILE_ID,
         "model_label": MODEL_LABEL,
         "contract_version": CONTRACT_VERSION,
