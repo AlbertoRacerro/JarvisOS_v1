@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, ConfigDict
 
 from app.modules.runner.guarded_service import (
     create_model_implementation,
@@ -31,6 +32,10 @@ from app.modules.runner.public_models import PublicModelImplementationCreate
 from app.modules.runner.safety import RunnerSafetyError
 
 router = APIRouter(tags=["runner"])
+
+
+class _BundledModelRegistrationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
 
 def _runner_error(exc: RunnerSafetyError) -> HTTPException:
@@ -125,6 +130,7 @@ def register_bundled_bluerev_topology_m1_endpoint(
 )
 def register_bundled_process_kernel_endpoint(
     workspace_id: str,
+    payload: _BundledModelRegistrationRequest | None = None,
 ) -> ModelImplementationRead:
     try:
         return register_bundled_process_kernel(workspace_id)
