@@ -24,6 +24,18 @@ MODEL_TITLE = "BlueRev geometry and hydraulics process kernel V1"
 PROFILE_ID = "bluerev_geometry_hydraulics_process_kernel_v1"
 CONTRACT_VERSION = "bluerev_geometry_hydraulics_process_kernel_contract_v2"
 BUNDLE_MANIFEST_FILENAME = "process_kernel_bundle_manifest.json"
+PROCESS_PACKAGE_FILENAMES = (
+    "__init__.py",
+    "blocks.py",
+    "canonical.py",
+    "components.py",
+    "contracts.py",
+    "errors.py",
+    "flowsheet.py",
+    "profile_047.py",
+    "streams.py",
+    "units.py",
+)
 
 ParameterLoader = Callable[[str], dict[str, object] | None]
 
@@ -65,9 +77,10 @@ def expected_contract_sha256() -> str:
 
 
 def bundle_source_entries() -> tuple[tuple[Path, str], ...]:
+    source_root = process_package_source_root()
     package_entries = tuple(
-        (path, f"process_kernel/{path.name}")
-        for path in sorted(process_package_source_root().glob("*.py"), key=lambda item: item.name)
+        (source_root / filename, f"process_kernel/{filename}")
+        for filename in PROCESS_PACKAGE_FILENAMES
     )
     return package_entries + ((core_topology_source_path(), "process_kernel/topology.py"),)
 
@@ -135,11 +148,14 @@ def validate_registered_bundle(target_dir: Path) -> str:
     if not isinstance(manifest_files, list):
         raise RunnerSafetyError("runner_process_kernel_bundle_files_invalid", "Process-kernel manifest is invalid.")
     expected_targets = {str(item["target_path"]) for item in manifest_files}
-    actual_targets = {
-        path.relative_to(target_dir).as_posix()
-        for path in package_dir.rglob("*.py")
-        if path.is_file() and not path.is_symlink()
-    }
+    actual_targets: set[str] = set()
+    for path in package_dir.rglob("*"):
+        if path.is_symlink() or not path.is_file():
+            raise RunnerSafetyError(
+                "runner_process_kernel_bundle_files_invalid",
+                "Process-kernel package contains an unsupported entry.",
+            )
+        actual_targets.add(path.relative_to(target_dir).as_posix())
     if actual_targets != expected_targets:
         raise RunnerSafetyError(
             "runner_process_kernel_bundle_files_invalid",
