@@ -104,10 +104,18 @@ COMPONENT_CATALOG: Final = MappingProxyType(
 )
 
 
+def screening_mass_constants_payload() -> dict[str, object]:
+    return SCREENING_MASS_CONSTANTS_V0.canonical_payload()
+
+
+def screening_mass_constants_sha256() -> str:
+    return canonical_sha256(screening_mass_constants_payload())
+
+
 def component_catalog_payload() -> dict[str, object]:
     return {
         "components": [COMPONENT_CATALOG[key].canonical_payload() for key in sorted(COMPONENT_CATALOG)],
-        "screening_mass_constants_v0": SCREENING_MASS_CONSTANTS_V0.canonical_payload(),
+        "screening_mass_constants_v0": screening_mass_constants_payload(),
     }
 
 
