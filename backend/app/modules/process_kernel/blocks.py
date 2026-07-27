@@ -34,7 +34,9 @@ class Reservoir:
     )
     scalar_inlets: Mapping[str, ScalarPort] = field(default_factory=lambda: _ports({}))
     material_outlets: Mapping[str, MaterialPort] = field(
-        default_factory=lambda: _ports({"outlet": MaterialPort("outlet")})
+        default_factory=lambda: _ports(
+            {"outlet": MaterialPort("outlet", source_input_port="inlet")}
+        )
     )
     scalar_outlets: Mapping[str, ScalarPort] = field(
         default_factory=lambda: _ports(
@@ -79,7 +81,15 @@ class Pipe:
     )
     scalar_inlets: Mapping[str, ScalarPort] = field(default_factory=lambda: _ports({}))
     material_outlets: Mapping[str, MaterialPort] = field(
-        default_factory=lambda: _ports({"outlet": MaterialPort("outlet")})
+        default_factory=lambda: _ports(
+            {
+                "outlet": MaterialPort(
+                    "outlet",
+                    provided_stream_fields=("mass_flow_kg_s", "volumetric_flow_m3_s"),
+                    source_input_port="inlet",
+                )
+            }
+        )
     )
     scalar_outlets: Mapping[str, ScalarPort] = field(
         default_factory=lambda: _ports(
@@ -195,7 +205,9 @@ class Fitting:
         default_factory=lambda: _ports({"dynamic_pressure": ScalarPort("dynamic_pressure", "Pa", "pressure")})
     )
     material_outlets: Mapping[str, MaterialPort] = field(
-        default_factory=lambda: _ports({"outlet": MaterialPort("outlet")})
+        default_factory=lambda: _ports(
+            {"outlet": MaterialPort("outlet", source_input_port="inlet")}
+        )
     )
     scalar_outlets: Mapping[str, ScalarPort] = field(
         default_factory=lambda: _ports(
@@ -250,7 +262,9 @@ class Pump:
         )
     )
     material_outlets: Mapping[str, MaterialPort] = field(
-        default_factory=lambda: _ports({"outlet": MaterialPort("outlet")})
+        default_factory=lambda: _ports(
+            {"outlet": MaterialPort("outlet", source_input_port="inlet")}
+        )
     )
     scalar_outlets: Mapping[str, ScalarPort] = field(
         default_factory=lambda: _ports(
