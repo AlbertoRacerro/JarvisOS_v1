@@ -7,7 +7,7 @@ on:
 jobs:
   pytest-focused:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -22,18 +22,20 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
-      - name: Capture focused pytest output
+      - name: Capture runner and flowsheet regression output
         working-directory: backend
         shell: bash
         run: |
           set +e
-          python -m pytest -q -x \
-            tests/test_flowsheet_shared_topology.py \
-            tests/test_process_kernel_075.py \
-            tests/test_process_kernel_075_identity.py \
-            tests/test_process_kernel_075_profile_identity.py \
-            tests/test_process_kernel_075_runner.py \
-            > "$RUNNER_TEMP/pytest-focused-output.txt" 2>&1
+          mapfile -t files < <(
+            grep -rlE \
+              'app\.modules\.(runner|flowsheet)|app\.core\.topology|input_contracts|local_python' \
+              tests --include='test*.py' | sort
+          )
+          printf 'Selected %s files:\n' "${#files[@]}" > "$RUNNER_TEMP/pytest-focused-output.txt"
+          printf '%s\n' "${files[@]}" >> "$RUNNER_TEMP/pytest-focused-output.txt"
+          python -m pytest -q -x "${files[@]}" \
+            >> "$RUNNER_TEMP/pytest-focused-output.txt" 2>&1
           status=$?
           echo "$status" > "$RUNNER_TEMP/pytest-focused-status.txt"
           exit 0
