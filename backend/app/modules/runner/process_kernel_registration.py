@@ -98,10 +98,12 @@ def register_bundled_process_kernel(workspace_id: str) -> ModelImplementationRea
     )
     target_dir = Path(implementation.script_path).parent
     try:
+        target_entrypoint = Path(implementation.script_path)
+        target_entrypoint.write_bytes(script_path.read_bytes())
+        _mark_server_owned_registration(implementation.id, script_sha)
         install_registered_bundle(target_dir)
-        _mark_server_owned_registration(implementation.id)
         row = _load_model_version(workspace_id, implementation.id)
-        if not is_exact_bundled_profile(row, implementation.script_sha256):
+        if not is_exact_bundled_profile(row, script_sha):
             raise RunnerSafetyError(
                 "RUNNER_SCRIPT_POLICY_VIOLATION",
                 "Installed process-kernel registration failed exact profile verification.",
@@ -131,7 +133,7 @@ def normalize_process_kernel_input(
         return normalize_input_set(input_set, load_parameter=load_parameter)
 
 
-def _mark_server_owned_registration(model_version_id: str) -> None:
+def _mark_server_owned_registration(model_version_id: str, script_sha: str) -> None:
     with open_sqlite_connection() as connection:
         row = connection.execute(
             "SELECT implementation_artifact_id FROM model_versions WHERE id = ?",
@@ -140,8 +142,8 @@ def _mark_server_owned_registration(model_version_id: str) -> None:
         if row is None:
             raise RunnerSafetyError("runner_model_version_not_found", "Model implementation not found.")
         connection.execute(
-            "UPDATE artifacts SET notes = ? WHERE id = ?",
-            (_ARTIFACT_NOTES, row["implementation_artifact_id"]),
+            "UPDATE artifacts SET sha256 = ?, notes = ? WHERE id = ?",
+            (script_sha, _ARTIFACT_NOTES, row["implementation_artifact_id"]),
         )
         connection.execute(
             "UPDATE model_versions SET changelog = ?, notes = ? WHERE id = ?",
