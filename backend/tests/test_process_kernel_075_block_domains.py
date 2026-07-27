@@ -130,3 +130,29 @@ def test_pump_rejects_invalid_losses_efficiency_and_gravity(
             {"standard_gravity": gravity},
         ),
     )
+
+
+def test_pass_through_blocks_return_equal_but_distinct_stream_records() -> None:
+    original = _stream()
+    reservoir_out = Reservoir().solve(
+        {"inlet": original},
+        {},
+        {"reservoir_liquid_volume": 5.0},
+        {},
+    ).material_outputs["outlet"]
+    fitting_out = Fitting().solve(
+        {"inlet": original},
+        {"dynamic_pressure": 1.0},
+        {"minor_loss_coefficient": 1.0},
+        {},
+    ).material_outputs["outlet"]
+    pump_out = Pump().solve(
+        {"inlet": original},
+        {"major_pressure_loss": 1.0, "minor_pressure_loss": 1.0},
+        {"pump_efficiency": 0.5},
+        {"standard_gravity": 9.80665},
+    ).material_outputs["outlet"]
+
+    for output in (reservoir_out, fitting_out, pump_out):
+        assert output == original
+        assert output is not original
