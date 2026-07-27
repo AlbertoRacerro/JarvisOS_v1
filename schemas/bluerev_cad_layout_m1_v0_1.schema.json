@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bluerev_cad_layout_m1_v0_1",
+  "title": "BlueRev CAD layout M1 v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "layout_kind",
+    "plane",
+    "boundary_policy",
+    "split_manifold",
+    "merge_manifold",
+    "branch_route"
+  ],
+  "properties": {
+    "schema_version": {"const": "bluerev_cad_layout_m1_v0_1"},
+    "layout_kind": {"const": "planar_mirrored_parallel_headers"},
+    "plane": {"const": "xy"},
+    "boundary_policy": {"const": "open_common_supply_and_return"},
+    "split_manifold": {"$ref": "#/$defs/manifold"},
+    "merge_manifold": {"$ref": "#/$defs/manifold"},
+    "branch_route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["steps"],
+      "properties": {
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 129,
+          "items": {
+            "oneOf": [
+              {"$ref": "#/$defs/straight"},
+              {"$ref": "#/$defs/bend"}
+            ]
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "positiveNumber": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "manifold": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "branch_gap_mm",
+        "end_gap_mm",
+        "branch_stub_length_mm",
+        "cap_thickness_mm"
+      ],
+      "properties": {
+        "branch_gap_mm": {"$ref": "#/$defs/positiveNumber"},
+        "end_gap_mm": {"$ref": "#/$defs/positiveNumber"},
+        "branch_stub_length_mm": {"$ref": "#/$defs/positiveNumber"},
+        "cap_thickness_mm": {"$ref": "#/$defs/positiveNumber"}
+      }
+    },
+    "straight": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "length_mm", "illumination"],
+      "properties": {
+        "kind": {"const": "straight"},
+        "length_mm": {"$ref": "#/$defs/positiveNumber"},
+        "illumination": {"enum": ["illuminated", "dark"]}
+      }
+    },
+    "bend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "turn", "illumination"],
+      "properties": {
+        "kind": {"const": "bend"},
+        "turn": {"enum": ["left", "right"]},
+        "illumination": {"enum": ["illuminated", "dark"]}
+      }
+    }
+  }
+}

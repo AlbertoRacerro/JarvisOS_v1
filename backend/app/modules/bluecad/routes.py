@@ -18,6 +18,12 @@ from app.modules.bluecad.cad_link import (
     execute_cad_link_047,
     preview_cad_link_047,
 )
+from app.modules.bluecad.cad_link_topology import (
+    CadLink072ExecuteRequest,
+    CadLink072PreviewRequest,
+    preview_cad_link_072,
+)
+from app.modules.bluecad.cad_link_topology_execute import execute_cad_link_072
 from app.modules.bluecad.ledger import archive_candidate, get_candidate, list_candidates, mark_promoted
 from app.modules.bluecad.loop import create_bluecad_candidate
 from app.modules.bluecad.models import BluecadCandidateCreate, BluecadCandidateRead
@@ -103,6 +109,26 @@ def execute_cad_link_047_endpoint(
         raise _cad_link_error(exc) from exc
 
 
+@router.post("/cad-link/072/preview")
+def preview_cad_link_072_endpoint(
+    workspace_id: str, payload: CadLink072PreviewRequest
+) -> dict[str, object]:
+    try:
+        return preview_cad_link_072(workspace_id, payload)
+    except CadLinkError as exc:
+        raise _cad_link_error(exc) from exc
+
+
+@router.post("/cad-link/072/execute", response_model=CadLinkExecuteResponse)
+def execute_cad_link_072_endpoint(
+    workspace_id: str, payload: CadLink072ExecuteRequest
+) -> CadLinkExecuteResponse:
+    try:
+        return execute_cad_link_072(workspace_id, payload)
+    except CadLinkError as exc:
+        raise _cad_link_error(exc) from exc
+
+
 @router.get("/candidates", response_model=list[BluecadCandidateRead])
 def list_candidates_endpoint(workspace_id: str) -> list[BluecadCandidateRead]:
     try:
@@ -143,7 +169,13 @@ def promote_candidate_endpoint(workspace_id: str, candidate_id: str) -> BluecadC
 
 @router.post("/candidates/{candidate_id}/archive", response_model=BluecadCandidateRead)
 def archive_candidate_endpoint(workspace_id: str, candidate_id: str) -> BluecadCandidateRead:
-    candidate = archive_candidate(workspace_id, candidate_id)
+    try:
+        candidate = archive_candidate(workspace_id, candidate_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": str(exc)},
+        ) from exc
     if candidate is None:
         raise HTTPException(status_code=404, detail={"error": "BLUECAD candidate not found."})
     return candidate

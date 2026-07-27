@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import json
+import mimetypes
+import shutil
+from collections.abc import Callable
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
 from app.modules.ai.budget import evaluate_ai_status
@@ -13,12 +17,16 @@ from app.modules.ai.contracts import AIProviderAdapter
 from app.modules.ai.execution import ProviderBinding, resolve_binding, run_ai_task
 from app.modules.ai.settings import get_ai_settings
 from app.modules.bluecad.evidence import (
+    map_fem_static_evidence,
+    map_mesh_quality_evidence,
     record_fem_static_evidence,
     record_mesh_quality_evidence,
     record_validation_evidence,
 )
+from app.modules.bluecad.export import sha256_file
 from app.modules.bluecad.fem_adapter import append_tier3_checks, solve_static_analysis
 from app.modules.bluecad.ledger import (
+    _artifact_storage_path,
     candidate_work_dir,
     create_candidate_record,
     finish_attempt,
@@ -161,6 +169,7 @@ def _run_simulation_stage(
     build: dict[str, Any],
     *,
     producer_notes: str | None = None,
+    required_candidate_status: str | None = None,
 ) -> None:
     if analysis_spec_without_geometry is None:
         return
@@ -168,7 +177,13 @@ def _run_simulation_stage(
         out_dir = candidate_work_dir(workspace_id, candidate_id, attempt_no) / "simulation"
         out_dir.mkdir(parents=True, exist_ok=True)
         analysis_spec = _analysis_spec_with_geometry(analysis_spec_without_geometry, build)
-        source_run_id = _create_simulation_run(workspace_id, candidate_id, attempt_id, analysis_spec)
+        source_run_id = _create_simulation_run(
+            workspace_id,
+            candidate_id,
+            attempt_id,
+            analysis_spec,
+            required_candidate_status=required_candidate_status,
+        )
     except Exception:
         return
     source_ref = f"bluecad_candidate:{candidate_id}:attempt:{attempt_no}:sim:{source_run_id}"
@@ -177,22 +192,44 @@ def _run_simulation_stage(
     except Exception as exc:  # noqa: BLE001 - sim failures are advisory evidence only.
         mesh_result = _mesh_error_result(exc, analysis_spec)
     try:
-        mesh_report_artifact_id = _register_sim_report(
-            workspace_id,
-            out_dir / "mesh_result.json",
-            mesh_result,
-            source_ref,
-            producer_notes=producer_notes,
-        )
-        mesh_evidence_id = record_mesh_quality_evidence(
-            workspace_id,
-            mesh_result,
-            source_run_id=source_run_id,
-            report_artifact_id=mesh_report_artifact_id,
-        )
-        _link_sim_evidence_context(mesh_evidence_id, candidate_id, attempt_id)
+        if required_candidate_status is None:
+            mesh_report_artifact_id = _register_sim_report(
+                workspace_id,
+                out_dir / "mesh_result.json",
+                mesh_result,
+                source_ref,
+                producer_notes=producer_notes,
+            )
+            mesh_evidence_id = record_mesh_quality_evidence(
+                workspace_id,
+                mesh_result,
+                source_run_id=source_run_id,
+                report_artifact_id=mesh_report_artifact_id,
+            )
+            _link_sim_evidence_context(mesh_evidence_id, candidate_id, attempt_id)
+        else:
+            _persist_sim_evidence(
+                workspace_id,
+                candidate_id,
+                attempt_id,
+                source_run_id,
+                out_dir / "mesh_result.json",
+                mesh_result,
+                source_ref,
+                evidence_builder=lambda artifact_id: map_mesh_quality_evidence(
+                    workspace_id,
+                    mesh_result,
+                    source_run_id=source_run_id,
+                    report_artifact_id=artifact_id,
+                ),
+                producer_notes=producer_notes,
+                required_candidate_status=required_candidate_status,
+            )
     except Exception:
-        _best_effort_fail_simulation_run(source_run_id, "mesh_evidence_persistence_failed")
+        _best_effort_fail_simulation_run(
+            source_run_id,
+            "mesh_evidence_persistence_failed",
+        )
         return
     if mesh_result.get("verdict") != "pass" or "mesh_inp" not in mesh_result.get("artifacts", {}):
         _complete_simulation_run(source_run_id, mesh_result, None)
@@ -209,43 +246,61 @@ def _run_simulation_stage(
             fem_report = {"verdict": "error", "checks": [], "errors": [{"code": "TIER3_ERROR", "detail": {"message": str(exc), "type": type(exc).__name__}}]}
     fem_payload = {"result_summary": fem_summary, "report": fem_report}
     try:
-        fem_report_artifact_id = _register_sim_report(
-            workspace_id,
-            out_dir / "fem_result.json",
-            fem_payload,
-            source_ref,
-            producer_notes=producer_notes,
-        )
-        fem_evidence_id = record_fem_static_evidence(
-            workspace_id,
-            fem_summary,
-            fem_report,
-            source_run_id=source_run_id,
-            report_artifact_id=fem_report_artifact_id,
-        )
-        _link_sim_evidence_context(fem_evidence_id, candidate_id, attempt_id)
+        if required_candidate_status is None:
+            fem_report_artifact_id = _register_sim_report(
+                workspace_id,
+                out_dir / "fem_result.json",
+                fem_payload,
+                source_ref,
+                producer_notes=producer_notes,
+            )
+            fem_evidence_id = record_fem_static_evidence(
+                workspace_id,
+                fem_summary,
+                fem_report,
+                source_run_id=source_run_id,
+                report_artifact_id=fem_report_artifact_id,
+            )
+            _link_sim_evidence_context(fem_evidence_id, candidate_id, attempt_id)
+        else:
+            _persist_sim_evidence(
+                workspace_id,
+                candidate_id,
+                attempt_id,
+                source_run_id,
+                out_dir / "fem_result.json",
+                fem_payload,
+                source_ref,
+                evidence_builder=lambda artifact_id: map_fem_static_evidence(
+                    workspace_id,
+                    fem_summary,
+                    fem_report,
+                    source_run_id=source_run_id,
+                    report_artifact_id=artifact_id,
+                ),
+                producer_notes=producer_notes,
+                required_candidate_status=required_candidate_status,
+            )
     except Exception:
-        _best_effort_fail_simulation_run(source_run_id, "fem_evidence_persistence_failed")
+        _best_effort_fail_simulation_run(
+            source_run_id,
+            "fem_evidence_persistence_failed",
+        )
         return
     _complete_simulation_run(source_run_id, mesh_result, fem_summary, fem_report)
 
 
-def _link_sim_evidence_context(record_id: str, candidate_id: str, attempt_id: str) -> None:
+def _link_sim_evidence_context(
+    record_id: str,
+    candidate_id: str,
+    attempt_id: str,
+) -> None:
     with open_sqlite_connection() as connection:
         connection.execute(
             "UPDATE evidence_records SET candidate_id = ?, attempt_id = ? WHERE id = ?",
             (candidate_id, attempt_id, record_id),
         )
         connection.commit()
-
-
-def _analysis_spec_with_geometry(analysis_spec_without_geometry: dict[str, Any], build: dict[str, Any]) -> dict[str, Any]:
-    result = build["result"]
-    step_path = result.out_dir / "model.step"
-    manifest_path = result.manifest_path
-    if manifest_path is None:
-        raise RuntimeError("validated BLUECAD build missing manifest for simulation")
-    return {**analysis_spec_without_geometry, "geometry": {"step_path": str(step_path), "manifest_path": str(manifest_path)}}
 
 
 def _register_sim_report(
@@ -257,9 +312,17 @@ def _register_sim_report(
     producer_notes: str | None = None,
 ) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
     if producer_notes is None:
-        return register_artifact(workspace_id, path, role="bluecad_sim_report", source_ref=source_ref)
+        return register_artifact(
+            workspace_id,
+            path,
+            role="bluecad_sim_report",
+            source_ref=source_ref,
+        )
     return register_artifact(
         workspace_id,
         path,
@@ -269,31 +332,187 @@ def _register_sim_report(
     )
 
 
-def _create_simulation_run(workspace_id: str, candidate_id: str, attempt_id: str, analysis_spec: dict[str, Any]) -> str:
-    from uuid import uuid4
+def _analysis_spec_with_geometry(analysis_spec_without_geometry: dict[str, Any], build: dict[str, Any]) -> dict[str, Any]:
+    result = build["result"]
+    step_path = result.out_dir / "model.step"
+    manifest_path = result.manifest_path
+    if manifest_path is None:
+        raise RuntimeError("validated BLUECAD build missing manifest for simulation")
+    return {**analysis_spec_without_geometry, "geometry": {"step_path": str(step_path), "manifest_path": str(manifest_path)}}
 
+
+def _persist_sim_evidence(
+    workspace_id: str,
+    candidate_id: str,
+    attempt_id: str,
+    source_run_id: str,
+    path: Path,
+    payload: dict[str, Any],
+    source_ref: str,
+    *,
+    evidence_builder: Callable[[str], Any],
+    producer_notes: str | None = None,
+    required_candidate_status: str | None = None,
+) -> tuple[str, str]:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    artifact_id = str(uuid4())
+    stored_path = _artifact_storage_path(
+        workspace_id,
+        artifact_id,
+        path.name,
+    )
+    try:
+        stored_path.parent.mkdir(parents=True, exist_ok=False)
+        shutil.copy2(path, stored_path)
+        evidence = evidence_builder(artifact_id)
+        evidence_id = str(uuid4())
+        notes = producer_notes or "Generated by BLUECAD AI loop v0."
+        now = utc_now()
+        with open_sqlite_connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            run_row = connection.execute(
+                """
+                SELECT input_payload
+                FROM simulation_runs
+                WHERE id = ? AND workspace_id = ? AND status = 'running'
+                """,
+                (source_run_id, workspace_id),
+            ).fetchone()
+            if run_row is None:
+                connection.rollback()
+                raise RuntimeError(
+                    "BLUECAD analysis run no longer owns evidence persistence"
+                )
+            run_context = json.loads(str(run_row["input_payload"]))
+            if (
+                run_context.get("candidate_id") != candidate_id
+                or run_context.get("attempt_id") != attempt_id
+            ):
+                connection.rollback()
+                raise RuntimeError("BLUECAD analysis run context is inconsistent")
+            if required_candidate_status is not None:
+                owner = connection.execute(
+                    """
+                    SELECT 1
+                    FROM bluecad_candidates
+                    WHERE workspace_id = ? AND id = ? AND status = ?
+                    """,
+                    (workspace_id, candidate_id, required_candidate_status),
+                ).fetchone()
+                if owner is None:
+                    connection.rollback()
+                    raise RuntimeError(
+                        "BLUECAD candidate no longer owns evidence persistence"
+                    )
+            connection.execute(
+                """
+                INSERT INTO artifacts (
+                    id, workspace_id, filename, stored_path, artifact_type,
+                    mime_type, sha256, source_ref, status, created_at, notes
+                ) VALUES (?, ?, ?, ?, 'bluecad_sim_report', ?, ?, ?,
+                    'registered', ?, ?)
+                """,
+                (
+                    artifact_id,
+                    workspace_id,
+                    stored_path.name,
+                    str(stored_path),
+                    mimetypes.guess_type(stored_path.name)[0]
+                    or "application/octet-stream",
+                    sha256_file(stored_path),
+                    source_ref,
+                    now,
+                    notes,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO evidence_records (
+                    id, workspace_id, kind, verdict, metrics_json, source_run_id,
+                    candidate_id, attempt_id, report_artifact_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    evidence_id,
+                    evidence.workspace_id,
+                    evidence.kind,
+                    evidence.verdict,
+                    evidence.metrics_json,
+                    source_run_id,
+                    candidate_id,
+                    attempt_id,
+                    artifact_id,
+                    now,
+                ),
+            )
+            connection.commit()
+    except Exception:
+        shutil.rmtree(stored_path.parent, ignore_errors=True)
+        raise
+    return artifact_id, evidence_id
+
+
+def _create_simulation_run(
+    workspace_id: str,
+    candidate_id: str,
+    attempt_id: str,
+    analysis_spec: dict[str, Any],
+    *,
+    required_candidate_status: str | None = None,
+) -> str:
     run_id = str(uuid4())
     now = utc_now()
+    values = (
+        run_id,
+        workspace_id,
+        f"bluecad_attempt_{attempt_id}",
+        json.dumps(
+            {"candidate_id": candidate_id, "attempt_id": attempt_id},
+            sort_keys=True,
+        ),
+        json.dumps(analysis_spec, sort_keys=True),
+        now,
+        now,
+        "BLUECAD advisory synchronous mesh/FEM stage.",
+    )
     with open_sqlite_connection() as connection:
-        connection.execute(
-            """
-            INSERT INTO simulation_runs (
-                id, workspace_id, model_version_id, run_label, status,
-                input_payload, parameter_payload, output_payload, started_at,
-                completed_at, created_at, notes
-            ) VALUES (?, ?, NULL, ?, 'running', ?, ?, NULL, ?, NULL, ?, ?)
-            """,
-            (
-                run_id,
-                workspace_id,
-                f"bluecad_attempt_{attempt_id}",
-                json.dumps({"candidate_id": candidate_id, "attempt_id": attempt_id}, sort_keys=True),
-                json.dumps(analysis_spec, sort_keys=True),
-                now,
-                now,
-                "BLUECAD advisory synchronous mesh/FEM stage.",
-            ),
-        )
+        if required_candidate_status is None:
+            cursor = connection.execute(
+                """
+                INSERT INTO simulation_runs (
+                    id, workspace_id, model_version_id, run_label, status,
+                    input_payload, parameter_payload, output_payload, started_at,
+                    completed_at, created_at, notes
+                ) VALUES (?, ?, NULL, ?, 'running', ?, ?, NULL, ?, NULL, ?, ?)
+                """,
+                values,
+            )
+        else:
+            cursor = connection.execute(
+                """
+                INSERT INTO simulation_runs (
+                    id, workspace_id, model_version_id, run_label, status,
+                    input_payload, parameter_payload, output_payload, started_at,
+                    completed_at, created_at, notes
+                )
+                SELECT ?, ?, NULL, ?, 'running', ?, ?, NULL, ?, NULL, ?, ?
+                FROM bluecad_candidates
+                WHERE workspace_id = ? AND id = ? AND status = ?
+                """,
+                (
+                    *values,
+                    workspace_id,
+                    candidate_id,
+                    required_candidate_status,
+                ),
+            )
+        if cursor.rowcount != 1:
+            connection.rollback()
+            raise RuntimeError("BLUECAD candidate no longer owns the analysis stage")
         connection.commit()
     return run_id
 
@@ -307,7 +526,7 @@ def _complete_simulation_run(source_run_id: str, mesh_result: dict[str, Any], fe
                 """
                 UPDATE simulation_runs
                 SET status = 'completed', output_payload = ?, completed_at = ?
-                WHERE id = ?
+                WHERE id = ? AND status = 'running'
                 """,
                 (canonical_json(output_payload), completed_at, source_run_id),
             )
@@ -325,7 +544,7 @@ def _best_effort_fail_simulation_run(source_run_id: str, error_code: str) -> Non
                 """
                 UPDATE simulation_runs
                 SET status = 'failed', output_payload = ?, completed_at = ?
-                WHERE id = ?
+                WHERE id = ? AND status = 'running'
                 """,
                 (canonical_json(output_payload), completed_at, source_run_id),
             )
