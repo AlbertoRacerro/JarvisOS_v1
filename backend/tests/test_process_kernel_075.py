@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import shutil
 from pathlib import Path
 
 import pytest
@@ -11,7 +12,9 @@ from app.modules.process_kernel.streams import MaterialStream
 from app.modules.runner.process_kernel_047 import (
     BUNDLE_MANIFEST_FILENAME,
     PROCESS_PACKAGE_FILENAMES,
+    REGISTERED_ENTRYPOINT_FILENAME,
     bundle_source_entries,
+    bundled_script_path,
     install_registered_bundle,
     validate_registered_bundle,
 )
@@ -30,6 +33,7 @@ def _pipe_parameters(*, length: float, inner_mm: float, outer_mm: float, velocit
 def _installed_bundle(tmp_path: Path, name: str) -> Path:
     target_dir = tmp_path / name
     target_dir.mkdir()
+    shutil.copy2(bundled_script_path(), target_dir / REGISTERED_ENTRYPOINT_FILENAME)
     install_registered_bundle(target_dir)
     assert len(validate_registered_bundle(target_dir)) == 64
     return target_dir
@@ -140,4 +144,24 @@ def test_registered_bundle_rejects_stale_manifest(tmp_path: Path) -> None:
     target_dir = _installed_bundle(tmp_path, "stale-manifest")
     manifest = target_dir / BUNDLE_MANIFEST_FILENAME
     manifest.write_bytes(manifest.read_bytes() + b"\n")
+    _assert_bundle_error(target_dir, "runner_process_kernel_bundle_hash_mismatch")
+
+
+@pytest.mark.parametrize("filename", ["json.py", "sitecustomize.py", "unexpected.txt"])
+def test_registered_bundle_rejects_top_level_sibling_file(tmp_path: Path, filename: str) -> None:
+    target_dir = _installed_bundle(tmp_path, f"top-level-{filename.replace('.', '-')}")
+    (target_dir / filename).write_text("raise RuntimeError('must never import')", encoding="utf-8")
+    _assert_bundle_error(target_dir, "runner_process_kernel_bundle_files_invalid")
+
+
+def test_registered_bundle_rejects_top_level_directory(tmp_path: Path) -> None:
+    target_dir = _installed_bundle(tmp_path, "top-level-directory")
+    (target_dir / "unexpected").mkdir()
+    _assert_bundle_error(target_dir, "runner_process_kernel_bundle_files_invalid")
+
+
+def test_registered_bundle_rejects_modified_registered_entrypoint(tmp_path: Path) -> None:
+    target_dir = _installed_bundle(tmp_path, "modified-entrypoint")
+    entrypoint = target_dir / REGISTERED_ENTRYPOINT_FILENAME
+    entrypoint.write_bytes(entrypoint.read_bytes() + b"\n# modified\n")
     _assert_bundle_error(target_dir, "runner_process_kernel_bundle_hash_mismatch")
