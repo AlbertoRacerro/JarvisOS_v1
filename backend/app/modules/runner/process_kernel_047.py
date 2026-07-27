@@ -25,14 +25,19 @@ from app.modules.runner.input_contracts import (
     parse_stored_input_contract,
 )
 from app.modules.runner.models import BindingPreviewResponse
-from app.modules.runner.safety import RunnerSafetyError, canonical_json, sha256_file
+from app.modules.runner.safety import (
+    ALLOWED_CALC_V0_PROCESS_KERNEL_IMPORT_ROOTS,
+    RunnerSafetyError,
+    canonical_json,
+    sha256_file,
+)
 
 MODEL_LABEL = "bluerev-geometry-hydraulics-process-kernel-v1.0.0"
 MODEL_TITLE = "BlueRev geometry and hydraulics process kernel V1"
 PROFILE_ID = "bluerev_geometry_hydraulics_process_kernel_v1"
 CONTRACT_VERSION = "bluerev_geometry_hydraulics_process_kernel_contract_v2"
 AST_POLICY_ID = "calc_v0_process_kernel_v1"
-ALLOWED_IMPORT_ROOTS = ("json", "math", "process_kernel")
+ALLOWED_IMPORT_ROOTS = tuple(sorted(ALLOWED_CALC_V0_PROCESS_KERNEL_IMPORT_ROOTS))
 BUNDLE_MANIFEST_FILENAME = "process_kernel_bundle_manifest.json"
 PROCESS_PACKAGE_FILENAMES = (
     "__init__.py",
