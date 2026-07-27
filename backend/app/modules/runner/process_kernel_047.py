@@ -38,6 +38,7 @@ PROFILE_ID = "bluerev_geometry_hydraulics_process_kernel_v1"
 CONTRACT_VERSION = "bluerev_geometry_hydraulics_process_kernel_contract_v2"
 AST_POLICY_ID = "calc_v0_process_kernel_v1"
 ALLOWED_IMPORT_ROOTS = tuple(sorted(ALLOWED_CALC_V0_PROCESS_KERNEL_IMPORT_ROOTS))
+REGISTERED_ENTRYPOINT_FILENAME = "calc_v0.py"
 BUNDLE_MANIFEST_FILENAME = "process_kernel_bundle_manifest.json"
 PROCESS_PACKAGE_FILENAMES = (
     "__init__.py",
@@ -116,6 +117,7 @@ def expected_bundle_manifest() -> dict[str, object]:
         "contract_version": CONTRACT_VERSION,
         "ast_policy_id": AST_POLICY_ID,
         "allowed_import_roots": list(ALLOWED_IMPORT_ROOTS),
+        "registered_entrypoint": REGISTERED_ENTRYPOINT_FILENAME,
         "contract_sha256": expected_contract_sha256(),
         "semantic_unit_registry_sha256": semantic_registry_sha256(),
         "component_catalog_sha256": component_catalog_sha256(),
@@ -133,6 +135,17 @@ def expected_bundle_manifest_bytes() -> bytes:
 
 
 def install_registered_bundle(target_dir: Path) -> None:
+    entrypoint = target_dir / REGISTERED_ENTRYPOINT_FILENAME
+    if entrypoint.is_symlink() or not entrypoint.is_file():
+        raise RunnerSafetyError(
+            "runner_process_kernel_bundle_missing",
+            "Registered process-kernel entrypoint is missing.",
+        )
+    if sha256_file(entrypoint) != sha256_file(bundled_script_path()):
+        raise RunnerSafetyError(
+            "runner_process_kernel_bundle_hash_mismatch",
+            "Registered process-kernel entrypoint hash mismatch.",
+        )
     package_dir = target_dir / "process_kernel"
     if package_dir.exists() or package_dir.is_symlink():
         raise RunnerSafetyError("runner_process_kernel_bundle_exists", "Process-kernel bundle already exists.")
@@ -151,8 +164,30 @@ def install_registered_bundle(target_dir: Path) -> None:
 
 
 def validate_registered_bundle(target_dir: Path) -> str:
+    if target_dir.is_symlink() or not target_dir.is_dir():
+        raise RunnerSafetyError("runner_process_kernel_bundle_missing", "Process-kernel model directory is missing.")
+    expected_top_level = {
+        REGISTERED_ENTRYPOINT_FILENAME,
+        BUNDLE_MANIFEST_FILENAME,
+        "process_kernel",
+    }
+    actual_top_level = {path.name for path in target_dir.iterdir()}
+    if actual_top_level != expected_top_level:
+        raise RunnerSafetyError(
+            "runner_process_kernel_bundle_files_invalid",
+            "Process-kernel model directory file set is invalid.",
+        )
+
+    entrypoint = target_dir / REGISTERED_ENTRYPOINT_FILENAME
     manifest_path = target_dir / BUNDLE_MANIFEST_FILENAME
     package_dir = target_dir / "process_kernel"
+    if entrypoint.is_symlink() or not entrypoint.is_file():
+        raise RunnerSafetyError("runner_process_kernel_bundle_missing", "Process-kernel entrypoint is missing.")
+    if sha256_file(entrypoint) != sha256_file(bundled_script_path()):
+        raise RunnerSafetyError(
+            "runner_process_kernel_bundle_hash_mismatch",
+            "Process-kernel entrypoint hash mismatch.",
+        )
     if package_dir.is_symlink() or not package_dir.is_dir():
         raise RunnerSafetyError("runner_process_kernel_bundle_missing", "Process-kernel package is missing.")
     if manifest_path.is_symlink() or not manifest_path.is_file():
@@ -197,7 +232,8 @@ def is_exact_bundled_profile(model_version: Any, script_sha256: str) -> bool:
         script_path = Path(str(model_version["script_path"]))
         expected_manifest_sha = hashlib.sha256(expected_bundle_manifest_bytes()).hexdigest()
         return (
-            model_version["implementation_kind"] == "calc_v0"
+            script_path.name == REGISTERED_ENTRYPOINT_FILENAME
+            and model_version["implementation_kind"] == "calc_v0"
             and model_version["version_label"] == MODEL_LABEL
             and script_sha256 == sha256_file(bundled_script_path())
             and model_version["script_sha256"] == script_sha256
