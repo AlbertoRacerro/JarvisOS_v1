@@ -9,6 +9,7 @@ from app.modules.process_kernel.blocks import Pipe
 from app.modules.process_kernel.components import SCREENING_MASS_CONSTANTS_V0
 from app.modules.process_kernel.streams import MaterialStream
 from app.modules.runner.process_kernel_047 import (
+    BUNDLE_MANIFEST_FILENAME,
     PROCESS_PACKAGE_FILENAMES,
     bundle_source_entries,
     install_registered_bundle,
@@ -24,6 +25,20 @@ def _pipe_parameters(*, length: float, inner_mm: float, outer_mm: float, velocit
         "tube_outer_diameter": outer_mm,
         "target_liquid_velocity": velocity,
     }
+
+
+def _installed_bundle(tmp_path: Path, name: str) -> Path:
+    target_dir = tmp_path / name
+    target_dir.mkdir()
+    install_registered_bundle(target_dir)
+    assert len(validate_registered_bundle(target_dir)) == 64
+    return target_dir
+
+
+def _assert_bundle_error(target_dir: Path, code: str) -> None:
+    with pytest.raises(RunnerSafetyError) as exc_info:
+        validate_registered_bundle(target_dir)
+    assert exc_info.value.code == code
 
 
 def test_two_pipe_instances_are_independent_and_parameterized() -> None:
@@ -54,6 +69,7 @@ def test_two_pipe_instances_are_independent_and_parameterized() -> None:
     assert result_a.scalar_outputs["circulation_flow"] != result_b.scalar_outputs["circulation_flow"]
     assert result_a.material_outputs["outlet"] is not stream
     assert result_b.material_outputs["outlet"] is not stream
+    assert result_a.material_outputs["outlet"] is not result_b.material_outputs["outlet"]
     assert stream.volumetric_flow_m3_s is None
     assert result_a.material_outputs["outlet"].volumetric_flow_m3_s == pytest.approx(
         math.pi * 0.05**2 / 4.0
@@ -77,9 +93,8 @@ def test_048_screening_ratio_is_derived_from_explicit_compatibility_constants() 
 
 def test_process_kernel_bundle_uses_a_closed_explicit_file_set() -> None:
     expected_targets = {
-        *(f"process_kernel/{filename}" for filename in PROCESS_PACKAGE_FILENAMES),
-        "process_kernel/topology.py",
-    }
+        f"process_kernel/{filename}" for filename in PROCESS_PACKAGE_FILENAMES
+    } | {"process_kernel/topology.py"}
     entries = bundle_source_entries()
 
     assert {target for _, target in entries} == expected_targets
@@ -87,38 +102,42 @@ def test_process_kernel_bundle_uses_a_closed_explicit_file_set() -> None:
     assert all(source.is_file() for source, _ in entries)
 
 
-def test_registered_bundle_rejects_missing_modified_and_extra_entries(tmp_path: Path) -> None:
-    target_dir = tmp_path / "registered"
-    target_dir.mkdir()
-    install_registered_bundle(target_dir)
-    digest = validate_registered_bundle(target_dir)
-    assert len(digest) == 64
+def test_registered_bundle_rejects_modified_file(tmp_path: Path) -> None:
+    target_dir = _installed_bundle(tmp_path, "modified")
+    target = target_dir / "process_kernel" / "blocks.py"
+    target.write_bytes(target.read_bytes() + b"\n# modified\n")
+    _assert_bundle_error(target_dir, "runner_process_kernel_bundle_hash_mismatch")
 
-    modified = target_dir / "process_kernel" / "blocks.py"
-    original = modified.read_bytes()
-    modified.write_bytes(original + b"\n# modified\n")
-    with pytest.raises(RunnerSafetyError) as exc_info:
-        validate_registered_bundle(target_dir)
-    assert exc_info.value.code == "runner_process_kernel_bundle_hash_mismatch"
-    modified.write_bytes(original)
 
-    missing = target_dir / "process_kernel" / "errors.py"
-    missing_bytes = missing.read_bytes()
-    missing.unlink()
-    with pytest.raises(RunnerSafetyError) as exc_info:
-        validate_registered_bundle(target_dir)
-    assert exc_info.value.code == "runner_process_kernel_bundle_files_invalid"
-    missing.write_bytes(missing_bytes)
+def test_registered_bundle_rejects_missing_file(tmp_path: Path) -> None:
+    target_dir = _installed_bundle(tmp_path, "missing")
+    (target_dir / "process_kernel" / "errors.py").unlink()
+    _assert_bundle_error(target_dir, "runner_process_kernel_bundle_files_invalid")
 
-    extra_file = target_dir / "process_kernel" / "unexpected.txt"
-    extra_file.write_text("unexpected", encoding="utf-8")
-    with pytest.raises(RunnerSafetyError) as exc_info:
-        validate_registered_bundle(target_dir)
-    assert exc_info.value.code == "runner_process_kernel_bundle_files_invalid"
-    extra_file.unlink()
 
-    extra_directory = target_dir / "process_kernel" / "unexpected"
-    extra_directory.mkdir()
-    with pytest.raises(RunnerSafetyError) as exc_info:
-        validate_registered_bundle(target_dir)
-    assert exc_info.value.code == "runner_process_kernel_bundle_files_invalid"
+@pytest.mark.parametrize("filename", ["unexpected.py", "unexpected.txt"])
+def test_registered_bundle_rejects_extra_file(tmp_path: Path, filename: str) -> None:
+    target_dir = _installed_bundle(tmp_path, filename.replace(".", "-"))
+    (target_dir / "process_kernel" / filename).write_text("unexpected", encoding="utf-8")
+    _assert_bundle_error(target_dir, "runner_process_kernel_bundle_files_invalid")
+
+
+def test_registered_bundle_rejects_extra_directory(tmp_path: Path) -> None:
+    target_dir = _installed_bundle(tmp_path, "extra-directory")
+    (target_dir / "process_kernel" / "unexpected").mkdir()
+    _assert_bundle_error(target_dir, "runner_process_kernel_bundle_files_invalid")
+
+
+def test_registered_bundle_rejects_symlink_entry(tmp_path: Path) -> None:
+    target_dir = _installed_bundle(tmp_path, "symlink")
+    target = target_dir / "outside.py"
+    target.write_text("outside", encoding="utf-8")
+    (target_dir / "process_kernel" / "unexpected.py").symlink_to(target)
+    _assert_bundle_error(target_dir, "runner_process_kernel_bundle_files_invalid")
+
+
+def test_registered_bundle_rejects_stale_manifest(tmp_path: Path) -> None:
+    target_dir = _installed_bundle(tmp_path, "stale-manifest")
+    manifest = target_dir / BUNDLE_MANIFEST_FILENAME
+    manifest.write_bytes(manifest.read_bytes() + b"\n")
+    _assert_bundle_error(target_dir, "runner_process_kernel_bundle_hash_mismatch")
