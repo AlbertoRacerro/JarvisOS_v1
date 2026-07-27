@@ -97,6 +97,8 @@ def flowsheet_profile_payload() -> dict[str, object]:
                         "name": name,
                         "required_stream_fields": list(port.required_stream_fields),
                         "composition_required": port.composition_required,
+                        "provided_stream_fields": list(port.provided_stream_fields),
+                        "source_input_port": port.source_input_port,
                     }
                     for name, port in sorted(block.material_inlets.items())
                 ],
@@ -114,6 +116,8 @@ def flowsheet_profile_payload() -> dict[str, object]:
                         "name": name,
                         "required_stream_fields": list(port.required_stream_fields),
                         "composition_required": port.composition_required,
+                        "provided_stream_fields": list(port.provided_stream_fields),
+                        "source_input_port": port.source_input_port,
                     }
                     for name, port in sorted(block.material_outlets.items())
                 ],
