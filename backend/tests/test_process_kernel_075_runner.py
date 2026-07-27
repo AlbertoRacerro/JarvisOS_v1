@@ -50,14 +50,18 @@ def _register(client: TestClient) -> dict[str, object]:
     return response.json()
 
 
-def _create_and_run(client: TestClient, implementation_id: str) -> dict[str, object]:
+def _create_job(client: TestClient, implementation_id: object) -> str:
     created = client.post(
         "/workspaces/bluerev/runner-jobs",
         json={"model_version_id": implementation_id, "input_set": _valid_input()},
     )
     assert created.status_code == 201, created.text
-    runner_job = created.json()["runner_job"]
-    executed = client.post(f"/runner-jobs/{runner_job['id']}/run")
+    return str(created.json()["runner_job"]["id"])
+
+
+def _create_and_run(client: TestClient, implementation_id: str) -> dict[str, object]:
+    runner_job_id = _create_job(client, implementation_id)
+    executed = client.post(f"/runner-jobs/{runner_job_id}/run")
     assert executed.status_code == 200, executed.text
     body = executed.json()
     assert body["runner_job"]["status"] == "succeeded"
@@ -111,16 +115,30 @@ def test_registration_preview_and_two_real_runner_jobs_are_stable(client: TestCl
     ]
 
 
-def test_bundle_tamper_is_rejected_before_subprocess(client: TestClient, monkeypatch) -> None:
+@pytest.mark.parametrize(
+    "identity_dimension",
+    [
+        "entrypoint",
+        "package_file",
+        "contract",
+        "semantic_registry",
+        "component_catalog",
+        "screening_constants",
+        "flowsheet",
+        "profile_constants",
+        "assembler",
+        "import_policy",
+    ],
+)
+def test_complete_profile_tamper_is_rejected_before_subprocess(
+    client: TestClient,
+    monkeypatch,
+    identity_dimension: str,
+) -> None:
     implementation = _register(client)
-    created = client.post(
-        "/workspaces/bluerev/runner-jobs",
-        json={"model_version_id": implementation["id"], "input_set": _valid_input()},
-    )
-    assert created.status_code == 201, created.text
-    runner_job_id = created.json()["runner_job"]["id"]
+    runner_job_id = _create_job(client, implementation["id"])
 
-    from app.modules.runner import service
+    from app.modules.runner import process_kernel_047, service
 
     calls = 0
 
@@ -130,8 +148,35 @@ def test_bundle_tamper_is_rejected_before_subprocess(client: TestClient, monkeyp
         raise AssertionError(f"subprocess must not be invoked: {kwargs}")
 
     monkeypatch.setattr(service, "execute_python_script", forbidden_execute)
-    package_file = Path(str(implementation["script_path"])).parent / "process_kernel" / "blocks.py"
-    package_file.write_bytes(package_file.read_bytes() + b"\n# tampered\n")
+    model_dir = Path(str(implementation["script_path"])).parent
+    if identity_dimension == "entrypoint":
+        script_path = Path(str(implementation["script_path"]))
+        script_path.write_bytes(script_path.read_bytes() + b"\n# tampered\n")
+    elif identity_dimension == "package_file":
+        package_file = model_dir / "process_kernel" / "blocks.py"
+        package_file.write_bytes(package_file.read_bytes() + b"\n# tampered\n")
+    elif identity_dimension == "contract":
+        monkeypatch.setattr(process_kernel_047, "expected_contract_sha256", lambda: "0" * 64)
+    elif identity_dimension == "semantic_registry":
+        monkeypatch.setattr(process_kernel_047, "semantic_registry_sha256", lambda: "1" * 64)
+    elif identity_dimension == "component_catalog":
+        monkeypatch.setattr(process_kernel_047, "component_catalog_sha256", lambda: "2" * 64)
+    elif identity_dimension == "screening_constants":
+        monkeypatch.setattr(process_kernel_047, "screening_mass_constants_sha256", lambda: "3" * 64)
+    elif identity_dimension == "flowsheet":
+        monkeypatch.setattr(process_kernel_047, "flowsheet_profile_sha256", lambda: "4" * 64)
+    elif identity_dimension == "profile_constants":
+        monkeypatch.setattr(process_kernel_047, "profile_constants_sha256", lambda: "5" * 64)
+    elif identity_dimension == "assembler":
+        monkeypatch.setattr(process_kernel_047, "assembler_contract_sha256", lambda: "6" * 64)
+    elif identity_dimension == "import_policy":
+        monkeypatch.setattr(
+            process_kernel_047,
+            "ALLOWED_IMPORT_ROOTS",
+            ("json", "math", "process_kernel", "statistics"),
+        )
+    else:  # pragma: no cover - parametrization is a closed set
+        raise AssertionError(f"Unhandled identity dimension: {identity_dimension}")
 
     response = client.post(f"/runner-jobs/{runner_job_id}/run")
     assert response.status_code == 400, response.text
