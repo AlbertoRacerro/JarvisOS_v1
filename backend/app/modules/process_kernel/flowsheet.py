@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from math import isfinite
 from types import MappingProxyType
 
 try:
@@ -75,6 +76,18 @@ class ProcessFlowsheet:
         for block_id, block in self.blocks.items():
             if block_id != block.block_id:
                 raise ProcessKernelError("flowsheet_block_identity_mismatch", "Block map key must equal block id.")
+
+        declared_constants = {
+            constant_name
+            for block in self.blocks.values()
+            for constant_name in block.profile_constants
+        }
+        if set(self.profile_constants) != declared_constants:
+            raise ProcessKernelError(
+                "flowsheet_constants_invalid",
+                "Profile constants must match the exact declared block constant set.",
+            )
+        _require_finite_scalars(self.profile_constants, "flowsheet_constants_invalid")
 
         total_connections = (
             len(self.material_connections) + len(self.scalar_connections) + len(self.external_material_inputs)
@@ -152,8 +165,18 @@ class ProcessFlowsheet:
         expected_external = {item.stream_id for item in self.external_material_inputs}
         if set(external_streams) != expected_external:
             raise ProcessKernelError("flowsheet_external_inputs_invalid", "External stream set does not match the profile.")
+        if any(not isinstance(stream, MaterialStream) for stream in external_streams.values()):
+            raise ProcessKernelError("flowsheet_external_inputs_invalid", "External inputs must be material streams.")
         if set(caller_parameters) != set(self.blocks):
             raise ProcessKernelError("flowsheet_parameters_invalid", "Caller parameter block set does not match the profile.")
+        for block_id, block in self.blocks.items():
+            values = caller_parameters[block_id]
+            if set(values) != set(block.caller_parameters):
+                raise ProcessKernelError(
+                    "flowsheet_parameters_invalid",
+                    "Caller parameters must match each block's exact declared set.",
+                )
+            _require_finite_scalars(values, "flowsheet_parameters_invalid")
 
         results: dict[str, BlockResult] = {}
         for block_id in order:
@@ -188,6 +211,9 @@ class ProcessFlowsheet:
                 raise ProcessKernelError("block_material_outputs_invalid", "Block material outputs do not match its contract.")
             if set(result.scalar_outputs) != set(block.scalar_outlets):
                 raise ProcessKernelError("block_scalar_outputs_invalid", "Block scalar outputs do not match its contract.")
+            if any(not isinstance(stream, MaterialStream) for stream in result.material_outputs.values()):
+                raise ProcessKernelError("block_material_outputs_invalid", "Block material outputs must be material streams.")
+            _require_finite_scalars(result.scalar_outputs, "block_scalar_outputs_invalid")
             results[block_id] = result
 
         return ProcessExecutionResult(order=order, block_results=results)
@@ -203,3 +229,9 @@ def _record_driver(drivers: dict[tuple[str, str], str], key: tuple[str, str], dr
     if key in drivers:
         raise ProcessKernelError("flowsheet_driver_duplicate", "Input port has more than one driver.")
     drivers[key] = driver
+
+
+def _require_finite_scalars(values: Mapping[str, object], code: str) -> None:
+    for name, value in values.items():
+        if isinstance(value, bool) or not isinstance(value, int | float) or not isfinite(float(value)):
+            raise ProcessKernelError(code, f"Scalar value must be finite: {name}.")
