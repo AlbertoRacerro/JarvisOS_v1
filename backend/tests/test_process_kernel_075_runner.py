@@ -115,39 +115,33 @@ def test_registration_preview_and_two_real_runner_jobs_are_stable(client: TestCl
     ]
 
 
-@pytest.mark.parametrize(
-    "identity_dimension",
-    [
-        "entrypoint",
-        "package_file",
-        "contract",
-        "semantic_registry",
-        "component_catalog",
-        "screening_constants",
-        "flowsheet",
-        "profile_constants",
-        "assembler",
-        "import_policy",
-    ],
+_PROFILE_IDENTITY_DIMENSIONS = (
+    "entrypoint",
+    "package_file",
+    "schema_version",
+    "profile_id",
+    "model_label",
+    "contract_version",
+    "ast_policy_id",
+    "registered_entrypoint",
+    "contract",
+    "semantic_registry",
+    "component_catalog",
+    "screening_constants",
+    "flowsheet",
+    "profile_constants",
+    "assembler",
+    "import_policy",
 )
-def test_complete_profile_tamper_is_rejected_before_subprocess(
-    client: TestClient,
-    monkeypatch,
+
+
+def _tamper_profile_identity(
     identity_dimension: str,
+    implementation: dict[str, object],
+    monkeypatch,
 ) -> None:
-    implementation = _register(client)
-    runner_job_id = _create_job(client, implementation["id"])
+    from app.modules.runner import process_kernel_047
 
-    from app.modules.runner import process_kernel_047, service
-
-    calls = 0
-
-    def forbidden_execute(**kwargs):
-        nonlocal calls
-        calls += 1
-        raise AssertionError(f"subprocess must not be invoked: {kwargs}")
-
-    monkeypatch.setattr(service, "execute_python_script", forbidden_execute)
     model_dir = Path(str(implementation["script_path"])).parent
     if identity_dimension == "entrypoint":
         script_path = Path(str(implementation["script_path"]))
@@ -155,6 +149,18 @@ def test_complete_profile_tamper_is_rejected_before_subprocess(
     elif identity_dimension == "package_file":
         package_file = model_dir / "process_kernel" / "blocks.py"
         package_file.write_bytes(package_file.read_bytes() + b"\n# tampered\n")
+    elif identity_dimension == "schema_version":
+        monkeypatch.setattr(process_kernel_047, "BUNDLE_SCHEMA_VERSION", 2)
+    elif identity_dimension == "profile_id":
+        monkeypatch.setattr(process_kernel_047, "PROFILE_ID", "tampered_profile")
+    elif identity_dimension == "model_label":
+        monkeypatch.setattr(process_kernel_047, "MODEL_LABEL", "tampered-model-label")
+    elif identity_dimension == "contract_version":
+        monkeypatch.setattr(process_kernel_047, "CONTRACT_VERSION", "tampered_contract")
+    elif identity_dimension == "ast_policy_id":
+        monkeypatch.setattr(process_kernel_047, "AST_POLICY_ID", "tampered_policy")
+    elif identity_dimension == "registered_entrypoint":
+        monkeypatch.setattr(process_kernel_047, "REGISTERED_ENTRYPOINT_FILENAME", "tampered.py")
     elif identity_dimension == "contract":
         monkeypatch.setattr(process_kernel_047, "expected_contract_sha256", lambda: "0" * 64)
     elif identity_dimension == "semantic_registry":
@@ -178,7 +184,53 @@ def test_complete_profile_tamper_is_rejected_before_subprocess(
     else:  # pragma: no cover - parametrization is a closed set
         raise AssertionError(f"Unhandled identity dimension: {identity_dimension}")
 
+
+@pytest.mark.parametrize("identity_dimension", _PROFILE_IDENTITY_DIMENSIONS)
+def test_complete_profile_tamper_is_rejected_before_subprocess(
+    client: TestClient,
+    monkeypatch,
+    identity_dimension: str,
+) -> None:
+    implementation = _register(client)
+    runner_job_id = _create_job(client, implementation["id"])
+
+    from app.modules.runner import service
+
+    calls = 0
+
+    def forbidden_execute(**kwargs):
+        nonlocal calls
+        calls += 1
+        raise AssertionError(f"subprocess must not be invoked: {kwargs}")
+
+    monkeypatch.setattr(service, "execute_python_script", forbidden_execute)
+    _tamper_profile_identity(identity_dimension, implementation, monkeypatch)
+
     response = client.post(f"/runner-jobs/{runner_job_id}/run")
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"]["code"] == "RUNNER_SCRIPT_POLICY_VIOLATION"
+    assert calls == 0
+
+
+def test_package_tamper_is_rejected_during_job_creation(client: TestClient, monkeypatch) -> None:
+    implementation = _register(client)
+
+    from app.modules.runner import service
+
+    calls = 0
+
+    def forbidden_execute(**kwargs):
+        nonlocal calls
+        calls += 1
+        raise AssertionError(f"subprocess must not be invoked: {kwargs}")
+
+    monkeypatch.setattr(service, "execute_python_script", forbidden_execute)
+    _tamper_profile_identity("package_file", implementation, monkeypatch)
+
+    response = client.post(
+        "/workspaces/bluerev/runner-jobs",
+        json={"model_version_id": implementation["id"], "input_set": _valid_input()},
+    )
     assert response.status_code == 400, response.text
     assert response.json()["detail"]["code"] == "RUNNER_SCRIPT_POLICY_VIOLATION"
     assert calls == 0
