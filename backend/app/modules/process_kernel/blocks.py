@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Mapping
 
 from .contracts import BlockResult, MaterialPort, ScalarPort
 from .errors import ProcessKernelError
