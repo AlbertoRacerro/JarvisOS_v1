@@ -20,6 +20,7 @@ REQUIRED_BATCH_GROWTH_PARAMETERS = ("mu_max", "X0", "t_final", "dt")
 
 ALLOWED_CALC_V0_IMPORT_ROOTS = frozenset({"json", "math", "statistics"})
 ALLOWED_CALC_V0_TOPOLOGY_M1_IMPORT_ROOTS = ALLOWED_CALC_V0_IMPORT_ROOTS | frozenset({"hashlib"})
+ALLOWED_CALC_V0_PROCESS_KERNEL_IMPORT_ROOTS = frozenset({"json", "math", "process_kernel"})
 
 ALLOWED_BLUECAD_L2_IMPORT_ROOTS = frozenset({
     "build123d",
@@ -297,15 +298,42 @@ def preflight_script_policy(script_path: Path, *, ast_policy: str | None = None,
     if ast_import_allowlist or ast_policy == "bluecad_l2_v0":
         preflight_bluecad_l2_ast_policy(text)
     elif ast_policy == "calc_v0":
-        preflight_calc_v0_ast_policy(text)
+        if _is_exact_process_kernel_profile(script_path):
+            preflight_calc_v0_process_kernel_ast_policy(text)
+        else:
+            preflight_calc_v0_ast_policy(text)
     elif ast_policy == "calc_v0_topology_m1":
         preflight_calc_v0_topology_m1_ast_policy(text)
+
+
+def _is_exact_process_kernel_profile(script_path: Path) -> bool:
+    try:
+        from app.modules.runner.process_kernel_047 import (
+            bundled_script_path,
+            validate_registered_bundle,
+        )
+
+        return (
+            sha256_file(script_path) == sha256_file(bundled_script_path())
+            and bool(validate_registered_bundle(script_path.parent))
+        )
+    except (OSError, RunnerSafetyError, ValueError):
+        return False
 
 
 def preflight_calc_v0_ast_policy(source: str) -> None:
     _preflight_ast_policy(
         source,
         ALLOWED_CALC_V0_IMPORT_ROOTS,
+        FORBIDDEN_CALC_V0_NAME_REFERENCES,
+        enforce_calc_file_contract=True,
+    )
+
+
+def preflight_calc_v0_process_kernel_ast_policy(source: str) -> None:
+    _preflight_ast_policy(
+        source,
+        ALLOWED_CALC_V0_PROCESS_KERNEL_IMPORT_ROOTS,
         FORBIDDEN_CALC_V0_NAME_REFERENCES,
         enforce_calc_file_contract=True,
     )
