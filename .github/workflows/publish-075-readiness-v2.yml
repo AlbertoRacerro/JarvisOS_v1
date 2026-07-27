@@ -1,0 +1,93 @@
+name: Publish clean spec 075 readiness
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  publish-clean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 1f49a56580633f4399924402c0d08a08085827ab
+          fetch-depth: 0
+      - name: Patch readiness documents
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          spec_path = Path("docs/specs/075-process-kernel-1.md")
+          spec = spec_path.read_text(encoding="utf-8")
+          spec = re.sub(
+              r"\*\*Implementation preconditions:\*\*[^\n]*\n",
+              "**Implementation preconditions:** the bundled-only runner cleanup and 074 implementation are merged  \n",
+              spec,
+              count=1,
+          )
+          spec = re.sub(
+              r"\*\*Definition status:\*\*[^\n]*\n",
+              "**Definition status:** reviewed and promoted; registry is `ready`  \n",
+              spec,
+              count=1,
+          )
+          marker = "- implementation slices and ownership are explicit.\n\n### Implementation PR\n"
+          insertion = """- implementation slices and ownership are explicit.
+
+### Readiness decision and implementation ownership
+
+The 2026-07-27 readiness review confirmed that the definition is merged in PR #187, the bundled-only runner cleanup is merged in PR #186, 074 is merged in PR #183 and registry-reconciled in PR #188, all definition review threads are resolved, and no open PR overlaps the runner, input-contract, ordering, or process-kernel target files.
+
+One branch, `impl-075`, and one implementation PR own delivery. The implementation PR is divided into three internal work packages:
+
+1. **WP1 — Process contracts and records.** Own the new `backend/app/modules/process_kernel/` package and focused tests for semantic units, components, immutable streams, ports, block/result contracts, and graph validation.
+2. **WP2 — Shared deterministic boundaries.** Make only additive, reviewed changes to `backend/app/core/schema.py` and `backend/app/modules/runner/input_contracts.py`; add one pure `backend/app/core/topology.py` utility; and make extraction-only changes in `backend/app/modules/flowsheet/service.py`. Schema v1 and existing FLOWSHEET-1 behavior remain exact.
+3. **WP3 — Exact 047 runner profile and proof.** Own the new server-known multi-file profile under `backend/app/modules/runner/examples/`, bounded profile registration/verification changes in runner services, the fixed 047 assembler, and side-by-side identity plus real-runner tests.
+
+The existing `backend/app/modules/runner/examples/bluerev_geometry_hydraulics_v0.py`, its v1 contract, canonical fixtures, and historical digests are read-only reference authority and may not be changed. No parallel implementation PR may modify these shared files while 075 is active.
+
+### Implementation PR
+"""
+          if marker not in spec:
+              raise SystemExit("promotion marker not found")
+          spec_path.write_text(spec.replace(marker, insertion, 1), encoding="utf-8")
+
+          status_path = Path("docs/specs/STATUS.md")
+          status = status_path.read_text(encoding="utf-8")
+          status = re.sub(
+              r"8\. Review and promote planned `075` only from exact 047 reproduction; the bundled-only\n"
+              r"\s+runner cleanup and definition are merged, but implementation remains unauthorized until\n"
+              r"\s+a separate readiness decision\.\n",
+              "8. Implement ready `075` only from exact 047 reproduction through one bounded implementation\n"
+              "   PR; preserve the merged 047 files, v1 contract, canonical fixtures, and bundled-only runner\n"
+              "   boundary throughout all work packages.\n",
+              status,
+              count=1,
+          )
+          status = re.sub(
+              r"^\| 075 \| planned \| — \| PROCESS-KERNEL-1:",
+              "| 075 | ready | — | PROCESS-KERNEL-1:",
+              status,
+              count=1,
+              flags=re.MULTILINE,
+          )
+          status_path.write_text(status, encoding="utf-8")
+          PY
+          git diff --check
+          test "$(git diff --name-only | sort)" = "$(printf '%s\n' docs/specs/075-process-kernel-1.md docs/specs/STATUS.md | sort)"
+      - name: Publish clean branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "JarvisOS Maintainer"
+          git config user.email "maintainer@jarvisos.local"
+          git add docs/specs/075-process-kernel-1.md docs/specs/STATUS.md
+          git commit -m "Promote spec 075 to ready"
+          git push --force origin HEAD:spec/075-readiness
