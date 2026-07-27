@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from app.modules.process_kernel import components, profile_047
 from app.modules.process_kernel.components import ScreeningMassConstants
+from app.modules.runner import process_kernel_047
 from app.modules.runner.process_kernel_047 import (
+    ALLOWED_IMPORT_ROOTS,
+    AST_POLICY_ID,
     expected_bundle_manifest,
     expected_bundle_manifest_bytes,
 )
+from app.modules.runner.safety import ALLOWED_CALC_V0_PROCESS_KERNEL_IMPORT_ROOTS
 
 
 def test_process_profile_manifest_records_all_named_identities() -> None:
@@ -22,7 +26,20 @@ def test_process_profile_manifest_records_all_named_identities() -> None:
     ):
         assert isinstance(manifest[name], str)
         assert len(manifest[name]) == 64
+    assert manifest["ast_policy_id"] == AST_POLICY_ID
+    assert tuple(manifest["allowed_import_roots"]) == ALLOWED_IMPORT_ROOTS
+    assert frozenset(ALLOWED_IMPORT_ROOTS) == ALLOWED_CALC_V0_PROCESS_KERNEL_IMPORT_ROOTS
     assert expected_bundle_manifest_bytes() == expected_bundle_manifest_bytes()
+
+
+def test_import_policy_change_changes_profile_identity(monkeypatch) -> None:
+    baseline = expected_bundle_manifest_bytes()
+    monkeypatch.setattr(
+        process_kernel_047,
+        "ALLOWED_IMPORT_ROOTS",
+        ("json", "math", "process_kernel", "statistics"),
+    )
+    assert expected_bundle_manifest_bytes() != baseline
 
 
 def test_standard_gravity_changes_constant_and_flowsheet_identity(monkeypatch) -> None:
