@@ -28,6 +28,8 @@ def execute_python_script(
 ) -> LocalPythonResult:
     command = [sys.executable, str(script_path), str(input_file), str(output_dir)]
     env = {"PYTHONIOENCODING": "utf-8"}
+    if (script_path.parent / "process_kernel").is_dir():
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
     command_metadata = {
         "executable": Path(sys.executable).name,
         "argv": [Path(command[0]).name, str(script_path), str(input_file), str(output_dir)],
