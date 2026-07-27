@@ -61,9 +61,9 @@ before Codex or another coding agent may act on them.
    symmetric-topology foundation.
 7. Preserve the merged `074` fresh-manifest, explicit-layout, reconciliation,
    idempotency, lifecycle-fencing, and fail-closed boundaries.
-8. Review and promote planned `075` only from exact 047 reproduction; the bundled-only
-   runner cleanup and definition are merged, but implementation remains unauthorized until
-   a separate readiness decision.
+8. Implement ready `075` only from exact 047 reproduction through one bounded implementation
+   PR; preserve the merged 047 files, v1 contract, canonical fixtures, and bundled-only runner
+   boundary throughout all work packages.
 9. Run `069` MEMORY-CONSOLIDATE-0 as the first Hermes dogfood only after 066–068
    are merged and the required local route is qualified.
 10. Continue `063`/`064`, `012` → `033`, and residual conversation/UI rows according
@@ -160,7 +160,7 @@ PR overlaps the target files or runtime boundary.
 | 072 | merged | [#172](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/172) | BLUEREV-PROCESS-3: explicit symmetric hydraulic topology M1 | 043, 047, 050, 051, 052, 071 | Add one deterministic fixed-topology closed loop with common supply/return sections and 1–12 identical parallel branches; separate installed geometry from the representative hydraulic path, emit a canonical topology manifest, and prove reduction to 047 without adding a generic network solver, CAD layout, automatic recompute, or UI. |
 | 073 | merged | [#174](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/174) | BLUECAD-PRIMITIVE-1: fluid-open capped branch manifold | 005, 005b, 056 | Add one deterministic capped branch-header primitive with exactly one common port and 1–12 branch ports, explicit branch bores through the header wall, closed-end geometry, kernel-volume reconciliation, and property/conformance tests; no process link, layout solver, project defaults, or UI. |
 | 074 | merged | [#183](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/183) | CAD-LINK-1: 072 M1 topology to deterministic multi-part BLUECAD | 038, 050, 051, 052, 071, 072, 073 | Convert a fresh 072 topology manifest into an idempotent multi-part BLUECAD candidate only through an explicit reviewed spatial-layout contract; reconcile process geometry, ports, volume/area, and lineage without inferring bend handedness, routing, or design defaults. |
-| 075 | planned | — | PROCESS-KERNEL-1: streams, components, units, and unit operations | 043, 047, 048, 071 | Re-express validated 047 as an acyclic flowsheet of typed material/scalar ports and reusable blocks, add additive unit-contract v2 and component/stream foundations, and require exact canonical 047 result identity before broader solver work. |
+| 075 | ready | — | PROCESS-KERNEL-1: streams, components, units, and unit operations | 043, 047, 048, 071 | Re-express validated 047 as an acyclic flowsheet of typed material/scalar ports and reusable blocks, add additive unit-contract v2 and component/stream foundations, and require exact canonical 047 result identity before broader solver work. Readiness evidence and implementation ownership are frozen in [the 2026-07-27 readiness decision](075-readiness-2026-07-27.md). |
 
 ## Superseded planning aliases and resolved collisions
 
