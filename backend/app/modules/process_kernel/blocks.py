@@ -19,6 +19,13 @@ def _require_exact_keys(values: Mapping[str, object], expected: set[str], code: 
         raise ProcessKernelError(code, "Block inputs do not match the declared contract.")
 
 
+def _finite_number(values: Mapping[str, object], name: str, code: str) -> float:
+    value = values[name]
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(float(value)):
+        raise ProcessKernelError(code, f"Block scalar must be finite: {name}.")
+    return float(value)
+
+
 @dataclass(frozen=True, slots=True)
 class Reservoir:
     block_id: str = "reservoir"
@@ -48,7 +55,14 @@ class Reservoir:
         _require_exact_keys(scalar_inputs, set(), "reservoir_scalar_inputs_invalid")
         _require_exact_keys(caller_parameter_values, {"reservoir_liquid_volume"}, "reservoir_parameters_invalid")
         _require_exact_keys(profile_constant_values, set(), "reservoir_constants_invalid")
-        reservoir_volume = caller_parameter_values["reservoir_liquid_volume"] / 1000.0
+        reservoir_liquid_volume = _finite_number(
+            caller_parameter_values,
+            "reservoir_liquid_volume",
+            "reservoir_parameters_invalid",
+        )
+        if reservoir_liquid_volume < 0:
+            raise ProcessKernelError("reservoir_parameters_invalid", "Reservoir volume must be nonnegative.")
+        reservoir_volume = reservoir_liquid_volume / 1000.0
         return BlockResult(
             material_outputs={"outlet": material_inputs["inlet"]},
             scalar_outputs={"reservoir_liquid_volume_m3": reservoir_volume},
@@ -109,10 +123,24 @@ class Pipe:
         viscosity = stream.dynamic_viscosity_Pa_s
         assert density is not None and viscosity is not None
 
-        tube_length = caller_parameter_values["tube_length"]
-        diameter_inner = caller_parameter_values["tube_inner_diameter"] / 1000.0
-        diameter_outer = caller_parameter_values["tube_outer_diameter"] / 1000.0
-        velocity = caller_parameter_values["target_liquid_velocity"]
+        tube_length = _finite_number(caller_parameter_values, "tube_length", "pipe_parameters_invalid")
+        diameter_inner_mm = _finite_number(
+            caller_parameter_values,
+            "tube_inner_diameter",
+            "pipe_parameters_invalid",
+        )
+        diameter_outer_mm = _finite_number(
+            caller_parameter_values,
+            "tube_outer_diameter",
+            "pipe_parameters_invalid",
+        )
+        velocity = _finite_number(caller_parameter_values, "target_liquid_velocity", "pipe_parameters_invalid")
+        if tube_length <= 0 or diameter_inner_mm <= 0 or velocity <= 0:
+            raise ProcessKernelError("pipe_parameters_invalid", "Pipe length, inner diameter, and velocity must be positive.")
+        if diameter_outer_mm < diameter_inner_mm:
+            raise ProcessKernelError("pipe_parameters_invalid", "Pipe outer diameter must not be smaller than inner diameter.")
+        diameter_inner = diameter_inner_mm / 1000.0
+        diameter_outer = diameter_outer_mm / 1000.0
 
         hydraulic_area = math.pi * diameter_inner**2 / 4.0
         tube_volume = hydraulic_area * tube_length
@@ -188,7 +216,17 @@ class Fitting:
         _require_exact_keys(scalar_inputs, {"dynamic_pressure"}, "fitting_scalar_inputs_invalid")
         _require_exact_keys(caller_parameter_values, {"minor_loss_coefficient"}, "fitting_parameters_invalid")
         _require_exact_keys(profile_constant_values, set(), "fitting_constants_invalid")
-        minor_pressure_loss = caller_parameter_values["minor_loss_coefficient"] * scalar_inputs["dynamic_pressure"]
+        dynamic_pressure = _finite_number(scalar_inputs, "dynamic_pressure", "fitting_scalar_inputs_invalid")
+        loss_coefficient = _finite_number(
+            caller_parameter_values,
+            "minor_loss_coefficient",
+            "fitting_parameters_invalid",
+        )
+        if dynamic_pressure < 0:
+            raise ProcessKernelError("fitting_scalar_inputs_invalid", "Dynamic pressure must be nonnegative.")
+        if loss_coefficient < 0:
+            raise ProcessKernelError("fitting_parameters_invalid", "Minor-loss coefficient must be nonnegative.")
+        minor_pressure_loss = loss_coefficient * dynamic_pressure
         return BlockResult(
             material_outputs={"outlet": material_inputs["inlet"]},
             scalar_outputs={"minor_pressure_loss": minor_pressure_loss},
@@ -248,10 +286,37 @@ class Pump:
         volumetric_flow = stream.volumetric_flow_m3_s
         assert density is not None and volumetric_flow is not None
 
-        total_pressure_loss = scalar_inputs["major_pressure_loss"] + scalar_inputs["minor_pressure_loss"]
-        equivalent_static_head = total_pressure_loss / (density * profile_constant_values["standard_gravity"])
+        major_pressure_loss = _finite_number(
+            scalar_inputs,
+            "major_pressure_loss",
+            "pump_scalar_inputs_invalid",
+        )
+        minor_pressure_loss = _finite_number(
+            scalar_inputs,
+            "minor_pressure_loss",
+            "pump_scalar_inputs_invalid",
+        )
+        pump_efficiency = _finite_number(
+            caller_parameter_values,
+            "pump_efficiency",
+            "pump_parameters_invalid",
+        )
+        standard_gravity = _finite_number(
+            profile_constant_values,
+            "standard_gravity",
+            "pump_constants_invalid",
+        )
+        if major_pressure_loss < 0 or minor_pressure_loss < 0:
+            raise ProcessKernelError("pump_scalar_inputs_invalid", "Pump pressure losses must be nonnegative.")
+        if pump_efficiency <= 0 or pump_efficiency > 1:
+            raise ProcessKernelError("pump_parameters_invalid", "Pump efficiency must be in (0, 1].")
+        if standard_gravity <= 0:
+            raise ProcessKernelError("pump_constants_invalid", "Standard gravity must be positive.")
+
+        total_pressure_loss = major_pressure_loss + minor_pressure_loss
+        equivalent_static_head = total_pressure_loss / (density * standard_gravity)
         hydraulic_power = total_pressure_loss * volumetric_flow
-        pump_electric_power = hydraulic_power / caller_parameter_values["pump_efficiency"]
+        pump_electric_power = hydraulic_power / pump_efficiency
         return BlockResult(
             material_outputs={"outlet": stream},
             scalar_outputs={
