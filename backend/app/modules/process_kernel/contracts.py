@@ -13,6 +13,8 @@ class MaterialPort:
     name: str
     required_stream_fields: tuple[str, ...] = ()
     composition_required: bool = False
+    provided_stream_fields: tuple[str, ...] = ()
+    source_input_port: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
