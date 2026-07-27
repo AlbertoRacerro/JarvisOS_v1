@@ -5,10 +5,12 @@ import json
 import re
 from collections.abc import Callable
 from math import isfinite
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
+from app.modules.process_kernel.errors import ProcessKernelError
+from app.modules.process_kernel.units import normalize_magnitude
 from app.modules.runner.models import (
     BindingPreviewResponse,
     BindingVariablePreview,
@@ -52,6 +54,8 @@ class NumericDomain(BaseModel):
 
 
 class InputVariable(BaseModel):
+    """Schema-v1 input variable. Its fields and canonical bytes remain unchanged."""
+
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=64)
@@ -77,7 +81,23 @@ class InputVariable(BaseModel):
         return value
 
 
+class InputVariableV2(InputVariable):
+    model_config = ConfigDict(extra="forbid")
+
+    physical_dimension: str = Field(min_length=1, max_length=64)
+    semantic_basis: str | None = Field(default=None, min_length=1, max_length=64)
+
+    @field_validator("physical_dimension", "semantic_basis")
+    @classmethod
+    def v2_no_edge_whitespace(cls, value: str | None) -> str | None:
+        if value is not None and value != value.strip():
+            raise ValueError("text fields cannot have leading or trailing whitespace")
+        return value
+
+
 class ModelInputContract(BaseModel):
+    """Schema-v1 contract retained as the public legacy model."""
+
     model_config = ConfigDict(extra="forbid")
 
     schema_version: Literal[1]
@@ -86,23 +106,29 @@ class ModelInputContract(BaseModel):
 
     @model_validator(mode="after")
     def unique_names(self) -> ModelInputContract:
-        names = [variable.name for variable in self.variables]
-        if len(names) != len(set(names)):
-            raise ValueError("variable names must be unique")
+        _require_unique_variable_names(self.variables)
         return self
 
 
+class ModelInputContractV2(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal[2]
+    evaluation_mode: Literal["forward"]
+    variables: list[InputVariableV2] = Field(min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def unique_names(self) -> ModelInputContractV2:
+        _require_unique_variable_names(self.variables)
+        return self
+
+
+StoredInputContract: TypeAlias = ModelInputContract | ModelInputContractV2
 ParameterLoader = Callable[[str], dict[str, object] | None]
 
 
 def canonicalize_input_contract(payload: dict[str, Any]) -> tuple[str, str, dict[str, Any]]:
-    try:
-        contract = ModelInputContract.model_validate(payload)
-    except ValidationError as exc:
-        raise RunnerSafetyError(
-            "runner_input_contract_invalid",
-            "Model input contract is invalid.",
-        ) from exc
+    contract = _validate_contract(payload)
     normalized = contract.model_dump(mode="json", exclude_none=True)
     encoded = canonical_json(normalized)
     digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -112,7 +138,7 @@ def canonicalize_input_contract(payload: dict[str, Any]) -> tuple[str, str, dict
 def parse_stored_input_contract(
     payload: str | None,
     expected_sha256: str | None,
-) -> tuple[ModelInputContract, str]:
+) -> tuple[StoredInputContract, str]:
     if not payload or not expected_sha256:
         raise RunnerSafetyError(
             "runner_input_contract_missing",
@@ -126,8 +152,10 @@ def parse_stored_input_contract(
         )
     try:
         raw = json.loads(payload)
-        contract = ModelInputContract.model_validate(raw)
-    except (json.JSONDecodeError, ValidationError) as exc:
+        if not isinstance(raw, dict):
+            raise ValueError("contract must be an object")
+        contract = _validate_contract(raw)
+    except (json.JSONDecodeError, ValidationError, ValueError) as exc:
         raise RunnerSafetyError(
             "runner_input_contract_invalid",
             "Stored model input contract is invalid.",
@@ -172,46 +200,18 @@ def build_binding_preview(
             )
             continue
 
-        errors: list[str] = []
-        value: float | None = None
-        source_parameter_id: str | None = None
-        if not isinstance(item, dict):
-            errors.append("binding_object_invalid")
+        if isinstance(contract, ModelInputContractV2):
+            value, source_parameter_id, errors = _validate_v2_binding(
+                variable,
+                item,
+                load_parameter=load_parameter,
+            )
         else:
-            allowed = {"value", "unit", "source_parameter_id"}
-            if set(item) - allowed or "value" not in item or "unit" not in item:
-                errors.append("binding_object_invalid")
-            raw_value = item.get("value")
-            if isinstance(raw_value, bool) or not isinstance(raw_value, int | float):
-                errors.append("binding_value_invalid")
-            elif not isfinite(float(raw_value)):
-                errors.append("binding_value_invalid")
-            else:
-                value = float(raw_value)
-            if item.get("unit") != variable.unit:
-                errors.append("binding_unit_invalid")
-            raw_source = item.get("source_parameter_id")
-            if raw_source is not None:
-                if not isinstance(raw_source, str) or not raw_source.strip():
-                    errors.append("binding_parameter_reference_invalid")
-                else:
-                    source_parameter_id = raw_source
-
-        if value is not None and not errors:
-            errors.extend(_domain_errors(variable.domain, value))
-
-        if source_parameter_id is not None and not errors:
-            parameter = load_parameter(source_parameter_id)
-            if parameter is None:
-                errors.append("binding_parameter_not_found")
-            else:
-                parameter_value = _finite_parameter_value(parameter.get("value"))
-                if parameter_value is None:
-                    errors.append("binding_parameter_value_invalid")
-                if parameter.get("unit") != variable.unit:
-                    errors.append("binding_parameter_unit_mismatch")
-                if parameter_value is not None and value is not None and parameter_value != value:
-                    errors.append("binding_parameter_value_mismatch")
+            value, source_parameter_id, errors = _validate_v1_binding(
+                variable,
+                item,
+                load_parameter=load_parameter,
+            )
 
         if errors:
             invalid_count += 1
@@ -265,6 +265,177 @@ def build_binding_preview(
         errors=global_errors,
         normalized_input_set=normalized if preview_state == "ready" else None,
     )
+
+
+def normalize_input_set_v2(
+    contract: ModelInputContractV2,
+    input_set: dict[str, Any],
+    *,
+    load_parameter: ParameterLoader | None = None,
+) -> dict[str, dict[str, object]]:
+    if set(input_set) != {variable.name for variable in contract.variables}:
+        raise RunnerSafetyError("runner_input_invalid", "Input set does not match the schema-v2 contract.")
+    normalized: dict[str, dict[str, object]] = {}
+    for variable in contract.variables:
+        value, source_parameter_id, errors = _validate_v2_binding(
+            variable,
+            input_set[variable.name],
+            load_parameter=load_parameter,
+        )
+        if errors or value is None:
+            raise RunnerSafetyError(
+                "runner_input_invalid",
+                f"Invalid schema-v2 input: {variable.name}.",
+            )
+        normalized_item: dict[str, object] = {"value": value, "unit": variable.unit}
+        if source_parameter_id:
+            normalized_item["source_parameter_id"] = source_parameter_id
+        normalized[variable.name] = normalized_item
+    return normalized
+
+
+def _validate_contract(payload: dict[str, Any]) -> StoredInputContract:
+    try:
+        schema_version = payload.get("schema_version")
+        if schema_version == 1:
+            return ModelInputContract.model_validate(payload)
+        if schema_version == 2:
+            return ModelInputContractV2.model_validate(payload)
+    except ValidationError as exc:
+        raise RunnerSafetyError(
+            "runner_input_contract_invalid",
+            "Model input contract is invalid.",
+        ) from exc
+    raise RunnerSafetyError(
+        "runner_input_contract_invalid",
+        "Model input contract schema version is unsupported.",
+    )
+
+
+def _require_unique_variable_names(variables: list[InputVariable] | list[InputVariableV2]) -> None:
+    names = [variable.name for variable in variables]
+    if len(names) != len(set(names)):
+        raise ValueError("variable names must be unique")
+
+
+def _validate_v1_binding(
+    variable: InputVariable,
+    item: object,
+    *,
+    load_parameter: ParameterLoader,
+) -> tuple[float | None, str | None, list[str]]:
+    errors: list[str] = []
+    value: float | None = None
+    source_parameter_id: str | None = None
+    if not isinstance(item, dict):
+        errors.append("binding_object_invalid")
+    else:
+        allowed = {"value", "unit", "source_parameter_id"}
+        if set(item) - allowed or "value" not in item or "unit" not in item:
+            errors.append("binding_object_invalid")
+        raw_value = item.get("value")
+        if isinstance(raw_value, bool) or not isinstance(raw_value, int | float):
+            errors.append("binding_value_invalid")
+        elif not isfinite(float(raw_value)):
+            errors.append("binding_value_invalid")
+        else:
+            value = float(raw_value)
+        if item.get("unit") != variable.unit:
+            errors.append("binding_unit_invalid")
+        raw_source = item.get("source_parameter_id")
+        if raw_source is not None:
+            if not isinstance(raw_source, str) or not raw_source.strip():
+                errors.append("binding_parameter_reference_invalid")
+            else:
+                source_parameter_id = raw_source
+
+    if value is not None and not errors:
+        errors.extend(_domain_errors(variable.domain, value))
+
+    if source_parameter_id is not None and not errors:
+        parameter = load_parameter(source_parameter_id)
+        if parameter is None:
+            errors.append("binding_parameter_not_found")
+        else:
+            parameter_value = _finite_parameter_value(parameter.get("value"))
+            if parameter_value is None:
+                errors.append("binding_parameter_value_invalid")
+            if parameter.get("unit") != variable.unit:
+                errors.append("binding_parameter_unit_mismatch")
+            if parameter_value is not None and value is not None and parameter_value != value:
+                errors.append("binding_parameter_value_mismatch")
+    return value, source_parameter_id, errors
+
+
+def _validate_v2_binding(
+    variable: InputVariableV2,
+    item: object,
+    *,
+    load_parameter: ParameterLoader | None,
+) -> tuple[float | None, str | None, list[str]]:
+    errors: list[str] = []
+    value: float | None = None
+    source_parameter_id: str | None = None
+    if not isinstance(item, dict):
+        return None, None, ["binding_object_invalid"]
+    allowed = {"value", "unit", "source_parameter_id"}
+    if set(item) - allowed or "value" not in item or "unit" not in item:
+        return None, None, ["binding_object_invalid"]
+    raw_value = item.get("value")
+    source_unit = item.get("unit")
+    if (
+        isinstance(raw_value, bool)
+        or not isinstance(raw_value, int | float)
+        or not isinstance(source_unit, str)
+    ):
+        errors.append("binding_value_invalid")
+    else:
+        try:
+            value = normalize_magnitude(
+                float(raw_value),
+                source_unit=source_unit,
+                target_unit=variable.unit,
+                physical_dimension=variable.physical_dimension,
+                semantic_basis=variable.semantic_basis,
+            )
+        except ProcessKernelError:
+            errors.append("binding_unit_invalid")
+    if value is not None and not errors:
+        errors.extend(_domain_errors(variable.domain, value))
+
+    raw_source = item.get("source_parameter_id")
+    if raw_source is not None:
+        if not isinstance(raw_source, str) or not raw_source.strip():
+            errors.append("binding_parameter_reference_invalid")
+        else:
+            source_parameter_id = raw_source
+
+    if source_parameter_id is not None and not errors:
+        if load_parameter is None:
+            return value, source_parameter_id, errors
+        parameter = load_parameter(source_parameter_id)
+        if parameter is None:
+            errors.append("binding_parameter_not_found")
+        else:
+            parameter_value = _finite_parameter_value(parameter.get("value"))
+            parameter_unit = parameter.get("unit")
+            if parameter_value is None or not isinstance(parameter_unit, str):
+                errors.append("binding_parameter_value_invalid")
+            else:
+                try:
+                    normalized_parameter_value = normalize_magnitude(
+                        parameter_value,
+                        source_unit=parameter_unit,
+                        target_unit=variable.unit,
+                        physical_dimension=variable.physical_dimension,
+                        semantic_basis=variable.semantic_basis,
+                    )
+                except ProcessKernelError:
+                    errors.append("binding_parameter_unit_mismatch")
+                else:
+                    if value is not None and normalized_parameter_value != value:
+                        errors.append("binding_parameter_value_mismatch")
+    return value, source_parameter_id, errors
 
 
 def _finite_parameter_value(value: object) -> float | None:
