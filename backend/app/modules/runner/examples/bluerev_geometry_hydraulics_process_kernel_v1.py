@@ -1,7 +1,7 @@
 import json
 import math
 
-from process_kernel.profile_047 import EXPECTED_UNITS, ProcessKernelError, execute_047_process_kernel
+from process_kernel import EXPECTED_UNITS, ProcessKernelError, execute_047_process_kernel
 
 
 def fail(reason, field_name=None):
