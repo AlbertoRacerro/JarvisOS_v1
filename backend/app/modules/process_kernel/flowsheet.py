@@ -9,12 +9,24 @@ try:
     from app.core.topology import TopologyError, deterministic_topological_order
 except ModuleNotFoundError:  # bundled runner package
     from .topology import TopologyError, deterministic_topological_order
-from .contracts import BlockResult, UnitOperation
+from .contracts import BlockResult, MaterialPort, UnitOperation
 from .errors import ProcessKernelError
 from .streams import MaterialStream
 
 MAX_PROCESS_BLOCKS = 64
 MAX_PROCESS_CONNECTIONS = 256
+_MATERIAL_STREAM_FIELDS = frozenset(
+    {
+        "id",
+        "composition",
+        "density_kg_m3",
+        "dynamic_viscosity_Pa_s",
+        "mass_flow_kg_s",
+        "volumetric_flow_m3_s",
+        "temperature_K",
+        "pressure_Pa",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +88,7 @@ class ProcessFlowsheet:
         for block_id, block in self.blocks.items():
             if block_id != block.block_id:
                 raise ProcessKernelError("flowsheet_block_identity_mismatch", "Block map key must equal block id.")
+            self._validate_material_port_contract(block)
 
         declared_constants = {
             constant_name
@@ -178,6 +191,8 @@ class ProcessFlowsheet:
                 )
             _require_finite_scalars(values, "flowsheet_parameters_invalid")
 
+        self._preflight_material_requirements(order, external_streams)
+
         results: dict[str, BlockResult] = {}
         for block_id in order:
             block = self.blocks[block_id]
@@ -213,16 +228,111 @@ class ProcessFlowsheet:
                 raise ProcessKernelError("block_scalar_outputs_invalid", "Block scalar outputs do not match its contract.")
             if any(not isinstance(stream, MaterialStream) for stream in result.material_outputs.values()):
                 raise ProcessKernelError("block_material_outputs_invalid", "Block material outputs must be material streams.")
+            self._validate_material_outputs(block, material_inputs, result.material_outputs)
             _require_finite_scalars(result.scalar_outputs, "block_scalar_outputs_invalid")
             results[block_id] = result
 
         return ProcessExecutionResult(order=order, block_results=results)
+
+    def _validate_material_port_contract(self, block: UnitOperation) -> None:
+        for name, port in block.material_inlets.items():
+            if port.name != name or port.source_input_port is not None or port.provided_stream_fields:
+                raise ProcessKernelError(
+                    "flowsheet_material_port_invalid",
+                    "Material inlet metadata is invalid.",
+                )
+            _validate_stream_field_names(port.required_stream_fields)
+        for name, port in block.material_outlets.items():
+            if port.name != name:
+                raise ProcessKernelError("flowsheet_material_port_invalid", "Material output metadata is invalid.")
+            _validate_stream_field_names(port.required_stream_fields)
+            _validate_stream_field_names(port.provided_stream_fields)
+            if port.source_input_port is not None and port.source_input_port not in block.material_inlets:
+                raise ProcessKernelError(
+                    "flowsheet_material_port_invalid",
+                    "Material output source input port is unknown.",
+                )
+
+    def _preflight_material_requirements(
+        self,
+        order: tuple[str, ...],
+        external_streams: Mapping[str, MaterialStream],
+    ) -> None:
+        output_fields: dict[tuple[str, str], frozenset[str]] = {}
+        for block_id in order:
+            block = self.blocks[block_id]
+            input_fields: dict[str, frozenset[str]] = {}
+            for external in self.external_material_inputs:
+                if external.target_block_id == block_id:
+                    input_fields[external.target_port] = _known_stream_fields(external_streams[external.stream_id])
+            for connection in self.material_connections:
+                if connection.target_block_id == block_id:
+                    input_fields[connection.target_port] = output_fields[
+                        (connection.source_block_id, connection.source_port)
+                    ]
+
+            for port_name, port in block.material_inlets.items():
+                known = input_fields[port_name]
+                missing = set(port.required_stream_fields) - known
+                if missing:
+                    field_name = sorted(missing)[0]
+                    raise ProcessKernelError(
+                        "stream_requirement_missing",
+                        f"Stream field is required: {field_name}.",
+                        context={"field": field_name},
+                    )
+                if port.composition_required and "composition" not in known:
+                    raise ProcessKernelError(
+                        "stream_composition_required",
+                        "Block requires a known material composition.",
+                    )
+
+            for output_name, port in block.material_outlets.items():
+                known = set(port.provided_stream_fields)
+                if port.source_input_port is not None:
+                    known.update(input_fields[port.source_input_port])
+                output_fields[(block_id, output_name)] = frozenset(known)
+
+    def _validate_material_outputs(
+        self,
+        block: UnitOperation,
+        material_inputs: Mapping[str, MaterialStream],
+        material_outputs: Mapping[str, MaterialStream],
+    ) -> None:
+        for output_name, port in block.material_outlets.items():
+            output_fields = _known_stream_fields(material_outputs[output_name])
+            missing_provided = set(port.provided_stream_fields) - output_fields
+            if missing_provided:
+                raise ProcessKernelError(
+                    "block_material_outputs_invalid",
+                    "Block material output omitted a declared provided stream field.",
+                )
+            if port.source_input_port is not None:
+                source_fields = _known_stream_fields(material_inputs[port.source_input_port])
+                if not source_fields.issubset(output_fields):
+                    raise ProcessKernelError(
+                        "block_material_outputs_invalid",
+                        "Block material output did not preserve its declared source stream fields.",
+                    )
 
     def _block(self, block_id: str) -> UnitOperation:
         block = self.blocks.get(block_id)
         if block is None:
             raise ProcessKernelError("flowsheet_block_unknown", "Connection references an unknown block.")
         return block
+
+
+def _known_stream_fields(stream: MaterialStream) -> frozenset[str]:
+    fields = {"id"}
+    for name in _MATERIAL_STREAM_FIELDS - {"id"}:
+        if getattr(stream, name) is not None:
+            fields.add(name)
+    return frozenset(fields)
+
+
+def _validate_stream_field_names(field_names: tuple[str, ...]) -> None:
+    if len(field_names) != len(set(field_names)) or any(name not in _MATERIAL_STREAM_FIELDS for name in field_names):
+        raise ProcessKernelError("flowsheet_material_port_invalid", "Material port stream fields are invalid.")
 
 
 def _record_driver(drivers: dict[tuple[str, str], str], key: tuple[str, str], driver: str) -> None:
