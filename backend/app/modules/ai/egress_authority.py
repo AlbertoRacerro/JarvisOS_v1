@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -181,6 +182,7 @@ def sanitize_prompt_with_local_model(
     adapters: dict[str, AIProviderAdapter] | None = None,
     registry: ProviderRegistry | None = None,
     policy: EgressPolicyConfig | None = None,
+    output_validator: Callable[[str], None] | None = None,
 ) -> PromptDerivative:
     """Run exactly one registry-owned local sanitizer binding through run_ai_task."""
 
@@ -233,6 +235,8 @@ def sanitize_prompt_with_local_model(
         model_id=binding.model_id,
         maximum=policy.max_prompt_chars,
     )
+    if output_validator is not None:
+        output_validator(derivative_content)
 
     approval = create_prompt_derivative(
         raw_prompt=raw_prompt,
@@ -263,6 +267,7 @@ def sanitize_canonical_sources_with_local_model(
     adapters: dict[str, AIProviderAdapter] | None = None,
     registry: ProviderRegistry | None = None,
     policy: EgressPolicyConfig | None = None,
+    config_context: dict[str, Any] | None = None,
 ) -> SanitizerApproval:
     """Sanitize exact canonical source snapshots with one local-only AI job.
 
@@ -301,6 +306,7 @@ def sanitize_canonical_sources_with_local_model(
         template=_CANONICAL_SANITIZER_TEMPLATE,
         version=_CANONICAL_SANITIZER_VERSION,
         registry=registry,
+        config_context=config_context,
     )
     outcome = _run_local_sanitizer(
         sanitizer_input=sanitizer_input,
@@ -568,6 +574,7 @@ def _sanitizer_config_digest(
     template: str,
     version: str,
     registry: ProviderRegistry,
+    config_context: dict[str, Any] | None = None,
 ) -> str:
     binding = registry.bindings.get(route_class)
     if binding is None:
@@ -575,26 +582,27 @@ def _sanitizer_config_digest(
             "Sanitizer config digest cannot resolve the primary binding."
         )
     chain = registry.fallback_chains.get(route_class, ())
-    return sha256_text(
-        canonical_json(
-            {
-                "egress_config_digest": policy.config_digest,
-                "fallback_closure": [
-                    {"provider_id": item.provider_id, "model_id": item.model_id}
-                    for item in chain
-                ],
-                "primary_binding": {
-                    "provider_id": binding.provider_id,
-                    "model_id": binding.model_id,
-                    "requires_network": binding.requires_network,
-                    "max_output_tokens": binding.max_output_tokens,
-                },
-                "route_class": route_class,
-                "template": template,
-                "version": version,
-            }
-        )
-    )
+    payload: dict[str, Any] = {
+        "egress_config_digest": policy.config_digest,
+        "fallback_closure": [
+            {"provider_id": item.provider_id, "model_id": item.model_id}
+            for item in chain
+        ],
+        "primary_binding": {
+            "provider_id": binding.provider_id,
+            "model_id": binding.model_id,
+            "requires_network": binding.requires_network,
+            "max_output_tokens": binding.max_output_tokens,
+        },
+        "route_class": route_class,
+        "template": template,
+        "version": version,
+    }
+    if config_context is not None:
+        if not isinstance(config_context, dict):
+            raise EgressContractError("config_context must be an object")
+        payload["config_context"] = dict(config_context)
+    return sha256_text(canonical_json(payload))
 
 
 def _prompt_authority_from_derivative(
