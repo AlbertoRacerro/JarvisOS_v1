@@ -232,13 +232,18 @@ def is_exact_bundled_profile(model_version: Any, script_sha256: str) -> bool:
     try:
         script_path = Path(str(model_version["script_path"]))
         expected_manifest_sha = hashlib.sha256(expected_bundle_manifest_bytes()).hexdigest()
+        stored_contract, stored_contract_sha = parse_stored_input_contract(
+            model_version["input_contract_payload"],
+            model_version["input_contract_sha256"],
+        )
         return (
             script_path.name == REGISTERED_ENTRYPOINT_FILENAME
             and model_version["implementation_kind"] == "calc_v0"
             and model_version["version_label"] == MODEL_LABEL
             and script_sha256 == sha256_file(bundled_script_path())
             and model_version["script_sha256"] == script_sha256
-            and model_version["input_contract_sha256"] == expected_contract_sha256()
+            and isinstance(stored_contract, ModelInputContractV2)
+            and stored_contract_sha == expected_contract_sha256()
             and validate_registered_bundle(script_path.parent) == expected_manifest_sha
         )
     except (KeyError, OSError, RunnerSafetyError, TypeError, ValueError):
