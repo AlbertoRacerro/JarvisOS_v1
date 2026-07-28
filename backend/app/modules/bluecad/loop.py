@@ -7,6 +7,7 @@ import mimetypes
 import shutil
 from collections.abc import Callable
 from copy import deepcopy
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -23,6 +24,7 @@ from app.modules.bluecad.evidence import (
     record_mesh_quality_evidence,
     record_validation_evidence,
 )
+from app.modules.bluecad.evidence_sight import render_evidence_sight
 from app.modules.bluecad.export import sha256_file
 from app.modules.bluecad.fem_adapter import append_tier3_checks, solve_static_analysis
 from app.modules.bluecad.ledger import (
@@ -39,12 +41,28 @@ from app.modules.bluecad.ledger import (
 )
 from app.modules.bluecad.mesh_adapter import mesh_analysis_spec
 from app.modules.bluecad.models import BluecadCandidateCreate, BluecadCandidateRead, BluecadLoopConfig
-from app.modules.bluecad.prompts import PROMPT_VERSION, generate_prompt, repair_prompt
+from app.modules.bluecad.prompts import (
+    PROMPT_VERSION,
+    STRUCTURAL_REPAIR_PROMPT_VERSION,
+    generate_prompt,
+    repair_prompt,
+    structural_repair_prompt,
+)
 from app.modules.bluecad.service import build_geometry_spec
 from app.modules.bluecad.spec import SpecValidationError, canonical_json, canonicalize_geometry_spec
+from app.modules.bluecad.structural_ledger import (
+    commit_structural_candidate_artifacts,
+    start_structural_attempt,
+)
 from app.modules.events.service import utc_now
 
 _EXTERNAL_ROUTES = {"external:cheap", "external:reasoning"}
+
+
+@dataclass(frozen=True)
+class SimulationStageOutcome:
+    status: str
+    source_run_id: str | None = None
 
 
 def create_bluecad_candidate(
@@ -93,7 +111,11 @@ def create_bluecad_candidate(
                     proposal_outcome="blocked",
                     error_detail={"error_type": outcome.error_type or outcome.status},
                 )
-                park_candidate(candidate.id, "budget_blocked", notes=f"external_blocked_reason={outcome.error_type or outcome.status}")
+                park_candidate(
+                    candidate.id,
+                    "budget_blocked",
+                    notes=f"external_blocked_reason={outcome.error_type or outcome.status}",
+                )
                 return _require_candidate(workspace_id, candidate.id)
             if outcome.status != "success" or outcome.response is None or outcome.response.text is None:
                 finish_attempt(
@@ -123,7 +145,11 @@ def create_bluecad_candidate(
             last_spec = spec
             build = _build_and_register(workspace_id, candidate.id, attempt_no, spec)
             verdict = "pass" if build["report"].get("verdict") == "pass" else "fail"
-            build_outcome = "ok" if build["result"].verdict != "error" else _build_error_code(build["result"].errors)
+            build_outcome = (
+                "ok"
+                if build["result"].verdict != "error"
+                else _build_error_code(build["result"].errors)
+            )
             finish_attempt(
                 attempt.id,
                 proposal_ai_job_id=outcome.ledger_id,
@@ -151,13 +177,173 @@ def create_bluecad_candidate(
             last_report = build["report"]
             if verdict == "pass":
                 mark_candidate_valid(candidate.id)
-                _run_simulation_stage(workspace_id, candidate.id, attempt.id, attempt_no, loop_config.analysis_spec, build)
+                simulation = _run_simulation_stage(
+                    workspace_id,
+                    candidate.id,
+                    attempt.id,
+                    attempt_no,
+                    loop_config.analysis_spec,
+                    build,
+                )
+                if loop_config.structural_repair and simulation.status == "criteria_failed":
+                    _run_structural_repair_cycle(
+                        workspace_id=workspace_id,
+                        candidate_id=candidate.id,
+                        initial_attempt_id=attempt.id,
+                        initial_attempt_no=attempt_no,
+                        initial_spec=spec,
+                        route_class=tier,
+                        loop_config=loop_config,
+                        adapters=adapters,
+                        bindings=bindings,
+                    )
                 return _require_candidate(workspace_id, candidate.id)
             saw_build_or_validation_failure = True
 
-    reason = "malformed_repeated" if saw_malformed and not saw_build_or_validation_failure else "attempts_exhausted"
+    reason = (
+        "malformed_repeated"
+        if saw_malformed and not saw_build_or_validation_failure
+        else "attempts_exhausted"
+    )
     park_candidate(candidate.id, reason)
     return _require_candidate(workspace_id, candidate.id)
+
+
+def _run_structural_repair_cycle(
+    *,
+    workspace_id: str,
+    candidate_id: str,
+    initial_attempt_id: str,
+    initial_attempt_no: int,
+    initial_spec: dict[str, Any],
+    route_class: str,
+    loop_config: BluecadLoopConfig,
+    adapters: dict[str, AIProviderAdapter] | None,
+    bindings: dict[str, ProviderBinding] | None,
+) -> None:
+    sight = render_evidence_sight(workspace_id, candidate_id, initial_attempt_id)
+    if sight is None:
+        return
+    current_spec = initial_spec
+    attempt_no = initial_attempt_no
+
+    for _ in range(loop_config.max_structural_repairs):
+        attempt_no += 1
+        prompt = structural_repair_prompt(current_spec, sight.text)
+        try:
+            attempt = start_structural_attempt(
+                candidate_id,
+                attempt_no,
+                route_class,
+                prompt_version=STRUCTURAL_REPAIR_PROMPT_VERSION,
+                evidence_digest=sight.digest,
+            )
+        except ValueError:
+            return
+        outcome = run_ai_task(
+            user_prompt=prompt,
+            task_kind="bluecad_cad_repair",
+            route_class=route_class,
+            max_output_tokens=loop_config.max_output_tokens,
+            adapters=adapters,
+            bindings=bindings,
+        )
+        if outcome.status == "config_error":
+            finish_attempt(
+                attempt.id,
+                proposal_ai_job_id=outcome.ledger_id,
+                proposal_outcome="blocked",
+                error_detail={"error_type": outcome.error_type or outcome.status},
+            )
+            return
+        if outcome.status != "success" or outcome.response is None or outcome.response.text is None:
+            finish_attempt(
+                attempt.id,
+                proposal_ai_job_id=outcome.ledger_id,
+                proposal_outcome="provider_error",
+                error_detail={"error_type": outcome.error_type or outcome.status},
+            )
+            return
+        try:
+            spec = parse_geometry_spec_response(outcome.response.text)
+        except SpecValidationError as exc:
+            finish_attempt(
+                attempt.id,
+                proposal_ai_job_id=outcome.ledger_id,
+                proposal_outcome="malformed",
+                error_detail={"parse_error": exc.detail},
+            )
+            return
+        try:
+            build = _build_and_register(workspace_id, candidate_id, attempt_no, spec)
+        except Exception as exc:  # noqa: BLE001 - speculative build must preserve valid owner.
+            finish_attempt(
+                attempt.id,
+                proposal_ai_job_id=outcome.ledger_id,
+                proposal_outcome="ok",
+                build_outcome="error",
+                error_detail={"build_error": type(exc).__name__},
+            )
+            return
+        verdict = "pass" if build["report"].get("verdict") == "pass" else "fail"
+        build_outcome = (
+            "ok"
+            if build["result"].verdict != "error"
+            else _build_error_code(build["result"].errors)
+        )
+        finish_attempt(
+            attempt.id,
+            proposal_ai_job_id=outcome.ledger_id,
+            proposal_outcome="ok",
+            build_outcome=build_outcome,
+            validation_verdict=verdict,
+            spec_artifact_id=build["spec_artifact_id"],
+            report_artifact_id=build["report_artifact_id"],
+            manifest_artifact_id=build["manifest_artifact_id"],
+        )
+        try:
+            record_validation_evidence(
+                workspace_id,
+                candidate_id,
+                attempt.id,
+                build["report"],
+                report_artifact_id=build["report_artifact_id"],
+            )
+        except Exception:  # noqa: BLE001 - evidence failure is non-triggering.
+            return
+        if verdict != "pass" or build_outcome != "ok":
+            return
+        simulation = _run_simulation_stage(
+            workspace_id,
+            candidate_id,
+            attempt.id,
+            attempt_no,
+            loop_config.analysis_spec,
+            build,
+            producer_notes="Generated by EVIDENCE-SIGHT-0 structural repair.",
+            required_candidate_status="valid",
+        )
+        if simulation.status == "criteria_passed":
+            glb_artifact_id = build.get("glb_artifact_id")
+            if not isinstance(glb_artifact_id, str) or not glb_artifact_id:
+                return
+            try:
+                commit_structural_candidate_artifacts(
+                    candidate_id,
+                    spec_artifact_id=build["spec_artifact_id"],
+                    glb_artifact_id=glb_artifact_id,
+                    report_artifact_id=build["report_artifact_id"],
+                )
+            except ValueError:
+                return
+            return
+        if simulation.status != "criteria_failed":
+            return
+        next_sight = render_evidence_sight(workspace_id, candidate_id, attempt.id)
+        if next_sight is None:
+            return
+        current_spec = spec
+        sight = next_sight
 
 
 def _run_simulation_stage(
@@ -170,9 +356,9 @@ def _run_simulation_stage(
     *,
     producer_notes: str | None = None,
     required_candidate_status: str | None = None,
-) -> None:
+) -> SimulationStageOutcome:
     if analysis_spec_without_geometry is None:
-        return
+        return SimulationStageOutcome("skipped")
     try:
         out_dir = candidate_work_dir(workspace_id, candidate_id, attempt_no) / "simulation"
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -185,7 +371,7 @@ def _run_simulation_stage(
             required_candidate_status=required_candidate_status,
         )
     except Exception:
-        return
+        return SimulationStageOutcome("setup_error")
     source_ref = f"bluecad_candidate:{candidate_id}:attempt:{attempt_no}:sim:{source_run_id}"
     try:
         mesh_result = mesh_analysis_spec(analysis_spec, out_dir / "mesh")
@@ -230,10 +416,12 @@ def _run_simulation_stage(
             source_run_id,
             "mesh_evidence_persistence_failed",
         )
-        return
-    if mesh_result.get("verdict") != "pass" or "mesh_inp" not in mesh_result.get("artifacts", {}):
+        return SimulationStageOutcome("mesh_evidence_error", source_run_id)
+    mesh_verdict = str(mesh_result.get("verdict") or "error")
+    if mesh_verdict != "pass" or "mesh_inp" not in mesh_result.get("artifacts", {}):
         _complete_simulation_run(source_run_id, mesh_result, None)
-        return
+        status = "mesh_failed" if mesh_verdict == "fail" else "mesh_error"
+        return SimulationStageOutcome(status, source_run_id)
     try:
         fem_summary = solve_static_analysis(analysis_spec, mesh_result, out_dir / "fem")
     except Exception as exc:  # noqa: BLE001 - sim failures are advisory evidence only.
@@ -241,9 +429,22 @@ def _run_simulation_stage(
     fem_report = None
     if fem_summary.get("verdict") == "pass" and analysis_spec.get("pass_criteria"):
         try:
-            fem_report = append_tier3_checks(deepcopy(build["report"]), fem_summary, analysis_spec["pass_criteria"])
+            fem_report = append_tier3_checks(
+                deepcopy(build["report"]),
+                fem_summary,
+                analysis_spec["pass_criteria"],
+            )
         except Exception as exc:  # noqa: BLE001 - Tier 3 failures are advisory evidence only.
-            fem_report = {"verdict": "error", "checks": [], "errors": [{"code": "TIER3_ERROR", "detail": {"message": str(exc), "type": type(exc).__name__}}]}
+            fem_report = {
+                "verdict": "error",
+                "checks": [],
+                "errors": [
+                    {
+                        "code": "TIER3_ERROR",
+                        "detail": {"message": str(exc), "type": type(exc).__name__},
+                    }
+                ],
+            }
     fem_payload = {"result_summary": fem_summary, "report": fem_report}
     try:
         if required_candidate_status is None:
@@ -286,8 +487,30 @@ def _run_simulation_stage(
             source_run_id,
             "fem_evidence_persistence_failed",
         )
-        return
+        return SimulationStageOutcome("fem_evidence_error", source_run_id)
     _complete_simulation_run(source_run_id, mesh_result, fem_summary, fem_report)
+    if fem_summary.get("verdict") != "pass":
+        return SimulationStageOutcome("solve_error", source_run_id)
+    if not analysis_spec.get("pass_criteria"):
+        return SimulationStageOutcome("no_criteria", source_run_id)
+    return SimulationStageOutcome(_criteria_outcome(fem_report), source_run_id)
+
+
+def _criteria_outcome(fem_report: dict[str, Any] | None) -> str:
+    if fem_report is None:
+        return "criteria_error"
+    checks = fem_report.get("checks")
+    errors = fem_report.get("errors")
+    if not isinstance(checks, list) or not isinstance(errors, list):
+        return "criteria_error"
+    statuses = [check.get("status") for check in checks if isinstance(check, dict)]
+    if fem_report.get("verdict") == "error" or errors or "error" in statuses:
+        return "criteria_error"
+    if fem_report.get("verdict") == "fail" and "fail" in statuses:
+        return "criteria_failed"
+    if fem_report.get("verdict") == "pass" and all(status == "pass" for status in statuses):
+        return "criteria_passed"
+    return "criteria_error"
 
 
 def _link_sim_evidence_context(
@@ -332,13 +555,22 @@ def _register_sim_report(
     )
 
 
-def _analysis_spec_with_geometry(analysis_spec_without_geometry: dict[str, Any], build: dict[str, Any]) -> dict[str, Any]:
+def _analysis_spec_with_geometry(
+    analysis_spec_without_geometry: dict[str, Any],
+    build: dict[str, Any],
+) -> dict[str, Any]:
     result = build["result"]
     step_path = result.out_dir / "model.step"
     manifest_path = result.manifest_path
     if manifest_path is None:
         raise RuntimeError("validated BLUECAD build missing manifest for simulation")
-    return {**analysis_spec_without_geometry, "geometry": {"step_path": str(step_path), "manifest_path": str(manifest_path)}}
+    return {
+        **analysis_spec_without_geometry,
+        "geometry": {
+            "step_path": str(step_path),
+            "manifest_path": str(manifest_path),
+        },
+    }
 
 
 def _persist_sim_evidence(
@@ -517,10 +749,19 @@ def _create_simulation_run(
     return run_id
 
 
-def _complete_simulation_run(source_run_id: str, mesh_result: dict[str, Any], fem_summary: dict[str, Any] | None, fem_report: dict[str, Any] | None = None) -> None:
+def _complete_simulation_run(
+    source_run_id: str,
+    mesh_result: dict[str, Any],
+    fem_summary: dict[str, Any] | None,
+    fem_report: dict[str, Any] | None = None,
+) -> None:
     try:
         completed_at = utc_now()
-        output_payload = _simulation_run_output_payload(mesh_result, fem_summary, fem_report)
+        output_payload = _simulation_run_output_payload(
+            mesh_result,
+            fem_summary,
+            fem_report,
+        )
         with open_sqlite_connection() as connection:
             connection.execute(
                 """
@@ -538,7 +779,12 @@ def _complete_simulation_run(source_run_id: str, mesh_result: dict[str, Any], fe
 def _best_effort_fail_simulation_run(source_run_id: str, error_code: str) -> None:
     try:
         completed_at = utc_now()
-        output_payload = {"status": "failed", "error": {"code": error_code}, "mesh_verdict": None, "fem_verdict": None}
+        output_payload = {
+            "status": "failed",
+            "error": {"code": error_code},
+            "mesh_verdict": None,
+            "fem_verdict": None,
+        }
         with open_sqlite_connection() as connection:
             connection.execute(
                 """
@@ -553,11 +799,19 @@ def _best_effort_fail_simulation_run(source_run_id: str, error_code: str) -> Non
         return
 
 
-def _simulation_run_output_payload(mesh_result: dict[str, Any], fem_summary: dict[str, Any] | None, fem_report: dict[str, Any] | None = None) -> dict[str, Any]:
+def _simulation_run_output_payload(
+    mesh_result: dict[str, Any],
+    fem_summary: dict[str, Any] | None,
+    fem_report: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     return {
         "status": "completed",
         "mesh_verdict": mesh_result.get("verdict"),
-        "fem_verdict": fem_report.get("verdict") if fem_report is not None else (fem_summary.get("verdict") if fem_summary is not None else None),
+        "fem_verdict": (
+            fem_report.get("verdict")
+            if fem_report is not None
+            else (fem_summary.get("verdict") if fem_summary is not None else None)
+        ),
     }
 
 
@@ -565,8 +819,20 @@ def _mesh_error_result(exc: Exception, analysis_spec: dict[str, Any]) -> dict[st
     return {
         "schema_version": "bluecad_mesh_result_v0_1",
         "verdict": "error",
-        "errors": [{"code": "MESH_ERROR", "detail": {"message": str(exc), "type": type(exc).__name__}}],
-        "attempts": [{"attempt_no": 1, "target_size": analysis_spec.get("mesh", {}).get("target_size"), "counts": {}, "errors": []}],
+        "errors": [
+            {
+                "code": "MESH_ERROR",
+                "detail": {"message": str(exc), "type": type(exc).__name__},
+            }
+        ],
+        "attempts": [
+            {
+                "attempt_no": 1,
+                "target_size": analysis_spec.get("mesh", {}).get("target_size"),
+                "counts": {},
+                "errors": [],
+            }
+        ],
         "artifacts": {},
     }
 
@@ -575,7 +841,12 @@ def _fem_error_result(exc: Exception) -> dict[str, Any]:
     return {
         "schema_version": "bluecad_result_summary_v0_1",
         "verdict": "error",
-        "errors": [{"code": "SOLVE_ERROR", "detail": {"message": str(exc), "type": type(exc).__name__}}],
+        "errors": [
+            {
+                "code": "SOLVE_ERROR",
+                "detail": {"message": str(exc), "type": type(exc).__name__},
+            }
+        ],
         "solver": {"tool_id": "calculix", "version": None, "returncode": None},
         "artifacts": {},
     }
@@ -586,24 +857,37 @@ def parse_geometry_spec_response(text: str) -> dict[str, Any]:
     try:
         loaded = json.loads(payload)
     except json.JSONDecodeError as exc:
-        raise SpecValidationError({"message": "LLM response did not contain valid JSON.", "position": exc.pos}) from exc
+        raise SpecValidationError(
+            {
+                "message": "LLM response did not contain valid JSON.",
+                "position": exc.pos,
+            }
+        ) from exc
     try:
         return canonicalize_geometry_spec(loaded)
     except SpecValidationError:
         raise
     except Exception as exc:
-        raise SpecValidationError({"message": str(exc), "type": type(exc).__name__}) from exc
+        raise SpecValidationError(
+            {"message": str(exc), "type": type(exc).__name__}
+        ) from exc
 
 
 def _extract_single_json_object(text: str) -> str:
     stripped = text.strip()
     if stripped.startswith("```"):
         lines = stripped.splitlines()
-        if len(lines) >= 3 and lines[0].startswith("```") and lines[-1].strip() == "```":
+        if (
+            len(lines) >= 3
+            and lines[0].startswith("```")
+            and lines[-1].strip() == "```"
+        ):
             stripped = "\n".join(lines[1:-1]).strip()
     start = stripped.find("{")
     if start < 0:
-        raise SpecValidationError({"message": "LLM response must contain one JSON object."})
+        raise SpecValidationError(
+            {"message": "LLM response must contain one JSON object."}
+        )
     depth = 0
     in_string = False
     escape = False
@@ -629,36 +913,69 @@ def _extract_single_json_object(text: str) -> str:
             if depth < 0:
                 break
     if end is None:
-        raise SpecValidationError({"message": "LLM response JSON object was incomplete."})
+        raise SpecValidationError(
+            {"message": "LLM response JSON object was incomplete."}
+        )
     before = stripped[:start].strip()
     after = stripped[end:].strip()
     if before or after:
-        raise SpecValidationError({"message": "LLM response must contain exactly one JSON object."})
+        raise SpecValidationError(
+            {"message": "LLM response must contain exactly one JSON object."}
+        )
     return stripped[start:end]
 
 
-def _prompt_for_attempt(brief_text: str, last_spec: dict[str, Any] | None, last_report: dict[str, Any] | None) -> str:
+def _prompt_for_attempt(
+    brief_text: str,
+    last_spec: dict[str, Any] | None,
+    last_report: dict[str, Any] | None,
+) -> str:
     if last_spec is None or last_report is None:
         return generate_prompt(brief_text)
     return repair_prompt(last_spec, last_report)
 
 
-def _build_and_register(workspace_id: str, candidate_id: str, attempt_no: int, spec: dict[str, Any]) -> dict[str, Any]:
+def _build_and_register(
+    workspace_id: str,
+    candidate_id: str,
+    attempt_no: int,
+    spec: dict[str, Any],
+) -> dict[str, Any]:
     out_dir = candidate_work_dir(workspace_id, candidate_id, attempt_no)
     out_dir.mkdir(parents=True, exist_ok=True)
     spec_path = out_dir / "geometry_spec.json"
     spec_path.write_text(canonical_json(spec) + "\n", encoding="utf-8")
     result = build_geometry_spec(spec, out_dir)
     source_ref = f"bluecad_candidate:{candidate_id}:attempt:{attempt_no}"
-    spec_artifact_id = register_artifact(workspace_id, spec_path, role="bluecad_spec", source_ref=source_ref)
-    report_artifact_id = register_artifact(workspace_id, _require_path(result.report_path, out_dir / "validation_report.json"), role="bluecad_report", source_ref=source_ref)
+    spec_artifact_id = register_artifact(
+        workspace_id,
+        spec_path,
+        role="bluecad_spec",
+        source_ref=source_ref,
+    )
+    report_artifact_id = register_artifact(
+        workspace_id,
+        _require_path(result.report_path, out_dir / "validation_report.json"),
+        role="bluecad_report",
+        source_ref=source_ref,
+    )
     manifest_artifact_id = None
     glb_artifact_id = None
     if result.manifest_path is not None and result.manifest_path.exists():
-        manifest_artifact_id = register_artifact(workspace_id, result.manifest_path, role="bluecad_manifest", source_ref=source_ref)
+        manifest_artifact_id = register_artifact(
+            workspace_id,
+            result.manifest_path,
+            role="bluecad_manifest",
+            source_ref=source_ref,
+        )
     glb_path = out_dir / "model.glb"
     if glb_path.exists():
-        glb_artifact_id = register_artifact(workspace_id, glb_path, role="bluecad_glb", source_ref=source_ref)
+        glb_artifact_id = register_artifact(
+            workspace_id,
+            glb_path,
+            role="bluecad_glb",
+            source_ref=source_ref,
+        )
     return {
         "result": result,
         "report": result.report,
@@ -697,7 +1014,9 @@ def _validate_loop_config(loop_config: BluecadLoopConfig) -> None:
         raise ValueError("tier_ladder must not be empty")
     for route_class in loop_config.tier_ladder:
         if route_class not in _EXTERNAL_ROUTES:
-            raise ValueError("BLUECAD loop route classes must be explicit external tiers")
+            raise ValueError(
+                "BLUECAD loop route classes must be explicit external tiers"
+            )
 
 
 def _require_candidate(workspace_id: str, candidate_id: str) -> BluecadCandidateRead:
