@@ -9,10 +9,11 @@ provider directly.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, Iterator
+from typing import Any
 
 from app.core.database import open_sqlite_connection
 from app.modules.ai import sensitivity
@@ -181,6 +182,7 @@ def prepare_external_structural_repair(
         )
         _validate_prompt_derivative(
             prompt_derivative,
+            expected_workspace_id=workspace_id,
             raw_prompt=raw_prompt,
             forbidden_spec_json=spec_json,
         )
@@ -354,6 +356,7 @@ def _resolve_external_prompt_derivative(
         try:
             _validate_prompt_derivative(
                 derivative,
+                expected_workspace_id=workspace_id,
                 raw_prompt=raw_prompt,
                 forbidden_spec_json=forbidden_spec_json,
             )
@@ -371,12 +374,13 @@ def _resolve_external_prompt_derivative(
 def _validate_prompt_derivative(
     derivative,
     *,
+    expected_workspace_id: str,
     raw_prompt: str,
     forbidden_spec_json: str,
 ) -> None:
     if (
         derivative.status != "approved"
-        or derivative.workspace_id is None
+        or derivative.workspace_id != expected_workspace_id
         or derivative.sanitizer_kind != "model_local"
         or derivative.derivative_content == raw_prompt
         or forbidden_spec_json in derivative.derivative_content
