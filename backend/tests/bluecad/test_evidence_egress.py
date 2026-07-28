@@ -271,3 +271,49 @@ def test_preparation_failure_happens_before_structural_attempt_insert(
     )
 
     assert events == ["prepare"]
+
+
+def test_unresolved_binding_stops_before_preparation_attempt_or_ai(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sight = EvidenceSight(
+        text="EVIDENCE_SIGHT_V0\nevidence:validation verdict=fail",
+        digest="sha256:" + "5" * 64,
+        record_ids=("e1",),
+    )
+    events: list[str] = []
+    monkeypatch.setattr(loop_module, "render_evidence_sight", lambda *_args: sight)
+    monkeypatch.setattr(
+        loop_module,
+        "resolve_binding",
+        lambda *_args, **_kwargs: (None, SimpleNamespace()),
+    )
+    monkeypatch.setattr(
+        loop_module,
+        "prepare_external_structural_repair",
+        lambda **_kwargs: events.append("prepare"),
+    )
+    monkeypatch.setattr(
+        loop_module,
+        "start_structural_attempt",
+        lambda *_args, **_kwargs: events.append("start"),
+    )
+    monkeypatch.setattr(
+        loop_module,
+        "run_ai_task",
+        lambda **_kwargs: events.append("ai"),
+    )
+
+    loop_module._run_structural_repair_cycle(
+        workspace_id=WORKSPACE_ID,
+        candidate_id="candidate-1",
+        initial_attempt_id="attempt-1",
+        initial_attempt_no=1,
+        initial_spec={"schema_version": "geometry_spec_v0_1"},
+        route_class="external:cheap",
+        loop_config=SimpleNamespace(max_structural_repairs=1, max_output_tokens=128),
+        adapters=None,
+        bindings=None,
+    )
+
+    assert events == []
