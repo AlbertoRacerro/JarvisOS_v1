@@ -61,9 +61,9 @@ before Codex or another coding agent may act on them.
    symmetric-topology foundation.
 7. Preserve the merged `074` fresh-manifest, explicit-layout, reconciliation,
    idempotency, lifecycle-fencing, and fail-closed boundaries.
-8. Implement ready `075` only from exact 047 reproduction through one bounded implementation
-   PR; preserve the merged 047 files, v1 contract, canonical fixtures, and bundled-only runner
-   boundary throughout all work packages.
+8. Preserve merged `075` exact-047 identity and process-kernel boundaries; define
+   and promote `076` only as one bounded evidence-guided structural-repair slice
+   that keeps valid candidate state and artifact pointers fail-closed.
 9. Run `069` MEMORY-CONSOLIDATE-0 as the first Hermes dogfood only after 066–068
    are merged and the required local route is qualified.
 10. Continue `063`/`064`, `012` → `033`, and residual conversation/UI rows according
@@ -161,6 +161,7 @@ PR overlaps the target files or runtime boundary.
 | 073 | merged | [#174](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/174) | BLUECAD-PRIMITIVE-1: fluid-open capped branch manifold | 005, 005b, 056 | Add one deterministic capped branch-header primitive with exactly one common port and 1–12 branch ports, explicit branch bores through the header wall, closed-end geometry, kernel-volume reconciliation, and property/conformance tests; no process link, layout solver, project defaults, or UI. |
 | 074 | merged | [#183](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/183) | CAD-LINK-1: 072 M1 topology to deterministic multi-part BLUECAD | 038, 050, 051, 052, 071, 072, 073 | Convert a fresh 072 topology manifest into an idempotent multi-part BLUECAD candidate only through an explicit reviewed spatial-layout contract; reconcile process geometry, ports, volume/area, and lineage without inferring bend handedness, routing, or design defaults. |
 | 075 | merged | [#191](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/191) | PROCESS-KERNEL-1: streams, components, units, and unit operations | 043, 047, 048, 071 | Re-express validated 047 as an acyclic flowsheet of typed material/scalar ports and reusable blocks, add additive unit-contract v2 and component/stream foundations, and require exact canonical 047 result identity before broader solver work. Readiness evidence and implementation ownership are frozen in [the 2026-07-27 readiness decision](075-readiness-2026-07-27.md). |
+| 076 | planned | — | EVIDENCE-SIGHT-0: bounded evidence-guided structural repair | 010, 038, 044, 059b, 061a, 061b | Add an opt-in, separately budgeted structural-repair cycle using deterministic attempt-scoped evidence; preserve valid candidate state and artifact pointers on every unsuccessful path; no new states, migration, promotion, or egress authority. |
 
 ## Superseded planning aliases and resolved collisions
 
