@@ -398,6 +398,11 @@ def authorize_manual_context(
             source_digests[source_ref] = digest
         levels.append(derivative.effective_level)
 
+    from app.modules.bluecad.evidence_egress import (
+        enrich_authorized_evidence_manifest,
+    )
+
+    included_manifest = enrich_authorized_evidence_manifest(included_manifest)
     context_level = max(levels, key=_LEVEL_RANK.__getitem__) if levels else "S0"
     return ManualContextAuthority(
         result="eligible",
