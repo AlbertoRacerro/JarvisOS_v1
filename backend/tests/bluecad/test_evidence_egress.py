@@ -7,6 +7,7 @@ import pytest
 
 import app.modules.bluecad.loop as loop_module
 from app.core.database import initialize_database, open_sqlite_connection
+from app.modules.ai import sensitivity
 from app.modules.ai.egress_persistence import prepare_egress_attempt
 from app.modules.ai.egress_policy import EXTERNAL_PROVIDER_OPERATION
 from app.modules.ai.egress_service import (
@@ -138,7 +139,9 @@ def test_lineage_enrichment_is_scoped_and_exact() -> None:
 
     bad = _lineage()
     bad["ordered_source_refs"] = ["evidence:other"]
-    with bind_evidence_lineage(bad), pytest.raises(Exception):
+    with bind_evidence_lineage(bad), pytest.raises(
+        sensitivity.SensitivityPolicyError
+    ):
         enrich_authorized_evidence_manifest(manifest)
 
 
