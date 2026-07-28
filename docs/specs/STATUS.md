@@ -62,12 +62,13 @@ before Codex or another coding agent may act on them.
 7. Preserve the merged `074` fresh-manifest, explicit-layout, reconciliation,
    idempotency, lifecycle-fencing, and fail-closed boundaries.
 8. Preserve merged `075` exact-047 identity, process-kernel boundaries, and merged
-   `076` fail-closed evidence-guided structural repair; define `077` only as the
-   evidence provenance/classification amendment to existing 059a/059b egress authority.
+   `076` fail-closed evidence-guided structural repair; implement ready `077` only
+   under the [2026-07-28 readiness decision](077-readiness-2026-07-28.md) and the
+   existing 059a/059b egress authority.
 9. Run `069` MEMORY-CONSOLIDATE-0 as the first Hermes dogfood only after 066–068
    are merged and the required local route is qualified.
 10. Continue `063`/`064`, `012` → `033`, and residual conversation/UI rows according
-   to dependencies, explicit maintainer priority, and measured value.
+    to dependencies, explicit maintainer priority, and measured value.
 
 Trigger-gated rows remain `planned` until their stated evidence exists. Always
 check rows marked `in_review` before choosing any `ready` spec and confirm no open
@@ -162,7 +163,7 @@ PR overlaps the target files or runtime boundary.
 | 074 | merged | [#183](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/183) | CAD-LINK-1: 072 M1 topology to deterministic multi-part BLUECAD | 038, 050, 051, 052, 071, 072, 073 | Convert a fresh 072 topology manifest into an idempotent multi-part BLUECAD candidate only through an explicit reviewed spatial-layout contract; reconcile process geometry, ports, volume/area, and lineage without inferring bend handedness, routing, or design defaults. |
 | 075 | merged | [#191](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/191) | PROCESS-KERNEL-1: streams, components, units, and unit operations | 043, 047, 048, 071 | Re-express validated 047 as an acyclic flowsheet of typed material/scalar ports and reusable blocks, add additive unit-contract v2 and component/stream foundations, and require exact canonical 047 result identity before broader solver work. Readiness evidence and implementation ownership are frozen in [the 2026-07-27 readiness decision](075-readiness-2026-07-27.md). |
 | 076 | merged | [#195](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/195) | EVIDENCE-SIGHT-0: bounded evidence-guided structural repair | 010, 038, 044, 059b, 061a, 061b | Add an opt-in, separately budgeted structural-repair cycle using deterministic attempt-scoped evidence; preserve valid candidate state and artifact pointers on every unsuccessful path; no new states, migration, promotion, or egress authority. |
-| 077 | planned | — | EVIDENCE-EGRESS-0: canonical evidence provenance and classification | 044, 059a, 059b, 076 | Bind canonical evidence rows and rendered evidence derivatives to workspace-scoped provenance, sensitivity, staleness, and exact-packet lineage before external model use; reuse 059a/059b authority and add no alternate egress path. |
+| 077 | ready | — | EVIDENCE-EGRESS-0: canonical evidence provenance and classification | 044, 059a, 059b, 076 | Bind canonical evidence rows and rendered evidence derivatives to workspace-scoped provenance, sensitivity, staleness, and exact-packet lineage before external model use; reuse 059a/059b authority and add no alternate egress path. Readiness sequencing, prompt authority, and no-migration packet lineage are frozen in [the 2026-07-28 readiness decision](077-readiness-2026-07-28.md). |
 
 ## Superseded planning aliases and resolved collisions
 
