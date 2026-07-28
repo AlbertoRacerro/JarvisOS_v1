@@ -5,6 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
+import app.modules.ai.egress_authority as egress_authority_module
+import app.modules.bluecad.evidence_egress as evidence_egress_module
 import app.modules.bluecad.loop as loop_module
 from app.core.database import initialize_database, open_sqlite_connection
 from app.modules.ai import sensitivity
@@ -92,20 +94,26 @@ def _lineage(*, structural_attempt_id: str = "attempt-2") -> dict[str, object]:
     }
 
 
+def _manifest() -> tuple[dict[str, object], ...]:
+    return (
+        {
+            "source_ref": "derivative:derivative-1",
+            "source_refs": ["evidence:e1"],
+            "content_digest": "sha256:" + "2" * 64,
+            "effective_level": "S1",
+            "label_id": None,
+            "derivative_id": "derivative-1",
+            "inclusion_reason": "approved_derivative",
+        },
+    )
+
+
 def _material(
     *,
     lineage: dict[str, object] | None = None,
     prompt_derivative_id: str = "prompt-derivative-1",
 ) -> EgressPacketMaterial:
-    manifest = {
-        "source_ref": "derivative:derivative-1",
-        "source_refs": ["evidence:e1"],
-        "content_digest": "sha256:" + "2" * 64,
-        "effective_level": "S1",
-        "label_id": None,
-        "derivative_id": "derivative-1",
-        "inclusion_reason": "approved_derivative",
-    }
+    manifest = dict(_manifest()[0])
     if lineage is not None:
         manifest["evidence_lineage"] = lineage
     return EgressPacketMaterial(
@@ -135,17 +143,22 @@ def _material(
     )
 
 
-def test_lineage_enrichment_is_scoped_and_exact() -> None:
-    manifest = (
-        {
-            "source_ref": "derivative:derivative-1",
-            "source_refs": ["evidence:e1"],
-            "content_digest": "sha256:" + "2" * 64,
-            "effective_level": "S1",
-            "label_id": None,
-            "derivative_id": "derivative-1",
-            "inclusion_reason": "approved_derivative",
-        },
+def _matching_sight() -> EvidenceSight:
+    return EvidenceSight(
+        text="EVIDENCE_SIGHT_V0\nevidence:validation verdict=fail",
+        digest="sha256:" + "1" * 64,
+        record_ids=("e1",),
+    )
+
+
+def test_lineage_enrichment_is_scoped_and_exact(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _manifest()
+    monkeypatch.setattr(
+        evidence_egress_module,
+        "_current_lineage_sight",
+        lambda _lineage: _matching_sight(),
     )
 
     assert enrich_authorized_evidence_manifest(manifest) == manifest
@@ -160,6 +173,33 @@ def test_lineage_enrichment_is_scoped_and_exact() -> None:
         sensitivity.SensitivityPolicyError
     ):
         enrich_authorized_evidence_manifest(manifest)
+
+    wrong_manifest = (dict(manifest[0], content_digest="sha256:" + "9" * 64),)
+    with bind_evidence_lineage(_lineage()), pytest.raises(
+        sensitivity.SensitivityPolicyError
+    ):
+        enrich_authorized_evidence_manifest(wrong_manifest)
+
+
+def test_packet_authorization_rejects_sight_insertion_order_or_digest_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _manifest()
+    current_sights = (
+        EvidenceSight("changed", "sha256:" + "8" * 64, ("e1",)),
+        EvidenceSight("inserted", "sha256:" + "1" * 64, ("e1", "e2")),
+        EvidenceSight("reordered", "sha256:" + "1" * 64, ("e2", "e1")),
+    )
+    for sight in current_sights:
+        monkeypatch.setattr(
+            evidence_egress_module,
+            "_current_lineage_sight",
+            lambda _lineage, current=sight: current,
+        )
+        with bind_evidence_lineage(_lineage()), pytest.raises(
+            sensitivity.SensitivityPolicyError
+        ):
+            enrich_authorized_evidence_manifest(manifest)
 
 
 def test_lineage_mutation_changes_packet_digest() -> None:
@@ -220,6 +260,112 @@ def test_first_use_structural_trigger_denies_without_ticket_or_reservation(
         "confirmation_required": 0,
         "trigger_ids_json": '["t1"]',
     }
+
+
+def test_prompt_validator_runs_before_derivative_persistence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    initialize_database()
+    binding = SimpleNamespace(
+        provider_id="local-provider",
+        model_id="local-model",
+        requires_network=False,
+        max_output_tokens=256,
+    )
+    registry = SimpleNamespace(
+        bindings={"local:fast": binding},
+        fallback_chains={"local:fast": ()},
+    )
+    response = SimpleNamespace(
+        text="Generic repair\nRAW_GEOMETRY_SPEC_BEGIN",
+        provider_id=binding.provider_id,
+        model_id=binding.model_id,
+    )
+    outcome = SimpleNamespace(
+        status="success",
+        response=response,
+        selected_route_class="local:fast",
+        ledger_id="sanitizer-job-1",
+        error_type=None,
+    )
+    monkeypatch.setattr(
+        egress_authority_module,
+        "_resolve_local_sanitizer_binding",
+        lambda **_kwargs: (binding, registry),
+    )
+    monkeypatch.setattr(
+        egress_authority_module,
+        "_run_local_sanitizer",
+        lambda **_kwargs: outcome,
+    )
+    with open_sqlite_connection() as connection:
+        before = connection.execute(
+            "SELECT COUNT(*) AS count FROM egress_prompt_derivatives"
+        ).fetchone()["count"]
+
+    with pytest.raises(sensitivity.SensitivityPolicyError):
+        egress_authority_module.sanitize_prompt_with_local_model(
+            raw_prompt="CONFIDENTIAL PROJECT GEOMETRY: raw task.",
+            task_kind="bluecad_cad_repair",
+            workspace_id=WORKSPACE_ID,
+            output_validator=lambda content: (
+                evidence_egress_module._validate_transformed_prompt_content(
+                    content,
+                    raw_prompt="CONFIDENTIAL PROJECT GEOMETRY: raw task.",
+                    forbidden_spec_json='{"schema_version":"geometry_spec_v0_1"}',
+                )
+            ),
+        )
+
+    with open_sqlite_connection() as connection:
+        after = connection.execute(
+            "SELECT COUNT(*) AS count FROM egress_prompt_derivatives"
+        ).fetchone()["count"]
+    assert after == before
+
+
+def test_model_sanitizer_config_identity_binds_renderer_context() -> None:
+    policy = SimpleNamespace(config_digest="policy-digest")
+    binding = SimpleNamespace(
+        provider_id="local-provider",
+        model_id="local-model",
+        requires_network=False,
+        max_output_tokens=512,
+    )
+    registry = SimpleNamespace(
+        bindings={"local:fast": binding},
+        fallback_chains={"local:fast": ()},
+    )
+    base = {
+        "workspace_id": WORKSPACE_ID,
+        "candidate_id": "candidate-1",
+        "source_attempt_id": "attempt-1",
+        "ordered_source_refs": ["evidence:e1"],
+        "sight_digest": "sha256:" + "1" * 64,
+        "renderer_id": "evidence_sight_v0",
+        "renderer_version": "evidence_sight_v0",
+        "max_lines": 6,
+        "max_chars": 2000,
+    }
+
+    def digest(context: dict[str, object]) -> str:
+        return egress_authority_module._sanitizer_config_digest(
+            policy=policy,
+            route_class="local:fast",
+            template="canonical-template",
+            version="canonical-v1",
+            registry=registry,
+            config_context=context,
+        )
+
+    variants = (
+        base,
+        dict(base, candidate_id="candidate-2"),
+        dict(base, source_attempt_id="attempt-2"),
+        dict(base, sight_digest="sha256:" + "2" * 64),
+        dict(base, ordered_source_refs=["evidence:e2", "evidence:e1"]),
+    )
+    assert len({digest(context) for context in variants}) == len(variants)
 
 
 def test_preparation_failure_happens_before_structural_attempt_insert(
