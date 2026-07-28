@@ -80,6 +80,54 @@ external execution.
 - Do not infer live state from legacy `Status:` lines inside individual specs,
   strategy documents, README prose, or chat handoffs. Update `docs/specs/STATUS.md`.
 
+## Conduct when encountering an obstacle
+
+A technical obstacle opens the work; it does not close it. Never conclude with
+"it does not work, so we stop."
+
+Binding rules:
+
+1. Report every obstacle with at least two routes forward, each with its cost and
+   first concrete step. A report that says only "blocked" is incomplete and must
+   be rejected in review.
+2. Do not move a registry row to `blocked` for a technical difficulty unless at
+   least two workaround attempts are documented, together with why neither is
+   viable. `blocked` remains legitimate when progress genuinely depends on a
+   human decision or an external dependency that cannot be bypassed within scope.
+3. An exploratory test never returns only yes or no. It must state which route is
+   viable, what it costs, and what is required to start.
+4. When desired properties are incompatible, or a binding external constraint
+   cannot be changed, do not force an invalid implementation. Change the question:
+   separate the cases, label them differently, and declare the trade-off. That is
+   also a resolution.
+
+### Obstacle report format
+
+Write every obstacle encountered during implementation in the pull request body
+under `## Obstacles`, using this form:
+
+    ### <short title>
+    What I tried:
+    What happened, with evidence (command, error, file, line):
+    Why it blocks:
+    Route A — <description> · cost: <low/medium/high> · first step:
+    Route B — <description> · cost: <low/medium/high> · first step:
+    Recommendation:
+
+### Status reports
+
+When asked "where are we?", do not answer with only a list of completed work.
+Report, in this order:
+
+1. what changed since the previous update in terms of usable capabilities, not
+   specifications merged;
+2. every open obstacle, including the analysis already performed and the routes
+   forward in the format above, never as a bare blocker notice;
+3. the recommended next action and any human decision that is required.
+
+A status update that reports a problem without analysis and options is incomplete
+and must be redone.
+
 ## Repo map
 
 | Path | Contents |
