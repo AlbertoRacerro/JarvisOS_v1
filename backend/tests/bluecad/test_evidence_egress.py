@@ -89,6 +89,8 @@ def _lineage(*, structural_attempt_id: str = "attempt-2") -> dict[str, object]:
         "sanitizer_version": "bluecad_evidence_sight_derivative_v0_1",
         "sanitizer_config_digest": "3" * 64,
         "sanitizer_ai_job_id": None,
+        "instruction_derivative_id": "prompt-derivative-1",
+        "instruction_derivative_digest": "sha256:" + "4" * 64,
         "sensitivity_policy_version": "ip-egress-v1",
         "egress_policy_version": "ip-egress-v1",
     }
@@ -151,6 +153,16 @@ def _matching_sight() -> EvidenceSight:
     )
 
 
+def _matching_prompt_derivative() -> SimpleNamespace:
+    return SimpleNamespace(
+        id="prompt-derivative-1",
+        derivative_digest="sha256:" + "4" * 64,
+        workspace_id=WORKSPACE_ID,
+        sanitizer_kind="model_local",
+        status="approved",
+    )
+
+
 def test_lineage_enrichment_is_scoped_and_exact(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -159,6 +171,11 @@ def test_lineage_enrichment_is_scoped_and_exact(
         evidence_egress_module,
         "_current_lineage_sight",
         lambda _lineage: _matching_sight(),
+    )
+    monkeypatch.setattr(
+        evidence_egress_module,
+        "_current_structural_prompt_derivative",
+        lambda _lineage: _matching_prompt_derivative(),
     )
 
     assert enrich_authorized_evidence_manifest(manifest) == manifest
@@ -181,10 +198,41 @@ def test_lineage_enrichment_is_scoped_and_exact(
         enrich_authorized_evidence_manifest(wrong_manifest)
 
 
+def test_packet_authorization_rejects_prompt_derivative_substitution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        evidence_egress_module,
+        "_current_lineage_sight",
+        lambda _lineage: _matching_sight(),
+    )
+    monkeypatch.setattr(
+        evidence_egress_module,
+        "_current_structural_prompt_derivative",
+        lambda _lineage: SimpleNamespace(
+            id="prompt-derivative-other",
+            derivative_digest="sha256:" + "9" * 64,
+            workspace_id=WORKSPACE_ID,
+            sanitizer_kind="model_local",
+            status="approved",
+        ),
+    )
+
+    with bind_evidence_lineage(_lineage()), pytest.raises(
+        sensitivity.SensitivityPolicyError
+    ):
+        enrich_authorized_evidence_manifest(_manifest())
+
+
 def test_packet_authorization_rejects_sight_insertion_order_or_digest_drift(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     manifest = _manifest()
+    monkeypatch.setattr(
+        evidence_egress_module,
+        "_current_structural_prompt_derivative",
+        lambda _lineage: _matching_prompt_derivative(),
+    )
     current_sights = (
         EvidenceSight("changed", "sha256:" + "8" * 64, ("e1",)),
         EvidenceSight("inserted", "sha256:" + "1" * 64, ("e1", "e2")),
