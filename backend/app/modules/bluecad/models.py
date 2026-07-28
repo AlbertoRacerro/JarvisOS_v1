@@ -132,6 +132,7 @@ def _transform_bbox(bbox: tuple[tuple[float, float, float], tuple[float, float, 
     transformed = [_transform_point(corner, rotation_z_rad, translation) for corner in corners]
     return (tuple(min(point[axis] for point in transformed) for axis in range(3)), tuple(max(point[axis] for point in transformed) for axis in range(3)))
 
+
 # Spec 010 AI loop ledger/API models.
 
 CandidateStatus = Literal["generating", "validating", "valid", "parked", "archived"]
@@ -257,10 +258,14 @@ class BluecadLoopConfig(BaseModel):
     max_output_tokens: int = Field(default=4000, ge=128, le=32000)
     per_call_timeout_s: float = Field(default=20.0, gt=0, le=120)
     analysis_spec: dict[str, Any] | None = None
+    structural_repair: bool = False
+    max_structural_repairs: int = Field(default=1, ge=0, le=3)
 
     @model_validator(mode="after")
     def _validate_analysis_spec_without_geometry(self) -> BluecadLoopConfig:
         if self.analysis_spec is None:
+            if self.structural_repair:
+                raise ValueError("structural_repair requires analysis_spec")
             return self
         if not isinstance(self.analysis_spec, dict):
             raise ValueError("analysis_spec must be an object")
@@ -268,6 +273,8 @@ class BluecadLoopConfig(BaseModel):
         if "geometry" in self.analysis_spec:
             raise ValueError("analysis_spec geometry is filled from build artifacts by the loop")
         _AnalysisSpecWithoutGeometry.model_validate(self.analysis_spec)
+        if self.structural_repair and not self.analysis_spec.get("pass_criteria"):
+            raise ValueError("structural_repair requires non-empty analysis_spec.pass_criteria")
         return self
 
 
