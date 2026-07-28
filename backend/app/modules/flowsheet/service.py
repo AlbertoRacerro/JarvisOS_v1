@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import heapq
 import json
 import re
 import sqlite3
@@ -9,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.core.database import open_sqlite_connection
+from app.core.topology import TopologyError, deterministic_topological_order
 from app.modules.flowsheet.models import (
     FlowsheetDiagnosticsRead,
     FlowsheetEdgeRead,
@@ -1040,28 +1040,31 @@ def _topological_projection(
     edges: list[FlowsheetEdgeRead],
 ) -> tuple[bool, list[str] | None, list[list[str]]]:
     adjacency = {node_ref: set() for node_ref in nodes}
-    indegree = {node_ref: 0 for node_ref in nodes}
+    dependency_edges: list[tuple[str, str]] = []
     for edge in edges:
         if edge.edge_class != "dependency":
             continue
+        pair = (edge.upstream_ref, edge.downstream_ref)
         if edge.downstream_ref not in adjacency[edge.upstream_ref]:
             adjacency[edge.upstream_ref].add(edge.downstream_ref)
-            indegree[edge.downstream_ref] += 1
-    queue = [node_ref for node_ref, degree in indegree.items() if degree == 0]
-    heapq.heapify(queue)
-    order: list[str] = []
-    while queue:
-        node_ref = heapq.heappop(queue)
-        order.append(node_ref)
-        for downstream in sorted(adjacency[node_ref]):
-            indegree[downstream] -= 1
-            if indegree[downstream] == 0:
-                heapq.heappush(queue, downstream)
-    if len(order) == len(nodes):
-        return True, order, []
-    cyclic_nodes = {node_ref for node_ref, degree in indegree.items() if degree > 0}
-    cycles = _find_directed_cycles(adjacency, cyclic_nodes)
-    return False, None, cycles
+            dependency_edges.append(pair)
+    try:
+        order = deterministic_topological_order(
+            nodes,
+            dependency_edges,
+            max_nodes=MAX_GRAPH_NODES,
+            max_edges=MAX_GRAPH_EDGES,
+        )
+    except TopologyError as exc:
+        if exc.code != "topology_cycle":
+            raise FlowsheetError(
+                "flowsheet_graph_invalid",
+                "Flowsheet dependency graph is invalid.",
+            ) from exc
+        cyclic_nodes = set(exc.residual_nodes) or set(nodes)
+        cycles = _find_directed_cycles(adjacency, cyclic_nodes)
+        return False, None, cycles
+    return True, list(order), []
 
 
 def _find_directed_cycles(adjacency: dict[str, set[str]], candidates: set[str]) -> list[list[str]]:
