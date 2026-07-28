@@ -52,6 +52,8 @@ _ACTIVE_LINEAGE: ContextVar[dict[str, Any] | None] = ContextVar(
 class ExternalStructuralPreparation:
     raw_prompt: str
     context_block: dict[str, object]
+    prompt_derivative_id: str
+    prompt_derivative_digest: str
     workspace_id: str
     candidate_id: str
     source_attempt_id: str
@@ -89,6 +91,8 @@ class ExternalStructuralPreparation:
             "sanitizer_version": self.sanitizer_version,
             "sanitizer_config_digest": self.sanitizer_config_digest,
             "sanitizer_ai_job_id": self.sanitizer_ai_job_id,
+            "instruction_derivative_id": self.prompt_derivative_id,
+            "instruction_derivative_digest": self.prompt_derivative_digest,
             "sensitivity_policy_version": self.sensitivity_policy_version,
             "egress_policy_version": self.egress_policy_version,
         }
@@ -104,6 +108,26 @@ def bind_evidence_lineage(lineage: dict[str, Any]) -> Iterator[None]:
         yield
     finally:
         _ACTIVE_LINEAGE.reset(token)
+
+
+def validate_authorized_structural_prompt_derivative(derivative: Any) -> None:
+    """Require 059b to use the exact prompt derivative prepared by BLUECAD."""
+
+    lineage = _ACTIVE_LINEAGE.get()
+    if lineage is None:
+        return
+    _validate_lineage(lineage)
+    if (
+        getattr(derivative, "id", None) != lineage["instruction_derivative_id"]
+        or getattr(derivative, "derivative_digest", None)
+        != lineage["instruction_derivative_digest"]
+        or getattr(derivative, "workspace_id", None) != lineage["workspace_id"]
+        or getattr(derivative, "sanitizer_kind", None) != "model_local"
+        or getattr(derivative, "status", None) != "approved"
+    ):
+        raise sensitivity.SensitivityPolicyError(
+            "Authorized structural prompt derivative differs from preparation authority."
+        )
 
 
 def enrich_authorized_evidence_manifest(
@@ -217,6 +241,8 @@ def prepare_external_structural_repair(
             "id": derivative_row["id"],
             "content": derivative_row["content"],
         },
+        prompt_derivative_id=prompt_derivative.id,
+        prompt_derivative_digest=prompt_derivative.derivative_digest,
         workspace_id=workspace_id,
         candidate_id=candidate_id,
         source_attempt_id=source_attempt_id,
@@ -552,6 +578,8 @@ def _validate_lineage(lineage: dict[str, Any]) -> None:
         "sanitizer_kind",
         "sanitizer_version",
         "sanitizer_config_digest",
+        "instruction_derivative_id",
+        "instruction_derivative_digest",
         "sensitivity_policy_version",
         "egress_policy_version",
     )
