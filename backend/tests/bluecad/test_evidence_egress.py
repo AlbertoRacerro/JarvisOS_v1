@@ -10,6 +10,7 @@ from app.core.database import initialize_database, open_sqlite_connection
 from app.modules.ai import sensitivity
 from app.modules.ai.egress_persistence import prepare_egress_attempt
 from app.modules.ai.egress_policy import EXTERNAL_PROVIDER_OPERATION
+from app.modules.ai.egress_sanitizer import create_prompt_derivative
 from app.modules.ai.egress_service import (
     EgressPacketMaterial,
     build_packet_projection,
@@ -29,7 +30,7 @@ WORKSPACE_ID = "bluerev"
 NOW = datetime(2026, 7, 28, 12, 0, tzinfo=UTC)
 
 
-def _bootstrap(monkeypatch: pytest.MonkeyPatch) -> None:
+def _bootstrap(monkeypatch: pytest.MonkeyPatch) -> str:
     initialize_database()
     ensure_ai_settings()
     update_ai_settings(
@@ -52,6 +53,18 @@ def _bootstrap(monkeypatch: pytest.MonkeyPatch) -> None:
             (WORKSPACE_ID, now, now),
         )
         connection.commit()
+    approval = create_prompt_derivative(
+        raw_prompt="CONFIDENTIAL PROJECT GEOMETRY: test-only raw request.",
+        derivative_content="Generic structural repair instruction.",
+        final_level="S1",
+        transformations=("test_fixture_generic_rewrite",),
+        sanitizer_kind="deterministic",
+        sanitizer_version="test-fixture-v1",
+        sanitizer_config_digest="a" * 64,
+        workspace_id=WORKSPACE_ID,
+        now=NOW,
+    )
+    return approval.derivative_id
 
 
 def _lineage(*, structural_attempt_id: str = "attempt-2") -> dict[str, object]:
@@ -79,7 +92,11 @@ def _lineage(*, structural_attempt_id: str = "attempt-2") -> dict[str, object]:
     }
 
 
-def _material(*, lineage: dict[str, object] | None = None) -> EgressPacketMaterial:
+def _material(
+    *,
+    lineage: dict[str, object] | None = None,
+    prompt_derivative_id: str = "prompt-derivative-1",
+) -> EgressPacketMaterial:
     manifest = {
         "source_ref": "derivative:derivative-1",
         "source_refs": ["evidence:e1"],
@@ -112,7 +129,7 @@ def _material(*, lineage: dict[str, object] | None = None) -> EgressPacketMateri
         final_level="S1",
         max_output_tokens=128,
         workspace_id=WORKSPACE_ID,
-        prompt_derivative_id="prompt-derivative-1",
+        prompt_derivative_id=prompt_derivative_id,
         included_manifest=(manifest,),
         source_digests=(("evidence:e1", sha256_text("source-body")),),
     )
@@ -157,9 +174,15 @@ def test_lineage_mutation_changes_packet_digest() -> None:
 def test_first_use_structural_trigger_denies_without_ticket_or_reservation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _bootstrap(monkeypatch)
+    prompt_derivative_id = _bootstrap(monkeypatch)
 
-    result = prepare_egress_attempt(_material(lineage=_lineage()), now=NOW)
+    result = prepare_egress_attempt(
+        _material(
+            lineage=_lineage(),
+            prompt_derivative_id=prompt_derivative_id,
+        ),
+        now=NOW,
+    )
 
     assert result.result == "deny"
     assert result.reason_code == "bluecad_structural_confirmation_unsupported"
