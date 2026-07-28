@@ -1,0 +1,41 @@
+name: Finalize spec 075 status
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/workflows/finalize-spec-075-status.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+      - name: Mark spec 075 merged and remove temporary workflow
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("docs/specs/STATUS.md")
+          text = path.read_text(encoding="utf-8")
+          old = "| 075 | in_review | [#191](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/191) |"
+          new = "| 075 | merged | [#191](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/191) |"
+          if text.count(old) != 1:
+              raise SystemExit(f"expected exactly one 075 in_review row, found {text.count(old)}")
+          path.write_text(text.replace(old, new), encoding="utf-8")
+          PY
+          rm .github/workflows/finalize-spec-075-status.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/specs/STATUS.md .github/workflows/finalize-spec-075-status.yml
+          git commit -m "Mark spec 075 merged"
+          git push origin HEAD:master
