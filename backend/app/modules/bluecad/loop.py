@@ -233,7 +233,9 @@ def _run_structural_repair_cycle(
     source_attempt_id = initial_attempt_id
     attempt_no = initial_attempt_no
     binding, _decision = resolve_binding(route_class, bindings)
-    network_bound = binding is not None and binding.requires_network
+    if binding is None:
+        return
+    network_bound = binding.requires_network
 
     for _ in range(loop_config.max_structural_repairs):
         attempt_no += 1
