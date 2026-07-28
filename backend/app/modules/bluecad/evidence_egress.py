@@ -25,6 +25,7 @@ from app.modules.ai.egress_authority import (
 from app.modules.ai.egress_policy import load_default_egress_policy
 from app.modules.ai.egress_sanitizer import (
     auto_approve_canonical_derivative,
+    get_prompt_derivative,
     resolve_approved_prompt_derivative,
 )
 from app.modules.ai.egress_service import canonical_json, sha256_text
@@ -144,6 +145,9 @@ def enrich_authorized_evidence_manifest(
     if lineage is None:
         return included_manifest
     _validate_lineage(lineage)
+    validate_authorized_structural_prompt_derivative(
+        _current_structural_prompt_derivative(lineage)
+    )
     _validate_current_lineage_sight(lineage)
     derivative_id = lineage["derivative_id"]
     matches = [
@@ -499,6 +503,46 @@ def _renderer_config_context(
         "max_lines": EVIDENCE_SIGHT_MAX_LINES,
         "max_chars": EVIDENCE_SIGHT_MAX_CHARS,
     }
+
+
+def _current_structural_prompt_derivative(lineage: dict[str, Any]):
+    workspace_id = lineage["workspace_id"]
+    prepared_id = lineage["instruction_derivative_id"]
+    with open_sqlite_connection() as connection:
+        prepared = connection.execute(
+            """
+            SELECT raw_prompt_digest, policy_version
+            FROM egress_prompt_derivatives
+            WHERE id = ? AND workspace_id = ? AND status = 'approved'
+            """,
+            (prepared_id, workspace_id),
+        ).fetchone()
+        if prepared is None:
+            raise sensitivity.SensitivityPolicyError(
+                "Prepared structural prompt derivative is no longer approved."
+            )
+        current = connection.execute(
+            """
+            SELECT id
+            FROM egress_prompt_derivatives
+            WHERE workspace_id = ?
+              AND raw_prompt_digest = ?
+              AND policy_version = ?
+              AND status = 'approved'
+            ORDER BY created_at DESC, id ASC
+            LIMIT 1
+            """,
+            (
+                workspace_id,
+                prepared["raw_prompt_digest"],
+                prepared["policy_version"],
+            ),
+        ).fetchone()
+    if current is None:
+        raise sensitivity.SensitivityPolicyError(
+            "Structural prompt derivative authority disappeared before packet authorization."
+        )
+    return get_prompt_derivative(str(current["id"]), workspace_id=workspace_id)
 
 
 def _validate_current_lineage_sight(lineage: dict[str, Any]) -> None:
