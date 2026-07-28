@@ -120,6 +120,7 @@ def enrich_authorized_evidence_manifest(
     if lineage is None:
         return included_manifest
     _validate_lineage(lineage)
+    _validate_current_lineage_sight(lineage)
     derivative_id = lineage["derivative_id"]
     matches = [
         index
@@ -137,6 +138,13 @@ def enrich_authorized_evidence_manifest(
     ):
         raise sensitivity.SensitivityPolicyError(
             "Evidence lineage source set does not match derivative authority."
+        )
+    if (
+        item.get("content_digest") != lineage["derivative_digest"]
+        or item.get("effective_level") != lineage["effective_level"]
+    ):
+        raise sensitivity.SensitivityPolicyError(
+            "Evidence lineage derivative identity does not match the manifest."
         )
     item["evidence_lineage"] = dict(lineage)
     return (item,)
@@ -300,21 +308,14 @@ def _resolve_evidence_derivative(
         raise sensitivity.SensitivityPolicyError(
             "Secret-bearing evidence cannot enter model-backed sanitization."
         )
-    config_digest = sha256_text(
-        canonical_json(
-            {
-                "candidate_id": candidate_id,
-                "max_chars": EVIDENCE_SIGHT_MAX_CHARS,
-                "max_lines": EVIDENCE_SIGHT_MAX_LINES,
-                "ordered_source_refs": list(ordered_source_refs),
-                "renderer_id": EVIDENCE_SIGHT_RENDERER_ID,
-                "renderer_version": EVIDENCE_SIGHT_RENDERER_VERSION,
-                "sight_digest": sight.digest,
-                "source_attempt_id": source_attempt_id,
-                "workspace_id": workspace_id,
-            }
-        )
+    renderer_context = _renderer_config_context(
+        workspace_id=workspace_id,
+        candidate_id=candidate_id,
+        source_attempt_id=source_attempt_id,
+        sight=sight,
+        ordered_source_refs=ordered_source_refs,
     )
+    config_digest = sha256_text(canonical_json(renderer_context))
     if effective_levels and all(level in {"S0", "S1"} for level in effective_levels):
         final_level = max(
             effective_levels,
@@ -337,6 +338,7 @@ def _resolve_evidence_derivative(
             workspace_id=workspace_id,
             source_refs=ordered_source_refs,
             adapters=adapters,
+            config_context=renderer_context,
         )
     return _canonical_derivative_row(workspace_id, approval.derivative_id)
 
@@ -368,6 +370,11 @@ def _resolve_external_prompt_derivative(
         task_kind="bluecad_cad_repair",
         workspace_id=workspace_id,
         adapters=adapters,
+        output_validator=lambda content: _validate_transformed_prompt_content(
+            content,
+            raw_prompt=raw_prompt,
+            forbidden_spec_json=forbidden_spec_json,
+        ),
     )
 
 
@@ -382,12 +389,32 @@ def _validate_prompt_derivative(
         derivative.status != "approved"
         or derivative.workspace_id != expected_workspace_id
         or derivative.sanitizer_kind != "model_local"
-        or derivative.derivative_content == raw_prompt
-        or forbidden_spec_json in derivative.derivative_content
-        or sensitivity.deterministic_floor(derivative.derivative_content) is not None
     ):
         raise sensitivity.SensitivityPolicyError(
-            "External structural prompt derivative is not a safe transformation."
+            "External structural prompt derivative is not current local authority."
+        )
+    _validate_transformed_prompt_content(
+        derivative.derivative_content,
+        raw_prompt=raw_prompt,
+        forbidden_spec_json=forbidden_spec_json,
+    )
+
+
+def _validate_transformed_prompt_content(
+    content: str,
+    *,
+    raw_prompt: str,
+    forbidden_spec_json: str,
+) -> None:
+    if (
+        content == raw_prompt
+        or forbidden_spec_json in content
+        or "RAW_GEOMETRY_SPEC_BEGIN" in content
+        or "RAW_GEOMETRY_SPEC_END" in content
+        or sensitivity.deterministic_floor(content) is not None
+    ):
+        raise sensitivity.SensitivityPolicyError(
+            "External structural prompt sanitizer did not remove raw geometry authority."
         )
 
 
@@ -420,10 +447,80 @@ def _validate_evidence_derivative(
         or set(stored_refs) != set(ordered_source_refs)
         or stored_digests != source_digests
         or row["policy_version"] != sensitivity.POLICY_VERSION
+        or not row["sanitizer_config_digest"]
     ):
         raise sensitivity.SensitivityPolicyError(
             "Canonical evidence derivative authority is stale or mismatched."
         )
+
+
+def _renderer_config_context(
+    *,
+    workspace_id: str,
+    candidate_id: str,
+    source_attempt_id: str,
+    sight: EvidenceSight,
+    ordered_source_refs: tuple[str, ...],
+) -> dict[str, Any]:
+    return {
+        "workspace_id": workspace_id,
+        "candidate_id": candidate_id,
+        "source_attempt_id": source_attempt_id,
+        "ordered_source_refs": list(ordered_source_refs),
+        "sight_digest": sight.digest,
+        "renderer_id": EVIDENCE_SIGHT_RENDERER_ID,
+        "renderer_version": EVIDENCE_SIGHT_RENDERER_VERSION,
+        "max_lines": EVIDENCE_SIGHT_MAX_LINES,
+        "max_chars": EVIDENCE_SIGHT_MAX_CHARS,
+    }
+
+
+def _validate_current_lineage_sight(lineage: dict[str, Any]) -> None:
+    sight = _current_lineage_sight(lineage)
+    expected_refs = tuple(lineage["ordered_source_refs"])
+    current_refs = tuple(f"evidence:{record_id}" for record_id in sight.record_ids)
+    if sight.digest != lineage["sight_digest"] or current_refs != expected_refs:
+        raise sensitivity.SensitivityPolicyError(
+            "Evidence sight changed before packet authorization."
+        )
+
+
+def _current_lineage_sight(lineage: dict[str, Any]) -> EvidenceSight:
+    workspace_id = lineage["workspace_id"]
+    candidate_id = lineage["candidate_id"]
+    source_attempt_id = lineage["source_attempt_id"]
+    with open_sqlite_connection() as connection:
+        connection.execute("BEGIN")
+        candidate = connection.execute(
+            "SELECT workspace_id, status FROM bluecad_candidates WHERE id = ?",
+            (candidate_id,),
+        ).fetchone()
+        attempt = connection.execute(
+            "SELECT candidate_id FROM bluecad_attempts WHERE id = ?",
+            (source_attempt_id,),
+        ).fetchone()
+        if (
+            candidate is None
+            or candidate["workspace_id"] != workspace_id
+            or candidate["status"] != "valid"
+            or attempt is None
+            or attempt["candidate_id"] != candidate_id
+        ):
+            raise sensitivity.SensitivityPolicyError(
+                "Evidence sight ownership changed before packet authorization."
+            )
+        sight = _render_evidence_sight_in_connection(
+            connection,
+            workspace_id,
+            candidate_id,
+            source_attempt_id,
+        )
+        connection.commit()
+    if sight is None:
+        raise sensitivity.SensitivityPolicyError(
+            "Evidence sight disappeared before packet authorization."
+        )
+    return sight
 
 
 def _external_structural_prompt(spec_json: str) -> str:
