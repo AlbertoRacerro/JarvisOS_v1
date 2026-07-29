@@ -89,9 +89,13 @@ create a second implementation front.
    `076` fail-closed evidence-guided structural repair; implement ready `077` only
    under the [2026-07-28 readiness decision](077-readiness-2026-07-28.md) and the
    existing 059a/059b egress authority.
-9. Run `069` MEMORY-CONSOLIDATE-0 as the first Hermes dogfood only after 066–068
-   are merged and the required local route is qualified.
-10. Continue `063`/`064`, `012` → `033`, and residual conversation/UI rows according
+9. Draft `078` PBR-MODELING-0 over the merged `075` process-kernel boundary and the
+   merged `048`/`049` screening evidence; promote beyond `planned` only after its
+   light, dissolved-species, semantic-unit, and kinetic-parameter decisions are
+   closed with recorded evidence and a dated readiness decision exists.
+10. Run `069` MEMORY-CONSOLIDATE-0 as the first Hermes dogfood only after 066–068
+    are merged and the required local route is qualified.
+11. Continue `063`/`064`, `012` → `033`, and residual conversation/UI rows according
     to dependencies, explicit maintainer priority, and measured value.
 
 Trigger-gated rows remain `planned` until their stated evidence exists. Always
@@ -189,6 +193,7 @@ PR overlaps the target files or runtime boundary.
 | 075 | merged | [#191](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/191) | PROCESS-KERNEL-1: streams, components, units, and unit operations | 043, 047, 048, 071 | Re-express validated 047 as an acyclic flowsheet of typed material/scalar ports and reusable blocks, add additive unit-contract v2 and component/stream foundations, and require exact canonical 047 result identity before broader solver work. Readiness evidence and implementation ownership are frozen in [the 2026-07-27 readiness decision](075-readiness-2026-07-27.md). |
 | 076 | merged | [#195](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/195) | EVIDENCE-SIGHT-0: bounded evidence-guided structural repair | 010, 038, 044, 059b, 061a, 061b | Add an opt-in, separately budgeted structural-repair cycle using deterministic attempt-scoped evidence; preserve valid candidate state and artifact pointers on every unsuccessful path; no new states, migration, promotion, or egress authority. |
 | 077 | ready | — | EVIDENCE-EGRESS-0: canonical evidence provenance and classification | 044, 059a, 059b, 076 | Bind canonical evidence rows and rendered evidence derivatives to workspace-scoped provenance, sensitivity, staleness, and exact-packet lineage before external model use; reuse 059a/059b authority and add no alternate egress path. Readiness sequencing, prompt authority, and no-migration packet lineage are frozen in [the 2026-07-28 readiness decision](077-readiness-2026-07-28.md). |
+| 078 | planned | — | PBR-MODELING-0: bounded photobioreactor modeling kernel | 043, 047, 048, 049, 071, 075 | Define the smallest bounded extension from static `048` biomass and `049` optical screening toward photobioreactor modeling: a closed server-bundled typed rate-law registry for light-limited kinetics, an incident-PAR quantity with a declared path-averaged irradiance built on the existing 049 optical-parameter separation, and CO2/O2 gas-liquid transfer with externally supplied kLa and an explicit sufficiency check against the carbon demand already derivable in 048; 048 and 049 identities, outputs, and fixtures remain unchanged, and no solver, expression language, dependency, or migration is added. Implementation requires a later full specification and a dated readiness decision. |
 
 ## Superseded planning aliases and resolved collisions
 
