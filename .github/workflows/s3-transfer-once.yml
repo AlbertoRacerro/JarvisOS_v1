@@ -61,6 +61,7 @@ jobs:
 
           rm scripts/s3_apply_once.py
           rm .github/workflows/s3-transfer-once.yml
+          rm -f .s3-trigger
           git add -A
           git diff --cached --check
           git commit -m "Harden BLUECAD packet authority and integrate master"
