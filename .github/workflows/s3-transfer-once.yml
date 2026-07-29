@@ -1,0 +1,67 @@
+name: S3 exact transfer once
+
+on:
+  push:
+    branches:
+      - spec/077-evidence-egress-0-impl
+
+permissions:
+  contents: write
+
+concurrency:
+  group: s3-exact-transfer-once
+  cancel-in-progress: false
+
+jobs:
+  transfer:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact branch
+        uses: actions/checkout@v4
+        with:
+          ref: spec/077-evidence-egress-0-impl
+          fetch-depth: 0
+
+      - name: Integrate current master and apply tested patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin master
+
+          set +e
+          git merge --no-commit --no-ff origin/master
+          merge_status=$?
+          set -e
+
+          unresolved="$(git diff --name-only --diff-filter=U || true)"
+          if [[ -n "$unresolved" ]]; then
+            unexpected="$(printf '%s\n' "$unresolved" | grep -v '^docs/specs/STATUS.md$' || true)"
+            if [[ -n "$unexpected" ]]; then
+              echo "Unexpected merge conflicts:"
+              printf '%s\n' "$unexpected"
+              exit 1
+            fi
+            git checkout --theirs docs/specs/STATUS.md
+            git add docs/specs/STATUS.md
+          elif [[ $merge_status -ne 0 ]]; then
+            echo "Merge failed without a resolvable STATUS-only conflict"
+            exit 1
+          fi
+
+          python scripts/s3_apply_once.py
+          python -m compileall -q \
+            backend/app/modules/ai/egress_authority.py \
+            backend/app/modules/ai/egress_runtime.py \
+            backend/app/modules/bluecad/evidence_egress.py \
+            backend/tests/bluecad/test_evidence_egress.py
+          git diff --check
+
+          rm scripts/s3_apply_once.py
+          rm .github/workflows/s3-transfer-once.yml
+          git add -A
+          git diff --cached --check
+          git commit -m "Harden BLUECAD packet authority and integrate master"
+          git push origin HEAD:spec/077-evidence-egress-0-impl
