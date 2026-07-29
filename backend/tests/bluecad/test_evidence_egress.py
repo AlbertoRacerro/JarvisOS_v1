@@ -24,6 +24,7 @@ from app.modules.ai.settings import ensure_ai_settings, update_ai_settings
 from app.modules.bluecad.evidence_egress import (
     bind_evidence_lineage,
     enrich_authorized_evidence_manifest,
+    validate_authorized_structural_prompt_authority,
 )
 from app.modules.bluecad.evidence_sight import EvidenceSight
 from app.modules.events.service import utc_now
@@ -163,14 +164,31 @@ def _matching_prompt_derivative() -> SimpleNamespace:
     )
 
 
+def _matching_authority_snapshot(
+    *, sight: EvidenceSight | None = None, effective_level: str = "S1"
+) -> dict[str, object]:
+    return {
+        "sight": sight or _matching_sight(),
+        "derivative": {
+            "source_refs_json": '["evidence:e1"]',
+            "source_digests_json": '{"evidence:e1":"sha256:' + "5" * 64 + '"}',
+            "effective_level": "S1",
+            "content_digest": "sha256:" + "2" * 64,
+        },
+        "source_refs": tuple(f"evidence:{item}" for item in (sight or _matching_sight()).record_ids),
+        "source_digests": {"evidence:e1": "sha256:" + "5" * 64},
+        "effective_levels": (effective_level,),
+    }
+
+
 def test_lineage_enrichment_is_scoped_and_exact(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     manifest = _manifest()
     monkeypatch.setattr(
         evidence_egress_module,
-        "_current_lineage_sight",
-        lambda _lineage: _matching_sight(),
+        "_current_lineage_authority_snapshot",
+        lambda _lineage: _matching_authority_snapshot(),
     )
     monkeypatch.setattr(
         evidence_egress_module,
@@ -203,8 +221,8 @@ def test_packet_authorization_rejects_prompt_derivative_substitution(
 ) -> None:
     monkeypatch.setattr(
         evidence_egress_module,
-        "_current_lineage_sight",
-        lambda _lineage: _matching_sight(),
+        "_current_lineage_authority_snapshot",
+        lambda _lineage: _matching_authority_snapshot(),
     )
     monkeypatch.setattr(
         evidence_egress_module,
@@ -224,6 +242,27 @@ def test_packet_authorization_rejects_prompt_derivative_substitution(
         enrich_authorized_evidence_manifest(_manifest())
 
 
+def test_selected_prompt_authority_rejects_substitution_before_packet(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter_calls: list[str] = []
+    monkeypatch.setattr(
+        evidence_egress_module,
+        "get_prompt_derivative",
+        lambda *_args, **_kwargs: adapter_calls.append("lookup"),
+    )
+    substituted = SimpleNamespace(
+        prompt_derivative_id="prompt-derivative-other",
+        prompt_derivative_digest="sha256:" + "9" * 64,
+        sanitizer_kind="model_local",
+    )
+    with bind_evidence_lineage(_lineage()), pytest.raises(
+        sensitivity.SensitivityPolicyError
+    ):
+        validate_authorized_structural_prompt_authority(substituted)
+    assert adapter_calls == []
+
+
 def test_packet_authorization_rejects_sight_insertion_order_or_digest_drift(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -241,13 +280,32 @@ def test_packet_authorization_rejects_sight_insertion_order_or_digest_drift(
     for sight in current_sights:
         monkeypatch.setattr(
             evidence_egress_module,
-            "_current_lineage_sight",
-            lambda _lineage, current=sight: current,
+            "_current_lineage_authority_snapshot",
+            lambda _lineage, current=sight: _matching_authority_snapshot(sight=current),
         )
         with bind_evidence_lineage(_lineage()), pytest.raises(
             sensitivity.SensitivityPolicyError
         ):
             enrich_authorized_evidence_manifest(manifest)
+
+
+def test_packet_authorization_rejects_concurrent_effective_level_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        evidence_egress_module,
+        "_current_structural_prompt_derivative",
+        lambda _lineage: _matching_prompt_derivative(),
+    )
+    monkeypatch.setattr(
+        evidence_egress_module,
+        "_current_lineage_authority_snapshot",
+        lambda _lineage: _matching_authority_snapshot(effective_level="S2"),
+    )
+    with bind_evidence_lineage(_lineage()), pytest.raises(
+        sensitivity.SensitivityPolicyError
+    ):
+        enrich_authorized_evidence_manifest(_manifest())
 
 
 def test_lineage_mutation_changes_packet_digest() -> None:
@@ -310,8 +368,17 @@ def test_first_use_structural_trigger_denies_without_ticket_or_reservation(
     }
 
 
+@pytest.mark.parametrize(
+    "sanitized_content",
+    (
+        "Generic repair\nRAW_GEOMETRY_SPEC_BEGIN",
+        'Generic repair\n{\n  "schema_version": "geometry_spec_v0_1"\n}',
+        'Generic repair\n{"payload":{"schema_version":"geometry_spec_v0_1"}}',
+    ),
+)
 def test_prompt_validator_runs_before_derivative_persistence(
     monkeypatch: pytest.MonkeyPatch,
+    sanitized_content: str,
 ) -> None:
     initialize_database()
     binding = SimpleNamespace(
@@ -325,7 +392,7 @@ def test_prompt_validator_runs_before_derivative_persistence(
         fallback_chains={"local:fast": ()},
     )
     response = SimpleNamespace(
-        text="Generic repair\nRAW_GEOMETRY_SPEC_BEGIN",
+        text=sanitized_content,
         provider_id=binding.provider_id,
         model_id=binding.model_id,
     )
@@ -370,6 +437,77 @@ def test_prompt_validator_runs_before_derivative_persistence(
             "SELECT COUNT(*) AS count FROM egress_prompt_derivatives"
         ).fetchone()["count"]
     assert after == before
+
+
+def test_bluecad_prompt_sanitizer_binds_template_and_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    initialize_database()
+    binding = SimpleNamespace(
+        provider_id="local-provider",
+        model_id="local-model",
+        requires_network=False,
+        max_output_tokens=256,
+    )
+    registry = SimpleNamespace(
+        bindings={"local:fast": binding}, fallback_chains={"local:fast": ()}
+    )
+    captured: dict[str, str] = {}
+    monkeypatch.setattr(
+        egress_authority_module,
+        "_resolve_local_sanitizer_binding",
+        lambda **_kwargs: (binding, registry),
+    )
+
+    def run_sanitizer(**kwargs):
+        captured["input"] = kwargs["sanitizer_input"]
+        return SimpleNamespace(
+            status="success",
+            response=SimpleNamespace(
+                text="Generic bounded structural repair request.",
+                provider_id=binding.provider_id,
+                model_id=binding.model_id,
+            ),
+            selected_route_class="local:fast",
+            ledger_id="sanitizer-job-1",
+            error_type=None,
+        )
+
+    monkeypatch.setattr(egress_authority_module, "_run_local_sanitizer", run_sanitizer)
+    monkeypatch.setattr(
+        egress_authority_module,
+        "create_prompt_derivative",
+        lambda **kwargs: (
+            captured.update(
+                version=kwargs["sanitizer_version"],
+                config_digest=kwargs["sanitizer_config_digest"],
+            )
+            or SimpleNamespace(derivative_id="prompt-derivative-1")
+        ),
+    )
+    monkeypatch.setattr(
+        egress_authority_module,
+        "get_prompt_derivative",
+        lambda *_args, **_kwargs: SimpleNamespace(id="prompt-derivative-1"),
+    )
+    evidence_egress_module._resolve_external_prompt_derivative(
+        workspace_id=WORKSPACE_ID,
+        raw_prompt="CONFIDENTIAL PROJECT GEOMETRY: raw task.",
+        forbidden_spec_json='{"schema_version":"geometry_spec_v0_1"}',
+        adapters=None,
+    )
+    assert captured["version"] == "bluecad_structural_abstraction_v0_1"
+    assert captured["input"].startswith(
+        "Transform the BLUECAD structural repair task into a bounded generic abstraction."
+    )
+    generic_digest = egress_authority_module._sanitizer_config_digest(
+        policy=evidence_egress_module.load_default_egress_policy(),
+        route_class="local:fast",
+        template=egress_authority_module._LOCAL_SANITIZER_TEMPLATE,
+        version=egress_authority_module._LOCAL_SANITIZER_VERSION,
+        registry=registry,
+    )
+    assert captured["config_digest"] != generic_digest
 
 
 def test_model_sanitizer_config_identity_binds_renderer_context() -> None:

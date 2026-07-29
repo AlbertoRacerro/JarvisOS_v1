@@ -478,6 +478,11 @@ def _run_binding(
         (prompt.prompt_level or "S1", context.level),
         key=_LEVEL_RANK.__getitem__,
     )
+    from app.modules.bluecad.evidence_egress import (
+        validate_authorized_structural_prompt_authority,
+    )
+
+    validate_authorized_structural_prompt_authority(prompt)
     if continuation_decision is None:
         material = EgressPacketMaterial(
             operation=EXTERNAL_PROVIDER_OPERATION,

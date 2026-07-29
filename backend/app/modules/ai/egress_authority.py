@@ -183,6 +183,8 @@ def sanitize_prompt_with_local_model(
     registry: ProviderRegistry | None = None,
     policy: EgressPolicyConfig | None = None,
     output_validator: Callable[[str], None] | None = None,
+    sanitizer_template: str = _LOCAL_SANITIZER_TEMPLATE,
+    sanitizer_version: str = _LOCAL_SANITIZER_VERSION,
 ) -> PromptDerivative:
     """Run exactly one registry-owned local sanitizer binding through run_ai_task."""
 
@@ -204,8 +206,10 @@ def sanitize_prompt_with_local_model(
         route_class=route_class,
         registry=registry,
     )
+    sanitizer_template = _required_text(sanitizer_template, "sanitizer_template")
+    sanitizer_version = _required_text(sanitizer_version, "sanitizer_version")
     sanitizer_input = (
-        f"{_LOCAL_SANITIZER_TEMPLATE}\n\n"
+        f"{sanitizer_template}\n\n"
         f"TASK_KIND: {task_kind}\n"
         "RAW_TASK_BEGIN\n"
         f"{raw_prompt}\n"
@@ -214,8 +218,8 @@ def sanitize_prompt_with_local_model(
     config_digest = _sanitizer_config_digest(
         policy=policy,
         route_class=route_class,
-        template=_LOCAL_SANITIZER_TEMPLATE,
-        version=_LOCAL_SANITIZER_VERSION,
+        template=sanitizer_template,
+        version=sanitizer_version,
         registry=registry,
     )
 
@@ -247,7 +251,7 @@ def sanitize_prompt_with_local_model(
             "deterministic_post_scan",
         ],
         sanitizer_kind="model_local",
-        sanitizer_version=_LOCAL_SANITIZER_VERSION,
+        sanitizer_version=sanitizer_version,
         sanitizer_config_digest=config_digest,
         sanitizer_ai_job_id=outcome.ledger_id,
         workspace_id=workspace_id,

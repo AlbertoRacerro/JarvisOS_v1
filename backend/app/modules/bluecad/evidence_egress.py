@@ -41,6 +41,14 @@ from app.modules.bluecad.prompts import SYSTEM_TEMPLATE
 from app.modules.events.service import log_event
 
 EXTERNAL_STRUCTURAL_PROMPT_VERSION = "bluecad_ai_loop_v3_structural_external_v0_1"
+_STRUCTURAL_SANITIZER_VERSION = "bluecad_structural_abstraction_v0_1"
+_STRUCTURAL_SANITIZER_TEMPLATE = (
+    "Transform the BLUECAD structural repair task into a bounded generic abstraction. "
+    "Remove the raw GeometrySpec, project identity, proprietary geometry, exact "
+    "dimensions, unpublished parameters, credentials, and secrets. Preserve only "
+    "non-sensitive structural symptoms and generic repair constraints. Return only "
+    "the abstracted repair request, without JSON, source markers, or commentary."
+)
 _EVIDENCE_DERIVATIVE_VERSION = "bluecad_evidence_sight_derivative_v0_1"
 _LINEAGE_VERSION = "bluecad_evidence_lineage_v0_1"
 _ACTIVE_LINEAGE: ContextVar[dict[str, Any] | None] = ContextVar(
@@ -129,6 +137,30 @@ def validate_authorized_structural_prompt_derivative(derivative: Any) -> None:
         raise sensitivity.SensitivityPolicyError(
             "Authorized structural prompt derivative differs from preparation authority."
         )
+
+
+def validate_authorized_structural_prompt_authority(authority: Any) -> None:
+    """Validate the exact prompt authority selected immediately before packet material."""
+
+    lineage = _ACTIVE_LINEAGE.get()
+    if lineage is None:
+        return
+    _validate_lineage(lineage)
+    if (
+        getattr(authority, "prompt_derivative_id", None)
+        != lineage["instruction_derivative_id"]
+        or getattr(authority, "prompt_derivative_digest", None)
+        != lineage["instruction_derivative_digest"]
+        or getattr(authority, "sanitizer_kind", None) != "model_local"
+    ):
+        raise sensitivity.SensitivityPolicyError(
+            "Selected structural prompt authority differs from preparation authority."
+        )
+    derivative = get_prompt_derivative(
+        lineage["instruction_derivative_id"],
+        workspace_id=lineage["workspace_id"],
+    )
+    validate_authorized_structural_prompt_derivative(derivative)
 
 
 def enrich_authorized_evidence_manifest(
@@ -405,6 +437,8 @@ def _resolve_external_prompt_derivative(
             raw_prompt=raw_prompt,
             forbidden_spec_json=forbidden_spec_json,
         ),
+        sanitizer_template=_STRUCTURAL_SANITIZER_TEMPLATE,
+        sanitizer_version=_STRUCTURAL_SANITIZER_VERSION,
     )
 
 
@@ -439,6 +473,7 @@ def _validate_transformed_prompt_content(
     if (
         content == raw_prompt
         or forbidden_spec_json in content
+        or _contains_structural_json_value(content, json.loads(forbidden_spec_json))
         or "RAW_GEOMETRY_SPEC_BEGIN" in content
         or "RAW_GEOMETRY_SPEC_END" in content
         or sensitivity.deterministic_floor(content) is not None
@@ -446,6 +481,30 @@ def _validate_transformed_prompt_content(
         raise sensitivity.SensitivityPolicyError(
             "External structural prompt sanitizer did not remove raw geometry authority."
         )
+
+
+def _contains_structural_json_value(content: str, forbidden_value: Any) -> bool:
+    decoder = json.JSONDecoder()
+    for index, character in enumerate(content):
+        if character not in "[{":
+            continue
+        try:
+            value, _ = decoder.raw_decode(content[index:])
+        except json.JSONDecodeError:
+            continue
+        if _json_value_contains(value, forbidden_value):
+            return True
+    return False
+
+
+def _json_value_contains(value: Any, forbidden_value: Any) -> bool:
+    if value == forbidden_value:
+        return True
+    if isinstance(value, dict):
+        return any(_json_value_contains(item, forbidden_value) for item in value.values())
+    if isinstance(value, list):
+        return any(_json_value_contains(item, forbidden_value) for item in value)
+    return False
 
 
 def _canonical_derivative_row(workspace_id: str, derivative_id: str) -> dict[str, Any]:
@@ -546,13 +605,94 @@ def _current_structural_prompt_derivative(lineage: dict[str, Any]):
 
 
 def _validate_current_lineage_sight(lineage: dict[str, Any]) -> None:
-    sight = _current_lineage_sight(lineage)
+    current = _current_lineage_authority_snapshot(lineage)
+    sight = current["sight"]
+    derivative = current["derivative"]
+    current_refs = current["source_refs"]
+    source_digests = current["source_digests"]
+    effective_levels = current["effective_levels"]
     expected_refs = tuple(lineage["ordered_source_refs"])
-    current_refs = tuple(f"evidence:{record_id}" for record_id in sight.record_ids)
-    if sight.digest != lineage["sight_digest"] or current_refs != expected_refs:
+    stored_refs = tuple(json.loads(derivative["source_refs_json"]))
+    stored_digests = json.loads(derivative["source_digests_json"])
+    current_level = (
+        max(effective_levels, key={"S0": 0, "S1": 1, "S2": 2, "S3": 3, "S4": 4}.__getitem__)
+        if effective_levels
+        else "S0"
+    )
+    if (
+        sight.digest != lineage["sight_digest"]
+        or current_refs != expected_refs
+        or stored_refs != expected_refs
+        or source_digests != stored_digests
+        or current_level != derivative["effective_level"]
+        or current_level != lineage["effective_level"]
+        or derivative["content_digest"] != lineage["derivative_digest"]
+    ):
         raise sensitivity.SensitivityPolicyError(
-            "Evidence sight changed before packet authorization."
+            "Evidence sight, labels, or derivative authority changed before packet authorization."
         )
+
+
+def _current_lineage_authority_snapshot(lineage: dict[str, Any]) -> dict[str, Any]:
+    workspace_id = lineage["workspace_id"]
+    candidate_id = lineage["candidate_id"]
+    source_attempt_id = lineage["source_attempt_id"]
+    with open_sqlite_connection() as connection:
+        connection.execute("BEGIN")
+        candidate = connection.execute(
+            "SELECT workspace_id, status FROM bluecad_candidates WHERE id = ?",
+            (candidate_id,),
+        ).fetchone()
+        attempt = connection.execute(
+            "SELECT candidate_id FROM bluecad_attempts WHERE id = ?",
+            (source_attempt_id,),
+        ).fetchone()
+        derivative = connection.execute(
+            "SELECT * FROM sanitized_derivatives WHERE id = ? AND workspace_id = ?",
+            (lineage["derivative_id"], workspace_id),
+        ).fetchone()
+        if (
+            candidate is None
+            or candidate["workspace_id"] != workspace_id
+            or candidate["status"] != "valid"
+            or attempt is None
+            or attempt["candidate_id"] != candidate_id
+            or derivative is None
+            or derivative["status"] != "approved"
+        ):
+            raise sensitivity.SensitivityPolicyError(
+                "Evidence authority ownership or lifecycle changed before packet authorization."
+            )
+        sight = _render_evidence_sight_in_connection(
+            connection, workspace_id, candidate_id, source_attempt_id
+        )
+        current_refs = (
+            tuple(f"evidence:{record_id}" for record_id in sight.record_ids)
+            if sight is not None
+            else ()
+        )
+        source_digests: dict[str, str] = {}
+        effective_levels: list[str] = []
+        for source_ref in current_refs:
+            snapshot, label = sensitivity._resolve_source_snapshot_and_label_in_connection(
+                connection, workspace_id, source_ref
+            )
+            source_digests[source_ref] = snapshot.content_digest
+            effective_levels.append(
+                sensitivity._effective_level_for_bound_snapshot(snapshot, label)
+            )
+        connection.commit()
+    if sight is None:
+        raise sensitivity.SensitivityPolicyError(
+            "Evidence sight disappeared before packet authorization."
+        )
+    return {
+        "sight": sight,
+        "derivative": dict(derivative),
+        "source_refs": current_refs,
+        "source_digests": source_digests,
+        "effective_levels": tuple(effective_levels),
+    }
 
 
 def _current_lineage_sight(lineage: dict[str, Any]) -> EvidenceSight:

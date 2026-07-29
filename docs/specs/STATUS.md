@@ -43,6 +43,30 @@ before Codex or another coding agent may act on them.
    pull requests. A spec implementation PR fails if its row is absent, not
    `in_review`, missing the current PR number, or has an unmerged hard dependency.
 
+## Maintainer operating mode — one active front
+
+Effective 2026-07-29, the maintainer's master's degree is the priority and JarvisOS
+must be able to remain idle without degrading or demanding attention.
+
+- Only one product or implementation front may be active at a time. Other fronts
+  are frozen explicitly rather than left informally in progress.
+- A maintainer freeze is a prioritization decision, not a technical blocker. Frozen
+  rows remain `planned`; do not move them to `blocked`.
+- Specs 066, 067, and 068, plus UI foundation 070, are frozen by maintainer decision
+  dated 2026-07-29. Their branches are retained and their definition PRs were closed
+  without merge. Restart requires an explicit maintainer decision, re-derivation
+  from then-current `master`, and fresh verification of dependencies, assumptions,
+  mergeability, and deterministic gates.
+- The maintainer reviews the project once per week. Between reviews, contact the
+  maintainer only for an obstacle requiring a human decision, a security problem,
+  or a budget overrun.
+- Do not open additional frontend waves, external-geometry imports, bioprocess
+  engines, or expanded autonomous-control plans while this freeze is in force.
+
+The active implementation front at the time of this decision is spec 077 in PR
+#198. A documentation-only governance PR that records this decision does not
+create a second implementation front.
+
 ## Current priority and drafting order
 
 1. Preserve the merged 059 foundation: PR #90/059a, PR #95 definition amendment,
@@ -65,9 +89,13 @@ before Codex or another coding agent may act on them.
    `076` fail-closed evidence-guided structural repair; implement ready `077` only
    under the [2026-07-28 readiness decision](077-readiness-2026-07-28.md) and the
    existing 059a/059b egress authority.
-9. Run `069` MEMORY-CONSOLIDATE-0 as the first Hermes dogfood only after 066–068
-   are merged and the required local route is qualified.
-10. Continue `063`/`064`, `012` → `033`, and residual conversation/UI rows according
+9. Draft `078` PBR-MODELING-0 over the merged `075` process-kernel boundary and the
+   merged `048`/`049` screening evidence; promote beyond `planned` only after its
+   light, dissolved-species, semantic-unit, and kinetic-parameter decisions are
+   closed with recorded evidence and a dated readiness decision exists.
+10. Run `069` MEMORY-CONSOLIDATE-0 as the first Hermes dogfood only after 066–068
+    are merged and the required local route is qualified.
+11. Continue `063`/`064`, `012` → `033`, and residual conversation/UI rows according
     to dependencies, explicit maintainer priority, and measured value.
 
 Trigger-gated rows remain `planned` until their stated evidence exists. Always
@@ -153,10 +181,11 @@ PR overlaps the target files or runtime boundary.
 | 063 | planned | — | CAPTURE-VAULT-0 | 040, 042 | Add a local markdown vault and rebuildable local vector working layer, merged with canonical SQLite retrieval under explicit authority/conflict tags; no vectors over canonical records. |
 | 064 | planned | — | LIT-RAG-0 | 042, 063 | Add corpus-tagged public-literature retrieval to the local working layer with source locators and canonical-over-literature authority; boundary consolidation remains a separately unnumbered planning gap. |
 | 065 | planned | — | Provider-family diversification policy hook | 059b | After policy autopilot is proven, add a configurable hook that may separate families of S2/S3-derived content across provider accounts without weakening exact-packet, budget, sensitivity, or audit gates. |
-| 066 | planned | — | HERMES-PASSTHROUGH-0 | 015, 018, 021, 059b, 061a, 061b, 062 | Define the loopback OpenAI-compatible agent-loop subset over `run_ai_task`, policy aliases, exact per-attempt gating, retry/idempotency, provenance, and `ai_jobs` correlation; external execution remains blocked until 059b is merged and active. |
-| 067 | planned | — | JARVIS-MCP-0 | 005, 010, 040, 042, 043, 044, 059a | Expose bounded context, canonical search, MemoryStore proposal, `calc_v0`, BLUECAD candidate, and evidence tools through existing services; no direct storage/filesystem access, promotion, sampling, or authority. |
-| 068 | planned | — | HERMES-CONFIG-0 | 066, 067 | Freeze a pinned/fingerprinted Hermes profile with passthrough-only model paths, Jarvis MCP only, host-level workspace isolation, explicit tool allowlist, disabled browser/computer/cron/proactive paths, and bounded delegation. |
+| 066 | planned | — | HERMES-PASSTHROUGH-0 | 015, 018, 021, 059b, 061a, 061b, 062 | Frozen by maintainer decision on 2026-07-29. The prior definition branch is retained; restart requires explicit maintainer approval and fresh re-derivation from current `master`. |
+| 067 | planned | — | JARVIS-MCP-0 | 005, 010, 040, 042, 043, 044, 059a | Frozen by maintainer decision on 2026-07-29. The prior definition branch is retained; restart requires explicit maintainer approval and fresh re-derivation from current `master`. |
+| 068 | planned | — | HERMES-CONFIG-0 | 066, 067 | Frozen by maintainer decision on 2026-07-29. The prior definition branch is retained; restart requires explicit maintainer approval and fresh re-derivation from current `master`. |
 | 069 | planned | — | MEMORY-CONSOLIDATE-0 | 040, 042, 061a, 061b, 062, 066, 067, 068 | First Hermes dogfood: consolidate bounded accepted records/evidence into MemoryStore proposals with conflict preservation, provenance, grading, and cost evidence; never promote, overwrite, delete, or lower sensitivity. |
+| 070 | planned | — | UI-FOUNDATION-0: design tokens, appearance themes, and shared primitives | 006 | Frozen by maintainer decision on 2026-07-29. Definition PR #132 was closed without merge and its branch is retained; restart requires explicit maintainer approval and fresh re-derivation from current `master`. |
 | 071 | merged | [#147](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/147) | MODEL-SCENARIO-DOF-0: editable bindings, scenario runs, and degree-of-freedom inspection | 040, 043, 047 | Expose immutable value-free model input contracts, side-effect-free forward binding/DOF preview, parameter-backed or manual scenario bindings, existing-runner execution, and one bounded Domain Foundation panel; no inverse solver, targets, optimizer, automatic promotion, or embedded design defaults. |
 | 072 | merged | [#172](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/172) | BLUEREV-PROCESS-3: explicit symmetric hydraulic topology M1 | 043, 047, 050, 051, 052, 071 | Add one deterministic fixed-topology closed loop with common supply/return sections and 1–12 identical parallel branches; separate installed geometry from the representative hydraulic path, emit a canonical topology manifest, and prove reduction to 047 without adding a generic network solver, CAD layout, automatic recompute, or UI. |
 | 073 | merged | [#174](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/174) | BLUECAD-PRIMITIVE-1: fluid-open capped branch manifold | 005, 005b, 056 | Add one deterministic capped branch-header primitive with exactly one common port and 1–12 branch ports, explicit branch bores through the header wall, closed-end geometry, kernel-volume reconciliation, and property/conformance tests; no process link, layout solver, project defaults, or UI. |
@@ -164,6 +193,7 @@ PR overlaps the target files or runtime boundary.
 | 075 | merged | [#191](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/191) | PROCESS-KERNEL-1: streams, components, units, and unit operations | 043, 047, 048, 071 | Re-express validated 047 as an acyclic flowsheet of typed material/scalar ports and reusable blocks, add additive unit-contract v2 and component/stream foundations, and require exact canonical 047 result identity before broader solver work. Readiness evidence and implementation ownership are frozen in [the 2026-07-27 readiness decision](075-readiness-2026-07-27.md). |
 | 076 | merged | [#195](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/195) | EVIDENCE-SIGHT-0: bounded evidence-guided structural repair | 010, 038, 044, 059b, 061a, 061b | Add an opt-in, separately budgeted structural-repair cycle using deterministic attempt-scoped evidence; preserve valid candidate state and artifact pointers on every unsuccessful path; no new states, migration, promotion, or egress authority. |
 | 077 | in_review | [#198](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/198) | EVIDENCE-EGRESS-0: canonical evidence provenance and classification | 044, 059a, 059b, 076 | Bind canonical evidence rows and rendered evidence derivatives to workspace-scoped provenance, sensitivity, staleness, and exact-packet lineage before external model use; reuse 059a/059b authority and add no alternate egress path. Readiness sequencing, prompt authority, and no-migration packet lineage are frozen in [the 2026-07-28 readiness decision](077-readiness-2026-07-28.md). |
+| 078 | planned | — | PBR-MODELING-0: bounded photobioreactor modeling kernel | 043, 047, 048, 049, 071, 075 | Define the smallest bounded extension from static `048` biomass and `049` optical screening toward photobioreactor modeling: a closed server-bundled typed rate-law registry for light-limited kinetics, an incident-PAR quantity with a declared path-averaged irradiance built on the existing 049 optical-parameter separation, and CO2/O2 gas-liquid transfer with externally supplied kLa and an explicit sufficiency check against the carbon demand already derivable in 048; 048 and 049 identities, outputs, and fixtures remain unchanged, and no solver, expression language, dependency, or migration is added. Implementation requires a later full specification and a dated readiness decision. |
 
 ## Superseded planning aliases and resolved collisions
 
