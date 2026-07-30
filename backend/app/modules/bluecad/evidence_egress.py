@@ -19,6 +19,8 @@ from app.core.database import open_sqlite_connection
 from app.modules.ai import sensitivity
 from app.modules.ai.contracts import AIProviderAdapter
 from app.modules.ai.egress_authority import (
+    _CANONICAL_SANITIZER_TEMPLATE,
+    _CANONICAL_SANITIZER_VERSION,
     _sanitizer_config_digest,
     sanitize_canonical_sources_with_local_model,
     sanitize_prompt_with_local_model,
@@ -401,6 +403,20 @@ def _resolve_evidence_derivative(
             approval_source="evidence-egress-v0",
         )
     else:
+        reusable = _resolve_reusable_model_evidence_derivative(
+            workspace_id=workspace_id,
+            ordered_source_refs=ordered_source_refs,
+            source_digests=source_digests,
+            renderer_context=renderer_context,
+        )
+        if reusable is not None:
+            _validate_evidence_derivative(
+                reusable,
+                workspace_id=workspace_id,
+                ordered_source_refs=ordered_source_refs,
+                source_digests=source_digests,
+            )
+            return reusable
         approval = sanitize_canonical_sources_with_local_model(
             workspace_id=workspace_id,
             source_refs=ordered_source_refs,
@@ -408,6 +424,55 @@ def _resolve_evidence_derivative(
             config_context=renderer_context,
         )
     return _canonical_derivative_row(workspace_id, approval.derivative_id)
+
+
+def _resolve_reusable_model_evidence_derivative(
+    *,
+    workspace_id: str,
+    ordered_source_refs: tuple[str, ...],
+    source_digests: dict[str, str],
+    renderer_context: dict[str, Any],
+) -> dict[str, Any] | None:
+    policy = load_default_egress_policy()
+    registry = load_default_provider_registry()
+    config_digest = _sanitizer_config_digest(
+        policy=policy,
+        route_class="local:fast",
+        template=_CANONICAL_SANITIZER_TEMPLATE,
+        version=_CANONICAL_SANITIZER_VERSION,
+        registry=registry,
+        config_context=renderer_context,
+    )
+    with open_sqlite_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT *
+            FROM sanitized_derivatives
+            WHERE workspace_id = ?
+              AND source_refs_json = ?
+              AND source_digests_json = ?
+              AND effective_level = 'S1'
+              AND sanitizer_kind = 'model_local'
+              AND sanitizer_version = ?
+              AND sanitizer_config_digest = ?
+              AND sanitizer_ai_job_id IS NOT NULL
+              AND policy_version = ?
+              AND approval_source = 'policy-sanitizer-v1'
+              AND auto_approved = 1
+              AND status = 'approved'
+            ORDER BY created_at DESC, id ASC
+            LIMIT 1
+            """,
+            (
+                workspace_id,
+                canonical_json(sorted(ordered_source_refs)),
+                canonical_json(source_digests),
+                _CANONICAL_SANITIZER_VERSION,
+                config_digest,
+                policy.policy_version,
+            ),
+        ).fetchone()
+    return dict(row) if row is not None else None
 
 
 def _resolve_external_prompt_derivative(
@@ -799,7 +864,10 @@ def _validate_lineage(lineage: dict[str, Any]) -> None:
     if (
         not isinstance(levels, list)
         or len(levels) != len(refs)
-        or any(level not in {"S0", "S1", "S2", "S3", "S4"} for level in levels)
+        or any(
+            level not in {"S0", "S1", "S2", "S3", "S4", "unknown"}
+            for level in levels
+        )
     ):
         raise sensitivity.SensitivityPolicyError(
             "Evidence lineage source effective levels are malformed."

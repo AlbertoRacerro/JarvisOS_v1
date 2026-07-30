@@ -152,3 +152,53 @@ def test_final_bluecad_authority_rejection_becomes_prepacket_stop(
     assert stop.reason_code == "bluecad_structural_prompt_authority_changed"
     assert stop.detail_reason == "bluecad_structural_prompt_authority_changed"
     assert stop.ai_error_type == "sensitivity_policy_error"
+
+
+
+def test_sensitive_evidence_reuses_matching_derivative_before_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    existing = {"id": "derivative-existing"}
+    monkeypatch.setattr(
+        evidence_egress,
+        "_resolve_reusable_model_evidence_derivative",
+        lambda **_kwargs: existing,
+    )
+    monkeypatch.setattr(
+        evidence_egress,
+        "_validate_evidence_derivative",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        evidence_egress,
+        "sanitize_canonical_sources_with_local_model",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("matching authority must be reused before model execution")
+        ),
+    )
+    sight = EvidenceSight(
+        "EVIDENCE_SIGHT_V0\nevidence:e1",
+        "sha256:" + "1" * 64,
+        ("e1",),
+    )
+
+    resolved = evidence_egress._resolve_evidence_derivative(
+        workspace_id="bluerev",
+        candidate_id="candidate-1",
+        source_attempt_id="attempt-1",
+        sight=sight,
+        ordered_source_refs=("evidence:e1",),
+        source_digests={"evidence:e1": "sha256:" + "5" * 64},
+        effective_levels=("S2",),
+        adapters={},
+    )
+
+    assert resolved is existing
+
+
+def test_lineage_accepts_unknown_raw_source_level() -> None:
+    lineage = _lineage()
+    lineage["source_effective_levels"] = ["unknown", "S1"]
+
+    with evidence_egress.bind_evidence_lineage(lineage):
+        pass
