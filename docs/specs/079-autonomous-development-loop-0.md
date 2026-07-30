@@ -91,7 +91,7 @@ A run may start or resume only when all of these are true:
 
 1. the maintainer has authorized the exact spec/slice or the row is the eligible lowest-numbered `ready` row under current priority;
 2. all hard dependencies are `merged`;
-3. no overlapping implementation PR owns the same files or runtime boundary;
+3. no different product or implementation front is active; when resuming the one already authorized active front, no competing pull request or branch owner overlaps its files or runtime boundary;
 4. the branch descends from the recorded base without force-push ambiguity;
 5. requested actions remain inside the scope digest and current repository governance;
 6. no stop condition is active.
@@ -274,7 +274,7 @@ A future implementation must stop without branch mutation when any of the follow
 - missing or ambiguous authorization;
 - registry row absent, frozen without explicit restart, or not eligible;
 - unmerged hard dependency;
-- overlapping active PR or conflicting branch owner;
+- another product or implementation front is active, or a competing pull request or branch owner conflicts with the one authorized front;
 - base/head mismatch, force-push ambiguity, or untrusted fork;
 - required gate missing, stale, cancelled, action-required, infrastructure-failed, flaky, ambiguous, or failed without a reproducible in-scope implementation defect;
 - finding requires scope expansion;
@@ -307,7 +307,8 @@ A full spec must define offline deterministic tests using fixtures and fake acto
 13. no actor can approve and merge its own work;
 14. interrupted execution resumes without duplicate commits, comments, reviews, or charges;
 15. inactivity produces no repeated calls or noise;
-16. a reproducible in-scope implementation defect routes back to bounded implementation, while stale, infrastructure, flaky, or ambiguous gate outcomes do not mutate the branch.
+16. a reproducible in-scope implementation defect routes back to bounded implementation, while stale, infrastructure, flaky, or ambiguous gate outcomes do not mutate the branch;
+17. an unrelated `ready` slice is never selected while any other product or implementation front is active, even when their files and runtime boundaries do not overlap.
 
 A later real-tool proof must use a disposable repository or equivalent isolated fixture. It must not experiment on `master`, repository secrets, branch protection, or live paid models.
 
