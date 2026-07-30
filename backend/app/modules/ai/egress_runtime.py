@@ -879,12 +879,34 @@ def _authorize_context(
             source_count=len(blocks),
             withheld_count=len(blocks),
         )
+    from app.modules.bluecad.evidence_egress import has_active_evidence_lineage
+
     try:
         authority = authorize_manual_context(
             workspace_id=workspace_id,
             raw_blocks=blocks,
             budget_chars=policy.max_context_chars,
         )
+    except sensitivity.SensitivityPolicyError as exc:
+        if has_active_evidence_lineage():
+            raise _stop(
+                result="deny",
+                reason_code="bluecad_evidence_authority_changed",
+                prompt_level=_prompt_floor_or_unknown(prompt),
+                context_digest=raw_digest,
+                source_count=len(blocks),
+                withheld_count=len(blocks),
+                detail_reason="bluecad_evidence_authority_changed",
+                ai_error_type="sensitivity_policy_error",
+            ) from exc
+        raise _stop(
+            result="pause",
+            reason_code="manual_context_not_authorized",
+            prompt_level=_prompt_floor_or_unknown(prompt),
+            context_digest=raw_digest,
+            source_count=len(blocks),
+            withheld_count=len(blocks),
+        ) from exc
     except ValueError as exc:
         raise _stop(
             result="pause",

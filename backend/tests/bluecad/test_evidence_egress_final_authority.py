@@ -202,3 +202,36 @@ def test_lineage_accepts_unknown_raw_source_level() -> None:
 
     with evidence_egress.bind_evidence_lineage(lineage):
         pass
+
+
+
+def test_late_evidence_drift_becomes_bluecad_blocked_prepacket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        egress_runtime,
+        "authorize_manual_context",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            sensitivity.SensitivityPolicyError("concurrent evidence authority drift")
+        ),
+    )
+
+    with evidence_egress.bind_evidence_lineage(_lineage()):
+        with pytest.raises(egress_runtime._PrepacketStop) as caught:
+            egress_runtime._authorize_context(
+                context_blocks=[
+                    {
+                        "source": "BLUECAD evidence",
+                        "content": "sanitized structural evidence",
+                    }
+                ],
+                workspace_id="bluerev",
+                policy=SimpleNamespace(max_context_chars=2000),
+                prompt="CONFIDENTIAL PROJECT GEOMETRY: raw task.",
+            )
+
+    stop = caught.value
+    assert stop.result == "deny"
+    assert stop.reason_code == "bluecad_evidence_authority_changed"
+    assert stop.detail_reason == "bluecad_evidence_authority_changed"
+    assert stop.ai_error_type == "sensitivity_policy_error"

@@ -62,6 +62,12 @@ _ACTIVE_LINEAGE: ContextVar[dict[str, Any] | None] = ContextVar(
 )
 
 
+def has_active_evidence_lineage() -> bool:
+    """Return whether BLUECAD packet authority is active in this execution context."""
+
+    return _ACTIVE_LINEAGE.get() is not None
+
+
 @dataclass(frozen=True)
 class ExternalStructuralPreparation:
     raw_prompt: str
