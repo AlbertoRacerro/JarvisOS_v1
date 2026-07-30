@@ -131,7 +131,7 @@ def test_renderer_order_can_differ_from_canonical_derivative_order(
         "evidence:e2": "sha256:" + "6" * 64,
     }
     sight = EvidenceSight(
-        "EVIDENCE_SIGHT_V0\nevidence:e2\nevidence:e1",
+        "EVIDENCE_SIGHT_V0\\nevidence:e2\\nevidence:e1",
         "sha256:" + "1" * 64,
         ("e2", "e1"),
     )
