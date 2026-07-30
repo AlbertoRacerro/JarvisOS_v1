@@ -408,6 +408,7 @@ def _resolve_evidence_derivative(
             sanitizer_version=_EVIDENCE_DERIVATIVE_VERSION,
             sanitizer_config_digest=config_digest,
             expected_source_digests=source_digests,
+            expected_source_levels=dict(zip(ordered_source_refs, effective_levels, strict=True)),
             approval_source="evidence-egress-v0",
         )
     else:

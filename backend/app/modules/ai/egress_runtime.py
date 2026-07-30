@@ -917,6 +917,18 @@ def _authorize_context(
             withheld_count=len(blocks),
         ) from exc
     if authority.result != "eligible":
+        if has_active_evidence_lineage():
+            raise _stop(
+                result="deny",
+                reason_code="bluecad_evidence_authority_changed",
+                prompt_level=_prompt_floor_or_unknown(prompt),
+                context_digest=raw_digest,
+                source_count=len(blocks),
+                included_count=len(authority.included_manifest),
+                withheld_count=len(authority.withheld_manifest),
+                detail_reason="bluecad_evidence_authority_changed",
+                ai_error_type="sensitivity_policy_error",
+            )
         raise _stop(
             result="pause",
             reason_code="manual_context_not_authorized",

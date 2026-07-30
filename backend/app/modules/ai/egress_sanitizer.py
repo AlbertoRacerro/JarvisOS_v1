@@ -272,6 +272,7 @@ def auto_approve_canonical_derivative(
     sanitizer_config_digest: str,
     sanitizer_ai_job_id: str | None = None,
     expected_source_digests: dict[str, str] | None = None,
+    expected_source_levels: dict[str, str] | None = None,
     approval_source: str = "policy-sanitizer-v1",
     policy: EgressPolicyConfig | None = None,
     now: datetime | None = None,
@@ -303,6 +304,10 @@ def auto_approve_canonical_derivative(
         source_refs=source_refs_tuple,
         required=sanitizer_kind == "model_local",
     )
+    expected_source_levels = _validate_expected_source_levels(
+        expected_source_levels,
+        source_refs=source_refs_tuple,
+    )
 
     derivative_digest = sensitivity._derivative_content_digest(derivative_content)
     source_refs_json = canonical_json(list(source_refs_tuple))
@@ -331,6 +336,17 @@ def auto_approve_canonical_derivative(
         if expected_source_digests is not None and source_digests != expected_source_digests:
             raise sensitivity.SensitivityPolicyError(
                 "Canonical sanitizer source snapshot changed before approval."
+            )
+        source_levels = {
+            snapshot.subject_ref: sensitivity._effective_level_for_bound_snapshot(
+                snapshot,
+                label,
+            )
+            for snapshot, label in resolved_sources
+        }
+        if expected_source_levels is not None and source_levels != expected_source_levels:
+            raise sensitivity.SensitivityPolicyError(
+                "Canonical sanitizer source level changed before approval."
             )
         source_digests_json = canonical_json(source_digests)
 
@@ -926,6 +942,33 @@ def _validate_expected_source_digests(
     if set(cleaned) != set(source_refs):
         raise sensitivity.SensitivityPolicyError(
             "Expected canonical source digest set does not match source_refs."
+        )
+    return dict(sorted(cleaned.items()))
+
+
+def _validate_expected_source_levels(
+    values: dict[str, str] | None,
+    *,
+    source_refs: tuple[str, ...],
+) -> dict[str, str] | None:
+    if values is None:
+        return None
+    if not isinstance(values, dict):
+        raise EgressContractError("expected_source_levels must be a mapping")
+    allowed_levels = {"S0", "S1", "S2", "S3", "S4", "unknown"}
+    cleaned: dict[str, str] = {}
+    for raw_ref, raw_level in values.items():
+        source_ref = _required_text(raw_ref, "expected_source_level source_ref")
+        sensitivity._parse_subject_ref(source_ref)
+        level = _required_text(raw_level, "expected_source_level")
+        if level not in allowed_levels:
+            raise EgressContractError("expected_source_levels contains an invalid level")
+        if source_ref in cleaned:
+            raise EgressContractError("expected_source_levels contains duplicates")
+        cleaned[source_ref] = level
+    if set(cleaned) != set(source_refs):
+        raise sensitivity.SensitivityPolicyError(
+            "Expected canonical source level set does not match source_refs."
         )
     return dict(sorted(cleaned.items()))
 
