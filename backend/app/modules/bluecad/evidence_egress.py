@@ -431,6 +431,9 @@ def _resolve_evidence_derivative(
             source_refs=ordered_source_refs,
             adapters=adapters,
             config_context=renderer_context,
+            expected_source_levels=dict(
+                zip(ordered_source_refs, effective_levels, strict=True)
+            ),
         )
     return _canonical_derivative_row(workspace_id, approval.derivative_id)
 

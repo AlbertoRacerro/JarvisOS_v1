@@ -312,3 +312,56 @@ def test_noneligible_bluecad_context_authority_is_blocked_prepacket(
     assert stop.result == "deny"
     assert stop.reason_code == "bluecad_evidence_authority_changed"
     assert stop.ai_error_type == "sensitivity_policy_error"
+
+
+
+def test_model_evidence_approval_forwards_transaction_source_levels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        evidence_egress,
+        "_resolve_reusable_model_evidence_derivative",
+        lambda **_kwargs: None,
+    )
+
+    def sanitize(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(derivative_id="derivative-model-transaction")
+
+    monkeypatch.setattr(
+        evidence_egress,
+        "sanitize_canonical_sources_with_local_model",
+        sanitize,
+    )
+    monkeypatch.setattr(
+        evidence_egress,
+        "_canonical_derivative_row",
+        lambda _workspace_id, derivative_id: {"id": derivative_id},
+    )
+    sight = EvidenceSight(
+        "EVIDENCE_SIGHT_V0\nevidence:e2\nevidence:e1",
+        "sha256:" + "1" * 64,
+        ("e2", "e1"),
+    )
+
+    resolved = evidence_egress._resolve_evidence_derivative(
+        workspace_id="bluerev",
+        candidate_id="candidate-1",
+        source_attempt_id="attempt-1",
+        sight=sight,
+        ordered_source_refs=("evidence:e2", "evidence:e1"),
+        source_digests={
+            "evidence:e2": "sha256:" + "5" * 64,
+            "evidence:e1": "sha256:" + "6" * 64,
+        },
+        effective_levels=("S2", "unknown"),
+        adapters={},
+    )
+
+    assert resolved == {"id": "derivative-model-transaction"}
+    assert captured["expected_source_levels"] == {
+        "evidence:e2": "S2",
+        "evidence:e1": "unknown",
+    }

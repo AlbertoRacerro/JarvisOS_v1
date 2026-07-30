@@ -272,6 +272,7 @@ def sanitize_canonical_sources_with_local_model(
     registry: ProviderRegistry | None = None,
     policy: EgressPolicyConfig | None = None,
     config_context: dict[str, Any] | None = None,
+    expected_source_levels: dict[str, str] | None = None,
 ) -> SanitizerApproval:
     """Sanitize exact canonical source snapshots with one local-only AI job.
 
@@ -341,6 +342,7 @@ def sanitize_canonical_sources_with_local_model(
         sanitizer_config_digest=config_digest,
         sanitizer_ai_job_id=outcome.ledger_id,
         expected_source_digests=source_digests,
+        expected_source_levels=expected_source_levels,
         policy=policy,
     )
 
