@@ -19,6 +19,7 @@ from app.core.database import open_sqlite_connection
 from app.modules.ai import sensitivity
 from app.modules.ai.contracts import AIProviderAdapter
 from app.modules.ai.egress_authority import (
+    _sanitizer_config_digest,
     sanitize_canonical_sources_with_local_model,
     sanitize_prompt_with_local_model,
 )
@@ -29,6 +30,7 @@ from app.modules.ai.egress_sanitizer import (
     resolve_approved_prompt_derivative,
 )
 from app.modules.ai.egress_service import canonical_json, sha256_text
+from app.modules.ai.provider_registry import load_default_provider_registry
 from app.modules.bluecad.evidence_sight import (
     EVIDENCE_SIGHT_MAX_CHARS,
     EVIDENCE_SIGHT_MAX_LINES,
@@ -67,6 +69,7 @@ class ExternalStructuralPreparation:
     candidate_id: str
     source_attempt_id: str
     ordered_source_refs: tuple[str, ...]
+    source_effective_levels: tuple[str, ...]
     sight_digest: str
     derivative_id: str
     derivative_digest: str
@@ -88,6 +91,7 @@ class ExternalStructuralPreparation:
             "source_attempt_id": self.source_attempt_id,
             "structural_attempt_id": structural_attempt_id,
             "ordered_source_refs": list(self.ordered_source_refs),
+            "source_effective_levels": list(self.source_effective_levels),
             "sight_digest": self.sight_digest,
             "renderer_id": EVIDENCE_SIGHT_RENDERER_ID,
             "renderer_version": EVIDENCE_SIGHT_RENDERER_VERSION,
@@ -283,6 +287,7 @@ def prepare_external_structural_repair(
         candidate_id=candidate_id,
         source_attempt_id=source_attempt_id,
         ordered_source_refs=snapshot["ordered_source_refs"],
+        source_effective_levels=snapshot["effective_levels"],
         sight_digest=snapshot["sight"].digest,
         derivative_id=derivative_row["id"],
         derivative_digest=derivative_row["content_digest"],
@@ -453,6 +458,9 @@ def _validate_prompt_derivative(
         derivative.status != "approved"
         or derivative.workspace_id != expected_workspace_id
         or derivative.sanitizer_kind != "model_local"
+        or derivative.sanitizer_version != _STRUCTURAL_SANITIZER_VERSION
+        or derivative.sanitizer_config_digest
+        != _expected_structural_prompt_config_digest()
     ):
         raise sensitivity.SensitivityPolicyError(
             "External structural prompt derivative is not current local authority."
@@ -461,6 +469,18 @@ def _validate_prompt_derivative(
         derivative.derivative_content,
         raw_prompt=raw_prompt,
         forbidden_spec_json=forbidden_spec_json,
+    )
+
+
+def _expected_structural_prompt_config_digest() -> str:
+    policy = load_default_egress_policy()
+    registry = load_default_provider_registry()
+    return _sanitizer_config_digest(
+        policy=policy,
+        route_class="local:fast",
+        template=_STRUCTURAL_SANITIZER_TEMPLATE,
+        version=_STRUCTURAL_SANITIZER_VERSION,
+        registry=registry,
     )
 
 
@@ -473,7 +493,7 @@ def _validate_transformed_prompt_content(
     if (
         content == raw_prompt
         or forbidden_spec_json in content
-        or _contains_structural_json_value(content, json.loads(forbidden_spec_json))
+        or _contains_json_structure(content)
         or "RAW_GEOMETRY_SPEC_BEGIN" in content
         or "RAW_GEOMETRY_SPEC_END" in content
         or sensitivity.deterministic_floor(content) is not None
@@ -483,7 +503,7 @@ def _validate_transformed_prompt_content(
         )
 
 
-def _contains_structural_json_value(content: str, forbidden_value: Any) -> bool:
+def _contains_json_structure(content: str) -> bool:
     decoder = json.JSONDecoder()
     for index, character in enumerate(content):
         if character not in "[{":
@@ -492,18 +512,8 @@ def _contains_structural_json_value(content: str, forbidden_value: Any) -> bool:
             value, _ = decoder.raw_decode(content[index:])
         except json.JSONDecodeError:
             continue
-        if _json_value_contains(value, forbidden_value):
+        if isinstance(value, (dict, list)):
             return True
-    return False
-
-
-def _json_value_contains(value: Any, forbidden_value: Any) -> bool:
-    if value == forbidden_value:
-        return True
-    if isinstance(value, dict):
-        return any(_json_value_contains(item, forbidden_value) for item in value.values())
-    if isinstance(value, list):
-        return any(_json_value_contains(item, forbidden_value) for item in value)
     return False
 
 
@@ -612,21 +622,21 @@ def _validate_current_lineage_sight(lineage: dict[str, Any]) -> None:
     source_digests = current["source_digests"]
     effective_levels = current["effective_levels"]
     expected_refs = tuple(lineage["ordered_source_refs"])
+    expected_levels = tuple(lineage["source_effective_levels"])
     stored_refs = tuple(json.loads(derivative["source_refs_json"]))
     stored_digests = json.loads(derivative["source_digests_json"])
-    current_level = (
-        max(effective_levels, key={"S0": 0, "S1": 1, "S2": 2, "S3": 3, "S4": 4}.__getitem__)
-        if effective_levels
-        else "S0"
-    )
     if (
         sight.digest != lineage["sight_digest"]
         or current_refs != expected_refs
         or stored_refs != expected_refs
         or source_digests != stored_digests
-        or current_level != derivative["effective_level"]
-        or current_level != lineage["effective_level"]
+        or effective_levels != expected_levels
+        or derivative["effective_level"] != lineage["effective_level"]
         or derivative["content_digest"] != lineage["derivative_digest"]
+        or derivative["sanitizer_kind"] != lineage["sanitizer_kind"]
+        or derivative["sanitizer_version"] != lineage["sanitizer_version"]
+        or derivative["sanitizer_config_digest"]
+        != lineage["sanitizer_config_digest"]
     ):
         raise sensitivity.SensitivityPolicyError(
             "Evidence sight, labels, or derivative authority changed before packet authorization."
@@ -784,6 +794,15 @@ def _validate_lineage(lineage: dict[str, Any]) -> None:
     ):
         raise sensitivity.SensitivityPolicyError(
             "Evidence lineage ordered source refs are malformed."
+        )
+    levels = lineage.get("source_effective_levels")
+    if (
+        not isinstance(levels, list)
+        or len(levels) != len(refs)
+        or any(level not in {"S0", "S1", "S2", "S3", "S4"} for level in levels)
+    ):
+        raise sensitivity.SensitivityPolicyError(
+            "Evidence lineage source effective levels are malformed."
         )
     if lineage.get("max_lines") != EVIDENCE_SIGHT_MAX_LINES or lineage.get(
         "max_chars"

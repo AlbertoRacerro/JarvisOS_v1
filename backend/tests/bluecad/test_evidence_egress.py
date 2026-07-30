@@ -78,6 +78,7 @@ def _lineage(*, structural_attempt_id: str = "attempt-2") -> dict[str, object]:
         "source_attempt_id": "attempt-1",
         "structural_attempt_id": structural_attempt_id,
         "ordered_source_refs": ["evidence:e1"],
+        "source_effective_levels": ["S1"],
         "sight_digest": "sha256:" + "1" * 64,
         "renderer_id": "evidence_sight_v0",
         "renderer_version": "evidence_sight_v0",
@@ -174,6 +175,9 @@ def _matching_authority_snapshot(
             "source_digests_json": '{"evidence:e1":"sha256:' + "5" * 64 + '"}',
             "effective_level": "S1",
             "content_digest": "sha256:" + "2" * 64,
+            "sanitizer_kind": "deterministic",
+            "sanitizer_version": "bluecad_evidence_sight_derivative_v0_1",
+            "sanitizer_config_digest": "3" * 64,
         },
         "source_refs": tuple(f"evidence:{item}" for item in (sight or _matching_sight()).record_ids),
         "source_digests": {"evidence:e1": "sha256:" + "5" * 64},
@@ -308,6 +312,38 @@ def test_packet_authorization_rejects_concurrent_effective_level_drift(
         enrich_authorized_evidence_manifest(_manifest())
 
 
+def test_packet_authorization_accepts_bound_sensitive_source_after_sanitization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lineage = _lineage()
+    lineage.update(
+        source_effective_levels=["S2"],
+        sanitizer_kind="model_local",
+        sanitizer_version="canonical-local-sanitizer-v1",
+        sanitizer_config_digest="6" * 64,
+    )
+    snapshot = _matching_authority_snapshot(effective_level="S2")
+    snapshot["derivative"].update(
+        sanitizer_kind="model_local",
+        sanitizer_version="canonical-local-sanitizer-v1",
+        sanitizer_config_digest="6" * 64,
+    )
+    monkeypatch.setattr(
+        evidence_egress_module,
+        "_current_structural_prompt_derivative",
+        lambda _lineage: _matching_prompt_derivative(),
+    )
+    monkeypatch.setattr(
+        evidence_egress_module,
+        "_current_lineage_authority_snapshot",
+        lambda _lineage: snapshot,
+    )
+
+    with bind_evidence_lineage(lineage):
+        enriched = enrich_authorized_evidence_manifest(_manifest())
+    assert enriched[0]["evidence_lineage"]["source_effective_levels"] == ["S2"]
+
+
 def test_lineage_mutation_changes_packet_digest() -> None:
     first = build_packet_projection(_material(lineage=_lineage()))
     second = build_packet_projection(
@@ -374,6 +410,7 @@ def test_first_use_structural_trigger_denies_without_ticket_or_reservation(
         "Generic repair\nRAW_GEOMETRY_SPEC_BEGIN",
         'Generic repair\n{\n  "schema_version": "geometry_spec_v0_1"\n}',
         'Generic repair\n{"payload":{"schema_version":"geometry_spec_v0_1"}}',
+        'Generic repair\n{"objects":[{"id":"tube-1","diameter":0.4}]}',
     ),
 )
 def test_prompt_validator_runs_before_derivative_persistence(
@@ -437,6 +474,94 @@ def test_prompt_validator_runs_before_derivative_persistence(
             "SELECT COUNT(*) AS count FROM egress_prompt_derivatives"
         ).fetchone()["count"]
     assert after == before
+
+
+@pytest.mark.parametrize(
+    ("sanitizer_version", "sanitizer_config_digest"),
+    (
+        ("prompt-local-sanitizer-v1", "e" * 64),
+        ("bluecad_structural_abstraction_v0_1", "f" * 64),
+    ),
+)
+def test_prompt_reuse_requires_exact_bluecad_sanitizer_identity(
+    monkeypatch: pytest.MonkeyPatch,
+    sanitizer_version: str,
+    sanitizer_config_digest: str,
+) -> None:
+    existing = SimpleNamespace(
+        id="prompt-generic",
+        status="approved",
+        workspace_id=WORKSPACE_ID,
+        sanitizer_kind="model_local",
+        sanitizer_version=sanitizer_version,
+        sanitizer_config_digest=sanitizer_config_digest,
+        derivative_content="Generic bounded repair request.",
+        derivative_digest="sha256:" + "7" * 64,
+    )
+    replacement = SimpleNamespace(id="prompt-bluecad")
+    calls: list[str] = []
+    monkeypatch.setattr(
+        evidence_egress_module,
+        "resolve_approved_prompt_derivative",
+        lambda **_kwargs: existing,
+    )
+    monkeypatch.setattr(
+        evidence_egress_module,
+        "_expected_structural_prompt_config_digest",
+        lambda: "e" * 64,
+    )
+    monkeypatch.setattr(
+        evidence_egress_module,
+        "sanitize_prompt_with_local_model",
+        lambda **_kwargs: calls.append("sanitize") or replacement,
+    )
+
+    result = evidence_egress_module._resolve_external_prompt_derivative(
+        workspace_id=WORKSPACE_ID,
+        raw_prompt="CONFIDENTIAL PROJECT GEOMETRY: raw task.",
+        forbidden_spec_json='{"schema_version":"geometry_spec_v0_1"}',
+        adapters=None,
+    )
+    assert result is replacement
+    assert calls == ["sanitize"]
+
+
+def test_prompt_reuse_accepts_exact_bluecad_sanitizer_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    existing = SimpleNamespace(
+        id="prompt-bluecad",
+        status="approved",
+        workspace_id=WORKSPACE_ID,
+        sanitizer_kind="model_local",
+        sanitizer_version="bluecad_structural_abstraction_v0_1",
+        sanitizer_config_digest="e" * 64,
+        derivative_content="Generic bounded repair request.",
+        derivative_digest="sha256:" + "7" * 64,
+    )
+    monkeypatch.setattr(
+        evidence_egress_module,
+        "resolve_approved_prompt_derivative",
+        lambda **_kwargs: existing,
+    )
+    monkeypatch.setattr(
+        evidence_egress_module,
+        "_expected_structural_prompt_config_digest",
+        lambda: "e" * 64,
+    )
+    monkeypatch.setattr(
+        evidence_egress_module,
+        "sanitize_prompt_with_local_model",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("must reuse")),
+    )
+
+    result = evidence_egress_module._resolve_external_prompt_derivative(
+        workspace_id=WORKSPACE_ID,
+        raw_prompt="CONFIDENTIAL PROJECT GEOMETRY: raw task.",
+        forbidden_spec_json='{"schema_version":"geometry_spec_v0_1"}',
+        adapters=None,
+    )
+    assert result is existing
 
 
 def test_bluecad_prompt_sanitizer_binds_template_and_version(
