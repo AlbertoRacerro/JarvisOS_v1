@@ -174,9 +174,11 @@ Such actions require explicit authority and auditable attribution. The control p
 
 ### 5.9 Concurrency, leases, and idempotency
 
-At most one active claimant may mutate an authorized work branch at a time. Claims require bounded leases with explicit renewal and expiry semantics. Duplicate delivery, scheduler retries, webhook replay, and concurrent agents must converge without duplicate fix attempts, duplicate reviews, conflicting pushes, or lost state.
+Front selection and claim acquisition must be one repository-wide atomic compare-and-swap or equivalent transaction. It must verify that no product or implementation front is active and publish the newly claimed front as one indivisible transition. A dispatcher that loses this race must stop before branch creation, mutation, agent invocation, external spend, or review dispatch.
 
-A lease must not grant authority beyond the recorded slice and must not survive branch/head replacement without revalidation.
+Only the globally claimed front may acquire a work-branch mutation lease. At most one active claimant may mutate that branch at a time. The repository-wide front claim and branch lease both require bounded renewal and expiry semantics, but expiry must not silently authorize a different front while the prior branch, PR, or actor may still be active; recovery must reconcile durable GitHub state first.
+
+Duplicate delivery, scheduler retries, webhook replay, and concurrent agents must converge without duplicate front claims, fix attempts, reviews, conflicting pushes, or lost state. Neither a repository claim nor a branch lease may grant authority beyond the recorded slice or survive branch/head replacement without revalidation.
 
 ### 5.10 Honest inactivity
 
@@ -274,7 +276,8 @@ A future implementation must stop without branch mutation when any of the follow
 - missing or ambiguous authorization;
 - registry row absent, frozen without explicit restart, or not eligible;
 - unmerged hard dependency;
-- another product or implementation front is active, or a competing pull request or branch owner conflicts with the one authorized front;
+- another product or implementation front is active, or the repository-wide front claim cannot be acquired atomically;
+- a competing pull request or branch owner conflicts with the one authorized front;
 - base/head mismatch, force-push ambiguity, or untrusted fork;
 - required gate missing, stale, cancelled, action-required, infrastructure-failed, flaky, ambiguous, or failed without a reproducible in-scope implementation defect;
 - finding requires scope expansion;
@@ -308,7 +311,8 @@ A full spec must define offline deterministic tests using fixtures and fake acto
 14. interrupted execution resumes without duplicate commits, comments, reviews, or charges;
 15. inactivity produces no repeated calls or noise;
 16. a reproducible in-scope implementation defect routes back to bounded implementation, while stale, infrastructure, flaky, or ambiguous gate outcomes do not mutate the branch;
-17. an unrelated `ready` slice is never selected while any other product or implementation front is active, even when their files and runtime boundaries do not overlap.
+17. an unrelated `ready` slice is never selected while any other product or implementation front is active, even when their files and runtime boundaries do not overlap;
+18. two dispatchers racing from an empty repository state produce exactly one repository-wide front claim, while the loser performs no branch mutation, model call, review dispatch, or spend.
 
 A later real-tool proof must use a disposable repository or equivalent isolated fixture. It must not experiment on `master`, repository secrets, branch protection, or live paid models.
 
@@ -319,7 +323,7 @@ A later real-tool proof must use a disposable repository or equivalent isolated 
 1. canonical GitHub state substrate and append-only/tamper-evident representation;
 2. dispatcher host and trust boundary;
 3. exact authorization-grant format and revocation semantics;
-4. branch lease, concurrency, replay, and idempotency model;
+4. repository-wide atomic front claim plus work-branch lease, concurrency, replay, expiry, and idempotency model;
 5. exact state machine and transition table;
 6. deterministic gate set and infrastructure-retry policy;
 7. review provider, structured finding schema, and reviewer independence;
