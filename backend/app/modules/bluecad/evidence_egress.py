@@ -9,6 +9,7 @@ provider directly.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -383,6 +384,7 @@ def _resolve_evidence_derivative(
         source_attempt_id=source_attempt_id,
         sight=sight,
         ordered_source_refs=ordered_source_refs,
+        effective_levels=effective_levels,
     )
     config_digest = sha256_text(canonical_json(renderer_context))
     if effective_levels and all(level in {"S0", "S1"} for level in effective_levels):
@@ -559,6 +561,7 @@ def _validate_transformed_prompt_content(
         content == raw_prompt
         or forbidden_spec_json in content
         or _contains_json_structure(content)
+        or _contains_serialized_geometry_authority(content, forbidden_spec_json)
         or "RAW_GEOMETRY_SPEC_BEGIN" in content
         or "RAW_GEOMETRY_SPEC_END" in content
         or sensitivity.deterministic_floor(content) is not None
@@ -580,6 +583,103 @@ def _contains_json_structure(content: str) -> bool:
         if isinstance(value, (dict, list)):
             return True
     return False
+
+
+def _contains_serialized_geometry_authority(
+    content: str,
+    forbidden_spec_json: str,
+) -> bool:
+    """Reject raw GeometrySpec key/value authority independent of serialization."""
+
+    try:
+        forbidden = json.loads(forbidden_spec_json)
+    except json.JSONDecodeError as exc:  # server-owned canonical JSON must be valid
+        raise sensitivity.SensitivityPolicyError(
+            "Server GeometrySpec authority is malformed."
+        ) from exc
+    lines = tuple(content.splitlines())
+    for key, value in _iter_geometry_scalar_pairs(forbidden):
+        key_pattern = re.compile(
+            rf"(?i)(?<![A-Za-z0-9_]){re.escape(key)}(?![A-Za-z0-9_])"
+        )
+        for line in lines:
+            match = key_pattern.search(line)
+            if match is None:
+                continue
+            tail = line[match.end() : match.end() + 160]
+            if _serialized_tail_contains_value(tail, value):
+                return True
+    identifiers = _geometry_identifier_values(forbidden)
+    return any(
+        re.search(
+            rf"(?i)(?<![A-Za-z0-9_]){re.escape(identifier)}(?![A-Za-z0-9_])",
+            content,
+        )
+        is not None
+        for identifier in identifiers
+    )
+
+
+def _iter_geometry_scalar_pairs(value: Any) -> Iterator[tuple[str, Any]]:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if isinstance(item, (dict, list)):
+                yield from _iter_geometry_scalar_pairs(item)
+            elif item is not None:
+                yield str(key), item
+    elif isinstance(value, list):
+        for item in value:
+            yield from _iter_geometry_scalar_pairs(item)
+
+
+def _serialized_tail_contains_value(tail: str, value: Any) -> bool:
+    tail = tail.lstrip()
+    tail = tail.lstrip("'\"")
+    if tail.startswith((":", "=")):
+        tail = tail[1:].lstrip()
+    elif tail and not tail[0].isspace():
+        return False
+    if isinstance(value, bool):
+        return re.search(rf"(?i)^{str(value).lower()}(?![A-Za-z0-9_])", tail) is not None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        number = re.match(r"^([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)", tail)
+        if number is None:
+            return False
+        try:
+            return float(number.group(1)) == float(value)
+        except ValueError:
+            return False
+    expected = str(value).strip().casefold()
+    if not expected:
+        return False
+    candidate = tail.lstrip()
+    candidate = candidate.lstrip("'\"").casefold()
+    return candidate.startswith(expected) and (
+        len(candidate) == len(expected)
+        or not candidate[len(expected)].isalnum()
+        and candidate[len(expected)] != "_"
+    )
+
+
+def _geometry_identifier_values(value: Any) -> tuple[str, ...]:
+    identifiers: set[str] = set()
+    if isinstance(value, dict):
+        for key, item in value.items():
+            normalized = str(key).casefold()
+            if (
+                isinstance(item, str)
+                and len(item.strip()) >= 3
+                and (
+                    normalized in {"id", "name", "ref", "label"}
+                    or normalized.endswith(("_id", "_name", "_ref"))
+                )
+            ):
+                identifiers.add(item.strip())
+            identifiers.update(_geometry_identifier_values(item))
+    elif isinstance(value, list):
+        for item in value:
+            identifiers.update(_geometry_identifier_values(item))
+    return tuple(sorted(identifiers))
 
 
 def _canonical_derivative_row(workspace_id: str, derivative_id: str) -> dict[str, Any]:
@@ -625,12 +725,14 @@ def _renderer_config_context(
     source_attempt_id: str,
     sight: EvidenceSight,
     ordered_source_refs: tuple[str, ...],
+    effective_levels: tuple[str, ...],
 ) -> dict[str, Any]:
     return {
         "workspace_id": workspace_id,
         "candidate_id": candidate_id,
         "source_attempt_id": source_attempt_id,
         "ordered_source_refs": list(ordered_source_refs),
+        "effective_levels": list(effective_levels),
         "sight_digest": sight.digest,
         "renderer_id": EVIDENCE_SIGHT_RENDERER_ID,
         "renderer_version": EVIDENCE_SIGHT_RENDERER_VERSION,

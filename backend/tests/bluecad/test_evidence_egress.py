@@ -411,6 +411,9 @@ def test_first_use_structural_trigger_denies_without_ticket_or_reservation(
         'Generic repair\n{\n  "schema_version": "geometry_spec_v0_1"\n}',
         'Generic repair\n{"payload":{"schema_version":"geometry_spec_v0_1"}}',
         'Generic repair\n{"objects":[{"id":"tube-1","diameter":0.4}]}',
+        "Generic repair\nschema_version: geometry_spec_v0_1",
+        "Generic repair\n{'schema_version': 'geometry_spec_v0_1'}",
+        "Generic repair\nschema_version=geometry_spec_v0_1",
     ),
 )
 def test_prompt_validator_runs_before_derivative_persistence(
@@ -652,6 +655,7 @@ def test_model_sanitizer_config_identity_binds_renderer_context() -> None:
         "candidate_id": "candidate-1",
         "source_attempt_id": "attempt-1",
         "ordered_source_refs": ["evidence:e1"],
+        "effective_levels": ["S2"],
         "sight_digest": "sha256:" + "1" * 64,
         "renderer_id": "evidence_sight_v0",
         "renderer_version": "evidence_sight_v0",
@@ -675,6 +679,7 @@ def test_model_sanitizer_config_identity_binds_renderer_context() -> None:
         dict(base, source_attempt_id="attempt-2"),
         dict(base, sight_digest="sha256:" + "2" * 64),
         dict(base, ordered_source_refs=["evidence:e2", "evidence:e1"]),
+        dict(base, effective_levels=["S3"]),
     )
     assert len({digest(context) for context in variants}) == len(variants)
 
@@ -774,3 +779,32 @@ def test_unresolved_binding_stops_before_preparation_attempt_or_ai(
     )
 
     assert events == []
+
+
+
+def test_renderer_context_binds_ordered_effective_levels() -> None:
+    sight = EvidenceSight(
+        text="EVIDENCE_SIGHT_V0\nevidence:e1",
+        digest="sha256:" + "1" * 64,
+        record_ids=("e1",),
+    )
+    s2 = evidence_egress_module._renderer_config_context(
+        workspace_id=WORKSPACE_ID,
+        candidate_id="candidate-1",
+        source_attempt_id="attempt-1",
+        sight=sight,
+        ordered_source_refs=("evidence:e1",),
+        effective_levels=("S2",),
+    )
+    s3 = evidence_egress_module._renderer_config_context(
+        workspace_id=WORKSPACE_ID,
+        candidate_id="candidate-1",
+        source_attempt_id="attempt-1",
+        sight=sight,
+        ordered_source_refs=("evidence:e1",),
+        effective_levels=("S3",),
+    )
+
+    assert s2["effective_levels"] == ["S2"]
+    assert s3["effective_levels"] == ["S3"]
+    assert s2 != s3
