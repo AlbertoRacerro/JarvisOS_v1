@@ -150,7 +150,9 @@ Current governance forbids automatic review dispatch and automatic Codex request
 
 A model review or fix cycle may never substitute for CI. Before review or re-review, the control plane must establish that required deterministic gates completed successfully on the exact head. Stale success from another SHA is ineligible.
 
-Infrastructure failure must remain distinguishable from a code defect and from a review finding. Automatic retries, if later authorized, must be bounded and must not rewrite code to mask flaky infrastructure.
+A failed gate must be classified before the next transition. A reproducible failure caused by an in-scope implementation defect may transition from `awaiting_deterministic_gates` back to `implementing` under the same authorization and bounded round, with the exact failing check and reproduction recorded. Missing, stale, cancelled, action-required, infrastructure, flaky, or otherwise ambiguous gate outcomes remain fail-closed and may not trigger speculative code mutation.
+
+Automatic retries, if later authorized, must be bounded. An implementing agent may fix the reproduced in-scope defect, but it may not broaden scope, weaken protected evidence, skip tests, or rewrite code merely to mask flaky infrastructure.
 
 ### 5.7 Human merge boundary
 
@@ -274,7 +276,7 @@ A future implementation must stop without branch mutation when any of the follow
 - unmerged hard dependency;
 - overlapping active PR or conflicting branch owner;
 - base/head mismatch, force-push ambiguity, or untrusted fork;
-- required gate missing, stale, cancelled, action-required, or failed;
+- required gate missing, stale, cancelled, action-required, infrastructure-failed, flaky, ambiguous, or failed without a reproducible in-scope implementation defect;
 - finding requires scope expansion;
 - maximum review/fix rounds reached;
 - lease conflict or replay ambiguity;
@@ -304,7 +306,8 @@ A full spec must define offline deterministic tests using fixtures and fake acto
 12. no automatic path invokes a live provider in CI;
 13. no actor can approve and merge its own work;
 14. interrupted execution resumes without duplicate commits, comments, reviews, or charges;
-15. inactivity produces no repeated calls or noise.
+15. inactivity produces no repeated calls or noise;
+16. a reproducible in-scope implementation defect routes back to bounded implementation, while stale, infrastructure, flaky, or ambiguous gate outcomes do not mutate the branch.
 
 A later real-tool proof must use a disposable repository or equivalent isolated fixture. It must not experiment on `master`, repository secrets, branch protection, or live paid models.
 
