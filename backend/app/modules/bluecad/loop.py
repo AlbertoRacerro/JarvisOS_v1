@@ -24,6 +24,11 @@ from app.modules.bluecad.evidence import (
     record_mesh_quality_evidence,
     record_validation_evidence,
 )
+from app.modules.bluecad.evidence_egress import (
+    EXTERNAL_STRUCTURAL_PROMPT_VERSION,
+    bind_evidence_lineage,
+    prepare_external_structural_repair,
+)
 from app.modules.bluecad.evidence_sight import render_evidence_sight
 from app.modules.bluecad.export import sha256_file
 from app.modules.bluecad.fem_adapter import append_tier3_checks, solve_static_analysis
@@ -225,29 +230,65 @@ def _run_structural_repair_cycle(
     if sight is None:
         return
     current_spec = initial_spec
+    source_attempt_id = initial_attempt_id
     attempt_no = initial_attempt_no
+    binding, _decision = resolve_binding(route_class, bindings)
+    if binding is None:
+        return
+    network_bound = binding.requires_network
 
     for _ in range(loop_config.max_structural_repairs):
         attempt_no += 1
-        prompt = structural_repair_prompt(current_spec, sight.text)
+        external_preparation = None
+        if network_bound:
+            try:
+                external_preparation = prepare_external_structural_repair(
+                    workspace_id=workspace_id,
+                    candidate_id=candidate_id,
+                    source_attempt_id=source_attempt_id,
+                    valid_spec=current_spec,
+                    expected_sight=sight,
+                    adapters=adapters,
+                )
+            except Exception:  # noqa: BLE001 - preparation is fail-closed before attempt insert.
+                return
+            prompt = external_preparation.raw_prompt
+            prompt_version = EXTERNAL_STRUCTURAL_PROMPT_VERSION
+        else:
+            prompt = structural_repair_prompt(current_spec, sight.text)
+            prompt_version = STRUCTURAL_REPAIR_PROMPT_VERSION
         try:
             attempt = start_structural_attempt(
                 candidate_id,
                 attempt_no,
                 route_class,
-                prompt_version=STRUCTURAL_REPAIR_PROMPT_VERSION,
+                prompt_version=prompt_version,
                 evidence_digest=sight.digest,
             )
         except ValueError:
             return
-        outcome = run_ai_task(
-            user_prompt=prompt,
-            task_kind="bluecad_cad_repair",
-            route_class=route_class,
-            max_output_tokens=loop_config.max_output_tokens,
-            adapters=adapters,
-            bindings=bindings,
-        )
+        if external_preparation is None:
+            outcome = run_ai_task(
+                user_prompt=prompt,
+                task_kind="bluecad_cad_repair",
+                route_class=route_class,
+                max_output_tokens=loop_config.max_output_tokens,
+                adapters=adapters,
+                bindings=bindings,
+            )
+        else:
+            lineage = external_preparation.lineage_for(attempt.id)
+            with bind_evidence_lineage(lineage):
+                outcome = run_ai_task(
+                    user_prompt=prompt,
+                    task_kind="bluecad_cad_repair",
+                    route_class=route_class,
+                    context_blocks=[dict(external_preparation.context_block)],
+                    max_output_tokens=loop_config.max_output_tokens,
+                    adapters=adapters,
+                    bindings=bindings,
+                    workspace_id=workspace_id,
+                )
         if outcome.status == "config_error":
             finish_attempt(
                 attempt.id,
@@ -343,6 +384,7 @@ def _run_structural_repair_cycle(
         if next_sight is None:
             return
         current_spec = spec
+        source_attempt_id = attempt.id
         sight = next_sight
 
 

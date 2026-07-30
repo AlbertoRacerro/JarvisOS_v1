@@ -879,12 +879,34 @@ def _authorize_context(
             source_count=len(blocks),
             withheld_count=len(blocks),
         )
+    from app.modules.bluecad.evidence_egress import has_active_evidence_lineage
+
     try:
         authority = authorize_manual_context(
             workspace_id=workspace_id,
             raw_blocks=blocks,
             budget_chars=policy.max_context_chars,
         )
+    except sensitivity.SensitivityPolicyError as exc:
+        if has_active_evidence_lineage():
+            raise _stop(
+                result="deny",
+                reason_code="bluecad_evidence_authority_changed",
+                prompt_level=_prompt_floor_or_unknown(prompt),
+                context_digest=raw_digest,
+                source_count=len(blocks),
+                withheld_count=len(blocks),
+                detail_reason="bluecad_evidence_authority_changed",
+                ai_error_type="sensitivity_policy_error",
+            ) from exc
+        raise _stop(
+            result="pause",
+            reason_code="manual_context_not_authorized",
+            prompt_level=_prompt_floor_or_unknown(prompt),
+            context_digest=raw_digest,
+            source_count=len(blocks),
+            withheld_count=len(blocks),
+        ) from exc
     except ValueError as exc:
         raise _stop(
             result="pause",
@@ -895,6 +917,18 @@ def _authorize_context(
             withheld_count=len(blocks),
         ) from exc
     if authority.result != "eligible":
+        if has_active_evidence_lineage():
+            raise _stop(
+                result="deny",
+                reason_code="bluecad_evidence_authority_changed",
+                prompt_level=_prompt_floor_or_unknown(prompt),
+                context_digest=raw_digest,
+                source_count=len(blocks),
+                included_count=len(authority.included_manifest),
+                withheld_count=len(authority.withheld_manifest),
+                detail_reason="bluecad_evidence_authority_changed",
+                ai_error_type="sensitivity_policy_error",
+            )
         raise _stop(
             result="pause",
             reason_code="manual_context_not_authorized",
@@ -969,6 +1003,25 @@ def _authorize_prompt(
             included_count=len(context.included_manifest),
             withheld_count=len(context.withheld_manifest),
         )
+    from app.modules.bluecad.evidence_egress import (
+        validate_authorized_structural_prompt_authority,
+    )
+
+    try:
+        validate_authorized_structural_prompt_authority(authority)
+    except sensitivity.SensitivityPolicyError as exc:
+        raise _stop(
+            result="deny",
+            reason_code="bluecad_structural_prompt_authority_changed",
+            prompt_level=authority.prompt_level or "unknown",
+            context_level=context.level,
+            context_digest=context.digest,
+            source_count=len(context.source_digests),
+            included_count=len(context.included_manifest),
+            withheld_count=len(context.withheld_manifest),
+            detail_reason="bluecad_structural_prompt_authority_changed",
+            ai_error_type="sensitivity_policy_error",
+        ) from exc
     return authority
 
 

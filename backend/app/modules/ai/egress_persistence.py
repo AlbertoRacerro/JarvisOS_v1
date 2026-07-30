@@ -184,6 +184,32 @@ def prepare_egress_attempt(
         if unsupported:
             raise EgressStateError("runtime produced a non-confirmable confirmation trigger")
 
+        if trigger_ids and _is_bluecad_structural_packet(material):
+            decision_id = _insert_decision(
+                connection,
+                material=material,
+                projection=projection,
+                packet_id=packet_id,
+                now_iso=now_iso,
+                result="deny",
+                reason_code="bluecad_structural_confirmation_unsupported",
+                trigger_ids=trigger_ids,
+                confirmation_required=False,
+                reservation_id=None,
+                ticket_id=None,
+            )
+            return _preparation(
+                decision_id=decision_id,
+                packet_id=packet_id,
+                material=material,
+                projection=projection,
+                result="deny",
+                reason_code="bluecad_structural_confirmation_unsupported",
+                trigger_ids=trigger_ids,
+                ticket_id=None,
+                reservation_id=None,
+            )
+
         if trigger_ids:
             decision_id = str(uuid4())
             ticket_id = str(uuid4())
@@ -599,6 +625,20 @@ def _trigger_ids(
         if row is not None and bool(row["ask_me"]):
             triggers.append("t5")
     return tuple(triggers)
+
+
+def _is_bluecad_structural_packet(material: EgressPacketMaterial) -> bool:
+    if material.task_kind != "bluecad_cad_repair":
+        return False
+    matches = [
+        item.get("evidence_lineage")
+        for item in material.included_manifest
+        if isinstance(item, dict) and isinstance(item.get("evidence_lineage"), dict)
+    ]
+    return (
+        len(matches) == 1
+        and matches[0].get("schema_version") == "bluecad_evidence_lineage_v0_1"
+    )
 
 
 def _budget_snapshot(
