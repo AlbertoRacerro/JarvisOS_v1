@@ -27,6 +27,7 @@ jobs:
       - name: Apply bounded review patch
         run: |
           set -euo pipefail
+          python scripts/s3_fix_serialization_builder_quotes.py
           python scripts/s3_build_serialization_level_fix.py
           python -m compileall -q \
             backend/app/modules/bluecad/evidence_egress.py \
