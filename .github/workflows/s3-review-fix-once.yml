@@ -43,10 +43,12 @@ jobs:
           ''',"""
           new = """    TEST,
               '''        \"source_attempt_id\": \"attempt-1\",
+                  \"structural_attempt_id\": structural_attempt_id,
                   \"ordered_source_refs\": [\"evidence:e1\"],
                   \"sight_digest\": \"sha256:\" + \"1\" * 64,
           ''',
               '''        \"source_attempt_id\": \"attempt-1\",
+                  \"structural_attempt_id\": structural_attempt_id,
                   \"ordered_source_refs\": [\"evidence:e1\"],
                   \"source_effective_levels\": [\"S1\"],
                   \"sight_digest\": \"sha256:\" + \"1\" * 64,
