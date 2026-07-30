@@ -28,6 +28,33 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("scripts/s3_fix_review_p1.py")
+          text = path.read_text(encoding="utf-8")
+          old = """    TEST,
+              '''        \"ordered_source_refs\": [\"evidence:e1\"],
+                  \"sight_digest\": \"sha256:\" + \"1\" * 64,
+          ''',
+              '''        \"ordered_source_refs\": [\"evidence:e1\"],
+                  \"source_effective_levels\": [\"S1\"],
+                  \"sight_digest\": \"sha256:\" + \"1\" * 64,
+          ''',"""
+          new = """    TEST,
+              '''        \"source_attempt_id\": \"attempt-1\",
+                  \"ordered_source_refs\": [\"evidence:e1\"],
+                  \"sight_digest\": \"sha256:\" + \"1\" * 64,
+          ''',
+              '''        \"source_attempt_id\": \"attempt-1\",
+                  \"ordered_source_refs\": [\"evidence:e1\"],
+                  \"source_effective_levels\": [\"S1\"],
+                  \"sight_digest\": \"sha256:\" + \"1\" * 64,
+          ''',"""
+          if text.count(old) != 1:
+              raise RuntimeError("expected one script fixture replacement")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
           python scripts/s3_fix_review_p1.py
           python -m compileall -q \
             backend/app/modules/bluecad/evidence_egress.py \
