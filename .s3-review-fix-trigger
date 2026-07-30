@@ -1,1 +1,1 @@
-trigger S3 review fix workflow
+trigger non-mutating S3 final object builder via synchronize
