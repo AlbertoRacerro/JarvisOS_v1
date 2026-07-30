@@ -53,7 +53,14 @@ jobs:
           ''',"""
           if text.count(old) != 1:
               raise RuntimeError("expected one script fixture replacement")
-          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          text = text.replace(old, new, 1)
+          escaped = r"Generic repair\n"
+          if text.count(escaped) != 3:
+              raise RuntimeError(
+                  f"expected three literal-newline escapes, found {text.count(escaped)}"
+              )
+          text = text.replace(escaped, r"Generic repair\\n")
+          path.write_text(text, encoding="utf-8")
           PY
           python scripts/s3_fix_review_p1.py
           python -m compileall -q \
