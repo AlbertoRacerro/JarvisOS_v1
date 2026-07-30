@@ -1,90 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE = ROOT / "backend/app/modules/bluecad/evidence_egress.py"
-RUNTIME = ROOT / "backend/app/modules/ai/egress_runtime.py"
-TEST = ROOT / "backend/tests/bluecad/test_evidence_egress_final_authority.py"
-
-
-def replace_once(path: Path, old: str, new: str) -> None:
-    text = path.read_text(encoding="utf-8")
-    count = text.count(old)
-    if count != 1:
-        raise RuntimeError(f"{path}: expected one replacement, found {count}")
-    path.write_text(text.replace(old, new, 1), encoding="utf-8")
-
-
-replace_once(
-    EVIDENCE,
-    "        or stored_refs != expected_refs\n",
-    "        or stored_refs != tuple(sorted(expected_refs))\n",
-)
-
-replace_once(
-    RUNTIME,
-    '''    from app.modules.bluecad.evidence_egress import (
-        validate_authorized_structural_prompt_authority,
-    )
-
-    validate_authorized_structural_prompt_authority(prompt)
-''',
-    "",
-)
-
-replace_once(
-    RUNTIME,
-    '''    if authority.result != "eligible":
-        raise _stop(
-            result="deny" if authority.result == "deny" else "pause",
-            reason_code=authority.reason_code,
-            prompt_level=authority.prompt_level or "unknown",
-            context_level=context.level,
-            context_digest=context.digest,
-            source_count=len(context.source_digests),
-            included_count=len(context.included_manifest),
-            withheld_count=len(context.withheld_manifest),
-        )
-    return authority
-''',
-    '''    if authority.result != "eligible":
-        raise _stop(
-            result="deny" if authority.result == "deny" else "pause",
-            reason_code=authority.reason_code,
-            prompt_level=authority.prompt_level or "unknown",
-            context_level=context.level,
-            context_digest=context.digest,
-            source_count=len(context.source_digests),
-            included_count=len(context.included_manifest),
-            withheld_count=len(context.withheld_manifest),
-        )
-    from app.modules.bluecad.evidence_egress import (
-        validate_authorized_structural_prompt_authority,
-    )
-
-    try:
-        validate_authorized_structural_prompt_authority(authority)
-    except sensitivity.SensitivityPolicyError as exc:
-        raise _stop(
-            result="deny",
-            reason_code="bluecad_structural_prompt_authority_changed",
-            prompt_level=authority.prompt_level or "unknown",
-            context_level=context.level,
-            context_digest=context.digest,
-            source_count=len(context.source_digests),
-            included_count=len(context.included_manifest),
-            withheld_count=len(context.withheld_manifest),
-            detail_reason="bluecad_structural_prompt_authority_changed",
-            ai_error_type="sensitivity_policy_error",
-        ) from exc
-    return authority
-''',
-)
-
-TEST.write_text(
-    '''from __future__ import annotations
-
 from types import SimpleNamespace
 
 import pytest
@@ -131,7 +46,7 @@ def test_renderer_order_can_differ_from_canonical_derivative_order(
         "evidence:e2": "sha256:" + "6" * 64,
     }
     sight = EvidenceSight(
-        "EVIDENCE_SIGHT_V0\\nevidence:e2\\nevidence:e1",
+        "EVIDENCE_SIGHT_V0\nevidence:e2\nevidence:e1",
         "sha256:" + "1" * 64,
         ("e2", "e1"),
     )
@@ -237,8 +152,3 @@ def test_final_bluecad_authority_rejection_becomes_prepacket_stop(
     assert stop.reason_code == "bluecad_structural_prompt_authority_changed"
     assert stop.detail_reason == "bluecad_structural_prompt_authority_changed"
     assert stop.ai_error_type == "sensitivity_policy_error"
-''',
-    encoding="utf-8",
-)
-
-print("final S3 review patch prepared")

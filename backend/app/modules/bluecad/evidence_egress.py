@@ -628,7 +628,7 @@ def _validate_current_lineage_sight(lineage: dict[str, Any]) -> None:
     if (
         sight.digest != lineage["sight_digest"]
         or current_refs != expected_refs
-        or stored_refs != expected_refs
+        or stored_refs != tuple(sorted(expected_refs))
         or source_digests != stored_digests
         or effective_levels != expected_levels
         or derivative["effective_level"] != lineage["effective_level"]

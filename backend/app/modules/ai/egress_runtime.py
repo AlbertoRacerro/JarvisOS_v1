@@ -478,11 +478,6 @@ def _run_binding(
         (prompt.prompt_level or "S1", context.level),
         key=_LEVEL_RANK.__getitem__,
     )
-    from app.modules.bluecad.evidence_egress import (
-        validate_authorized_structural_prompt_authority,
-    )
-
-    validate_authorized_structural_prompt_authority(prompt)
     if continuation_decision is None:
         material = EgressPacketMaterial(
             operation=EXTERNAL_PROVIDER_OPERATION,
@@ -974,6 +969,25 @@ def _authorize_prompt(
             included_count=len(context.included_manifest),
             withheld_count=len(context.withheld_manifest),
         )
+    from app.modules.bluecad.evidence_egress import (
+        validate_authorized_structural_prompt_authority,
+    )
+
+    try:
+        validate_authorized_structural_prompt_authority(authority)
+    except sensitivity.SensitivityPolicyError as exc:
+        raise _stop(
+            result="deny",
+            reason_code="bluecad_structural_prompt_authority_changed",
+            prompt_level=authority.prompt_level or "unknown",
+            context_level=context.level,
+            context_digest=context.digest,
+            source_count=len(context.source_digests),
+            included_count=len(context.included_manifest),
+            withheld_count=len(context.withheld_manifest),
+            detail_reason="bluecad_structural_prompt_authority_changed",
+            ai_error_type="sensitivity_policy_error",
+        ) from exc
     return authority
 
 
