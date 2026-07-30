@@ -1,0 +1,244 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+EVIDENCE = ROOT / "backend/app/modules/bluecad/evidence_egress.py"
+RUNTIME = ROOT / "backend/app/modules/ai/egress_runtime.py"
+TEST = ROOT / "backend/tests/bluecad/test_evidence_egress_final_authority.py"
+
+
+def replace_once(path: Path, old: str, new: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    count = text.count(old)
+    if count != 1:
+        raise RuntimeError(f"{path}: expected one replacement, found {count}")
+    path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
+replace_once(
+    EVIDENCE,
+    "        or stored_refs != expected_refs\n",
+    "        or stored_refs != tuple(sorted(expected_refs))\n",
+)
+
+replace_once(
+    RUNTIME,
+    '''    from app.modules.bluecad.evidence_egress import (
+        validate_authorized_structural_prompt_authority,
+    )
+
+    validate_authorized_structural_prompt_authority(prompt)
+''',
+    "",
+)
+
+replace_once(
+    RUNTIME,
+    '''    if authority.result != "eligible":
+        raise _stop(
+            result="deny" if authority.result == "deny" else "pause",
+            reason_code=authority.reason_code,
+            prompt_level=authority.prompt_level or "unknown",
+            context_level=context.level,
+            context_digest=context.digest,
+            source_count=len(context.source_digests),
+            included_count=len(context.included_manifest),
+            withheld_count=len(context.withheld_manifest),
+        )
+    return authority
+''',
+    '''    if authority.result != "eligible":
+        raise _stop(
+            result="deny" if authority.result == "deny" else "pause",
+            reason_code=authority.reason_code,
+            prompt_level=authority.prompt_level or "unknown",
+            context_level=context.level,
+            context_digest=context.digest,
+            source_count=len(context.source_digests),
+            included_count=len(context.included_manifest),
+            withheld_count=len(context.withheld_manifest),
+        )
+    from app.modules.bluecad.evidence_egress import (
+        validate_authorized_structural_prompt_authority,
+    )
+
+    try:
+        validate_authorized_structural_prompt_authority(authority)
+    except sensitivity.SensitivityPolicyError as exc:
+        raise _stop(
+            result="deny",
+            reason_code="bluecad_structural_prompt_authority_changed",
+            prompt_level=authority.prompt_level or "unknown",
+            context_level=context.level,
+            context_digest=context.digest,
+            source_count=len(context.source_digests),
+            included_count=len(context.included_manifest),
+            withheld_count=len(context.withheld_manifest),
+            detail_reason="bluecad_structural_prompt_authority_changed",
+            ai_error_type="sensitivity_policy_error",
+        ) from exc
+    return authority
+''',
+)
+
+TEST.write_text(
+    '''from __future__ import annotations
+
+from types import SimpleNamespace
+
+import pytest
+
+import app.modules.ai.egress_runtime as egress_runtime
+import app.modules.bluecad.evidence_egress as evidence_egress
+from app.modules.ai import sensitivity
+from app.modules.bluecad.evidence_sight import EvidenceSight
+
+
+def _lineage() -> dict[str, object]:
+    return {
+        "schema_version": "bluecad_evidence_lineage_v0_1",
+        "workspace_id": "bluerev",
+        "candidate_id": "candidate-1",
+        "source_attempt_id": "attempt-1",
+        "structural_attempt_id": "attempt-2",
+        "ordered_source_refs": ["evidence:e2", "evidence:e1"],
+        "source_effective_levels": ["S1", "S1"],
+        "sight_digest": "sha256:" + "1" * 64,
+        "renderer_id": "evidence_sight_v0",
+        "renderer_version": "evidence_sight_v0",
+        "max_lines": 6,
+        "max_chars": 2000,
+        "derivative_id": "derivative-1",
+        "derivative_digest": "sha256:" + "2" * 64,
+        "effective_level": "S1",
+        "sanitizer_kind": "deterministic",
+        "sanitizer_version": "bluecad_evidence_sight_derivative_v0_1",
+        "sanitizer_config_digest": "3" * 64,
+        "sanitizer_ai_job_id": None,
+        "instruction_derivative_id": "prompt-derivative-1",
+        "instruction_derivative_digest": "sha256:" + "4" * 64,
+        "sensitivity_policy_version": "ip-egress-v1",
+        "egress_policy_version": "ip-egress-v1",
+    }
+
+
+def test_renderer_order_can_differ_from_canonical_derivative_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_digests = {
+        "evidence:e1": "sha256:" + "5" * 64,
+        "evidence:e2": "sha256:" + "6" * 64,
+    }
+    sight = EvidenceSight(
+        "EVIDENCE_SIGHT_V0\nevidence:e2\nevidence:e1",
+        "sha256:" + "1" * 64,
+        ("e2", "e1"),
+    )
+    snapshot = {
+        "sight": sight,
+        "derivative": {
+            "source_refs_json": '["evidence:e1","evidence:e2"]',
+            "source_digests_json": (
+                '{"evidence:e1":"sha256:'
+                + "5" * 64
+                + '","evidence:e2":"sha256:'
+                + "6" * 64
+                + '"}'
+            ),
+            "effective_level": "S1",
+            "content_digest": "sha256:" + "2" * 64,
+            "sanitizer_kind": "deterministic",
+            "sanitizer_version": "bluecad_evidence_sight_derivative_v0_1",
+            "sanitizer_config_digest": "3" * 64,
+        },
+        "source_refs": ("evidence:e2", "evidence:e1"),
+        "source_digests": source_digests,
+        "effective_levels": ("S1", "S1"),
+    }
+    prompt_derivative = SimpleNamespace(
+        id="prompt-derivative-1",
+        derivative_digest="sha256:" + "4" * 64,
+        workspace_id="bluerev",
+        sanitizer_kind="model_local",
+        status="approved",
+    )
+    monkeypatch.setattr(
+        evidence_egress,
+        "_current_lineage_authority_snapshot",
+        lambda _lineage: snapshot,
+    )
+    monkeypatch.setattr(
+        evidence_egress,
+        "_current_structural_prompt_derivative",
+        lambda _lineage: prompt_derivative,
+    )
+    manifest = (
+        {
+            "source_ref": "derivative:derivative-1",
+            "source_refs": ["evidence:e1", "evidence:e2"],
+            "content_digest": "sha256:" + "2" * 64,
+            "effective_level": "S1",
+            "label_id": None,
+            "derivative_id": "derivative-1",
+            "inclusion_reason": "approved_derivative",
+        },
+    )
+
+    with evidence_egress.bind_evidence_lineage(_lineage()):
+        enriched = evidence_egress.enrich_authorized_evidence_manifest(manifest)
+
+    assert enriched[0]["evidence_lineage"]["ordered_source_refs"] == [
+        "evidence:e2",
+        "evidence:e1",
+    ]
+
+
+def test_final_bluecad_authority_rejection_becomes_prepacket_stop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authority = SimpleNamespace(
+        result="eligible",
+        reason_code="prompt_approved_derivative",
+        prompt_level="S1",
+    )
+    context = egress_runtime._ContextView((), "S0", None, (), (), (), ())
+    monkeypatch.setattr(
+        egress_runtime,
+        "get_ai_settings",
+        lambda: SimpleNamespace(policy_mode="FAST_DEV"),
+    )
+    monkeypatch.setattr(
+        egress_runtime,
+        "authorize_prompt",
+        lambda **_kwargs: authority,
+    )
+    monkeypatch.setattr(
+        evidence_egress,
+        "validate_authorized_structural_prompt_authority",
+        lambda _authority: (_ for _ in ()).throw(
+            sensitivity.SensitivityPolicyError("concurrent authority drift")
+        ),
+    )
+
+    with pytest.raises(egress_runtime._PrepacketStop) as caught:
+        egress_runtime._authorize_prompt(
+            user_prompt="CONFIDENTIAL PROJECT GEOMETRY: raw task.",
+            task_kind="bluecad_cad_repair",
+            workspace_id="bluerev",
+            has_context=False,
+            context=context,
+            adapters={},
+            registry=SimpleNamespace(),
+        )
+
+    stop = caught.value
+    assert stop.result == "deny"
+    assert stop.reason_code == "bluecad_structural_prompt_authority_changed"
+    assert stop.detail_reason == "bluecad_structural_prompt_authority_changed"
+    assert stop.ai_error_type == "sensitivity_policy_error"
+''',
+    encoding="utf-8",
+)
+
+print("final S3 review patch prepared")
