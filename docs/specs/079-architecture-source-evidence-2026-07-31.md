@@ -11,184 +11,154 @@
 | Label | Meaning |
 | --- | --- |
 | `REPO_VERIFIED` | Read directly from the pinned JarvisOS repository state. |
-| `UPSTREAM_DOCUMENTED` | Read directly from a pinned first-party upstream documentation repository. |
-| `ARCHITECTURE_DECISION` | Decision made by the companion closure from the available evidence and repository constraints. |
-| `PROPOSED_PENDING_PROOF` | Candidate mechanism that must pass isolated runtime/security proof before becoming an implementation contract. |
-| `DEFERRED` | Intentionally left for the full specification or later governance/readiness work. |
-| `BLOCKED` | Claim or behavior that must not be relied upon because evidence contradicts it or is absent. |
+| `UPSTREAM_DOCUMENTED` | Read from first-party upstream documentation. |
+| `ARCHITECTURE_DECISION` | Selected direction derived from repository constraints and evidence. |
+| `PROPOSED_PENDING_PROOF` | Candidate mechanism requiring isolated runtime/security proof. |
+| `DEFERRED` | Left for full-spec, governance, or readiness work. |
+| `BLOCKED` | Must not be relied upon because evidence contradicts it or is absent. |
 
-Documentation establishes contracts and stated behavior. It does not prove deployment-specific security, permissions, race behavior, cost, or semantic correctness. Those require the disposable-repository proofs listed in the closure.
+Documentation records an interface contract. It does not prove deployment-specific atomicity, permissions, rulesets, security, cost, or semantic correctness.
 
-## 2. Pinned sources
+## 2. Pinned repository sources
 
-### JarvisOS first-party sources
-
-| ID | Source | Pin | What it establishes | Label |
+| ID | Source | Pin | Establishes | Label |
 | --- | --- | --- | --- | --- |
-| `RT-01` | `docs/specs/STATUS.md` | `d5441f64b1b053d909a15817af70c38a07f6bd0c` | One active front; 079 remains `planned`; implementation and automatic control remain frozen; planning PRs do not occupy the Implementation PR column. | `REPO_VERIFIED` |
-| `RT-02` | `docs/specs/079-autonomous-development-loop-0.md` | same | Required GitHub-owned state, repository-wide atomic claim, exact-head evidence, bounded roles, human merge boundary, stop conditions, promotion ladder, and proof direction. | `REPO_VERIFIED` |
-| `RT-03` | `AGENTS.md` | same | Agents may not merge or enable auto-merge; external review and Codex are manual/explicit-only; model findings are advisory and require deterministic reproduction or traceability. | `REPO_VERIFIED` |
-| `RT-04` | `docs/specs/022-codex-pr-autopush-no-automerge.md` and current registry description | same | Existing same-branch Codex actuation is retained only for explicit maintainer-requested use; no workflow automatically dispatches it. | `REPO_VERIFIED` |
-| `RT-05` | `docs/DECISIONS.md` | same | Repository precedent for recording architectural authority, rejected alternatives, and non-goals without treating planning prose as runtime proof. | `REPO_VERIFIED` |
+| `RT-01` | `docs/specs/STATUS.md` | `d5441f64b1b053d909a15817af70c38a07f6bd0c` | One active front; 079 remains `planned`; automatic-control implementation remains frozen; planning PRs do not occupy the Implementation PR column. | `REPO_VERIFIED` |
+| `RT-02` | `docs/specs/079-autonomous-development-loop-0.md` | same | GitHub-owned state, repository-wide atomic claim, exact-head evidence, bounded roles, human merge boundary, stop conditions, promotion ladder, and proof direction. | `REPO_VERIFIED` |
+| `RT-03` | `AGENTS.md` | same | Agents may not merge or enable auto-merge; external review and Codex are manual/explicit-only; model findings are advisory. | `REPO_VERIFIED` |
+| `RT-04` | `docs/specs/022-codex-pr-autopush-no-automerge.md` and registry description | same | Same-branch Codex actuation exists only for explicit maintainer-requested use; no workflow automatically dispatches it. | `REPO_VERIFIED` |
+| `RT-05` | `docs/DECISIONS.md` | same | Architectural decisions and rejected alternatives may be recorded without treating prose as runtime proof. | `REPO_VERIFIED` |
 
-### GitHub first-party upstream sources
+## 3. GitHub first-party upstream evidence
 
-Pinned source repository: `github/docs` at commit `59576b8ee04c6966d6b27766785845c2ed505584`.
+Pinned documentation repository: `github/docs` at commit `59576b8ee04c6966d6b27766785845c2ed505584`.
 
-| ID | Source path | First-party documented behavior used | Label |
+| ID | Source | Documented behavior used | Label |
 | --- | --- | --- | --- |
-| `GH-01` | `data/reusables/actions/actions-group-concurrency.md` | A concurrency group permits at most one running and one pending job/run; a new pending item may replace an existing pending item; ordering is not guaranteed; running work may be cancelled when configured. | `UPSTREAM_DOCUMENTED` |
-| `GH-02` | `data/reusables/actions/actions-do-not-trigger-workflows.md` | Events caused using the repository `GITHUB_TOKEN` generally do not create new workflow runs, apart from documented dispatch exceptions; this is intended to prevent recursive runs. | `UPSTREAM_DOCUMENTED` |
-| `GH-03` | `content/webhooks/using-webhooks/best-practices-for-using-webhooks.md` | Use a webhook secret, HTTPS, narrow subscriptions, asynchronous processing, rapid acknowledgement, delivery identifiers, and redelivery/replay handling. | `UPSTREAM_DOCUMENTED` |
-| `GH-04` | `data/reusables/apps/generate-installation-access-token.md` | Installation tokens may be scoped to repositories and permissions, cannot exceed the App installation permissions, and expire after one hour. | `UPSTREAM_DOCUMENTED` |
+| `GH-01` | `data/reusables/actions/actions-group-concurrency.md` | A concurrency group permits one running and one pending item; a new pending item may replace the prior pending item; order is not guaranteed. | `UPSTREAM_DOCUMENTED` |
+| `GH-02` | `data/reusables/actions/actions-do-not-trigger-workflows.md` | Ordinary repository `GITHUB_TOKEN` side effects generally do not recursively create workflow runs outside documented dispatch exceptions. | `UPSTREAM_DOCUMENTED` |
+| `GH-03` | `content/webhooks/using-webhooks/best-practices-for-using-webhooks.md` | Webhooks require secret validation, HTTPS, narrow subscriptions, fast acknowledgement, asynchronous processing, delivery IDs, and replay handling. | `UPSTREAM_DOCUMENTED` |
+| `GH-04` | `data/reusables/apps/generate-installation-access-token.md` | Installation tokens can be scoped within installation permissions and expire after one hour. | `UPSTREAM_DOCUMENTED` |
 
-Pinned API-description source repository: `github/rest-api-description` at commit `5e28810649ba41b5483753ba74f976f83856a504`.
+Pinned API-description repository: `github/rest-api-description` at commit `5e28810649ba41b5483753ba74f976f83856a504`.
 
-| ID | Source | Documented mechanism used | Label |
+| ID | Endpoint family | Documented mechanism used | Label |
 | --- | --- | --- | --- |
-| `GH-05` | `descriptions/api.github.com/api.github.com.json`, repository-contents create/update operation | Updating an existing contents object uses the current content/blob identity as an input to the request. This supports evaluating a stale-writer rejection design. | `UPSTREAM_DOCUMENTED` |
+| `GH-05` | Repository contents create/update | Existing-content updates accept a current blob identity, which can reject a stale file version but does not assert the exact branch-head SHA. | `UPSTREAM_DOCUMENTED` |
+| `GH-06` | Git blobs, trees, commits, and references | A caller can create a blob, tree, and commit with an explicit parent, then update a branch ref. A ref update with `force=false` requires a fast-forward update. | `UPSTREAM_DOCUMENTED` |
 
-`GH-05` does **not** prove that the complete proposed branch/file protocol is linearizable, race-free, immune to ruleset bypass, or sufficient as a repository-wide lock. The closure labels that conclusion `PROPOSED_PENDING_PROOF` and requires an isolated two-writer race test.
+The ref-level sequence supported by `GH-06` is a stronger candidate than `GH-05` for exact-head exclusion: build the candidate commit on the exact expected ref parent, then attempt a non-forced ref update. If another writer advanced the ref to a divergent commit, the stale candidate is not a fast-forward from the current ref and must be rejected.
 
-### Optional actuator source inspected but not selected
+This remains `PROPOSED_PENDING_PROOF`. Documentation does not establish complete linearizability, timeout recovery, ruleset behavior, App bypass behavior, or zero side effects by losing workers.
 
-Pinned source repository: `openai/codex` at commit `3d1d26915a303c3b4765828f973f5464f8c28c5c`.
+## 4. Optional actuator inspected but not selected
 
-| ID | Source | What it establishes | Label |
+Pinned repository: `openai/codex` at commit `3d1d26915a303c3b4765828f973f5464f8c28c5c`.
+
+| ID | Source | Establishes | Label |
 | --- | --- | --- | --- |
-| `AI-01` | `README.md` | A maintained Codex CLI exists as a possible future implementing adapter. It does not establish repository authority, safe unattended operation, reviewer independence, price, or suitability for 079. | `UPSTREAM_DOCUMENTED` |
+| `AI-01` | `README.md` | A maintained Codex CLI exists as a possible future implementer adapter. It does not establish authority, safe unattended operation, reviewer independence, price, or suitability for 079. | `UPSTREAM_DOCUMENTED` |
 
-No implementer or reviewer provider is chosen by the architecture closure.
+No implementer or reviewer provider is selected.
 
-## 3. Claim-to-evidence map
+## 5. Claim-to-evidence map
 
 | Claim ID | Claim | Evidence | Classification |
 | --- | --- | --- | --- |
-| `C-01` | GitHub Actions concurrency is insufficient as the canonical repository-wide authority lock. | `GH-01`, `RT-02` | `ARCHITECTURE_DECISION` |
-| `C-02` | A workflow-self-trigger chain based on ordinary `GITHUB_TOKEN` side effects has special recursion/liveness limits and must not own continuation authority. | `GH-02` | `ARCHITECTURE_DECISION` |
-| `C-03` | A webhook-driven dispatcher must treat delivery as replayable/duplicable input and process asynchronously. | `GH-03` | `ARCHITECTURE_DECISION` |
-| `C-04` | A GitHub App provides a stronger primary dispatcher identity than a maintainer-local process while permitting short-lived installation credentials. | `GH-03`, `GH-04`, `RT-02` | `ARCHITECTURE_DECISION` |
-| `C-05` | Canonical authority must remain reconstructible from GitHub rather than an external database or vendor conversation. | `RT-01`, `RT-02`, `RT-03` | `ARCHITECTURE_DECISION` |
-| `C-06` | One control branch plus one authority file minimizes partial multi-object transition states. | `RT-02`, `GH-05` | `PROPOSED_PENDING_PROOF` |
-| `C-07` | Presenting the current file/blob and expected branch head can be the basis for a single-winner conditional transition. | `GH-05` | `PROPOSED_PENDING_PROOF` |
-| `C-08` | App permissions alone are not sufficient proof that a compromised App cannot merge or write outside the intended path/branch. | Coarse repository-level permission model; absence of a verified path-capability contract | `ARCHITECTURE_DECISION` |
-| `C-09` | The reviewer must have no contents-write authority and cannot share the effective implementing credential. | `RT-02`, `RT-03` | `ARCHITECTURE_DECISION` |
-| `C-10` | A clean review or green CI is evidence, not merge consent. | `RT-02`, `RT-03` | `REPO_VERIFIED` |
-| `C-11` | Lease expiry cannot itself authorize another front. | `RT-01`, `RT-02` | `ARCHITECTURE_DECISION` |
-| `C-12` | GitHub Actions remains suitable for exact-head deterministic gates after canonical authorization. | Existing repository workflows and `RT-02` | `ARCHITECTURE_DECISION` |
-| `C-13` | Current JarvisOS runtime egress/accounting authority 059b automatically governs GitHub-hosted coding agents. | No supporting boundary exists | `BLOCKED` |
-| `C-14` | A provider can safely deduplicate paid retries. | Provider not selected; no adapter proof | `DEFERRED` |
-| `C-15` | The GitHub App is cheaper than a local dispatcher. | No stable cost evidence; deployment not selected | `DEFERRED` |
+| `C-01` | GitHub Actions concurrency is insufficient as canonical repository-wide authority. | `GH-01`, `RT-02` | `ARCHITECTURE_DECISION` |
+| `C-02` | A self-trigger chain based on ordinary `GITHUB_TOKEN` mutations must not own continuation authority. | `GH-02` | `ARCHITECTURE_DECISION` |
+| `C-03` | Webhook delivery is replayable input and must be processed asynchronously and idempotently. | `GH-03` | `ARCHITECTURE_DECISION` |
+| `C-04` | A GitHub App provides a stronger primary dispatcher identity than a maintainer-local process. | `GH-03`, `GH-04`, `RT-02` | `ARCHITECTURE_DECISION` |
+| `C-05` | Canonical authority must be reconstructible from GitHub rather than an external database or vendor conversation. | `RT-01`, `RT-02`, `RT-03` | `ARCHITECTURE_DECISION` |
+| `C-06` | One protected control branch plus one authority file minimizes partial transition states. | `RT-02` | `ARCHITECTURE_DECISION` |
+| `C-07` | A Contents API update is sufficient to assert both current file blob and exact branch head. | `GH-05`; contradicted by endpoint boundary | `BLOCKED` |
+| `C-08` | A commit built on the exact expected parent plus a non-forced ref update is the selected single-winner candidate. | `GH-06`, `RT-02` | `PROPOSED_PENDING_PROOF` |
+| `C-09` | The ref-level candidate is already proven linearizable and race-free. | Runtime proof absent | `BLOCKED` |
+| `C-10` | App permissions alone prove no merge or out-of-scope write. | Permission granularity insufficient | `BLOCKED` |
+| `C-11` | Reviewer credentials must have no contents-write authority. | `RT-02`, `RT-03` | `ARCHITECTURE_DECISION` |
+| `C-12` | A clean review or green CI is evidence, not merge consent. | `RT-02`, `RT-03` | `REPO_VERIFIED` |
+| `C-13` | Lease expiry alone may release or transfer the front. | `RT-01`, `RT-02` | `BLOCKED` |
+| `C-14` | Actions remains suitable for exact-head deterministic gates after authorization. | Existing workflows, `RT-02` | `ARCHITECTURE_DECISION` |
+| `C-15` | JarvisOS runtime egress/accounting policy 059b automatically governs GitHub-hosted coding agents. | No implemented authority bridge | `BLOCKED` |
+| `C-16` | A provider can deduplicate paid retries safely. | Provider/adapter not selected | `DEFERRED` |
+| `C-17` | Hosted App operation is cheaper than a local process. | Stable deployment/cost evidence absent | `DEFERRED` |
 
-## 4. Alternative evaluation
+## 6. Corrected CAS reasoning
 
-| Candidate | Authority integrity | Availability | Permission isolation | Operational burden | Result |
-| --- | --- | --- | --- | --- | --- |
-| GitHub Actions plus issue/check state | Weak as canonical lock; documented pending replacement and unordered execution | High | Workflow-token dependent | Low–medium | Reject as authority; retain as worker |
-| Installed GitHub App plus GitHub control branch | Strongest candidate if conditional write and ruleset proofs pass | High with hosted service | Better identity and short-lived tokens, but contents permission remains coarse | Medium–high | Select as primary, proof-gated |
-| Maintainer-local scheduler | Can be safe while online; local authority/recovery risk | Low–variable | Local key custody | Medium and maintainer-dependent | Reject as primary; optional manual inspector |
-| External transactional database as authority | Strong database transactions | Host-dependent | Service-defined | Medium–high | Reject because repository cannot reconstruct authority |
-| Issue/label/comment as authority | Mutable and multi-object | High | Coarse | Low | Reject; presentation only |
-| Model/vendor task state as authority | Vendor-specific, not repository-replayable | Vendor-dependent | Unverified | Low initially | Reject |
+The exact candidate transition is:
 
-## 5. Permission evidence and unresolved enforcement gap
+1. read `refs/heads/jarvis-control` and record expected head `H`;
+2. verify the authority file and deterministic transition from `H`;
+3. create replacement blob `B`;
+4. create tree `T` from `H`'s tree with only the authority path replaced by `B`;
+5. create commit `C` with parent exactly `H` and tree `T`;
+6. update the control ref to `C` with `force=false`;
+7. permit no side effect unless success is verified;
+8. on rejection, timeout, or ambiguity, reread the ref and event ID before retry.
 
-GitHub App installation permissions are repository/resource classes, not a demonstrated path-capability system. The architecture therefore separates three layers:
+Why this fixes the P1 defect:
 
-1. **Installation permission ceiling** — remove all classes not required by the full spec.
-2. **Repository rulesets/branch protection** — prevent direct `master` mutation, bypass, force-push, deletion, and unauthorized branch operations.
-3. **Capability wrapper** — allow-list exact endpoints, repository ID, branch/path patterns, transition preconditions, and actor role.
+- the prior Contents API candidate bound only the authority blob;
+- a separate commit could advance the branch while leaving that blob unchanged;
+- the stale file update could then succeed on an unexpected branch tip;
+- the corrected candidate binds the new commit to exact parent `H`;
+- any concurrent divergent advance makes `C` non-fast-forward from the current ref, so a non-forced ref update rejects it.
 
-None of these layers has been configured or tested by this planning work. The full spec must state exact permissions and denial tests; readiness must provide results from a disposable repository.
+The disposable-repository race and timeout proofs remain mandatory.
 
-Claims withheld:
+## 7. Permission and enforcement gap
 
-- that `contents: write` can be scoped natively to only `.jarvis/development-loop/authority.json`;
-- that an App with the candidate permissions is technically incapable of calling a merge endpoint;
-- that branch protection/rulesets cannot be bypassed by an incorrectly configured App or maintainer token;
-- that reviewer and implementer separation exists merely because two model prompts differ.
+GitHub App permissions are repository/resource classes, not native path capabilities. The design therefore requires:
 
-## 6. Webhook and replay evidence
-
-`GH-03` supports these requirements:
-
-- validate the delivery signature before parsing authority-bearing fields;
-- subscribe only to events needed by the state machine;
-- acknowledge quickly and process asynchronously;
-- retain delivery IDs for deduplication;
-- expect missed, delayed, duplicated, or redelivered events;
-- reconcile against live GitHub state rather than trusting webhook order.
+1. minimum installation permission ceiling;
+2. protected `master` and `jarvis-control`, with no App bypass, force-push, or deletion;
+3. capability wrapper allow-listing repository, ref, path, endpoint, transition, and request shape;
+4. short-lived credentials;
+5. separate read-only reviewer identity;
+6. audit of denied operations;
+7. abuse tests for merge, ref deletion, settings/secrets mutation, and out-of-scope writes.
 
 Claims withheld:
 
-- exactly-once delivery;
-- globally ordered delivery;
-- automatic redelivery under every failure condition;
-- a webhook event proving that the referenced branch/head remains current when processed.
+- that `contents: write` is natively path-scoped;
+- that a candidate App is technically incapable of calling a merge endpoint;
+- that incorrectly configured rulesets cannot be bypassed;
+- that two prompts imply reviewer independence.
 
-## 7. Actions evidence
+## 8. Actions, webhook, cost, and runtime proof status
 
-`GH-01` directly blocks using a concurrency group as the only global front claim because:
+`GH-01` blocks treating Actions concurrency as a FIFO mutex. `GH-02` blocks assuming arbitrary recursive continuation from normal `GITHUB_TOKEN` writes. `GH-03` blocks exactly-once or globally ordered webhook assumptions.
 
-- one pending run can be replaced by another pending run;
-- execution ordering is not guaranteed;
-- cancellation behavior can change running/pending work without changing repository authority.
+No stable price table is adopted. Costs must be policy inputs with projected, reserved, and final values, hard caps, unknown-cost stops, and duplicate-charge evidence.
 
-`GH-02` blocks assuming that normal `GITHUB_TOKEN` mutations will recursively continue an arbitrary workflow chain.
+No App, webhook, workflow dispatch, model, secret, ruleset, branch-protection change, or provider call was created. These remain proof-gated:
 
-Therefore:
-
-- a workflow run is an attempt/worker record, not authorization;
-- cancelled, missing, stale, action-required, or infrastructure-ambiguous runs cannot release a front;
-- only a canonical control transition can claim, release, pause, or halt the front.
-
-## 8. Cost evidence status
-
-No stable first-party price table is adopted by this closure. Prices, quotas, public-repository allowances, included agent seats, and model billing can change independently of repository code.
-
-The full spec must make costs inputs to policy rather than prose constants. Required numerical fields include:
-
-- currency and time basis;
-- projected and reserved amount;
-- final provider/Actions/hosting amount;
-- per-request, run, day, and month caps;
-- reservation and release identities;
-- unknown/unpriced outcome;
-- retry and duplicate-charge evidence.
-
-Until a provider and host are selected, all numeric cost claims are `DEFERRED`.
-
-## 9. Runtime proofs still absent
-
-No live App, webhook, Actions dispatch, model, secret, ruleset, branch-protection change, or provider call was created for this closure. Consequently these remain `PROPOSED_PENDING_PROOF`:
-
-- two-writer single-winner semantics for the control file;
-- stale writer failure behavior under the selected API and ruleset;
-- hash-chain and commit-ancestry reconstruction;
-- App permission-denial behavior;
-- inability of dispatcher/reviewer credentials to merge;
-- lease recovery after process and GitHub interruptions;
-- duplicate paid-request prevention;
-- cost reservation/accounting;
+- two-writer single-winner ref transition;
+- unrelated branch advance with unchanged authority blob;
+- stale parent/ref rejection;
+- timeout-after-success reconciliation;
+- event/commit reconstruction and tamper detection;
+- permission denials and no-merge proof;
+- lease recovery;
+- paid-request idempotency and accounting;
 - untrusted-fork and prompt-injection isolation;
 - kill switches and recovery.
 
-## 10. Claims explicitly blocked or deferred
+## 9. Alternative evaluation
 
-| Claim | Status | Reason |
-| --- | --- | --- |
-| GitHub Actions concurrency is a FIFO queue or durable global mutex | `BLOCKED` | Contradicted by `GH-01` |
-| Webhook delivery is exactly once and ordered | `BLOCKED` | Not documented; replay/deduplication guidance assumes duplicates/failure |
-| Ordinary `GITHUB_TOKEN` side effects can freely self-trigger continuation workflows | `BLOCKED` | Contradicted by `GH-02` outside documented dispatch exceptions |
-| Current 059b automatically covers GitHub-hosted agent spend/content | `BLOCKED` | No implemented authority bridge |
-| Conditional file update alone proves complete atomic front ownership | `PROPOSED_PENDING_PROOF` | Endpoint/ruleset race test absent |
-| App permissions alone guarantee no merge or out-of-scope write | `BLOCKED` | Permission granularity is insufficiently proven |
-| Codex, Claude, or another provider is selected | `DEFERRED` | Provider/adapter evidence and governance absent |
-| Hosted App is cheaper than a local process | `DEFERRED` | Host/provider/cost basis not selected |
-| Architecture closure authorizes the full spec or implementation | `BLOCKED` | Promotion ladder and maintainer boundary explicitly forbid it |
+| Candidate | Result |
+| --- | --- |
+| GitHub Actions plus issue/check state | Reject as authority; retain as deterministic worker |
+| Contents API blob update | Reject as exact-head CAS |
+| GitHub App plus protected control branch and ref-level CAS candidate | Select as primary, proof-gated |
+| External transactional database as authority | Reject; retain as cache/queue only |
+| Maintainer-local scheduler | Reject as primary; optional manual inspector |
+| Issue, label, comment, or model task state | Reject as authority |
 
-## 11. Evidence result
+## 10. Evidence result
 
-The evidence supports selecting a GitHub App plus GitHub-owned protected control branch as the primary architecture **only as a proof-gated direction**.
+The evidence supports a hosted GitHub App and GitHub-owned protected control branch as the narrowed architecture direction.
 
-The architecture decision is strong enough to narrow the full-spec design space. It is not strong enough to claim readiness, install permissions, create workflows, spend money, or automate a provider. Those require the isolated proofs and later explicit maintainer decisions.
+The authoritative transition candidate is no longer a Contents API file update. It is an exact-parent Git commit followed by a non-forced ref update, with all stale, rejected, timed-out, or ambiguous outcomes failing closed.
+
+This direction is not readiness. Spec 079 remains `planned`; isolated proofs, rulesets, credential denials, schemas, provider contracts, cost authority, governance amendments, and a separate maintainer decision are still required.
