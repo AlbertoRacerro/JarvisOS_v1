@@ -34,7 +34,7 @@ The control plane may never merge, enable auto-merge, change priority, create a 
 This document freezes the v0 contract for:
 
 - canonical state and event encoding;
-- explicit authorization and revocation;
+- explicit authorization, release, revocation, and recovery;
 - repository-wide claim and work-branch lease;
 - state machine and transition table;
 - exact-head Git ref compare-and-swap;
@@ -325,7 +325,7 @@ Closed v1 stop reasons include:
 
 Generic `unknown`, `provider_error`, or `failed` is not an acceptable durable reason when a more precise reason exists.
 
-## 7. Explicit authorization and revocation
+## 7. Explicit authorization, release, revocation, and recovery
 
 ### 7.1 Control issue
 
@@ -432,6 +432,44 @@ A valid revocation:
 
 Editing or deleting the original authorization comment does not revoke a recorded grant.
 
+### 7.6 Release command
+
+A release command is accepted only after reconciliation proves that no implementer, reviewer, workflow dispatch, or provider request remains active or ambiguous:
+
+~~~~text
+```jarvis-authorization-v1
+{
+  "command": "release",
+  "repository_id": 123,
+  "grant_id": "grant_<32 hex>",
+  "expected_control_head": "<40 lowercase hex>",
+  "reason": "Release the completed or abandoned front."
+}
+```
+~~~~
+
+A release records one canonical `front_released` event. It never deletes the work branch, closes or merges the PR, rewrites history, or erases evidence. An active or ambiguous external action makes release ineligible and requires recovery or revocation instead.
+
+### 7.7 Recovery command
+
+Recovery from `halted` requires:
+
+~~~~text
+```jarvis-authorization-v1
+{
+  "command": "recover",
+  "repository_id": 123,
+  "run_id": "run_<32 hex>",
+  "expected_control_head": "<40 lowercase hex>",
+  "action": "resume",
+  "target_state": "awaiting_maintainer",
+  "reason": "Facts reconciled and safe state selected."
+}
+```
+~~~~
+
+`action` is `resume` or `terminalize`. Resume is allowed only after the command binds the exact control head and the service independently reconciles repository, branch, PR, workflow, provider, budget, lease, and security facts. A security signal cannot be cleared by prose alone; the recovery event must reference recorded remediation evidence. `target_state` must be reachable under the closed transition table. Terminalization uses one outcome from section 6.4.
+
 ## 8. Canonical snapshot schema
 
 The derived snapshot contains:
@@ -537,7 +575,9 @@ The global claim is repository-wide and contains:
 - reconciliation deadline;
 - first permitted action.
 
-A losing or ambiguous claim writer performs zero external side effects.
+The successful `claim_acquired` event atomically creates the initial work lease inside the same authority transition. A losing or ambiguous claim writer performs zero external side effects.
+
+After claim success, the Control App may create the derived work branch from the exact base SHA. It must then record one state-preserving `work_branch_recorded` event before any implementer request.
 
 ### 9.3 Work lease
 
@@ -551,6 +591,8 @@ V1 constants:
 - lease renewal does not change scope, round, adapter, or budget;
 - lease expiry never releases the global claim.
 
+Every renewal is a state-preserving canonical `lease_renewed` event committed before additional mutation. Database heartbeats do not renew authority.
+
 After expiry, the system records `lease_expired_pending_reconciliation` and reconciles branch, PR, workflows, provider requests, comments, budget, and security state before any renewal or recovery.
 
 ### 9.4 Release
@@ -559,7 +601,7 @@ Only one of these canonical events may release a front:
 
 - maintainer-observed terminal outcome;
 - explicit authorization revocation;
-- explicit maintainer `release` command defined by the later governance amendment;
+- valid maintainer `release` command from section 7.6;
 - verified `completed_without_pr`;
 - verified human closure or supersession.
 
@@ -604,7 +646,9 @@ A retry never creates a different event for the same idempotency key.
 | --- | --- | --- | --- | --- |
 | `idle` | `authorization_recorded` | valid maintainer command | `authorized` | none |
 | `authorized` | `claim_acquired` | section 9.1 and successful ref CAS | `claimed` | create/verify work branch |
-| `claimed` | `implementation_requested` | valid lease, scope, budget/provider authority | `implementing` | invoke one implementer request |
+| `claimed` | `work_branch_recorded` | exact derived branch at grant base | `claimed` | none |
+| any active state | `lease_renewed` | current lease, reconciled facts, renewal window | same state | none |
+| `claimed` | `implementation_requested` | recorded work branch, valid lease, scope, budget/provider authority | `implementing` | invoke one implementer request |
 | `implementing` | `work_head_recorded` | exact descendant head, scope passes | `awaiting_gates` | request/observe deterministic gates |
 | `awaiting_gates` | `gates_passed` | all required gates green on exact head | `awaiting_review` or `awaiting_re_review` | invoke one reviewer request |
 | `awaiting_gates` | `gate_defect_reproduced` | in-scope deterministic reproduction | `implementing` | one bounded implementer repair |
@@ -621,7 +665,7 @@ A retry never creates a different event for the same idempotency key.
 | `awaiting_maintainer` | `human_close_observed` | PR closed/deferred/superseded by maintainer | `terminal` | none |
 | any non-terminal | `authorization_revoked` | valid revocation | `awaiting_maintainer` or `terminal` | bounded cancellation only |
 | any non-terminal | `security_halt` | security signal | `halted` | none |
-| `halted` | `human_recovery_recorded` | explicit maintainer recovery and reconciled facts | prior safe state or `terminal` | only the recorded recovery action |
+| `halted` | `human_recovery_recorded` | valid section 7.7 command and reconciled facts | prior safe state or `terminal` | only the recorded recovery action |
 
 No transition permits merge, auto-merge, priority changes, settings/secrets changes, branch deletion, or force-push.
 
@@ -710,7 +754,7 @@ The reviewer uses a credential and effective identity with:
 - no review approval authority used as merge permission;
 - no merge, settings, secret, ref-delete, or ruleset permission.
 
-The reviewer adapter ID must differ from the implementer adapter ID. Different prompts using the same effective credential do not satisfy separation.
+The reviewer adapter ID must differ from the implementer adapter ID. Different prompts using the same effective credential do not satisfy separation. Reviewer output returns to the Control App; only the Control App may publish a non-authoritative presentation comment.
 
 ### 14.2 Review request
 
@@ -1099,12 +1143,12 @@ Prove:
 3. duplicate idempotency convergence;
 4. invalid schema, unknown field, float, bad timestamp, and digest rejection;
 5. state-transition allow/deny matrix;
-6. authorization and revocation parsing;
+6. authorization, release, revocation, and recovery parsing;
 7. maintainer identity and edited-comment rejection;
 8. scope normalization, deny precedence, diff limits, and path escape rejection;
 9. budget reservation/finalization and every cap;
 10. finding normalization and blocking policy;
-11. lease renewal, expiry, and non-release;
+11. lease creation, renewal, expiry, and non-release;
 12. provider ambiguous-timeout halt;
 13. presentation and notification dedupe.
 
@@ -1176,7 +1220,7 @@ No CI test may call a live model, require a paid service, or mutate the producti
 
 ### 23.5 Maintainer-owned conformance evidence
 
-Before implementation, the readiness owner must add or separately freeze protected conformance fixtures for:
+Before implementation, the readiness owner must freeze canonical test vectors and expected outcomes for:
 
 - state transitions;
 - two-writer race outcome;
@@ -1186,7 +1230,7 @@ Before implementation, the readiness owner must add or separately freeze protect
 - cost stops;
 - kill switches.
 
-The implementation agent may not weaken those fixtures.
+If protected conformance test files are created before the implementation PR, they must be added in a separate maintainer-owned PR. Otherwise the implementation assignment must explicitly authorize creation of those exact files. The implementation agent may not weaken the frozen vectors or protected fixtures.
 
 ## 24. Rollout, governance, readiness, and kill switches
 
@@ -1203,12 +1247,12 @@ This full-spec PR does not apply that amendment.
 ### 24.2 Rollout phases
 
 1. **Documentation:** merge this full spec with 079 still `planned`.
-2. **Governance:** merge the narrow AGENTS.md amendment.
-3. **Offline implementation skeleton:** deterministic schemas, state machine, fake adapters, no App installation.
-4. **Disposable-repository proof:** GitHub App, rulesets, fake actors, PostgreSQL, all section 23.3 proofs.
-5. **Shadow mode on JarvisOS:** read-only reconciliation and presentation; no claims, branch writes, workflow dispatch, or providers.
-6. **Readiness decision:** record exact host, App IDs, rulesets, credentials, provider adapters, prices/caps, proof outputs, owners, and rollback.
-7. **Implementation activation:** only after the registry is `ready`, then `in_progress`; first live run must be a low-risk documentation-only slice with explicit grant and zero merge authority.
+2. **Governance:** merge the narrow AGENTS.md amendment; its exception remains dormant until a readiness decision exists.
+3. **Isolated proof prototype:** build only in a disposable repository or separate proof fixture, not in JarvisOS `master`; use fake actors and zero paid-provider calls to exercise the schemas, state machine, ref CAS, PostgreSQL queue, and abuse tests.
+4. **Read-only shadow evidence:** only after explicit maintainer approval, install or exercise the App against JarvisOS with read-only reconciliation and presentation; no claims, control/work-branch writes, workflow dispatch, or providers.
+5. **Readiness decision:** record exact host, App IDs, rulesets, credentials, provider adapters, prices/caps, proof outputs, frozen test vectors, owners, and rollback; then and only then move 079 to `ready`.
+6. **Repository implementation:** after readiness merge, set 079 `in_progress` and implement the service and offline tests in one bounded PR.
+7. **First activation:** after implementation merge and a separate explicit operational authorization, run one low-risk documentation-only slice with a maintainer grant and zero merge authority.
 8. **Broader use:** separately approved after the first run is reviewed and cost/security evidence is accepted.
 
 ### 24.3 Independent kill switches
@@ -1243,7 +1287,7 @@ Rollback means halt, reconstruct, and record. It never means force-push, delete 
 - implementer/reviewer adapters and effective identities are selected;
 - provider price/quota evidence is current;
 - non-zero caps, if any, are explicitly approved and within section 17 ceilings;
-- deterministic gate policy and conformance fixtures are frozen;
+- deterministic gate policy and conformance vectors are frozen;
 - implementation owner and rollback owner are named;
 - the first activation slice is explicitly bounded;
 - no unresolved P0/P1 or authority/security blocker remains.
