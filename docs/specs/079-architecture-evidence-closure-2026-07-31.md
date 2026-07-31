@@ -10,7 +10,7 @@
 
 ## 1. Decision boundary
 
-This document performs only promotion-ladder step 2 for spec 079: choose the primary state substrate and dispatcher architecture, produce threat/cost/permission analyses, and reject unsafe alternatives.
+This document performs only promotion-ladder step 2 for spec 079: select the primary state substrate and dispatcher class, document the trust, permission, cost, concurrency, and recovery boundaries, and reject unsafe alternatives.
 
 It does **not** authorize:
 
@@ -22,383 +22,342 @@ It does **not** authorize:
 - the full 079 specification, governance amendment, readiness promotion, or implementation;
 - auto-merge or agent-owned merge authority.
 
-079 remains `planned`. The next ladder step is a separately authorized full specification after the proof gaps listed here are closed or explicitly carried as readiness blockers.
+Spec 079 remains `planned`. A later full specification requires separate maintainer authorization and must preserve every blocker and mandatory proof recorded here.
 
 ## 2. Failure-mode-first conclusion
 
-The primary failure is not loss of a chat session. It is **two actors both believing they own the one active development front** and performing irreversible or paid work from stale authority.
+The primary failure is not loss of a chat session. It is **two actors both believing they own the one active development front** and performing mutation, review dispatch, or paid work from stale authority.
 
-A safe design therefore cannot treat any of these as authority by itself:
+None of the following is sufficient authority by itself:
 
 - a running GitHub Actions job;
-- an issue label or sticky comment;
-- an open branch or pull request;
+- an issue label, comment, check run, or PR state;
+- an open branch;
 - a webhook delivery;
 - a model verdict;
 - an external queue or database row;
-- a local process lease;
+- a local lease;
 - elapsed time or lease expiry.
 
-The first externally visible action of a run must occur only after one GitHub-owned, repository-wide claim transition succeeds against the current canonical state. A loser in a race must perform no branch mutation, workflow dispatch, review request, model call, or spend.
+The first externally visible side effect of a run is permitted only after one GitHub-owned repository-wide claim transition has succeeded against the exact current control-branch head. A losing or ambiguous writer must perform zero branch mutation, workflow dispatch, review request, model call, or spend.
 
 ## 3. Selected architecture
 
-### 3.1 Primary dispatcher: installed GitHub App
+### 3.1 Primary dispatcher
 
 Select an **installed GitHub App hosted as a small event-driven control service** as the primary dispatcher/resumer.
 
-The App is selected because it provides:
+The App provides:
 
 - an independently identifiable installation actor;
-- short-lived installation tokens with repository and permission scoping;
-- signed webhook delivery and stable delivery identifiers;
-- direct read access to pull requests, commits, checks, reviews, and workflow state;
+- short-lived installation tokens scoped to installed repositories and granted permissions;
+- signed webhook deliveries and stable delivery identifiers;
+- direct read access to commits, pull requests, checks, reviews, and workflow state;
 - operation without a maintainer workstation remaining online.
 
-The App is a dispatcher and policy enforcer, not an engineering authority. It may request or coordinate allowed actions only after canonical state authorizes the transition.
+The App is a dispatcher and deterministic policy enforcer. It is not an engineering authority and may invoke only the transition currently authorized by canonical state.
 
-### 3.2 Canonical state substrate: one protected control branch and one authority file
+### 3.2 Canonical state location
 
-Select a dedicated protected branch named provisionally:
+Select a dedicated protected branch provisionally named:
 
 `jarvis-control`
 
-and one canonical file named provisionally:
+with one canonical authority file provisionally named:
 
 `.jarvis/development-loop/authority.json`
 
-The exact names may change in the full spec, but the one-branch/one-file property is binding unless later evidence disproves it.
+The one-branch/one-file property minimizes partial multi-object transitions. Comments, checks, dashboards, queue records, and weekly digests are projections only and must be rebuildable from the control branch.
 
-The file must contain:
+The authority file must contain at least:
 
 - schema version and repository identity;
 - monotonically increasing sequence;
 - current derived snapshot;
-- an ordered event list;
-- each event's stable ID, actor, transition, timestamp, idempotency key, payload digest, and previous-event digest;
-- the globally claimed spec/slice/front, or explicit vacancy;
-- work-branch lease state;
-- exact base/head/PR bindings;
-- gate and review evidence references;
-- budget/security stop state;
-- next permitted action or human decision;
-- terminal or paused reason.
+- ordered hash-chained events;
+- stable event ID, actor, role, transition, timestamp, idempotency key, payload digest, and previous-event digest;
+- active spec/slice/front or explicit vacancy;
+- scope digest;
+- work-branch lease;
+- exact base, control-head, work-head, and PR bindings;
+- exact-head gate and review evidence references;
+- budget and security stop state;
+- next permitted action;
+- terminal, paused, or human-decision reason.
 
-Each transition replaces the single file while presenting the current blob identity and expected control-branch head. The resulting commit becomes the durable transition evidence. Concurrent writers must be treated as a race: one succeeds; every stale writer rereads, replays, and re-evaluates from GitHub before doing anything else.
+### 3.3 Ref-level compare-and-swap candidate
 
-This is a **candidate compare-and-swap design, not yet a proven atomicity result**. The disposable-repository race proof in section 12 is mandatory before a full spec may claim that the GitHub endpoint and branch/ruleset configuration provide the required single-winner semantics.
+The repository Contents API is **not** the selected authority transition primitive. A contents update can reject a stale file blob while still operating on a branch whose head advanced through another path. Blob identity alone therefore cannot enforce the required exact-head ownership rule.
 
-### 3.3 Why one file
+The selected proof-gated candidate is a raw Git-object transition:
 
-A transition must not require an independently updated event file, snapshot file, issue comment, database row, and lease record. Multi-object writes create partial-commit states and ambiguous recovery.
+1. read and verify the exact current `jarvis-control` ref SHA;
+2. read the canonical authority file and reconstruct its event chain;
+3. compute one permitted transition deterministically;
+4. create the replacement authority blob;
+5. create a tree derived from the expected parent tree with only the authority path replaced;
+6. create a commit whose **single parent is the exact expected control-head SHA**;
+7. update `refs/heads/jarvis-control` to the candidate commit with `force=false`;
+8. treat any non-fast-forward rejection, unexpected response, timeout, or ambiguous outcome as no authority gained;
+9. reread the ref and canonical file before any retry or side effect.
 
-One canonical file makes the authoritative transition one repository write. Views, comments, check runs, dashboards, queue rows, and weekly summaries are projections only and must be rebuildable.
+Because the candidate commit is built directly on the exact expected parent, a concurrent writer that advances the ref produces a divergent tip. A non-forced ref update must then reject the stale candidate rather than silently rebasing it onto the unexpected head.
 
-The event list can grow. Compaction, if ever needed, requires a separately specified checkpoint event that preserves the previous terminal digest and cannot occur during an active front. Silent truncation is forbidden.
+This is still **PROPOSED_PENDING_PROOF**, not a claim of proven linearizability. The disposable-repository two-writer test must demonstrate exactly one winner, correct ambiguous-timeout reconciliation, and zero loser side effects under the actual API, App permissions, and ruleset configuration.
 
-### 3.4 External queue and database
+### 3.4 Event history and compaction
 
-The hosted dispatcher may use a durable queue and database for:
+Each successful ref update creates one durable authority commit. The file contains the ordered logical event chain, while Git commit ancestry supplies a second tamper-evident sequence.
+
+Compaction, if ever required, needs a separately specified checkpoint event that preserves the prior terminal digest and may run only with no active front. Silent truncation, force-push, history rewrite, or event deletion is forbidden.
+
+### 3.5 External queue and database
+
+The hosted service may use a durable queue and database for:
 
 - asynchronous webhook processing;
-- `X-GitHub-Delivery` deduplication;
+- delivery-ID deduplication;
 - bounded retries and backoff;
 - observability;
 - cached projections;
 - short-lived worker coordination.
 
-They are **non-authoritative and rebuildable**. Losing them may delay work but must not change who owns the active front or which transition is legal.
+They are non-authoritative and rebuildable. Their loss may delay work but must never change ownership, authorization, or transition legality.
 
-### 3.5 GitHub Actions role
+### 3.6 GitHub Actions role
 
-GitHub Actions is retained only as an ephemeral worker and deterministic-gate surface:
+GitHub Actions remains an ephemeral worker and deterministic-gate surface only:
 
-- run repository tests and proofs;
-- expose check/workflow conclusions tied to an exact commit;
-- optionally run a later bounded adapter after canonical authorization.
+- run repository tests and isolated proofs;
+- expose conclusions bound to an exact commit;
+- optionally execute a later bounded adapter after canonical authorization.
 
-Actions concurrency groups are not the global authority lock. Workflow ordering is not assumed. A queued/running workflow does not prove authorization, and cancelling or replacing a pending workflow cannot release the repository-wide front.
+Actions concurrency groups are not the repository-wide mutex. Workflow order, queued state, cancellation, or replacement cannot claim, release, or transfer the active front.
 
-### 3.6 Actor separation
+### 3.7 Actor separation
 
 The future system requires distinct effective identities:
 
-1. **Control App** — reads GitHub state and writes only canonical control transitions and bounded presentation artifacts.
+1. **Control App** — reads GitHub state and writes canonical control transitions plus bounded presentation artifacts.
 2. **Implementer actuator** — may mutate only the recorded work branch and scope; it cannot review or merge.
-3. **Reviewer actuator** — read-only over code and evidence; it may emit structured findings but has no contents-write capability.
-4. **Maintainer** — owns priority, governance exceptions, secret/settings changes, destructive actions, external-spend exceptions, and merge.
+3. **Reviewer actuator** — read-only over code and evidence; it may emit findings but has no contents-write or merge capability.
+4. **Maintainer** — owns priority, governance exceptions, secrets/settings, destructive actions, exceptional spending, and merge.
 
-A single vendor may supply more than one model, but one credential or actor must not simultaneously possess implementer, reviewer, and merge authority.
-
-The exact implementer/reviewer provider is deliberately not selected here. Selecting a dispatcher does not authorize an external model.
+One credential must not combine control, implementation, review, and merge authority. The implementer and reviewer provider remain deliberately unselected.
 
 ## 4. Transition topology
 
-The selected control flow is:
-
 1. GitHub emits a subscribed event.
-2. The service validates HTTPS transport, webhook signature, event type, repository/installation identity, and delivery ID.
-3. The handler acknowledges quickly and enqueues the delivery; it performs no model call or branch mutation in the webhook request path.
-4. A worker deduplicates the delivery, reads the canonical control branch/file, verifies the event hash chain, and reconstructs current state.
-5. Deterministic policy computes either one permitted transition or a precise no-op/stop.
-6. For a claim or lease transition, the worker attempts the single canonical conditional write.
-7. Only after that write succeeds may it invoke the next bounded action.
-8. The action result is reconciled against live GitHub state and written as another canonical event.
-9. A changed implementation head invalidates all previous head-bound gate and review evidence.
-10. Any ambiguity writes or preserves a paused/halted state and requests human action only when required by repository rules.
+2. The service validates transport, webhook signature, event type, installation, repository, and delivery ID.
+3. The handler acknowledges quickly and queues work; it performs no model call or branch mutation in the request path.
+4. A worker deduplicates delivery and reads the exact control ref and authority file.
+5. It verifies commit ancestry, event hashes, schema, current repository facts, authorization, dependencies, active-front state, scope, lease, spend, and security stops.
+6. Deterministic policy returns one permitted transition or a precise no-op/halt.
+7. Claim and lease changes use the ref-level CAS candidate in section 3.3.
+8. Only a verified successful ref transition permits the next bounded external action.
+9. The action result is reconciled against live GitHub state and recorded by a new canonical transition.
+10. Any work-head change invalidates all prior head-bound gate and review evidence.
+11. Any ambiguity pauses or halts; timers never create authority.
 
-A scheduler may wake the dispatcher for lease reconciliation or a weekly digest, but a timer is never authorization.
-
-## 5. Repository-wide front claim and lease semantics
+## 5. Global claim, lease, and idempotency
 
 ### 5.1 Global front claim
 
 The global claim transition must atomically establish:
 
-- previously vacant or explicitly recoverable front state;
+- prior vacancy or explicitly reconciled recoverability;
 - authorized spec and bounded slice;
 - scope digest;
-- base branch and exact base SHA;
-- intended work branch;
+- exact base and intended work branch;
 - claimant identity;
-- claim sequence and idempotency key;
-- maximum lifetime and reconciliation deadline;
+- sequence and idempotency key;
+- reconciliation deadline;
 - first permitted action.
 
 No work-branch lease may exist without a valid global claim.
 
 ### 5.2 Work-branch lease
 
-The branch lease serializes mutation inside the already claimed front. It does not authorize another front, broaden scope, or replace the global claim.
+The lease serializes mutation within the already claimed front. It cannot authorize another front, broaden scope, or replace the global claim.
 
-A lease expiry does not automatically free the front. Recovery must first reconcile:
+Expiry does not release ownership. Recovery first reconciles:
 
-- work branch and current head;
-- open/closed/merged pull requests;
-- running, queued, cancelled, or completed workflows;
-- outstanding model/provider requests where observable;
+- current branch head and ancestry;
+- open, closed, or merged PR state;
+- queued, running, cancelled, and completed workflows;
+- observable provider requests;
 - unrecorded commits or review comments;
 - security and budget stops.
 
-Only an explicit canonical `lease_recovered`, `front_released`, or terminal event may change ownership.
+Only an explicit canonical recovery, release, or terminal transition may change ownership.
 
 ### 5.3 Idempotency
 
-Every side-effecting transition and external request must carry a deterministic idempotency key derived from at least:
+Every transition and external request uses a deterministic idempotency key derived from repository, run, sequence, transition, target head, review/fix round, and adapter identity as applicable.
 
-- repository identity;
-- development-run ID;
-- transition kind;
-- canonical sequence;
-- exact target head where applicable;
-- review/fix round;
-- provider/adapter identity where applicable.
-
-Duplicate delivery must converge to the existing result. A retry may inspect but must not duplicate commits, comments, reviews, workflow dispatches, model calls, or charges.
+Duplicate delivery may inspect existing evidence but must not duplicate commits, comments, reviews, workflow dispatches, model calls, reservations, or charges.
 
 ## 6. Permission model
 
-### 6.1 Candidate minimum App permissions
+### 6.1 Candidate App permissions
 
-The full spec must validate a minimal installation permission set. The starting candidate is:
+The full spec must prove the smallest installation permission set. Initial candidates are:
 
 - metadata: read;
-- contents: read/write, required for the control file and only later for explicitly authorized branch operations;
-- pull requests: read/write, for bounded metadata, comments, and review requests;
-- checks: read;
-- commit statuses: read;
-- actions: read, plus narrowly justified write only if workflow dispatch/rerun is selected;
-- issues: read/write only if human-decision requests use issue/PR comments.
+- contents: read/write for raw Git objects and authorized work branches;
+- pull requests: read/write only for bounded metadata, comments, and review requests;
+- checks and commit statuses: read;
+- actions: read, with write added only if a selected transition must dispatch or rerun a workflow;
+- issues: read/write only if human-decision requests use issue or PR comments.
 
-Do not grant administration, environments, secrets, organization members, deployments, packages, security-alert mutation, repository-hook mutation, or ruleset bypass unless a later proof demonstrates an unavoidable requirement. No such requirement is established here.
+Do not grant administration, environments, secrets, organization membership, deployments, packages, security-alert mutation, repository-hook mutation, or ruleset bypass without separate proof of necessity.
 
-### 6.2 Blocker: GitHub permissions are not path capabilities
+### 6.2 Coarse-permission blocker
 
-`contents: write` is broader than “append the control file” or “write one authorized work branch.” Permissions alone cannot prove that a compromised dispatcher is incapable of modifying another path or calling a merge-capable endpoint.
+`contents: write` is not a path capability. It is broader than “write one control file” or “write one authorized branch.” Permissions alone cannot prove that a compromised App cannot alter another path or use a merge-capable endpoint.
 
-The full spec must therefore combine:
+The full design therefore requires all of:
 
-- repository rulesets/branch protection with no App bypass for `master`;
-- a dedicated control branch with its own narrow writer policy;
-- a capability wrapper that exposes only an allow-listed set of API operations, repositories, branches, paths, and transition states;
-- short-lived installation tokens generated only when a transition needs them;
+- protected `master` with no App bypass;
+- protected `jarvis-control`, no force-push, no deletion, and a narrowly allowed writer identity;
+- a capability wrapper allow-listing exact repository IDs, refs, paths, Git-object operations, transition states, and request shapes;
+- short-lived tokens issued only for the current transition;
 - separate reviewer credentials with no contents write;
-- audit of every issued token scope and attempted denied operation;
-- abuse tests proving that the App cannot merge, force-push, delete protected refs, modify settings/secrets, or write outside authorized branches through supported paths.
+- denied-operation audit;
+- abuse tests for merge, force-push, ref deletion, settings/secrets mutation, and out-of-scope writes.
 
-Until those tests pass, “the App cannot merge” is a requirement, not a verified fact.
+Until those tests pass, “the App cannot merge or write outside scope” is a requirement, not a verified fact.
 
-### 6.3 Untrusted pull requests
+### 6.3 Untrusted input
 
-No secret-bearing or write-capable job may execute untrusted fork code. Repository content, issue text, PR descriptions, comments, test logs, and model output are untrusted data. They may propose actions but may not alter policy, scope, permissions, spend limits, or state-machine transitions.
+Fork code, repository text, PR descriptions, comments, logs, artifacts, and model output are untrusted data. They may supply evidence but may never modify authority, role, scope, permissions, spend limits, or transition policy.
+
+No secret-bearing or write-capable job may execute untrusted fork code.
 
 ## 7. Threat analysis
 
-| Threat/failure mode | Required control | Residual risk before proof |
+| Failure mode | Required control | Residual proof gap |
 | --- | --- | --- |
-| Duplicate or replayed webhook | Signature verification, delivery-ID dedupe, transition idempotency | Redelivery after dedupe-store loss must still converge via canonical events |
-| Two dispatcher instances race | One-file conditional canonical write; loser rereads before any side effect | GitHub single-winner semantics require disposable-repo proof |
-| Pending Actions run replaced/cancelled | Actions is worker only; authority remains in control branch | Delayed reconciliation during GitHub incident |
-| Stale gate/review result | Exact-head binding; head change invalidates evidence | Provider comments may omit strong head identity |
-| Force-push or branch replacement | Protected refs; recorded base/head ancestry; halt on ambiguity | Ruleset misconfiguration or privileged human action |
-| Compromised App private key | Short-lived scoped tokens, rotation/revocation, allow-listed proxy, kill switch | Contents permission remains coarse |
-| Prompt injection in repo/PR/logs | Deterministic parser and policy; content never grants authority | Model may still leak or follow malicious text if context boundaries fail |
-| Reviewer mutates code | Read-only reviewer credential and API surface | Vendor-side identity/permission claims require verification |
-| Implementer approves its own work | Actor-role checks and distinct credentials | Shared underlying provider account may weaken independence |
-| Provider call duplicated or charged twice | Durable request idempotency and reservation before dispatch | Some providers may not support idempotency; adapter-specific proof needed |
-| Cost runaway | Per-run/per-day caps, projected reservation, maximum rounds, hard halt | GitHub-hosted model billing may not expose real-time final cost |
-| Action/dependency supply-chain compromise | Pin immutable action SHAs, minimal permissions, offline fixtures | Upstream compromise before pinning or malicious maintained release |
-| External DB divergence | Database is cache only; rebuild from GitHub | Temporary availability loss and delayed recovery |
-| GitHub outage or delayed webhook | No action during uncertainty; reconcile after recovery | Work pauses; availability is intentionally sacrificed for safety |
-| Control ledger tampering | Protected branch, hash chain, commit ancestry verification, alert/halt | Maintainer/admin compromise remains outside software-only prevention |
-| Lease expires while actor still runs | Expiry triggers reconciliation, not reassignment | Provider execution may be unobservable or uncancellable |
-| Notification spam | State-change-only notices and weekly digest; no liveness noise | Repeated infrastructure incidents may still require grouped reporting |
+| Two dispatchers race | Exact-parent candidate commit plus non-forced ref update | Disposable-repository single-winner proof |
+| Ref advances without file change | Ref-level CAS; blob-only update forbidden | Ruleset/API integration proof |
+| Timeout after ref update | Reread ref, candidate commit, and event ID before retry | Network-fault proof |
+| Duplicate webhook | Signature, delivery dedupe, transition idempotency | Dedupe-store loss proof |
+| Stale CI/review | Exact work-head binding | Provider evidence format proof |
+| Force-push or branch replacement | Rulesets, ancestry checks, halt on ambiguity | Misconfiguration/admin compromise |
+| Compromised App key | Short-lived tokens, capability wrapper, rotation, kill switch | Coarse contents permission |
+| Prompt injection | Deterministic policy; untrusted text grants no authority | Model-context isolation proof |
+| Reviewer mutates code | Read-only reviewer identity | Vendor credential verification |
+| Implementer self-approves | Separate identities and role checks | Shared provider-account residual risk |
+| Duplicate paid call | Reservation and adapter idempotency | Provider-specific behavior |
+| Cost runaway | Hard caps, max rounds, no implicit fallback | Timely billing visibility |
+| Supply-chain compromise | Immutable action pins and minimal permissions | Upstream compromise before pinning |
+| External DB divergence | GitHub remains canonical | Temporary availability loss |
+| GitHub outage | No action during uncertainty; reconcile later | Intentional loss of liveness |
+| Ledger tampering | Protected ref, ancestry plus event hash chain | Maintainer/admin compromise |
+| Lease expiry while actor runs | Reconcile, never automatic reassignment | Unobservable provider execution |
+| Notification spam | State-change notices and weekly digest only | Grouping during repeated incidents |
 
-## 8. Cost analysis
+## 8. Cost boundary
 
-The architecture has three independent cost surfaces:
+The architecture has independent cost surfaces for hosted control infrastructure, GitHub execution, and model/review providers.
 
-1. **Control service** — hosted compute, queue, database, logs, and network traffic.
-2. **GitHub execution** — Actions runners, artifact retention, and API usage.
-3. **Model/review providers** — tokens, jobs, seats, or hosted coding-agent charges.
+No price is frozen into this decision. The full spec must provide:
 
-No current vendor price is frozen into this architecture decision. Prices and included quotas are time-sensitive and cannot be a safety boundary.
-
-The full spec must define:
-
-- a zero-provider-call idle path;
-- projected and final cost records per transition/provider;
-- per-request, per-run, per-day, and per-month hard caps;
-- atomic budget reservation before every paid dispatch;
+- zero-provider-call idle behavior;
+- projected, reserved, and final cost records;
+- per-request, run, day, and month caps;
+- atomic reservation before paid dispatch;
 - maximum fix/re-review rounds;
-- no fallback to a more expensive provider without explicit policy and available reservation;
-- a manual emergency disable independent of provider availability;
-- cost reconciliation that distinguishes GitHub Actions, hosting, and model spend;
-- `cost_unknown` as a hard stop for a paid action rather than an assumed zero.
+- no implicit expensive fallback;
+- independent emergency disable;
+- separate reconciliation for hosting, Actions, and model spend;
+- `cost_unknown` as a hard stop for paid action.
 
-JarvisOS runtime policy 059b is not automatically authoritative for GitHub-hosted agents. The later governance/full-spec work must either define a separate repository-development budget authority or deliberately reuse 059b semantics through a proven boundary without pretending they already apply.
+JarvisOS runtime policy 059b does not automatically govern GitHub-hosted agents. A later governance contract must establish the development-loop budget authority explicitly.
 
-## 9. Availability and operational model
+## 9. Availability, kill switches, and recovery
 
-The control plane is allowed to stop. Safety dominates liveness.
+Safety dominates liveness. No eligible transition means no model call, repeated comment, or mutation. GitHub uncertainty, provider ambiguity, stale evidence, or lost local state causes a pause and reconstruction from canonical GitHub state.
 
-Expected behavior:
+Independent kill paths must include:
 
-- no eligible transition: no model call, no repeated comments, no branch mutation;
-- webhook missed or service down: reconcile from GitHub on restart;
-- external database lost: rebuild projections, retain canonical authority;
-- GitHub uncertain/unavailable: halt and retry bounded reads later;
-- provider unavailable: record precise blocked outcome; do not silently switch provider;
-- maintainer absent: wait at `awaiting_maintainer` without periodic spend.
+1. canonical `halted` event;
+2. suspend the App installation;
+3. revoke or rotate App and provider credentials;
+4. stop hosting workers and queue consumers;
+5. set provider caps to zero;
+6. disable selected workflows;
+7. human-only recovery from the last verified control commit.
 
-A weekly digest is presentation only. It cannot release a lease, authorize a slice, select a provider, or imply merge consent.
+Rollback means stop and reconstruct. It never means force-pushing the control branch, deleting events, rewriting findings, or erasing spend evidence.
 
-## 10. Kill switches and rollback
+## 10. Rejected alternatives
 
-The full spec must provide independent kill paths:
+- **Pure GitHub Actions authority:** rejected because concurrency is execution serialization, not an ordered durable repository-wide claim ledger.
+- **Contents API blob update as CAS:** rejected because blob identity does not assert the exact branch head.
+- **Issue/check/comment authority:** rejected because state is mutable and transitions span multiple objects.
+- **External database authority:** rejected because repository reviewers could not reconstruct canonical authorization from GitHub.
+- **Maintainer-local scheduler as primary:** rejected because availability, credentials, and recovery depend on one workstation.
+- **Model/vendor conversation state:** rejected because it is vendor-specific, non-canonical, and not independently replayable.
 
-1. canonical `halted` event preventing all non-recovery transitions;
-2. disable or suspend the GitHub App installation;
-3. revoke/rotate the App private key and provider credentials;
-4. disable the hosting service or dispatcher queue consumers;
-5. set provider spend caps to zero;
-6. disable selected repository workflows;
-7. human-only recovery procedure from the last verified control-branch commit.
+## 11. Mandatory proofs before full-spec promotion
 
-A repository variable such as `DEVLOOP_ENABLED=false` may be a defense-in-depth switch, but a mutable variable alone is not canonical authority.
+Use only a disposable repository or isolated organization fixture. Do not mutate live `master`, current secrets, paid providers, or production rulesets.
 
-Rollback means stop and reconstruct. It does not mean deleting canonical events, force-pushing the control branch, rewriting findings, or erasing spend evidence.
+1. Two or more dispatchers race from the same vacant ref; exactly one ref update wins and every loser produces zero side effects.
+2. An unrelated commit advances `jarvis-control` without changing the authority blob; the stale candidate ref update is rejected.
+3. Stale authority blob, tree, parent commit, and ref identities all fail closed.
+4. A timeout after a successful ref update is reconciled without a second event or action.
+5. Duplicate and replayed webhook deliveries converge across process and database restarts.
+6. Deleting all external cache/database state still permits exact snapshot reconstruction.
+7. Reordered, removed, changed, or forked events/commits trigger a precise integrity halt.
+8. Lease expiry while a worker remains active never starts a new claimant before reconciliation.
+9. A changed work-head invalidates previous green CI and clean review.
+10. Every dispatcher/actor credential is denied merge, force-push, ref deletion, settings/secrets mutation, and out-of-scope writes.
+11. Reviewer credentials cannot write, approve authoritatively, or merge; implementer cannot supply the authoritative review verdict.
+12. Untrusted fork code and text cannot access secrets or alter authority.
+13. Prompt-injection fixtures cannot change scope, spend, role, tests, or merge authority.
+14. Exceeded or unknown cost prevents provider dispatch.
+15. Timeout after provider acceptance cannot create an untracked duplicate charge.
+16. GitHub outage and delayed webhook recovery produce no duplicate action.
+17. Every kill switch stops new side effects and requires explicit maintainer recovery.
+18. Actions cancellation or concurrency behavior cannot release or transfer canonical authority.
+19. Inactivity and duplicate events create no repeated comments or model calls.
 
-## 11. Rejected alternatives
+## 12. Decisions closed and remaining blockers
 
-### 11.1 Pure GitHub Actions control plane — rejected as authority
+Closed, subject to proof:
 
-Rejected because documented concurrency behavior permits at most one running and one pending item per group, may replace a pending item, and does not guarantee ordering. That is useful execution serialization, not a durable FIFO authority ledger or repository-wide compare-and-swap.
+- installed GitHub App as dispatcher class;
+- GitHub protected control branch as canonical location;
+- one authority file with hash-chained events and derived snapshot;
+- raw Git-object commit built on exact expected parent plus non-forced ref update as the CAS candidate;
+- queue/database as non-authoritative infrastructure;
+- Actions as deterministic worker only;
+- global claim before lease and every side effect;
+- human-only merge, governance, destructive action, and exceptional spend.
 
-The normal repository `GITHUB_TOKEN` also intentionally suppresses many recursively triggered workflow runs. Building continuation from self-triggering workflow side effects would create special-case dispatch paths and ambiguous liveness.
+Still blocked before full-spec promotion:
 
-Actions remains suitable for deterministic workers after authorization.
-
-### 11.2 Issue/check/comment state — rejected as authority
-
-Issues, labels, comments, check runs, and sticky summaries are mutable presentation surfaces with weak multi-object atomicity. They may display current state or request a human decision but cannot own claim, lease, budget, or transition history.
-
-### 11.3 External database as canonical state — rejected
-
-A database can provide strong transactions, but making it authoritative violates the GitHub-owned and chat-independent recovery requirement. It also creates an invisible state that repository reviewers cannot reconstruct from GitHub.
-
-The database is retained only as queue/deduplication/cache infrastructure.
-
-### 11.4 Maintainer-local scheduled dispatcher — rejected as primary
-
-A local process is easy to stop but depends on a maintained workstation, long-lived credential custody, local state, network availability, and manual recovery. It is retained only as a possible read-only disaster-recovery inspector or manual operator tool, not the 24/7 authority.
-
-### 11.5 Model/vendor-native conversation state — rejected
-
-A coding-agent thread, browser conversation, or vendor task ID cannot own repository authority. It may be referenced as evidence, but it is not guaranteed to be durable, independently replayable, repository-visible, or permission-complete.
-
-## 12. Mandatory proofs before full-spec promotion
-
-Run these only in a disposable repository or isolated organization fixture. No test may mutate live `master`, current secrets, paid providers, or production rulesets.
-
-1. **Atomic front race:** start at least two dispatchers from identical vacant state; exactly one canonical claim succeeds and every loser produces zero side effects.
-2. **Stale blob/head:** attempt a transition with stale file/blob/control-head identities; it fails closed and does not invoke a worker.
-3. **Replay:** deliver identical webhook IDs and semantically duplicate events across process/database restarts; one canonical effect results.
-4. **Ledger reconstruction:** rebuild the same snapshot from event history after deleting all external cache/database state.
-5. **Tamper detection:** reorder, remove, alter, or fork events/commits; reconstruction halts with a precise integrity reason.
-6. **Lease recovery:** expire a lease while a workflow or simulated actor remains active; no new claimant starts before reconciliation.
-7. **Exact-head invalidation:** change work-branch head after clean CI/review; prior evidence becomes ineligible.
-8. **Permission abuse:** try merge, force-push, ref deletion, settings/secrets mutation, and out-of-scope path/branch writes using every dispatcher/actor credential; all are denied and audited.
-9. **Reviewer separation:** reviewer credential cannot write contents or approve/merge; implementer cannot submit the authoritative review verdict.
-10. **Untrusted fork:** malicious workflow/code/text cannot access secrets, gain write permission, or alter canonical authority.
-11. **Prompt-injection corpus:** repository text attempts to change scope, spend, actor role, tests, or merge authority; deterministic policy ignores it.
-12. **Budget stop:** projected cost exceeds each cap; no provider request occurs and reservation/accounting remain consistent.
-13. **Duplicate paid request:** simulate timeout after provider acceptance; retry cannot create an untracked second charge.
-14. **GitHub outage/recovery:** interrupt reads/writes/webhooks; system pauses and later reconstructs without duplicate action.
-15. **Kill switches:** each independent switch stops new side effects; recovery requires explicit maintainer action.
-16. **Actions behavior:** demonstrate that workflow concurrency/cancellation cannot release or transfer canonical authority.
-17. **Notification behavior:** inactivity and duplicate events do not create repeated comments or model calls.
-
-The Contents API's current-blob input and the proposed control-branch rules are evidence for a candidate design, not substitutes for these runtime proofs.
-
-## 13. Decisions closed by this document
-
-Closed for the next full-spec draft, subject to mandatory proof:
-
-- primary dispatcher class: installed GitHub App hosted service;
-- canonical state location: GitHub repository, separate protected control branch;
-- canonical transition unit: one conditional update to one authority file;
-- event history: ordered, hash-chained, tamper-evident logical append;
-- external queue/database: non-authoritative cache and delivery infrastructure;
-- Actions: deterministic worker only, never authority;
-- global claim precedes branch lease and every side effect;
-- lease expiry requires reconciliation, not automatic reassignment;
-- maintainer remains sole merge/governance/destructive-action authority;
-- provider/implementer/reviewer selection is deferred and grants no present authority.
-
-## 14. Remaining blockers for a full specification
-
-The architecture class is selected, but the full spec must not be drafted as settled fact until the following are resolved or explicitly represented as blocking acceptance criteria:
-
-- disposable-repository proof of conditional single-winner writes;
-- exact GitHub ruleset and branch-protection configuration;
-- proof that each App/actor credential cannot merge or write outside scope;
+- runtime proof of ref-level single-winner and timeout reconciliation;
+- exact ruleset and branch-protection configuration;
+- credential denial proofs;
 - closed schemas and transition table;
-- deployment host, queue/database technology, retention, and recovery objectives;
+- deployment host, queue/database, retention, and recovery objectives;
 - provider-independent implementer/reviewer adapter contract;
-- exact deterministic gate set and infrastructure-flake policy;
-- spend source of truth and hard numerical caps;
-- maximum fix/re-review rounds;
-- notification/digest contract;
+- deterministic gate and infrastructure-flake policy;
+- spend source of truth and numerical caps;
+- maximum review/fix rounds;
+- notification contract;
 - governance amendment text;
-- isolated end-to-end proof plan and owner.
+- isolated proof plan and owner.
 
-## 15. Closure result
+## 13. Closure result
 
-Architecture/evidence closure is complete when this document and its companion evidence map merge while:
+Architecture/evidence closure is complete when this document and its evidence map merge while:
 
 - 079 remains `planned` with no Implementation PR;
 - no workflow, App, service, secret, provider, runtime, dependency, test, or repository setting is created or changed;
-- upstream claims are pinned and unsupported claims remain labelled as proposed or unverified;
-- deterministic documentation gates pass on the exact PR head;
-- the PR stops for the maintainer's explicit merge decision.
+- the ref-level CAS design remains explicitly proof-gated;
+- deterministic documentation and repository gates pass on the exact PR head;
+- the PR stops for the maintainer’s explicit merge decision.
