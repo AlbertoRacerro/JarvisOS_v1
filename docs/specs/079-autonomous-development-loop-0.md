@@ -21,8 +21,9 @@ The v0 control plane may:
 - reconstruct durable authority from GitHub;
 - claim exactly one repository-wide development front;
 - create one derived work branch at one exact authorized base;
-- invoke one bounded implementer on that branch;
-- create or reconcile exactly one pull request idempotently;
+- invoke one bounded implementer on that branch before a PR exists;
+- after a real branch delta exists, create or reconcile exactly one pull request idempotently;
+- terminalize a verified initial no-change result without inventing an empty PR;
 - bind deterministic gates and review to an exact PR head;
 - perform at most two bounded fix/re-review rounds;
 - recover from duplicate delivery, process restart, stale local state, and ambiguous API responses;
@@ -38,6 +39,8 @@ This document freezes the proposed v0 contract for:
 - canonical state and event integrity;
 - authorization, expiry, revocation, recovery, terminalization, and release;
 - repository-wide claim and work-branch lease;
+- initial implementation before PR creation;
+- verified no-change terminalization;
 - exact-head branch and pull-request lifecycle;
 - deterministic gate and review sequencing;
 - implementer/reviewer adapter contracts;
@@ -76,16 +79,18 @@ The amendment changes only the order of documentary consolidation versus isolate
 3. A branch, pull request, label, review, check, workflow, timer, comment, or model message is not authorization.
 4. V0 starts only from a maintainer-authored command naming the exact spec, slice, base SHA, scope, adapters, and budget policy.
 5. Every side-effect-authorizing transition rechecks grant currency, claim ownership, exact GitHub facts, stop state, role capacity, provider policy, and canonical reservation; mutation additionally requires a valid reconciled lease.
-6. Deterministic gates and advisory review inform readiness; the maintainer alone owns merge.
-7. Reviewer credentials cannot mutate code; implementer credentials cannot produce the authoritative review verdict.
-8. Automated actors cannot merge, auto-merge, force-push, delete protected refs, change settings or secrets, or bypass rulesets.
-9. Repository-development provider authority is separate from runtime policy 059b.
-10. Planned, blocked, cancelled, dependency-incomplete, expired, or revoked work never starts or continues automatically.
-11. Lease expiry, grant expiry, inactivity, process death, or a timer never releases ownership.
-12. Any work-head change invalidates all prior head-bound gates, review, and presentation evidence.
-13. Human PR actions are recorded factually from every PR-bound active state; observation never retroactively manufactures a clean verdict.
-14. Revocation or expiry never clears an existing security, integrity, or ambiguity halt.
-15. Safety dominates liveness; indefinite inactivity is valid.
+6. The initial implementer request binds the verified absence of a PR for the derived branch; all repair and review requests bind the one recorded PR.
+7. A PR is created only after a valid branch delta exists. A verified initial no-change result terminalizes without a PR.
+8. Deterministic gates and advisory review inform readiness; the maintainer alone owns merge.
+9. Reviewer credentials cannot mutate code; implementer credentials cannot produce the authoritative review verdict.
+10. Automated actors cannot merge, auto-merge, force-push, delete protected refs, change settings or secrets, or bypass rulesets.
+11. Repository-development provider authority is separate from runtime policy 059b.
+12. Planned, blocked, cancelled, dependency-incomplete, expired, or revoked work never starts or continues automatically.
+13. Lease expiry, grant expiry, inactivity, process death, or a timer never releases ownership.
+14. Any work-head change invalidates all prior head-bound gates, review, and presentation evidence.
+15. Human PR actions are recorded factually from every PR-bound active state; observation never retroactively manufactures a clean verdict.
+16. Revocation or expiry never clears an existing security, integrity, or ambiguity halt.
+17. Safety dominates liveness; indefinite inactivity is valid.
 
 ## 4. Selected architecture
 
@@ -234,6 +239,8 @@ Closed states:
 - `authorization_expired`
 - `abandoned_after_human_decision`
 
+A `completed_without_pr` terminal record is allowed only for the initial implementation request when all section 11.3 no-change conditions pass. It is never used to bypass a required repair, review, or PR.
+
 A human-merge terminal event records separately:
 
 - `prepared_state_at_human_action`;
@@ -254,6 +261,7 @@ Closed reasons include:
 - claim race lost;
 - control integrity or capacity failure;
 - scope, base, work-head, or PR mismatch/ambiguity;
+- invalid initial no-change claim;
 - work head changed after review;
 - lease expired pending reconciliation;
 - gate missing, stale, cancelled, action-required, infrastructure-failed, flaky, or ambiguous;
@@ -342,11 +350,11 @@ Security or integrity recovery requires referenced remediation evidence. The tar
 Release is eligible only from `terminal` after proving:
 
 - no external request, workflow dispatch, reservation, cancellation, integrity anomaly, security anomaly, or provider ambiguity remains active or unresolved;
-- work-ref and PR facts match the terminal record;
+- work-ref and PR facts match the terminal record, or the terminal outcome is a verified `completed_without_pr` with no PR and no branch delta;
 - every halt overlay has been resolved through recovery;
 - the expected control head is current.
 
-`front_released` clears active snapshot fields and returns to `idle` while preserving completed-run identity, terminal outcome, PR/ref bindings, findings, usage, cost, events, and Git history. Duplicate identical release is a no-op. A later run needs a new authorization grant from `idle`.
+`front_released` clears active snapshot fields and returns to `idle` while preserving completed-run identity, terminal outcome, PR/ref bindings when present, findings, usage, cost, events, and Git history. Duplicate identical release is a no-op. A later run needs a new authorization grant from `idle`.
 
 ## 8. Canonical snapshot
 
@@ -355,13 +363,15 @@ The derived snapshot binds:
 - state and active run;
 - authorization grant, expiry, revocation, and overlays;
 - global claim and branch lease;
-- work branch, exact head, PR number, PR base/head branch, PR state, ancestry, diff limits, and scope digest;
+- work branch, exact head, optional PR number, PR base/head branch, PR state, ancestry, diff limits, and scope digest;
 - exact-head gates;
 - review round, reviewed head, reviewer identity, request, verdict, findings, and dispositions;
 - integer-micro-USD budget, reservations, finalized/released usage, and role call counts;
 - next permitted action;
 - primary stop and stop overlays;
 - active terminal outcome and last completed run.
+
+Before PR creation, the work snapshot explicitly records `pr_number=null` and `pr_expected_absent=true`.
 
 ## 9. Claim, work ref, and lease
 
@@ -423,7 +433,7 @@ After ambiguous update, the service rereads ref, ancestry, and event ID. Candida
 
 ## 11. Closed state machine
 
-### 11.1 Dispatch authority
+### 11.1 Dispatch authority and conditional PR binding
 
 Only these events authorize model calls:
 
@@ -432,17 +442,24 @@ Only these events authorize model calls:
 - `review_fix_authorized`;
 - `review_dispatch_authorized`.
 
-Before the external call, the event atomically binds:
+Every dispatch event atomically binds:
 
 - current unexpired and unrevoked grant;
 - current claim and no stop;
-- exact repository, work ref, PR, base, and head;
+- exact repository, work ref, base, and head;
 - approved role identity and remaining role-call capacity;
 - current adapter and provider policy;
 - canonical cost/quota reservation, even when projected marginal cost is zero;
 - deterministic request idempotency key;
-- valid reconciled lease and scope for mutations;
-- exact eligible gates and recorded PR/head for review.
+- valid reconciled lease and scope for mutations.
+
+PR binding is conditional and closed:
+
+- the initial `implementation_requested` from `claimed` requires `pr_number=null`, `pr_expected_absent=true`, and a live GitHub search proving that no PR exists for the derived work branch;
+- `gate_repair_authorized`, `review_fix_authorized`, and every `review_dispatch_authorized` require the one recorded PR, exact PR base/head branch, and exact current PR head;
+- no other no-PR model dispatch is permitted.
+
+Review dispatch additionally binds exact eligible gates on the recorded PR head.
 
 No other event or prose authorizes a model call.
 
@@ -452,24 +469,27 @@ No other event or prose authorizes a model call.
 | --- | --- | --- | --- | --- |
 | `idle` | `authorization_recorded` | valid maintainer command | `authorized` | none |
 | `authorized` | `claim_acquired` | section 9.1 and successful CAS | `claimed` | create/reconcile exact work ref |
-| `claimed` | `work_branch_recorded` | exact derived ref at grant base | `claimed` | none |
+| `claimed` | `work_branch_recorded` | exact derived ref at grant base; PR absent | `claimed` | none |
 | active non-halted | `lease_renewed` | current grant, lease, reconciliation, renewal window | same | none |
-| `claimed` | `implementation_requested` | section 11.1 | `implementing` | one implementer request |
-| `implementing` | `work_head_recorded` | expected descendant or bounded no-change; scope valid | `awaiting_pr` | none |
+| `claimed` | `implementation_requested` | section 11.1 initial no-PR authority | `implementing` | one initial implementer request |
+| `implementing` | `initial_work_head_recorded` | initial request; strict descendant; non-empty in-scope diff | `awaiting_pr` | none |
+| `implementing` | `initial_no_change_completed` | section 11.3 verified initial no-change | `terminal` | none |
+| `implementing` | `repair_work_head_recorded` | repair/fix request; strict descendant; in-scope diff; recorded PR exists | `awaiting_pr` | none |
+| `implementing` | `repair_no_change_recorded` | repair/fix request; exact prior head unchanged; recorded PR exists; bounded evidence | `awaiting_pr` | none |
 | `implementing` | `provider_ambiguous` | accepted request with unresolved result or charge | `halted` | none |
-| `awaiting_pr` | `pr_creation_authorized` | exact branch/head/base; no conflict; grant current | `awaiting_pr` | create/reconcile one PR |
+| `awaiting_pr` | `pr_creation_authorized` | initial delta or recorded-PR rebind; exact branch/head/base; grant current | `awaiting_pr` | create/reconcile one PR |
 | `awaiting_pr` | `pr_recorded` | exactly one matching open PR and exact head | `awaiting_gates` | observe/request deterministic gates only |
 | `awaiting_gates` | `gates_passed` | all required exact-head gates green | `awaiting_review` or `awaiting_re_review` | none |
 | `awaiting_gates` | `gate_defect_reproduced` | deterministic in-scope defect | `fix_required` | none |
-| `fix_required` | `gate_repair_authorized` | gate defect plus section 11.1 | `implementing` | one implementer repair |
+| `fix_required` | `gate_repair_authorized` | gate defect plus section 11.1 PR/lease/dispatch authority | `implementing` | one implementer repair |
 | `awaiting_gates` | `gate_ambiguous_or_infra` | stale, flaky, cancelled, missing, action-required, or infrastructure ambiguity | `halted` or `awaiting_maintainer` | none |
-| `awaiting_review` or `awaiting_re_review` | `review_dispatch_authorized` | section 11.1 review authority | same | one reviewer request |
+| `awaiting_review` or `awaiting_re_review` | `review_dispatch_authorized` | section 11.1 PR/gate/review authority | same | one reviewer request |
 | `awaiting_review` or `awaiting_re_review` | `provider_ambiguous` | accepted review with unresolved result or charge | `halted` | none |
 | `awaiting_review` | `review_clean` | valid structured response on exact head | `awaiting_maintainer` | presentation only |
 | `awaiting_review` | `review_findings_recorded` | valid normalized findings on exact head | `fix_required` | deterministic triage only |
 | `awaiting_review` or `awaiting_re_review` | `review_inconclusive` | valid inconclusive response | `awaiting_maintainer` | none |
 | `fix_required` | `findings_disposed_no_change` | evidence-backed false or superseded findings | `awaiting_re_review` | none |
-| `fix_required` | `review_fix_authorized` | genuine blocker, section 11.1, round remains | `implementing` | one implementer fix |
+| `fix_required` | `review_fix_authorized` | genuine blocker, section 11.1 PR/lease/dispatch authority, round remains | `implementing` | one implementer fix |
 | `fix_required` | `finding_requires_human` | scope, security, ambiguity, dependency, or round boundary | `awaiting_maintainer` | none |
 | `awaiting_re_review` | `review_clean` | valid structured response on exact head | `awaiting_maintainer` | presentation only |
 | `awaiting_re_review` | `review_findings_recorded` | valid findings and rounds remain | `fix_required` | deterministic triage only |
@@ -486,11 +506,31 @@ No other event or prose authorizes a model call.
 | `halted` | `human_recovery_recorded` | valid command and complete reconciliation | reachable safe state or `terminal` | recorded recovery action only |
 | `terminal` | `front_released` | section 7.6 | `idle` | none |
 
-A PR-bound active state is any active state whose snapshot contains a recorded PR, including `awaiting_gates`, `awaiting_review`, `fix_required`, `awaiting_re_review`, and `awaiting_maintainer`. `awaiting_pr` becomes PR-bound when it is rebinding an already recorded PR after a head change.
+A PR-bound active state is any active state whose snapshot contains a recorded PR, including `awaiting_pr` during rebinding, `awaiting_gates`, `awaiting_review`, `fix_required`, `awaiting_re_review`, and `awaiting_maintainer`.
 
 If the work head changes while an implementer or reviewer request is active, the system first reconciles that request. If the outcome cannot be determined exactly, it records `provider_ambiguous` or `work_head_ambiguous` and halts. It never applies `work_head_changed` while silently ignoring an in-flight action.
 
-### 11.3 Human PR outcomes from every PR-bound state
+### 11.3 Verified initial no-change terminalization
+
+`initial_no_change_completed` is allowed only when all of the following are true:
+
+1. the active request is the first `implementation_requested` for the run;
+2. the provider reports completed, not ambiguous;
+3. the work ref still equals the exact grant base SHA;
+4. comparison against the grant base shows zero changed files and zero diff lines;
+5. no PR exists for the derived branch and no PR-creation event was committed;
+6. the implementer call consumed its canonical reservation and usage is finalized;
+7. the adapter returns a bounded structured no-change reason and evidence digest;
+8. a deterministic verifier confirms either that the authorized slice is already satisfied at the pinned base or that the requested implementation cannot produce an in-scope change without crossing a recorded human/governance boundary;
+9. no active request, reservation, lease ambiguity, security signal, or integrity stop remains.
+
+The event terminalizes with outcome `completed_without_pr`, records `evidence_status=not_applicable`, and preserves the claim and branch history until explicit `front_released`.
+
+A provider assertion alone is insufficient. If the deterministic verifier cannot confirm the reason, record `initial_no_change_invalid` and enter `awaiting_maintainer` or `halted` with no PR creation.
+
+A no-change result from a gate repair or review fix never uses `completed_without_pr`. It requires the already recorded PR, records `repair_no_change_recorded`, returns through the same PR, reruns exact-head gates, and receives re-review.
+
+### 11.4 Human PR outcomes from every PR-bound state
 
 The maintainer may merge or close the recorded PR at any time. The ledger must never strand the claim because the human acted before `awaiting_maintainer`.
 
@@ -516,7 +556,7 @@ When the PR head at the merge boundary was not current-clean, record `evidence_s
 
 For close or supersede, record the actual PR state, actor, timestamp, prior state, and corresponding terminal outcome. No replacement PR is created automatically.
 
-### 11.4 Head invalidation
+### 11.5 Head invalidation
 
 Any PR-head change invalidates gates, review, presentation, and clean-merge eligibility.
 
@@ -524,9 +564,11 @@ From every PR-bound active state with no active or ambiguous external request, a
 
 A non-descendant, force-push, scope violation, unexpected actor, or unresolved concurrent request records `work_head_ambiguous` and halts.
 
-### 11.5 Idempotent PR lifecycle
+### 11.6 Idempotent PR lifecycle
 
 `pr_creation_authorized` binds repository, run, derived branch, exact head, base, scope, and operation version.
+
+For the initial implementation, PR creation is eligible only after `initial_work_head_recorded` proves a strict descendant with a non-empty in-scope diff. It is forbidden after `initial_no_change_completed` or `initial_no_change_invalid`.
 
 Reconciliation:
 
@@ -536,7 +578,7 @@ Reconciliation:
 - previously recorded PR closed by the maintainer: never create a replacement;
 - timeout after create: search and validate before retry; never create a second PR.
 
-`pr_recorded` binds PR numeric ID, repository, base, head branch, exact current work head, operation key, and state. Gates and review are forbidden before it. Every code-changing repair rebinds the same PR through `awaiting_pr`; a second PR is forbidden.
+`pr_recorded` binds PR numeric ID, repository, base, head branch, exact current work head, operation key, and state. Gates and review are forbidden before it. Every code-changing repair and every repair no-change rebinds the same PR through `awaiting_pr`; a second PR is forbidden.
 
 ## 12. Branch and scope contract
 
@@ -616,13 +658,15 @@ Every code change returns through PR rebinding, exact-head gates, and review. An
 
 ## 16. Adapter contract and execution-spine governance block
 
-Adapter requests bind repository/installation, work branch/head, spec/slice, scope/non-goals, task or findings, provider/budget policy, reservation, and idempotency. Responses bind provider request/status, resulting head or no-change, safe summary/digests, usage/cost/idempotency, and error class.
+Adapter requests bind repository/installation, work branch/head, optional PR according to section 11.1, spec/slice, scope/non-goals, task or findings, provider/budget policy, reservation, and idempotency. Responses bind provider request/status, resulting head or no-change, safe summary/digests, usage/cost/idempotency, and error class.
+
+The initial task kind permits `pr_number=null` only under the exact initial no-PR preconditions. Gate repair, review fix, and review tasks require the recorded PR.
 
 Adapters cannot change authority. Implementer writes only the work branch. Neither actor may merge, approve, force-push, delete refs, change settings/secrets, or write control authority. An accepted ambiguous outcome halts without retry unless exact provider idempotency and reconciliation prove the result.
 
 Current `AGENTS.md` requires all AI calls through product `run_ai_task` and `ai_jobs`. The selected hosted service does not share product SQLite or runtime egress state. Live 079 calls are therefore blocked under current governance.
 
-The proposed v0 governance route is a narrow repository-development exception: approved 079 adapter calls may occur outside product `run_ai_task` only with committed grant, claim, exact branch/head/PR, scope, actor identity, provider policy, reservation, idempotency, and durable 079 usage/cost evidence.
+The proposed v0 governance route is a narrow repository-development exception: approved 079 adapter calls may occur outside product `run_ai_task` only with committed grant, claim, exact branch/head, conditional PR binding, scope, actor identity, provider policy, reservation, idempotency, and durable 079 usage/cost evidence.
 
 That exception requires a separate `AGENTS.md` PR and dated readiness evidence. Until both merge, no live implementer or reviewer dispatch is authorized. If the exception is rejected, this full spec must be amended to use a separately authenticated product execution-spine boundary.
 
@@ -645,7 +689,7 @@ Marginal zero requires current account/plan, entitlement, remaining quota, and t
 
 ## 18. Content, secrets, and prompt injection
 
-External material is limited to the exact spec, scope, diff, findings, PR, and gates needed for the task. Secrets, credentials, environment values, keys, tokens, headers, and unrelated records are excluded.
+External material is limited to the exact spec, scope, diff, findings, PR when present, and gates needed for the task. Secrets, credentials, environment values, keys, tokens, headers, and unrelated records are excluded.
 
 Issue, PR, source, test, artifact, log, and model text is untrusted data. It cannot change policy, role, provider, budget, tests, scope, authority, or merge boundary. Deterministic policy constructs every request.
 
@@ -751,7 +795,12 @@ With fake GitHub, PostgreSQL, implementer, and reviewer actors, prove:
 - grant issue, expiry, revocation, halted overlays, recovery, terminalization, and release;
 - repository-wide claim race and lease lifecycle;
 - create-only work ref and denial of later App mutation;
-- one PR before gates and no duplicate after timeout/replay;
+- initial implementation dispatch with explicit PR absence;
+- strict-delta initial result creates one PR before gates;
+- verified initial no-change terminalizes as `completed_without_pr` and never creates a PR;
+- invalid initial no-change stops and cannot create a PR;
+- repair no-change retains and rebinds the existing PR;
+- no duplicate PR after timeout/replay;
 - same-PR rebinding after every head change;
 - `work_head_changed` from every PR-bound active state;
 - `work_head_ambiguous` while requests are active or ancestry is invalid;
@@ -763,7 +812,7 @@ With fake GitHub, PostgreSQL, implementer, and reviewer actors, prove:
 - `pr_head_at_merge_boundary` separate from `merge_result_sha` for merge, squash, and rebase strategies;
 - `current_clean` based on the PR head, not the result commit SHA;
 - revocation or expiry while halted preserves the original halt and recovery path;
-- terminal release preserves history and permits a later authorization;
+- terminal release after PR and no-PR outcomes preserves history and permits a later authorization;
 - invalid webhook signatures cause no canonical state change;
 - inactivity creates no repeated calls or notifications.
 
@@ -779,24 +828,27 @@ Every architecture-closure proof remains mandatory, including:
 6. history-tamper halt;
 7. lease expiry never starts another claimant;
 8. create-only exact-base work ref and denial of later App mutation;
-9. one exact-head PR before gates and no duplicate after create timeout;
-10. PR mismatch, fork, duplicate, or closed-state fail-closed behavior;
-11. grant expiry before each dispatch creates zero new calls;
-12. reservation, role capacity, and valid lease gates;
-13. head change from every PR-bound active state invalidates evidence;
-14. active-request head ambiguity halts;
-15. merge, squash, and rebase cases record PR head and result SHA separately;
-16. clean evidence is determined from the PR head at the merge boundary;
-17. human merge/close from every PR-bound active state terminalizes truthfully;
-18. revocation/expiry while halted preserves the halt and recovery path;
-19. inconclusive review, provider ambiguity, deterministic finding IDs, and release/sequential-run behavior;
-20. automated credential denial for merge, approval, force-push, deletion, settings/secrets, and out-of-scope writes;
-21. reviewer/implementer separation;
-22. untrusted-fork and prompt-injection resistance;
-23. cost and duplicate-charge stops;
-24. GitHub outage and kill-switch recovery;
-25. invalid unsigned traffic cannot halt, while authenticated verified anomaly does;
-26. inactivity and replay create no noise or duplicate calls.
+9. initial no-PR implementer dispatch and verified PR absence;
+10. strict-delta result creates one exact-head PR before gates;
+11. verified no-change creates no PR and terminalizes; invalid no-change stops;
+12. one PR only, including create timeout and repair rebinding;
+13. PR mismatch, fork, duplicate, or closed-state fail-closed behavior;
+14. grant expiry before each dispatch creates zero new calls;
+15. reservation, role capacity, and valid lease gates;
+16. head change from every PR-bound active state invalidates evidence;
+17. active-request head ambiguity halts;
+18. merge, squash, and rebase cases record PR head and result SHA separately;
+19. clean evidence is determined from the PR head at the merge boundary;
+20. human merge/close from every PR-bound active state terminalizes truthfully;
+21. revocation/expiry while halted preserves the halt and recovery path;
+22. inconclusive review, provider ambiguity, deterministic finding IDs, and release/sequential-run behavior;
+23. automated credential denial for merge, approval, force-push, deletion, settings/secrets, and out-of-scope writes;
+24. reviewer/implementer separation;
+25. untrusted-fork and prompt-injection resistance;
+26. cost and duplicate-charge stops;
+27. GitHub outage and kill-switch recovery;
+28. invalid unsigned traffic cannot halt, while authenticated verified anomaly does;
+29. inactivity and replay create no noise or duplicate calls.
 
 ### 23.3 Repository gates and conformance
 
@@ -813,7 +865,7 @@ A separate PR must explicitly amend:
 1. manual-only/explicit-only development review and Codex dispatch rules; and
 2. the hard `run_ai_task`/`ai_jobs` invariant.
 
-The narrow proposed exception permits repository-development model calls outside product `run_ai_task` only through the approved 079 adapter when a canonical run has a current grant, claim, exact branch/head/PR, scope, actor identity, provider policy, reservation, idempotency, and durable 079 usage/cost evidence.
+The narrow proposed exception permits repository-development model calls outside product `run_ai_task` only through the approved 079 adapter when a canonical run has a current grant, claim, exact branch/head, conditional PR binding, scope, actor identity, provider policy, reservation, idempotency, and durable 079 usage/cost evidence.
 
 The exception continues to forbid automatic spec selection, merge, auto-merge, priority change, workflow/ruleset bypass, force-push, branch deletion, settings/secrets, destructive action, scope expansion, provider fallback, or work after expiry, revocation, security, cost, integrity, ambiguity, or human-decision stop.
 
@@ -858,6 +910,7 @@ Rollback means halt, reconstruct, and record. It never force-pushes or erases ev
 - exact App permissions, rulesets, capability wrapper, and actor IDs;
 - execution-spine exception;
 - automated credential abuse denials;
+- initial no-PR dispatch and verified no-change terminalization;
 - work-ref and PR lifecycle;
 - grant/lease/reservation/call-capacity controls;
 - head changes from every PR-bound state;
@@ -925,7 +978,7 @@ This full-spec PR is ready for the maintainer’s merge decision when:
 - it remains a one-document planning diff;
 - 079 remains `planned` with no Implementation PR;
 - section 2.1 honestly presents the sequencing amendment for merge approval rather than treating it as already effective;
-- architecture, authority, expiry/revocation overlays, branch/PR lifecycle, dispatch, lease, head invalidation from every PR-bound state, human outcomes, merge-method SHA semantics, provider ambiguity, finding identity, permissions, cost, tests, rollout, compatibility, and kill switches are explicit;
+- architecture, authority, expiry/revocation overlays, initial no-PR dispatch, verified no-change terminalization, branch/PR lifecycle, dispatch, lease, head invalidation from every PR-bound state, human outcomes, merge-method SHA semantics, provider ambiguity, finding identity, permissions, cost, tests, rollout, compatibility, and kill switches are explicit;
 - every mandatory proof remains a hard readiness blocker;
 - the execution-spine conflict remains blocked pending governance;
 - no unproven mechanism is claimed operational;
