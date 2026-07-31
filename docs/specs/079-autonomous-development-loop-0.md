@@ -1,6 +1,6 @@
 # 079 — AUTONOMOUS-DEVELOPMENT-LOOP-0: durable bounded development continuation
 
-Status: full specification complete; `docs/specs/STATUS.md` remains authoritative and keeps 079 `planned`.
+Status: full specification complete under the explicit documentary sequencing decision in section 2.1; `docs/specs/STATUS.md` remains authoritative and keeps 079 `planned`.
 
 Depends on: 004, 017, 019, 022
 
@@ -16,136 +16,70 @@ Authority and evidence:
 
 Allow one already and explicitly authorized JarvisOS repository-development slice to continue safely across agent-session termination without repeated conversational `continue` prompts.
 
-The v0 control plane may:
+The v0 control plane may reconstruct GitHub-owned authority, claim one repository-wide front, create one exact-base work branch, invoke one bounded implementer, create or reconcile one exact-head PR, collect exact-head gates, invoke one independent reviewer, run at most two fix/re-review rounds, recover from replay/restart/ambiguity, present evidence to the maintainer, truthfully record any human PR outcome, and release a reconciled terminal front to `idle` without erasing history.
 
-- reconstruct durable authority from GitHub;
-- claim exactly one repository-wide development front;
-- create one derived work branch from an exact authorized base;
-- invoke one bounded implementer on that branch;
-- create or reconcile one exact-head pull request idempotently;
-- collect deterministic gates tied to the exact work head;
-- invoke one independent reviewer;
-- perform at most two bounded finding/fix/re-review rounds;
-- recover from duplicate delivery, process restart, stale local state, and ambiguous API responses;
-- present a fully evidenced pull request to the maintainer;
-- release a fully reconciled terminal front back to canonical `idle` without erasing history.
-
-The control plane may never merge, enable auto-merge, approve authoritatively, change priority, create a second active front, infer authorization from activity, or turn model output into repository authority.
+It may never merge, auto-merge, approve authoritatively, change priority, create a second front, infer authorization from activity, or turn model output into authority.
 
 ## 2. Full-spec boundary
 
-This document freezes the v0 contract for:
+This document freezes the v0 contract for canonical state/events; authorization/expiry/revocation/recovery/release; claim/lease; exact branch/PR lifecycle; state machine; Git ref CAS; webhook/queue; implementer/reviewer adapters; gates; findings/fixes; dispatch/spend/content/permissions; deployment/retention/notifications; proofs/rollout/kill switches/compatibility.
 
-- canonical state and event encoding;
-- explicit authorization, expiry, revocation, recovery, terminalization, and release;
-- repository-wide claim and work-branch lease;
-- exact-head branch and pull-request lifecycle;
-- state machine and transition table;
-- exact-parent Git ref compare-and-swap;
-- webhook, queue, and reconciliation behavior;
-- implementer and reviewer adapter contracts;
-- deterministic gate policy;
-- finding, fix, and re-review semantics;
-- provider-dispatch, spend, secret, permission, and content boundaries;
-- deployment class, retention, recovery objectives, and notifications;
-- tests, isolated proofs, rollout, kill switches, and compatibility.
+It does not install/configure an App, service, database, secret, ruleset, branch, workflow, provider, or dependency; modify `AGENTS.md` or `STATUS.md`; invoke a model or paid service; authorize governance, readiness, implementation, repository settings, merge, or auto-merge.
 
-This document does not:
+Current `AGENTS.md` remains binding. Live development-agent dispatch is impossible until section 24’s separate governance amendment reconciles both the execution-spine invariant and manual/explicit-only review rules.
 
-- install or configure a GitHub App;
-- create a hosted service, queue, database, secret, ruleset, branch, or workflow;
-- modify `AGENTS.md` or `STATUS.md`;
-- invoke Codex, Claude, another model, or a paid service;
-- authorize implementation while 079 remains `planned`;
-- authorize a governance amendment, readiness promotion, repository-setting change, merge, or auto-merge.
+### 2.1 Explicit documentary sequencing decision
 
-Current `AGENTS.md` remains binding. In particular, live development-agent model dispatch is prohibited until the separate governance amendment in section 24 explicitly reconciles the execution-spine invariant and the manual/explicit-only review rules. The implementation contract becomes actionable only after that amendment and the dated readiness decision.
+The merged architecture/evidence closure originally labelled the disposable-repository concurrency, CAS, credential, cost, PR, and recovery proofs mandatory before full-spec promotion.
 
-## 3. Binding repository invariants
+After PR #205 merged, the maintainer explicitly instructed this full-spec step to proceed. This is recorded as a narrow sequencing decision:
 
-Any 079 implementation must preserve all of the following:
+- the complete documentary contract may merge while 079 remains `planned`;
+- every unproven mechanism remains marked proof-gated and unavailable;
+- the decision does not assert that CAS, permissions, cost controls, adapters, or recovery work;
+- no governance exception, live App, proof prototype in JarvisOS, readiness promotion, implementation, or provider call is authorized;
+- every mandatory proof from the architecture closure remains a hard blocker before the dated readiness decision and implementation.
 
-1. `docs/specs/STATUS.md` is the only live roadmap and status authority.
-2. Only one product or implementation front may be active repository-wide.
-3. A planning document, branch, PR, issue label, review, check, workflow run, timer, or model message is not authorization.
-4. V0 starts only from a maintainer-authored command naming the exact spec, slice, base SHA, scope, adapters, and budget policy.
-5. Every side-effect-authorizing transition rechecks grant currency, claim ownership, exact GitHub facts, stop state, role capacity, provider policy, and budget authority.
-6. Deterministic gates and advisory review inform readiness; the maintainer alone owns merge.
-7. The reviewer is advisory and cannot mutate code.
-8. The implementer cannot supply the authoritative review verdict.
-9. No automated actor may merge, enable auto-merge, force-push, delete protected refs, change secrets/settings, or bypass branch protection.
-10. Paid or external-model work requires explicit repository-development content, provider, credential, and budget authority separate from runtime policy 059b.
-11. Frozen, `planned`, `blocked`, cancelled, expired, revoked, or dependency-incomplete work is never selected or continued automatically.
-12. Lease expiry, grant expiry, inactivity, process death, or a timer never releases the active front.
-13. Any work-head change invalidates head-bound gates and review.
-14. Safety takes precedence over liveness; the control plane is allowed to stop indefinitely.
+This section supersedes the earlier phrase “before full-spec promotion” only for the order of the documentation PR. It does not waive, weaken, or silently reclassify any proof.
+
+## 3. Binding invariants
+
+1. `STATUS.md` is the only live roadmap/status authority.
+2. One product/implementation front repository-wide.
+3. Branches, PRs, labels, reviews, checks, workflows, timers, and model text are not authorization.
+4. V0 begins only from a maintainer command naming exact spec/slice/base/scope/adapters/budget.
+5. Every side-effect transition rechecks grant currency, claim, GitHub facts, stop state, role capacity, provider policy, and budget; mutations also require a valid reconciled lease.
+6. Deterministic gates and advisory review inform readiness; maintainer alone merges.
+7. Reviewer cannot mutate; implementer cannot author authoritative review.
+8. Automated actors cannot merge, auto-merge, force-push, delete protected refs, change settings/secrets, or bypass rulesets.
+9. Repository-development provider authority is separate from runtime 059b.
+10. Planned/blocked/cancelled/dependency-incomplete/expired/revoked work never starts or continues automatically.
+11. Lease/grant expiry, inactivity, process death, or timers never release ownership.
+12. Any head change invalidates head-bound gates/review.
+13. Human PR actions are observed and recorded truthfully even when they occur before system-prepared readiness.
+14. Safety dominates liveness.
 
 ## 4. Selected architecture
 
-### 4.1 Control service
+### 4.1 Service
 
-The primary dispatcher is an installed GitHub App operated by a small stateless Python 3.11 ASGI service.
+Installed GitHub App plus stateless Python 3.11 FastAPI/ASGI service, GitHub REST/Git Data client, and PostgreSQL 16 for non-authoritative queue/dedupe/projections. One OCI image; replicas allowed. No Redis, agent framework, vector database, browser automation, or second orchestrator.
 
-The selected implementation class is:
+The service is outside product runtime and does not share JarvisOS SQLite, runtime egress state, runtime provider secrets, or `C:\JarvisOS` data.
 
-- one OCI container image;
-- FastAPI/ASGI HTTP entry point;
-- GitHub REST and Git Data client;
-- PostgreSQL 16 for non-authoritative delivery, queue, deduplication, and projections;
-- no Redis, agent framework, vector database, browser automation, or second orchestration engine;
-- one or more identical replicas permitted.
+### 4.2 Canonical state
 
-The service is outside the JarvisOS product runtime. It must not share JarvisOS SQLite authority, runtime provider secrets, runtime egress state, or `C:\JarvisOS` data.
+Protected branch `jarvis-control`, one file `.jarvis/development-loop/authority.json`. Comments/checks/workflows/DB/dashboard are rebuildable projections only.
 
-### 4.2 Canonical GitHub state
+### 4.3 PostgreSQL
 
-Canonical state lives on a protected branch provisionally named `jarvis-control` in exactly one file:
-
-`.jarvis/development-loop/authority.json`
-
-Comments, checks, workflow runs, queue rows, database rows, dashboards, and digests are projections. They are rebuildable and never own a transition.
-
-### 4.3 Non-authoritative PostgreSQL
-
-PostgreSQL may contain only rebuildable operational state:
-
-- webhook delivery IDs and payload digests;
-- queued reconciliation jobs;
-- bounded retry metadata;
-- cached authority projections;
-- provider-request correlation metadata;
-- notification deduplication;
-- service health and audit summaries.
-
-It must not contain the only copy of a grant, claim, lease, PR binding, gate verdict, finding disposition, budget reservation, terminal outcome, or release decision. Complete database loss may delay work but cannot alter canonical authority.
+May store delivery IDs/digests, queue attempts, cached projections, provider correlation, notification dedupe, and health summaries. It never owns the only grant, claim, lease, PR binding, gate/review, finding disposition, reservation, terminal outcome, or release. DB loss delays but cannot change authority.
 
 ## 5. Canonical encoding and integrity
 
-### 5.1 Deterministic JSON
+Deterministic UTF-8 JSON: sorted keys, compact separators, UTC `Z` timestamps, integers for money/counters/durations/sizes, no float/NaN/inf, lowercase SHA-256 identifiers.
 
-`authority.json` uses deterministic UTF-8 JSON:
-
-- object keys sorted lexicographically;
-- separators `,` and `:` with no insignificant whitespace;
-- UTF-8 without BOM;
-- UTC RFC 3339 timestamps ending in `Z`;
-- integer quantities for money, counters, durations, and sizes;
-- no floating-point values, `NaN`, or infinity;
-- SHA-256 digests as lowercase `sha256:<64 hex>`.
-
-Canonical bytes are equivalent to:
-
-```python
-json.dumps(
-    value,
-    sort_keys=True,
-    separators=(",", ":"),
-    ensure_ascii=False,
-    allow_nan=False,
-).encode("utf-8")
-```
-
-### 5.2 File envelope
+Top level:
 
 ```json
 {
@@ -163,84 +97,17 @@ json.dumps(
 }
 ```
 
-Requirements:
+Every event binds sequence, deterministic event ID, type, timestamp, effective actor/role, idempotency key, previous digest, payload/digest, and event digest. Identical duplicate is no-op; same key with different bytes is integrity failure. Sequence and Git ancestry own ordering.
 
-- `repository_id` is the immutable GitHub numeric repository ID.
-- `sequence` equals the final event sequence, or zero for bootstrap.
-- `snapshot` derives entirely from `events` and rebuilds to `snapshot_digest`.
-- unknown top-level or event fields are rejected in v1.
-- v1 has no compaction.
-- before event 4097 or 2,000,000 canonical bytes, halt with `authority_capacity_reached`; never truncate history.
+Both event hash chain and linear `jarvis-control` ancestry must validate. Missing/reordered/altered/forked/force-pushed/non-linear history causes `control_integrity_failure` and zero external side effects. V1 has no compaction; halt before event 4097 or 2,000,000 canonical bytes.
 
-### 5.3 Event schema
+## 6. Closed identifiers, roles, states, outcomes
 
-```json
-{
-  "sequence": 1,
-  "event_id": "evt_<64 hex>",
-  "event_type": "authorization_recorded",
-  "occurred_at": "2026-07-31T16:00:00Z",
-  "actor": {
-    "actor_id": "github:123",
-    "login": "example",
-    "role": "control"
-  },
-  "idempotency_key": "sha256:...",
-  "previous_event_digest": null,
-  "payload": {},
-  "payload_digest": "sha256:...",
-  "event_digest": "sha256:..."
-}
-```
+IDs: `run_`, `grant_`, `claim_`, `lease_`, `pr_`, `gates_`, `review_`, `finding_`, `fix_`, `provider_`, `human_` plus deterministic hex. Control App derives IDs; models never choose them.
 
-Rules:
+Roles: `maintainer`, `control`, `implementer`, `reviewer`, `gate_collector`, `system_reconciler`; effective credentials decide role.
 
-- sequence increments by one;
-- `event_id` derives from the idempotency-key bytes;
-- payload and event digests use canonical bytes;
-- previous-event digest matches exactly;
-- identical duplicate input is a no-op returning the existing event;
-- reuse of an idempotency key with different bytes is an integrity failure;
-- sequence and Git ancestry, not timestamps, own ordering.
-
-### 5.4 Double integrity chain
-
-A transition requires both the in-file hash chain and linear Git ancestry on `jarvis-control`. Missing, altered, reordered, duplicated, forked, force-pushed, or non-linear history causes `control_integrity_failure` and permits no external side effect.
-
-## 6. Closed identifiers, roles, states, and outcomes
-
-### 6.1 Identifier prefixes
-
-- run: `run_<32 hex>`
-- grant: `grant_<32 hex>`
-- global claim: `claim_<32 hex>`
-- branch lease: `lease_<32 hex>`
-- PR operation: `pr_<32 hex>`
-- gate collection: `gates_<32 hex>`
-- review round: `review_<32 hex>`
-- finding: `finding_<32 hex>`
-- fix attempt: `fix_<32 hex>`
-- provider request: `provider_<32 hex>`
-- human request: `human_<32 hex>`
-
-All IDs are Control-App-derived from canonical idempotency inputs. No model or provider may choose authoritative IDs.
-
-### 6.2 Actor roles
-
-Closed roles:
-
-- `maintainer`
-- `control`
-- `implementer`
-- `reviewer`
-- `gate_collector`
-- `system_reconciler`
-
-Effective credentials determine roles; text cannot self-assert them.
-
-### 6.3 States
-
-Closed states:
+States:
 
 - `idle`
 - `authorized`
@@ -255,9 +122,7 @@ Closed states:
 - `terminal`
 - `halted`
 
-`terminal` returns to `idle` only through explicit reconciled `front_released`. `halted` must first recover to a reachable safe state or terminalize through a valid maintainer command.
-
-### 6.4 Terminal outcomes
+Terminal outcomes:
 
 - `merged_by_maintainer`
 - `closed_without_merge`
@@ -267,541 +132,251 @@ Closed states:
 - `authorization_expired`
 - `abandoned_after_human_decision`
 
-### 6.5 Stop reasons
+A terminal event also records `prepared_state_at_human_action`, `human_action_head`, and `evidence_status` (`current_clean`, `stale_or_incomplete`, or `not_applicable`). Thus a human merge is recorded honestly without pretending the system had current clean evidence.
 
-Closed reasons include:
+Closed stop reasons include authorization missing/invalid/expired/revoked; registry/dependency/front conflict; claim race; integrity/capacity; scope/base/head/PR mismatch or ambiguity; head changed after review; lease expiry; gate missing/stale/cancelled/action-required/infra/flaky; review invalid/inconclusive; finding/round boundary; provider disabled/ambiguous; cost unknown/cap; secret/security/destructive/governance/merge/human decision.
 
-- `authorization_missing`
-- `authorization_invalid`
-- `authorization_expired`
-- `authorization_revoked`
-- `registry_ineligible`
-- `dependency_unmerged`
-- `active_front_conflict`
-- `claim_race_lost`
-- `control_integrity_failure`
-- `authority_capacity_reached`
-- `scope_violation`
-- `base_head_mismatch`
-- `work_head_ambiguous`
-- `work_head_changed_after_review`
-- `pr_missing`
-- `pr_mismatch`
-- `pr_ambiguous`
-- `pr_closed_unexpectedly`
-- `lease_expired_pending_reconciliation`
-- `gate_missing`
-- `gate_stale`
-- `gate_cancelled`
-- `gate_action_required`
-- `gate_infrastructure_failure`
-- `gate_flaky_or_ambiguous`
-- `review_invalid`
-- `review_inconclusive`
-- `finding_needs_human`
-- `maximum_rounds_reached`
-- `provider_disabled`
-- `provider_ambiguous`
-- `cost_unknown`
-- `spend_cap_exceeded`
-- `secret_unavailable_or_changed`
-- `security_signal`
-- `destructive_action_required`
-- `governance_decision_required`
-- `merge_boundary`
-- `human_decision_required`
+## 7. Authorization lifecycle
 
-Generic `unknown`, `provider_error`, or `failed` is forbidden when a precise reason exists.
+### 7.1 Maintainer commands
 
-## 7. Authorization, expiry, revocation, recovery, and release
+Readiness bootstraps one control issue and allow-listed maintainer numeric IDs. Eligible commands are newly created, exactly formatted, repository/issue/author validated, and rechecked against current SHAs/facts. Comments are inputs, not authority.
 
-### 7.1 Control issue and maintainer identity
+Authorization command binds repository, three-digit spec, bounded slice, `master` and exact SHA, normalized allow/deny globs and file/line caps, distinct approved adapter IDs, budget policy, max fix rounds 0–2, optional future expiry no more than 30 days, and bounded reason. Scope produces `scope_digest`; work branch derives as `jarvis-work/<run_id>`.
 
-Readiness bootstraps one control issue and allow-listed maintainer numeric IDs. A command is eligible only when the author ID, repository ID, issue, new-comment event, exact command syntax, SHAs, and repository facts validate. Comments are command inputs, never canonical authority.
+V0 never infers grants from rows, branches, PRs, labels, schedules, chat, previous runs, or models.
 
-### 7.2 Authorization command
+### 7.2 Currency and expiry
 
-~~~~text
-```jarvis-authorization-v1
-{
-  "command": "authorize",
-  "repository_id": 123,
-  "spec_id": "079",
-  "slice_id": "079-implementation-v0",
-  "base_branch": "master",
-  "base_sha": "<40 lowercase hex>",
-  "scope": {
-    "allow_paths": ["services/devloop/**", "docs/specs/STATUS.md"],
-    "deny_paths": [".github/workflows/**", "AGENTS.md"],
-    "max_changed_files": 40,
-    "max_diff_lines": 6000
-  },
-  "implementer_adapter_id": "approved-implementer-v1",
-  "reviewer_adapter_id": "approved-reviewer-v1",
-  "budget_policy_id": "devloop-budget-v1",
-  "max_fix_rounds": 2,
-  "expires_at": null,
-  "reason": "Implement the merged and ready 079 slice."
-}
-```
-~~~~
+Every branch/PR/workflow/provider/reservation side-effect event proves grant present, unrevoked, and unexpired at commit time.
 
-Validation:
+At expiry: no new side-effect event; record `authorization_expired`; enter `awaiting_maintainer`; reconcile already accepted work without follow-on action; never release claim/lease/history automatically. Maintainer may terminalize and later release.
 
-- spec ID is exactly three digits;
-- slice ID is 1–80 lowercase ASCII letters, digits, `_`, or `-`;
-- base SHA equals current base head when recorded;
-- normalized non-empty allow/deny globs use deny precedence;
-- maximum files is 1–100 and diff lines 1–20,000;
-- maximum fix rounds is 0–2;
-- implementer/reviewer identities are distinct and approved;
-- expiry is future UTC and at most 30 days after issue;
-- reason is bounded to 500 safe characters.
+### 7.3 Revocation and recovery
 
-The normalized scope produces `scope_digest`; work branch is derived as `jarvis-work/<run_id>`. V0 never infers a grant from a row, branch, PR, label, review, schedule, prior run, chat, or model recommendation.
+Revocation blocks new work, permits only proven-safe cancellation, and enters `awaiting_maintainer` or terminal. Recovery binds exact control head, action `resume` or `terminalize`, target/outcome, and independently reconciles repository, work ref, PR, workflows, providers, reservations, lease, budget, and security. Security recovery references remediation evidence.
 
-### 7.3 Grant currency and expiry
+### 7.4 Release
 
-Every transition that can authorize branch/PR mutation, workflow action, implementer call, reviewer call, reservation, or other external side effect must re-read and prove that the grant is present, unrevoked, and unexpired at transition commit time.
+Only from `terminal`, after proving no external action/reservation/cancellation/integrity/security ambiguity and PR/ref facts match outcome. `front_released` clears active snapshot fields but preserves complete completed-run, PR/ref, findings, usage/cost, events, and Git history. Duplicate release is no-op; later run needs new grant from `idle`.
 
-When `expires_at` is reached:
+## 8. Snapshot
 
-- no new side-effect-authorizing transition may commit;
-- a canonical `authorization_expired` event records the stop and enters `awaiting_maintainer`;
-- already accepted external work is not retried or discarded; it is reconciled and recorded without authorizing follow-on work;
-- expiry never releases the claim, lease, branch, PR, budget evidence, or history;
-- the maintainer may terminalize through recovery/revocation and then explicitly release.
+Snapshot binds state, active run/grant/claim/lease, work branch/head/PR/base/PR state/ancestry/diff/scope digest, gates, review round/exact head/effective reviewer/request/findings/dispositions/verdict, integer-micro-USD budget/reservations/call counts, next action, stop, active outcome, and last completed run.
 
-### 7.4 Revocation
+## 9. Claim, work ref, and lease
 
-A valid maintainer `revoke` command records `authorization_revoked`, blocks new side effects, permits only proven-safe bounded cancellation, and enters `awaiting_maintainer` or terminal outcome `authorization_revoked`. It never erases evidence.
+`claim_acquired` requires current grant, eligible registry/dependencies, repository-wide vacancy, no competing owner/PR/run, exact base, current policies, and no stop. One CAS atomically records global claim and initial 60-minute lease. Losers/ambiguity produce zero side effects.
 
-### 7.5 Recovery
+After claim, Control App may create only `refs/heads/jarvis-work/<run_id>` at exact grant base when absent and state/claim/lease match. Existing exact ref is idempotent. App cannot later update/force/delete/commit on it. `work_branch_recorded` follows exact reconciliation. Later commits are implementer-only under lease; maintainer retains emergency authority.
 
-A `recover` command binds repository/run/exact control head, action `resume` or `terminalize`, target state/outcome, and reason. The service independently reconciles repository, branch, PR, workflows, providers, reservations, lease, budget, and security facts. Security stops require referenced remediation evidence. Target state must be reachable under section 11.
+Lease duration 60 minutes; renewal window last 20 minutes; one active mutation request; renewal cannot alter grant/scope/round/adapter/budget. Expiry never releases; it records pending reconciliation and blocks mutation until branch/PR/workflow/provider/reservation/security facts reconcile and lease renews canonically.
 
-### 7.6 Release and `terminal → idle`
+## 10. Exact-head Git CAS
 
-Release is accepted only from `terminal` after proving no implementer, reviewer, workflow dispatch, provider request, reservation, cancellation, integrity anomaly, or security anomaly remains active or ambiguous and branch/PR facts match terminal outcome.
+Read exact control ref/commit/tree/blob; validate schema/chains/snapshot; reread preconditions; compute one event; create blob/tree/commit with sole parent exact expected head; update ref `force=false`; accept only unambiguous candidate success. Contents API blob update is forbidden as CAS.
 
-A release command binds repository, run, grant, exact control head, and reason. Successful CAS appends one `front_released` event and derives `idle` by clearing active-run fields while preserving immutable completed-run identity, terminal outcome, PR/branch bindings, findings, usage, cost, event chain, and Git history.
-
-Duplicate identical release is a no-op. Non-terminal or ambiguous release fails closed. A later run requires a new grant from `idle`.
-
-## 8. Canonical snapshot
-
-```json
-{
-  "state": "idle",
-  "run_id": null,
-  "authorization": null,
-  "global_claim": null,
-  "branch_lease": null,
-  "work": null,
-  "gates": null,
-  "review": null,
-  "budget": null,
-  "next_action": null,
-  "stop": null,
-  "terminal_outcome": null,
-  "last_completed_run": null
-}
-```
-
-Authorization binds grant source/identity/spec/slice/base/scope/adapters/budget/rounds/expiry/revocation. Work binds branch/head/PR/base/PR state/ancestry/attempt/diff/scope digest. Review binds round/exact head/effective reviewer/provider request/response digest/findings/dispositions/verdict. Budget uses integer micro-USD and binds policies, ceilings, reservations, finalized/released/unknown amounts, provider IDs, and role call counts.
-
-## 9. Repository-wide claim, work branch, and lease
-
-### 9.1 Claim
-
-`claim_acquired` requires state `authorized`, current grant, eligible registry/dependencies, repository-wide vacancy, no competing PR/owner/run, exact master base, current policies, and no stop. It atomically records the global claim and initial 60-minute lease. Losing or ambiguous writers perform zero side effects.
-
-### 9.2 Control-App create-only work ref
-
-After claim success, the Control App may create only `refs/heads/jarvis-work/<run_id>` in the exact repository at the exact grant base SHA, only when absent and canonical state/claim/lease match. An existing exact ref is idempotently accepted. The App may not subsequently update, force-update, delete, or author commits on that ref.
-
-After exact creation/reconciliation, `work_branch_recorded` commits. A mismatched pre-existing ref or ambiguous result halts. Later engineering writes are implementer-only under lease, with human emergency authority.
-
-### 9.3 Work lease
-
-V1 lease duration is 60 minutes; renewal may start with 20 minutes or less remaining; only one mutation request may be active. Renewal cannot change scope, round, adapter, budget, or grant. Every renewal is canonical and requires a current unexpired grant and reconciled facts.
-
-Expiry never releases ownership. It records `lease_expired_pending_reconciliation`; branch, PR, workflows, provider calls, comments, reservations, budget, and security facts must be reconciled before renewal/recovery.
-
-## 10. Exact-head authority CAS
-
-Every canonical transition:
-
-1. reads exact `refs/heads/jarvis-control`;
-2. reads parent commit/tree/blob;
-3. validates schema, event chain, snapshot, and Git ancestry;
-4. re-reads all transition preconditions;
-5. computes one deterministic event and replacement bytes;
-6. creates blob and tree based on expected parent tree;
-7. creates a commit whose sole parent is exact expected control head;
-8. updates control ref with `force=false`;
-9. accepts only unambiguous candidate success;
-10. on rejection/timeout/disconnect/ambiguity, performs no external side effect and reconciles.
-
-Contents API blob updates are forbidden as authority CAS. Ambiguous success is resolved by rereading ref/ancestry/event ID; unresolved ambiguity halts. Same idempotency key never creates a different event.
+On timeout/rejection/disconnect, perform no external side effect and reread ref/ancestry/event ID. Candidate present exactly once means committed; absent means lost; unresolved ambiguity halts. Same idempotency key never creates a different event.
 
 ## 11. Closed state machine
 
-### 11.1 Global dispatch precondition
+### 11.1 Dispatch authority
 
-The only events that may authorize implementer or reviewer dispatch are `implementation_requested`, `gate_repair_authorized`, `review_fix_authorized`, and `review_dispatch_authorized`.
+Only `implementation_requested`, `gate_repair_authorized`, `review_fix_authorized`, and `review_dispatch_authorized` can authorize model calls. Before call, the event atomically binds current grant/claim/no-stop, exact repo/ref/PR/head, role/call capacity, current adapter/provider policy, canonical cost/quota reservation even at marginal zero, idempotency key, and—when mutating—valid lease/scope. Review dispatch additionally binds exact eligible gates and PR/head.
 
-Each must atomically record, before the external call:
-
-- current unexpired/unrevoked grant;
-- current global claim and no stop;
-- exact repository, branch, PR, base, and work head as applicable;
-- valid role identity and remaining role call capacity;
-- current provider policy and adapter identity;
-- canonical cost/quota reservation, even when projected marginal cost is zero;
-- deterministic request idempotency key;
-- for mutations, a valid reconciled lease and current scope digest;
-- for reviews, exact eligible gates and exact recorded PR/head.
-
-No other event or prose authorizes an external model call.
+No other event or prose authorizes a model call.
 
 ### 11.2 Transition table
 
-| Current state | Event | Binding preconditions | Next state | Side effect after commit |
+| State | Event | Preconditions | Next | Side effect after commit |
 | --- | --- | --- | --- | --- |
-| `idle` | `authorization_recorded` | valid maintainer command | `authorized` | none |
-| `authorized` | `claim_acquired` | section 9.1 and CAS | `claimed` | create/reconcile exact work ref |
-| `claimed` | `work_branch_recorded` | exact derived ref at base | `claimed` | none |
-| any active state | `lease_renewed` | current grant, lease, reconciliation, window | same | none |
-| `claimed` | `implementation_requested` | section 11.1 including lease/reservation/capacity | `implementing` | one implementer request |
-| `implementing` | `work_head_recorded` | exact descendant or bounded no-change; scope passes | `awaiting_pr` | none |
-| `implementing` | `provider_ambiguous` | accepted request with unresolved completion/charge | `halted` | none |
-| `awaiting_pr` | `pr_creation_authorized` | exact branch/head/base; no conflict; grant current | `awaiting_pr` | create/reconcile one PR |
-| `awaiting_pr` | `pr_recorded` | exactly one matching open PR and exact head | `awaiting_gates` | observe/request deterministic gates only |
-| `awaiting_gates` | `gates_passed` | all required gates green on exact recorded PR/head | `awaiting_review` or `awaiting_re_review` | none |
-| `awaiting_gates` | `gate_defect_reproduced` | deterministic in-scope defect only | `fix_required` | none |
-| `fix_required` | `gate_repair_authorized` | gate defect plus section 11.1 lease/reservation/capacity | `implementing` | one implementer repair |
+| `idle` | `authorization_recorded` | valid command | `authorized` | none |
+| `authorized` | `claim_acquired` | section 9 and CAS | `claimed` | create/reconcile work ref |
+| `claimed` | `work_branch_recorded` | exact ref at base | `claimed` | none |
+| active | `lease_renewed` | current grant/lease/reconciliation/window | same | none |
+| `claimed` | `implementation_requested` | section 11.1 | `implementing` | one implementer request |
+| `implementing` | `work_head_recorded` | descendant/no-change, scope valid | `awaiting_pr` | none |
+| `implementing` | `provider_ambiguous` | accepted unresolved request/charge | `halted` | none |
+| `awaiting_pr` | `pr_creation_authorized` | exact branch/head/base, no conflict, grant current | `awaiting_pr` | create/reconcile one PR |
+| `awaiting_pr` | `pr_recorded` | exactly one matching open PR/head | `awaiting_gates` | observe/request deterministic gates only |
+| `awaiting_gates` | `gates_passed` | all required exact-head gates green | `awaiting_review` or `awaiting_re_review` | none |
+| `awaiting_gates` | `gate_defect_reproduced` | deterministic in-scope defect | `fix_required` | none |
+| `fix_required` | `gate_repair_authorized` | section 11.1 including valid lease/capacity | `implementing` | one repair |
 | `awaiting_gates` | `gate_ambiguous_or_infra` | stale/flaky/cancelled/missing/action-required/infra | `halted` or `awaiting_maintainer` | none |
-| `awaiting_review` | `review_dispatch_authorized` | section 11.1 review reservation/capacity | `awaiting_review` | one reviewer request |
-| `awaiting_re_review` | `review_dispatch_authorized` | section 11.1 review reservation/capacity | `awaiting_re_review` | one reviewer request |
-| `awaiting_review` or `awaiting_re_review` | `provider_ambiguous` | accepted review request with unresolved completion/charge | `halted` | none |
-| `awaiting_review` | `review_clean` | valid structured review on exact head | `awaiting_maintainer` | presentation only |
-| `awaiting_review` | `review_findings_recorded` | valid normalized findings on exact head | `fix_required` | deterministic triage only |
-| `awaiting_review` | `review_inconclusive` | valid inconclusive review | `awaiting_maintainer` | none |
-| `fix_required` | `findings_disposed_no_change` | all findings false/superseded with evidence | `awaiting_re_review` | none |
-| `fix_required` | `review_fix_authorized` | genuine blocker plus section 11.1 lease/reservation/capacity/round | `implementing` | one implementer fix |
-| `fix_required` | `finding_requires_human` | scope/security/ambiguity/dependency/round boundary | `awaiting_maintainer` | none |
-| `awaiting_re_review` | `review_clean` | valid exact-head review | `awaiting_maintainer` | presentation only |
-| `awaiting_re_review` | `review_findings_recorded` | valid findings and rounds remain | `fix_required` | triage only |
-| `awaiting_re_review` | `review_inconclusive` | valid inconclusive review | `awaiting_maintainer` | none |
-| `awaiting_re_review` | `maximum_rounds_reached` | negative result after round 2 | `awaiting_maintainer` | none |
+| `awaiting_review` or `awaiting_re_review` | `review_dispatch_authorized` | section 11.1 review authority | same | one reviewer request |
+| `awaiting_review` or `awaiting_re_review` | `provider_ambiguous` | accepted unresolved review/charge | `halted` | none |
+| `awaiting_review` | `review_clean` | valid exact-head response | `awaiting_maintainer` | presentation only |
+| `awaiting_review` | `review_findings_recorded` | valid normalized findings | `fix_required` | triage only |
+| `awaiting_review` or `awaiting_re_review` | `review_inconclusive` | valid inconclusive response | `awaiting_maintainer` | none |
+| `fix_required` | `findings_disposed_no_change` | evidence-backed false/superseded | `awaiting_re_review` | none |
+| `fix_required` | `review_fix_authorized` | genuine blocker, section 11.1, round remains | `implementing` | one fix |
+| `fix_required` | `finding_requires_human` | scope/security/ambiguity/dependency/round | `awaiting_maintainer` | none |
+| `awaiting_re_review` | `review_clean` | valid exact-head response | `awaiting_maintainer` | presentation only |
+| `awaiting_re_review` | `review_findings_recorded` | valid findings, rounds remain | `fix_required` | triage only |
+| `awaiting_re_review` | `maximum_rounds_reached` | negative after round 2 | `awaiting_maintainer` | none |
 | `awaiting_maintainer` | `work_head_changed` | valid scoped descendant differs from reviewed head | `awaiting_pr` | none |
-| `awaiting_maintainer` | `human_merge_observed` | allow-listed maintainer; merged SHA equals exact current gated/reviewed head | `terminal` | none |
-| `awaiting_maintainer` | `human_close_observed` | recorded PR closed/deferred/superseded by maintainer | `terminal` | none |
-| any active non-terminal state | `authorization_expired` | current time reaches grant expiry | `awaiting_maintainer` | reconcile accepted work only |
-| any non-terminal state | `authorization_revoked` | valid revocation | `awaiting_maintainer` or `terminal` | proven-safe cancellation only |
-| any non-terminal state | `security_halt` | authenticated compromise evidence or verified anomaly | `halted` | none |
-| `halted` | `human_recovery_recorded` | valid recovery and reconciled facts | reachable safe state or `terminal` | recorded recovery action only |
-| `terminal` | `front_released` | section 7.6 and full reconciliation | `idle` | none |
+| any active state with recorded PR | `human_merge_observed` | human action reconciled; no active/ambiguous request remains | `terminal` | none |
+| any active state with recorded PR | `human_close_observed` | human action reconciled; no active/ambiguous request remains | `terminal` | none |
+| active non-terminal | `authorization_expired` | expiry reached | `awaiting_maintainer` | reconcile accepted work only |
+| non-terminal | `authorization_revoked` | valid revoke | `awaiting_maintainer` or `terminal` | safe cancellation only |
+| non-terminal | `security_halt` | authenticated verified anomaly | `halted` | none |
+| `halted` | `human_recovery_recorded` | valid command/reconciliation | reachable safe state or `terminal` | recorded recovery only |
+| `terminal` | `front_released` | section 7.4 | `idle` | none |
 
-### 11.3 Exact-head invalidation
+### 11.3 Human PR outcomes from any active PR state
 
-Any push or ref observation that changes the active work head invalidates prior `gates`, review verdict, presentation-ready status, and merge eligibility.
+The maintainer may merge or close a recorded PR at any time. The control plane must never strand the claim merely because the human acted before `awaiting_maintainer`.
 
-- Before clean review: record the new scoped head and return through `awaiting_pr` and gates.
-- From `awaiting_maintainer`: `work_head_changed` returns to `awaiting_pr`; no stale clean verdict remains active.
-- A non-descendant, force-push, scope violation, or ambiguous head halts.
-- `human_merge_observed` is valid only when the actual merged commit/head equals the exact current head that passed required gates and received the current clean review. Any mismatch fails closed and cannot terminalize as cleanly merged.
+Before terminalization it reconciles all accepted implementer/reviewer/workflow/provider requests and reservations. If any outcome is ambiguous, record/honor the halt first; recovery then records the actual human PR outcome.
 
-### 11.4 Idempotent PR lifecycle
+For merge:
 
-`pr_creation_authorized` binds repository/run/branch/exact head/base/scope/version. The App reconciles PRs for the derived head:
+- actual merged SHA, actor, timestamp, and prior canonical state are recorded;
+- if merged SHA equals the current exact gated and clean-reviewed head, `evidence_status=current_clean`;
+- otherwise `evidence_status=stale_or_incomplete`; prior gates/review are invalidated for presentation and the terminal record must not claim system-prepared readiness;
+- terminal outcome is still `merged_by_maintainer`, because merge authority is human and the ledger’s duty is factual observation, not retroactive approval.
 
-- none: create one non-draft PR with base `master`, derived head, and bounded run/scope marker;
-- exactly one correct open PR: reuse;
-- duplicate, wrong base/head/marker, fork, unknown state: fail closed;
-- previously recorded PR closed by maintainer: never create replacement; reconcile terminal/human decision;
-- timeout after create: search and validate before retry; never create a second PR.
+For close/supersede, record actual PR state and corresponding terminal outcome. No replacement PR is created automatically.
 
-`pr_recorded` commits numeric PR ID, repository, base, head branch, current exact work head, operation key, and state. Gates/review are forbidden before it. After every code-changing repair/fix, the same PR is rebound to the new head through `awaiting_pr`; second PR creation is forbidden.
+### 11.4 Head invalidation and merge equality
 
-## 12. Branch and scope contract
+Any work-head change invalidates gates/review/presentation. Before clean review return via `awaiting_pr`; from `awaiting_maintainer`, `work_head_changed` returns via PR/gates/review. Non-descendant/force/scope ambiguity halts.
 
-Exactly one work branch exists. Control App creates it once at exact base; implementer supplies later commits; automated force-push/deletion is denied; PR base is `master`; forks unsupported.
+A system claim of `current_clean` requires actual merged SHA equal the exact current gated/reviewed head. A different human-merged head is recorded only as a human override with stale/incomplete evidence, never as a clean system verdict.
 
-Before every mutation request and after every resulting head, normalize and verify changed paths, allow/deny precedence, file/line limits, linear ancestry, submodules, LFS pointers, symlink escapes, binaries, and secret-file risks; bind verification digest.
+### 11.5 Idempotent PR lifecycle
 
-Denied absent exact separate authorization:
+`pr_creation_authorized` binds repository/run/branch/head/base/scope/version. Zero matching PR creates one non-draft PR with run/scope marker; exactly one correct open PR is reused; duplicates/wrong base/head/marker/fork/unknown fail closed; closed recorded PR is never replaced; create timeout searches/reconciles before retry.
 
-- `AGENTS.md`
-- `.github/workflows/**`
-- `.github/CODEOWNERS`
-- settings/ruleset exports
-- secrets/credentials/keys/tokens
-- protected conformance tests
-- vendored dependencies/lockfiles
-- canonical authority file.
+`pr_recorded` binds PR ID/repository/base/head branch/exact work head/operation/state. No gates/review before it. Every code-changing repair rebinds the same PR through `awaiting_pr`; second PR forbidden.
 
-## 13. Deterministic gate policy
+## 12. Scope
 
-Readiness freezes exact gate names, workflow/action pins, and path conditions. Initial gates include registry, manual-review offline boundary, BLUECAD license boundary, Ruff, full Pytest, geometry canary, frontend build when needed, strict real-tool proof for relevant changes, and 079 service unit/integration/conformance/reconstruction tests.
+One work branch; App creates once; implementer commits later; no automated force/delete; base master; forks unsupported.
 
-Eligible results are successful, repository-bound, exact-head, policy-matching, and not skipped/stale/cancelled/action-required/superseded. One zero-model-cost infrastructure rerun is allowed per collection only absent source/test failure. Further or ambiguous infrastructure failure halts. Tests/workflows cannot be weakened.
+Before/after mutation verify normalized paths, allow/deny precedence, file/line caps, linear ancestry, submodules/LFS/symlink/binary/secret risk and bind digest. Denied absent exact separate authority: `AGENTS.md`, workflows/CODEOWNERS, settings/rulesets, secrets/keys/tokens, protected conformance tests, vendored dependencies/lockfiles, canonical authority file.
 
-## 14. Reviewer contract and finding identity
+## 13. Deterministic gates
 
-Reviewer credential is read-only for repository, code, PR, checks, and statuses; it has no contents write, workflow dispatch, merge, settings, secret, ref-delete, or ruleset authority. Reviewer and implementer effective identities differ.
+Readiness freezes exact checks/workflow/action pins/path conditions: registry, manual-review offline boundary, BLUECAD license boundary, Ruff, full Pytest, canary, frontend build if needed, strict tool proof where relevant, and 079 service unit/integration/conformance/reconstruction tests.
 
-Review request binds repository/spec/slice/scope/non-goals/base/head/diff/PR/gates/round/prior findings/fixes/content digest/provider policy/reservation/idempotency.
+Eligible means success, correct repo/head/policy, not stale/skipped-required/cancelled/action-required/superseded. One zero-model-cost infra rerun per collection absent assertion/source defect; further ambiguity halts. Never weaken tests/workflows.
 
-Reviewer response:
+## 14. Reviewer and finding IDs
 
-```json
-{
-  "schema_version": 1,
-  "reviewed_head_sha": "<40 hex>",
-  "verdict": "clean",
-  "summary": "bounded text",
-  "findings": [
-    {
-      "severity": "P1",
-      "category": "correctness",
-      "path": "path/or/null",
-      "line": 1,
-      "claim": "bounded text",
-      "reproduction": "bounded text or null",
-      "suggested_resolution": "bounded text or null"
-    }
-  ]
-}
-```
+Reviewer is read-only; no write/dispatch/merge/settings/secrets/ref/ruleset authority; effective identity differs from implementer.
 
-The reviewer must not provide authoritative finding IDs. After schema validation and deterministic normalization, the Control App derives each `finding_<32 hex>` from review round, exact head, normalized severity/category/path/line/claim digest, and occurrence index. A model-supplied `finding_id` is rejected as an unknown field in v1.
+Request binds repo/spec/slice/scope/non-goals/base/head/diff/PR/gates/round/prior findings/fixes/content/provider/reservation/idempotency.
 
-Verdict is `clean`, `findings`, or `inconclusive`; maximum 50 findings and 2,000 characters per text field. Malformed, oversized, wrong-head, unknown-field, or non-JSON output is invalid. Inconclusive review records `review_inconclusive` and stops for human action.
+Response JSON includes exact head, verdict `clean|findings|inconclusive`, bounded summary, and findings with severity/category/path/line/claim/reproduction/resolution—but no authoritative finding ID. Control App validates/normalizes and derives `finding_<32 hex>` from review round, head, normalized finding digest, and occurrence index. Model-supplied `finding_id` is rejected as unknown field.
 
-P0/P1 block until disposed. P2 blocks only when independently reproduced as a binding violation. P3 is advisory and never triggers mutation.
+Max 50 findings, 2,000 chars per field. Malformed/oversized/wrong-head/unknown-field/non-JSON is invalid. Inconclusive records canonical human stop. P0/P1 block; P2 only if independently reproduced as binding violation; P3 advisory.
 
-## 15. Finding disposition and fix loop
+## 15. Disposition and rounds
 
-Closed dispositions: `reproduced`, `accepted_without_reproduction`, `false_positive`, `superseded`, `needs_human`.
+Dispositions: `reproduced`, `accepted_without_reproduction`, `false_positive`, `superseded`, `needs_human`, each evidence-bound. Initial round 0; max two fix rounds, three reviewer calls, three implementer calls; one fix per negative round; every code change rebinds PR/gates/review; no-change rebuttal re-reviews; negative round 2 stops; scope/destructive/governance/secret/dependency expansion stops.
 
-Reproduced requires deterministic evidence or precise current path; accepted-without-reproduction is limited to direct spec-invariant contradiction; false-positive requires evidence; superseded points to later head/finding; needs-human stops.
+## 16. Adapters and execution-spine governance block
 
-Limits: initial review round 0; maximum fix rounds 2; maximum reviewer calls 3; maximum implementer calls 3; one fix per negative round; every code change returns through PR binding, gates, and review; no-change rebuttal still re-reviews; negative round 2 stops; scope/destructive/governance/secret/dependency expansion requires human action.
+Adapter requests bind repo/install, branch/head, spec/slice, scope/non-goals, task/defect/findings, provider/budget/reservation/idempotency. Responses bind provider request/status, resulting head/no-change, safe digests/summary, usage/cost/idempotency/error.
 
-## 16. Implementer/reviewer provider adapters and current execution-spine block
+Adapters cannot alter authority; implementer writes only work branch; neither merges/approves/force-deletes/settings/secrets/control. Accepted ambiguous outcome halts without retry absent proven idempotency/reconciliation.
 
-Immutable adapter requests bind repository/installation, branch/exact head, spec/slice, scope/non-goals, task type, defect/findings, provider/budget policy, reservation, and idempotency. Responses bind provider request/status, resulting head/no-change, safe summary/digests, usage/cost/idempotency, and error class.
+Current `AGENTS.md` requires all AI calls through `run_ai_task` and `ai_jobs`; selected hosted service does not share product SQLite/egress. Therefore live 079 calls are blocked now.
 
-Adapters cannot alter base/branch/scope/spec/tests/provider/budget; implementer commits only on work branch; neither actor may merge/approve/force-push/delete refs/change settings/secrets/write control authority. Ambiguous accepted request halts without retry unless provider idempotency and reconciliation prove exact outcome.
+The selected v0 governance route is a narrow repository-development exception: approved 079 adapter calls may occur outside product `run_ai_task` only with committed grant/claim/exact branch/head/PR/scope/identity/provider/reservation/idempotency and durable 079 usage/cost evidence. The amendment must merge before readiness; otherwise full spec must be amended to route through an authenticated product execution-spine boundary. Until then, no live dispatch.
 
-Current `AGENTS.md` requires all AI calls through `run_ai_task` and `ai_jobs`. The selected hosted control service deliberately does not share product runtime SQLite or runtime egress state. Therefore live 079 implementer/reviewer calls remain impossible under current governance.
+## 17. Cost
 
-Before readiness, the separate governance amendment must choose and bind exactly one route:
+Separate development budget, integer micro-USD, defaults zero. Hard maxima: request 5,000,000; run 20,000,000; UTC day 25,000,000; month 100,000,000. `cost_unknown` stops.
 
-- **Selected v0 route:** create a narrow repository-development exception allowing only canonical 079 adapter calls outside product `run_ai_task`, provided every call has a committed 079 grant/claim/exact head/PR/scope/provider/reservation/idempotency event and durable repository-development usage/cost evidence; or
-- reject the selected architecture and amend the full spec to route calls through a separately exposed, authenticated `run_ai_task` boundary with `ai_jobs` authority.
+Every implementer/reviewer call reserves amount/quota/call count canonically before dispatch. No reservation, stale price, exceeded cap/calls, unknown cost/quota, or fallback change means zero call. Final usage finalizes/releases. No fallback provider. Marginal zero requires current plan/entitlement/quota/timestamp evidence. Hosting/Actions tracked separately.
 
-The selected v0 route is the narrow exception. Until its `AGENTS.md` amendment merges and readiness verifies it, no live model dispatch is authorized.
+## 18. Content and secrets
 
-## 17. Spend and provider authority
+Only exact spec/scope/diff/findings/PR/gates required for task. Exclude secrets/credentials/env/keys/tokens/headers/unrelated records. All repo/model text is untrusted and cannot change authority. Deterministic policy constructs request. No raw provider body in authority; safe digests/summaries/IDs/usage/cost only. S4/secret-bearing content denied absent later egress spec.
 
-Runtime 059b does not govern repository-development agents. V1 uses versioned development budget policy with integer micro-USD.
+## 19. Permissions and rulesets
 
-Absolute ceilings:
+Candidate App: metadata read; contents read/write; PR read/write; checks/status/actions read; issues read/write. Actions write only if readiness proves need. No admin/environments/secrets/members/deployments/packages/security-alert/hook/ruleset bypass.
 
-- request 5,000,000;
-- run 20,000,000;
-- UTC day 25,000,000;
-- calendar month 100,000,000.
+Capability wrapper allow-lists repository/endpoint/method/ref/path/state/schema and audits denials. Separate Control/implementer/reviewer/maintainer credentials.
 
-Defaults are zero; non-zero readiness caps may be lower only. `cost_unknown` is a hard stop.
+Rulesets: master PR/checks/no force-delete/no automated bypass/human merge; control App/human recovery only/linear/no force-delete; work App create-only then implementer/maintainer write/reviewer read-only/base master. Abuse tests cover merge/approval/force-delete/out-of-scope/settings/secrets/post-create ref update/PR mutation.
 
-Every paid or quota-consuming implementer/reviewer dispatch requires a canonical reservation in the dispatch-authorizing event. Dispatch is forbidden if reservation absent, cap/call count exceeded, price evidence stale, fallback changes provider/cost, or cost/quota unknown. Final usage finalizes/releases reservation. No fallback provider.
+## 20. Webhook and service
 
-Marginal zero requires current account/plan, entitlement, remaining quota, and timestamp evidence. Hosting/Actions cost is separately recorded with monthly cap and reconciliation.
+Events: new issue comments, pushes on master/control/work, PR/review/review-comment/workflow-run, installation suspension/deletion. Edited authorization comments ignored.
 
-## 18. Content, secrets, and prompt injection
+Webhook verifies raw-body signature constant-time before JSON. Missing/invalid: auth failure, edge/app rate-limit, redacted log, no trusted delivery/queue/canonical event/security halt, no information disclosure. Authenticated processing validates install/repo/event, stores digest, acknowledges under 10 seconds, queues reconciliation, no request-thread side effect.
 
-External material is limited to exact spec/scope/diff/findings/PR/gates. Secrets, credentials, environment values, keys, tokens, headers, and unrelated records are excluded.
+Canonical security halt only for authenticated/verified anomaly: signed delivery-ID digest mismatch, identity contradiction, history tamper, credential misuse/unauthorized API success, scope/secret escape, independently confirmed compromise.
 
-Issue, PR, source, test, artifact, log, and model text is untrusted data. It cannot change policy, role, provider, budget, tests, scope, authority, or merge. Deterministic policy constructs requests.
+Endpoints only health, readiness, webhook. Queue is operational; duplicate converges; pure reads retry bounded; side-effect retry requires committed event/proven idempotency; webhook order untrusted.
 
-No raw provider body enters canonical authority; safe digests/summaries/IDs/usage/cost are permitted. S4 or secret-bearing content remains denied absent later repository-development egress authority.
+Retention: delivery 30d, queue/projection 90d, logs 30d; no raw model/secrets/headers. Canonical RPO zero, DB RPO 24h, RTO target 4h; GitHub uncertainty stops.
 
-## 19. GitHub permissions and rulesets
+## 21. Presentation
 
-Candidate App permissions: metadata read; contents read/write; pull requests read/write; checks/statuses/actions read; issues read/write. Actions write absent unless readiness proves exact need. Administration, environments, secrets, members, deployments, packages, security-alert mutation, hook mutation, and ruleset bypass denied.
+One non-authoritative check, sticky PR comment, control-issue status, weekly digest. Idempotent after canonical change. Between weekly reviews notify only human decision, authenticated security signal, or budget overrun/disabled authority. Digest Europe/Rome Monday 08:00, max weekly, omitted without change, never grants authority.
 
-A capability wrapper allow-lists repository ID, endpoint, method, ref, path, state, and schema and audits denials.
+## 22. Security/supply chain
 
-Separate credentials: Control App, implementer, reviewer, maintainer.
+Short-lived tokens, secret store, rotation, immutable pins/digests, SBOM, dependency/container scanning, outbound allow-list, repo/SHA validation, no untrusted fork with write/secrets, webhook process never executes PR code. Invalid unsigned traffic does not halt; verified authenticated compromise does.
 
-Rulesets prove:
+## 23. Verification
 
-- `master`: PR required, checks required, no automated bypass, force-push/deletion denied, human-only merge;
-- `jarvis-control`: Control App/human recovery only, linear history, no force/delete/non-fast-forward;
-- `jarvis-work/*`: Control App create-only at exact base, then implementer/maintainer write; no automated force/delete; reviewer read-only; base `master`.
+### 23.1 Offline
 
-Abuse tests cover merge, approval, force/delete, out-of-scope write, settings/secrets, unauthorized post-create work-ref update, and PR mutation beyond bounded metadata.
+Unit/integration with fake GitHub/DB/actors proves canonical encoding/chains/reconstruction/idempotency/schema rejection; transition matrix; grant/expiry/revoke/recover/release; identity/scope; reservation/caps/calls; finding ID derivation; lease; PR idempotency; head invalidation; human PR outcome from every active PR state; current-clean versus human-override merge evidence; provider ambiguity; notifications; invalid-signature no-state-change; restart/replay; one create-only ref; no later App ref mutation; one PR before gates; same PR after fixes; grant expiry blocks dispatch; expired lease blocks repair; inconclusive stops; ambiguous calls halt; release enables later grant; no merge/self-approval; inactivity silent.
 
-## 20. Webhook, queue, and service API
+### 23.2 Disposable real-tool proofs before readiness
 
-Subscribed events are created issue comments, pushes on master/control/active work branch, PR/review/review-comment/workflow-run, and installation suspension/deletion. Edited authorization comments never create authority.
+All architecture-closure proofs remain mandatory, including multi-writer CAS race; stale parent/ref; timeout reconciliation; replay after DB loss; reconstruction; history tamper; lease expiry; create-only ref; PR create/replay/mismatch; grant expiry at each dispatch; budget/call/lease gates; exact-head invalidation; human merge/close from each active PR state; clean-evidence equality versus override; inconclusive/provider ambiguity; deterministic finding IDs; release/sequential run; credential abuse denials; reviewer/implementer separation; fork/prompt injection; cost stops; provider duplicate-charge prevention; outage; kill switches; Actions non-authority; invalid unsigned traffic no halt; verified authenticated anomaly halt; inactivity/noise.
 
-`POST /github/webhook` verifies signature over raw body with constant-time comparison before JSON parsing.
+### 23.3 Repository/conformance
 
-Missing/invalid signatures:
+Implementation must pass repository Pytest/Ruff/status/canaries and deterministic service tests; no live/paid/production CI. Readiness freezes maintainer-owned vectors for every authority property. Implementation agents cannot weaken them.
 
-- return authentication failure;
-- are edge/application rate-limited;
-- are logged with redacted bounded metadata;
-- do not queue work or create trusted delivery rows;
-- create no canonical event, `security_signal`, or halt merely because invalid;
-- reveal no repository/install/command existence.
-
-Authenticated processing validates install/repository/event, stores delivery digest, acknowledges within 10 seconds, performs no request-thread side effect, and queues reconciliation.
-
-Canonical security halt is reserved for authenticated compromise evidence or verified anomaly: signed delivery-ID digest mismatch, authenticated identity contradiction, verified control-history tamper, verified credential misuse/unauthorized API success, verified scope/secret escape, or independently confirmed compromise.
-
-Other endpoints: `GET /healthz`, `GET /readyz`, and webhook only. No public admin mutation endpoint.
-
-PostgreSQL queue ownership is operational. Duplicate jobs converge canonically. Read reconciliation retries at most five times. Side-effect retry requires committed authorization and proven idempotency. Webhook order is untrusted.
-
-Retention: delivery 30 days, queue/projection 90 days, logs 30 days; no raw model/secret/header logs. Canonical RPO zero, DB RPO 24 hours, service RTO target 4 hours; GitHub uncertainty stops indefinitely.
-
-## 21. Presentation and notifications
-
-At most one non-authoritative check, sticky PR comment, control-issue status comment, and weekly digest. Updates follow canonical state changes and are idempotent.
-
-Between weekly reviews, direct notification only for human decision, authenticated security signal, or budget overrun/disabled cost authority. Weekly digest: Europe/Rome, Monday 08:00, max one per seven days, omitted without state change, never grants authority.
-
-## 22. Security and supply chain
-
-Use short-lived tokens, secret store, rotation, immutable pins/digests, SBOM, dependency/container scanning, outbound allow-list, repository/SHA validation, and deny untrusted fork execution with write/secret credentials. Webhook process never executes PR code.
-
-Invalid unauthenticated signatures do not canonically halt. Authenticated compromise evidence, verified history anomaly, signed delivery mismatch, verified scope escape, or verified secret exposure does.
-
-## 23. Verification and acceptance
-
-### 23.1 Offline unit tests
-
-Prove deterministic JSON/digests; event/snapshot reconstruction; duplicate convergence; invalid schema/field/float/timestamp/digest rejection; full transition matrix; grant/expiry/revoke/recover/release parsing; maintainer identity; scope/path limits; reservations/caps/call counts; finding normalization and Control-App ID derivation; lease lifecycle; PR idempotency; exact-head invalidation; provider ambiguity; notification dedupe; and invalid-signature no-state-change behavior.
-
-### 23.2 Offline integration tests
-
-With fake GitHub/PostgreSQL/implementer/reviewer, prove restart reconstruction; duplicate webhook/job convergence; one create-only work ref; denial of later Control-App update/delete; one PR before gates; PR timeout reconciliation; same-PR rebinding after fixes; grant expiry blocks every new dispatch; every dispatch has reservation/capacity; expired lease blocks repair until reconciled renewal; head movement invalidates clean review and returns through gates; inconclusive review stops; ambiguous implementer/reviewer call halts; finding IDs are Control-App-derived; terminal release preserves history and enables later grant; no merge/self-approval; invalid signatures cannot cause canonical DoS; inactivity is silent.
-
-### 23.3 Disposable-repository proofs before readiness
-
-Prove:
-
-1. multi-dispatcher single-winner claim;
-2. stale exact-parent/ref rejection even with unchanged blob;
-3. timeout-after-CAS reconciliation once;
-4. signed webhook replay convergence after DB loss;
-5. full authority reconstruction after external-state deletion;
-6. history tamper halt;
-7. lease expiry never starts another claimant;
-8. create-only exact-base work ref and denial of later App mutation;
-9. one exact-head PR before gates and no duplicate after timeout/replay;
-10. wrong/forked/closed/duplicate/mismatched PR fail-closed;
-11. grant expiry before initial/review/repair dispatch creates zero new calls;
-12. reservation/call-capacity required for every implementer/reviewer call;
-13. expired lease blocks mutation repair;
-14. reviewed-head drift invalidates presentation and merge eligibility;
-15. actual merged head must equal exact gated/reviewed head;
-16. inconclusive review and provider ambiguity produce canonical stop states;
-17. reviewer-supplied finding ID is rejected and deterministic ID is reproduced;
-18. terminal release preserves history and allows sequential run;
-19. automated credentials denied merge/approval/force/delete/settings/secrets/out-of-scope writes;
-20. reviewer cannot write and implementer cannot author review;
-21. untrusted fork cannot access secrets/write;
-22. prompt injection cannot change authority;
-23. exceeded/unknown cost creates zero calls;
-24. provider timeout creates no duplicate request/charge;
-25. GitHub outage reconciles without duplicate action;
-26. kill switches stop effects;
-27. Actions concurrency cannot release authority;
-28. invalid/unsigned traffic cannot canonical-halt;
-29. authenticated verified anomaly does halt;
-30. inactivity/replay creates no noise or calls.
-
-### 23.4 Repository gates and conformance
-
-Implementation passes backend Pytest/Ruff/status self-test, existing CI/canaries, and deterministic `services/devloop` tests. No CI live model, paid service, or production mutation.
-
-Readiness freezes maintainer-owned vectors for transitions, race, work-ref permission, PR lifecycle, grant/lease expiry, budget dispatch, exact-head invalidation, provider ambiguity, finding IDs, merge denial, release/sequential runs, webhook authentication, rounds, cost stops, and kill switches. Implementation agents cannot weaken them.
-
-## 24. Governance, rollout, readiness, and kill switches
+## 24. Governance, rollout, readiness
 
 ### 24.1 Required `AGENTS.md` amendment
 
-A separate PR must explicitly amend both:
+Separate PR explicitly amends manual/explicit-only dispatch rules and hard `run_ai_task`/`ai_jobs` invariant with the narrow 079 repository-development exception described in section 16. It continues to forbid auto selection/merge/priority/bypass/force-delete/settings/secrets/destructive/scope expansion/fallback/work after expiry/revocation/security/cost/integrity/human stop. Until merged, no live calls.
 
-1. the manual-only/explicit-only automated review and Codex dispatch clauses; and
-2. the hard invariant requiring all AI calls through product `run_ai_task`/`ai_jobs`.
+### 24.2 Rollout and proof order
 
-The narrow v0 exception must state that repository-development model calls may occur outside product `run_ai_task` only through the approved 079 adapter when one canonical run has a current maintainer grant, global claim, exact branch/head/PR, scope, actor identities, deterministic gates as applicable, role capacity, provider policy, and canonical reservation/idempotency evidence. The adapter must write durable 079 request/usage/cost evidence and may not access product runtime authority or secrets.
-
-The exception must continue to forbid automatic spec selection, merge, auto-merge, priority change, workflow/ruleset bypass, force-push, branch deletion, settings/secrets change, destructive action, scope expansion, provider fallback, or work after expiry/revocation/security/cost/integrity/human-decision stop.
-
-Until that amendment is merged, no live implementer or reviewer dispatch is authorized.
-
-### 24.2 Rollout
-
-1. Merge full spec with 079 `planned`.
+1. Merge this documentary full spec under section 2.1; 079 stays `planned` and mechanisms remain unproven/unavailable.
 2. Merge narrow governance amendment, dormant until readiness.
-3. Build proof prototype only in disposable repository/separate fixture with fake actors and zero paid calls.
-4. Explicitly approved read-only JarvisOS shadow: no claim, branch/PR write, workflow, or provider.
-5. Dated readiness records host, App/actor IDs, rulesets, adapters, pricing/caps, proofs, vectors, owners, rollback; only then `ready`.
-6. After readiness, one bounded implementation PR.
-7. After implementation and separate operational grant, one low-risk documentation-only activation with human merge.
+3. Build disposable/separate proof prototype with fake actors and zero paid calls; execute every architecture-closure proof before readiness.
+4. Optional explicitly approved read-only JarvisOS shadow: no claim/ref/PR/workflow/provider writes.
+5. Dated readiness records host/App/actors/rulesets/adapters/prices/caps/proofs/vectors/owners/rollback and only then sets `ready`.
+6. One bounded implementation PR after readiness.
+7. Separate operational grant for one low-risk docs-only activation with human merge.
 8. Broader use separately approved after first-run evidence.
 
-No implementation skeleton enters JarvisOS while 079 is `planned`.
+The sequencing exception affects only steps 1 and 3 ordering. No implementation skeleton enters JarvisOS while `planned`.
 
-### 24.3 Kill switches
+### 24.3 Kill switches and readiness evidence
 
-Canonical halt, App suspension, App/webhook credential rotation, provider credential revocation, service/queue stop, caps zero, dispatch workflow disable, and protected human recovery. Rollback halts/reconstructs/records; never force-pushes or erases evidence.
+Canonical halt, App suspension, key/secret/provider revocation, service/queue stop, caps zero, dispatch workflow disable, human recovery. Rollback never force-pushes or erases.
 
-### 24.4 Readiness evidence
+Readiness proves merged dependencies/architecture/full spec/governance; all mandatory proofs; exact permissions/rulesets/wrapper/IDs; execution exception; abuse denials; ref/PR lifecycle; grant/lease/budget; head drift and human-outcome reconciliation; provider ambiguity/finding IDs/release; host/DB/secrets/adapters/pricing/caps/gates/vectors/owners/first slice; no unresolved P0/P1. Only readiness PR sets `ready`.
 
-079 remains `planned` until a dated PR proves dependencies/current vacancy; merged architecture/full spec/governance; every disposable proof; exact permissions/rulesets/wrapper/IDs; execution-spine exception; automated abuse denials; work-ref/PR lifecycle; grant/lease/budget dispatch controls; exact-head drift; provider ambiguity; finding IDs; release/sequential behavior; selected host/DB/secrets; selected adapters/effective identities; current price/quota; approved caps; frozen gates/vectors; named implementation/rollback owners; bounded first activation; and no unresolved P0/P1 authority/security blocker.
+## 25. Compatibility
 
-Only that PR may set `ready`.
-
-## 25. Compatibility and migration
-
-No product SQLite migration. Runtime execution spine, budget, Hermes, MemoryStore, BLUECAD, and product events do not become control-plane authority. Hosted PostgreSQL v1 remains rebuildable. Bootstrap creates new protected control branch explicitly; no chat/old PR/branch is imported. Existing work requires exact grant/reconciliation and normally a fresh work branch. Review workflows remain manual until governance/readiness. Authority version changes require additive versioning/migration proof. Force-push/history rewrite is never migration.
+No product SQLite migration. Product execution/budget/Hermes/MemoryStore/BLUECAD/events do not become authority. Hosted DB rebuildable. Bootstrap new protected control branch explicitly; no chat/old PR/ref imported. Existing work needs exact grant/reconciliation and normally fresh branch. Review remains manual until governance/readiness. Authority versions require additive migration proof. No force-push migration.
 
 ## 26. Likely implementation scope
 
-Expected bounded paths after readiness: `services/devloop/`, pinned service manifest/container, fake actors/fixtures, secret-free deployment docs, normal `STATUS.md` implementation transition, and CI only for offline service tests.
+After readiness: `services/devloop/`, pinned service manifest/container, fake fixtures, secret-free deployment docs, normal `STATUS.md` transition, CI only for offline tests. Not in implementation: `AGENTS.md` amendment, live settings/App/rulesets/secrets, credentials/account data, product runtime, Hermes/MCP/MemoryStore/BLUECAD/process kernel/078. Dependencies pinned/justified/scanned/service-limited; no agent framework.
 
-Not in implementation PR: `AGENTS.md` amendment, live App/settings/rulesets/secrets, provider credentials/raw account data, product backend/frontend/runtime, Hermes/MCP/MemoryStore/BLUECAD/process-kernel/078. New dependencies must be pinned, justified, scanned, service-limited; no agent framework.
+## 27. Non-goals
 
-## 27. Binding non-goals
-
-No automatic next-spec selection; simultaneous fronts/branches/implementers/reviewers/PRs; autonomous merge/approval/release/deploy/priority/governance/ruleset/secrets; force-push/delete/history rewrite/protected-test mutation; arbitrary shell beyond adapter/scope; provider fallback/bidding/swarm; unbounded loops; untrusted-fork execution; replacement of runtime 059b/Hermes/Actions; raw model/secret canonical storage; outage availability guarantee; or implementation of 078/another frozen front.
+No automatic next-spec selection; simultaneous fronts/branches/actors/PRs; autonomous merge/approval/release/deploy/priority/governance/settings; force-delete/history rewrite/protected-test mutation; arbitrary shell; provider fallback/bidding/swarm; unbounded loops; untrusted fork execution; replacement of runtime 059b/Hermes/Actions; raw model/secret canonical storage; outage availability guarantee; or 078/other frozen work.
 
 ## 28. Definition result
 
-Full-spec step is complete when:
+Complete when this one-document PR remains `planned`; records section 2.1 sequencing honestly; freezes architecture/state/auth/expiry/branch/PR/dispatch/lease/head/human outcomes/provider/finding IDs/permissions/cost/tests/rollout; preserves mandatory proof gates; keeps execution-spine conflict blocked pending governance; asserts no unproven mechanism as working; changes no runtime/workflow/App/provider/secret/ruleset/dependency/setting; passes exact-head gates and review; and stops for maintainer merge.
 
-- this document replaces the planning kernel on current-master PR;
-- 079 remains `planned` with no Implementation PR;
-- architecture, schemas, state machine, authorization/expiry, branch/PR lifecycle, dispatch reservations/capacity, lease, exact-head invalidation, provider ambiguity, finding IDs, permissions, cost, tests, rollout, compatibility, and kill switches are explicit;
-- PR creation occurs before gates and remains same-PR idempotent across fixes;
-- terminal release preserves history and returns idle;
-- Control App create-only work-ref capability is explicit;
-- unauthenticated signature failures cannot canonical-halt;
-- current execution-spine conflict is explicitly blocked pending governance amendment;
-- ref-level CAS remains proof-gated;
-- no runtime/workflow/App/provider/secret/ruleset/dependency/setting is created or changed;
-- exact-head deterministic gates pass;
-- review findings are resolved;
-- PR stops for maintainer merge decision.
-
-Merging this specification does not authorize governance amendment, readiness, implementation, external provider calls, or automated merge.
+Merge does not authorize governance, proofs against live JarvisOS, readiness, implementation, provider calls, or automated merge.
