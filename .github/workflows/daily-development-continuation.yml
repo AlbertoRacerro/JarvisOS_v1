@@ -11,7 +11,6 @@ concurrency:
 
 env:
   CONTINUATION_WORKFLOW_VERSION: "2"
-  CONTINUATION_OIDC_AUDIENCE: jarvisos-continuation-marker-v1
 
 jobs:
   plan:
@@ -82,12 +81,14 @@ jobs:
           ref: master
           persist-credentials: false
 
-      - name: Recover checkpoint with workflow-bound OIDC proof
+      - name: Recover the checkpoint with workflow-bound OIDC proof
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${CONTINUATION_OIDC_AUDIENCE}"
+          payload="v2|spec=${{ needs.plan.outputs.spec_id }}|pr=${{ needs.plan.outputs.pr_number }}|input=${{ needs.plan.outputs.checkpoint_sha }}|output=${{ needs.plan.outputs.recovery_output_sha }}|result=changed"
+          audience=$(python -c 'import hashlib,sys; print("jarvisos-continuation-marker-v1-" + hashlib.sha256(sys.argv[1].encode()).hexdigest())' "$payload")
+          url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=$audience"
           CONTINUATION_OIDC_TOKEN=$(curl --fail --silent --show-error \
             -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$url" \
             | python -c 'import json,sys; print(json.load(sys.stdin)["value"])')
@@ -120,7 +121,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${CONTINUATION_OIDC_AUDIENCE}"
+          payload="v2|spec=${{ needs.plan.outputs.spec_id }}|pr=${{ needs.plan.outputs.pr_number }}|input=${{ needs.plan.outputs.checkpoint_sha }}|output=${{ needs.plan.outputs.head_sha }}|result=changed"
+          audience=$(python -c 'import hashlib,sys; print("jarvisos-continuation-marker-v1-" + hashlib.sha256(sys.argv[1].encode()).hexdigest())' "$payload")
+          url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=$audience"
           CONTINUATION_OIDC_TOKEN=$(curl --fail --silent --show-error \
             -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$url" \
             | python -c 'import json,sys; print(json.load(sys.stdin)["value"])')
@@ -414,12 +417,18 @@ jobs:
           ref: master
           persist-credentials: false
 
-      - name: Record checkpoint with workflow-bound OIDC proof
+      - name: Record the idempotent checkpoint with workflow-bound OIDC proof
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${CONTINUATION_OIDC_AUDIENCE}"
+          result=changed
+          if [ "${{ needs.plan.outputs.head_sha }}" = "${{ needs.push.outputs.output_head }}" ]; then
+            result=no_change
+          fi
+          payload="v2|spec=${{ needs.plan.outputs.spec_id }}|pr=${{ needs.plan.outputs.pr_number }}|input=${{ needs.plan.outputs.head_sha }}|output=${{ needs.push.outputs.output_head }}|result=$result"
+          audience=$(python -c 'import hashlib,sys; print("jarvisos-continuation-marker-v1-" + hashlib.sha256(sys.argv[1].encode()).hexdigest())' "$payload")
+          url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=$audience"
           CONTINUATION_OIDC_TOKEN=$(curl --fail --silent --show-error \
             -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$url" \
             | python -c 'import json,sys; print(json.load(sys.stdin)["value"])')
