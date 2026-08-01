@@ -353,6 +353,18 @@ def test_marker_from_human_is_ignored_even_with_valid_token():
     assert checkpoint == BASE
 
 
+def test_marker_with_result_inconsistent_with_heads_is_ignored():
+    forged = marker()
+    forged["body"] = forged["body"].replace(
+        "result=changed", "result=no_change", 1
+    )
+    checkpoint, terminal = mod.checkpoint_for(
+        candidate(), [forged], verifier=AcceptVerifier()
+    )
+    assert checkpoint == BASE
+    assert terminal is False
+
+
 def test_verified_changed_marker_advances_checkpoint():
     checkpoint, terminal = mod.checkpoint_for(
         candidate(), [marker()], verifier=AcceptVerifier(),

@@ -492,6 +492,13 @@ def _verified_markers(
                 continue
             if user.get("login") != "github-actions[bot]":
                 continue
+            expected_result = (
+                "changed"
+                if match.group("input") != match.group("output")
+                else "no_change"
+            )
+            if match.group("result") != expected_result:
+                continue
             audience = marker_audience(
                 match.group("spec"),
                 int(match.group("pr")),
