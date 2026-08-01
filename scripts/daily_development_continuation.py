@@ -491,40 +491,19 @@ def checkpoint_for(
     )
     if not matches:
         return candidate.base_sha, False
-    changed_edges: dict[str, str] = {}
-    no_change_inputs: set[str] = set()
-    all_inputs: set[str] = set()
-    for match in matches:
-        input_head, output_head, result = (
-            match.group("input"),
-            match.group("output"),
-            match.group("result"),
-        )
-        all_inputs.add(input_head)
-        if result == "no_change":
-            if output_head != input_head:
-                raise ContinuationError("no-change marker changed the checkpoint")
-            no_change_inputs.add(input_head)
-            continue
-        if output_head == input_head:
-            raise ContinuationError("changed marker did not advance the checkpoint")
-        if input_head in changed_edges and changed_edges[input_head] != output_head:
-            raise ContinuationError(
-                "incompatible continuation markers share one input head"
-            )
-        changed_edges[input_head] = output_head
-    checkpoint = candidate.base_sha
-    seen: set[str] = set()
-    while checkpoint in changed_edges:
-        if checkpoint in seen:
-            raise ContinuationError("continuation marker chain contains a cycle")
-        seen.add(checkpoint)
-        checkpoint = changed_edges[checkpoint]
-    reachable_inputs = seen | {checkpoint}
-    if all_inputs - reachable_inputs:
-        raise ContinuationError("continuation marker chain is not contiguous")
-    terminal = checkpoint in no_change_inputs and checkpoint not in changed_edges
-    return checkpoint, terminal and checkpoint == candidate.head_sha
+    latest = matches[-1]
+    input_head, output_head, result = (
+        latest.group("input"),
+        latest.group("output"),
+        latest.group("result"),
+    )
+    if result == "no_change":
+        if output_head != input_head:
+            raise ContinuationError("no-change marker changed the checkpoint")
+    elif output_head == input_head:
+        raise ContinuationError("changed marker did not advance the checkpoint")
+    terminal = result == "no_change" and output_head == candidate.head_sha
+    return output_head, terminal
 
 
 def _continuation_commit(
@@ -680,6 +659,21 @@ def _normalized_path(path: str) -> str:
     return path.replace("\\", "/").strip("/")
 
 
+def read_nul_paths(path: Path) -> list[str]:
+    raw = path.read_bytes()
+    if not raw:
+        return []
+    if not raw.endswith(b"\0"):
+        raise ContinuationError("changed-files stream is not NUL-terminated")
+    records = raw[:-1].split(b"\0")
+    if any(not record for record in records):
+        raise ContinuationError("changed-files stream contains an empty path")
+    try:
+        return [record.decode("utf-8") for record in records]
+    except UnicodeDecodeError as exc:
+        raise ContinuationError("changed-files stream contains a non-UTF-8 path") from exc
+
+
 def validate_changed_paths(paths: list[str], active_spec: str) -> None:
     if len(paths) > MAX_CHANGED_FILES:
         raise ContinuationError("continuation patch changes too many files")
@@ -802,7 +796,7 @@ def main(argv: list[str] | None = None) -> int:
             append_outputs(plan, args.github_output)
             return 0
         if args.command == "validate":
-            paths = [line for line in args.changed_files.read_text(encoding="utf-8").splitlines() if line]
+            paths = read_nul_paths(args.changed_files)
             validate_changed_paths(paths, args.active_spec.lower())
             if "docs/specs/STATUS.md" in paths:
                 if args.status_before is None or args.status_after is None:

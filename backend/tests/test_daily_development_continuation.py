@@ -93,6 +93,18 @@ class RejectVerifier:
         return False
 
 
+class CurrentKeyVerifier:
+    def verify(
+        self,
+        token: str,
+        *,
+        run_id: str,
+        audience: str,
+        require_fresh: bool = False,
+    ) -> bool:
+        return token == "current.jwt.token" and run_id == RUN
+
+
 class FakeReader:
     def __init__(self, pulls=None, statuses=None, comments=None, compares=None, commits=None):
         self.pulls = pulls if pulls is not None else [pull()]
@@ -325,12 +337,13 @@ def test_verified_changed_marker_advances_checkpoint():
     assert terminal is False
 
 
-def test_floating_no_change_marker_fails_closed():
-    with pytest.raises(mod.ContinuationError, match="not contiguous"):
-        mod.checkpoint_for(
-            candidate(), [marker(input_head=HEAD, output_head=HEAD)],
-            verifier=AcceptVerifier(),
-        )
+def test_latest_no_change_marker_at_head_is_terminal():
+    checkpoint, terminal = mod.checkpoint_for(
+        candidate(), [marker(input_head=HEAD, output_head=HEAD)],
+        verifier=AcceptVerifier(),
+    )
+    assert checkpoint == HEAD
+    assert terminal is True
 
 
 def test_bridge_then_no_change_is_terminal():
@@ -342,19 +355,36 @@ def test_bridge_then_no_change_is_terminal():
     assert terminal is True
 
 
-def test_conflicting_markers_fail_closed():
+def test_latest_authenticated_marker_supersedes_older_edges():
     comments = [marker(BASE, HEAD), marker(BASE, NEXT)]
-    with pytest.raises(mod.ContinuationError, match="incompatible"):
-        mod.checkpoint_for(
-            candidate(), comments, verifier=AcceptVerifier(),
-        )
+    checkpoint, terminal = mod.checkpoint_for(
+        candidate(NEXT), comments, verifier=AcceptVerifier(),
+    )
+    assert checkpoint == NEXT
+    assert terminal is False
 
 
-def test_disconnected_verified_marker_fails_closed():
-    with pytest.raises(mod.ContinuationError, match="not contiguous"):
-        mod.checkpoint_for(
-            candidate(), [marker(HEAD, NEXT)],
-            verifier=AcceptVerifier(),
+def test_latest_valid_marker_reanchors_after_retired_oidc_key():
+    comments = [
+        marker(BASE, HEAD, token="retired.jwt.token"),
+        marker(HEAD, NEXT, token="current.jwt.token"),
+    ]
+    checkpoint, terminal = mod.checkpoint_for(
+        candidate(NEXT), comments, verifier=CurrentKeyVerifier(),
+    )
+    assert checkpoint == NEXT
+    assert terminal is False
+
+
+def test_build_plan_rejects_disconnected_latest_anchor():
+    reader = FakeReader(
+        comments=[marker(SIDE, NEXT)],
+        compares={(BASE, HEAD): "ahead", (NEXT, HEAD): "behind"},
+    )
+    with pytest.raises(mod.ContinuationError, match="does not descend from the checkpoint"):
+        mod.build_plan(
+            mode="SHADOW", repository=REPOSITORY, reader=reader,
+            token_present=False, verifier=AcceptVerifier(),
         )
 
 
@@ -522,6 +552,25 @@ def test_too_many_paths_fail():
         mod.validate_changed_paths([f"docs/{i}.md" for i in range(21)], "079")
 
 
+@pytest.mark.parametrize("separator", ["\n", "\t"])
+def test_nul_path_stream_preserves_control_characters_and_rejects_protected_path(
+    tmp_path, separator
+):
+    changed = tmp_path / "changed-files.z"
+    changed.write_bytes(f".github/workflows/evil{separator}.yml".encode() + b"\0")
+    paths = mod.read_nul_paths(changed)
+    assert paths == [f".github/workflows/evil{separator}.yml"]
+    with pytest.raises(mod.ContinuationError, match="protected path"):
+        mod.validate_changed_paths(paths, "079")
+
+
+def test_nul_path_stream_must_be_terminated(tmp_path):
+    changed = tmp_path / "changed-files.z"
+    changed.write_bytes(b"backend/app/service.py")
+    with pytest.raises(mod.ContinuationError, match="NUL-terminated"):
+        mod.read_nul_paths(changed)
+
+
 def test_status_only_active_row_may_change_when_binding_is_preserved():
     before = registry(extra="queue unchanged\n")
     after = before.replace("| CONTINUE | 004 | active |", "| CONTINUE | 004 | active detail |")
@@ -679,6 +728,18 @@ def test_workflow_contract_separates_validation_and_trusted_push():
     assert "index_tree=$(git write-tree)" in push_block
     assert "--active-pr" in push_block
     assert "python scripts/daily_development_continuation.py validate" not in push_block
+
+
+def test_workflow_uses_raw_nul_delimited_paths_in_both_workspaces():
+    text = (ROOT / ".github/workflows/daily-development-continuation.yml").read_text()
+    validate_block = text.split("  validate:\n", 1)[1].split("\n  push:\n", 1)[0]
+    push_block = text.split("\n  push:\n", 1)[1].split("\n  record-marker:\n", 1)[0]
+    assert validate_block.count("--name-only -z") == 1
+    assert push_block.count("--name-only -z") == 1
+    assert "changed-files.z" in validate_block
+    assert "changed-files.z" in push_block
+    assert "changed-files.txt" not in validate_block
+    assert "changed-files.txt" not in push_block
 
 
 def test_workflow_runs_timed_bluecad_canary_before_push():
