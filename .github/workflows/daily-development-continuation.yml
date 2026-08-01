@@ -93,7 +93,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          show_full_output: true
+          show_full_output: false
           prompt: |
             Continue the already-authorized JarvisOS implementation slice on pull
             request #${{ needs.plan.outputs.pr_number }}, spec
@@ -121,8 +121,10 @@ jobs:
         env:
           EXPECTED_HEAD: ${{ needs.plan.outputs.head_sha }}
           HEAD_REF: ${{ needs.plan.outputs.head_ref }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git fetch --no-tags origin "refs/heads/$HEAD_REF:refs/remotes/origin/$HEAD_REF"
+          auth=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)
+          git -c http.extraheader="AUTHORIZATION: basic $auth" fetch --no-tags origin "refs/heads/$HEAD_REF:refs/remotes/origin/$HEAD_REF"
           test "$(git rev-parse "refs/remotes/origin/$HEAD_REF")" = "$EXPECTED_HEAD"
 
       - name: Export the untrusted patch
@@ -168,7 +170,14 @@ jobs:
           ACTIVE_SPEC: ${{ needs.plan.outputs.spec_id }}
         run: |
           git show HEAD:docs/specs/STATUS.md > "$RUNNER_TEMP/status-before.md"
-          git apply --index --whitespace=error-all "$RUNNER_TEMP/continuation/continuation.patch"
+          patch="$RUNNER_TEMP/continuation/continuation.patch"
+          if [ ! -s "$patch" ]; then
+            : > "$RUNNER_TEMP/changed-files.txt"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "frontend_changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git apply --index --whitespace=error-all "$patch"
           git diff --cached --name-only > "$RUNNER_TEMP/changed-files.txt"
           count=$(grep -c . "$RUNNER_TEMP/changed-files.txt" || true)
           test "$count" -le 20
