@@ -33,7 +33,7 @@ jobs:
             echo "Patch already consumed; no action."
             exit 0
           fi
-          echo "ec518a85db0cf00b0e3c13c9d492185d66d7cc2747e776325fe233706c45174a  scripts/.079-final-p1.patch" | sha256sum -c -
+          echo "bd32122ccca7ecb954bda502575a47845d03b8a8c60b01c088d6cfbd2e7a3c82  scripts/.079-final-p1.patch" | sha256sum -c -
           git apply --index --whitespace=error-all scripts/.079-final-p1.patch
           cp .github/workflows/daily-development-continuation.yml scripts/.079-daily-final.yml
           git restore --source=HEAD --staged --worktree .github/workflows/daily-development-continuation.yml
