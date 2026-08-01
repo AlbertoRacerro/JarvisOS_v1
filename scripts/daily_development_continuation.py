@@ -680,7 +680,7 @@ def _normalized_path(path: str) -> str:
     return path.replace("\\", "/").strip("/")
 
 
-def validate_changed_paths(paths: list[str]) -> None:
+def validate_changed_paths(paths: list[str], active_spec: str) -> None:
     if len(paths) > MAX_CHANGED_FILES:
         raise ContinuationError("continuation patch changes too many files")
     for raw_path in paths:
@@ -693,6 +693,12 @@ def validate_changed_paths(paths: list[str]) -> None:
             or path in CONTROL_PATHS
         ):
             raise ContinuationError(f"continuation patch changes a protected path: {raw_path}")
+        if path.startswith("docs/specs/") and path != "docs/specs/STATUS.md":
+            filename = path.removeprefix("docs/specs/")
+            if "/" in filename or not filename.startswith(f"{active_spec.lower()}-"):
+                raise ContinuationError(
+                    f"continuation patch changes a non-active specification: {raw_path}"
+                )
         if path.startswith("backend/tests/") and Path(path).name.startswith("test_") and Path(path).name.endswith("_conformance.py"):
             raise ContinuationError(
                 f"continuation patch changes a maintainer-owned conformance test: {raw_path}"
@@ -711,6 +717,10 @@ def validate_status_change(
     if active_after.status != "in_review" or active_after.prs != (active_pr,):
         raise ContinuationError(
             "active STATUS.md row must remain in_review and bound to the active PR"
+        )
+    if active_after.depends_on != before_rows[active_spec].depends_on:
+        raise ContinuationError(
+            "active STATUS.md dependencies may not change during continuation"
         )
     prefix = f"| {active_spec} |"
     before_lines, after_lines = before.splitlines(keepends=True), after.splitlines(keepends=True)
@@ -793,7 +803,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "validate":
             paths = [line for line in args.changed_files.read_text(encoding="utf-8").splitlines() if line]
-            validate_changed_paths(paths)
+            validate_changed_paths(paths, args.active_spec.lower())
             if "docs/specs/STATUS.md" in paths:
                 if args.status_before is None or args.status_after is None:
                     raise ContinuationError("STATUS validation inputs are required")

@@ -477,7 +477,7 @@ def test_recovery_fails_on_multiple_continuation_commits():
 )
 def test_protected_and_sensitive_paths_are_rejected(path):
     with pytest.raises(mod.ContinuationError):
-        mod.validate_changed_paths([path])
+        mod.validate_changed_paths([path], "079")
 
 
 @pytest.mark.parametrize(
@@ -489,7 +489,7 @@ def test_protected_and_sensitive_paths_are_rejected(path):
 )
 def test_maintainer_owned_conformance_tests_are_rejected(path):
     with pytest.raises(mod.ContinuationError, match="maintainer-owned conformance test"):
-        mod.validate_changed_paths([path])
+        mod.validate_changed_paths([path], "079")
 
 
 def test_allowed_paths_pass():
@@ -498,13 +498,28 @@ def test_allowed_paths_pass():
             "backend/app/service.py",
             "backend/tests/test_service.py",
             "docs/specs/STATUS.md",
-        ]
+            "docs/specs/079-autonomous-development-loop-0.md",
+        ],
+        "079",
     )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "docs/specs/080-autonomous-review-repair-0.md",
+        "docs/specs/078-bluecad-complex-system-reference-architecture.md",
+        "docs/specs/archive/079-old.md",
+    ],
+)
+def test_non_active_specification_paths_are_rejected(path):
+    with pytest.raises(mod.ContinuationError, match="non-active specification"):
+        mod.validate_changed_paths([path], "079")
 
 
 def test_too_many_paths_fail():
     with pytest.raises(mod.ContinuationError, match="too many"):
-        mod.validate_changed_paths([f"docs/{i}.md" for i in range(21)])
+        mod.validate_changed_paths([f"docs/{i}.md" for i in range(21)], "079")
 
 
 def test_status_only_active_row_may_change_when_binding_is_preserved():
@@ -524,6 +539,13 @@ def test_status_may_not_rebind_the_active_pr():
     before = registry()
     after = before.replace("/pull/210", "/pull/211")
     with pytest.raises(mod.ContinuationError, match="active PR"):
+        mod.validate_status_change(before, after, "079", 210)
+
+
+def test_status_dependencies_may_not_change():
+    before = registry()
+    after = before.replace("| CONTINUE | 004 | active |", "| CONTINUE | 080 | active |")
+    with pytest.raises(mod.ContinuationError, match="dependencies may not change"):
         mod.validate_status_change(before, after, "079", 210)
 
 
@@ -657,6 +679,18 @@ def test_workflow_contract_separates_validation_and_trusted_push():
     assert "index_tree=$(git write-tree)" in push_block
     assert "--active-pr" in push_block
     assert "python scripts/daily_development_continuation.py validate" not in push_block
+
+
+def test_workflow_runs_timed_bluecad_canary_before_push():
+    text = (ROOT / ".github/workflows/daily-development-continuation.yml").read_text()
+    validate_block = text.split("  validate:\n", 1)[1].split("\n  push:\n", 1)[0]
+    assert "Run timed BLUECAD continuation canary" in validate_block
+    assert "timeout 240s python -m pytest -q" in validate_block
+    assert "tests/bluecad/test_manifest_determinism_canary.py" in validate_block
+    assert "tests/bluecad/test_geometry_property_invariants.py" in validate_block
+    assert "tests/bluecad/test_capped_manifold.py" in validate_block
+    assert 'test "$status" = "0"' in validate_block
+    assert 'test "$elapsed" -le 240' in validate_block
 
 
 def test_workflow_oidc_authority_is_confined_to_trusted_jobs():
