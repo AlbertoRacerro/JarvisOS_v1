@@ -1,82 +1,64 @@
 # 079 — AUTONOMOUS-DEVELOPMENT-LOOP-0: minimal scheduled continuation
 
-Status: full specification, ready for implementation after the dated readiness decision in `079-readiness-2026-08-01.md` is merged and `docs/specs/STATUS.md` records `ready`.
+Status: implementation contract. `docs/specs/STATUS.md` is authoritative.
 
 Depends on: 022
 
 ## 1. Acceptance criterion
 
-When one already-authorized implementation session is interrupted, JarvisOS repository work resumes without a new maintainer message, on the same pull request branch, for the same spec, and against the same exact head.
+When one already-authorized implementation session stops, repository work resumes without a new maintainer message, on the same pull-request branch, for the same specification, and from the exact current head.
 
-V0 satisfies this criterion with one GitHub Actions workflow scheduled once per day. The workflow reconstructs all authority from state that already exists in GitHub:
+V0 satisfies this criterion with one GitHub Actions workflow scheduled once per day. It reuses the installed `anthropics/claude-code-action@v1` integration and the existing `CLAUDE_CODE_OAUTH_TOKEN`. It adds no provider account, credential, repository, GitHub App, service, database, queue, control branch, claim, or lease.
 
-- the single `in_review` row and implementation PR number in `docs/specs/STATUS.md`;
-- the open pull request, its base, head repository, head branch and exact head SHA;
-- the branch and commit history;
-- deterministic workflow runs and one idempotency marker in the PR conversation.
-
-No additional authority file, control branch, database, queue, lease, claim registry, GitHub App, organization, repository or credential is required.
-
-## 2. Test del minimo necessario
+## 2. Minimum-necessary test
 
 ### Test del minimo necessario
-Criterio di accettazione della spec:
-Una sessione interrotta riprende da sola, sullo stesso ramo e sulla stessa spec, senza un nuovo messaggio del maintainer.
+Acceptance criterion of the specification:
+An interrupted implementation session resumes on the same branch and specification without a new maintainer message.
 
-Questo lavoro serve a soddisfarlo?           sì
+Does this work satisfy it?                   yes
+Can the criterion be met without it?         no — a future trigger must observe the interrupted front and invoke the existing agent integration.
+Can it be met with less infrastructure?      no — one daily workflow, one standard-library script, existing GitHub state, and the existing Claude action are the minimum mechanism.
 
-Il criterio è raggiungibile senza di esso?   no — senza un trigger futuro non esiste alcun processo che osservi il fronte interrotto e pubblichi la richiesta di continuazione.
-
-Il criterio è raggiungibile con meno infrastruttura? sì — un singolo workflow schedulato, il `GITHUB_TOKEN` già fornito da Actions e lo stato GitHub esistente sono sufficienti.
-
-Conseguenza vincolante: non costruire App, webhook, servizio, database, coda, control branch, lease, compare-and-swap remoto, ruleset di prova o repository sandbox per 079 v0. Il precedente proof CAS resta evidenza allegata di una possibile estensione, non una dipendenza.
+Binding consequence: do not build the earlier GitHub App, webhook service, database, queue, `jarvis-control` branch, compare-and-swap authority ledger, claim/lease system, ruleset laboratory, token-revocation programme, or sandbox repository for 079 v0. The already merged CAS experiments remain historical evidence, not an implementation dependency.
 
 ## 3. Scope
 
-079 comprende esclusivamente:
+079 owns only scheduled continuation of one existing implementation pull request:
 
-1. individuare deterministicamente l'unica spec di implementazione `in_review`;
-2. verificare che il numero PR registrato esista e identifichi una PR aperta nello stesso repository;
-3. verificare base `master`, ramo head non protetto e exact head SHA;
-4. rifiutare ambiguità, più fronti attivi, PR chiusa, fork, branch mancante o stato incoerente;
-5. pubblicare al massimo una richiesta di continuazione per la tupla `(spec, PR, exact head)`;
-6. non fare nulla quando la stessa tupla è già stata richiesta;
-7. poter essere eseguito manualmente in modalità `dry_run` per prova e diagnosi;
-8. registrare l'esito nel log del workflow.
+1. enumerate open pull requests;
+2. read `docs/specs/STATUS.md` from each exact pull-request head;
+3. find exactly one same-repository, non-draft pull request whose own head registry contains exactly one `in_review` row linked to that pull-request number;
+4. verify base `master`, an unprotected head branch, a valid exact head, specification binding, and ancestry from the prior continuation checkpoint;
+5. in `SHADOW`, report the exact action without invoking Claude or mutating GitHub;
+6. in `EXECUTE_NO_MERGE`, invoke the existing Claude Code Action on that exact head;
+7. treat Claude's working-tree result as untrusted input;
+8. validate paths and run deterministic gates in a separate write-authority job;
+9. push only a non-forced same-branch commit when the remote head still equals the planned head;
+10. record one idempotent checkpoint marker in the pull-request conversation.
 
-La richiesta di continuazione deve dire all'attuatore già installato di lavorare sulla stessa PR e sullo stesso ramo, rispettare la spec e `AGENTS.md`, non cambiare scope, non modificare segreti o workflow e non eseguire merge.
+079 does not select a new specification, create a pull request, perform review, classify findings, request fixes or re-review, or merge.
 
-## 4. Separazione da review/fix
+## 4. Separate specification 080
 
-La separazione implementatore/revisore, la classificazione dei rilievi, la correzione e la ri-revisione non appartengono a 079.
+Implementer/reviewer separation and the finding → correction → re-review cycle belong exclusively to spec 080 `AUTONOMOUS-REVIEW-REPAIR-0`.
 
-Quella capacità è definita separatamente da spec 080 `AUTONOMOUS-REVIEW-REPAIR-0`. 080 può essere rimossa senza rimuovere la continuazione giornaliera di 079. Il workflow 079:
+080 remains independently removable and `planned`. No 080 behavior may be added to the 079 workflow.
 
-- non legge né risolve thread di review;
-- non decide se un rilievo è vero o falso;
-- non chiede review;
-- non chiede fix di review;
-- non esegue merge;
-- non modifica label o stato della spec.
+## 5. Workflow and modes
 
-## 5. Workflow
+Implementation path: `.github/workflows/daily-development-continuation.yml`.
 
-Path previsto: `.github/workflows/daily-development-continuation.yml`.
-
-Trigger:
+Triggers:
 
 ```yaml
 on:
   schedule:
     - cron: "17 4 * * *"
   workflow_dispatch:
-    inputs:
-      dry_run:
-        type: boolean
-        default: true
 ```
 
-Il workflow usa:
+Concurrency:
 
 ```yaml
 concurrency:
@@ -84,128 +66,161 @@ concurrency:
   cancel-in-progress: false
 ```
 
-Permessi massimi:
+Repository variable `JARVISOS_CONTINUATION_MODE` has a closed vocabulary:
 
-```yaml
-permissions:
-  contents: read
-  pull-requests: read
-  issues: write
-```
+- `OFF`: default when absent; no API discovery beyond workflow checkout, no Claude invocation, no mutation;
+- `SHADOW`: reconstruct and report the eligible exact-head action; no Claude invocation and no mutation;
+- `EXECUTE_NO_MERGE`: run the bounded continuation path; never merge.
 
-Non sono ammessi `contents: write`, `actions: write`, secret aggiuntivi, token personali o checkout di un ramo modificabile.
+Any other value fails closed. Tests never enter a live provider path.
 
-## 6. Deterministic discovery
+## 6. Existing credential boundary
 
-Lo script previsto è `scripts/daily_development_continuation.py`.
+The workflow reuses `CLAUDE_CODE_OAUTH_TOKEN`, already named by `.github/workflows/claude-review.yml`.
 
-Parsing del registry:
+GitHub does not expose secret values through repository APIs. The plan job checks only non-empty presence without printing or exporting the value. Actual validity or expiry is exercised only when the maintainer changes the mode to `EXECUTE_NO_MERGE`; a rejected authentication attempt fails the workflow before any push.
 
-- accetta solo righe tabellari valide;
-- considera attive solo `in_progress` e `in_review`;
-- v0 continua soltanto `in_review`, perché una PR esistente è il minimo contesto durevole che lega spec e ramo;
-- richiede esattamente una riga `in_review` e nessuna diversa riga attiva;
-- estrae un solo numero PR dalla colonna `Implementation PR`;
-- ogni ambiguità termina con zero commenti e exit non-zero.
+No new credential is introduced. `GITHUB_TOKEN` is used only for GitHub API reads, the isolated validation job's non-forced branch push, and the checkpoint comment.
 
-Verifica PR:
+## 7. Authority separation inside the workflow
 
-- repository head uguale al repository base;
-- base ref `master`;
-- head ref diverso da `master` e `main`;
-- PR `open`, non draft;
-- exact head presente e di 40 caratteri esadecimali;
-- spec a tre cifre presente nel titolo, nel ramo o nel corpo della PR;
-- il numero della spec deve coincidere con la riga registry.
+### 7.1 Plan job
 
-## 7. Idempotency
+The plan job has read-only repository and pull-request permissions. It reconstructs the sole active front from current GitHub facts and exports the exact plan.
 
-La chiave è:
+### 7.2 Claude generation job
 
-`sha256(repository + spec + pr_number + exact_head + schema_version)`
+The Claude job:
 
-Il commento contiene:
+- has `contents: read` only;
+- checks out the exact planned SHA with persisted credentials disabled;
+- uses `anthropics/claude-code-action@v1` and the existing OAuth secret;
+- receives the exact specification, pull request, branch, input head, and control constraints;
+- may modify only the local working tree;
+- cannot push, comment, label, merge, dispatch another model, or own a write token;
+- exports a bounded binary Git patch as an artifact.
+
+A local Claude commit is harmless: the exported artifact is always a patch relative to the planned exact head. The remote head is reread and must remain unchanged after Claude exits.
+
+### 7.3 Validation and push job
+
+Only the separate validation job receives `contents: write`. It does not receive the Claude OAuth secret. It:
+
+1. checks out the planned exact head;
+2. applies the untrusted patch;
+3. rejects protected or sensitive paths;
+4. runs deterministic gates before any push;
+5. rereads the remote branch head;
+6. commits and performs a normal non-forced push only when the remote head still equals the planned head;
+7. records the input/output checkpoint marker.
+
+A push made with `GITHUB_TOKEN` is not assumed to trigger CI, so this job runs the complete deterministic gate set itself.
+
+## 8. Discovery and authority
+
+Implementation script: `scripts/daily_development_continuation.py`, standard library only.
+
+The script lists all open pull requests with bounded pagination. For each non-draft pull request it reads `docs/specs/STATUS.md` from the exact head SHA, not from `master`.
+
+An eligible front requires:
+
+- exactly one active registry row in that head;
+- status exactly `in_review`;
+- exactly one implementation PR number, equal to the pull request being inspected;
+- same base and head repository;
+- base branch `master`;
+- head branch not `master` or `main`;
+- valid 40-character lowercase hexadecimal base and head SHAs;
+- the same three-digit specification identifier in the registry and PR title, body, or branch.
+
+Zero eligible fronts is an honest no-op. More than one eligible front, an `in_progress` row without a durable PR, multiple active rows, incomplete pagination, a fork, or any mismatch fails closed.
+
+## 9. Checkpoint and idempotency
+
+The marker is:
 
 ```text
-<!-- jarvis-continuation:v1:<digest> -->
+<!-- jarvis-continuation:v1 spec=<spec> pr=<number> input=<sha> output=<sha> result=<changed|no_change> -->
 ```
 
-Prima di pubblicare, lo script legge tutti i commenti della PR e cerca esattamente il marker. Se esiste, ritorna successo senza una seconda richiesta.
+The current head must descend from the last output checkpoint, or from the PR base when no marker exists.
 
-Il testo operativo contiene l'exact head. Un nuovo commit produce una nuova chiave ed è quindi eleggibile al ciclo giornaliero successivo. Nessuna chiave è conservata altrove.
+- A `no_change` marker whose output equals the current head makes that head terminal and prevents another invocation.
+- A `changed` marker must name the exact current head as output; that output becomes the next checkpoint.
+- Two markers with the same input and different outputs/results are an integrity error.
+- A marker claiming an output not observed as the current head is an integrity error.
 
-## 8. Fail-closed conditions
+No separate ledger or mutable label is used.
 
-Zero commenti e fallimento deterministico per:
+## 10. Protected paths and patch limits
 
-- nessun fronte o più fronti attivi;
-- stato `in_progress` senza PR;
-- più righe `in_review`;
-- PR assente, chiusa, draft o fork;
-- base diversa da `master`;
-- head protetto o SHA invalido;
-- spec non riconciliabile con PR/ramo;
-- errore API, risposta incompleta o paginazione non conclusa;
-- marker con stessa chiave e testo incompatibile;
-- permessi insufficienti.
+The generated patch is rejected if it changes:
 
-Uno stato semplicemente non eleggibile usa exit code 0 con `action=noop`; un'incoerenza di autorità usa exit code non-zero.
+- `.github/**`;
+- `AGENTS.md`;
+- `CODEOWNERS`;
+- `scripts/daily_development_continuation.py`;
+- `backend/tests/test_daily_development_continuation.py`;
+- environment, secret, token, credential, or key paths.
 
-## 9. Tests
+`docs/specs/STATUS.md` may change only the active specification row. No registry row may be added or removed by scheduled continuation.
 
-Tutti i test sono offline con HTTP fake.
+V0 limits the patch to 20 files and 200,000 bytes.
 
-Obbligatori:
+## 11. Deterministic gates before push
 
-1. parsing di una singola riga `in_review`;
-2. rifiuto di zero o più fronti;
-3. rifiuto di `in_progress` senza PR;
-4. rifiuto di PR chiusa, draft, fork o base errata;
-5. rifiuto di spec mismatch;
-6. marker deterministico;
-7. primo run pubblica una richiesta;
-8. replay sullo stesso head non pubblica;
-9. nuovo head produce una nuova richiesta;
-10. `dry_run` non pubblica;
-11. errore/paginazione API non produce side effect;
-12. self-test del workflow senza rete o provider.
+For a non-empty patch, the validation job runs:
 
-Nessun test può menzionare realmente `@codex`, effettuare chiamate a provider o consumare quota. Il client fake deve registrare il payload che sarebbe inviato.
+1. spec-registry self-test and live registry validation;
+2. cheap-review and manual-review offline self-tests;
+3. dependency installation from existing requirement files;
+4. Ruff over backend code, tests, and repository control scripts including the 079 script;
+5. full backend Pytest;
+6. frontend `npm ci` and production build when a frontend file changed;
+7. `git diff --check`;
+8. exact remote-head reread.
 
-## 10. Acceptance proof
+Any failure produces zero push and zero checkpoint marker.
 
-La prova di accettazione ha due livelli:
+## 12. Offline tests
 
-1. **Deterministico offline:** i test dimostrano discovery, exact-head binding, idempotenza e zero side effect sui casi non eleggibili.
-2. **GitHub Actions reale senza provider:** dopo il merge, un `workflow_dispatch` in `dry_run=true` deve identificare correttamente una PR campione o produrre `noop` quando non esiste un fronte. La schedulazione giornaliera e il gruppo di concorrenza sono verificati dalla definizione workflow e dal run GitHub.
+`backend/tests/test_daily_development_continuation.py` uses fake GitHub readers and no network or provider.
 
-L'invio reale della richiesta di continuazione non è un test CI e non viene forzato per creare lavoro artificiale. Avverrà sul primo fronte reale eleggibile con `dry_run=false`.
+Required coverage includes OFF, SHADOW, secret-presence enforcement, exact PR-head registry discovery, zero-front no-op, draft/fork/base/spec/ancestry failures, multiple-front rejection, checkpoint idempotency, conflicting-marker rejection, protected paths, file-count limits, active-row-only STATUS changes, and static workflow authority checks.
 
-## 11. Non-goals
+## 13. Acceptance proof
 
-- review, fix o ri-review automatici;
-- merge o auto-merge;
-- selezione autonoma di una nuova spec;
-- continuazione prima dell'apertura di una PR;
-- più fronti o più repository;
-- daemon, webhook o polling più frequente di una volta al giorno;
-- nuovi account, credenziali o archivi di stato;
-- provider routing, budget ledger o contabilità;
-- App, ruleset, branch protection o capability wrapper;
-- recupero da force-push o ref race;
-- modifica di JarvisOS runtime, Hermes, backend o frontend.
+Acceptance is established in layers:
 
-## 12. Rollback
+1. offline deterministic tests prove discovery, exact-head binding, idempotency, authority separation, and fail-closed paths;
+2. normal PR CI proves the implementation and complete repository remain green;
+3. after merge, an Actions run in `SHADOW` proves GitHub-hosted discovery without provider execution or mutation;
+4. the first real eligible run in `EXECUTE_NO_MERGE` proves cross-session continuation using the existing credential. Authentication failure is a credential obstacle, not a reason to build new infrastructure.
 
-La capacità è rimossa eliminando un workflow e uno script. Nessuno stato applicativo o schema deve essere migrato. I marker PR restano cronologia innocua.
+Default `OFF` means merge alone invokes no provider and incurs no spend.
 
-## 13. Definition of done
+## 14. Non-goals
 
-- workflow e script implementati;
-- test offline verdi;
-- full repository CI verde;
-- workflow permissions conformi;
-- dry-run GitHub Actions osservato;
-- nessun nuovo secret, account, repository o stato durevole;
-- `STATUS.md` registra 079 `merged` dopo integrazione;
-- 080 resta una spec separata e non implementata.
+- review, finding management, repair, or re-review;
+- merge or auto-merge;
+- automatic selection or authorization of a new specification;
+- continuation before an implementation PR exists;
+- parallel fronts, forks, or multiple repositories;
+- App, webhook service, daemon, database, queue, control branch, claim, or lease;
+- paid-provider tests or synthetic work created only to exercise the workflow;
+- changes to JarvisOS runtime, Hermes, backend APIs, frontend product behavior, repository settings, secrets, rulesets, or branch protection.
+
+## 15. Rollback
+
+Delete one workflow, one script, and one focused test. No application state, schema, account, credential, or external service must be migrated.
+
+## 16. Definition of done
+
+- workflow, script, and focused tests merged;
+- 079 exact-head PR CI green;
+- all current review findings resolved;
+- mode defaults to `OFF`;
+- no new credential, account, repository, state store, dependency, or runtime service;
+- 079 recorded as `merged` after integration;
+- 080 remains separate and `planned`;
+- a real `SHADOW` run is observed without provider execution or mutation.
