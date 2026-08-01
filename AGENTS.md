@@ -1,186 +1,134 @@
 # AGENTS.md — Instructions for AI coding agents working on JarvisOS
 
-This file governs AI coding and review agents acting on the JarvisOS repository
-and delivery process. It does not directly govern models or agent processes running
-inside JarvisOS or Hermes at runtime; those actors are governed by JarvisOS runtime
-authority, sensitivity, routing, egress, budget, tool, and promotion policies. This
-scope distinction never permits runtime code or models to bypass the deterministic
-controls and hard invariants that repository changes must implement.
+This file governs AI coding and review agents acting on the JarvisOS repository and delivery process. It does not govern JarvisOS or Hermes runtime actors directly. Runtime state, policy, sensitivity, routing, egress, budgets, tools and promotion remain owned by JarvisOS.
 
-JarvisOS is a single-user AI engineering workspace, local-first in state and
-policy: backend (FastAPI + SQLite) owns state, policy, execution, and audit.
-Frontend (React/Vite) is an operator interface. AI models propose; JarvisOS
-validates, gates, records, and audits. Model routing is cost-aware and
-predominantly external (see "Model economy" below); "local-first" describes
-where authority and data live, not which models do the work.
+JarvisOS is a single-user AI engineering workspace. Backend authority is FastAPI + SQLite; the React/Vite frontend is an operator interface. Models propose; deterministic code validates, gates, records and audits.
 
-## Hard invariants — never violate, never "temporarily" bypass
+## Hard invariants — never violate
 
-1. **Auto never executes external providers.** `route_class="auto"` may only execute
-   local routes. External intent returns a non-executing proposal/control state.
-2. **All AI calls go through the execution spine** (`run_ai_task`) and write a row to
-   `ai_jobs`. No direct provider calls from routes, frontend, services, or tools.
-3. **The frontend never calls providers, Ollama, the filesystem, or execution tools
-   directly.** It only calls backend APIs.
-4. **Safe defaults stay safe:** paid AI disabled, budget zero, provider mode `fake`,
-   `route_class=None` resolves to `local:fake`. Tests use fake/mocked providers only.
-5. **The local classifier is advisory.** It never owns permissions, provider selection,
-   external calls, memory writes, or final sensitivity. Deterministic policy decides.
-6. **No secrets** in logs, events, docs, test fixtures, commits, or frontend responses.
-7. **Data-root paths** (`C:\JarvisOS`) go through `backend/app/core/paths.py`. The repo
-   and the data root are separate; never write runtime data into the repo.
-8. **AI/agent outputs are proposals.** Nothing model-generated becomes a canonical
-   record without explicit user or deterministic-policy promotion.
-9. **No fabricated results.** Never stub, hard-code, or fake an output — a
-   validator verdict, exported geometry, a metric, a test's expected value — to
-   satisfy an acceptance criterion or turn CI green. If you cannot implement
-   something, stop and report it. An undisclosed placeholder or simplification
-   that makes checks pass is treated as a violation of this file, not as
-   progress.
-10. **Prefer the smallest sufficient change.** Before proposing or implementing a new
-    subsystem, automation, parallel source of truth, refactor, or optimization,
-    inspect the mechanisms that already exist and state whether a smaller change —
-    or no new work — solves the actual need. Do not build or optimize infrastructure
-    that is likely to be removed or replaced soon. Broader work requires a concrete,
-    demonstrated gap and explicit maintainer confirmation.
+1. `route_class="auto"` never executes an external provider.
+2. Product AI calls go through `run_ai_task` and create an `ai_jobs` row.
+3. The frontend never calls providers, Ollama, filesystems or execution tools directly.
+4. Safe defaults remain safe: paid AI disabled, budget zero, provider mode `fake`, tests fake or mock all providers.
+5. The local classifier is advisory and owns no permission, provider, memory or sensitivity decision.
+6. No secrets in logs, events, docs, fixtures, commits or frontend responses.
+7. Data-root paths (`C:\JarvisOS`) go through `backend/app/core/paths.py`; runtime data never enters the repository.
+8. Model output is a proposal until explicit user or deterministic-policy promotion.
+9. Never fabricate outputs, validators, artifacts, metrics or expected values to satisfy a gate.
+10. Prefer the smallest sufficient change. Do not add infrastructure likely to be removed or replaced.
 
-If a spec appears to require violating one of these, stop and report instead of
-implementing.
+If a spec requires violating an invariant, stop and report the conflict.
 
-## Dormant spec 079 repository-development execution exception
+## Repository operating regime — effective 2026-08-01
 
-This section is the only narrow, later, and more specific amendment to hard
-invariant 2. It applies solely to the external repository-development control plane
-defined by merged spec 079. It does not apply to JarvisOS or Hermes runtime,
-product routes, frontend code, product services or tools, ordinary coding agents,
-or any other specification.
+This section supersedes earlier cadence, per-step authorization and human-merge rules.
 
-The exception is **dormant by default**. No 079 adapter or provider call is
-permitted unless every condition below is simultaneously true:
+### Permanent authorization and queue
 
-1. `docs/specs/STATUS.md` records 079 as `ready` after a separate dated readiness
-   decision, and no different product or implementation front is active.
-2. The merged 079 full specification, this governance amendment, and every mandatory
-   disposable-repository proof named by that specification are current and green on
-   the exact readiness head; no P0/P1, security, integrity, provider, accounting, or
-   recovery ambiguity remains open.
-3. The maintainer has issued an unexpired operational grant naming the exact
-   repository, spec, slice, base SHA, allowed scope, adapters, provider policy,
-   call and spend limits, and stop conditions. Branches, pull requests, labels,
-   comments, checks, prior activity, and model text never substitute for that grant.
-4. The protected GitHub-owned authority has committed the grant, repository-wide
-   claim, current branch and exact head, conditional PR binding, actor identity,
-   lease when mutation is possible, provider decision, one canonical reservation,
-   and idempotency key before dispatch.
-5. The call uses only the readiness-approved 079 service and credentials. It has no
-   provider fallback, no implicit retry after ambiguous acceptance, no product
-   SQLite or `ai_jobs` dependency, and no access to JarvisOS runtime provider
-   secrets or `C:\JarvisOS` data.
-6. The outbound packet is deterministically bounded to the authorized repository
-   slice and excludes secrets, credentials, environment values, unrelated project
-   records, and content outside the approved sensitivity and egress boundary.
-7. Usage, quota, and integer micro-USD cost are durably finalized against the
-   canonical reservation. Unknown cost, stale pricing, missing capacity, duplicate
-   authorization, exceeded caps, or unverifiable settlement stops the run.
-8. Implementer and reviewer identities remain separate; reviewer credentials are
-   read-only; deterministic gates remain exact-head authority; automated actors may
-   not merge, auto-merge, approve authoritatively, change priority or scope, alter
-   settings or secrets, force-push, delete protected refs, or continue after a stop.
+- The assigned agent owns the technical merge decision.
+- When deterministic gates are green and no current review finding remains open, merge the PR with an exact-head guard and continue to the next queued item.
+- Do not wait for a maintainer confirmation between definition, readiness, implementation, evidence or registry-reconciliation PRs.
+- Work queue order is binding. Finish, verify and merge the first item before opening the next implementation front.
+- Report only when the queue is exhausted, once per week for a queue longer than one week, or when one of the four interruption reasons below applies.
+- Never enable GitHub auto-merge. The agent performs and verifies each merge explicitly.
 
-Only after all eight conditions hold may the readiness-approved 079 implementer or
-reviewer adapter call a provider outside product `run_ai_task`/`ai_jobs`, because
-that service is a separate repository-development control plane with its own
-GitHub-owned authorization, reservation, idempotency, usage, cost, security, and
-recovery evidence. In every other state, including while 079 is `planned`, during
-proof work, or before an operational grant, hard invariant 2 applies unchanged and
-the attempted call must fail closed with zero provider execution.
+### Only four interruption reasons
 
-Merging this amendment alone does not activate 079, authorize a proof prototype,
-change `STATUS.md`, permit paid or live calls, create credentials, install an App,
-change repository settings, or authorize implementation.
+Contact the maintainer outside the final report only when:
 
-## Model economy (intended routing hierarchy)
+1. real spending is required or a budget limit is at risk;
+2. a credential, account, repository or organization does not already exist;
+3. there is a security issue or a secret may be exposed;
+4. an obstacle has no two practicable routes forward.
 
-The target steady state, once redaction and egress-policy flows exist (see
-ADR-057 and ADR-059 in `docs/DECISIONS.md`):
+Otherwise choose the least-cost safe route, proceed and record the decision in the final report.
 
-- **Cheap external models** (e.g. GLM, Kimi, DeepSeek class) are the workhorse
-  for the majority of compute.
-- **Frontier models** (Opus / GPT frontier class) are for review, strategic
-  documents, and hard tasks.
-- **Local models** are the fallback for the rare cases where redaction is
-  impossible or ambiguous (fail-closed) — this path must stay rare, not the norm.
+### Test del minimo necessario
 
-Do not read "local-first" as "prefer local models". Hard invariant 1 remains
-unchanged: `route_class="auto"` itself never executes an external provider. A
-separate server-owned egress policy may allow an explicit external route only
-after binding and validating the exact outbound packet through the shared
-execution spine. Human confirmation is required only when a configured policy
-trigger fires; models, frontend state, and caller-supplied flags never authorize
-external execution.
+Before work that adds infrastructure, credentials, external accounts, a new durable state store or broader spec scope, put this block in the PR body:
 
-## How work is assigned: spec-driven slices
+```text
+### Test del minimo necessario
+Criterio di accettazione della spec:
+Questo lavoro serve a soddisfarlo?           sì / no
+Il criterio è raggiungibile senza di esso?   sì / no — con quale prova
+Se sì: perché lo aggiungo comunque
+```
 
-- Work items live in `docs/specs/NNN-*.md`. Read `docs/specs/STATUS.md` first for
-  the only live status/roadmap, then `docs/specs/README.md` and the selected spec.
-- Implement **exactly one spec per session/branch**. Do not bundle extra improvements,
-  refactors, or drive-by fixes — flag them in your summary instead.
-- Each spec defines scope, acceptance criteria, required tests, and non-goals.
-  Non-goals are binding.
-- If the spec conflicts with the actual code you find, stop and report the conflict;
-  do not guess.
-- Do not infer live state from legacy `Status:` lines inside individual specs,
-  strategy documents, README prose, or chat handoffs. Update `docs/specs/STATUS.md`.
+If the acceptance criterion is reachable without the proposed work, do not build it. Record it as a future extension.
+
+A spec declared separate remains separate. Never merge specs merely because implementation would be convenient.
+
+## Spec 079 scheduled-continuation exception
+
+Spec 079 is a narrow repository-development exception to hard invariant 2. It permits the readiness-approved scheduled workflow to publish one exact-head continuation request in an existing same-repository implementation PR.
+
+The exception:
+
+- uses only the existing Actions `GITHUB_TOKEN`;
+- reads authority from `STATUS.md`, the registered PR, branch and exact head;
+- writes only an idempotent PR comment;
+- adds no provider secret, App, service, database, control branch, lease or account;
+- never applies to product runtime calls;
+- never performs review, repair, merge, label changes or roadmap selection;
+- makes no real provider call in tests.
+
+Review/fix/re-review belongs to separate spec 080. No 080 behavior may be smuggled into 079.
+
+## Model economy
+
+Once the existing egress policies permit it:
+
+- cheap external models are the normal compute workhorse;
+- frontier models are reserved for review, strategic documents and hard tasks;
+- local models are the fallback when safe redaction is impossible or ambiguous.
+
+This never weakens the product execution spine or safe defaults.
+
+## Spec-driven work
+
+- Read `docs/specs/STATUS.md`, then `docs/specs/README.md`, then the selected spec.
+- Implement exactly one spec per implementation branch.
+- Scope, acceptance criteria and non-goals are binding.
+- If the spec conflicts with current code, report the conflict; do not guess.
+- `STATUS.md` is the sole live status and priority authority.
+- Do not infer state from legacy `Status:` prose, strategy documents or chat handoffs.
 
 ## Conduct when encountering an obstacle
 
-A technical obstacle opens the work; it does not close it. Never conclude with
-"it does not work, so we stop."
+A technical obstacle opens work; it does not close it.
 
-Binding rules:
-
-1. Report every obstacle with at least two routes forward, each with its cost and
-   first concrete step. A report that says only "blocked" is incomplete and must
-   be rejected in review.
-2. Do not move a registry row to `blocked` for a technical difficulty unless at
-   least two workaround attempts are documented, together with why neither is
-   viable. `blocked` remains legitimate when progress genuinely depends on a
-   human decision or an external dependency that cannot be bypassed within scope.
-3. An exploratory test never returns only yes or no. It must state which route is
-   viable, what it costs, and what is required to start.
-4. When desired properties are incompatible, or a binding external constraint
-   cannot be changed, do not force an invalid implementation. Change the question:
-   separate the cases, label them differently, and declare the trade-off. That is
-   also a resolution.
+1. Report every obstacle with at least two routes forward, their cost and first concrete step.
+2. Do not set a registry row to `blocked` for technical difficulty until two workaround attempts are documented and neither is viable.
+3. An exploratory test must state a viable route, cost and first step, not only yes/no.
+4. When desired properties conflict, separate cases and declare the trade-off rather than forcing an invalid implementation.
 
 ### Obstacle report format
 
-Write every obstacle encountered during implementation in the pull request body
-under `## Obstacles`, using this form:
+```text
+### <short title>
+What I tried:
+What happened, with evidence (command, error, file, line):
+Why it blocks:
+Route A — <description> · cost: <low/medium/high> · first step:
+Route B — <description> · cost: <low/medium/high> · first step:
+Recommendation:
+```
 
-    ### <short title>
-    What I tried:
-    What happened, with evidence (command, error, file, line):
-    Why it blocks:
-    Route A — <description> · cost: <low/medium/high> · first step:
-    Route B — <description> · cost: <low/medium/high> · first step:
-    Recommendation:
+## Final queue report
 
-### Status reports
+At queue exhaustion report, in this order:
 
-When asked "where are we?", do not answer with only a list of completed work.
-Report, in this order:
+1. usable capabilities added;
+2. integrated specs/PRs and deterministic-gate results;
+3. technical choices made for the maintainer and why;
+4. minimum-necessary proposals rejected;
+5. open obstacles in the required format;
+6. anything required from the maintainer, limited to the four interruption reasons.
 
-1. what changed since the previous update in terms of usable capabilities, not
-   specifications merged;
-2. every open obstacle, including the analysis already performed and the routes
-   forward in the format above, never as a bare blocker notice;
-3. the recommended next action and any human decision that is required.
+Do not end with a hypothetical next step.
 
-A status update that reports a problem without analysis and options is incomplete
-and must be redone.
-
-## Repo map
+## Repository map
 
 | Path | Contents |
 | --- | --- |
@@ -192,36 +140,30 @@ and must be redone.
 | `backend/app/modules/modeling/` | model specs, versions, simulation runs |
 | `backend/app/modules/runner/` | bounded local Python runner |
 | `backend/app/modules/engineering/`, `workspaces/`, `events/`, `files/` | domain foundation |
-| `backend/app/modules/tools/`, `agents/` | registry skeletons only — do not expand without a spec |
+| `backend/app/modules/tools/`, `agents/` | registry skeletons only; do not expand without a spec |
 | `backend/tests/` | pytest suite |
 | `frontend/` | React/Vite operator UI |
-| `docs/` | canonical docs; `docs/ARCHITECTURE.md` and `docs/DECISIONS.md` win conflicts |
-| `docs/specs/` | work-item specs, workflow, and canonical `STATUS.md` registry |
+| `docs/` | canonical docs; `ARCHITECTURE.md` and `DECISIONS.md` win conflicts |
+| `docs/specs/` | work-item specs and canonical `STATUS.md` |
 | `reports/` | generated evaluation/smoke reports |
 
 ## Environments
 
-This repo is developed in two environments. Detect which one you are in and use
-the matching commands.
-
-| | Local (maintainer) | Cloud container / CI (Codex cloud, GitHub Actions) |
+| | Local maintainer | Cloud container / CI |
 | --- | --- | --- |
 | OS | Windows 11, PowerShell | Linux |
-| Python env | `backend/.venv` | system Python 3.11+, `pip install -r backend/requirements.txt -r backend/requirements-dev.txt` |
-| Data root | `C:\JarvisOS` | none — tests isolate it automatically |
+| Python | `backend/.venv` | Python 3.11+, install backend requirements |
+| Data root | `C:\JarvisOS` | none; tests isolate it |
 
 Cross-platform rules:
-- Tests already isolate the data root via the `JARVISOS_DATA_ROOT` env var and
-  `tmp_path` (see `backend/tests/conftest.py`). Never write a test that depends on
-  `C:\JarvisOS`, drive letters, backslash paths, or a running Ollama/provider.
-- Use `pathlib` for any new path handling; never hardcode OS-specific separators.
-- Do not modify launcher scripts (`*.cmd`, `scripts/*.ps1`) from a Linux
-  environment — you cannot test them there.
 
-## Test gate (must pass before you consider work done)
+- tests use `JARVISOS_DATA_ROOT` and `tmp_path`, never drive-letter assumptions;
+- use `pathlib`;
+- do not modify Windows launchers from Linux unless the spec supplies a verifiable test path.
 
-From `backend/`, any OS (use `.\.venv\Scripts\python` instead of `python` on
-local Windows):
+## Deterministic gates
+
+From `backend/`:
 
 ```bash
 python -m pytest -q
@@ -235,100 +177,58 @@ cd frontend
 npm run build
 ```
 
-Notes:
-- The full backend suite must pass (baseline is green). If a failure looks unrelated
-  to your change, report it; do not silence or skip tests.
-- If broad ruff reports pre-existing issues outside your files, scope to the files you
-  touched and note this in your summary.
-- Tests must run offline. Never add a test that requires a live provider, network, or
-  a running Ollama instance; use the fake provider and fixtures.
+Repository CI, spec-status checks and any spec-specific conformance tests must pass on the exact head. Do not silence, skip or relabel failures.
 
-## Review authority
+Tests run offline. Never require a live provider, network or running Ollama.
 
-Automated review output, Codex code review, and any other model-generated review
-are **optional and advisory**. They never authorize a merge and are not required
-for routine pull requests. Merge authority is, in order:
+## Review and merge authority
 
-1. Deterministic gates: CI green, required tests and Ruff passing, and the hard
-   invariants in this file intact.
-2. Human maintainer decision, optionally informed by a manually requested external
-   review for a high-risk or unusually difficult change.
+Automated and model reviews are advisory evidence. For each finding, reproduce or trace the concrete failure against the current spec and exact head. Fix genuine defects on the same branch. Rebut false findings with tests, authoritative sources or precise code paths.
 
-External review workflows are manual-only:
+Merge requirements:
 
-- `Manual Cheap Review` and `Manual Senior Review` run only through
-  `workflow_dispatch` from `master` with an explicit PR number.
-- `Manual Expert Review` runs only when the maintainer explicitly applies the
-  `expert-review` label.
-- No review workflow may add or remove tier/readiness labels, invoke or mention
-  `@codex`, dispatch another review tier, push changes, or merge.
-- `ready-for-merge` is a maintainer-owned informational label, not a model verdict.
+1. exact current PR head verified;
+2. required deterministic gates green on that head;
+3. no unresolved current P0/P1 or other blocking review finding;
+4. no scope, dependency, secret, spending or security conflict;
+5. PR body includes the minimum-necessary test when required.
 
-Never merge your own PR. Never enable auto-merge. Open the PR against `master`,
-fill in the PR template completely, verify the current head and deterministic
-gates, and leave the merge decision to the maintainer.
+When all five hold, merge immediately with the expected-head SHA and verify `master`. The merge owner then reconciles `STATUS.md` and continues the queue.
 
-**Model findings are fallible.** A manually requested review is evidence to inspect,
-not a command. For each finding, construct the concrete failing input or state,
-check the current spec and head, and reproduce it where possible. Fix genuine
-defects on the same PR branch. If a finding is false, record a concise rebuttal
-backed by a test, reproduction, authoritative source, or precise code path. Never
-change correct code merely to satisfy a reviewer.
+External review workflows remain bounded by their own specs. Spec 079 may request continuation only. Spec 080, if later promoted, owns review/fix/re-review automation.
 
-**Codex is explicit-only.** No workflow sends automatic fix requests. Codex or any
-other implementing agent acts only after an explicit maintainer request. A manual
-request still does not waive verification: evaluate each finding independently,
-respect the current branch and scope, and never merge, force-push, delete branches,
-or change secrets without explicit authority.
+## Agent autonomy
 
-**Autonomy of the implementing agent.** Within an assigned slice, proceed through
-inspection, implementation, tests, CI diagnosis, and evidence collection without
-waiting between reversible steps. When there is no active overlapping PR, an agent
-may also pick up the lowest-numbered `ready` spec in `docs/specs/STATUS.md` whose
-hard dependencies are `merged`, unless the maintainer has set a different priority.
-This autonomy stops at external spending, destructive or irreversible actions,
-secret changes, workflow dispatches that call paid models, and the merge boundary.
+Within the queued slice, proceed through inspection, definition, evidence, implementation, tests, CI diagnosis, review handling, merge and status reconciliation without waiting between reversible steps.
 
-**Maintainer-owned conformance tests:** files matching
-`backend/tests/**/test_*_conformance.py` are protected acceptance evidence. An
-implementation agent must not add, modify, or delete them unless the maintainer
-explicitly assigns that exact change. If one blocks the implementation and appears
-wrong, stop and report rather than editing it to turn CI green.
+This autonomy stops only for the four interruption reasons, destructive actions outside the spec, or a hard safety invariant.
+
+Maintainer-owned conformance tests matching `backend/tests/**/test_*_conformance.py` may not be changed unless the queued work explicitly assigns that exact modification.
 
 ## Definition of done
 
-1. Spec acceptance criteria all met.
-2. Required tests added and passing; full backend suite green.
-3. Ruff clean on touched files.
-4. No new dependency added (if truly unavoidable, add to requirements and call it out
-   prominently in your summary).
-5. Docs updated only where the spec says so.
-6. Summary states: what changed, files touched, test results, anything deferred or
-   discovered.
-7. `docs/specs/STATUS.md` shows `in_review` with the PR number before review; the
-   merge owner changes it to `merged` after merge.
+1. Acceptance criteria met.
+2. Required and full tests green.
+3. Ruff clean on touched Python.
+4. No unapproved dependency.
+5. Docs changed only within scope.
+6. PR records changes, tests and deferred findings.
+7. Implementation PR has the correct `STATUS.md` state and number before merge.
+8. Merge is verified on `master`; registry is immediately reconciled.
 
 ## Conventions
 
-- Python: match existing style; type hints on new code; small pure functions where
-  reasonable. English for all code, comments, docs, and commit messages.
-- Follow existing module patterns (service/routes/models split) instead of inventing
-  new layouts.
-- SQLite schema changes: additive columns with safe defaults, following the existing
-  pattern in `backend/app/core/schema.py`; bump the relevant schema version field.
-  No Alembic.
-- Commit messages: short imperative subject, one commit per logical change.
+- Use existing Python style, type hints and small pure functions.
+- English for code, comments, docs and commit messages.
+- Follow existing service/routes/models layout.
+- SQLite migrations are additive in `backend/app/core/schema.py`; no Alembic.
+- Short imperative commit subjects; one logical change per commit.
 
-## What NOT to do
+## What not to do
 
-- No broad refactors, renames, or file moves unless the spec says so.
-- No new design docs, README rewrites, or roadmap edits.
-- No new frameworks, ORMs, agent libraries, or vector databases unless an accepted
-  ADR and an implementation-ready spec explicitly authorize that repository change.
-  ADR-060 is direction-lock only; specs 066–068 must authorize any Hermes dependency
-  or integration, and ADR-060 alone does not activate Hermes or install dependencies.
-- No touching `backend/.venv`, `frontend/node_modules`, `reports/` history, or
-  anything under the data root.
-- No expanding `tools/` or `agents/` skeletons, no MCP servers, no background
-  workers, no streaming — unless a spec explicitly asks.
-- No speculative features "while you're in there".
+- no broad refactors, renames or file moves unless required by the spec;
+- no new frameworks, ORMs, agent libraries or vector databases without accepted authority;
+- no touching `backend/.venv`, `frontend/node_modules`, report history or the data root;
+- no expansion of tool/agent skeletons, MCP servers, background workers or streaming unless a spec requires it;
+- no speculative work while touching adjacent code;
+- no combining independently removable specs.
