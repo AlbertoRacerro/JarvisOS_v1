@@ -33,13 +33,14 @@ jobs:
             echo "Transformer already consumed; no action."
             exit 0
           fi
-          test "$(git hash-object scripts/.079-ruff-import-transform.py)" = "ada71cafc973f7c46c8b6f508082e29609073000"
+          test "$(git hash-object scripts/.079-ruff-import-transform.py)" = "eaea792081de6c02a407aa06b6f7cc271164202f"
 
           python scripts/.079-ruff-import-transform.py
           python -m pip install --disable-pip-version-check pytest ruff
           python -m py_compile scripts/daily_development_continuation.py \
             backend/tests/test_daily_development_continuation.py
-          python -m ruff check scripts/daily_development_continuation.py \
+          python -m ruff check --config backend/pyproject.toml \
+            scripts/daily_development_continuation.py \
             backend/tests/test_daily_development_continuation.py
           python -m pytest -q --noconftest \
             backend/tests/test_daily_development_continuation.py
