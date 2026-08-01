@@ -105,7 +105,7 @@ Both event hash chain and linear `jarvis-control` ancestry must validate. Missin
 
 ### 6.1 IDs and roles
 
-Control-App-derived prefixes: `run_`, `grant_`, `claim_`, `lease_`, `pr_`, `gates_`, `review_`, `finding_`, `fix_`, `provider_`, `human_`. Models/providers never choose authoritative IDs.
+Control-App-derived prefixes: `run_`, `grant_`, `claim_`, `lease_`, `pr_`, `gates_`, `review_`, `finding_`, `fix_`, `provider_`, `human_`, `incident_`. Models/providers never choose authoritative IDs.
 
 Closed roles: `maintainer`, `control`, `implementer`, `reviewer`, `gate_collector`, `system_reconciler`. Effective credentials determine role.
 
@@ -175,7 +175,9 @@ Multiple pending stops are preserved; the highest-priority result controls state
 
 The snapshot binds run, grant/expiry/revocation, claim/lease, branch/head, optional PR/base/head branch/state, ancestry/diff/scope, gates, review round/attempt/mode/head/verdict/findings/dispositions, integer-micro-USD reservations and usage, call counts, next action, primary stop/overlays, outcome, and last completed run.
 
-A repository-scoped security halt additionally binds `security_prior_state`, `security_prior_snapshot_digest`, verified signal identity, remediation requirements, and whether the prior state was `idle`, an active run state, or unreleased `terminal`.
+A repository-scoped security halt additionally binds `security_incident_id`, `security_prior_state`, `security_prior_snapshot_digest`, verified signal identity, remediation requirements, and whether the prior state was `idle`, an active run state, or unreleased `terminal`.
+
+`security_incident_id` is `incident_<32 hex>` derived by the Control App from repository ID, exact control head, normalized verified-signal digest, and event sequence. When `security_prior_state=idle`, `run_id` must be null; this is the only v1 security-recovery case in which a run binding may be absent. A later recovery must bind the incident ID rather than inventing or borrowing a run.
 
 Before PR creation: `pr_number=null`, `pr_expected_absent=true`.
 
@@ -187,11 +189,11 @@ The grant binds repository, three-digit spec, slice, `master` and exact base SHA
 
 No grant is inferred from a row, branch, PR, label, schedule, chat, previous run, or model.
 
-If no request is active, expiry from an active non-halted state records `authorization_expired_no_request` and enters `awaiting_maintainer`; revocation records `authorization_revoked_no_request` and enters `awaiting_maintainer`. From `halted`, `authorization_expired_overlay_recorded` or `authorization_revoked_overlay_recorded` preserves `halted` and the original primary stop while adding the authority overlay.
+If no request is active, expiry from an active non-halted state records `authorization_expired_no_request` and enters `awaiting_maintainer`; revocation records `authorization_revoked_no_request` and enters `awaiting_maintainer`. From `halted`, `authorization_expired_overlay_recorded` or `authorization_revoked_overlay_recorded` preserves `halted`, the unresolved request/reservation when present, and the original primary stop while adding the authority overlay.
 
-If a request is active, expiry/revocation appends the matching pending stop and leaves the request response state unchanged until section 11.4 settlement.
+If a request is active in a response state, expiry/revocation appends the matching pending stop and leaves the request response state unchanged until section 11.4 settlement. If the state is already `halted` because the request result or charge is ambiguous, expiry/revocation uses the halted overlay event and does not clear or replace the request reconciliation obligation.
 
-Recovery binds exact control head, run, target/action/reason, and reconciles control history, ref, PR, workflows, requests, reservations, usage/cost, lease/grant/overlays, security, and integrity. Security/integrity recovery requires remediation evidence.
+Recovery binds exact current control head, target/action/reason, preserved prior state and snapshot digest, and complete reconciliation of control history, ref, PR, workflows, requests, reservations, usage/cost, lease/grant/overlays, security, and integrity. For a run-scoped halt it binds the exact run ID. For an idle repository incident it requires `run_id=null` and the exact `security_incident_id`. Security/integrity recovery also requires incident-specific remediation evidence.
 
 Release is allowed only from `terminal` after all actions, reservations, ambiguity, stops, and PR/ref facts reconcile. `front_released` returns to `idle` while preserving history. A later run requires a new grant.
 
@@ -244,8 +246,8 @@ Identical replay returns the existing request without another reservation/call. 
 | active, no request | `lease_renewed` | current lease/grant/reconciliation/window | same | none |
 | active non-terminal, no request, not `halted` | `authorization_expired_no_request` | expiry reached; no higher-priority stop | `awaiting_maintainer` | none |
 | active non-terminal, no request, not `halted` | `authorization_revoked_no_request` | valid maintainer revocation; no higher-priority stop | `awaiting_maintainer` | none |
-| `halted`, no request | `authorization_expired_overlay_recorded` | expiry reached | `halted` | none |
-| `halted`, no request | `authorization_revoked_overlay_recorded` | valid maintainer revocation | `halted` | none |
+| `halted` | `authorization_expired_overlay_recorded` | expiry reached; preserve any active reconciliation | `halted` | none |
+| `halted` | `authorization_revoked_overlay_recorded` | valid maintainer revocation; preserve any active reconciliation | `halted` | none |
 | dispatch-eligible | `dispatch_blocked` | closed pre-call failure | `awaiting_maintainer` | none |
 | `claimed` | `implementation_requested` | initial no-PR dispatch authority | `implementing` | one implementer call |
 | `implementing` | `initial_work_head_recorded` | strict descendant, non-empty scope-valid delta | `awaiting_pr` | none |
@@ -283,13 +285,15 @@ Identical replay returns the existing request without another reservation/call. 
 | response state with request | `human_pr_action_pending` | reconciled maintainer merge/close observed | same | settlement only |
 | response state with request | `authorization_revoked_pending` | valid maintainer revocation | same | settlement only |
 | response state with request | `authorization_expired_pending` | expiry reached | same | settlement only |
+| response state with human PR action pending | `request_cancelled_after_human_pr_action` | accepted request proven safely cancelled; reservation/usage settled | corresponding PR-bound state, no request | record factual human outcome next |
+| response state with valid head change pending | `request_cancelled_after_head_change` | accepted request proven safely cancelled; reservation/usage settled | `awaiting_pr` | none |
 | PR-bound active, no request | `human_merge_observed` | reconciled human action | `terminal` | none |
 | PR-bound active, no request | `human_close_observed` | reconciled human action | `terminal` | none |
 | `awaiting_maintainer` | `human_decision_recorded` | section 11.6 | closed target state or `terminal` | none |
-| `idle`, active non-terminal, or unreleased `terminal`; no request | `security_halt` | authenticated/verified security signal; preserve prior state/snapshot | `halted` | none |
-| `halted`, no request | `security_halt_overlay_recorded` | additional authenticated/verified signal | `halted` | none |
+| `idle`, active non-terminal, or unreleased `terminal`; no request | `security_halt` | authenticated/verified security signal; create incident and preserve prior state/snapshot | `halted` | none |
+| `halted` | `security_halt_overlay_recorded` | additional authenticated/verified signal; preserve active reconciliation if present | `halted` | none |
 | response state with request | `security_stop_pending` | authenticated/verified security signal | same | safe cancellation/settlement only |
-| `halted` | `human_recovery_recorded` | reconciliation/remediation; restore only preserved safe state | preserved safe state or `terminal` | recovery only |
+| `halted` | `human_recovery_recorded` | exact run or idle-incident identity, reconciliation, and remediation; restore only preserved safe state | preserved safe state or `terminal` | recovery only |
 | `terminal` | `front_released` | complete reconciliation; no open PR | `idle` | none |
 
 A PR-bound state contains a recorded PR, including `awaiting_pr` during rebinding, `awaiting_gates`, both review-dispatch/reviewing states, `fix_required`, and PR-bound `awaiting_maintainer`.
@@ -325,7 +329,9 @@ Settlement transitions:
 - exact valid completion with security pending -> `request_settled_after_security_stop` -> `halted`;
 - proven safe cancellation with security pending -> `request_cancelled_after_security_stop` -> `halted`;
 - exact valid completion with human PR action pending -> settle usage/head/response, then record factual human outcome -> `terminal`;
+- proven safe cancellation with human PR action pending -> `request_cancelled_after_human_pr_action`; clear request and settlement ambiguity in the corresponding PR-bound state, then record the separate factual `human_merge_observed` or `human_close_observed` event -> `terminal`;
 - exact valid completion with valid scoped head-change pending -> settle and return `awaiting_pr`;
+- proven safe cancellation with valid scoped head-change pending -> `request_cancelled_after_head_change` -> `awaiting_pr`;
 - exact valid completion with invalid/ambiguous head-change pending -> `request_settled_after_head_ambiguity` -> `halted`;
 - proven safe cancellation with invalid/ambiguous head-change pending -> `request_cancelled_after_head_ambiguity` -> `halted`;
 - exact valid completion with revocation/expiry pending -> `request_settled_after_authority_stop` -> `awaiting_maintainer`;
@@ -333,7 +339,9 @@ Settlement transitions:
 - completed invalid output -> role-specific invalid-after-stop event; implementer/security invalidity halts, reviewer invalidity without security enters `awaiting_maintainer`;
 - unresolved result/charge -> `provider_ambiguous` -> `halted`.
 
-Every settlement clears `active_request`, finalizes/releases reservation, records safe digests and actual usage, and preserves all pending-stop overlays. Outputs settled under a stop are forensic evidence only and cannot authorize continuation.
+Every settlement and safe-cancellation event clears `active_request`, finalizes or releases the canonical reservation, records safe request/response or cancellation digests and actual usage, proves that no duplicate request or charge is authorized, and preserves every pending-stop and halt overlay. Outputs settled under a stop are forensic evidence only and cannot authorize continuation.
+
+While a provider-ambiguous request remains attached to `halted`, later expiry, revocation, or verified security evidence is recorded through the halted overlay events. Those overlays never imply that the request, reservation, result, or charge has been reconciled.
 
 ### 11.5 Completed invalid responses
 
@@ -360,7 +368,7 @@ An open PR makes `abandon` and `supersede` ineligible. The maintainer must close
 
 `retry_review_next_attempt` never reuses the completed request key. It increments `review_attempt`, while `review_round` and head remain unchanged. A new fix/re-review round increments `review_round` and resets attempt to zero.
 
-For a repository-scoped security halt, `human_recovery_recorded` may restore only the exact preserved prior state after remediation evidence and complete reconciliation. Recovery to `idle` cannot synthesize a grant or claim; recovery to unreleased `terminal` cannot release it; recovery to an active run state remains subject to grant, lease, PR, head, reservation, provider, and stop checks.
+For a repository-scoped security halt, `human_recovery_recorded` may restore only the exact preserved prior state after incident-specific remediation evidence and complete reconciliation. A run-scoped incident requires the exact run ID. An incident entered from `idle` requires `run_id=null` and the exact `security_incident_id`; it cannot fabricate or borrow a run. Recovery to `idle` cannot synthesize a grant or claim; recovery to unreleased `terminal` cannot release it; recovery to an active run state remains subject to grant, lease, PR, head, reservation, provider, and stop checks.
 
 Resume is forbidden for expired/revoked grants, unresolved security/integrity/provider ambiguity, stale heads, active requests, or scope expansion.
 
@@ -377,7 +385,7 @@ If safe rerun authority is not configured, the first infrastructure failure uses
 
 ### 11.8 Human PR outcomes and merge SHA semantics
 
-The maintainer may merge or close a recorded PR from any PR-bound state. If a request is active, record the pending human action and settle it first; unresolved settlement halts and recovery later records the already-observed PR outcome.
+The maintainer may merge or close a recorded PR from any PR-bound state. If a request is active, record the pending human action and settle or safely cancel it first; unresolved settlement halts and recovery later records the already-observed PR outcome. Safe cancellation records `request_cancelled_after_human_pr_action` before the separate factual merge/close event.
 
 Merge records PR head at merge boundary, separate merge-result SHA, method, actor, timestamp, prior state, and head-bound evidence.
 
@@ -399,7 +407,7 @@ PR creation is eligible only after strict non-empty initial delta and is forbidd
 
 `pr_recorded` binds PR ID/repository/base/head branch/current head/operation/state. Gates/review are forbidden before it. Every repair result rebinds the same PR.
 
-Any PR-head change invalidates gates/review/presentation. With no active request, a valid scoped descendant returns to `awaiting_pr`; invalid/ambiguous movement halts. With an active request, a valid change records `work_head_change_pending`; an invalid or ambiguous change records `work_head_stop_pending`; both preserve the response state until section 11.4 settlement.
+Any PR-head change invalidates gates/review/presentation. With no active request, a valid scoped descendant returns to `awaiting_pr`; invalid/ambiguous movement halts. With an active request, a valid change records `work_head_change_pending`; an invalid or ambiguous change records `work_head_stop_pending`; both preserve the response state until section 11.4 settlement. Proven safe cancellation after a valid scoped change records `request_cancelled_after_head_change` and returns to `awaiting_pr`.
 
 ## 12. Branch and scope
 
@@ -471,7 +479,7 @@ Webhook verifies raw-body signature constant-time before JSON. Missing/invalid r
 
 Authenticated processing validates installation/repository/event, stores delivery digest, acknowledges within 10 seconds, queues reconciliation, and performs no request-thread side effect.
 
-Verified security signals include signed delivery-ID digest mismatch, identity contradiction, history tamper, credential misuse/unauthorized API success, scope/secret escape, or independently confirmed compromise. Security transitions follow section 11.1 and 11.4 from every unreleased repository state, including `idle` and unreleased `terminal`.
+Verified security signals include signed delivery-ID digest mismatch, identity contradiction, history tamper, credential misuse/unauthorized API success, scope/secret escape, or independently confirmed compromise. Security transitions follow section 11.1 and 11.4 from every unreleased repository state, including `idle` and unreleased `terminal`. Additional verified signals received while `halted` always append `security_halt_overlay_recorded`, including while an unresolved request is still being reconciled.
 
 Endpoints are health, readiness, and webhook only. Queue is operational; duplicate jobs converge; reads retry bounded; side-effect retry requires committed authority/proven idempotency; webhook order untrusted.
 
@@ -483,17 +491,17 @@ One non-authoritative check, sticky PR comment, control-issue status, and weekly
 
 ## 22. Security and supply chain
 
-Use short-lived tokens, managed secrets, rotation, immutable pins/digests, SBOM, dependency/container scans, outbound allow-listing, repository/SHA validation, and no untrusted fork with write/secrets. Webhook processing never executes PR code. Invalid unsigned traffic does not halt; verified security evidence does from any unreleased state, with active-request settlement when required and exact prior-state preservation for recovery.
+Use short-lived tokens, managed secrets, rotation, immutable pins/digests, SBOM, dependency/container scans, outbound allow-listing, repository/SHA validation, and no untrusted fork with write/secrets. Webhook processing never executes PR code. Invalid unsigned traffic does not halt; verified security evidence does from any unreleased state, with active-request settlement when required and exact prior-state preservation for recovery. Idle-state incidents use repository-scoped incident identity and never fabricate a run.
 
 ## 23. Verification
 
 ### 23.1 Offline tests
 
-Prove canonical encoding/chains/reconstruction/idempotency/schema; every transition edge; grant/expiry/revocation with and without active requests; explicit no-request authority-stop events and halted overlays; pending-stop priority/settlement including valid and ambiguous head changes; repository-scoped security halt/recovery from idle, active, and unreleased terminal states; recovery/release; claim/lease/ref; initial PR absence/delta/no-change classifications; completed invalid settlement; no-PR human decisions; PR closure before abandonment; gate predicates and one infrastructure rerun; review round versus attempt; concurrent reviewer single-flight; review retry next-attempt; every reservation/capacity/lease check; exact-head invalidation; provider ambiguity; deterministic finding IDs; human outcomes/merge SHA semantics; release; invalid webhook; inactivity.
+Prove canonical encoding/chains/reconstruction/idempotency/schema; every transition edge; grant/expiry/revocation with and without active requests; explicit no-request authority-stop events and halted overlays even while a request/reservation remains unresolved; pending-stop priority/settlement including valid and ambiguous head changes; safe-cancellation paths for pending human PR actions and valid scoped head changes; repository-scoped incident identity and security halt/recovery from idle with `run_id=null`; run-scoped security halt/recovery from active and unreleased terminal states; additional security overlays during halted request reconciliation; recovery/release; claim/lease/ref; initial PR absence/delta/no-change classifications; completed invalid settlement; no-PR human decisions; PR closure before abandonment; gate predicates and one infrastructure rerun; review round versus attempt; concurrent reviewer single-flight; review retry next-attempt; every reservation/capacity/lease check; exact-head invalidation; provider ambiguity; deterministic finding IDs; human outcomes/merge SHA semantics; release; invalid webhook; inactivity.
 
 ### 23.2 Disposable proofs before readiness
 
-All architecture proofs remain mandatory, including CAS races/timeouts/replay/reconstruction/tamper; lease/ref; initial PR/no-change; classification disjointness; no-PR decisions; PR closure and idempotency; gate predicates/rerun; reviewer single-flight and retry attempts; pending authority/security/head/human stops with request settlement; ambiguous head-change cancellation and settlement before halt; credential abuse; security halt/recovery from idle and terminal; head/human/merge semantics; invalid output settlement; provider ambiguity/finding IDs/release; fork/prompt injection; cost/duplicate charge; outage/kill switches; invalid unsigned no halt; inactivity/no duplicate calls.
+All architecture proofs remain mandatory, including CAS races/timeouts/replay/reconstruction/tamper; lease/ref; initial PR/no-change; classification disjointness; no-PR decisions; PR closure and idempotency; gate predicates/rerun; reviewer single-flight and retry attempts; pending authority/security/head/human stops with request settlement; safe cancellation after pending human PR actions and valid scoped head changes; ambiguous head-change cancellation and settlement before halt; credential abuse; repository-scoped incident identity and security halt/recovery from idle without a run; security halt/recovery from active and terminal; halted authority/security overlays during unresolved request reconciliation; head/human/merge semantics; invalid output settlement; provider ambiguity/finding IDs/release; fork/prompt injection; cost/duplicate charge; outage/kill switches; invalid unsigned no halt; inactivity/no duplicate calls.
 
 ### 23.3 Repository/conformance
 
@@ -523,7 +531,7 @@ No implementation skeleton enters JarvisOS while planned.
 
 Canonical halt, App suspension, key/secret/provider revocation, service/queue stop, caps zero, dispatch-workflow disable, and human recovery. Rollback never force-pushes or erases.
 
-Readiness proves merged dependencies/architecture/full spec/governance; every proof; exact permissions/rulesets/wrapper/IDs; execution exception; all closed transition and pending-stop behavior; reviewer single-flight/attempts; gate predicates; PR closure; abuse denials; host/database/secrets/adapters/pricing/caps/gates/vectors/owners/first slice; no unresolved P0/P1. Only readiness sets `ready`.
+Readiness proves merged dependencies/architecture/full spec/governance; every proof; exact permissions/rulesets/wrapper/IDs; execution exception; all closed transition and pending-stop behavior; repository-scoped incident recovery; halted overlays during request reconciliation; reviewer single-flight/attempts; gate predicates; PR closure; safe-cancellation paths; abuse denials; host/database/secrets/adapters/pricing/caps/gates/vectors/owners/first slice; no unresolved P0/P1. Only readiness sets `ready`.
 
 ## 25. Compatibility
 
@@ -539,6 +547,6 @@ No automatic next-spec selection; simultaneous fronts/branches/actors/PRs; auton
 
 ## 28. Definition result
 
-Ready for maintainer merge decision when the diff remains one planning document, 079 remains `planned`, section 2.1 remains proposed until merge, transitions and predicates are closed, review requests are single-flight by attempt, review retry advances attempt, PR-bound abandonment requires closure, gate outcomes are deterministic, security signals have repository-wide no-request and active-request transitions, pending calls settle before every state departure including ambiguous head changes, every proof remains a readiness blocker, execution-spine conflict remains blocked, no mechanism is claimed operational, no runtime/workflow/App/provider/secret/ruleset/dependency/setting changes, exact-head gates pass, no current P0/P1 remains, and the PR stops for human merge.
+Ready for maintainer merge decision when the diff remains one planning document, 079 remains `planned`, section 2.1 remains proposed until merge, transitions and predicates are closed, review requests are single-flight by attempt, review retry advances attempt, PR-bound abandonment requires closure, gate outcomes are deterministic, security signals have repository-wide no-request and active-request transitions with repository incident identity for idle halts, halted authority/security overlays preserve unresolved reconciliation, pending calls settle or are safely cancelled before every state departure including human PR actions and valid or ambiguous head changes, every proof remains a readiness blocker, execution-spine conflict remains blocked, no mechanism is claimed operational, no runtime/workflow/App/provider/secret/ruleset/dependency/setting changes, exact-head gates pass, no current P0/P1 remains, and the PR stops for human merge.
 
 Merge does not authorize governance, proofs against live JarvisOS, readiness, implementation, provider calls, or automated merge.
