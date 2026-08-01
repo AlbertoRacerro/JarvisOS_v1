@@ -269,6 +269,7 @@ jobs:
           python scripts/daily_development_continuation.py validate \
             --changed-files "$RUNNER_TEMP/changed-files.txt" \
             --active-spec "$ACTIVE_SPEC" \
+            --active-pr "${{ needs.plan.outputs.pr_number }}" \
             --status-before "$RUNNER_TEMP/status-before.md" \
             --status-after "$RUNNER_TEMP/status-after.md"
           git diff --cached --check
@@ -361,16 +362,21 @@ jobs:
         if: ${{ needs.validate.outputs.has_changes == 'true' }}
         env:
           ACTIVE_SPEC: ${{ needs.plan.outputs.spec_id }}
+          ACTIVE_PR: ${{ needs.plan.outputs.pr_number }}
         run: |
+          cp scripts/daily_development_continuation.py "$RUNNER_TEMP/trusted-continuation-validator.py"
           git show HEAD:docs/specs/STATUS.md > "$RUNNER_TEMP/status-before.md"
           git apply --index --whitespace=error-all "$RUNNER_TEMP/continuation/continuation.patch"
           git diff --cached --no-renames --name-only > "$RUNNER_TEMP/changed-files.txt"
           cp docs/specs/STATUS.md "$RUNNER_TEMP/status-after.md"
-          python scripts/daily_development_continuation.py validate \
+          index_tree=$(git write-tree)
+          python -I -S "$RUNNER_TEMP/trusted-continuation-validator.py" validate \
             --changed-files "$RUNNER_TEMP/changed-files.txt" \
             --active-spec "$ACTIVE_SPEC" \
+            --active-pr "$ACTIVE_PR" \
             --status-before "$RUNNER_TEMP/status-before.md" \
             --status-after "$RUNNER_TEMP/status-after.md"
+          test "$(git write-tree)" = "$index_tree"
           git diff --cached --check
 
       - name: Commit and push only from the unchanged exact head
