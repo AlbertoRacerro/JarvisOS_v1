@@ -244,14 +244,21 @@ jobs:
           git show HEAD:docs/specs/STATUS.md > "$RUNNER_TEMP/status-before.md"
           patch="$RUNNER_TEMP/continuation/continuation.patch"
           if [ ! -s "$patch" ]; then
-            : > "$RUNNER_TEMP/changed-files.txt"
+            : > "$RUNNER_TEMP/changed-files.z"
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
             echo "frontend_changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git apply --index --whitespace=error-all "$patch"
-          git diff --cached --no-renames --name-only > "$RUNNER_TEMP/changed-files.txt"
-          count=$(grep -c . "$RUNNER_TEMP/changed-files.txt" || true)
+          git diff --cached --no-renames --name-only -z > "$RUNNER_TEMP/changed-files.z"
+          count=$(python - "$RUNNER_TEMP/changed-files.z" <<'PY'
+          from pathlib import Path
+          import sys
+          raw = Path(sys.argv[1]).read_bytes()
+          records = [record for record in raw.split(b"\0") if record]
+          print(len(records))
+          PY
+          )
           test "$count" -le 20
           if [ "$count" -eq 0 ]; then
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
@@ -259,14 +266,20 @@ jobs:
             exit 0
           fi
           echo "has_changes=true" >> "$GITHUB_OUTPUT"
-          if grep -q '^frontend/' "$RUNNER_TEMP/changed-files.txt"; then
+          if python - "$RUNNER_TEMP/changed-files.z" <<'PY'
+          from pathlib import Path
+          import sys
+          records = [record for record in Path(sys.argv[1]).read_bytes().split(b"\0") if record]
+          raise SystemExit(0 if any(record.startswith(b"frontend/") for record in records) else 1)
+          PY
+          then
             echo "frontend_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "frontend_changed=false" >> "$GITHUB_OUTPUT"
           fi
           cp docs/specs/STATUS.md "$RUNNER_TEMP/status-after.md"
           python scripts/daily_development_continuation.py validate \
-            --changed-files "$RUNNER_TEMP/changed-files.txt" \
+            --changed-files "$RUNNER_TEMP/changed-files.z" \
             --active-spec "$ACTIVE_SPEC" \
             --active-pr "${{ needs.plan.outputs.pr_number }}" \
             --status-before "$RUNNER_TEMP/status-before.md" \
@@ -386,11 +399,11 @@ jobs:
           cp scripts/daily_development_continuation.py "$RUNNER_TEMP/trusted-continuation-validator.py"
           git show HEAD:docs/specs/STATUS.md > "$RUNNER_TEMP/status-before.md"
           git apply --index --whitespace=error-all "$RUNNER_TEMP/continuation/continuation.patch"
-          git diff --cached --no-renames --name-only > "$RUNNER_TEMP/changed-files.txt"
+          git diff --cached --no-renames --name-only -z > "$RUNNER_TEMP/changed-files.z"
           cp docs/specs/STATUS.md "$RUNNER_TEMP/status-after.md"
           index_tree=$(git write-tree)
           python -I -S "$RUNNER_TEMP/trusted-continuation-validator.py" validate \
-            --changed-files "$RUNNER_TEMP/changed-files.txt" \
+            --changed-files "$RUNNER_TEMP/changed-files.z" \
             --active-spec "$ACTIVE_SPEC" \
             --active-pr "$ACTIVE_PR" \
             --status-before "$RUNNER_TEMP/status-before.md" \
