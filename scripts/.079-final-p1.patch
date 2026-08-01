@@ -1,0 +1,151 @@
+--- a/scripts/daily_development_continuation.py
++++ b/scripts/daily_development_continuation.py
+@@ -691,7 +691,7 @@
+ def _normalized_path(path: str) -> str:
+     return path.replace("\\", "/").strip("/")
+ 
+ 
+-def validate_changed_paths(paths: list[str]) -> None:
++def validate_changed_paths(paths: list[str], active_spec: str) -> None:
+     if len(paths) > MAX_CHANGED_FILES:
+         raise ContinuationError("continuation patch changes too many files")
+     for raw_path in paths:
+@@ -708,6 +708,13 @@
+         ):
+             raise ContinuationError(
+                 f"continuation patch changes a protected path: {raw_path}"
+             )
++        if path.startswith("docs/specs/") and path != "docs/specs/STATUS.md":
++            filename = path.removeprefix("docs/specs/")
++            if "/" in filename or not filename.startswith(
++                f"{active_spec.lower()}-"
++            ):
++                raise ContinuationError(
++                    f"continuation patch changes a non-active specification: {raw_path}"
++                )
+         if SENSITIVE_PART_RE.search(path):
+             raise ContinuationError(
+                 f"continuation patch changes a sensitive path: {raw_path}"
+@@ -727,6 +734,10 @@
+         raise ContinuationError(
+             "active STATUS.md row must remain in_review and bound to the active PR"
+         )
++    if active_after.depends_on != before_rows[active_spec].depends_on:
++        raise ContinuationError(
++            "active STATUS.md dependencies may not change during continuation"
++        )
+     prefix = f"| {active_spec} |"
+     before_lines, after_lines = before.splitlines(keepends=True), after.splitlines(keepends=True)
+     before_indexes = [i for i, line in enumerate(before_lines) if line.startswith(prefix)]
+@@ -806,7 +817,7 @@
+                 for line in args.changed_files.read_text(encoding="utf-8").splitlines()
+                 if line
+             ]
+-            validate_changed_paths(paths)
++            validate_changed_paths(paths, args.active_spec.lower())
+             if "docs/specs/STATUS.md" in paths:
+                 if args.status_before is None or args.status_after is None:
+                     raise ContinuationError("STATUS validation inputs are required")
+--- a/backend/tests/test_daily_development_continuation.py
++++ b/backend/tests/test_daily_development_continuation.py
+@@ -518,19 +518,34 @@
+ )
+ def test_protected_and_sensitive_paths_are_rejected(path):
+     with pytest.raises(mod.ContinuationError):
+-        mod.validate_changed_paths([path])
++        mod.validate_changed_paths([path], "079")
+ 
+ 
+ def test_allowed_paths_pass():
+-    mod.validate_changed_paths(["backend/app/service.py", "docs/specs/STATUS.md"])
++    mod.validate_changed_paths(
++        [
++            "backend/app/service.py",
++            "docs/specs/STATUS.md",
++            "docs/specs/079-autonomous-development-loop-0.md",
++        ],
++        "079",
++    )
++
++
++@pytest.mark.parametrize(
++    "path",
++    [
++        "docs/specs/080-autonomous-review-repair-0.md",
++        "docs/specs/078-bluecad-complex-system-reference-architecture.md",
++        "docs/specs/archive/079-old.md",
++    ],
++)
++def test_non_active_specification_paths_are_rejected(path):
++    with pytest.raises(mod.ContinuationError, match="non-active specification"):
++        mod.validate_changed_paths([path], "079")
+ 
+ 
+ def test_too_many_paths_fail():
+     with pytest.raises(mod.ContinuationError, match="too many"):
+-        mod.validate_changed_paths([f"docs/{i}.md" for i in range(21)])
++        mod.validate_changed_paths([f"docs/{i}.md" for i in range(21)], "079")
+ 
+ 
+ def test_status_only_active_row_may_change_when_binding_is_preserved():
+@@ -552,6 +567,14 @@
+         mod.validate_status_change(before, after, "079", 210)
+ 
+ 
++def test_status_dependencies_may_not_change():
++    before = registry()
++    after = before.replace("| CONTINUE | 004 | active |", "| CONTINUE | 080 | active |")
++    with pytest.raises(mod.ContinuationError, match="dependencies may not change"):
++        mod.validate_status_change(before, after, "079", 210)
++
++
+ def test_status_prose_change_fails():
+     before = registry(extra="queue unchanged\n")
+     after = before.replace("queue unchanged", "queue changed")
+@@ -680,6 +703,20 @@
+     assert "python scripts/daily_development_continuation.py validate" not in push_block
+ 
+ 
++def test_workflow_runs_timed_bluecad_canary_before_push():
++    text = (ROOT / ".github/workflows/daily-development-continuation.yml").read_text()
++    validate_block = text.split("  validate:\n", 1)[1].split("\n  push:\n", 1)[0]
++    assert "Run timed BLUECAD continuation canary" in validate_block
++    assert "timeout 240s python -m pytest -q" in validate_block
++    assert "tests/bluecad/test_manifest_determinism_canary.py" in validate_block
++    assert "tests/bluecad/test_geometry_property_invariants.py" in validate_block
++    assert "tests/bluecad/test_capped_manifold.py" in validate_block
++    assert 'test "$status" = "0"' in validate_block
++    assert 'test "$elapsed" -le 240' in validate_block
++
++
+ def test_workflow_oidc_authority_is_confined_to_trusted_jobs():
+     text = (ROOT / ".github/workflows/daily-development-continuation.yml").read_text()
+     generate_block = text.split("  generate-patch:\n", 1)[1].split("\n  validate:\n", 1)[0]
+--- a/.github/workflows/daily-development-continuation.yml
++++ b/.github/workflows/daily-development-continuation.yml
+@@ -292,6 +292,24 @@
+           python -m pip install --upgrade pip
+           pip install -r requirements.txt -r requirements-dev.txt
+ 
++      - name: Run timed BLUECAD continuation canary
++        if: ${{ steps.inspect.outputs.has_changes == 'true' }}
++        working-directory: backend
++        shell: bash
++        run: |
++          set -o pipefail
++          set +e
++          SECONDS=0
++          timeout 240s python -m pytest -q \
++            tests/bluecad/test_manifest_determinism_canary.py \
++            tests/bluecad/test_geometry_property_invariants.py \
++            tests/bluecad/test_capped_manifold.py \
++            2>&1 | tee "$RUNNER_TEMP/bluecad-continuation-canary.log"
++          status=${PIPESTATUS[0]}
++          elapsed=$SECONDS
++          set -e
++          test "$status" = "0"
++          test "$elapsed" -le 240
++
+       - name: Run deterministic gates
+         if: ${{ steps.inspect.outputs.has_changes == 'true' }}
+         run: |
