@@ -513,6 +513,7 @@ def test_recovery_fails_on_multiple_continuation_commits():
         ".github/workflows/x.yml",
         "AGENTS.md",
         "CODEOWNERS",
+        "docs/CODEOWNERS",
         "scripts/daily_development_continuation.py",
         "backend/tests/test_daily_development_continuation.py",
         ".git/hooks/pre-commit",

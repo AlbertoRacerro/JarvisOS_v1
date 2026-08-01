@@ -46,6 +46,7 @@ PROTECTED_BRANCHES = {"master", "main"}
 CONTROL_PATHS = {
     "AGENTS.md",
     "CODEOWNERS",
+    "docs/CODEOWNERS",
     "scripts/daily_development_continuation.py",
     "backend/tests/test_daily_development_continuation.py",
 }
