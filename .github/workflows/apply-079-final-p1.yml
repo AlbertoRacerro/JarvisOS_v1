@@ -11,7 +11,7 @@ jobs:
   apply:
     if: ${{ github.event.pull_request.number == 210 && github.head_ref == 'spec/079-minimal-continuation-definition' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: write
     steps:
@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Apply, verify and publish bounded fixes
+      - name: Apply, verify and publish bounded fix
         env:
           EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
           HEAD_REF: ${{ github.head_ref }}
@@ -29,15 +29,59 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -f scripts/.079-final-p1.patch ]; then
-            echo "Patch already consumed; no action."
-            exit 0
-          fi
-          echo "bd32122ccca7ecb954bda502575a47845d03b8a8c60b01c088d6cfbd2e7a3c82  scripts/.079-final-p1.patch" | sha256sum -c -
-          git apply --index --whitespace=error-all scripts/.079-final-p1.patch
-          cp .github/workflows/daily-development-continuation.yml scripts/.079-daily-final.yml
-          git restore --source=HEAD --staged --worktree .github/workflows/daily-development-continuation.yml
-          git rm scripts/.079-final-p1.patch
+          python - <<'PY'
+          from pathlib import Path
+
+          control = Path('scripts/daily_development_continuation.py')
+          text = control.read_text(encoding='utf-8')
+          old = '''        if SENSITIVE_PART_RE.search(path):
+                      raise ContinuationError(f"continuation patch changes a sensitive path: {raw_path}")
+          '''
+          new = '''        if path.startswith("backend/tests/") and Path(path).name.startswith("test_") and Path(path).name.endswith("_conformance.py"):
+                      raise ContinuationError(
+                          f"continuation patch changes a maintainer-owned conformance test: {raw_path}"
+                      )
+                  if SENSITIVE_PART_RE.search(path):
+                      raise ContinuationError(f"continuation patch changes a sensitive path: {raw_path}")
+          '''
+          if text.count(old) != 1:
+              raise SystemExit('control insertion point is not exact')
+          control.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          tests = Path('backend/tests/test_daily_development_continuation.py')
+          text = tests.read_text(encoding='utf-8')
+          marker = '''def test_allowed_paths_pass():
+              mod.validate_changed_paths(["backend/app/service.py", "docs/specs/STATUS.md"])
+          '''
+          replacement = '''@pytest.mark.parametrize(
+              "path",
+              [
+                  "backend/tests/test_bluecad_conformance.py",
+                  "backend/tests/bluecad/test_geometry_conformance.py",
+              ],
+          )
+          def test_maintainer_owned_conformance_tests_are_rejected(path):
+              with pytest.raises(mod.ContinuationError, match="maintainer-owned conformance test"):
+                  mod.validate_changed_paths([path])
+
+
+          def test_allowed_paths_pass():
+              mod.validate_changed_paths(
+                  [
+                      "backend/app/service.py",
+                      "backend/tests/test_service.py",
+                      "docs/specs/STATUS.md",
+                  ]
+              )
+          '''
+          if text.count(marker) != 1:
+              raise SystemExit('test insertion point is not exact')
+          tests.write_text(text.replace(marker, replacement, 1), encoding='utf-8')
+          PY
+
+          git rm .github/workflows/apply-079-final-p1.yml \
+            scripts/.079-final-p1.patch \
+            scripts/.079-final-transform.py
 
           python -m pip install --disable-pip-version-check pytest pyyaml
           python -m py_compile scripts/daily_development_continuation.py backend/tests/test_daily_development_continuation.py
@@ -45,13 +89,10 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import yaml
-          yaml.safe_load(Path('scripts/.079-daily-final.yml').read_text())
+          yaml.safe_load(Path('.github/workflows/daily-development-continuation.yml').read_text())
           print('workflow YAML: OK')
           PY
-
-          git add scripts/daily_development_continuation.py \
-            backend/tests/test_daily_development_continuation.py \
-            scripts/.079-daily-final.yml
+          git add scripts/daily_development_continuation.py backend/tests/test_daily_development_continuation.py
           git diff --cached --check
 
           auth=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)
@@ -61,6 +102,6 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit --no-verify -m "Fix final spec 079 continuation gates"
+          git commit --no-verify -m "Protect conformance tests in continuation"
           git -c http.extraheader="AUTHORIZATION: basic $auth" push origin \
             "HEAD:refs/heads/$HEAD_REF"
