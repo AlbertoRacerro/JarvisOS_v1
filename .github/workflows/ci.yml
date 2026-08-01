@@ -36,14 +36,14 @@ jobs:
           python -m py_compile scripts/daily_development_continuation.py backend/tests/test_daily_development_continuation.py
           python -m pytest -q backend/tests/test_daily_development_continuation.py
           git diff --check
+          git checkout -- .github/workflows/daily-development-continuation.yml
 
-      - name: Push hardening-only commit
+      - name: Push script and test hardening
         run: |
           git config user.name 'jarvisos-hardening-bootstrap[bot]'
           git config user.email 'jarvisos-hardening-bootstrap[bot]@users.noreply.github.com'
           git add scripts/daily_development_continuation.py \
             backend/tests/test_daily_development_continuation.py \
-            .github/workflows/daily-development-continuation.yml \
             scripts/.079-hardening.part00 scripts/.079-hardening.part01 \
             scripts/.079-hardening.part02 scripts/.079-hardening.part03 \
             scripts/.079-hardening.part04
