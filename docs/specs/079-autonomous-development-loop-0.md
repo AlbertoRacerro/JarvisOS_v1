@@ -1,375 +1,552 @@
-# Spec 079 — AUTONOMOUS-DEVELOPMENT-LOOP-0: durable bounded development continuation
+# 079 — AUTONOMOUS-DEVELOPMENT-LOOP-0: durable bounded development continuation
 
-**Definition status:** planning kernel; registry remains `planned`.
+Status: proposed full specification; it becomes merged authority only after an explicit human merge. `docs/specs/STATUS.md` remains authoritative and keeps 079 `planned`.
 
-**Depends on:** 004, 017, 019, 022
+Depends on: 004, 017, 019, 022
 
-**Target path:** `docs/specs/079-autonomous-development-loop-0.md`
+Pinned baseline: `9c3c8ce90a9048c1797f2560025790162012d423`
 
----
+Predecessor evidence:
 
-## 1. Purpose
+- `079-autonomous-development-loop-source-evidence.md`
+- `079-architecture-evidence-closure-2026-07-31.md`
+- `079-architecture-source-evidence-2026-07-31.md`
 
-Define the smallest safe control-plane direction that lets an already authorized JarvisOS development slice continue across agent-session termination without requiring the maintainer to repeatedly write `continue` or `proceed`.
+## 1. Goal
 
-The intended system coordinates implementing and reviewing agents through durable GitHub-owned state. It may resume reversible work on the same authorized spec, branch, pull request, and exact head; collect deterministic gate evidence; request bounded review; drive a bounded fix/re-review cycle; and stop at every authority boundary already owned by the maintainer.
+Allow one explicitly authorized JarvisOS repository-development slice to continue safely across agent-session termination.
 
-This document is a planning kernel, not an implementation contract. It does not authorize a workflow, GitHub App, daemon, external provider call, automatic Codex request, branch mutation, or merge. It identifies the current authority, the minimum state machine, candidate hosting choices, hard safety invariants, and the decisions that must be closed before a full specification may be promoted.
+V0 may reconstruct GitHub-owned authority, claim one repository-wide front, create one exact-base work branch, invoke one bounded implementer before a PR exists, create one PR only after a real delta, terminalize a verified initial no-change result without an empty PR, collect exact-head gates, run one reviewer request per review attempt, perform at most two fix/re-review rounds, settle accepted calls before applying stops, record every failure path canonically, record human PR actions truthfully, and release a reconciled terminal front without erasing history.
 
-## 2. Maintainer decision and current freeze
+V0 may never merge, auto-merge, approve authoritatively, change roadmap priority, infer authority from activity, create a second front, or turn model output into authority.
 
-On 2026-07-30 the maintainer explicitly authorized this definition-only S4 step after merge of spec 077 implementation PR #198. The authorization is limited to:
+## 2. Boundary and proposed sequencing amendment
 
-1. reconciling the canonical registry with the merged 077 implementation;
-2. recording one `planned` 079 backlog row;
-3. writing this planning kernel and its pinned source-evidence map.
+This document specifies canonical state, authorization, claim, lease, branch/PR lifecycle, dispatch, gates, review attempts and rounds, findings, spend, permissions, webhooks, proofs, rollout, kill switches, and compatibility.
 
-The authorization does **not** lift the freeze for autonomous-control implementation. It does not activate any previously removed automatic review/fix pipeline. It does not permit a second implementation front, automatic external review, automatic Codex actuation, auto-merge, or agent-owned merge authority.
+It creates no App, service, database, queue, branch, ruleset, workflow, secret, provider, dependency, runtime change, governance amendment, readiness decision, implementation, or merge automation. It does not modify `AGENTS.md` or `STATUS.md` and invokes no model or paid service.
 
-## 3. Current repository facts that must remain true
+Current `AGENTS.md` remains binding. Live development-agent dispatch is prohibited until section 24's separate governance amendment and dated readiness decision merge.
 
-Each fact is mapped in `079-autonomous-development-loop-source-evidence.md` and was re-read against pinned baseline `64d598ef99f6dcd6f5afe7caec7a1e7062f78c45` on 2026-07-30.
+### 2.1 Documentary ordering presented for human approval
 
-1. `docs/specs/STATUS.md` is the single live source of truth for spec state and near-term priority. Planning PRs do not occupy the `Implementation PR` column and do not move a row to `in_review`. `RT-01`
-2. Only one product or implementation front may be active. Frozen work remains `planned`, and restart requires an explicit maintainer decision plus re-derivation from current `master`. `RT-02`
-3. The maintainer normally reviews JarvisOS once per week and should be contacted between reviews only for a human decision, security problem, or budget overrun. `RT-03`
-4. Automated review output is advisory. Deterministic gates and a human maintainer decision own merge authority. `RT-04`
-5. External review workflows are manual-only and may not invoke Codex, push changes, modify readiness labels, dispatch another review tier, or merge. `RT-05`
-6. Agents may not merge their own pull requests or enable auto-merge. `RT-06`
-7. Model findings must be independently reproduced or traced. Genuine defects are fixed on the same PR branch; false findings receive a concise evidence-backed rebuttal. `RT-07`
-8. Codex is explicit-only. No current workflow sends an automatic fix request. `RT-08`
-9. Within an assigned slice, an implementing agent may proceed through inspection, implementation, tests, CI diagnosis, and evidence collection without waiting between reversible steps. It must stop at external spending, destructive or irreversible actions, secret changes, paid workflow dispatches, and merge. `RT-09`
-10. Spec 022 preserves a bounded same-branch Codex actuator only for explicit maintainer-requested work and explicitly excludes automatic workflow dispatch. `RT-10`
-11. Specs 017 and 019 preserve historical review infrastructure only as manually dispatched advisory review. Spec 020 is cancelled because the prior automatic review/fix pipeline was removed. `RT-11`
-12. Spec 077 implementation PR #198 is merged, while the pinned baseline registry still records it as `in_review`; this S4 planning PR must reconcile that factual drift. `RT-12`
-13. Spec 078 is a merged planning definition but remains `planned`; its full-spec promotion and implementation are not authorized during the maintainer freeze. `RT-13`
+The merged architecture closure requires isolated race, CAS, credential, cost, PR, and recovery proofs before full-spec promotion. The maintainer subsequently instructed drafting to proceed.
 
-Any future implementation that weakens these facts without an explicit, reviewed governance amendment is outside 079.
+Before merge, the prior ordering remains authoritative. Human merge of this PR would approve only that the complete documentary specification may merge while 079 remains `planned`. All mechanisms remain unproven and unavailable; every architecture-closure proof remains mandatory before readiness and implementation; no live App, JarvisOS proof prototype, governance exception, provider call, readiness promotion, or implementation is authorized.
 
-## 4. Problem statement
+No proof is waived, weakened, relabelled, or treated as complete.
 
-The current process can execute a bounded assigned slice safely, but continuity is conversational rather than durable. When an agent session ends, the next agent must reconstruct:
+## 3. Hard invariants
 
-- which spec and branch were authorized;
-- the exact base and head commits;
-- the current implementation/review round;
-- which deterministic gates ran on which head;
-- which review findings are open, genuine, false, superseded, or fixed;
-- whether a fix request was explicitly authorized;
-- which action is next and which authority boundary requires the maintainer.
+1. `STATUS.md` is the sole live roadmap/status authority.
+2. At most one product or implementation front is active repository-wide.
+3. Branches, PRs, labels, comments, reviews, checks, workflows, timers, and model text are not authorization.
+4. V0 starts only from a maintainer command naming exact repository, spec, slice, base SHA, scope, adapters, and budget policy.
+5. Every side-effect event rechecks grant currency, claim, exact GitHub facts, stop state, role capacity, provider policy, idempotency, and canonical reservation; mutation also requires a current reconciled lease.
+6. Initial implementation binds verified PR absence. Repairs and review bind the one recorded PR.
+7. A PR is created only after a strict non-empty in-scope delta. Verified initial no-change may terminalize without a PR.
+8. Exactly one active external request exists at a time. Exactly one reviewer request exists per review attempt.
+9. Review round and review attempt are distinct. Fix/re-review advances the round; retrying an invalid or inconclusive reviewer advances only the attempt.
+10. Expiry, revocation, security, head change, or human PR action during an accepted request blocks follow-on work but does not strand settlement.
+11. Every invalid completed response settles usage/reservation and writes a canonical event. Every ambiguity writes a halt. Every pre-call denial writes a zero-call blocked event.
+12. Gate failure destinations are selected by disjoint predicates.
+13. Gates and reviews are exact-head evidence; head change invalidates them.
+14. Reviewer cannot mutate; implementer cannot supply authoritative review.
+15. Automated actors cannot merge, auto-merge, force-push, delete protected refs, change settings/secrets, or bypass rulesets.
+16. Open PRs are never silently abandoned: PR-bound terminal abandonment requires the PR already closed by the maintainer.
+17. Revocation or expiry never clears a security, integrity, or ambiguity halt.
+18. Safety dominates liveness.
 
-GitHub contains most underlying evidence, but no single bounded machine-readable run authority currently joins it into a resumable state machine. Ad hoc issue comments, labels, branch names, chat summaries, and workflow runs are not individually sufficient because they can be stale, edited, duplicated, or detached from the exact head.
+## 4. Architecture
 
-The control-plane gap is therefore **durable authorization and continuation**, not another coding agent, another review model, another product orchestrator, or hidden browser-to-browser coordination.
+The selected dispatcher is an installed GitHub App operated by a stateless Python 3.11 FastAPI/ASGI service with a GitHub REST/Git Data client and PostgreSQL 16.
 
-## 5. Required control-plane properties
+PostgreSQL is non-authoritative and may store delivery IDs/digests, queue jobs, bounded retries, cached projections, provider correlations, notifications, and health. It never owns the sole grant, claim, lease, PR binding, gate/review result, request settlement, reservation, terminal outcome, or release.
 
-A future full specification must preserve all of the following.
+One OCI image and multiple identical replicas are permitted. Redis, agent frameworks, vector databases, browser automation, and a second orchestrator are excluded.
 
-### 5.1 GitHub-owned durable authority
+The service is outside JarvisOS runtime and shares neither product SQLite, runtime egress state, provider secrets, nor `C:\JarvisOS` data.
 
-The canonical continuation state must live in GitHub and be reconstructible without chat history or local process memory. Every transition must bind at least:
+Canonical authority lives on protected branch `jarvis-control` in one file:
 
-- repository identity;
-- spec identifier and registry status;
-- authorized slice and scope digest;
-- base branch and exact base SHA;
-- work branch and exact head SHA;
-- pull request number when present;
-- actor and actor role;
-- transition kind and monotonic sequence;
-- deterministic gate evidence tied to the exact head;
-- review round, finding identities, and dispositions;
-- next permitted action;
-- stop reason or required human decision.
+`.jarvis/development-loop/authority.json`
 
-Mutable presentation may exist, but the authority history must be append-only or equivalently tamper-evident. A changed head invalidates head-bound gate and review evidence rather than silently carrying it forward.
+Comments, checks, workflow runs, database rows, and dashboards are rebuildable projections.
 
-### 5.2 Explicit authorization envelope
+## 5. Canonical encoding and integrity
 
-A run may start or resume only when all of these are true:
+`authority.json` uses deterministic UTF-8 JSON: sorted keys, compact separators, UTC `Z` timestamps, integer money/counters/durations/sizes, no float/NaN/infinity, and lowercase SHA-256 identifiers.
 
-1. the maintainer has authorized the exact spec/slice or the row is the eligible lowest-numbered `ready` row under current priority;
-2. all hard dependencies are `merged`;
-3. no different product or implementation front is active; when resuming the one already authorized active front, no competing pull request or branch owner overlaps its files or runtime boundary;
-4. the branch descends from the recorded base without force-push ambiguity;
-5. requested actions remain inside the scope digest and current repository governance;
-6. no stop condition is active.
+Top-level v1:
 
-The dispatcher must not infer permission from a branch merely existing, a PR being open, an issue label alone, a model comment, or a previous session having worked on the branch.
+```json
+{
+  "schema_version": 1,
+  "repository": {
+    "repository_id": 0,
+    "full_name": "owner/repo",
+    "default_branch": "master",
+    "control_branch": "jarvis-control"
+  },
+  "sequence": 0,
+  "snapshot": {},
+  "snapshot_digest": "sha256:...",
+  "events": []
+}
+```
 
-### 5.3 Exact bounded state machine
+Every event binds sequence, deterministic event ID, closed type, timestamp, effective actor/role, idempotency key, previous digest, payload/digest, and event digest.
 
-The full spec must freeze a closed state machine. The planning candidate is:
+Identical duplicate input is a no-op returning the existing event. Same key with different bytes is an integrity failure. Sequence and Git ancestry, not timestamps, own order.
 
+Both event hash chain and linear `jarvis-control` ancestry must validate. Missing, altered, reordered, duplicated, forked, force-pushed, or non-linear history causes `control_integrity_failure` and zero external side effects. V1 has no compaction and halts before event 4097 or 2,000,000 canonical bytes.
+
+## 6. Closed IDs, roles, states, and snapshot
+
+### 6.1 IDs and roles
+
+Control-App-derived prefixes: `run_`, `grant_`, `claim_`, `lease_`, `pr_`, `gates_`, `review_`, `finding_`, `fix_`, `provider_`, `human_`, `incident_`. Models/providers never choose authoritative IDs.
+
+Closed roles: `maintainer`, `control`, `implementer`, `reviewer`, `gate_collector`, `system_reconciler`. Effective credentials determine role.
+
+### 6.2 States
+
+- `idle`
 - `authorized`
 - `claimed`
 - `implementing`
-- `awaiting_deterministic_gates`
-- `awaiting_review`
+- `awaiting_pr`
+- `awaiting_gates`
+- `awaiting_review_dispatch`
+- `reviewing`
 - `fix_required`
-- `awaiting_re_review`
+- `awaiting_re_review_dispatch`
+- `re_reviewing`
 - `awaiting_maintainer`
-- `completed_without_merge`
+- `terminal`
 - `halted`
 
-Names may change, but every state and transition must define:
+### 6.3 Terminal outcomes
 
-- required preconditions;
-- allowed actor;
-- idempotency key;
-- exact-head requirements;
-- durable evidence written;
-- timeout/lease behavior;
-- retry bound;
-- fail-closed outcome.
+- `merged_by_maintainer`
+- `closed_without_merge`
+- `superseded_by_maintainer`
+- `completed_without_pr`
+- `authorization_revoked`
+- `authorization_expired`
+- `abandoned_after_human_decision`
 
-No state may imply merge authority.
+A merge record separates `pr_head_at_merge_boundary` from `merge_result_sha`, records merge method, actor, timestamp, prior state, and evidence status. PR head and result SHA are never assumed equal.
 
-### 5.4 Implementer/reviewer separation
+### 6.4 Review round and attempt
 
-The implementing and reviewing roles must be independently identified even when both are model-backed. A reviewer may produce findings but may not mutate the implementation branch. An implementing agent may change the branch within scope but may not resolve a finding merely by assertion.
+The snapshot contains:
 
-A clean review is evidence, not merge authorization.
+- `review_round`: starts at 0; increments only after a genuine review-fix cycle or an evidence-backed no-change disposition that requires re-review; maximum 2.
+- `review_attempt`: starts at 0 for each round; increments only after a completed invalid or inconclusive review when the maintainer explicitly authorizes another reviewer call on the same head; bounded by total reviewer-call capacity.
+- `review_mode`: `initial` or `re_review`.
 
-### 5.5 Negative-review loop
+A gate repair before the first review does not advance `review_round`. Entering a new review round resets `review_attempt` to 0.
 
-The intended S4 behavior to evaluate and freeze in the full spec is:
+### 6.5 Active request and pending stops
 
-1. a negative review creates durable finding records bound to the reviewed head;
-2. each finding is triaged as `reproduced`, `accepted_without_reproduction`, `false_positive`, `superseded`, or another closed enum selected by the full spec;
-3. every genuine blocking finding requires a bounded `codex_fix_attempt` or equivalent implementing-agent attempt on the same authorized branch;
-4. the attempt must end in either a verified branch update or a structured evidence-backed no-change/false-positive decision;
-5. deterministic gates rerun on the new exact head;
-6. re-review occurs only after those gates pass;
-7. the cycle stops on clean review, maximum rounds, non-reproducible infrastructure failure, scope expansion, security/budget boundary, or maintainer decision.
+At most one `active_request` exists. It binds request ID, kind, role, round, attempt, head, adapter, idempotency key, reservation, and status. It is created before dispatch and cleared only after exact settlement.
 
-Current governance forbids automatic review dispatch and automatic Codex requests. Therefore this behavior is a target contract only; implementation requires a separate explicit amendment to `AGENTS.md` and a dated readiness decision.
+The snapshot may contain an ordered `pending_stops` set with closed kinds:
 
-### 5.6 Deterministic gates before model action
+- `security_signal`
+- `human_pr_action`
+- `work_head_changed`
+- `authorization_revoked`
+- `authorization_expired`
 
-A model review or fix cycle may never substitute for CI. Before review or re-review, the control plane must establish that required deterministic gates completed successfully on the exact head. Stale success from another SHA is ineligible.
+Any pending stop sets `follow_on_forbidden=true`. Priority after request settlement is:
 
-A failed gate must be classified before the next transition. A reproducible failure caused by an in-scope implementation defect may transition from `awaiting_deterministic_gates` back to `implementing` under the same authorization and bounded round, with the exact failing check and reproduction recorded. Missing, stale, cancelled, action-required, infrastructure, flaky, or otherwise ambiguous gate outcomes remain fail-closed and may not trigger speculative code mutation.
+1. security/integrity/ambiguity -> `halted`;
+2. reconciled human PR action -> `terminal`;
+3. valid scoped head change -> `awaiting_pr`, invalid/ambiguous -> `halted`;
+4. revocation/expiry -> `awaiting_maintainer`.
 
-Automatic retries, if later authorized, must be bounded. An implementing agent may fix the reproduced in-scope defect, but it may not broaden scope, weaken protected evidence, skip tests, or rewrite code merely to mask flaky infrastructure.
+An invalid or ambiguous work-head observation during an active request is recorded as a pending `work_head_changed` stop with classification `invalid_or_ambiguous`; it cannot move state until the request and reservation settle or are proven safely cancelled.
 
-### 5.7 Human merge boundary
+Multiple pending stops are preserved; the highest-priority result controls state while all overlays remain recorded.
 
-The system must stop at a prepared, fully evidenced pull request. The maintainer alone decides whether to merge, close, defer, request changes, or alter priority.
+### 6.6 Other snapshot fields
 
-No 079 implementation may:
+The snapshot binds run, grant/expiry/revocation, claim/lease, branch/head, optional PR/base/head branch/state, ancestry/diff/scope, gates, review round/attempt/mode/head/verdict/findings/dispositions, integer-micro-USD reservations and usage, call counts, next action, primary stop/overlays, outcome, and last completed run.
 
-- merge a PR;
-- enable auto-merge;
-- synthesize maintainer approval;
-- treat a label, model verdict, CI success, elapsed time, or weekly-review schedule as merge consent;
-- bypass branch protection or use a privileged token to cross the merge boundary.
+A repository-scoped security halt additionally binds `security_incident_id`, `security_prior_state`, `security_prior_snapshot_digest`, verified signal identity, remediation requirements, and whether the prior state was `idle`, an active run state, or unreleased `terminal`.
 
-### 5.8 Spend, secrets, and destructive-action boundaries
+`security_incident_id` is `incident_<32 hex>` derived by the Control App from repository ID, exact control head, normalized verified-signal digest, and event sequence. When `security_prior_state=idle`, `run_id` must be null; this is the only v1 security-recovery case in which a run binding may be absent. A later recovery must bind the incident ID rather than inventing or borrowing a run.
 
-The full spec must identify every action that can spend money, expose repository content to an external model, use or modify a secret, alter repository settings, delete refs, force-push, cancel authoritative runs, or change protected evidence.
+Before PR creation: `pr_number=null`, `pr_expected_absent=true`.
 
-Such actions require explicit authority and auditable attribution. The control plane must not assume that JarvisOS runtime egress policy 059b governs GitHub-hosted Codex, Claude, or third-party review services; their authorization and accounting boundary must be stated separately and honestly.
+## 7. Authorization lifecycle
 
-### 5.9 Concurrency, leases, and idempotency
+Readiness bootstraps one control issue and allow-listed maintainer numeric IDs. Commands are new, exactly formatted, repository/issue/author validated, and rechecked against current facts. Comments are inputs, not authority.
 
-Front selection and claim acquisition must be one repository-wide atomic compare-and-swap or equivalent transaction. It must verify that no product or implementation front is active and publish the newly claimed front as one indivisible transition. A dispatcher that loses this race must stop before branch creation, mutation, agent invocation, external spend, or review dispatch.
+The grant binds repository, three-digit spec, slice, `master` and exact base SHA, normalized allow/deny paths and file/line limits, distinct adapters, budget policy, max fix rounds 0–2, optional expiry within 30 days, and bounded reason. Scope produces `scope_digest`; work branch derives as `jarvis-work/<run_id>`.
 
-Only the globally claimed front may acquire a work-branch mutation lease. At most one active claimant may mutate that branch at a time. The repository-wide front claim and branch lease both require bounded renewal and expiry semantics, but expiry must not silently authorize a different front while the prior branch, PR, or actor may still be active; recovery must reconcile durable GitHub state first.
+No grant is inferred from a row, branch, PR, label, schedule, chat, previous run, or model.
 
-Duplicate delivery, scheduler retries, webhook replay, and concurrent agents must converge without duplicate front claims, fix attempts, reviews, conflicting pushes, or lost state. Neither a repository claim nor a branch lease may grant authority beyond the recorded slice or survive branch/head replacement without revalidation.
+If no request is active, expiry from an active non-halted state records `authorization_expired_no_request` and enters `awaiting_maintainer`; revocation records `authorization_revoked_no_request` and enters `awaiting_maintainer`. From `halted`, `authorization_expired_overlay_recorded` or `authorization_revoked_overlay_recorded` preserves `halted`, the unresolved request/reservation when present, and the original primary stop while adding the authority overlay.
 
-### 5.10 Honest inactivity
+If a request is active in a response state, expiry/revocation appends the matching pending stop and leaves the request response state unchanged until section 11.4 settlement. If the state is already `halted` because the request result or charge is ambiguous, expiry/revocation uses the halted overlay event and does not clear or replace the request reconciliation obligation.
 
-The system must tolerate days of inactivity. It must not create noise merely to prove liveness, repeatedly call models while no eligible transition exists, or contact the maintainer for routine progress. A weekly digest may summarize durable state, but it cannot become a hidden scheduling authority or merge signal.
+Recovery binds exact current control head, target/action/reason, preserved prior state and snapshot digest, and complete reconciliation of control history, ref, PR, workflows, requests, reservations, usage/cost, lease/grant/overlays, security, and integrity. For a run-scoped halt it binds the exact run ID. For an idle repository incident it requires `run_id=null` and the exact `security_incident_id`. Security/integrity recovery also requires incident-specific remediation evidence.
 
-## 6. Candidate architecture
+Release is allowed only from `terminal` after all actions, reservations, ambiguity, stops, and PR/ref facts reconcile. `front_released` returns to `idle` while preserving history. A later run requires a new grant.
 
-The smallest candidate architecture has six logical roles. These are authority roles, not necessarily six services or six models.
+## 8. Claim, work ref, and lease
 
-1. **Run authority store** — durable GitHub-owned append-only events plus a derived current snapshot.
-2. **Dispatcher/resumer** — reads authority, acquires a bounded lease, and invokes only the next permitted transition.
-3. **Implementing actuator** — modifies the authorized branch within the scope digest and reports the resulting exact head.
-4. **Deterministic gate collector** — records required workflow/check conclusions for that exact head.
-5. **Independent reviewer** — emits structured findings tied to the reviewed head and cannot push.
-6. **Maintainer boundary** — owns priority changes, governance exceptions, external-spend exceptions, secrets, destructive actions, and merge.
+`claim_acquired` requires current grant, eligible registry/dependencies, repository-wide vacancy, no competing owner/PR/run, exact base, current policies, and no stop. One CAS records claim and initial 60-minute lease. Losers or ambiguity produce zero side effects.
 
-The preferred interaction is GitHub-to-GitHub. Agents must not depend on shared browser tabs, hidden chat context, mutable local scratch state, or one vendor's conversation memory.
+The Control App may create only `refs/heads/jarvis-work/<run_id>` at exact grant base while state/claim/lease match. Existing exact ref is idempotently accepted. The App cannot later update, force-update, delete, or commit. Mismatch/ambiguity halts.
 
-## 7. Hosting options to decide
+Later engineering writes are implementer-only under lease.
 
-The full spec must compare at least these options against the safety properties above.
+Lease duration is 60 minutes; renewal window is final 20 minutes; one mutation request may be active; renewal cannot alter grant, scope, round, adapter, provider, or budget. Expiry never releases and blocks mutation until reconciliation and canonical renewal.
 
-### Option A — GitHub Actions plus issue/check state
+## 9. Exact-head Git CAS
 
-Advantages:
+Every authority transition reads exact control ref/parent/tree/blob, validates schema/chains/snapshot, rereads preconditions, computes one event, creates blob/tree/commit with sole exact parent, and updates ref with `force=false`.
 
-- repository-native identity and audit trail;
-- direct access to PR, head, check, and review events;
-- no always-on local machine.
+Contents API blob update is forbidden as CAS.
 
-Risks/open questions:
+Rejection, timeout, disconnect, or ambiguity permits no external side effect. Re-read ref/ancestry/event ID: exact occurrence means committed, absence means lost, unresolved ambiguity halts. Same idempotency key never creates a different event.
 
-- workflow permission escalation;
-- event recursion and duplicate delivery;
-- limited durable locking;
-- cost and secret handling for external agents;
-- current repository prohibition on automatic review/fix workflows.
-
-### Option B — installed GitHub App control plane
-
-Advantages:
+## 10. Dispatch contract
 
-- explicit installation permissions;
-- webhook-driven state transitions;
-- stronger independent service identity and lease storage.
-
-Risks/open questions:
-
-- new hosted service and operational burden;
-- webhook security and replay handling;
-- secret custody;
-- availability and cost;
-- broader attack surface.
-
-### Option C — maintainer-owned scheduled local dispatcher
-
-Advantages:
-
-- local custody and potentially lower hosted complexity;
-- direct control over credentials and shutdown.
-
-Risks/open questions:
-
-- not 24/7 unless a machine is maintained;
-- local state drift;
-- weaker availability;
-- harder independent audit and recovery.
-
-The planning kernel does not select a host. A full spec must choose one primary architecture and reject the others with recorded evidence.
-
-## 8. Minimum durable records
-
-The full spec must define closed schemas for at least:
-
-- `development_run`
-- `authorization_grant`
-- `work_claim`
-- `checkpoint_event`
-- `gate_evidence`
-- `review_round`
-- `review_finding`
-- `finding_disposition`
-- `fix_attempt`
-- `human_decision_request`
-- `terminal_outcome`
-
-Every record must carry stable identity, timestamps, repository/spec/PR linkage, actor provenance, exact-head binding where applicable, and a content digest or equivalent tamper-evident identity.
-
-Derived dashboards or sticky summaries are non-authoritative. Append-only events own history.
-
-## 9. Fail-closed stop conditions
-
-A future implementation must stop without branch mutation when any of the following is true:
-
-- missing or ambiguous authorization;
-- registry row absent, frozen without explicit restart, or not eligible;
-- unmerged hard dependency;
-- another product or implementation front is active, or the repository-wide front claim cannot be acquired atomically;
-- a competing pull request or branch owner conflicts with the one authorized front;
-- base/head mismatch, force-push ambiguity, or untrusted fork;
-- required gate missing, stale, cancelled, action-required, infrastructure-failed, flaky, ambiguous, or failed without a reproducible in-scope implementation defect;
-- finding requires scope expansion;
-- maximum review/fix rounds reached;
-- lease conflict or replay ambiguity;
-- external-spend authorization absent;
-- required secret unavailable or changed;
-- destructive action required;
-- security signal or suspected prompt/repository-content exfiltration;
-- merge or governance decision required.
-
-The terminal or paused reason must be durable and precise. `provider_error`, `unknown`, or generic failure is not sufficient when a deterministic authority gate caused the stop.
-
-## 10. Verification direction for a later implementation
-
-A full spec must define offline deterministic tests using fixtures and fake actors. At minimum it must prove:
-
-1. restart reconstructs the same current state from durable events;
-2. duplicate event delivery is idempotent;
-3. two claimants cannot both mutate the branch;
-4. stale CI/review evidence from another head is rejected;
-5. a changed head invalidates previous clean review;
-6. a genuine negative finding creates one bounded fix attempt;
-7. a structured false-positive decision requires evidence and no branch mutation;
-8. re-review waits for exact-head deterministic gates;
-9. maximum rounds halt without further model calls;
-10. frozen/planned/blocked work is never selected without explicit authority;
-11. external spending, secrets, destructive actions, and merge always stop for human authority;
-12. no automatic path invokes a live provider in CI;
-13. no actor can approve and merge its own work;
-14. interrupted execution resumes without duplicate commits, comments, reviews, or charges;
-15. inactivity produces no repeated calls or noise;
-16. a reproducible in-scope implementation defect routes back to bounded implementation, while stale, infrastructure, flaky, or ambiguous gate outcomes do not mutate the branch;
-17. an unrelated `ready` slice is never selected while any other product or implementation front is active, even when their files and runtime boundaries do not overlap;
-18. two dispatchers racing from an empty repository state produce exactly one repository-wide front claim, while the loser performs no branch mutation, model call, review dispatch, or spend.
-
-A later real-tool proof must use a disposable repository or equivalent isolated fixture. It must not experiment on `master`, repository secrets, branch protection, or live paid models.
-
-## 11. Decisions required before full specification
-
-079 must remain `planned` until all of these are closed with recorded evidence:
-
-1. canonical GitHub state substrate and append-only/tamper-evident representation;
-2. dispatcher host and trust boundary;
-3. exact authorization-grant format and revocation semantics;
-4. repository-wide atomic front claim plus work-branch lease, concurrency, replay, expiry, and idempotency model;
-5. exact state machine and transition table;
-6. deterministic gate set and infrastructure-retry policy;
-7. review provider, structured finding schema, and reviewer independence;
-8. genuine-finding, false-positive, and no-change decision rules;
-9. maximum fix/re-review rounds and escalation policy;
-10. external-model content, spend, credential, and audit authority;
-11. maintainer notification and weekly digest contract;
-12. threat model for malicious code, prompt injection, compromised actor, and supply-chain action;
-13. governance amendment required to replace the current manual-only/explicit-only rules;
-14. isolated end-to-end proof environment;
-15. rollback and kill-switch authority.
-
-## 12. Promotion ladder
-
-1. **Planning kernel — this PR:** identify facts, target behavior, options, invariants, and unresolved decisions; keep 079 `planned`.
-2. **Architecture/evidence closure:** choose the state substrate and dispatcher, produce threat/cost/permission analyses, and record rejected alternatives.
-3. **Full specification:** freeze schemas, state machine, APIs/events, permissions, tests, rollout, kill switch, and migration/compatibility policy.
-4. **Governance amendment:** explicitly revise `AGENTS.md` only where the accepted full spec requires it; preserve human merge authority.
-5. **Dated readiness decision:** prove dependencies, test environment, security boundaries, cost controls, and implementation ownership.
-6. **Implementation:** only after 079 is `ready`; set `in_progress`, then `in_review` with the implementation PR number.
-
-## 13. Non-goals for this planning PR
-
-This PR does not:
-
-- implement a dispatcher, bot, GitHub App, scheduler, daemon, MCP server, or agent framework;
-- create or modify a GitHub Actions workflow;
-- invoke Codex, Claude, another model, or a paid service;
-- alter repository secrets, permissions, branch protection, labels, or settings;
-- authorize automatic review or automatic fix dispatch;
-- authorize auto-merge or any agent merge;
-- change product runtime, backend, frontend, schema, dependencies, or tests;
-- activate Hermes or any second orchestration engine;
-- choose a new product/implementation front;
-- promote 078 or another frozen row;
-- treat an AI team, persona, or reviewer as an independent authority;
-- duplicate `STATUS.md` as a second live roadmap.
-
-## 14. Definition result
-
-S4 is complete at the definition boundary when:
-
-- this planning kernel and its source-evidence map are reviewable;
-- `STATUS.md` truthfully records 077 as merged and 079 as planned;
-- the 2026-07-30 definition-only maintainer exception is explicit;
-- 078 remains planned and frozen from promotion/implementation;
-- no runtime, workflow, dependency, test, or repository-setting change is present;
-- deterministic documentation gates pass on the exact PR head;
-- the PR stops for the maintainer's merge decision.
+Only `implementation_requested`, `gate_repair_authorized`, `review_fix_authorized`, and `review_dispatch_authorized` authorize model calls.
+
+Every dispatch binds current grant/claim/no stop, `active_request=null`, exact repository/ref/base/head, role/adapter/capacity, provider policy, canonical reservation even at marginal zero, idempotency key, and valid lease/scope for mutation.
+
+Initial implementation additionally binds PR absence. Gate repair/review fix/review dispatch bind the one recorded PR and exact PR head. Review dispatch binds exact eligible gates.
+
+Blocked preconditions append `dispatch_blocked`, release provisional reservation, record exact reason, make zero call, and enter `awaiting_maintainer`, except security/integrity/expiry/revocation use their specific events.
+
+### 10.1 Reviewer single-flight
+
+`review_dispatch_authorized` is allowed only from a review-dispatch state and moves to `reviewing` or `re_reviewing` while creating `active_request`.
+
+The request key derives from repository, run, PR, review round, review attempt, exact head, adapter, and schema version.
+
+Identical replay returns the existing request without another reservation/call. A different key for the same round/attempt/head is an integrity failure. A later call requires a new attempt or new round/head.
+
+## 11. Closed transition system
+
+### 11.1 Main transitions
+
+| State | Event | Predicate | Next | Side effect after commit |
+| --- | --- | --- | --- | --- |
+| `idle` | `authorization_recorded` | valid command | `authorized` | none |
+| `authorized` | `claim_acquired` | section 8/CAS | `claimed` | create/reconcile work ref |
+| `claimed` | `work_branch_recorded` | exact ref/base; PR absent | `claimed` | none |
+| `claimed` | `work_branch_ambiguous` | ref mismatch/unresolved create | `halted` | none |
+| active, no request | `lease_renewed` | current lease/grant/reconciliation/window | same | none |
+| active non-terminal, no request, not `halted` | `authorization_expired_no_request` | expiry reached; no higher-priority stop | `awaiting_maintainer` | none |
+| active non-terminal, no request, not `halted` | `authorization_revoked_no_request` | valid maintainer revocation; no higher-priority stop | `awaiting_maintainer` | none |
+| `halted` | `authorization_expired_overlay_recorded` | expiry reached; preserve any active reconciliation | `halted` | none |
+| `halted` | `authorization_revoked_overlay_recorded` | valid maintainer revocation; preserve any active reconciliation | `halted` | none |
+| dispatch-eligible | `dispatch_blocked` | closed pre-call failure | `awaiting_maintainer` | none |
+| `claimed` | `implementation_requested` | initial no-PR dispatch authority | `implementing` | one implementer call |
+| `implementing` | `initial_work_head_recorded` | strict descendant, non-empty scope-valid delta | `awaiting_pr` | none |
+| `implementing` | `initial_no_change_completed` | deterministic already-satisfied proof | `terminal` | none |
+| `implementing` | `initial_no_change_needs_human` | deterministic human-boundary proof | `awaiting_maintainer` | none |
+| `implementing` | `initial_no_change_invalid` | valid no-change claim contradicted/unsupported | `halted` | none |
+| `implementing` | `implementation_invalid` | completed invalid envelope/head/scope/usage | `halted` | none |
+| `implementing` | `repair_work_head_recorded` | repair strict descendant/delta; PR exists | `awaiting_pr` | none |
+| `implementing` | `repair_no_change_recorded` | valid repair no-change; PR exists | `awaiting_pr` | none |
+| response state | `provider_ambiguous` | unresolved acceptance/result/charge | `halted` | none |
+| `awaiting_pr` | `pr_creation_authorized` | exact delta/rebind/grant | `awaiting_pr` | create/reconcile PR |
+| `awaiting_pr` | `pr_recorded` | one exact open PR/head | `awaiting_gates` | observe/request gates |
+| `awaiting_pr` | `pr_needs_human` | deterministic PR conflict | `awaiting_maintainer` | none |
+| `awaiting_pr` | `pr_ambiguous` | unresolved PR API/identity/state | `halted` | none |
+| `awaiting_gates` | `initial_gates_passed` | exact green gates and `review_mode=initial` | `awaiting_review_dispatch` | none |
+| `awaiting_gates` | `re_review_gates_passed` | exact green gates and `review_mode=re_review` | `awaiting_re_review_dispatch` | none |
+| `awaiting_gates` | `gate_defect_reproduced` | deterministic in-scope source defect | `fix_required` | none |
+| `awaiting_gates` | `gate_evidence_needs_human` | missing/stale/cancelled/action-required/required-skipped/policy mismatch | `awaiting_maintainer` | none |
+| `awaiting_gates` | `gate_infrastructure_retry_authorized` | first classified infrastructure failure; safe rerun authority exists | `awaiting_gates` | one zero-model rerun |
+| `awaiting_gates` | `gate_flaky_or_ambiguous` | second infra failure, inconsistent results, or unclassifiable ambiguity | `halted` | none |
+| `awaiting_review_dispatch` | `review_dispatch_authorized` | section 10, unique round/attempt/head | `reviewing` | one reviewer call |
+| `awaiting_re_review_dispatch` | `review_dispatch_authorized` | section 10, unique round/attempt/head | `re_reviewing` | one reviewer call |
+| `reviewing` or `re_reviewing` | `review_clean` | valid exact-head response; usage settled | `awaiting_maintainer` | presentation only |
+| `reviewing` or `re_reviewing` | `review_findings_recorded` | valid findings; usage settled | `fix_required` | triage only |
+| `reviewing` or `re_reviewing` | `review_inconclusive` | valid inconclusive; usage settled | `awaiting_maintainer` | none |
+| `reviewing` or `re_reviewing` | `review_invalid` | completed invalid response; usage settled | `awaiting_maintainer` | none |
+| `fix_required` | `findings_disposed_no_change` | evidence-backed false/superseded; round+1 <=2 | `awaiting_re_review_dispatch` | none |
+| `fix_required` | `gate_repair_authorized` or `review_fix_authorized` | section 10 mutation authority and round remains | `implementing` | one repair/fix call |
+| `fix_required` | `finding_requires_human` | scope/security/dependency/round boundary | `awaiting_maintainer` | none |
+| `awaiting_re_review_dispatch` | `maximum_rounds_reached` | round/call cap exhausted | `awaiting_maintainer` | none |
+| PR-bound active, no request | `work_head_changed` | valid scoped descendant | `awaiting_pr` | none |
+| PR-bound active, no request | `work_head_ambiguous` | non-descendant/force/scope/concurrency ambiguity | `halted` | none |
+| response state with request | `work_head_change_pending` | valid scoped descendant observed | same | settlement only |
+| response state with request | `work_head_stop_pending` | non-descendant/force/scope/concurrency ambiguity | same | safe cancellation/settlement only |
+| response state with request | `human_pr_action_pending` | reconciled maintainer merge/close observed | same | settlement only |
+| response state with request | `authorization_revoked_pending` | valid maintainer revocation | same | settlement only |
+| response state with request | `authorization_expired_pending` | expiry reached | same | settlement only |
+| response state with human PR action pending | `request_cancelled_after_human_pr_action` | accepted request proven safely cancelled; reservation/usage settled | corresponding PR-bound state, no request | record factual human outcome next |
+| response state with valid head change pending | `request_cancelled_after_head_change` | accepted request proven safely cancelled; reservation/usage settled | `awaiting_pr` | none |
+| PR-bound active, no request | `human_merge_observed` | reconciled human action | `terminal` | none |
+| PR-bound active, no request | `human_close_observed` | reconciled human action | `terminal` | none |
+| `awaiting_maintainer` | `human_decision_recorded` | section 11.6 | closed target state or `terminal` | none |
+| `idle`, active non-terminal, or unreleased `terminal`; no request | `security_halt` | authenticated/verified security signal; create incident and preserve prior state/snapshot | `halted` | none |
+| `halted` | `security_halt_overlay_recorded` | additional authenticated/verified signal; preserve active reconciliation if present | `halted` | none |
+| response state with request | `security_stop_pending` | authenticated/verified security signal | same | safe cancellation/settlement only |
+| `halted` | `human_recovery_recorded` | exact run or idle-incident identity, reconciliation, and remediation; restore only preserved safe state | preserved safe state or `terminal` | recovery only |
+| `terminal` | `front_released` | complete reconciliation; no open PR | `idle` | none |
+
+A PR-bound state contains a recorded PR, including `awaiting_pr` during rebinding, `awaiting_gates`, both review-dispatch/reviewing states, `fix_required`, and PR-bound `awaiting_maintainer`.
+
+### 11.2 Response classification
+
+Mandatory mutually exclusive order:
+
+1. unresolved acceptance/completion/result/charge -> `provider_ambiguous`;
+2. completed invalid envelope/schema/bound head/usage/scope/ancestry -> role-specific invalid event;
+3. valid initial strict delta -> `initial_work_head_recorded`;
+4. valid initial no-change envelope, exact base, zero diff, settled usage -> deterministic verifier selects exactly one initial no-change event;
+5. valid repair result -> delta or repair no-change event.
+
+Malformed, wrong-head, usage-invalid, scope-invalid, or ambiguous evidence can never be `initial_no_change_invalid`.
+
+### 11.3 Initial no-change verifier
+
+After a valid no-change envelope is established:
+
+- `initial_no_change_completed`: acceptance conditions already satisfied at the pinned base;
+- `initial_no_change_needs_human`: progress requires a specific governance/scope/dependency/permission/secret/destructive decision outside the grant;
+- `initial_no_change_invalid`: the no-change claim is contradicted or unsupported by deterministic facts, with no other invalid/ambiguity/security class.
+
+The first terminalizes as `completed_without_pr`; the second enters no-PR `awaiting_maintainer`; the third halts. Provider assertion alone is insufficient. Repair no-change retains the PR and requires gates/re-review.
+
+### 11.4 Pending-stop settlement
+
+If a request is active, security, human PR action, valid or invalid observed head change, revocation, or expiry appends its pending-stop event, remains in the response state, and forbids follow-on work.
+
+Settlement transitions:
+
+- exact valid completion with security pending -> `request_settled_after_security_stop` -> `halted`;
+- proven safe cancellation with security pending -> `request_cancelled_after_security_stop` -> `halted`;
+- exact valid completion with human PR action pending -> settle usage/head/response, then record factual human outcome -> `terminal`;
+- proven safe cancellation with human PR action pending -> `request_cancelled_after_human_pr_action`; clear request and settlement ambiguity in the corresponding PR-bound state, then record the separate factual `human_merge_observed` or `human_close_observed` event -> `terminal`;
+- exact valid completion with valid scoped head-change pending -> settle and return `awaiting_pr`;
+- proven safe cancellation with valid scoped head-change pending -> `request_cancelled_after_head_change` -> `awaiting_pr`;
+- exact valid completion with invalid/ambiguous head-change pending -> `request_settled_after_head_ambiguity` -> `halted`;
+- proven safe cancellation with invalid/ambiguous head-change pending -> `request_cancelled_after_head_ambiguity` -> `halted`;
+- exact valid completion with revocation/expiry pending -> `request_settled_after_authority_stop` -> `awaiting_maintainer`;
+- proven safe cancellation with revocation/expiry -> `request_cancelled_after_authority_stop` -> `awaiting_maintainer`;
+- completed invalid output -> role-specific invalid-after-stop event; implementer/security invalidity halts, reviewer invalidity without security enters `awaiting_maintainer`;
+- unresolved result/charge -> `provider_ambiguous` -> `halted`.
+
+Every settlement and safe-cancellation event clears `active_request`, finalizes or releases the canonical reservation, records safe request/response or cancellation digests and actual usage, proves that no duplicate request or charge is authorized, and preserves every pending-stop and halt overlay. Outputs settled under a stop are forensic evidence only and cannot authorize continuation.
+
+While a provider-ambiguous request remains attached to `halted`, later expiry, revocation, or verified security evidence is recorded through the halted overlay events. Those overlays never imply that the request, reservation, result, or charge has been reconciled.
+
+### 11.5 Completed invalid responses
+
+Before an invalid event, finalize actual usage, release unused reservation, store safe request/response digests and exact invalid class, clear `active_request`, prove no retry/second charge is authorized, and invalidate output-derived authority.
+
+Implementation invalidity halts; reviewer invalidity enters `awaiting_maintainer` unless a security/integrity signal requires halt.
+
+### 11.6 Human decision, review retry, and PR closure
+
+`human_decision_recorded` binds an allow-listed maintainer, exact control head and repository/ref/PR facts, no active request or reservation ambiguity, current overlays, closed action, target, and reason.
+
+Closed actions:
+
+- `resume_pre_pr` -> `claimed` only with no PR/delta, current grant/policies, no stop overlay, and renewed lease;
+- `resume_pr_reconciliation` -> `awaiting_pr` only after the exact deterministic PR conflict is resolved;
+- `resume_gates` -> `awaiting_gates` only with exact PR/head and valid target evidence;
+- `resume_review_pre_dispatch` -> corresponding review-dispatch state only when the stop occurred before any reviewer request for the current round/attempt was authorized;
+- `retry_review_next_attempt` -> corresponding review-dispatch state only after a completed `review_invalid` or `review_inconclusive`, exact head/gates unchanged, reviewer-call capacity remains, and `review_attempt` increments by one;
+- `request_pr_close` -> remain `awaiting_maintainer`; creates only a human-decision request, never closes the PR automatically;
+- `abandon` or `supersede` -> `terminal` only when no PR exists or the recorded PR is already closed and reconciled;
+- `terminalize_expired_or_revoked` -> matching terminal outcome after all accepted requests settle.
+
+An open PR makes `abandon` and `supersede` ineligible. The maintainer must close it externally; `human_close_observed` then terminalizes. Release also requires no open PR.
+
+`retry_review_next_attempt` never reuses the completed request key. It increments `review_attempt`, while `review_round` and head remain unchanged. A new fix/re-review round increments `review_round` and resets attempt to zero.
+
+For a repository-scoped security halt, `human_recovery_recorded` may restore only the exact preserved prior state after incident-specific remediation evidence and complete reconciliation. A run-scoped incident requires the exact run ID. An incident entered from `idle` requires `run_id=null` and the exact `security_incident_id`; it cannot fabricate or borrow a run. Recovery to `idle` cannot synthesize a grant or claim; recovery to unreleased `terminal` cannot release it; recovery to an active run state remains subject to grant, lease, PR, head, reservation, provider, and stop checks.
+
+Resume is forbidden for expired/revoked grants, unresolved security/integrity/provider ambiguity, stale heads, active requests, or scope expansion.
+
+### 11.7 Gate classification
+
+Gate outcomes are disjoint:
+
+- reproducible in-scope source/test defect -> `gate_defect_reproduced`;
+- missing, stale, cancelled, action-required, required-but-skipped, or policy-definition mismatch -> `gate_evidence_needs_human`;
+- first independently classified infrastructure failure -> `gate_infrastructure_retry_authorized` only if the readiness-approved gate policy and credential permit one zero-model rerun;
+- second infrastructure failure, inconsistent rerun conclusions, suspected flake, or unclassifiable evidence -> `gate_flaky_or_ambiguous`.
+
+If safe rerun authority is not configured, the first infrastructure failure uses `gate_evidence_needs_human`, not an invented rerun.
+
+### 11.8 Human PR outcomes and merge SHA semantics
+
+The maintainer may merge or close a recorded PR from any PR-bound state. If a request is active, record the pending human action and settle or safely cancel it first; unresolved settlement halts and recovery later records the already-observed PR outcome. Safe cancellation records `request_cancelled_after_human_pr_action` before the separate factual merge/close event.
+
+Merge records PR head at merge boundary, separate merge-result SHA, method, actor, timestamp, prior state, and head-bound evidence.
+
+`current_clean` requires the PR head at the merge boundary to equal the exact current gated/clean-reviewed head with no later invalidation. Merge-result SHA may differ under merge, squash, or rebase. Otherwise evidence is `stale_or_incomplete`; outcome remains factually `merged_by_maintainer` without a system-ready claim.
+
+Close/supersede records facts and creates no replacement PR.
+
+### 11.9 PR lifecycle and head changes
+
+PR creation is eligible only after strict non-empty initial delta and is forbidden after initial no-change outcomes.
+
+`pr_creation_authorized` binds repo/run/branch/head/base/scope/version.
+
+- no PR -> create one non-draft PR;
+- one exact open PR -> reuse;
+- deterministic duplicate/mismatch/closed conflict -> `pr_needs_human`;
+- unresolved API/identity/fork/state -> `pr_ambiguous`;
+- timeout -> search before retry; never create a second PR.
+
+`pr_recorded` binds PR ID/repository/base/head branch/current head/operation/state. Gates/review are forbidden before it. Every repair result rebinds the same PR.
+
+Any PR-head change invalidates gates/review/presentation. With no active request, a valid scoped descendant returns to `awaiting_pr`; invalid/ambiguous movement halts. With an active request, a valid change records `work_head_change_pending`; an invalid or ambiguous change records `work_head_stop_pending`; both preserve the response state until section 11.4 settlement. Proven safe cancellation after a valid scoped change records `request_cancelled_after_head_change` and returns to `awaiting_pr`.
+
+## 12. Branch and scope
+
+One work branch; App creates once; implementer writes later; no automated force/delete; base `master`; forks unsupported.
+
+Before/after mutation verify normalized paths, deny precedence, file/line limits, linear ancestry, submodules, LFS, symlink escapes, binaries, secret risks, and scope digest.
+
+Denied absent separate authority: `AGENTS.md`, workflows/CODEOWNERS, settings/rulesets, secrets/keys/tokens/environment files, protected conformance tests, vendored dependencies/lockfiles, and canonical authority file.
+
+## 13. Deterministic gates
+
+Readiness freezes exact checks, action pins, and path conditions: registry, manual-review offline boundary, BLUECAD license boundary, Ruff, full Pytest, canary, frontend build when needed, strict real-tool proof when relevant, and 079 service unit/integration/conformance/reconstruction tests.
+
+Eligible evidence is exact repository/head/policy success and not stale, required-but-skipped, cancelled, action-required, or superseded. Gate failure handling follows section 11.7. Tests/workflows may not be weakened.
+
+## 14. Reviewer and findings
+
+Reviewer credentials are read-only, effectively distinct from implementer, and have no write, dispatch, merge, settings, secret, ref-delete, or ruleset authority.
+
+Review request binds repository, spec, slice, scope/non-goals, base/head, diff, PR, gates, round, attempt, prior findings/fixes, content digest, provider policy, reservation, and idempotency.
+
+Response contains exact head, verdict `clean|findings|inconclusive`, bounded summary, and findings with severity/category/path/line/claim/reproduction/resolution. Reviewer cannot provide authoritative IDs. Control App validates/normalizes and derives each `finding_<32 hex>` from round, attempt, head, normalized finding digest, and occurrence index. Model `finding_id` is invalid.
+
+Maximum 50 findings and 2,000 characters per text field. Malformed, oversized, wrong-head, unknown-field, or non-JSON output uses `review_invalid` after usage settlement. Inconclusive uses `review_inconclusive`. P0/P1 block; P2 only when independently reproduced as a binding violation; P3 advisory.
+
+## 15. Findings and bounded rounds
+
+Closed dispositions: `reproduced`, `accepted_without_reproduction`, `false_positive`, `superseded`, `needs_human`, all evidence-bound.
+
+Review round starts 0; maximum fix/re-review round 2. Reviewer calls maximum 3 total; implementer calls maximum 3 total; one fix per negative round.
+
+A code-changing review fix or an evidence-backed no-change disposition increments review round and resets review attempt to 0. Gate repair before initial review does not increment review round. Every code change returns through PR/gates/review. Negative result after round 2 stops. Scope/destructive/governance/secret/dependency expansion stops.
+
+## 16. Adapters and execution-spine block
+
+Adapter requests bind repository/install, branch/head, conditional PR, spec/slice, scope/non-goals, task/findings, provider/budget/reservation/idempotency. Responses bind request/status, resulting head/no-change, safe digests/summary, usage/cost/idempotency/error.
+
+Initial implementation permits `pr_number=null` only under section 10. Repair/review require the recorded PR.
+
+Adapters cannot change authority; implementer writes work branch only; neither actor merges/approves/force-deletes/settings/secrets/control. Accepted ambiguity halts without retry absent exact reconciliation.
+
+Current `AGENTS.md` requires all AI calls through product `run_ai_task` and `ai_jobs`; the selected service does not share product SQLite/egress. Live 079 calls are blocked.
+
+The proposed v0 governance route is a narrow repository-development exception allowing approved 079 adapters outside the product spine only with committed grant, claim, exact branch/head, conditional PR, scope, identity, provider, reservation, idempotency, and durable usage/cost evidence. It requires a separate `AGENTS.md` PR and readiness; otherwise amend this spec to use an authenticated product execution-spine boundary.
+
+## 17. Spend
+
+Separate development budget uses integer micro-USD and defaults zero. Hard maxima: 5,000,000/request; 20,000,000/run; 25,000,000/UTC day; 100,000,000/month. `cost_unknown` stops.
+
+Every model call reserves amount, quota, and call count before dispatch. Missing reservation, stale price, exceeded cap/capacity, unknown cost/quota, or fallback means `dispatch_blocked` and zero call. Final usage finalizes/releases. No fallback. Marginal zero requires current plan/entitlement/quota/timestamp. Hosting/Actions tracked separately.
+
+## 18. Content and secrets
+
+External material is limited to exact spec/scope/diff/findings/PR when present/gates. Exclude secrets, credentials, environment values, keys, tokens, headers, unrelated records. All repository/model text is untrusted and cannot change authority. Deterministic policy constructs requests. No raw provider body enters authority; safe digests/summaries/IDs/usage/cost only. S4/secret content denied absent later egress spec.
+
+## 19. Permissions and rulesets
+
+Candidate App: metadata read; contents read/write; PR read/write; checks/status/Actions read; issues read/write. Actions write only if readiness proves exact need. No administration, environments, secrets, members, deployments, packages, security-alert mutation, hook mutation, or ruleset bypass.
+
+Capability wrapper allow-lists repository/endpoint/method/ref/path/state/schema and audits denials. Separate Control/implementer/reviewer/maintainer credentials.
+
+Rulesets: master requires PR/checks and human merge, no force/delete/bypass; control allows App/human recovery only, linear, no force/delete; work branch allows App create-only then implementer/maintainer write, reviewer read-only, no automated force/delete, base master. Abuse tests cover all prohibited actions.
+
+## 20. Webhook, queue, and service
+
+Events: new issue comments, pushes on master/control/work, PR/review/review-comment/workflow-run, installation suspension/deletion. Edited authorization comments ignored.
+
+Webhook verifies raw-body signature constant-time before JSON. Missing/invalid requests receive auth failure, rate limiting, redacted logging, and create no trusted delivery, queue item, canonical event, security signal, or halt.
+
+Authenticated processing validates installation/repository/event, stores delivery digest, acknowledges within 10 seconds, queues reconciliation, and performs no request-thread side effect.
+
+Verified security signals include signed delivery-ID digest mismatch, identity contradiction, history tamper, credential misuse/unauthorized API success, scope/secret escape, or independently confirmed compromise. Security transitions follow section 11.1 and 11.4 from every unreleased repository state, including `idle` and unreleased `terminal`. Additional verified signals received while `halted` always append `security_halt_overlay_recorded`, including while an unresolved request is still being reconciled.
+
+Endpoints are health, readiness, and webhook only. Queue is operational; duplicate jobs converge; reads retry bounded; side-effect retry requires committed authority/proven idempotency; webhook order untrusted.
+
+Retention: delivery 30 days, queue/projections 90 days, logs 30 days; no raw model/secrets/headers. Canonical RPO zero, DB RPO 24h, RTO target 4h; GitHub uncertainty stops.
+
+## 21. Presentation
+
+One non-authoritative check, sticky PR comment, control-issue status, and weekly digest. Idempotent after canonical changes. Between weekly reviews notify only human decision, verified security signal, or budget overrun/disabled authority. Digest Europe/Rome Monday 08:00, at most weekly, omitted without change, never grants authority.
+
+## 22. Security and supply chain
+
+Use short-lived tokens, managed secrets, rotation, immutable pins/digests, SBOM, dependency/container scans, outbound allow-listing, repository/SHA validation, and no untrusted fork with write/secrets. Webhook processing never executes PR code. Invalid unsigned traffic does not halt; verified security evidence does from any unreleased state, with active-request settlement when required and exact prior-state preservation for recovery. Idle-state incidents use repository-scoped incident identity and never fabricate a run.
+
+## 23. Verification
+
+### 23.1 Offline tests
+
+Prove canonical encoding/chains/reconstruction/idempotency/schema; every transition edge; grant/expiry/revocation with and without active requests; explicit no-request authority-stop events and halted overlays even while a request/reservation remains unresolved; pending-stop priority/settlement including valid and ambiguous head changes; safe-cancellation paths for pending human PR actions and valid scoped head changes; repository-scoped incident identity and security halt/recovery from idle with `run_id=null`; run-scoped security halt/recovery from active and unreleased terminal states; additional security overlays during halted request reconciliation; recovery/release; claim/lease/ref; initial PR absence/delta/no-change classifications; completed invalid settlement; no-PR human decisions; PR closure before abandonment; gate predicates and one infrastructure rerun; review round versus attempt; concurrent reviewer single-flight; review retry next-attempt; every reservation/capacity/lease check; exact-head invalidation; provider ambiguity; deterministic finding IDs; human outcomes/merge SHA semantics; release; invalid webhook; inactivity.
+
+### 23.2 Disposable proofs before readiness
+
+All architecture proofs remain mandatory, including CAS races/timeouts/replay/reconstruction/tamper; lease/ref; initial PR/no-change; classification disjointness; no-PR decisions; PR closure and idempotency; gate predicates/rerun; reviewer single-flight and retry attempts; pending authority/security/head/human stops with request settlement; safe cancellation after pending human PR actions and valid scoped head changes; ambiguous head-change cancellation and settlement before halt; credential abuse; repository-scoped incident identity and security halt/recovery from idle without a run; security halt/recovery from active and terminal; halted authority/security overlays during unresolved request reconciliation; head/human/merge semantics; invalid output settlement; provider ambiguity/finding IDs/release; fork/prompt injection; cost/duplicate charge; outage/kill switches; invalid unsigned no halt; inactivity/no duplicate calls.
+
+### 23.3 Repository/conformance
+
+Implementation passes repository Pytest/Ruff/status/canaries and deterministic service tests; no live/paid/production CI. Readiness freezes maintainer-owned vectors for every authority property. Implementation agents cannot weaken them.
+
+## 24. Governance, rollout, readiness, and kill switches
+
+### 24.1 Required `AGENTS.md` amendment
+
+A separate PR must amend manual/explicit-only development dispatch and the hard `run_ai_task`/`ai_jobs` invariant with the narrow 079 exception described in section 16. It continues to forbid automatic selection, merge, priority, bypass, force/delete, settings/secrets, destructive actions, scope expansion, fallback, or work after any stop. Until governance/readiness merge, no live calls.
+
+### 24.2 Rollout
+
+1. Human merge of this PR accepts the documentary full spec and section 2.1 ordering amendment; 079 remains `planned` and mechanisms unavailable.
+2. Merge dormant governance amendment.
+3. Build disposable/separate proof prototype with fake actors and zero paid calls.
+4. Execute every architecture proof before readiness.
+5. Optional explicitly approved read-only JarvisOS shadow: no claim/ref/PR/workflow/provider writes.
+6. Dated readiness records host/App/actors/rulesets/adapters/prices/caps/proofs/vectors/owners/rollback and only then `ready`.
+7. One bounded implementation PR after readiness.
+8. Separate operational grant for one low-risk docs-only activation with human merge.
+9. Broader use separately approved after first-run evidence.
+
+No implementation skeleton enters JarvisOS while planned.
+
+### 24.3 Kill switches and readiness evidence
+
+Canonical halt, App suspension, key/secret/provider revocation, service/queue stop, caps zero, dispatch-workflow disable, and human recovery. Rollback never force-pushes or erases.
+
+Readiness proves merged dependencies/architecture/full spec/governance; every proof; exact permissions/rulesets/wrapper/IDs; execution exception; all closed transition and pending-stop behavior; repository-scoped incident recovery; halted overlays during request reconciliation; reviewer single-flight/attempts; gate predicates; PR closure; safe-cancellation paths; abuse denials; host/database/secrets/adapters/pricing/caps/gates/vectors/owners/first slice; no unresolved P0/P1. Only readiness sets `ready`.
+
+## 25. Compatibility
+
+No product SQLite migration. Product execution/budget/Hermes/MemoryStore/BLUECAD/events do not become authority. Hosted DB rebuildable. Bootstrap new protected control branch explicitly; no chat/old PR/ref imported. Existing work needs exact grant/reconciliation and normally fresh branch. Review remains manual until governance/readiness. Authority versions require additive migration proof. Force-push is never migration.
+
+## 26. Likely implementation scope
+
+After readiness: `services/devloop/`, pinned service manifest/container, fake fixtures, secret-free deployment docs, normal `STATUS.md` transition, CI only for offline tests. Not in implementation: `AGENTS.md` amendment, live App/settings/rulesets/secrets, credentials/account data, product runtime, Hermes/MCP/MemoryStore/BLUECAD/process kernel/078. Dependencies pinned/justified/scanned/service-limited; no agent framework.
+
+## 27. Non-goals
+
+No automatic next-spec selection; simultaneous fronts/branches/actors/PRs; autonomous merge/approval/release/deploy/priority/governance/settings; force/delete/history rewrite/protected-test mutation; arbitrary shell; provider fallback/bidding/swarm; unbounded loops; untrusted fork execution; replacement of runtime 059b/Hermes/Actions; raw model/secret canonical storage; outage liveness guarantee; or 078/other frozen work.
+
+## 28. Definition result
+
+Ready for maintainer merge decision when the diff remains one planning document, 079 remains `planned`, section 2.1 remains proposed until merge, transitions and predicates are closed, review requests are single-flight by attempt, review retry advances attempt, PR-bound abandonment requires closure, gate outcomes are deterministic, security signals have repository-wide no-request and active-request transitions with repository incident identity for idle halts, halted authority/security overlays preserve unresolved reconciliation, pending calls settle or are safely cancelled before every state departure including human PR actions and valid or ambiguous head changes, every proof remains a readiness blocker, execution-spine conflict remains blocked, no mechanism is claimed operational, no runtime/workflow/App/provider/secret/ruleset/dependency/setting changes, exact-head gates pass, no current P0/P1 remains, and the PR stops for human merge.
+
+Merge does not authorize governance, proofs against live JarvisOS, readiness, implementation, provider calls, or automated merge.
