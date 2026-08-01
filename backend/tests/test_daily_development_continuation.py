@@ -93,6 +93,10 @@ def build(mode="SHADOW", *, reader=None, token=False):
     )
 
 
+def trusted_marker(body):
+    return {"body": body, "user": {"login": "github-actions[bot]"}}
+
+
 def test_off_never_reads_external_state():
     reader = FakeReader()
     result = build("OFF", reader=reader)
@@ -149,7 +153,8 @@ def test_fail_closed_pull_cases(value, message):
 
 
 def test_draft_pull_is_not_an_active_candidate():
-    result = build(reader=reader_for(pull(draft=True)))
+    value = pull(draft=True)
+    result = build(reader=reader_for(value))
     assert result.action == "noop"
 
 
@@ -195,31 +200,46 @@ def test_checkpoint_must_be_ancestor():
 
 def test_marker_makes_same_no_change_head_idempotent():
     marker = module.marker_text("079", 210, "b" * 40, "b" * 40)
-    result = build(reader=reader_for(status="identical", comments=[{"body": marker}]))
+    result = build(reader=reader_for(status="identical", comments=[trusted_marker(marker)]))
     assert result.action == "noop"
     assert result.reason == "head_already_processed"
 
 
-def test_changed_marker_allows_new_output_head_next_day():
+def test_changed_marker_allows_current_head_to_descend_from_output_checkpoint():
     value = pull()
-    value["head"]["sha"] = "c" * 40
-    marker = module.marker_text("079", 210, "b" * 40, "c" * 40)
-    result = build(reader=reader_for(value, status="identical", comments=[{"body": marker}]))
+    value["head"]["sha"] = "d" * 40
+    marker = module.marker_text("079", 210, "a" * 40, "c" * 40)
+    result = build(reader=reader_for(value, status="ahead", comments=[trusted_marker(marker)]))
     assert result.action == "shadow"
     assert result.checkpoint_sha == "c" * 40
 
 
-def test_marker_claiming_unobserved_push_fails_closed():
+def test_first_marker_may_start_from_an_existing_descendant_head():
     marker = module.marker_text("079", 210, "b" * 40, "c" * 40)
-    with pytest.raises(module.ContinuationError, match="did not advance"):
-        build(reader=reader_for(comments=[{"body": marker}]))
+    value = pull()
+    value["head"]["sha"] = "d" * 40
+    result = build(reader=reader_for(value, comments=[trusted_marker(marker)]))
+    assert result.checkpoint_sha == "c" * 40
+
+
+def test_later_marker_must_continue_the_previous_output():
+    one = module.marker_text("079", 210, "a" * 40, "b" * 40)
+    two = module.marker_text("079", 210, "c" * 40, "d" * 40)
+    with pytest.raises(module.ContinuationError, match="not contiguous"):
+        build(reader=reader_for(comments=[trusted_marker(one), trusted_marker(two)]))
+
+
+def test_untrusted_marker_author_is_rejected():
+    marker = module.marker_text("079", 210, "a" * 40, "b" * 40)
+    with pytest.raises(module.ContinuationError, match="not authored"):
+        build(reader=reader_for(comments=[{"body": marker, "user": {"login": "alice"}}]))
 
 
 def test_conflicting_markers_fail_closed():
     one = module.marker_text("079", 210, "b" * 40, "b" * 40)
     two = module.marker_text("079", 210, "b" * 40, "c" * 40)
     with pytest.raises(module.ContinuationError, match="incompatible"):
-        build(reader=reader_for(comments=[{"body": one}, {"body": two}]))
+        build(reader=reader_for(comments=[trusted_marker(one), trusted_marker(two)]))
 
 
 @pytest.mark.parametrize(
@@ -257,6 +277,18 @@ def test_status_may_change_only_active_row():
     bad = after.replace("| 080 | planned", "| 080 | ready")
     with pytest.raises(module.ContinuationError, match="only the active"):
         module.validate_status_change(before, bad, "079")
+    bad_dependency = after.replace(
+        "| 080 | planned | — | Review | 079 | later |",
+        "| 080 | planned | — | Review | 022 | later |",
+    )
+    with pytest.raises(module.ContinuationError, match="only the active"):
+        module.validate_status_change(before, bad_dependency, "079")
+    bad_description = after.replace(
+        "| 080 | planned | — | Review | 079 | later |",
+        "| 080 | planned | — | Review | 079 | changed |",
+    )
+    with pytest.raises(module.ContinuationError, match="only the active"):
+        module.validate_status_change(before, bad_description, "079")
 
 
 def test_status_cannot_add_parallel_row():
@@ -274,9 +306,11 @@ def test_workflow_contract_is_daily_off_by_default_and_separates_authority():
     assert "vars.JARVISOS_CONTINUATION_MODE || 'OFF'" in text
     assert "anthropics/claude-code-action@v1" in text
     assert "claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}" in text
+    assert "show_full_output: false" in text
     assert "persist-credentials: false" in text
     assert "generate-patch:" in text and "validate-and-push:" in text
     assert "contents: read" in text and "contents: write" in text
+    assert 'if [ ! -s "$patch" ]' in text
     assert "git apply --index --whitespace=error-all" in text
     assert "python -m pytest -q" in text
     assert 'git push origin "HEAD:refs/heads/$HEAD_REF"' in text
