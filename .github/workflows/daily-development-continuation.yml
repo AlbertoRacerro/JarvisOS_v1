@@ -91,8 +91,34 @@ jobs:
             --input-head "${{ needs.plan.outputs.checkpoint_sha }}" \
             --output-head "${{ needs.plan.outputs.recovery_output_sha }}"
 
-  generate-patch:
+  bind-intervening-head:
     needs: plan
+    if: ${{ needs.plan.outputs.action == 'execute' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          persist-credentials: false
+
+      - name: Bind ancestry-verified intervening commits
+        if: ${{ needs.plan.outputs.checkpoint_sha != needs.plan.outputs.head_sha }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python scripts/daily_development_continuation.py marker \
+            --spec "${{ needs.plan.outputs.spec_id }}" \
+            --pr "${{ needs.plan.outputs.pr_number }}" \
+            --input-head "${{ needs.plan.outputs.checkpoint_sha }}" \
+            --output-head "${{ needs.plan.outputs.head_sha }}"
+
+  generate-patch:
+    needs: [plan, bind-intervening-head]
     if: ${{ needs.plan.outputs.action == 'execute' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
