@@ -43,71 +43,30 @@ before Codex or another coding agent may act on them.
    pull requests. A spec implementation PR fails if its row is absent, not
    `in_review`, missing the current PR number, or has an unmerged hard dependency.
 
-## Maintainer operating mode — one active front
+## Repository operating regime — effective 2026-08-01
 
-Effective 2026-07-29, the maintainer's master's degree is the priority and JarvisOS
-must be able to remain idle without degrading or demanding attention.
+- One implementation front at a time.
+- The assigned agent merges with an exact-head guard when deterministic gates are green and no current blocking review finding remains.
+- Work proceeds through the authorized queue without per-step maintainer confirmation.
+- The maintainer is contacted only for real spending/budget risk, genuinely missing credentials/accounts/repositories/organizations, security/secret risk, or an obstacle without two practicable routes.
+- New infrastructure, credentials, state stores, or scope must pass the mandatory minimum-necessary test in the PR body.
+- Independently removable specifications remain separate.
 
-- Only one product or implementation front may be active at a time. Other fronts
-  are frozen explicitly rather than left informally in progress.
-- A maintainer freeze is a prioritization decision, not a technical blocker. Frozen
-  rows remain `planned`; do not move them to `blocked`.
-- Specs 066, 067, and 068, plus UI foundation 070, are frozen by maintainer decision
-  dated 2026-07-29. Their branches are retained and their definition PRs were closed
-  without merge. Restart requires an explicit maintainer decision, re-derivation
-  from then-current `master`, and fresh verification of dependencies, assumptions,
-  mergeability, and deterministic gates.
-- The maintainer reviews the project once per week. Between reviews, contact the
-  maintainer only for an obstacle requiring a human decision, a security problem,
-  or a budget overrun.
-- Do not open additional frontend waves, external-geometry imports, bioprocess
-  engines, or autonomous-control implementation while this freeze is in force.
+The binding queue is:
 
-Spec 077 implementation PR #198 merged on 2026-07-30. No implementation front is
-active after that merge. On 2026-07-30 the maintainer explicitly authorized one
-S4 definition-only governance PR for planned spec 079. That exception permits the
-planning kernel and registry reconciliation only; it does not lift the freeze for
-autonomous-control implementation, authorize automatic review/fix dispatch, or
-create a second implementation front. The merged 078 planning definition remains
-recorded, but full-spec promotion and implementation require a separate explicit
-maintainer restart decision.
+1. complete and integrate 079 minimal scheduled continuation;
+2. promote 078 from its merged planning kernel to a complete specification using repository evidence and primary scientific literature;
+3. report and stop.
+
+Specs 066, 067, 068, and 070 remain frozen. Spec 080 is a separate planned review/repair capability and is not part of 079.
 
 ## Current priority and drafting order
 
-1. Preserve the merged 059 foundation: PR #90/059a, PR #95 definition amendment,
-   PR #98/ADR-059, and PR #101 lifecycle reconciliation.
-2. `059b` implementation is merged in PR #119; preserve its server-owned sensitivity,
-   packet, trigger, ticket, reservation, accounting, audit, and fallback boundaries.
-3. `061a` and `061b` are merged in PRs #134 and #145. Preserve their canonical flow,
-   attempt, protected continuation, confirmation, assembled-output, and accounting
-   authority.
-4. Draft and promote `066` HERMES-PASSTHROUGH-0 and `067` JARVIS-MCP-0 only after
-   their contracts are reconciled with 059b, 061a/061b, and existing service boundaries.
-5. Draft and promote `068` HERMES-CONFIG-0 only after 066/067 are stable and a
-   concrete Windows-first host-isolation boundary is selected.
-6. Preserve the merged `047`–`052`, `071`, and `072` process-model, editable-binding,
-   forward-DOF, dependency-graph, stale-propagation, M0 CAD-link, and explicit
-   symmetric-topology foundation.
-7. Preserve the merged `074` fresh-manifest, explicit-layout, reconciliation,
-   idempotency, lifecycle-fencing, and fail-closed boundaries.
-8. Preserve merged `075` exact-047 identity and process-kernel boundaries, merged
-   `076` fail-closed evidence-guided structural repair, and merged `077` canonical
-   evidence egress under the existing 059a/059b authority.
-9. Retain `078` PBR-MODELING-0 as a planning kernel over merged `075`, `048`, and
-   `049`; do not promote or implement it until the bioprocess freeze is explicitly
-   lifted and its scientific decisions close with recorded evidence and readiness.
-10. Draft `079` AUTONOMOUS-DEVELOPMENT-LOOP-0 as a definition-only control-plane
-    kernel. Promote beyond `planned` only after GitHub state, authorization, leases,
-    review/fix rounds, external-model spend, governance, security, and proof decisions
-    are closed with recorded evidence and a dated readiness decision.
-11. Run `069` MEMORY-CONSOLIDATE-0 as the first Hermes dogfood only after 066–068
-    are merged and the required local route is qualified.
-12. Continue `063`/`064`, `012` → `033`, and residual conversation/UI rows according
-    to dependencies, explicit maintainer priority, and measured value.
-
-Trigger-gated rows remain `planned` until their stated evidence exists. Always
-check rows marked `in_review` before choosing any `ready` spec and confirm no open
-PR overlaps the target files or runtime boundary.
+1. Preserve merged 059a/059b, 061a/061b, 075, 076, and 077 authority boundaries.
+2. Complete the sole active implementation front, 079, through PR #210.
+3. After 079 is merged and reconciled, complete the full specification for 078 without implementing it.
+4. Leave 080 planned and separate.
+5. Resume no other frozen or planned front unless it appears in a later explicit queue.
 
 ## Registry
 
@@ -200,8 +159,9 @@ PR overlaps the target files or runtime boundary.
 | 075 | merged | [#191](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/191) | PROCESS-KERNEL-1: streams, components, units, and unit operations | 043, 047, 048, 071 | Re-express validated 047 as an acyclic flowsheet of typed material/scalar ports and reusable blocks, add additive unit-contract v2 and component/stream foundations, and require exact canonical 047 result identity before broader solver work. Readiness evidence and implementation ownership are frozen in [the 2026-07-27 readiness decision](075-readiness-2026-07-27.md). |
 | 076 | merged | [#195](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/195) | EVIDENCE-SIGHT-0: bounded evidence-guided structural repair | 010, 038, 044, 059b, 061a, 061b | Add an opt-in, separately budgeted structural-repair cycle using deterministic attempt-scoped evidence; preserve valid candidate state and artifact pointers on every unsuccessful path; no new states, migration, promotion, or egress authority. |
 | 077 | merged | [#198](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/198) | EVIDENCE-EGRESS-0: canonical evidence provenance and classification | 044, 059a, 059b, 076 | Bind canonical evidence rows and rendered evidence derivatives to workspace-scoped provenance, sensitivity, staleness, and exact-packet lineage before external model use; reuse 059a/059b authority and add no alternate egress path. Readiness sequencing, prompt authority, and no-migration packet lineage are frozen in [the 2026-07-28 readiness decision](077-readiness-2026-07-28.md). |
-| 078 | planned | — | PBR-MODELING-0: bounded photobioreactor modeling kernel | 043, 047, 048, 049, 071, 075 | Define the smallest bounded extension from static `048` biomass and `049` optical screening toward photobioreactor modeling: a closed server-bundled typed rate-law registry for light-limited kinetics, an incident-PAR quantity with a declared path-averaged irradiance built on the existing 049 optical-parameter separation, and CO2/O2 gas-liquid transfer with externally supplied kLa and an explicit sufficiency check against the carbon demand already derivable in 048; 048 and 049 identities, outputs, and fixtures remain unchanged, and no solver, expression language, dependency, or migration is added. The merged planning definition does not authorize full-spec promotion or implementation during the maintainer freeze. |
-| 079 | planned | — | AUTONOMOUS-DEVELOPMENT-LOOP-0: durable bounded development continuation | 004, 017, 019, 022 | Define GitHub-owned durable authorization and cross-session continuation for one already authorized development slice, including exact-head checkpoints, bounded implementer/reviewer separation, deterministic gates, finding/fix/re-review state, leases, idempotency, spend/security stops, and a human-only merge boundary; no workflow, runtime, automatic Codex dispatch, or implementation is authorized by the planning kernel. |
+| 078 | planned | — | PBR-MODELING-0: bounded photobioreactor modeling kernel | 043, 047, 048, 049, 071, 075 | Define the smallest bounded extension from static `048` biomass and `049` optical screening toward photobioreactor modeling: a closed server-bundled typed rate-law registry for light-limited kinetics, an incident-PAR quantity with a declared path-averaged irradiance built on the existing 049 optical-parameter separation, and CO2/O2 gas-liquid transfer with externally supplied kLa and an explicit sufficiency check against the carbon demand already derivable in 048; 048 and 049 identities, outputs, and fixtures remain unchanged, and no solver, expression language, dependency, or migration is added. Full-spec promotion is the second item in the 2026-08-01 queue. |
+| 079 | in_review | [#210](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/210) | AUTONOMOUS-DEVELOPMENT-LOOP-0: minimal scheduled continuation | 022 | Resume exactly one existing in-review implementation PR once daily by reading the registry from exact PR heads, reusing Claude Code Action in OFF/SHADOW/EXECUTE_NO_MERGE modes, validating an untrusted patch with deterministic gates, and permitting only a non-forced same-branch push; no merge or review/repair authority. |
+| 080 | planned | — | AUTONOMOUS-REVIEW-REPAIR-0 | 004, 017, 019, 022, 079 | Define separately removable implementer/reviewer separation and bounded finding, correction, and re-review state; it is not part of 079 and is not authorized for implementation. |
 
 ## Superseded planning aliases and resolved collisions
 
