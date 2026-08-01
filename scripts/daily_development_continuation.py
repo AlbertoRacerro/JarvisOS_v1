@@ -5,18 +5,25 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
+import hmac
 import json
 import os
 import re
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Callable, Protocol
 
 API_ROOT = "https://api.github.com"
+OIDC_ISSUER = "https://token.actions.githubusercontent.com"
+OIDC_JWKS = f"{OIDC_ISSUER}/.well-known/jwks"
+OIDC_AUDIENCE = "jarvisos-continuation-marker-v1"
+WORKFLOW_PATH = ".github/workflows/daily-development-continuation.yml"
 MODES = {"OFF", "SHADOW", "EXECUTE_NO_MERGE"}
 ACTIVE_STATUSES = {"in_progress", "in_review"}
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -24,15 +31,16 @@ SPEC_RE = re.compile(r"^\d{3}[a-z]?$", re.I)
 PR_RE = re.compile(r"/pull/(\d+)")
 SPEC_BINDING_RE = re.compile(r"(?<!\d)(\d{3}[a-z]?)(?!\d)", re.I)
 MARKER_RE = re.compile(
-    r"<!-- jarvis-continuation:v1 spec=(?P<spec>\d{3}[a-z]?) "
+    r"<!-- jarvis-continuation:v2 spec=(?P<spec>\d{3}[a-z]?) "
     r"pr=(?P<pr>\d+) input=(?P<input>[0-9a-f]{40}) "
-    r"output=(?P<output>[0-9a-f]{40}) result=(?P<result>changed|no_change) -->",
+    r"output=(?P<output>[0-9a-f]{40}) result=(?P<result>changed|no_change) "
+    r"run=(?P<run>\d+) oidc=(?P<oidc>[A-Za-z0-9._-]+) -->",
     re.I,
 )
 MAX_OPEN_PULLS = 1000
 MAX_COMMENTS = 5000
 MAX_CHANGED_FILES = 20
-MAX_PATCH_BYTES = 200_000
+MAX_RECOVERY_COMMITS = 500
 PROTECTED_BRANCHES = {"master", "main"}
 CONTROL_PATHS = {
     "AGENTS.md",
@@ -44,6 +52,7 @@ SENSITIVE_PART_RE = re.compile(
     r"(^|[._/-])(env|secret|secrets|token|tokens|credential|credentials|key|keys)([._/-]|$)",
     re.I,
 )
+SHA256_DIGEST_INFO = bytes.fromhex("3031300d060960864801650304020105000420")
 
 
 class ContinuationError(ValueError):
@@ -95,6 +104,10 @@ class GitHubReader(Protocol):
     def commit_info(self, sha: str) -> dict[str, object]: ...
 
 
+class MarkerVerifier(Protocol):
+    def verify(self, token: str, *, run_id: str, require_fresh: bool = False) -> bool: ...
+
+
 class RestGitHubReader:
     def __init__(self, repository: str, token: str) -> None:
         if not repository or "/" not in repository:
@@ -122,7 +135,9 @@ class RestGitHubReader:
             payload = self._request(
                 f"{API_ROOT}/repos/{self.repository}/{path}{separator}per_page=100&page={page}"
             )
-            if not isinstance(payload, list) or any(not isinstance(item, dict) for item in payload):
+            if not isinstance(payload, list) or any(
+                not isinstance(item, dict) for item in payload
+            ):
                 raise ContinuationError("GitHub pagination response is incomplete")
             rows.extend(payload)
             if len(rows) > limit:
@@ -154,7 +169,9 @@ class RestGitHubReader:
         return self._pages(f"issues/{number}/comments", limit=MAX_COMMENTS)
 
     def compare(self, base: str, head: str) -> str:
-        payload = self._request(f"{API_ROOT}/repos/{self.repository}/compare/{base}...{head}")
+        payload = self._request(
+            f"{API_ROOT}/repos/{self.repository}/compare/{base}...{head}"
+        )
         if not isinstance(payload, dict) or not isinstance(payload.get("status"), str):
             raise ContinuationError("GitHub compare response is incomplete")
         return str(payload["status"])
@@ -164,6 +181,131 @@ class RestGitHubReader:
         if not isinstance(payload, dict):
             raise ContinuationError("GitHub commit response is incomplete")
         return payload
+
+
+def _b64url_decode(value: str) -> bytes:
+    try:
+        return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+    except (ValueError, base64.binascii.Error) as exc:
+        raise ContinuationError("OIDC token contains invalid base64url") from exc
+
+
+def _json_object(raw: bytes, label: str) -> dict[str, object]:
+    try:
+        value = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ContinuationError(f"OIDC {label} is invalid") from exc
+    if not isinstance(value, dict):
+        raise ContinuationError(f"OIDC {label} is not an object")
+    return value
+
+
+def _rsa_rs256_valid(
+    signing_input: bytes, signature: bytes, jwk: dict[str, object]
+) -> bool:
+    n_raw, e_raw = jwk.get("n"), jwk.get("e")
+    if not isinstance(n_raw, str) or not isinstance(e_raw, str):
+        return False
+    n = int.from_bytes(_b64url_decode(n_raw), "big")
+    e = int.from_bytes(_b64url_decode(e_raw), "big")
+    size = (n.bit_length() + 7) // 8
+    if len(signature) != size or size < 256:
+        return False
+    encoded = pow(int.from_bytes(signature, "big"), e, n).to_bytes(size, "big")
+    digest_info = SHA256_DIGEST_INFO + hashlib.sha256(signing_input).digest()
+    padding_length = size - len(digest_info) - 3
+    if padding_length < 8:
+        return False
+    expected = b"\x00\x01" + b"\xff" * padding_length + b"\x00" + digest_info
+    return hmac.compare_digest(encoded, expected)
+
+
+class GitHubOIDCVerifier:
+    def __init__(
+        self,
+        repository: str,
+        *,
+        jwks_loader: Callable[[], dict[str, object]] | None = None,
+        now: Callable[[], float] = time.time,
+    ) -> None:
+        self.repository = repository
+        self.jwks_loader = jwks_loader or self._load_jwks
+        self.now = now
+        self.expected_workflow_ref = (
+            f"{repository}/{WORKFLOW_PATH}@refs/heads/master"
+        )
+
+    @staticmethod
+    def _load_jwks() -> dict[str, object]:
+        request = urllib.request.Request(OIDC_JWKS)
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except (urllib.error.URLError, json.JSONDecodeError) as exc:
+            raise ContinuationError(f"GitHub OIDC JWKS read failed: {exc}") from exc
+        if not isinstance(payload, dict):
+            raise ContinuationError("GitHub OIDC JWKS response is incomplete")
+        return payload
+
+    def verify(self, token: str, *, run_id: str, require_fresh: bool = False) -> bool:
+        try:
+            parts = token.split(".")
+            if len(parts) != 3:
+                return False
+            header = _json_object(_b64url_decode(parts[0]), "header")
+            claims = _json_object(_b64url_decode(parts[1]), "claims")
+            if header.get("alg") != "RS256" or not isinstance(
+                header.get("kid"), str
+            ):
+                return False
+            payload = self.jwks_loader()
+            keys = payload.get("keys")
+            if not isinstance(keys, list):
+                return False
+            jwk = next(
+                (
+                    item
+                    for item in keys
+                    if isinstance(item, dict)
+                    and item.get("kid") == header["kid"]
+                    and item.get("kty") == "RSA"
+                    and item.get("use") in {None, "sig"}
+                ),
+                None,
+            )
+            if jwk is None or not _rsa_rs256_valid(
+                f"{parts[0]}.{parts[1]}".encode("ascii"),
+                _b64url_decode(parts[2]),
+                jwk,
+            ):
+                return False
+            audience = claims.get("aud")
+            audiences = {audience} if isinstance(audience, str) else set(audience or [])
+            required = {
+                "iss": OIDC_ISSUER,
+                "repository": self.repository,
+                "workflow_ref": self.expected_workflow_ref,
+                "ref": "refs/heads/master",
+                "run_id": str(run_id),
+            }
+            if any(claims.get(key) != value for key, value in required.items()):
+                return False
+            if OIDC_AUDIENCE not in audiences:
+                return False
+            if claims.get("event_name") not in {"schedule", "workflow_dispatch"}:
+                return False
+            iat, nbf, exp = (claims.get(name) for name in ("iat", "nbf", "exp"))
+            if not all(isinstance(value, int) for value in (iat, nbf, exp)):
+                return False
+            if not (iat - 60 <= nbf <= exp and 0 < exp - iat <= 900):
+                return False
+            if require_fresh:
+                now = int(self.now())
+                if now < nbf - 30 or now > exp:
+                    return False
+            return True
+        except (ContinuationError, TypeError, ValueError, UnicodeEncodeError):
+            return False
 
 
 def parse_registry(text: str) -> dict[str, RegistryRow]:
@@ -187,30 +329,31 @@ def parse_registry(text: str) -> dict[str, RegistryRow]:
         if not SPEC_RE.fullmatch(spec_id) or spec_id in rows:
             raise ContinuationError("STATUS.md has an invalid or duplicate spec id")
         rows[spec_id] = RegistryRow(
-            spec_id=spec_id,
-            status=status,
-            prs=tuple(sorted({int(value) for value in PR_RE.findall(pr_cell)})),
-            name=name,
-            depends_on=depends_on,
-            description=description,
+            spec_id,
+            status,
+            tuple(sorted({int(value) for value in PR_RE.findall(pr_cell)})),
+            name,
+            depends_on,
+            description,
         )
     if not rows:
         raise ContinuationError("STATUS.md registry is missing")
     return rows
 
 
-def _pull_fields(pull: dict[str, object], repository: str) -> tuple[int, str, str, str, str]:
-    number = pull.get("number")
-    base = pull.get("base")
-    head = pull.get("head")
-    if not isinstance(number, int) or not isinstance(base, dict) or not isinstance(head, dict):
+def _pull_fields(
+    pull: dict[str, object], repository: str
+) -> tuple[int, str, str, str, str]:
+    number, base, head = pull.get("number"), pull.get("base"), pull.get("head")
+    if not isinstance(number, int) or not isinstance(base, dict) or not isinstance(
+        head, dict
+    ):
         raise ContinuationError("open pull request response is incomplete")
-    base_ref = base.get("ref")
-    base_sha = base.get("sha")
-    head_ref = head.get("ref")
-    head_sha = head.get("sha")
-    head_repo = head.get("repo")
-    if not all(isinstance(value, str) for value in (base_ref, base_sha, head_ref, head_sha)):
+    base_ref, base_sha = base.get("ref"), base.get("sha")
+    head_ref, head_sha, head_repo = head.get("ref"), head.get("sha"), head.get("repo")
+    if not all(
+        isinstance(value, str) for value in (base_ref, base_sha, head_ref, head_sha)
+    ):
         raise ContinuationError(f"PR #{number} has incomplete refs")
     if not isinstance(head_repo, dict) or head_repo.get("full_name") != repository:
         raise ContinuationError(f"PR #{number} is a fork")
@@ -244,12 +387,17 @@ def discover_candidate(repository: str, reader: GitHubReader) -> Candidate | Non
             raise ContinuationError(f"PR #{number} registry does not bind itself exactly")
         binding_text = " ".join(
             str(pull.get(key) or "") for key in ("title", "body")
-        ) + f" {head_ref}"
-        if row.spec_id not in {value.lower() for value in SPEC_BINDING_RE.findall(binding_text)}:
+        )
+        binding_text += f" {head_ref}"
+        bindings = {value.lower() for value in SPEC_BINDING_RE.findall(binding_text)}
+        if row.spec_id not in bindings:
             raise ContinuationError(f"PR #{number} does not bind spec {row.spec_id}")
         candidates.append(Candidate(row.spec_id, number, head_ref, head_sha, base_sha))
     if unresolved_active:
-        raise ContinuationError("active pre-PR state is not resumable in v0: " + ", ".join(unresolved_active))
+        raise ContinuationError(
+            "active pre-PR state is not resumable in v0: "
+            + ", ".join(unresolved_active)
+        )
     if not candidates:
         return None
     if len(candidates) != 1:
@@ -257,99 +405,137 @@ def discover_candidate(repository: str, reader: GitHubReader) -> Candidate | Non
     return candidates[0]
 
 
-def marker_text(spec: str, pr: int, input_head: str, output_head: str) -> str:
+def marker_text(
+    spec: str,
+    pr: int,
+    input_head: str,
+    output_head: str,
+    run_id: str,
+    oidc_token: str,
+) -> str:
     result = "changed" if input_head != output_head else "no_change"
     return (
-        f"<!-- jarvis-continuation:v1 spec={spec} pr={pr} input={input_head} "
-        f"output={output_head} result={result} -->"
+        f"<!-- jarvis-continuation:v2 spec={spec} pr={pr} input={input_head} "
+        f"output={output_head} result={result} run={run_id} oidc={oidc_token} -->"
     )
 
 
-def _markers(comments: list[dict[str, object]], spec: str, pr: int) -> list[re.Match[str]]:
+def _verified_markers(
+    comments: list[dict[str, object]],
+    *,
+    spec: str,
+    pr: int,
+    verifier: MarkerVerifier,
+) -> list[re.Match[str]]:
     result: list[re.Match[str]] = []
     for comment in comments:
-        body = comment.get("body")
-        user = comment.get("user")
+        body, user = comment.get("body"), comment.get("user")
         if not isinstance(body, str) or not isinstance(user, dict):
             raise ContinuationError("PR comment response is incomplete")
         for match in MARKER_RE.finditer(body):
+            if match.group("spec").lower() != spec or int(match.group("pr")) != pr:
+                continue
             if user.get("login") != "github-actions[bot]":
-                raise ContinuationError("continuation marker was not authored by github-actions[bot]")
-            if match.group("spec").lower() == spec and int(match.group("pr")) == pr:
-                result.append(match)
+                continue
+            if not verifier.verify(match.group("oidc"), run_id=match.group("run")):
+                continue
+            result.append(match)
     return result
 
 
-def checkpoint_for(candidate: Candidate, comments: list[dict[str, object]]) -> tuple[str, bool]:
-    matches = _markers(comments, candidate.spec_id, candidate.pr_number)
+def checkpoint_for(
+    candidate: Candidate,
+    comments: list[dict[str, object]],
+    *,
+    verifier: MarkerVerifier,
+) -> tuple[str, bool]:
+    matches = _verified_markers(
+        comments,
+        spec=candidate.spec_id,
+        pr=candidate.pr_number,
+        verifier=verifier,
+    )
     if not matches:
         return candidate.base_sha, False
-    checkpoint = matches[0].group("input")
-    seen_inputs: dict[str, tuple[str, str]] = {}
-    last_result = ""
+    edges: dict[str, tuple[str, str]] = {}
     for match in matches:
-        input_head = match.group("input")
-        output_head = match.group("output")
-        result = match.group("result")
+        input_head, output_head, result = (
+            match.group("input"),
+            match.group("output"),
+            match.group("result"),
+        )
         value = (output_head, result)
-        previous = seen_inputs.get(input_head)
-        if previous is not None:
-            if previous != value:
-                raise ContinuationError("incompatible continuation markers share one input head")
-            continue
-        seen_inputs[input_head] = value
-        if input_head != checkpoint:
-            raise ContinuationError("continuation marker chain is not contiguous")
+        if input_head in edges and edges[input_head] != value:
+            raise ContinuationError(
+                "incompatible continuation markers share one input head"
+            )
         if result == "no_change" and output_head != input_head:
             raise ContinuationError("no-change marker changed the checkpoint")
         if result == "changed" and output_head == input_head:
             raise ContinuationError("changed marker did not advance the checkpoint")
+        edges[input_head] = value
+    checkpoint = candidate.base_sha
+    last_result = ""
+    seen: set[str] = set()
+    while checkpoint in edges:
+        if checkpoint in seen:
+            raise ContinuationError("continuation marker chain contains a cycle")
+        seen.add(checkpoint)
+        output_head, last_result = edges[checkpoint]
         checkpoint = output_head
-        last_result = result
-    terminal = last_result == "no_change" and checkpoint == candidate.head_sha
-    return checkpoint, terminal
+        if last_result == "no_change":
+            break
+    unused = set(edges) - seen
+    if unused:
+        raise ContinuationError("continuation marker chain is not contiguous")
+    return checkpoint, last_result == "no_change" and checkpoint == candidate.head_sha
 
 
 def _continuation_commit(
-    payload: dict[str, object], *, candidate: Candidate, checkpoint: str
-) -> str | None:
-    sha = payload.get("sha")
-    commit = payload.get("commit")
-    parents = payload.get("parents")
-    author = payload.get("author")
-    committer = payload.get("committer")
+    payload: dict[str, object], candidate: Candidate
+) -> tuple[str, str] | None:
+    sha, commit, parents = payload.get("sha"), payload.get("commit"), payload.get(
+        "parents"
+    )
+    author, committer = payload.get("author"), payload.get("committer")
     if not isinstance(sha, str) or not SHA_RE.fullmatch(sha):
         raise ContinuationError("GitHub commit SHA is incomplete")
     if not isinstance(commit, dict) or not isinstance(parents, list):
         raise ContinuationError("GitHub commit metadata is incomplete")
     if not isinstance(author, dict) or not isinstance(committer, dict):
         return None
-    if author.get("login") != "github-actions[bot]" or committer.get("login") != "github-actions[bot]":
+    if (
+        author.get("login") != "github-actions[bot]"
+        or committer.get("login") != "github-actions[bot]"
+    ):
         return None
     message = commit.get("message")
     if not isinstance(message, str):
         raise ContinuationError("GitHub commit message is incomplete")
     trailers: dict[str, str] = {}
     for line in message.splitlines():
-        if ": " in line:
-            key, value = line.split(": ", 1)
-            if key.startswith("Jarvis-"):
-                if key in trailers and trailers[key] != value:
-                    raise ContinuationError("continuation commit has conflicting trailers")
-                trailers[key] = value
+        if ": " not in line:
+            continue
+        key, value = line.split(": ", 1)
+        if key.startswith("Jarvis-"):
+            if key in trailers and trailers[key] != value:
+                raise ContinuationError("continuation commit has conflicting trailers")
+            trailers[key] = value
     if trailers.get("Jarvis-Continuation") != "v1":
         return None
+    input_head = trailers.get("Jarvis-Input", "")
     expected = {
         "Jarvis-Spec": candidate.spec_id,
         "Jarvis-PR": str(candidate.pr_number),
-        "Jarvis-Input": checkpoint,
     }
     if any(trailers.get(key) != value for key, value in expected.items()):
         return None
     parent_shas = [item.get("sha") for item in parents if isinstance(item, dict)]
-    if parent_shas != [checkpoint]:
-        raise ContinuationError("continuation commit does not have the checkpoint as sole parent")
-    return sha
+    if not SHA_RE.fullmatch(input_head) or parent_shas != [input_head]:
+        raise ContinuationError(
+            "continuation commit does not have its declared input as sole parent"
+        )
+    return input_head, sha
 
 
 def find_unrecorded_continuation(
@@ -359,78 +545,115 @@ def find_unrecorded_continuation(
         return None
     pending = [candidate.head_sha]
     visited: set[str] = set()
-    recovered: list[str] = []
+    recovered: set[str] = set()
     reached_checkpoint = False
     while pending:
         sha = pending.pop()
         if sha in visited:
             continue
         visited.add(sha)
-        if len(visited) > 100:
-            raise ContinuationError("continuation recovery ancestry exceeds the v0 bound")
+        if len(visited) > MAX_RECOVERY_COMMITS:
+            raise ContinuationError(
+                "continuation recovery ancestry exceeds the v0 bound"
+            )
         if sha == checkpoint:
             reached_checkpoint = True
             continue
         payload = reader.commit_info(sha)
-        recovered_sha = _continuation_commit(
-            payload, candidate=candidate, checkpoint=checkpoint
-        )
-        if recovered_sha is not None:
-            recovered.append(recovered_sha)
+        recovered_edge = _continuation_commit(payload, candidate)
+        if recovered_edge is not None:
+            recovered.add(recovered_edge[1])
         parents = payload.get("parents")
         if not isinstance(parents, list) or not parents:
-            raise ContinuationError("GitHub commit parents are incomplete")
+            continue
+        eligible: list[str] = []
         for parent in parents:
-            if not isinstance(parent, dict) or not isinstance(parent.get("sha"), str):
+            parent_sha = parent.get("sha") if isinstance(parent, dict) else None
+            if not isinstance(parent_sha, str) or not SHA_RE.fullmatch(parent_sha):
                 raise ContinuationError("GitHub commit parent is incomplete")
-            pending.append(str(parent["sha"]))
+            if parent_sha == checkpoint:
+                eligible.append(parent_sha)
+                continue
+            if reader.compare(checkpoint, parent_sha) in {"ahead", "identical"}:
+                eligible.append(parent_sha)
+        pending.extend(eligible)
     if not reached_checkpoint:
         raise ContinuationError("checkpoint was not reached during recovery walk")
-    unique = sorted(set(recovered))
-    if len(unique) > 1:
+    if len(recovered) > 1:
         raise ContinuationError("multiple unrecorded continuation commits were found")
-    return unique[0] if unique else None
+    return next(iter(recovered), None)
+
 
 def build_plan(
-    *, mode: str, repository: str, reader: GitHubReader, token_present: bool
+    *,
+    mode: str,
+    repository: str,
+    reader: GitHubReader,
+    token_present: bool,
+    verifier: MarkerVerifier,
 ) -> Plan:
     normalized_mode = mode.strip().upper()
     if normalized_mode not in MODES:
-        raise ContinuationError("continuation mode must be OFF, SHADOW, or EXECUTE_NO_MERGE")
+        raise ContinuationError(
+            "continuation mode must be OFF, SHADOW, or EXECUTE_NO_MERGE"
+        )
     if normalized_mode == "OFF":
         return Plan("noop", normalized_mode, "mode_off")
     candidate = discover_candidate(repository, reader)
     if candidate is None:
         return Plan("noop", normalized_mode, "no_active_front")
-    comments = reader.comments(candidate.pr_number)
-    checkpoint, terminal = checkpoint_for(candidate, comments)
+    checkpoint, terminal = checkpoint_for(
+        candidate,
+        reader.comments(candidate.pr_number),
+        verifier=verifier,
+    )
     if terminal:
         return Plan(
-            "noop", normalized_mode, "head_already_processed", candidate.spec_id,
-            candidate.pr_number, candidate.head_ref, candidate.head_sha,
-            candidate.base_sha, checkpoint,
+            "noop",
+            normalized_mode,
+            "head_already_processed",
+            candidate.spec_id,
+            candidate.pr_number,
+            candidate.head_ref,
+            candidate.head_sha,
+            candidate.base_sha,
+            checkpoint,
         )
-    base_status = reader.compare(candidate.base_sha, candidate.head_sha)
-    if base_status not in {"ahead", "identical"}:
+    if reader.compare(candidate.base_sha, candidate.head_sha) not in {
+        "ahead",
+        "identical",
+    }:
         raise ContinuationError("current PR head does not descend from the PR base")
-    status = reader.compare(checkpoint, candidate.head_sha)
-    if status not in {"ahead", "identical"}:
+    if reader.compare(checkpoint, candidate.head_sha) not in {"ahead", "identical"}:
         raise ContinuationError("current PR head does not descend from the checkpoint")
     recovery_output = find_unrecorded_continuation(candidate, checkpoint, reader)
     if recovery_output is not None:
         action = "shadow" if normalized_mode == "SHADOW" else "recover"
-        reason = "unrecorded_push_detected"
         return Plan(
-            action, normalized_mode, reason, candidate.spec_id, candidate.pr_number,
-            candidate.head_ref, candidate.head_sha, candidate.base_sha, checkpoint,
+            action,
+            normalized_mode,
+            "unrecorded_push_detected",
+            candidate.spec_id,
+            candidate.pr_number,
+            candidate.head_ref,
+            candidate.head_sha,
+            candidate.base_sha,
+            checkpoint,
             recovery_output,
         )
     action = "shadow" if normalized_mode == "SHADOW" else "execute"
     if action == "execute" and not token_present:
         raise ContinuationError("CLAUDE_CODE_OAUTH_TOKEN is not configured")
     return Plan(
-        action, normalized_mode, "eligible", candidate.spec_id, candidate.pr_number,
-        candidate.head_ref, candidate.head_sha, candidate.base_sha, checkpoint,
+        action,
+        normalized_mode,
+        "eligible",
+        candidate.spec_id,
+        candidate.pr_number,
+        candidate.head_ref,
+        candidate.head_sha,
+        candidate.base_sha,
+        checkpoint,
     )
 
 
@@ -443,26 +666,42 @@ def validate_changed_paths(paths: list[str]) -> None:
         raise ContinuationError("continuation patch changes too many files")
     for raw_path in paths:
         path = _normalized_path(raw_path)
-        if not path or path.startswith(".github/") or path in CONTROL_PATHS:
-            raise ContinuationError(f"continuation patch changes a protected path: {raw_path}")
+        if (
+            not path
+            or path == ".git"
+            or path.startswith(".git/")
+            or path.startswith(".github/")
+            or path in CONTROL_PATHS
+        ):
+            raise ContinuationError(
+                f"continuation patch changes a protected path: {raw_path}"
+            )
         if SENSITIVE_PART_RE.search(path):
-            raise ContinuationError(f"continuation patch changes a sensitive path: {raw_path}")
+            raise ContinuationError(
+                f"continuation patch changes a sensitive path: {raw_path}"
+            )
 
 
 def validate_status_change(before: str, after: str, active_spec: str) -> None:
-    before_rows = parse_registry(before)
-    after_rows = parse_registry(after)
+    before_rows, after_rows = parse_registry(before), parse_registry(after)
     if set(before_rows) != set(after_rows) or active_spec not in before_rows:
         raise ContinuationError("continuation may not add or remove registry rows")
     prefix = f"| {active_spec} |"
     before_lines = before.splitlines(keepends=True)
     after_lines = after.splitlines(keepends=True)
-    before_indexes = [index for index, line in enumerate(before_lines) if line.startswith(prefix)]
-    after_indexes = [index for index, line in enumerate(after_lines) if line.startswith(prefix)]
+    before_indexes = [
+        index for index, line in enumerate(before_lines) if line.startswith(prefix)
+    ]
+    after_indexes = [
+        index for index, line in enumerate(after_lines) if line.startswith(prefix)
+    ]
     if len(before_indexes) != 1 or before_indexes != after_indexes:
         raise ContinuationError("active STATUS.md row is missing, duplicated, or moved")
     index = before_indexes[0]
-    if before_lines[:index] != after_lines[:index] or before_lines[index + 1 :] != after_lines[index + 1 :]:
+    if (
+        before_lines[:index] != after_lines[:index]
+        or before_lines[index + 1 :] != after_lines[index + 1 :]
+    ):
         raise ContinuationError("STATUS.md may change only the exact active spec row")
 
 
@@ -470,15 +709,17 @@ def _post_comment(repository: str, pr: int, token: str, body: str) -> None:
     if not repository or not token:
         raise ContinuationError("repository and token are required to record a marker")
     payload = json.dumps({"body": body}).encode("utf-8")
-    request = urllib.request.Request(
-        f"{API_ROOT}/repos/{repository}/issues/{pr}/comments", data=payload, method="POST"
-    )
-    request.add_header("Authorization", f"Bearer {token}")
-    request.add_header("Accept", "application/vnd.github+json")
-    request.add_header("X-GitHub-Api-Version", "2022-11-28")
-    request.add_header("Content-Type", "application/json")
     last_error: Exception | None = None
     for _ in range(3):
+        request = urllib.request.Request(
+            f"{API_ROOT}/repos/{repository}/issues/{pr}/comments",
+            data=payload,
+            method="POST",
+        )
+        request.add_header("Authorization", f"Bearer {token}")
+        request.add_header("Accept", "application/vnd.github+json")
+        request.add_header("X-GitHub-Api-Version", "2022-11-28")
+        request.add_header("Content-Type", "application/json")
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
                 if response.status == 201:
@@ -486,7 +727,9 @@ def _post_comment(repository: str, pr: int, token: str, body: str) -> None:
                 last_error = ContinuationError("checkpoint comment was not created")
         except urllib.error.URLError as exc:
             last_error = exc
-    raise ContinuationError(f"checkpoint comment failed after retries: {last_error}")
+    raise ContinuationError(
+        f"checkpoint comment failed after retries: {last_error}"
+    )
 
 
 def append_outputs(plan: Plan, path: Path) -> None:
@@ -500,14 +743,20 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
     plan_parser = commands.add_parser("plan")
-    plan_parser.add_argument("--repository", default=os.getenv("GITHUB_REPOSITORY", ""))
+    plan_parser.add_argument(
+        "--repository", default=os.getenv("GITHUB_REPOSITORY", "")
+    )
     plan_parser.add_argument("--token", default=os.getenv("GITHUB_TOKEN", ""))
-    plan_parser.add_argument("--mode", default=os.getenv("JARVISOS_CONTINUATION_MODE", "OFF"))
+    plan_parser.add_argument(
+        "--mode", default=os.getenv("JARVISOS_CONTINUATION_MODE", "OFF")
+    )
     plan_parser.add_argument(
         "--claude-token-present", default=os.getenv("CLAUDE_TOKEN_PRESENT", "false")
     )
     plan_parser.add_argument(
-        "--github-output", type=Path, default=Path(os.getenv("GITHUB_OUTPUT", "/dev/null"))
+        "--github-output",
+        type=Path,
+        default=Path(os.getenv("GITHUB_OUTPUT", "/dev/null")),
     )
     validate = commands.add_parser("validate")
     validate.add_argument("--changed-files", type=Path, required=True)
@@ -517,6 +766,10 @@ def main(argv: list[str] | None = None) -> int:
     marker = commands.add_parser("marker")
     marker.add_argument("--repository", default=os.getenv("GITHUB_REPOSITORY", ""))
     marker.add_argument("--token", default=os.getenv("GITHUB_TOKEN", ""))
+    marker.add_argument(
+        "--oidc-token", default=os.getenv("CONTINUATION_OIDC_TOKEN", "")
+    )
+    marker.add_argument("--run-id", default=os.getenv("GITHUB_RUN_ID", ""))
     marker.add_argument("--spec", required=True)
     marker.add_argument("--pr", type=int, required=True)
     marker.add_argument("--input-head", required=True)
@@ -525,43 +778,60 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "plan":
             reader = RestGitHubReader(args.repository, args.token)
-            result = build_plan(
+            verifier = GitHubOIDCVerifier(args.repository)
+            plan = build_plan(
                 mode=args.mode,
                 repository=args.repository,
                 reader=reader,
                 token_present=str(args.claude_token_present).lower() == "true",
+                verifier=verifier,
             )
-            append_outputs(result, args.github_output)
-            print(json.dumps(asdict(result), sort_keys=True))
-        elif args.command == "validate":
+            append_outputs(plan, args.github_output)
+            return 0
+        if args.command == "validate":
             paths = [
-                line.strip()
-                for line in args.changed_files.read_text(encoding="utf-8").splitlines()
-                if line.strip()
+                line
+                for line in args.changed_files.read_text(
+                    encoding="utf-8"
+                ).splitlines()
+                if line
             ]
             validate_changed_paths(paths)
             if "docs/specs/STATUS.md" in paths:
                 if args.status_before is None or args.status_after is None:
-                    raise ContinuationError("STATUS.md validation requires before and after files")
+                    raise ContinuationError("STATUS validation inputs are required")
                 validate_status_change(
                     args.status_before.read_text(encoding="utf-8"),
                     args.status_after.read_text(encoding="utf-8"),
                     args.active_spec.lower(),
                 )
-            print("continuation diff validation: OK")
-        else:
-            if not SHA_RE.fullmatch(args.input_head) or not SHA_RE.fullmatch(args.output_head):
-                raise ContinuationError("marker SHA is invalid")
-            _post_comment(
-                args.repository,
+            return 0
+        if not SHA_RE.fullmatch(args.input_head) or not SHA_RE.fullmatch(
+            args.output_head
+        ):
+            raise ContinuationError("marker heads must be full lowercase SHAs")
+        if not args.run_id.isdigit():
+            raise ContinuationError("marker run id is invalid")
+        verifier = GitHubOIDCVerifier(args.repository)
+        if not verifier.verify(args.oidc_token, run_id=args.run_id, require_fresh=True):
+            raise ContinuationError("marker OIDC proof is invalid")
+        _post_comment(
+            args.repository,
+            args.pr,
+            args.token,
+            marker_text(
+                args.spec.lower(),
                 args.pr,
-                args.token,
-                marker_text(args.spec.lower(), args.pr, args.input_head, args.output_head),
-            )
+                args.input_head,
+                args.output_head,
+                args.run_id,
+                args.oidc_token,
+            ),
+        )
         return 0
-    except (ContinuationError, OSError, ValueError, json.JSONDecodeError) as exc:
-        print(f"daily-development-continuation: FAIL: {exc}", file=sys.stderr)
-        return 1
+    except (ContinuationError, OSError) as exc:
+        print(f"continuation: {exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":
