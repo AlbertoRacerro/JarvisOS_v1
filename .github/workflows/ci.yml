@@ -26,33 +26,34 @@ jobs:
           text = path.read_text(encoding='utf-8')
           start = text.index('## Maintainer operating mode — one active front')
           end = text.index('## Registry')
-          replacement = '''## Repository operating regime — effective 2026-08-01
-
-- One implementation front at a time.
-- The assigned agent merges with an exact-head guard when deterministic gates are green and no current blocking review finding remains.
-- Work proceeds through the authorized queue without per-step maintainer confirmation.
-- The maintainer is contacted only for real spending/budget risk, genuinely missing credentials/accounts/repositories/organizations, security/secret risk, or an obstacle without two practicable routes.
-- New infrastructure, credentials, state stores, or scope must pass the mandatory minimum-necessary test in the PR body.
-- Independently removable specifications remain separate.
-
-The binding queue is:
-
-1. complete and integrate 079 minimal scheduled continuation;
-2. promote 078 from its merged planning kernel to a complete specification using repository evidence and primary scientific literature;
-3. report and stop.
-
-Specs 066, 067, 068, and 070 remain frozen. Spec 080 is a separate planned review/repair capability and is not part of 079.
-
-## Current priority and drafting order
-
-1. Preserve merged 059a/059b, 061a/061b, 075, 076, and 077 authority boundaries.
-2. Complete the sole active implementation front, 079, through PR #210.
-3. After 079 is merged and reconciled, complete the full specification for 078 without implementing it.
-4. Leave 080 planned and separate.
-5. Resume no other frozen or planned front unless it appears in a later explicit queue.
-
-'''
-          text = text[:start] + replacement + text[end:]
+          lines = [
+              '## Repository operating regime — effective 2026-08-01',
+              '',
+              '- One implementation front at a time.',
+              '- The assigned agent merges with an exact-head guard when deterministic gates are green and no current blocking review finding remains.',
+              '- Work proceeds through the authorized queue without per-step maintainer confirmation.',
+              '- The maintainer is contacted only for real spending/budget risk, genuinely missing credentials/accounts/repositories/organizations, security/secret risk, or an obstacle without two practicable routes.',
+              '- New infrastructure, credentials, state stores, or scope must pass the mandatory minimum-necessary test in the PR body.',
+              '- Independently removable specifications remain separate.',
+              '',
+              'The binding queue is:',
+              '',
+              '1. complete and integrate 079 minimal scheduled continuation;',
+              '2. promote 078 from its merged planning kernel to a complete specification using repository evidence and primary scientific literature;',
+              '3. report and stop.',
+              '',
+              'Specs 066, 067, 068, and 070 remain frozen. Spec 080 is a separate planned review/repair capability and is not part of 079.',
+              '',
+              '## Current priority and drafting order',
+              '',
+              '1. Preserve merged 059a/059b, 061a/061b, 075, 076, and 077 authority boundaries.',
+              '2. Complete the sole active implementation front, 079, through PR #210.',
+              '3. After 079 is merged and reconciled, complete the full specification for 078 without implementing it.',
+              '4. Leave 080 planned and separate.',
+              '5. Resume no other frozen or planned front unless it appears in a later explicit queue.',
+              '',
+          ]
+          text = text[:start] + '\n'.join(lines) + '\n' + text[end:]
           old_078 = next(line for line in text.splitlines() if line.startswith('| 078 |'))
           old_079 = next(line for line in text.splitlines() if line.startswith('| 079 |'))
           new_078 = '| 078 | planned | — | PBR-MODELING-0: bounded photobioreactor modeling kernel | 043, 047, 048, 049, 071, 075 | Define the smallest bounded extension from static `048` biomass and `049` optical screening toward photobioreactor modeling: a closed server-bundled typed rate-law registry for light-limited kinetics, an incident-PAR quantity with a declared path-averaged irradiance built on the existing 049 optical-parameter separation, and CO2/O2 gas-liquid transfer with externally supplied kLa and an explicit sufficiency check against the carbon demand already derivable in 048; 048 and 049 identities, outputs, and fixtures remain unchanged, and no solver, expression language, dependency, or migration is added. Full-spec promotion is the second item in the 2026-08-01 queue. |'
