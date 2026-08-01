@@ -17,6 +17,13 @@ jobs:
           ref: spec/079-minimal-continuation-definition
           fetch-depth: 0
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install focused test dependency
+        run: python -m pip install -r backend/requirements-dev.txt
+
       - name: Materialize verified 079 hardening bundle
         run: |
           cat scripts/.079-hardening.part* | base64 -d > "$RUNNER_TEMP/079-hardening.tar.gz"
