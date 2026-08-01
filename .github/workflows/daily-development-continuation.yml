@@ -29,6 +29,7 @@ jobs:
       head_sha: ${{ steps.plan.outputs.head_sha }}
       base_sha: ${{ steps.plan.outputs.base_sha }}
       checkpoint_sha: ${{ steps.plan.outputs.checkpoint_sha }}
+      recovery_output_sha: ${{ steps.plan.outputs.recovery_output_sha }}
       reason: ${{ steps.plan.outputs.reason }}
     steps:
       - uses: actions/checkout@v4
@@ -64,6 +65,31 @@ jobs:
               echo "- Checkpoint: \`${{ steps.plan.outputs.checkpoint_sha }}\`"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+  recover-marker:
+    needs: plan
+    if: ${{ needs.plan.outputs.action == 'recover' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          persist-credentials: false
+
+      - name: Recover the checkpoint without invoking Claude
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python scripts/daily_development_continuation.py marker \
+            --spec "${{ needs.plan.outputs.spec_id }}" \
+            --pr "${{ needs.plan.outputs.pr_number }}" \
+            --input-head "${{ needs.plan.outputs.checkpoint_sha }}" \
+            --output-head "${{ needs.plan.outputs.recovery_output_sha }}"
 
   generate-patch:
     needs: plan
@@ -158,6 +184,7 @@ jobs:
         with:
           ref: ${{ needs.plan.outputs.head_sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/download-artifact@v4
         with:
@@ -178,12 +205,11 @@ jobs:
             exit 0
           fi
           git apply --index --whitespace=error-all "$patch"
-          git diff --cached --name-only > "$RUNNER_TEMP/changed-files.txt"
+          git diff --cached --no-renames --name-only > "$RUNNER_TEMP/changed-files.txt"
           count=$(grep -c . "$RUNNER_TEMP/changed-files.txt" || true)
           test "$count" -le 20
           if [ "$count" -eq 0 ]; then
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
-            echo "frontend_changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "has_changes=true" >> "$GITHUB_OUTPUT"
@@ -223,6 +249,26 @@ jobs:
           python scripts/check_spec_status.py
           python scripts/cheap_review.py --self-test
           python scripts/manual_review.py --self-test
+          python - <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          pattern = re.compile(r"^\s*(?:import\s+(?:gmsh|FreeCAD|calculix)\b|from\s+(?:gmsh|FreeCAD|calculix)\b)")
+          paths = list(Path("backend/app").rglob("*.py"))
+          src_root = Path("frontend/src")
+          if src_root.exists():
+              paths.extend(path for path in src_root.rglob("*") if path.suffix in {".ts", ".tsx"})
+          violations = []
+          for path in paths:
+              for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+                  if pattern.search(line):
+                      violations.append(f"{path}:{lineno}: {line.strip()}")
+          if violations:
+              print("Forbidden in-process GPL tool imports found:")
+              print("\n".join(violations))
+              sys.exit(1)
+          PY
           cd backend
           python -m ruff check app tests ../scripts/check_spec_status.py \
             ../scripts/daily_development_continuation.py \
@@ -249,13 +295,19 @@ jobs:
         env:
           EXPECTED_HEAD: ${{ needs.plan.outputs.head_sha }}
           HEAD_REF: ${{ needs.plan.outputs.head_ref }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git fetch --no-tags origin "refs/heads/$HEAD_REF:refs/remotes/origin/$HEAD_REF"
+          auth=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)
+          git -c http.extraheader="AUTHORIZATION: basic $auth" fetch --no-tags origin "refs/heads/$HEAD_REF:refs/remotes/origin/$HEAD_REF"
           test "$(git rev-parse "refs/remotes/origin/$HEAD_REF")" = "$EXPECTED_HEAD"
-          git config user.name "jarvisos-continuation[bot]"
-          git config user.email "jarvisos-continuation[bot]@users.noreply.github.com"
-          git commit -m "Continue spec ${{ needs.plan.outputs.spec_id }} from scheduled checkpoint"
-          git push origin "HEAD:refs/heads/$HEAD_REF"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Continue spec ${{ needs.plan.outputs.spec_id }} from scheduled checkpoint" \
+            -m "Jarvis-Continuation: v1" \
+            -m "Jarvis-Spec: ${{ needs.plan.outputs.spec_id }}" \
+            -m "Jarvis-PR: ${{ needs.plan.outputs.pr_number }}" \
+            -m "Jarvis-Input: $EXPECTED_HEAD"
+          git -c http.extraheader="AUTHORIZATION: basic $auth" push origin "HEAD:refs/heads/$HEAD_REF"
           echo "output_head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Record idempotent checkpoint
