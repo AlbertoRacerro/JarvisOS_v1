@@ -1,0 +1,89 @@
+name: 079 Registry Bootstrap
+
+on:
+  push:
+    branches:
+      - spec/079-minimal-continuation-definition
+
+concurrency:
+  group: 079-registry-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: spec/079-minimal-continuation-definition
+          fetch-depth: 0
+
+      - name: Reconcile only operating regime and rows 078-080
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('docs/specs/STATUS.md')
+          text = path.read_text(encoding='utf-8')
+
+          start = text.index('## Maintainer operating mode — one active front')
+          end = text.index('## Registry')
+          replacement = '''## Repository operating regime — effective 2026-08-01
+
+- One implementation front at a time.
+- The assigned agent merges with an exact-head guard when deterministic gates are green and no current blocking review finding remains.
+- Work proceeds through the authorized queue without per-step maintainer confirmation.
+- The maintainer is contacted only for real spending/budget risk, genuinely missing credentials/accounts/repositories/organizations, security/secret risk, or an obstacle without two practicable routes.
+- New infrastructure, credentials, state stores, or scope must pass the mandatory minimum-necessary test in the PR body.
+- Independently removable specifications remain separate.
+
+The binding queue is:
+
+1. complete and integrate 079 minimal scheduled continuation;
+2. promote 078 from its merged planning kernel to a complete specification using repository evidence and primary scientific literature;
+3. report and stop.
+
+Specs 066, 067, 068, and 070 remain frozen. Spec 080 is a separate planned review/repair capability and is not part of 079.
+
+## Current priority and drafting order
+
+1. Preserve merged 059a/059b, 061a/061b, 075, 076, and 077 authority boundaries.
+2. Complete the sole active implementation front, 079, through PR #210.
+3. After 079 is merged and reconciled, complete the full specification for 078 without implementing it.
+4. Leave 080 planned and separate.
+5. Resume no other frozen or planned front unless it appears in a later explicit queue.
+
+'''
+          text = text[:start] + replacement + text[end:]
+
+          old_078 = next(line for line in text.splitlines() if line.startswith('| 078 |'))
+          old_079 = next(line for line in text.splitlines() if line.startswith('| 079 |'))
+          new_078 = '| 078 | planned | — | PBR-MODELING-0: bounded photobioreactor modeling kernel | 043, 047, 048, 049, 071, 075 | Define the smallest bounded extension from static `048` biomass and `049` optical screening toward photobioreactor modeling: a closed server-bundled typed rate-law registry for light-limited kinetics, an incident-PAR quantity with a declared path-averaged irradiance built on the existing 049 optical-parameter separation, and CO2/O2 gas-liquid transfer with externally supplied kLa and an explicit sufficiency check against the carbon demand already derivable in 048; 048 and 049 identities, outputs, and fixtures remain unchanged, and no solver, expression language, dependency, or migration is added. Full-spec promotion is the second item in the 2026-08-01 queue. |'
+          new_079 = '| 079 | in_review | [#210](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/210) | AUTONOMOUS-DEVELOPMENT-LOOP-0: minimal scheduled continuation | 022 | Resume exactly one existing in-review implementation PR once daily by reading the registry from exact PR heads, reusing Claude Code Action in OFF/SHADOW/EXECUTE_NO_MERGE modes, validating an untrusted patch with deterministic gates, and permitting only a non-forced same-branch push; no merge or review/repair authority. |'
+          new_080 = '| 080 | planned | — | AUTONOMOUS-REVIEW-REPAIR-0 | 004, 017, 019, 022, 079 | Define separately removable implementer/reviewer separation and bounded finding, correction, and re-review state; it is not part of 079 and is not authorized for implementation. |'
+          text = text.replace(old_078, new_078, 1)
+          text = text.replace(old_079, new_079 + '\n' + new_080, 1)
+
+          if text.count('| 079 | in_review |') != 1 or text.count('| 080 | planned |') != 1:
+              raise SystemExit('registry reconciliation did not produce exact 079/080 rows')
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          python scripts/check_spec_status.py --self-test
+          python scripts/check_spec_status.py
+          git diff --check
+
+      - name: Commit registry reconciliation
+        run: |
+          if git diff --quiet -- docs/specs/STATUS.md; then
+            echo 'Registry already reconciled.'
+            exit 0
+          fi
+          git config user.name 'jarvisos-registry-bootstrap[bot]'
+          git config user.email 'jarvisos-registry-bootstrap[bot]@users.noreply.github.com'
+          git add docs/specs/STATUS.md
+          git commit -m 'Reconcile 079 implementation registry'
+          git push origin HEAD:refs/heads/spec/079-minimal-continuation-definition
