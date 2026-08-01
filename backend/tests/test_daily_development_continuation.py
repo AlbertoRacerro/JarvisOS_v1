@@ -30,6 +30,7 @@ def registry(status: str = "in_review", pr: int = 210, extra: str = "") -> str:
         "# Status\n\n## Registry\n\n"
         "| Spec | Status | Implementation PR | Name | Depends on | Description |\n"
         "| --- | --- | --- | --- | --- | --- |\n"
+        "| 004 | merged | — | BASE | — | dependency |\n"
         f"| 079 | {status} | https://github.com/{REPOSITORY}/pull/{pr} | CONTINUE | 004 | active |\n"
         "| 080 | planned | — | REVIEW | 079 | separate |\n"
         f"\n{extra}"
@@ -288,6 +289,20 @@ def test_protected_head_fails_closed():
 def test_wrong_registry_pr_binding_fails_closed():
     reader = FakeReader(statuses={HEAD: registry(pr=211)})
     with pytest.raises(mod.ContinuationError, match="bind itself"):
+        mod.discover_candidate(REPOSITORY, reader)
+
+
+def test_unmerged_dependency_fails_before_provider_execution():
+    status = registry().replace("| CONTINUE | 004 | active |", "| CONTINUE | 080 | active |")
+    reader = FakeReader(statuses={HEAD: status})
+    with pytest.raises(mod.ContinuationError, match="080=planned"):
+        mod.discover_candidate(REPOSITORY, reader)
+
+
+def test_missing_dependency_fails_before_provider_execution():
+    status = registry().replace("| CONTINUE | 004 | active |", "| CONTINUE | 099 | active |")
+    reader = FakeReader(statuses={HEAD: status})
+    with pytest.raises(mod.ContinuationError, match="099=absent"):
         mod.discover_candidate(REPOSITORY, reader)
 
 
@@ -728,6 +743,9 @@ def test_workflow_contract_separates_validation_and_trusted_push():
     assert "index_tree=$(git write-tree)" in push_block
     assert "--active-pr" in push_block
     assert "python scripts/daily_development_continuation.py validate" not in push_block
+    assert "audience=$(python -I -S -c" in push_block
+    assert "| python -I -S -c 'import json,sys;" in push_block
+    assert 'test "$(git write-tree)" = "$tree_sha"' in push_block
 
 
 def test_workflow_uses_raw_nul_delimited_paths_in_both_workspaces():

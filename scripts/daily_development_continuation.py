@@ -393,6 +393,23 @@ def discover_candidate(repository: str, reader: GitHubReader) -> Candidate | Non
             continue
         if row.prs != (number,):
             raise ContinuationError(f"PR #{number} registry does not bind itself exactly")
+        dependencies = list(
+            dict.fromkeys(
+                value.lower() for value in SPEC_BINDING_RE.findall(row.depends_on)
+            )
+        )
+        unmet = []
+        for dependency in dependencies:
+            dependency_row = registry.get(dependency)
+            if dependency_row is None:
+                unmet.append(f"{dependency}=absent")
+            elif dependency_row.status != "merged":
+                unmet.append(f"{dependency}={dependency_row.status}")
+        if unmet:
+            raise ContinuationError(
+                f"PR #{number} active spec has unmerged dependencies: "
+                + ", ".join(unmet)
+            )
         binding_text = " ".join(str(pull.get(key) or "") for key in ("title", "body"))
         binding_text += f" {head_ref}"
         bindings = {value.lower() for value in SPEC_BINDING_RE.findall(binding_text)}
