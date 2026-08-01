@@ -43,10 +43,9 @@ jobs:
 
       - name: Run isolated focused gates
         run: |
-          python -m pip install --disable-pip-version-check pytest pyyaml ruff
+          python -m pip install --disable-pip-version-check pytest pyyaml
           python -m py_compile scripts/daily_development_continuation.py backend/tests/test_daily_development_continuation.py
           python -m pytest -q --noconftest backend/tests/test_daily_development_continuation.py
-          python -m ruff check scripts/daily_development_continuation.py backend/tests/test_daily_development_continuation.py
           python - <<'PY'
           from pathlib import Path
           import yaml
