@@ -86,7 +86,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          payload="v2|spec=${{ needs.plan.outputs.spec_id }}|pr=${{ needs.plan.outputs.pr_number }}|input=${{ needs.plan.outputs.checkpoint_sha }}|output=${{ needs.plan.outputs.recovery_output_sha }}|result=changed"
+          payload="v3|phase=recover|spec=${{ needs.plan.outputs.spec_id }}|pr=${{ needs.plan.outputs.pr_number }}|input=${{ needs.plan.outputs.checkpoint_sha }}|output=${{ needs.plan.outputs.recovery_output_sha }}|result=changed"
           audience=$(python -c 'import hashlib,sys; print("jarvisos-continuation-marker-v1-" + hashlib.sha256(sys.argv[1].encode()).hexdigest())' "$payload")
           url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=$audience"
           CONTINUATION_OIDC_TOKEN=$(curl --fail --silent --show-error \
@@ -95,6 +95,7 @@ jobs:
           export CONTINUATION_OIDC_TOKEN
           echo "::add-mask::$CONTINUATION_OIDC_TOKEN"
           python scripts/daily_development_continuation.py marker \
+            --phase "recover" \
             --spec "${{ needs.plan.outputs.spec_id }}" \
             --pr "${{ needs.plan.outputs.pr_number }}" \
             --input-head "${{ needs.plan.outputs.checkpoint_sha }}" \
@@ -121,7 +122,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          payload="v2|spec=${{ needs.plan.outputs.spec_id }}|pr=${{ needs.plan.outputs.pr_number }}|input=${{ needs.plan.outputs.checkpoint_sha }}|output=${{ needs.plan.outputs.head_sha }}|result=changed"
+          payload="v3|phase=bridge|spec=${{ needs.plan.outputs.spec_id }}|pr=${{ needs.plan.outputs.pr_number }}|input=${{ needs.plan.outputs.checkpoint_sha }}|output=${{ needs.plan.outputs.head_sha }}|result=changed"
           audience=$(python -c 'import hashlib,sys; print("jarvisos-continuation-marker-v1-" + hashlib.sha256(sys.argv[1].encode()).hexdigest())' "$payload")
           url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=$audience"
           CONTINUATION_OIDC_TOKEN=$(curl --fail --silent --show-error \
@@ -130,6 +131,7 @@ jobs:
           export CONTINUATION_OIDC_TOKEN
           echo "::add-mask::$CONTINUATION_OIDC_TOKEN"
           python scripts/daily_development_continuation.py marker \
+            --phase "bridge" \
             --spec "${{ needs.plan.outputs.spec_id }}" \
             --pr "${{ needs.plan.outputs.pr_number }}" \
             --input-head "${{ needs.plan.outputs.checkpoint_sha }}" \
@@ -476,7 +478,7 @@ jobs:
           if [ "${{ needs.plan.outputs.head_sha }}" = "${{ needs.push.outputs.output_head }}" ]; then
             result=no_change
           fi
-          payload="v2|spec=${{ needs.plan.outputs.spec_id }}|pr=${{ needs.plan.outputs.pr_number }}|input=${{ needs.plan.outputs.head_sha }}|output=${{ needs.push.outputs.output_head }}|result=$result"
+          payload="v3|phase=final|spec=${{ needs.plan.outputs.spec_id }}|pr=${{ needs.plan.outputs.pr_number }}|input=${{ needs.plan.outputs.head_sha }}|output=${{ needs.push.outputs.output_head }}|result=$result"
           audience=$(python -c 'import hashlib,sys; print("jarvisos-continuation-marker-v1-" + hashlib.sha256(sys.argv[1].encode()).hexdigest())' "$payload")
           url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=$audience"
           CONTINUATION_OIDC_TOKEN=$(curl --fail --silent --show-error \
@@ -485,6 +487,7 @@ jobs:
           export CONTINUATION_OIDC_TOKEN
           echo "::add-mask::$CONTINUATION_OIDC_TOKEN"
           python scripts/daily_development_continuation.py marker \
+            --phase "final" \
             --spec "${{ needs.plan.outputs.spec_id }}" \
             --pr "${{ needs.plan.outputs.pr_number }}" \
             --input-head "${{ needs.plan.outputs.head_sha }}" \
