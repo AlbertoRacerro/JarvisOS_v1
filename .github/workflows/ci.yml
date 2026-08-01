@@ -6,50 +6,6 @@ on:
     branches: [master]
 
 jobs:
-  hardening-bootstrap:
-    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.number == 210 && github.event.pull_request.head.ref == 'spec/079-minimal-continuation-definition' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: spec/079-minimal-continuation-definition
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install focused test dependency
-        run: python -m pip install -r backend/requirements-dev.txt
-
-      - name: Materialize verified 079 hardening bundle
-        run: |
-          cat scripts/.079-hardening.part* | base64 -d > "$RUNNER_TEMP/079-hardening.tar.gz"
-          mkdir -p "$RUNNER_TEMP/079-hardening"
-          tar -xzf "$RUNNER_TEMP/079-hardening.tar.gz" -C "$RUNNER_TEMP/079-hardening"
-          cp "$RUNNER_TEMP/079-hardening/daily_development_continuation.py" scripts/daily_development_continuation.py
-          cp "$RUNNER_TEMP/079-hardening/test_daily_development_continuation.py" backend/tests/test_daily_development_continuation.py
-          cp "$RUNNER_TEMP/079-hardening/daily-development-continuation.yml" .github/workflows/daily-development-continuation.yml
-          rm scripts/.079-hardening.part*
-          python -m py_compile scripts/daily_development_continuation.py backend/tests/test_daily_development_continuation.py
-          python -m pytest -q backend/tests/test_daily_development_continuation.py
-          git diff --check
-          git checkout -- .github/workflows/daily-development-continuation.yml
-
-      - name: Push script and test hardening
-        run: |
-          git config user.name 'jarvisos-hardening-bootstrap[bot]'
-          git config user.email 'jarvisos-hardening-bootstrap[bot]@users.noreply.github.com'
-          git add scripts/daily_development_continuation.py \
-            backend/tests/test_daily_development_continuation.py \
-            scripts/.079-hardening.part00 scripts/.079-hardening.part01 \
-            scripts/.079-hardening.part02 scripts/.079-hardening.part03 \
-            scripts/.079-hardening.part04
-          git commit -m 'Harden scheduled continuation authority'
-          git push origin HEAD:refs/heads/spec/079-minimal-continuation-definition
-
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 15
