@@ -69,6 +69,7 @@ jobs:
         working-directory: backend
         run: >-
           python -m ruff check app tests ../scripts/check_spec_status.py
+          ../scripts/daily_development_continuation.py
           ../scripts/cheap_review.py ../scripts/manual_review.py
 
       - name: Pytest
