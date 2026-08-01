@@ -64,17 +64,27 @@ replace_once(
 
 replace_once(
     TESTS,
-    "        mod.validate_changed_paths([path])\n",
-    '        mod.validate_changed_paths([path], "079")\n',
+    (
+        'def test_protected_and_sensitive_paths_are_rejected(path):\n'
+        '    with pytest.raises(mod.ContinuationError):\n'
+        '        mod.validate_changed_paths([path])\n'
+    ),
+    (
+        'def test_protected_and_sensitive_paths_are_rejected(path):\n'
+        '    with pytest.raises(mod.ContinuationError):\n'
+        '        mod.validate_changed_paths([path], "079")\n'
+    ),
 )
 
 replace_once(
     TESTS,
     (
+        'def test_maintainer_owned_conformance_tests_are_rejected(path):\n'
         '    with pytest.raises(mod.ContinuationError, match="maintainer-owned conformance test"):\n'
         '        mod.validate_changed_paths([path])\n'
     ),
     (
+        'def test_maintainer_owned_conformance_tests_are_rejected(path):\n'
         '    with pytest.raises(mod.ContinuationError, match="maintainer-owned conformance test"):\n'
         '        mod.validate_changed_paths([path], "079")\n'
     ),
