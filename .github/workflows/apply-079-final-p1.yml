@@ -29,13 +29,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -f scripts/.079-final-transform.py ]; then
+          if [ ! -f scripts/.079-final-transform-v2.py ]; then
             echo "Transformer already consumed; no action."
             exit 0
           fi
-          test "$(git hash-object scripts/.079-final-transform.py)" = "4bd1f19a071e44695af8973151c786208fd3c6ad"
+          test "$(git hash-object scripts/.079-final-transform-v2.py)" = "fa156b7929466414e8f625430aa03873268e9bc2"
 
-          python scripts/.079-final-transform.py
+          python scripts/.079-final-transform-v2.py
           cp .github/workflows/daily-development-continuation.yml scripts/.079-daily-final.yml
 
           python -m pip install --disable-pip-version-check pytest pyyaml
@@ -52,7 +52,7 @@ jobs:
 
           git restore --source=HEAD --staged --worktree \
             .github/workflows/daily-development-continuation.yml
-          git rm -f scripts/.079-final-transform.py scripts/.079-final-p1.patch
+          git rm -f scripts/.079-final-transform-v2.py
           git add scripts/daily_development_continuation.py \
             backend/tests/test_daily_development_continuation.py \
             scripts/.079-daily-final.yml
@@ -65,6 +65,6 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit --no-verify -m "Fix final spec 079 continuation gates"
+          git commit --no-verify -m "Close final spec 079 review gates"
           git -c http.extraheader="AUTHORIZATION: basic $auth" push origin \
             "HEAD:refs/heads/$HEAD_REF"
