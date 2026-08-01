@@ -4,10 +4,19 @@ script_path = Path("scripts/daily_development_continuation.py")
 test_path = Path("backend/tests/test_daily_development_continuation.py")
 
 script = script_path.read_text(encoding="utf-8")
-old = "from typing import Callable, Protocol\n"
-new = "from collections.abc import Callable\nfrom typing import Protocol\n"
+old = (
+    "from dataclasses import asdict, dataclass\n"
+    "from pathlib import Path\n"
+    "from typing import Callable, Protocol\n"
+)
+new = (
+    "from collections.abc import Callable\n"
+    "from dataclasses import asdict, dataclass\n"
+    "from pathlib import Path\n"
+    "from typing import Protocol\n"
+)
 if script.count(old) != 1:
-    raise SystemExit("expected exactly one legacy Callable import")
+    raise SystemExit("expected exactly one legacy Callable import block")
 script_path.write_text(script.replace(old, new), encoding="utf-8")
 
 tests = test_path.read_text(encoding="utf-8")
