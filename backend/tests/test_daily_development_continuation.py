@@ -365,6 +365,16 @@ def test_marker_with_result_inconsistent_with_heads_is_ignored():
     assert terminal is False
 
 
+def test_marker_with_noncanonical_phase_case_is_ignored():
+    forged = marker()
+    forged["body"] = forged["body"].replace("phase=final", "phase=FINAL", 1)
+    checkpoint, terminal = mod.checkpoint_for(
+        candidate(), [forged], verifier=AcceptVerifier()
+    )
+    assert checkpoint == BASE
+    assert terminal is False
+
+
 def test_verified_changed_marker_advances_checkpoint():
     checkpoint, terminal = mod.checkpoint_for(
         candidate(), [marker()], verifier=AcceptVerifier(),

@@ -37,8 +37,7 @@ MARKER_RE = re.compile(
     r"spec=(?P<spec>\d{3}[a-z]?) pr=(?P<pr>\d+) "
     r"input=(?P<input>[0-9a-f]{40}) output=(?P<output>[0-9a-f]{40}) "
     r"result=(?P<result>changed|no_change) run=(?P<run>\d+) "
-    r"oidc=(?P<oidc>[A-Za-z0-9._-]+) -->",
-    re.I,
+    r"oidc=(?P<oidc>[A-Za-z0-9._-]+) -->"
 )
 MAX_OPEN_PULLS = 1000
 MAX_COMMENTS = 5000
