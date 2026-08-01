@@ -27,7 +27,7 @@ where authority and data live, not which models do the work.
 5. **The local classifier is advisory.** It never owns permissions, provider selection,
    external calls, memory writes, or final sensitivity. Deterministic policy decides.
 6. **No secrets** in logs, events, docs, test fixtures, commits, or frontend responses.
-7. **Data-root paths** (`C:\JarvisOS`) go through `backend/app/core/paths.py`. The repo
+7. **Data-root paths** (`C:\\JarvisOS`) go through `backend/app/core/paths.py`. The repo
    and the data root are separate; never write runtime data into the repo.
 8. **AI/agent outputs are proposals.** Nothing model-generated becomes a canonical
    record without explicit user or deterministic-policy promotion.
@@ -46,6 +46,58 @@ where authority and data live, not which models do the work.
 
 If a spec appears to require violating one of these, stop and report instead of
 implementing.
+
+## Dormant spec 079 repository-development execution exception
+
+This section is the only narrow, later, and more specific amendment to hard
+invariant 2. It applies solely to the external repository-development control plane
+defined by merged spec 079. It does not apply to JarvisOS or Hermes runtime,
+product routes, frontend code, product services or tools, ordinary coding agents,
+or any other specification.
+
+The exception is **dormant by default**. No 079 adapter or provider call is
+permitted unless every condition below is simultaneously true:
+
+1. `docs/specs/STATUS.md` records 079 as `ready` after a separate dated readiness
+   decision, and no different product or implementation front is active.
+2. The merged 079 full specification, this governance amendment, and every mandatory
+   disposable-repository proof named by that specification are current and green on
+   the exact readiness head; no P0/P1, security, integrity, provider, accounting, or
+   recovery ambiguity remains open.
+3. The maintainer has issued an unexpired operational grant naming the exact
+   repository, spec, slice, base SHA, allowed scope, adapters, provider policy,
+   call and spend limits, and stop conditions. Branches, pull requests, labels,
+   comments, checks, prior activity, and model text never substitute for that grant.
+4. The protected GitHub-owned authority has committed the grant, repository-wide
+   claim, current branch and exact head, conditional PR binding, actor identity,
+   lease when mutation is possible, provider decision, one canonical reservation,
+   and idempotency key before dispatch.
+5. The call uses only the readiness-approved 079 service and credentials. It has no
+   provider fallback, no implicit retry after ambiguous acceptance, no product
+   SQLite or `ai_jobs` dependency, and no access to JarvisOS runtime provider
+   secrets or `C:\\JarvisOS` data.
+6. The outbound packet is deterministically bounded to the authorized repository
+   slice and excludes secrets, credentials, environment values, unrelated project
+   records, and content outside the approved sensitivity and egress boundary.
+7. Usage, quota, and integer micro-USD cost are durably finalized against the
+   canonical reservation. Unknown cost, stale pricing, missing capacity, duplicate
+   authorization, exceeded caps, or unverifiable settlement stops the run.
+8. Implementer and reviewer identities remain separate; reviewer credentials are
+   read-only; deterministic gates remain exact-head authority; automated actors may
+   not merge, auto-merge, approve authoritatively, change priority or scope, alter
+   settings or secrets, force-push, delete protected refs, or continue after a stop.
+
+Only after all eight conditions hold may the readiness-approved 079 implementer or
+reviewer adapter call a provider outside product `run_ai_task`/`ai_jobs`, because
+that service is a separate repository-development control plane with its own
+GitHub-owned authorization, reservation, idempotency, usage, cost, security, and
+recovery evidence. In every other state, including while 079 is `planned`, during
+proof work, or before an operational grant, hard invariant 2 applies unchanged and
+the attempted call must fail closed with zero provider execution.
+
+Merging this amendment alone does not activate 079, authorize a proof prototype,
+change `STATUS.md`, permit paid or live calls, create credentials, install an App,
+change repository settings, or authorize implementation.
 
 ## Model economy (intended routing hierarchy)
 
@@ -156,19 +208,19 @@ the matching commands.
 | --- | --- | --- |
 | OS | Windows 11, PowerShell | Linux |
 | Python env | `backend/.venv` | system Python 3.11+, `pip install -r backend/requirements.txt -r backend/requirements-dev.txt` |
-| Data root | `C:\JarvisOS` | none — tests isolate it automatically |
+| Data root | `C:\\JarvisOS` | none — tests isolate it automatically |
 
 Cross-platform rules:
 - Tests already isolate the data root via the `JARVISOS_DATA_ROOT` env var and
   `tmp_path` (see `backend/tests/conftest.py`). Never write a test that depends on
-  `C:\JarvisOS`, drive letters, backslash paths, or a running Ollama/provider.
+  `C:\\JarvisOS`, drive letters, backslash paths, or a running Ollama/provider.
 - Use `pathlib` for any new path handling; never hardcode OS-specific separators.
 - Do not modify launcher scripts (`*.cmd`, `scripts/*.ps1`) from a Linux
   environment — you cannot test them there.
 
 ## Test gate (must pass before you consider work done)
 
-From `backend/`, any OS (use `.\.venv\Scripts\python` instead of `python` on
+From `backend/`, any OS (use `.\\.venv\\Scripts\\python` instead of `python` on
 local Windows):
 
 ```bash
