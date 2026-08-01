@@ -27,7 +27,7 @@ where authority and data live, not which models do the work.
 5. **The local classifier is advisory.** It never owns permissions, provider selection,
    external calls, memory writes, or final sensitivity. Deterministic policy decides.
 6. **No secrets** in logs, events, docs, test fixtures, commits, or frontend responses.
-7. **Data-root paths** (`C:\\JarvisOS`) go through `backend/app/core/paths.py`. The repo
+7. **Data-root paths** (`C:\JarvisOS`) go through `backend/app/core/paths.py`. The repo
    and the data root are separate; never write runtime data into the repo.
 8. **AI/agent outputs are proposals.** Nothing model-generated becomes a canonical
    record without explicit user or deterministic-policy promotion.
@@ -75,7 +75,7 @@ permitted unless every condition below is simultaneously true:
 5. The call uses only the readiness-approved 079 service and credentials. It has no
    provider fallback, no implicit retry after ambiguous acceptance, no product
    SQLite or `ai_jobs` dependency, and no access to JarvisOS runtime provider
-   secrets or `C:\\JarvisOS` data.
+   secrets or `C:\JarvisOS` data.
 6. The outbound packet is deterministically bounded to the authorized repository
    slice and excludes secrets, credentials, environment values, unrelated project
    records, and content outside the approved sensitivity and egress boundary.
@@ -208,19 +208,19 @@ the matching commands.
 | --- | --- | --- |
 | OS | Windows 11, PowerShell | Linux |
 | Python env | `backend/.venv` | system Python 3.11+, `pip install -r backend/requirements.txt -r backend/requirements-dev.txt` |
-| Data root | `C:\\JarvisOS` | none — tests isolate it automatically |
+| Data root | `C:\JarvisOS` | none — tests isolate it automatically |
 
 Cross-platform rules:
 - Tests already isolate the data root via the `JARVISOS_DATA_ROOT` env var and
   `tmp_path` (see `backend/tests/conftest.py`). Never write a test that depends on
-  `C:\\JarvisOS`, drive letters, backslash paths, or a running Ollama/provider.
+  `C:\JarvisOS`, drive letters, backslash paths, or a running Ollama/provider.
 - Use `pathlib` for any new path handling; never hardcode OS-specific separators.
 - Do not modify launcher scripts (`*.cmd`, `scripts/*.ps1`) from a Linux
   environment — you cannot test them there.
 
 ## Test gate (must pass before you consider work done)
 
-From `backend/`, any OS (use `.\\.venv\\Scripts\\python` instead of `python` on
+From `backend/`, any OS (use `.\.venv\Scripts\python` instead of `python` on
 local Windows):
 
 ```bash
