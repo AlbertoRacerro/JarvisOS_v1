@@ -56,6 +56,8 @@ class RegistryRow:
     status: str
     prs: tuple[int, ...]
     name: str
+    depends_on: str
+    description: str
 
 
 @dataclass(frozen=True)
@@ -171,7 +173,7 @@ def parse_registry(text: str) -> dict[str, RegistryRow]:
             continue
         if len(cells) != 6:
             raise ContinuationError("STATUS.md has an invalid registry row")
-        spec_id, status, pr_cell, name, _, _ = cells
+        spec_id, status, pr_cell, name, depends_on, description = cells
         spec_id = spec_id.lower()
         if not SPEC_RE.fullmatch(spec_id) or spec_id in rows:
             raise ContinuationError("STATUS.md has an invalid or duplicate spec id")
@@ -180,6 +182,8 @@ def parse_registry(text: str) -> dict[str, RegistryRow]:
             status=status,
             prs=tuple(sorted({int(value) for value in PR_RE.findall(pr_cell)})),
             name=name,
+            depends_on=depends_on,
+            description=description,
         )
     if not rows:
         raise ContinuationError("STATUS.md registry is missing")
@@ -254,9 +258,12 @@ def _markers(comments: list[dict[str, object]], spec: str, pr: int) -> list[re.M
     result: list[re.Match[str]] = []
     for comment in comments:
         body = comment.get("body")
-        if not isinstance(body, str):
+        user = comment.get("user")
+        if not isinstance(body, str) or not isinstance(user, dict):
             raise ContinuationError("PR comment response is incomplete")
         for match in MARKER_RE.finditer(body):
+            if user.get("login") != "github-actions[bot]":
+                raise ContinuationError("continuation marker was not authored by github-actions[bot]")
             if match.group("spec").lower() == spec and int(match.group("pr")) == pr:
                 result.append(match)
     return result
@@ -266,20 +273,27 @@ def checkpoint_for(candidate: Candidate, comments: list[dict[str, object]]) -> t
     matches = _markers(comments, candidate.spec_id, candidate.pr_number)
     if not matches:
         return candidate.base_sha, False
+    checkpoint = matches[0].group("input")
     seen_inputs: dict[str, tuple[str, str]] = {}
+    last_result = ""
     for match in matches:
-        key = match.group("input")
-        value = (match.group("output"), match.group("result"))
-        previous = seen_inputs.setdefault(key, value)
+        input_head = match.group("input")
+        output_head = match.group("output")
+        result = match.group("result")
+        value = (output_head, result)
+        previous = seen_inputs.setdefault(input_head, value)
         if previous != value:
             raise ContinuationError("incompatible continuation markers share one input head")
-    last = matches[-1]
-    output = last.group("output")
-    if last.group("result") == "no_change" and output == candidate.head_sha:
-        return output, True
-    if output != candidate.head_sha:
-        raise ContinuationError("continuation marker output did not advance to the current PR head")
-    return output, False
+        if input_head != checkpoint:
+            raise ContinuationError("continuation marker chain is not contiguous")
+        if result == "no_change" and output_head != input_head:
+            raise ContinuationError("no-change marker changed the checkpoint")
+        if result == "changed" and output_head == input_head:
+            raise ContinuationError("changed marker did not advance the checkpoint")
+        checkpoint = output_head
+        last_result = result
+    terminal = last_result == "no_change" and checkpoint == candidate.head_sha
+    return checkpoint, terminal
 
 
 def build_plan(*, mode: str, repository: str, reader: GitHubReader, token_present: bool) -> Plan:
@@ -299,6 +313,9 @@ def build_plan(*, mode: str, repository: str, reader: GitHubReader, token_presen
             candidate.pr_number, candidate.head_ref, candidate.head_sha,
             candidate.base_sha, checkpoint,
         )
+    base_status = reader.compare(candidate.base_sha, candidate.head_sha)
+    if base_status not in {"ahead", "identical"}:
+        raise ContinuationError("current PR head does not descend from the PR base")
     status = reader.compare(checkpoint, candidate.head_sha)
     if status not in {"ahead", "identical"}:
         raise ContinuationError("current PR head does not descend from the checkpoint")
@@ -369,8 +386,12 @@ def main(argv: list[str] | None = None) -> int:
     plan_parser.add_argument("--repository", default=os.getenv("GITHUB_REPOSITORY", ""))
     plan_parser.add_argument("--token", default=os.getenv("GITHUB_TOKEN", ""))
     plan_parser.add_argument("--mode", default=os.getenv("JARVISOS_CONTINUATION_MODE", "OFF"))
-    plan_parser.add_argument("--claude-token-present", default=os.getenv("CLAUDE_TOKEN_PRESENT", "false"))
-    plan_parser.add_argument("--github-output", type=Path, default=Path(os.getenv("GITHUB_OUTPUT", "/dev/null")))
+    plan_parser.add_argument(
+        "--claude-token-present", default=os.getenv("CLAUDE_TOKEN_PRESENT", "false")
+    )
+    plan_parser.add_argument(
+        "--github-output", type=Path, default=Path(os.getenv("GITHUB_OUTPUT", "/dev/null"))
+    )
     validate = commands.add_parser("validate")
     validate.add_argument("--changed-files", type=Path, required=True)
     validate.add_argument("--active-spec", required=True)
