@@ -1,34 +1,34 @@
 # AGENTS.md — Instructions for AI coding agents working on JarvisOS
 
-This file governs AI coding and review agents acting on the JarvisOS repository and delivery process. It does not govern JarvisOS or Hermes runtime actors directly. Runtime state, policy, sensitivity, routing, egress, budgets, tools and promotion remain owned by JarvisOS.
+This file governs AI coding and review agents acting on the JarvisOS repository and delivery process. It does not govern JarvisOS or Hermes runtime actors directly. Runtime state, policy, sensitivity, routing, egress, budgets, tools, and promotion remain owned by JarvisOS.
 
-JarvisOS is a single-user AI engineering workspace. Backend authority is FastAPI + SQLite; the React/Vite frontend is an operator interface. Models propose; deterministic code validates, gates, records and audits.
+JarvisOS is a single-user AI engineering workspace. Backend authority is FastAPI + SQLite; the React/Vite frontend is an operator interface. Models propose; deterministic code validates, gates, records, and audits.
 
 ## Hard invariants — never violate
 
 1. `route_class="auto"` never executes an external provider.
 2. Product AI calls go through `run_ai_task` and create an `ai_jobs` row.
-3. The frontend never calls providers, Ollama, filesystems or execution tools directly.
+3. The frontend never calls providers, Ollama, filesystems, or execution tools directly.
 4. Safe defaults remain safe: paid AI disabled, budget zero, provider mode `fake`, tests fake or mock all providers.
-5. The local classifier is advisory and owns no permission, provider, memory or sensitivity decision.
-6. No secrets in logs, events, docs, fixtures, commits or frontend responses.
+5. The local classifier is advisory and owns no permission, provider, memory, or sensitivity decision.
+6. No secrets in logs, events, docs, fixtures, commits, or frontend responses.
 7. Data-root paths (`C:\JarvisOS`) go through `backend/app/core/paths.py`; runtime data never enters the repository.
 8. Model output is a proposal until explicit user or deterministic-policy promotion.
-9. Never fabricate outputs, validators, artifacts, metrics or expected values to satisfy a gate.
+9. Never fabricate outputs, validators, artifacts, metrics, or expected values to satisfy a gate.
 10. Prefer the smallest sufficient change. Do not add infrastructure likely to be removed or replaced.
 
-If a spec requires violating an invariant, stop and report the conflict.
+If a specification requires violating an invariant, stop and report the conflict.
 
 ## Repository operating regime — effective 2026-08-01
 
-This section supersedes earlier cadence, per-step authorization and human-merge rules.
+This section supersedes earlier cadence, per-step authorization, and human-merge rules.
 
 ### Permanent authorization and queue
 
 - The assigned agent owns the technical merge decision.
-- When deterministic gates are green and no current review finding remains open, merge the PR with an exact-head guard and continue to the next queued item.
-- Do not wait for a maintainer confirmation between definition, readiness, implementation, evidence or registry-reconciliation PRs.
-- Work queue order is binding. Finish, verify and merge the first item before opening the next implementation front.
+- When deterministic gates are green and no current blocking review finding remains open, merge with an exact-head guard and continue to the next queued item.
+- Do not wait for maintainer confirmation between definition, readiness, implementation, evidence, or registry-reconciliation PRs.
+- Work queue order is binding. Finish, verify, and merge the first item before opening the next implementation front.
 - Report only when the queue is exhausted, once per week for a queue longer than one week, or when one of the four interruption reasons below applies.
 - Never enable GitHub auto-merge. The agent performs and verifies each merge explicitly.
 
@@ -37,15 +37,15 @@ This section supersedes earlier cadence, per-step authorization and human-merge 
 Contact the maintainer outside the final report only when:
 
 1. real spending is required or a budget limit is at risk;
-2. a credential, account, repository or organization does not already exist;
+2. a credential, account, repository, or organization does not already exist;
 3. there is a security issue or a secret may be exposed;
 4. an obstacle has no two practicable routes forward.
 
-Otherwise choose the least-cost safe route, proceed and record the decision in the final report.
+Otherwise choose the least-cost safe route, proceed, and record the decision in the final report.
 
 ### Test del minimo necessario
 
-Before work that adds infrastructure, credentials, external accounts, a new durable state store or broader spec scope, put this block in the PR body:
+Before work that adds infrastructure, credentials, external accounts, a new durable state store, or broader specification scope, put this block in the PR body:
 
 ```text
 ### Test del minimo necessario
@@ -57,50 +57,54 @@ Se sì: perché lo aggiungo comunque
 
 If the acceptance criterion is reachable without the proposed work, do not build it. Record it as a future extension.
 
-A spec declared separate remains separate. Never merge specs merely because implementation would be convenient.
+A specification declared separate remains separate. Never merge specifications merely because implementation would be convenient.
 
 ## Spec 079 scheduled-continuation exception
 
-Spec 079 is a narrow repository-development exception to hard invariant 2. It permits the readiness-approved scheduled workflow to publish one exact-head continuation request in an existing same-repository implementation PR.
+Spec 079 is a narrow repository-development exception to hard invariant 2. It permits the readiness-approved daily workflow to invoke the repository's existing `anthropics/claude-code-action@v1` integration for one exact-head continuation of one existing same-repository implementation PR.
 
-The exception:
+The exception is bounded as follows:
 
-- uses only the existing Actions `GITHUB_TOKEN`;
-- reads authority from `STATUS.md`, the registered PR, branch and exact head;
-- writes only an idempotent PR comment;
-- adds no provider secret, App, service, database, control branch, lease or account;
-- never applies to product runtime calls;
-- never performs review, repair, merge, label changes or roadmap selection;
-- makes no real provider call in tests.
+- mode is `OFF`, `SHADOW`, or `EXECUTE_NO_MERGE`; absent mode means `OFF`;
+- `OFF` and `SHADOW` invoke no provider and mutate nothing;
+- active authority is reconstructed from the exact PR-head `STATUS.md`, the PR, branch, commit ancestry, and checkpoint comments;
+- the existing `CLAUDE_CODE_OAUTH_TOKEN` is reused; no new provider credential or account is added;
+- the Claude job has read-only repository authority and persisted checkout credentials disabled;
+- Claude may only produce an untrusted local patch artifact;
+- a separate job, without the Claude secret, rejects protected/sensitive paths, runs deterministic gates, rereads the remote exact head, and alone may make a normal non-forced same-branch push;
+- the workflow cannot merge, auto-merge, review, classify findings, change labels, select a new specification, change settings/secrets, or dispatch another provider;
+- `.github/**`, `AGENTS.md`, `CODEOWNERS`, and the 079 control script/test are immutable to scheduled continuation;
+- `STATUS.md` may change only in the row of the active specification;
+- tests make no live provider call and incur no spend.
 
-Review/fix/re-review belongs to separate spec 080. No 080 behavior may be smuggled into 079.
+Review, finding, correction, and re-review behavior belongs only to separate spec 080. No 080 behavior may be smuggled into 079.
 
 ## Model economy
 
-Once the existing egress policies permit it:
+Once existing egress policies permit it:
 
 - cheap external models are the normal compute workhorse;
-- frontier models are reserved for review, strategic documents and hard tasks;
+- frontier models are reserved for review, strategic documents, and hard tasks;
 - local models are the fallback when safe redaction is impossible or ambiguous.
 
 This never weakens the product execution spine or safe defaults.
 
 ## Spec-driven work
 
-- Read `docs/specs/STATUS.md`, then `docs/specs/README.md`, then the selected spec.
-- Implement exactly one spec per implementation branch.
-- Scope, acceptance criteria and non-goals are binding.
-- If the spec conflicts with current code, report the conflict; do not guess.
+- Read `docs/specs/STATUS.md`, then `docs/specs/README.md`, then the selected specification.
+- Implement exactly one specification per implementation branch.
+- Scope, acceptance criteria, and non-goals are binding.
+- If the specification conflicts with current code, report the conflict; do not guess.
 - `STATUS.md` is the sole live status and priority authority.
-- Do not infer state from legacy `Status:` prose, strategy documents or chat handoffs.
+- Do not infer state from legacy `Status:` prose, strategy documents, or chat handoffs.
 
 ## Conduct when encountering an obstacle
 
 A technical obstacle opens work; it does not close it.
 
-1. Report every obstacle with at least two routes forward, their cost and first concrete step.
+1. Report every obstacle with at least two routes forward, their cost, and first concrete step.
 2. Do not set a registry row to `blocked` for technical difficulty until two workaround attempts are documented and neither is viable.
-3. An exploratory test must state a viable route, cost and first step, not only yes/no.
+3. An exploratory test must state a viable route, cost, and first step, not only yes/no.
 4. When desired properties conflict, separate cases and declare the trade-off rather than forcing an invalid implementation.
 
 ### Obstacle report format
@@ -120,7 +124,7 @@ Recommendation:
 At queue exhaustion report, in this order:
 
 1. usable capabilities added;
-2. integrated specs/PRs and deterministic-gate results;
+2. integrated specifications/PRs and deterministic-gate results;
 3. technical choices made for the maintainer and why;
 4. minimum-necessary proposals rejected;
 5. open obstacles in the required format;
@@ -140,11 +144,11 @@ Do not end with a hypothetical next step.
 | `backend/app/modules/modeling/` | model specs, versions, simulation runs |
 | `backend/app/modules/runner/` | bounded local Python runner |
 | `backend/app/modules/engineering/`, `workspaces/`, `events/`, `files/` | domain foundation |
-| `backend/app/modules/tools/`, `agents/` | registry skeletons only; do not expand without a spec |
-| `backend/tests/` | pytest suite |
+| `backend/app/modules/tools/`, `agents/` | registry skeletons only; do not expand without a specification |
+| `backend/tests/` | Pytest suite |
 | `frontend/` | React/Vite operator UI |
 | `docs/` | canonical docs; `ARCHITECTURE.md` and `DECISIONS.md` win conflicts |
-| `docs/specs/` | work-item specs and canonical `STATUS.md` |
+| `docs/specs/` | work-item specifications and canonical `STATUS.md` |
 | `reports/` | generated evaluation/smoke reports |
 
 ## Environments
@@ -159,7 +163,7 @@ Cross-platform rules:
 
 - tests use `JARVISOS_DATA_ROOT` and `tmp_path`, never drive-letter assumptions;
 - use `pathlib`;
-- do not modify Windows launchers from Linux unless the spec supplies a verifiable test path.
+- do not modify Windows launchers from Linux unless the specification supplies a verifiable test path.
 
 ## Deterministic gates
 
@@ -177,31 +181,31 @@ cd frontend
 npm run build
 ```
 
-Repository CI, spec-status checks and any spec-specific conformance tests must pass on the exact head. Do not silence, skip or relabel failures.
+Repository CI, spec-status checks, and specification-specific conformance tests must pass on the exact head. Do not silence, skip, or relabel failures.
 
-Tests run offline. Never require a live provider, network or running Ollama.
+Tests run offline. Never require a live provider, network, or running Ollama.
 
 ## Review and merge authority
 
-Automated and model reviews are advisory evidence. For each finding, reproduce or trace the concrete failure against the current spec and exact head. Fix genuine defects on the same branch. Rebut false findings with tests, authoritative sources or precise code paths.
+Automated and model reviews are advisory evidence. For each finding, reproduce or trace the concrete failure against the current specification and exact head. Fix genuine defects on the same branch. Rebut false findings with tests, authoritative sources, or precise code paths.
 
 Merge requirements:
 
 1. exact current PR head verified;
 2. required deterministic gates green on that head;
 3. no unresolved current P0/P1 or other blocking review finding;
-4. no scope, dependency, secret, spending or security conflict;
+4. no scope, dependency, secret, spending, or security conflict;
 5. PR body includes the minimum-necessary test when required.
 
 When all five hold, merge immediately with the expected-head SHA and verify `master`. The merge owner then reconciles `STATUS.md` and continues the queue.
 
-External review workflows remain bounded by their own specs. Spec 079 may request continuation only. Spec 080, if later promoted, owns review/fix/re-review automation.
+External review workflows remain bounded by their own specifications. Spec 079 may continue implementation only. Spec 080, if later promoted, owns review/fix/re-review automation.
 
 ## Agent autonomy
 
-Within the queued slice, proceed through inspection, definition, evidence, implementation, tests, CI diagnosis, review handling, merge and status reconciliation without waiting between reversible steps.
+Within the queued slice, proceed through inspection, definition, evidence, implementation, tests, CI diagnosis, review handling, merge, and status reconciliation without waiting between reversible steps.
 
-This autonomy stops only for the four interruption reasons, destructive actions outside the spec, or a hard safety invariant.
+This autonomy stops only for the four interruption reasons, destructive actions outside the specification, or a hard safety invariant.
 
 Maintainer-owned conformance tests matching `backend/tests/**/test_*_conformance.py` may not be changed unless the queued work explicitly assigns that exact modification.
 
@@ -212,23 +216,23 @@ Maintainer-owned conformance tests matching `backend/tests/**/test_*_conformance
 3. Ruff clean on touched Python.
 4. No unapproved dependency.
 5. Docs changed only within scope.
-6. PR records changes, tests and deferred findings.
+6. PR records changes, tests, and deferred findings.
 7. Implementation PR has the correct `STATUS.md` state and number before merge.
 8. Merge is verified on `master`; registry is immediately reconciled.
 
 ## Conventions
 
-- Use existing Python style, type hints and small pure functions.
-- English for code, comments, docs and commit messages.
+- Use existing Python style, type hints, and small pure functions.
+- English for code, comments, docs, and commit messages.
 - Follow existing service/routes/models layout.
 - SQLite migrations are additive in `backend/app/core/schema.py`; no Alembic.
 - Short imperative commit subjects; one logical change per commit.
 
-## What not to do
+## What NOT to do
 
-- no broad refactors, renames or file moves unless required by the spec;
-- no new frameworks, ORMs, agent libraries or vector databases without accepted authority;
-- no touching `backend/.venv`, `frontend/node_modules`, report history or the data root;
-- no expansion of tool/agent skeletons, MCP servers, background workers or streaming unless a spec requires it;
+- no broad refactors, renames, or file moves unless required by the specification;
+- no new frameworks, ORMs, agent libraries, or vector databases without accepted authority;
+- no touching `backend/.venv`, `frontend/node_modules`, report history, or the data root;
+- no expansion of tool/agent skeletons, MCP servers, background workers, or streaming unless a specification requires it;
 - no speculative work while touching adjacent code;
-- no combining independently removable specs.
+- no combining independently removable specifications.
