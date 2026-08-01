@@ -480,8 +480,26 @@ def test_protected_and_sensitive_paths_are_rejected(path):
         mod.validate_changed_paths([path])
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "backend/tests/test_bluecad_conformance.py",
+        "backend/tests/bluecad/test_geometry_conformance.py",
+    ],
+)
+def test_maintainer_owned_conformance_tests_are_rejected(path):
+    with pytest.raises(mod.ContinuationError, match="maintainer-owned conformance test"):
+        mod.validate_changed_paths([path])
+
+
 def test_allowed_paths_pass():
-    mod.validate_changed_paths(["backend/app/service.py", "docs/specs/STATUS.md"])
+    mod.validate_changed_paths(
+        [
+            "backend/app/service.py",
+            "backend/tests/test_service.py",
+            "docs/specs/STATUS.md",
+        ]
+    )
 
 
 def test_too_many_paths_fail():

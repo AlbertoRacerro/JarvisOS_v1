@@ -693,6 +693,10 @@ def validate_changed_paths(paths: list[str]) -> None:
             or path in CONTROL_PATHS
         ):
             raise ContinuationError(f"continuation patch changes a protected path: {raw_path}")
+        if path.startswith("backend/tests/") and Path(path).name.startswith("test_") and Path(path).name.endswith("_conformance.py"):
+            raise ContinuationError(
+                f"continuation patch changes a maintainer-owned conformance test: {raw_path}"
+            )
         if SENSITIVE_PART_RE.search(path):
             raise ContinuationError(f"continuation patch changes a sensitive path: {raw_path}")
 
