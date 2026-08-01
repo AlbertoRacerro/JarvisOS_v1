@@ -431,24 +431,38 @@ def test_too_many_paths_fail():
         mod.validate_changed_paths([f"docs/{i}.md" for i in range(21)])
 
 
-def test_status_only_active_row_may_change():
+def test_status_only_active_row_may_change_when_binding_is_preserved():
     before = registry(extra="queue unchanged\n")
+    after = before.replace("| CONTINUE | 004 | active |", "| CONTINUE | 004 | active detail |")
+    mod.validate_status_change(before, after, "079", 210)
+
+
+def test_status_may_not_leave_in_review():
+    before = registry()
     after = before.replace("| 079 | in_review", "| 079 | merged")
-    mod.validate_status_change(before, after, "079")
+    with pytest.raises(mod.ContinuationError, match="remain in_review"):
+        mod.validate_status_change(before, after, "079", 210)
+
+
+def test_status_may_not_rebind_the_active_pr():
+    before = registry()
+    after = before.replace("/pull/210", "/pull/211")
+    with pytest.raises(mod.ContinuationError, match="active PR"):
+        mod.validate_status_change(before, after, "079", 210)
 
 
 def test_status_prose_change_fails():
     before = registry(extra="queue unchanged\n")
     after = before.replace("queue unchanged", "queue changed")
     with pytest.raises(mod.ContinuationError, match="exact active"):
-        mod.validate_status_change(before, after, "079")
+        mod.validate_status_change(before, after, "079", 210)
 
 
 def test_status_other_row_change_fails():
     before = registry()
     after = before.replace("| 080 | planned", "| 080 | ready")
     with pytest.raises(mod.ContinuationError, match="exact active"):
-        mod.validate_status_change(before, after, "079")
+        mod.validate_status_change(before, after, "079", 210)
 
 
 def test_oidc_verifier_binds_exact_workflow_and_run(monkeypatch):
@@ -555,6 +569,11 @@ def test_workflow_contract_separates_validation_and_trusted_push():
     assert "pytest" not in push_block
     assert "git commit --no-verify" in push_block
     assert "persist-credentials: false" in push_block
+    assert "trusted-continuation-validator.py" in push_block
+    assert "python -I -S" in push_block
+    assert "index_tree=$(git write-tree)" in push_block
+    assert "--active-pr" in push_block
+    assert "python scripts/daily_development_continuation.py validate" not in push_block
 
 
 def test_workflow_marker_jobs_use_oidc_and_no_claude_secret():

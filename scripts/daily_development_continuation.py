@@ -661,10 +661,17 @@ def validate_changed_paths(paths: list[str]) -> None:
             raise ContinuationError(f"continuation patch changes a sensitive path: {raw_path}")
 
 
-def validate_status_change(before: str, after: str, active_spec: str) -> None:
+def validate_status_change(
+    before: str, after: str, active_spec: str, active_pr: int
+) -> None:
     before_rows, after_rows = parse_registry(before), parse_registry(after)
     if set(before_rows) != set(after_rows) or active_spec not in before_rows:
         raise ContinuationError("continuation may not add or remove registry rows")
+    active_after = after_rows[active_spec]
+    if active_after.status != "in_review" or active_after.prs != (active_pr,):
+        raise ContinuationError(
+            "active STATUS.md row must remain in_review and bound to the active PR"
+        )
     prefix = f"| {active_spec} |"
     before_lines, after_lines = before.splitlines(keepends=True), after.splitlines(keepends=True)
     before_indexes = [i for i, line in enumerate(before_lines) if line.startswith(prefix)]
@@ -718,6 +725,7 @@ def main(argv: list[str] | None = None) -> int:
     validate = commands.add_parser("validate")
     validate.add_argument("--changed-files", type=Path, required=True)
     validate.add_argument("--active-spec", required=True)
+    validate.add_argument("--active-pr", type=int, required=True)
     validate.add_argument("--status-before", type=Path)
     validate.add_argument("--status-after", type=Path)
     marker = commands.add_parser("marker")
@@ -753,6 +761,7 @@ def main(argv: list[str] | None = None) -> int:
                     args.status_before.read_text(encoding="utf-8"),
                     args.status_after.read_text(encoding="utf-8"),
                     args.active_spec.lower(),
+                    args.active_pr,
                 )
             return 0
         if not SHA_RE.fullmatch(args.input_head) or not SHA_RE.fullmatch(args.output_head):
