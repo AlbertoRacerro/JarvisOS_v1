@@ -1,0 +1,494 @@
+name: Daily Development Continuation
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: jarvis-development-continuation
+  cancel-in-progress: false
+
+env:
+  CONTINUATION_WORKFLOW_VERSION: "2"
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    outputs:
+      action: ${{ steps.plan.outputs.action }}
+      mode: ${{ steps.plan.outputs.mode }}
+      spec_id: ${{ steps.plan.outputs.spec_id }}
+      pr_number: ${{ steps.plan.outputs.pr_number }}
+      head_ref: ${{ steps.plan.outputs.head_ref }}
+      head_sha: ${{ steps.plan.outputs.head_sha }}
+      base_sha: ${{ steps.plan.outputs.base_sha }}
+      checkpoint_sha: ${{ steps.plan.outputs.checkpoint_sha }}
+      recovery_output_sha: ${{ steps.plan.outputs.recovery_output_sha }}
+      reason: ${{ steps.plan.outputs.reason }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Reconstruct the single active front
+        id: plan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JARVISOS_CONTINUATION_MODE: ${{ vars.JARVISOS_CONTINUATION_MODE || 'OFF' }}
+          CLAUDE_TOKEN_PRESENT: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+        run: python scripts/daily_development_continuation.py plan
+
+      - name: Record OFF or SHADOW result
+        if: ${{ steps.plan.outputs.action == 'noop' || steps.plan.outputs.action == 'shadow' }}
+        run: |
+          {
+            echo "## Daily development continuation"
+            echo ""
+            echo "- Mode: \`${{ steps.plan.outputs.mode }}\`"
+            echo "- Action: \`${{ steps.plan.outputs.action }}\`"
+            echo "- Reason: \`${{ steps.plan.outputs.reason }}\`"
+            if [ -n "${{ steps.plan.outputs.pr_number }}" ]; then
+              echo "- Spec: \`${{ steps.plan.outputs.spec_id }}\`"
+              echo "- PR: \`#${{ steps.plan.outputs.pr_number }}\`"
+              echo "- Exact head: \`${{ steps.plan.outputs.head_sha }}\`"
+              echo "- Checkpoint: \`${{ steps.plan.outputs.checkpoint_sha }}\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  recover-marker:
+    needs: plan
+    if: ${{ needs.plan.outputs.action == 'recover' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          persist-credentials: false
+
+      - name: Recover the checkpoint with workflow-bound OIDC proof
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          payload="v3|phase=recover|spec=${{ needs.plan.outputs.spec_id }}|pr=${{ needs.plan.outputs.pr_number }}|input=${{ needs.plan.outputs.checkpoint_sha }}|output=${{ needs.plan.outputs.recovery_output_sha }}|result=changed"
+          audience=$(python -c 'import hashlib,sys; print("jarvisos-continuation-marker-v1-" + hashlib.sha256(sys.argv[1].encode()).hexdigest())' "$payload")
+          url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=$audience"
+          CONTINUATION_OIDC_TOKEN=$(curl --fail --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$url" \
+            | python -c 'import json,sys; print(json.load(sys.stdin)["value"])')
+          export CONTINUATION_OIDC_TOKEN
+          echo "::add-mask::$CONTINUATION_OIDC_TOKEN"
+          python scripts/daily_development_continuation.py marker \
+            --phase "recover" \
+            --spec "${{ needs.plan.outputs.spec_id }}" \
+            --pr "${{ needs.plan.outputs.pr_number }}" \
+            --input-head "${{ needs.plan.outputs.checkpoint_sha }}" \
+            --output-head "${{ needs.plan.outputs.recovery_output_sha }}"
+
+  bridge-marker:
+    needs: plan
+    if: ${{ needs.plan.outputs.action == 'execute' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          persist-credentials: false
+
+      - name: Bind ancestry-verified intervening commits
+        if: ${{ needs.plan.outputs.checkpoint_sha != needs.plan.outputs.head_sha }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          payload="v3|phase=bridge|spec=${{ needs.plan.outputs.spec_id }}|pr=${{ needs.plan.outputs.pr_number }}|input=${{ needs.plan.outputs.checkpoint_sha }}|output=${{ needs.plan.outputs.head_sha }}|result=changed"
+          audience=$(python -c 'import hashlib,sys; print("jarvisos-continuation-marker-v1-" + hashlib.sha256(sys.argv[1].encode()).hexdigest())' "$payload")
+          url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=$audience"
+          CONTINUATION_OIDC_TOKEN=$(curl --fail --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$url" \
+            | python -c 'import json,sys; print(json.load(sys.stdin)["value"])')
+          export CONTINUATION_OIDC_TOKEN
+          echo "::add-mask::$CONTINUATION_OIDC_TOKEN"
+          python scripts/daily_development_continuation.py marker \
+            --phase "bridge" \
+            --spec "${{ needs.plan.outputs.spec_id }}" \
+            --pr "${{ needs.plan.outputs.pr_number }}" \
+            --input-head "${{ needs.plan.outputs.checkpoint_sha }}" \
+            --output-head "${{ needs.plan.outputs.head_sha }}"
+
+  generate-patch:
+    needs: [plan, bridge-marker]
+    if: ${{ needs.plan.outputs.action == 'execute' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify exact input head
+        env:
+          EXPECTED_HEAD: ${{ needs.plan.outputs.head_sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+
+      - name: Continue the same spec on the same branch
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          show_full_output: false
+          prompt: |
+            Continue the already-authorized JarvisOS implementation slice on pull
+            request #${{ needs.plan.outputs.pr_number }}, spec
+            ${{ needs.plan.outputs.spec_id }}, branch
+            ${{ needs.plan.outputs.head_ref }}, exact input head
+            ${{ needs.plan.outputs.head_sha }}.
+
+            Read AGENTS.md, docs/specs/STATUS.md, the active specification, the
+            pull-request body and the current diff. Perform only the next bounded
+            implementation work required by that specification. Preserve every
+            non-goal and the one-active-front rule.
+
+            Modify the checked-out working tree only. Do not commit, push, comment,
+            merge, enable auto-merge, change labels, dispatch another agent, or
+            invoke another provider. Never modify .github/**, AGENTS.md, CODEOWNERS,
+            scripts/daily_development_continuation.py, or
+            backend/tests/test_daily_development_continuation.py. STATUS.md may
+            change only in the row for spec ${{ needs.plan.outputs.spec_id }}.
+            Never touch secrets, credentials, token files, environment files, or
+            unrelated specifications. Stop with no changes when the remaining work
+            cannot be completed inside those constraints.
+          claude_args: "--max-turns 40 --model claude-opus-4-8 --permission-mode bypassPermissions"
+
+      - name: Prove the action did not mutate the remote branch
+        env:
+          EXPECTED_HEAD: ${{ needs.plan.outputs.head_sha }}
+          HEAD_REF: ${{ needs.plan.outputs.head_ref }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          auth=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)
+          git -c http.extraheader="AUTHORIZATION: basic $auth" fetch --no-tags origin \
+            "refs/heads/$HEAD_REF:refs/remotes/origin/$HEAD_REF"
+          test "$(git rev-parse "refs/remotes/origin/$HEAD_REF")" = "$EXPECTED_HEAD"
+
+      - name: Export the untrusted patch
+        env:
+          EXPECTED_HEAD: ${{ needs.plan.outputs.head_sha }}
+        run: |
+          git add -N --all
+          git diff --binary --full-index --no-ext-diff "$EXPECTED_HEAD" > continuation.patch
+          test "$(wc -c < continuation.patch)" -le 200000
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: continuation-patch-${{ needs.plan.outputs.head_sha }}
+          path: continuation.patch
+          if-no-files-found: error
+          retention-days: 1
+
+  validate:
+    needs: [plan, generate-patch]
+    if: ${{ needs.plan.outputs.action == 'execute' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      JARVISOS_BLUECAD_CANARY_PROFILE: ubuntu24-py311
+    outputs:
+      has_changes: ${{ steps.inspect.outputs.has_changes }}
+      frontend_changed: ${{ steps.inspect.outputs.frontend_changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: continuation-patch-${{ needs.plan.outputs.head_sha }}
+          path: ${{ runner.temp }}/continuation
+
+      - name: Apply patch and enforce immutable control paths
+        id: inspect
+        env:
+          ACTIVE_SPEC: ${{ needs.plan.outputs.spec_id }}
+        run: |
+          git show HEAD:docs/specs/STATUS.md > "$RUNNER_TEMP/status-before.md"
+          patch="$RUNNER_TEMP/continuation/continuation.patch"
+          if [ ! -s "$patch" ]; then
+            : > "$RUNNER_TEMP/changed-files.z"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "frontend_changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git apply --index --whitespace=error-all "$patch"
+          git diff --cached --no-renames --name-only -z > "$RUNNER_TEMP/changed-files.z"
+          count=$(python - "$RUNNER_TEMP/changed-files.z" <<'PY'
+          from pathlib import Path
+          import sys
+          raw = Path(sys.argv[1]).read_bytes()
+          records = [record for record in raw.split(b"\0") if record]
+          print(len(records))
+          PY
+          )
+          test "$count" -le 20
+          if [ "$count" -eq 0 ]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "frontend_changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          if python - "$RUNNER_TEMP/changed-files.z" <<'PY'
+          from pathlib import Path
+          import sys
+          records = [record for record in Path(sys.argv[1]).read_bytes().split(b"\0") if record]
+          raise SystemExit(0 if any(record.startswith(b"frontend/") for record in records) else 1)
+          PY
+          then
+            echo "frontend_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "frontend_changed=false" >> "$GITHUB_OUTPUT"
+          fi
+          cp docs/specs/STATUS.md "$RUNNER_TEMP/status-after.md"
+          python scripts/daily_development_continuation.py validate \
+            --changed-files "$RUNNER_TEMP/changed-files.z" \
+            --active-spec "$ACTIVE_SPEC" \
+            --active-pr "${{ needs.plan.outputs.pr_number }}" \
+            --status-before "$RUNNER_TEMP/status-before.md" \
+            --status-after "$RUNNER_TEMP/status-after.md"
+          git diff --cached --check
+
+      - uses: actions/setup-python@v5
+        if: ${{ steps.inspect.outputs.has_changes == 'true' }}
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install deterministic gate dependencies
+        if: ${{ steps.inspect.outputs.has_changes == 'true' }}
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run timed BLUECAD continuation canary
+        if: ${{ steps.inspect.outputs.has_changes == 'true' }}
+        working-directory: backend
+        shell: bash
+        run: |
+          set -o pipefail
+          set +e
+          SECONDS=0
+          timeout 240s python -m pytest -q \
+            tests/bluecad/test_manifest_determinism_canary.py \
+            tests/bluecad/test_geometry_property_invariants.py \
+            tests/bluecad/test_capped_manifold.py \
+            2>&1 | tee "$RUNNER_TEMP/bluecad-continuation-canary.log"
+          status=${PIPESTATUS[0]}
+          elapsed=$SECONDS
+          set -e
+          test "$status" = "0"
+          test "$elapsed" -le 240
+
+      - name: Run deterministic gates
+        if: ${{ steps.inspect.outputs.has_changes == 'true' }}
+        run: |
+          python scripts/check_spec_status.py --self-test
+          python scripts/check_spec_status.py
+          python scripts/cheap_review.py --self-test
+          python scripts/manual_review.py --self-test
+          python - <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          pattern = re.compile(r"^\s*(?:import\s+(?:gmsh|FreeCAD|calculix)\b|from\s+(?:gmsh|FreeCAD|calculix)\b)")
+          paths = list(Path("backend/app").rglob("*.py"))
+          src_root = Path("frontend/src")
+          if src_root.exists():
+              paths.extend(path for path in src_root.rglob("*") if path.suffix in {".ts", ".tsx"})
+          violations = []
+          for path in paths:
+              for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+                  if pattern.search(line):
+                      violations.append(f"{path}:{lineno}: {line.strip()}")
+          if violations:
+              print("Forbidden in-process GPL tool imports found:")
+              print("\n".join(violations))
+              sys.exit(1)
+          PY
+          cd backend
+          python -m ruff check app tests ../scripts/check_spec_status.py \
+            ../scripts/daily_development_continuation.py \
+            ../scripts/cheap_review.py ../scripts/manual_review.py
+          python -m pytest -q
+
+      - uses: actions/setup-node@v4
+        if: ${{ steps.inspect.outputs.has_changes == 'true' && steps.inspect.outputs.frontend_changed == 'true' }}
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend when changed
+        if: ${{ steps.inspect.outputs.has_changes == 'true' && steps.inspect.outputs.frontend_changed == 'true' }}
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+  push:
+    needs: [plan, generate-patch, validate]
+    if: ${{ needs.plan.outputs.action == 'execute' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      id-token: write
+    outputs:
+      output_head: ${{ steps.push.outputs.output_head }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: continuation-patch-${{ needs.plan.outputs.head_sha }}
+          path: ${{ runner.temp }}/continuation
+
+      - name: Reapply and revalidate in the trusted workspace
+        if: ${{ needs.validate.outputs.has_changes == 'true' }}
+        env:
+          ACTIVE_SPEC: ${{ needs.plan.outputs.spec_id }}
+          ACTIVE_PR: ${{ needs.plan.outputs.pr_number }}
+        run: |
+          cp scripts/daily_development_continuation.py "$RUNNER_TEMP/trusted-continuation-validator.py"
+          git show HEAD:docs/specs/STATUS.md > "$RUNNER_TEMP/status-before.md"
+          git apply --index --whitespace=error-all "$RUNNER_TEMP/continuation/continuation.patch"
+          git diff --cached --no-renames --name-only -z > "$RUNNER_TEMP/changed-files.z"
+          cp docs/specs/STATUS.md "$RUNNER_TEMP/status-after.md"
+          index_tree=$(git write-tree)
+          python -I -S "$RUNNER_TEMP/trusted-continuation-validator.py" validate \
+            --changed-files "$RUNNER_TEMP/changed-files.z" \
+            --active-spec "$ACTIVE_SPEC" \
+            --active-pr "$ACTIVE_PR" \
+            --status-before "$RUNNER_TEMP/status-before.md" \
+            --status-after "$RUNNER_TEMP/status-after.md"
+          test "$(git write-tree)" = "$index_tree"
+          git diff --cached --check
+
+      - name: Commit and push only from the unchanged exact head
+        id: push
+        env:
+          EXPECTED_HEAD: ${{ needs.plan.outputs.head_sha }}
+          HEAD_REF: ${{ needs.plan.outputs.head_ref }}
+          HAS_CHANGES: ${{ needs.validate.outputs.has_changes }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "$HAS_CHANGES" != "true" ]; then
+            echo "output_head=$EXPECTED_HEAD" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          auth=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)
+          git -c http.extraheader="AUTHORIZATION: basic $auth" fetch --no-tags origin \
+            "refs/heads/$HEAD_REF:refs/remotes/origin/$HEAD_REF"
+          test "$(git rev-parse "refs/remotes/origin/$HEAD_REF")" = "$EXPECTED_HEAD"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          tree_sha=$(git write-tree)
+          payload="v1|spec=${{ needs.plan.outputs.spec_id }}|pr=${{ needs.plan.outputs.pr_number }}|input=$EXPECTED_HEAD|tree=$tree_sha|result=changed"
+          audience=$(python -I -S -c 'import hashlib,sys; print("jarvisos-continuation-commit-v1-" + hashlib.sha256(sys.argv[1].encode()).hexdigest())' "$payload")
+          url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=$audience"
+          commit_oidc_token=$(curl --fail --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$url" \
+            | python -I -S -c 'import json,sys; print(json.load(sys.stdin)["value"])')
+          echo "::add-mask::$commit_oidc_token"
+          test "$(git write-tree)" = "$tree_sha"
+          git commit --no-verify \
+            -m "Continue spec ${{ needs.plan.outputs.spec_id }} from scheduled checkpoint" \
+            -m "Jarvis-Continuation: v2" \
+            -m "Jarvis-Spec: ${{ needs.plan.outputs.spec_id }}" \
+            -m "Jarvis-PR: ${{ needs.plan.outputs.pr_number }}" \
+            -m "Jarvis-Input: $EXPECTED_HEAD" \
+            -m "Jarvis-Tree: $tree_sha" \
+            -m "Jarvis-Run: $GITHUB_RUN_ID" \
+            -m "Jarvis-OIDC: $commit_oidc_token"
+          git -c http.extraheader="AUTHORIZATION: basic $auth" push origin \
+            "HEAD:refs/heads/$HEAD_REF"
+          echo "output_head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  record-marker:
+    needs: [plan, validate, push]
+    if: ${{ needs.plan.outputs.action == 'execute' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          persist-credentials: false
+
+      - name: Record the idempotent checkpoint with workflow-bound OIDC proof
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          result=changed
+          if [ "${{ needs.plan.outputs.head_sha }}" = "${{ needs.push.outputs.output_head }}" ]; then
+            result=no_change
+          fi
+          payload="v3|phase=final|spec=${{ needs.plan.outputs.spec_id }}|pr=${{ needs.plan.outputs.pr_number }}|input=${{ needs.plan.outputs.head_sha }}|output=${{ needs.push.outputs.output_head }}|result=$result"
+          audience=$(python -c 'import hashlib,sys; print("jarvisos-continuation-marker-v1-" + hashlib.sha256(sys.argv[1].encode()).hexdigest())' "$payload")
+          url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=$audience"
+          CONTINUATION_OIDC_TOKEN=$(curl --fail --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$url" \
+            | python -c 'import json,sys; print(json.load(sys.stdin)["value"])')
+          export CONTINUATION_OIDC_TOKEN
+          echo "::add-mask::$CONTINUATION_OIDC_TOKEN"
+          python scripts/daily_development_continuation.py marker \
+            --phase "final" \
+            --spec "${{ needs.plan.outputs.spec_id }}" \
+            --pr "${{ needs.plan.outputs.pr_number }}" \
+            --input-head "${{ needs.plan.outputs.head_sha }}" \
+            --output-head "${{ needs.push.outputs.output_head }}"

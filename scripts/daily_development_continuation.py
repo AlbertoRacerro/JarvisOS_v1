@@ -32,10 +32,11 @@ SPEC_RE = re.compile(r"^\d{3}[a-z]?$", re.I)
 PR_RE = re.compile(r"/pull/(\d+)")
 SPEC_BINDING_RE = re.compile(r"(?<!\d)(\d{3}[a-z]?)(?!\d)", re.I)
 MARKER_RE = re.compile(
-    r"<!-- jarvis-continuation:v2 spec=(?P<spec>\d{3}[a-z]?) "
-    r"pr=(?P<pr>\d+) input=(?P<input>[0-9a-f]{40}) "
-    r"output=(?P<output>[0-9a-f]{40}) result=(?P<result>changed|no_change) "
-    r"run=(?P<run>\d+) oidc=(?P<oidc>[A-Za-z0-9._-]+) -->",
+    r"<!-- jarvis-continuation:v3 phase=(?P<phase>recover|bridge|final) "
+    r"spec=(?P<spec>\d{3}[a-z]?) pr=(?P<pr>\d+) "
+    r"input=(?P<input>[0-9a-f]{40}) output=(?P<output>[0-9a-f]{40}) "
+    r"result=(?P<result>changed|no_change) run=(?P<run>\d+) "
+    r"oidc=(?P<oidc>[A-Za-z0-9._-]+) -->",
     re.I,
 )
 MAX_OPEN_PULLS = 1000
@@ -43,6 +44,7 @@ MAX_COMMENTS = 5000
 MAX_CHANGED_FILES = 20
 MAX_RECOVERY_COMMITS = 500
 PROTECTED_BRANCHES = {"master", "main"}
+MARKER_PHASE_RANK = {"recover": 0, "bridge": 1, "final": 2}
 CONTROL_PATHS = {
     "AGENTS.md",
     "CODEOWNERS",
@@ -427,11 +429,17 @@ def discover_candidate(repository: str, reader: GitHubReader) -> Candidate | Non
 
 
 def marker_audience(
-    spec: str, pr: int, input_head: str, output_head: str
+    spec: str,
+    pr: int,
+    input_head: str,
+    output_head: str,
+    phase: str = "final",
 ) -> str:
+    if phase not in MARKER_PHASE_RANK:
+        raise ContinuationError("marker phase is invalid")
     result = "changed" if input_head != output_head else "no_change"
     canonical = (
-        f"v2|spec={spec.lower()}|pr={pr}|input={input_head}|"
+        f"v3|phase={phase}|spec={spec.lower()}|pr={pr}|input={input_head}|"
         f"output={output_head}|result={result}"
     )
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -454,11 +462,15 @@ def marker_text(
     output_head: str,
     run_id: str,
     oidc_token: str,
+    phase: str = "final",
 ) -> str:
+    if phase not in MARKER_PHASE_RANK:
+        raise ContinuationError("marker phase is invalid")
     result = "changed" if input_head != output_head else "no_change"
     return (
-        f"<!-- jarvis-continuation:v2 spec={spec} pr={pr} input={input_head} "
-        f"output={output_head} result={result} run={run_id} oidc={oidc_token} -->"
+        f"<!-- jarvis-continuation:v3 phase={phase} spec={spec} pr={pr} "
+        f"input={input_head} output={output_head} result={result} "
+        f"run={run_id} oidc={oidc_token} -->"
     )
 
 
@@ -484,6 +496,7 @@ def _verified_markers(
                 int(match.group("pr")),
                 match.group("input"),
                 match.group("output"),
+                match.group("phase"),
             )
             if not verifier.verify(
                 match.group("oidc"),
@@ -509,7 +522,22 @@ def checkpoint_for(
     )
     if not matches:
         return candidate.base_sha, False
-    latest = matches[-1]
+    ordered: dict[tuple[int, int], re.Match[str]] = {}
+    payloads: dict[tuple[int, int], tuple[str, str, str]] = {}
+    for match in matches:
+        key = (int(match.group("run")), MARKER_PHASE_RANK[match.group("phase")])
+        payload = (
+            match.group("input"),
+            match.group("output"),
+            match.group("result"),
+        )
+        if key in payloads and payloads[key] != payload:
+            raise ContinuationError(
+                "conflicting authenticated markers share one run and phase"
+            )
+        payloads[key] = payload
+        ordered[key] = match
+    latest = ordered[max(ordered)]
     input_head, output_head, result = (
         latest.group("input"),
         latest.group("output"),
@@ -795,6 +823,7 @@ def main(argv: list[str] | None = None) -> int:
     marker.add_argument("--token", default=os.getenv("GITHUB_TOKEN", ""))
     marker.add_argument("--oidc-token", default=os.getenv("CONTINUATION_OIDC_TOKEN", ""))
     marker.add_argument("--run-id", default=os.getenv("GITHUB_RUN_ID", ""))
+    marker.add_argument("--phase", choices=tuple(MARKER_PHASE_RANK), required=True)
     marker.add_argument("--spec", required=True)
     marker.add_argument("--pr", type=int, required=True)
     marker.add_argument("--input-head", required=True)
@@ -832,7 +861,7 @@ def main(argv: list[str] | None = None) -> int:
             raise ContinuationError("marker run id is invalid")
         verifier = GitHubOIDCVerifier(args.repository)
         audience = marker_audience(
-            args.spec, args.pr, args.input_head, args.output_head
+            args.spec, args.pr, args.input_head, args.output_head, args.phase
         )
         if not verifier.verify(
             args.oidc_token,
@@ -847,7 +876,7 @@ def main(argv: list[str] | None = None) -> int:
             args.token,
             marker_text(
                 args.spec.lower(), args.pr, args.input_head, args.output_head,
-                args.run_id, args.oidc_token,
+                args.run_id, args.oidc_token, args.phase,
             ),
         )
         return 0

@@ -72,7 +72,7 @@ class AcceptVerifier:
     ) -> bool:
         return (
             token == "valid.jwt.token"
-            and run_id == RUN
+            and run_id.isdigit()
             and audience.startswith(
                 (
                     f"{mod.MARKER_OIDC_AUDIENCE_PREFIX}-",
@@ -172,9 +172,18 @@ def commit(
     }
 
 
-def marker(input_head=BASE, output_head=HEAD, token="valid.jwt.token", run=RUN, actor="github-actions[bot]"):
+def marker(
+    input_head=BASE,
+    output_head=HEAD,
+    token="valid.jwt.token",
+    run=RUN,
+    actor="github-actions[bot]",
+    phase="final",
+):
     return {
-        "body": mod.marker_text("079", 210, input_head, output_head, run, token),
+        "body": mod.marker_text(
+            "079", 210, input_head, output_head, run, token, phase
+        ),
         "user": {"login": actor},
     }
 
@@ -362,7 +371,10 @@ def test_latest_no_change_marker_at_head_is_terminal():
 
 
 def test_bridge_then_no_change_is_terminal():
-    comments = [marker(BASE, HEAD), marker(HEAD, HEAD)]
+    comments = [
+        marker(BASE, HEAD, phase="bridge"),
+        marker(HEAD, HEAD, phase="final"),
+    ]
     checkpoint, terminal = mod.checkpoint_for(
         candidate(), comments, verifier=AcceptVerifier(),
     )
@@ -371,7 +383,7 @@ def test_bridge_then_no_change_is_terminal():
 
 
 def test_latest_authenticated_marker_supersedes_older_edges():
-    comments = [marker(BASE, HEAD), marker(BASE, NEXT)]
+    comments = [marker(BASE, HEAD, run="12344"), marker(BASE, NEXT)]
     checkpoint, terminal = mod.checkpoint_for(
         candidate(NEXT), comments, verifier=AcceptVerifier(),
     )
@@ -400,6 +412,41 @@ def test_build_plan_rejects_disconnected_latest_anchor():
         mod.build_plan(
             mode="SHADOW", repository=REPOSITORY, reader=reader,
             token_present=False, verifier=AcceptVerifier(),
+        )
+
+
+def test_replayed_older_run_posted_last_cannot_roll_back_checkpoint():
+    comments = [
+        marker(BASE, NEXT, run="12346"),
+        marker(BASE, HEAD, run="12344"),
+    ]
+    checkpoint, terminal = mod.checkpoint_for(
+        candidate(NEXT), comments, verifier=AcceptVerifier(),
+    )
+    assert checkpoint == NEXT
+    assert terminal is False
+
+
+def test_replayed_bridge_after_same_run_final_cannot_roll_back_checkpoint():
+    comments = [
+        marker(HEAD, NEXT, run="12346", phase="final"),
+        marker(BASE, HEAD, run="12346", phase="bridge"),
+    ]
+    checkpoint, terminal = mod.checkpoint_for(
+        candidate(NEXT), comments, verifier=AcceptVerifier(),
+    )
+    assert checkpoint == NEXT
+    assert terminal is False
+
+
+def test_conflicting_same_run_and_phase_markers_fail_closed():
+    comments = [
+        marker(BASE, HEAD),
+        marker(BASE, NEXT),
+    ]
+    with pytest.raises(mod.ContinuationError, match="run and phase"):
+        mod.checkpoint_for(
+            candidate(NEXT), comments, verifier=AcceptVerifier(),
         )
 
 
@@ -688,6 +735,12 @@ def test_historical_oidc_proof_does_not_require_unexpired_token(monkeypatch):
     )
 
 
+def test_marker_audience_binds_phase():
+    assert mod.marker_audience("079", 210, BASE, HEAD, "bridge") != mod.marker_audience(
+        "079", 210, BASE, HEAD, "final"
+    )
+
+
 def test_oidc_audience_binds_marker_payload(monkeypatch):
     monkeypatch.setattr(mod, "_rsa_rs256_valid", lambda *args: True)
     claims = valid_claims()
@@ -714,9 +767,9 @@ def test_commit_audience_is_bound_to_input_and_tree():
 
 def test_human_commit_after_no_change_can_be_bridged():
     comments = [
-        marker(BASE, HEAD),
-        marker(HEAD, HEAD),
-        marker(HEAD, NEXT),
+        marker(BASE, HEAD, run="12344"),
+        marker(HEAD, HEAD, run="12345"),
+        marker(HEAD, NEXT, run="12346", phase="bridge"),
     ]
     checkpoint, terminal = mod.checkpoint_for(
         candidate(NEXT), comments, verifier=AcceptVerifier()
@@ -784,6 +837,12 @@ def test_workflow_oidc_authority_is_confined_to_trusted_jobs():
     assert "Jarvis-Continuation: v2" in push_block
     assert "Jarvis-OIDC:" in push_block
     assert "CONTINUATION_OIDC_TOKEN" in text
+    assert "v3|phase=recover|" in text
+    assert "v3|phase=bridge|" in text
+    assert "v3|phase=final|" in text
+    assert '--phase "recover"' in text
+    assert '--phase "bridge"' in text
+    assert '--phase "final"' in text
     marker_region = text.split("  record-marker:\n", 1)[1]
     assert "CLAUDE_CODE_OAUTH_TOKEN" not in marker_region
 
