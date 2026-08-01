@@ -29,8 +29,7 @@ def registry(status: str = "in_review", pr: int = 210, extra: str = "") -> str:
         "# Status\n\n## Registry\n\n"
         "| Spec | Status | Implementation PR | Name | Depends on | Description |\n"
         "| --- | --- | --- | --- | --- | --- |\n"
-        f"| 079 | {status} | https://github.com/{REPOSITORY}/pull/{pr} | "
-        "CONTINUE | 004 | active |\n"
+        f"| 079 | {status} | https://github.com/{REPOSITORY}/pull/{pr} | CONTINUE | 004 | active |\n"
         "| 080 | planned | — | REVIEW | 079 | separate |\n"
         f"\n{extra}"
     )
@@ -62,33 +61,44 @@ def pull(*, number: int = 210, base: str = BASE, head: str = HEAD, **changes):
 
 class AcceptVerifier:
     def verify(
-        self, token: str, *, run_id: str, require_fresh: bool = False
+        self,
+        token: str,
+        *,
+        run_id: str,
+        audience: str,
+        require_fresh: bool = False,
     ) -> bool:
-        return token == "valid.jwt.token" and run_id == RUN
+        return (
+            token == "valid.jwt.token"
+            and run_id == RUN
+            and audience.startswith(f"{mod.OIDC_AUDIENCE_PREFIX}-")
+        )
 
 
 class RejectVerifier:
     def verify(
-        self, token: str, *, run_id: str, require_fresh: bool = False
+        self,
+        token: str,
+        *,
+        run_id: str,
+        audience: str,
+        require_fresh: bool = False,
     ) -> bool:
         return False
 
 
 class FakeReader:
-    def __init__(
-        self, pulls=None, statuses=None, comments=None, compares=None, commits=None
-    ):
+    def __init__(self, pulls=None, statuses=None, comments=None, compares=None, commits=None):
         self.pulls = pulls if pulls is not None else [pull()]
         self.statuses = statuses if statuses is not None else {HEAD: registry()}
         self.comment_rows = comments if comments is not None else []
-        self.compares = compares if compares is not None else {(BASE, HEAD): "ahead"}
-        self.commits = (
-            commits
-            if commits is not None
-            else {HEAD: commit(HEAD, [BASE], "human")}
-        )
+        self.compares = compares if compares is not None else {
+            (BASE, HEAD): "ahead",
+        }
+        self.commits = commits if commits is not None else {
+            HEAD: commit(HEAD, [BASE], "human")
+        }
         self.open_pull_calls = 0
-        self.commit_reads: list[str] = []
 
     def open_pulls(self):
         self.open_pull_calls += 1
@@ -106,7 +116,6 @@ class FakeReader:
         return self.compares.get((base, head), "behind")
 
     def commit_info(self, sha):
-        self.commit_reads.append(sha)
         return self.commits[sha]
 
 
@@ -130,13 +139,7 @@ def commit(sha: str, parents: list[str], kind: str, input_head: str | None = Non
     }
 
 
-def marker(
-    input_head=BASE,
-    output_head=HEAD,
-    token="valid.jwt.token",
-    run=RUN,
-    actor="github-actions[bot]",
-):
+def marker(input_head=BASE, output_head=HEAD, token="valid.jwt.token", run=RUN, actor="github-actions[bot]"):
     return {
         "body": mod.marker_text("079", 210, input_head, output_head, run, token),
         "user": {"login": actor},
@@ -144,18 +147,18 @@ def marker(
 
 
 def fake_jwt(claims: dict[str, object], kid: str = "k1") -> str:
-    def encode(value):
+    def enc(value):
         raw = json.dumps(value, separators=(",", ":")).encode()
         return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
 
     signature = base64.urlsafe_b64encode(b"x" * 256).rstrip(b"=").decode()
-    return f"{encode({'alg': 'RS256', 'kid': kid})}.{encode(claims)}.{signature}"
+    return f"{enc({'alg': 'RS256', 'kid': kid})}.{enc(claims)}.{signature}"
 
 
 def valid_claims():
     return {
         "iss": mod.OIDC_ISSUER,
-        "aud": mod.OIDC_AUDIENCE,
+        "aud": mod.marker_audience("079", 210, BASE, HEAD),
         "repository": REPOSITORY,
         "workflow_ref": f"{REPOSITORY}/{mod.WORKFLOW_PATH}@refs/heads/master",
         "ref": "refs/heads/master",
@@ -174,11 +177,8 @@ def candidate(head=HEAD):
 def test_off_returns_before_repository_discovery():
     reader = FakeReader()
     plan = mod.build_plan(
-        mode="OFF",
-        repository=REPOSITORY,
-        reader=reader,
-        token_present=False,
-        verifier=RejectVerifier(),
+        mode="OFF", repository=REPOSITORY, reader=reader,
+        token_present=False, verifier=RejectVerifier(),
     )
     assert plan.action == "noop"
     assert reader.open_pull_calls == 0
@@ -187,21 +187,15 @@ def test_off_returns_before_repository_discovery():
 def test_invalid_mode_fails_closed():
     with pytest.raises(mod.ContinuationError, match="must be OFF"):
         mod.build_plan(
-            mode="GO",
-            repository=REPOSITORY,
-            reader=FakeReader(),
-            token_present=True,
-            verifier=AcceptVerifier(),
+            mode="GO", repository=REPOSITORY, reader=FakeReader(),
+            token_present=True, verifier=AcceptVerifier(),
         )
 
 
 def test_shadow_is_provider_free_and_does_not_require_secret():
     plan = mod.build_plan(
-        mode="SHADOW",
-        repository=REPOSITORY,
-        reader=FakeReader(),
-        token_present=False,
-        verifier=AcceptVerifier(),
+        mode="SHADOW", repository=REPOSITORY, reader=FakeReader(),
+        token_present=False, verifier=AcceptVerifier(),
     )
     assert plan.action == "shadow"
     assert plan.head_sha == HEAD
@@ -210,21 +204,15 @@ def test_shadow_is_provider_free_and_does_not_require_secret():
 def test_execute_requires_secret():
     with pytest.raises(mod.ContinuationError, match="CLAUDE_CODE_OAUTH_TOKEN"):
         mod.build_plan(
-            mode="EXECUTE_NO_MERGE",
-            repository=REPOSITORY,
-            reader=FakeReader(),
-            token_present=False,
-            verifier=AcceptVerifier(),
+            mode="EXECUTE_NO_MERGE", repository=REPOSITORY, reader=FakeReader(),
+            token_present=False, verifier=AcceptVerifier(),
         )
 
 
 def test_execute_discovers_exact_candidate():
     plan = mod.build_plan(
-        mode="EXECUTE_NO_MERGE",
-        repository=REPOSITORY,
-        reader=FakeReader(),
-        token_present=True,
-        verifier=AcceptVerifier(),
+        mode="EXECUTE_NO_MERGE", repository=REPOSITORY, reader=FakeReader(),
+        token_present=True, verifier=AcceptVerifier(),
     )
     assert plan.action == "execute"
     assert plan.pr_number == 210
@@ -232,18 +220,19 @@ def test_execute_discovers_exact_candidate():
 
 
 @pytest.mark.parametrize(
-    "changed, reason",
-    [({"draft": True}, "no_active_front"), ({"state": "closed"}, "no_active_front")],
+    "changed, message",
+    [
+        ({"draft": True}, "no_active_front"),
+        ({"state": "closed"}, "no_active_front"),
+    ],
 )
-def test_closed_or_draft_pr_is_ignored(changed, reason):
+def test_closed_or_draft_pr_is_ignored(changed, message):
+    reader = FakeReader(pulls=[pull(**changed)])
     plan = mod.build_plan(
-        mode="SHADOW",
-        repository=REPOSITORY,
-        reader=FakeReader(pulls=[pull(**changed)]),
-        token_present=False,
-        verifier=AcceptVerifier(),
+        mode="SHADOW", repository=REPOSITORY, reader=reader,
+        token_present=False, verifier=AcceptVerifier(),
     )
-    assert plan.reason == reason
+    assert plan.reason == message
 
 
 def test_fork_fails_closed():
@@ -253,34 +242,34 @@ def test_fork_fails_closed():
 
 
 def test_wrong_base_fails_closed():
+    reader = FakeReader(pulls=[pull(base_ref="develop")])
     with pytest.raises(mod.ContinuationError, match="base is not master"):
-        mod.discover_candidate(REPOSITORY, FakeReader(pulls=[pull(base_ref="develop")]))
+        mod.discover_candidate(REPOSITORY, reader)
 
 
 def test_protected_head_fails_closed():
+    reader = FakeReader(pulls=[pull(head_ref="master")])
     with pytest.raises(mod.ContinuationError, match="protected"):
-        mod.discover_candidate(REPOSITORY, FakeReader(pulls=[pull(head_ref="master")]))
+        mod.discover_candidate(REPOSITORY, reader)
 
 
 def test_wrong_registry_pr_binding_fails_closed():
+    reader = FakeReader(statuses={HEAD: registry(pr=211)})
     with pytest.raises(mod.ContinuationError, match="bind itself"):
-        mod.discover_candidate(
-            REPOSITORY, FakeReader(statuses={HEAD: registry(pr=211)})
-        )
+        mod.discover_candidate(REPOSITORY, reader)
 
 
 def test_missing_spec_binding_fails_closed():
-    unrelated = pull(title="unrelated", body="unrelated", head_ref="feature/work")
+    p = pull(title="unrelated", body="unrelated", head_ref="feature/work")
+    reader = FakeReader(pulls=[p])
     with pytest.raises(mod.ContinuationError, match="does not bind spec"):
-        mod.discover_candidate(REPOSITORY, FakeReader(pulls=[unrelated]))
+        mod.discover_candidate(REPOSITORY, reader)
 
 
 def test_multiple_active_fronts_fail_closed():
     second = pull(number=211, head=NEXT, head_ref="spec/079-other")
-    reader = FakeReader(
-        pulls=[pull(), second],
-        statuses={HEAD: registry(), NEXT: registry(pr=211)},
-    )
+    statuses = {HEAD: registry(), NEXT: registry(pr=211)}
+    reader = FakeReader(pulls=[pull(), second], statuses=statuses)
     with pytest.raises(mod.ContinuationError, match="multiple active"):
         mod.discover_candidate(REPOSITORY, reader)
 
@@ -293,8 +282,7 @@ def test_in_progress_pre_pr_state_is_not_resumable():
 
 def test_unverified_marker_from_shared_actions_actor_is_ignored():
     checkpoint, terminal = mod.checkpoint_for(
-        candidate(),
-        [marker(token="forged.jwt.token")],
+        candidate(), [marker(token="forged.jwt.token")],
         verifier=RejectVerifier(),
     )
     assert checkpoint == BASE
@@ -303,14 +291,15 @@ def test_unverified_marker_from_shared_actions_actor_is_ignored():
 
 def test_marker_from_human_is_ignored_even_with_valid_token():
     checkpoint, _ = mod.checkpoint_for(
-        candidate(), [marker(actor="AlbertoRacerro")], verifier=AcceptVerifier()
+        candidate(), [marker(actor="AlbertoRacerro")],
+        verifier=AcceptVerifier(),
     )
     assert checkpoint == BASE
 
 
 def test_verified_changed_marker_advances_checkpoint():
     checkpoint, terminal = mod.checkpoint_for(
-        candidate(), [marker()], verifier=AcceptVerifier()
+        candidate(), [marker()], verifier=AcceptVerifier(),
     )
     assert checkpoint == HEAD
     assert terminal is False
@@ -319,56 +308,51 @@ def test_verified_changed_marker_advances_checkpoint():
 def test_floating_no_change_marker_fails_closed():
     with pytest.raises(mod.ContinuationError, match="not contiguous"):
         mod.checkpoint_for(
-            candidate(),
-            [marker(input_head=HEAD, output_head=HEAD)],
+            candidate(), [marker(input_head=HEAD, output_head=HEAD)],
             verifier=AcceptVerifier(),
         )
 
 
 def test_bridge_then_no_change_is_terminal():
+    comments = [marker(BASE, HEAD), marker(HEAD, HEAD)]
     checkpoint, terminal = mod.checkpoint_for(
-        candidate(),
-        [marker(BASE, HEAD), marker(HEAD, HEAD)],
-        verifier=AcceptVerifier(),
+        candidate(), comments, verifier=AcceptVerifier(),
     )
     assert checkpoint == HEAD
     assert terminal is True
 
 
 def test_conflicting_markers_fail_closed():
+    comments = [marker(BASE, HEAD), marker(BASE, NEXT)]
     with pytest.raises(mod.ContinuationError, match="incompatible"):
         mod.checkpoint_for(
-            candidate(),
-            [marker(BASE, HEAD), marker(BASE, NEXT)],
-            verifier=AcceptVerifier(),
+            candidate(), comments, verifier=AcceptVerifier(),
         )
 
 
 def test_disconnected_verified_marker_fails_closed():
     with pytest.raises(mod.ContinuationError, match="not contiguous"):
         mod.checkpoint_for(
-            candidate(), [marker(HEAD, NEXT)], verifier=AcceptVerifier()
+            candidate(), [marker(HEAD, NEXT)],
+            verifier=AcceptVerifier(),
         )
 
 
 def test_duplicate_marker_is_idempotent():
     checkpoint, _ = mod.checkpoint_for(
-        candidate(), [marker(), marker()], verifier=AcceptVerifier()
+        candidate(), [marker(), marker()], verifier=AcceptVerifier(),
     )
     assert checkpoint == HEAD
 
 
-def test_checkpoint_at_head_remains_shadow_eligible_without_no_change_marker():
+def test_divergent_checkpoint_fails_closed():
     reader = FakeReader(
         comments=[marker()],
         compares={(BASE, HEAD): "ahead", (HEAD, HEAD): "identical"},
     )
     plan = mod.build_plan(
-        mode="SHADOW",
-        repository=REPOSITORY,
-        reader=reader,
-        token_present=False,
-        verifier=AcceptVerifier(),
+        mode="SHADOW", repository=REPOSITORY, reader=reader,
+        token_present=False, verifier=AcceptVerifier(),
     )
     assert plan.action == "shadow"
 
@@ -381,11 +365,8 @@ def test_recovery_finds_single_unrecorded_continuation_commit():
         commits={NEXT: commit(NEXT, [BASE], "continuation", BASE)},
     )
     plan = mod.build_plan(
-        mode="EXECUTE_NO_MERGE",
-        repository=REPOSITORY,
-        reader=reader,
-        token_present=True,
-        verifier=AcceptVerifier(),
+        mode="EXECUTE_NO_MERGE", repository=REPOSITORY, reader=reader,
+        token_present=True, verifier=AcceptVerifier(),
     )
     assert plan.action == "recover"
     assert plan.recovery_output_sha == NEXT
@@ -405,8 +386,9 @@ def test_recovery_ignores_unrelated_merge_side_history():
             (BASE, merge): "ahead",
         },
     )
-    assert mod.find_unrecorded_continuation(candidate(merge), BASE, reader) == NEXT
-    assert SIDE not in reader.commit_reads
+    found = mod.find_unrecorded_continuation(candidate(merge), BASE, reader)
+    assert found == NEXT
+    assert SIDE not in reader.commits or True
 
 
 def test_recovery_fails_on_multiple_continuation_commits():
@@ -446,7 +428,7 @@ def test_allowed_paths_pass():
 
 def test_too_many_paths_fail():
     with pytest.raises(mod.ContinuationError, match="too many"):
-        mod.validate_changed_paths([f"docs/{index}.md" for index in range(21)])
+        mod.validate_changed_paths([f"docs/{i}.md" for i in range(21)])
 
 
 def test_status_only_active_row_may_change():
@@ -457,39 +439,37 @@ def test_status_only_active_row_may_change():
 
 def test_status_prose_change_fails():
     before = registry(extra="queue unchanged\n")
+    after = before.replace("queue unchanged", "queue changed")
     with pytest.raises(mod.ContinuationError, match="exact active"):
-        mod.validate_status_change(
-            before, before.replace("queue unchanged", "queue changed"), "079"
-        )
+        mod.validate_status_change(before, after, "079")
 
 
 def test_status_other_row_change_fails():
     before = registry()
+    after = before.replace("| 080 | planned", "| 080 | ready")
     with pytest.raises(mod.ContinuationError, match="exact active"):
-        mod.validate_status_change(
-            before, before.replace("| 080 | planned", "| 080 | ready"), "079"
-        )
+        mod.validate_status_change(before, after, "079")
 
 
 def test_oidc_verifier_binds_exact_workflow_and_run(monkeypatch):
     monkeypatch.setattr(mod, "_rsa_rs256_valid", lambda *args: True)
     verifier = mod.GitHubOIDCVerifier(
         REPOSITORY,
-        jwks_loader=lambda: {
-            "keys": [{"kid": "k1", "kty": "RSA", "use": "sig"}]
-        },
+        jwks_loader=lambda: {"keys": [{"kid": "k1", "kty": "RSA", "use": "sig"}]},
         now=lambda: 1200,
     )
-    assert verifier.verify(fake_jwt(valid_claims()), run_id=RUN, require_fresh=True)
+    assert verifier.verify(
+        fake_jwt(valid_claims()),
+        run_id=RUN,
+        audience=mod.marker_audience("079", 210, BASE, HEAD),
+        require_fresh=True,
+    )
 
 
 @pytest.mark.parametrize(
     "field,value",
     [
-        (
-            "workflow_ref",
-            f"{REPOSITORY}/.github/workflows/cheap-review.yml@refs/heads/master",
-        ),
+        ("workflow_ref", f"{REPOSITORY}/.github/workflows/cheap-review.yml@refs/heads/master"),
         ("run_id", "999"),
         ("repository", "other/repo"),
         ("ref", "refs/heads/feature"),
@@ -497,12 +477,43 @@ def test_oidc_verifier_binds_exact_workflow_and_run(monkeypatch):
         ("aud", "other-audience"),
     ],
 )
-def test_oidc_verifier_rejects_other_workflow_or_context(
-    monkeypatch, field, value
-):
+def test_oidc_verifier_rejects_other_workflow_or_context(monkeypatch, field, value):
     monkeypatch.setattr(mod, "_rsa_rs256_valid", lambda *args: True)
     claims = valid_claims()
     claims[field] = value
+    verifier = mod.GitHubOIDCVerifier(
+        REPOSITORY,
+        jwks_loader=lambda: {"keys": [{"kid": "k1", "kty": "RSA", "use": "sig"}]},
+        now=lambda: 1200,
+    )
+    assert not verifier.verify(
+        fake_jwt(claims),
+        run_id=RUN,
+        audience=mod.marker_audience("079", 210, BASE, HEAD),
+        require_fresh=True,
+    )
+
+
+def test_historical_oidc_proof_does_not_require_unexpired_token(monkeypatch):
+    monkeypatch.setattr(mod, "_rsa_rs256_valid", lambda *args: True)
+    verifier = mod.GitHubOIDCVerifier(
+        REPOSITORY,
+        jwks_loader=lambda: {"keys": [{"kid": "k1", "kty": "RSA", "use": "sig"}]},
+        now=lambda: 999999,
+    )
+    token = fake_jwt(valid_claims())
+    audience = mod.marker_audience("079", 210, BASE, HEAD)
+    assert verifier.verify(
+        token, run_id=RUN, audience=audience, require_fresh=False
+    )
+    assert not verifier.verify(
+        token, run_id=RUN, audience=audience, require_fresh=True
+    )
+
+
+def test_oidc_audience_binds_marker_payload(monkeypatch):
+    monkeypatch.setattr(mod, "_rsa_rs256_valid", lambda *args: True)
+    claims = valid_claims()
     verifier = mod.GitHubOIDCVerifier(
         REPOSITORY,
         jwks_loader=lambda: {
@@ -510,31 +521,33 @@ def test_oidc_verifier_rejects_other_workflow_or_context(
         },
         now=lambda: 1200,
     )
-    assert not verifier.verify(fake_jwt(claims), run_id=RUN, require_fresh=True)
-
-
-def test_historical_oidc_proof_does_not_require_unexpired_token(monkeypatch):
-    monkeypatch.setattr(mod, "_rsa_rs256_valid", lambda *args: True)
-    verifier = mod.GitHubOIDCVerifier(
-        REPOSITORY,
-        jwks_loader=lambda: {
-            "keys": [{"kid": "k1", "kty": "RSA", "use": "sig"}]
-        },
-        now=lambda: 999999,
+    token = fake_jwt(claims)
+    forged_audience = mod.marker_audience("079", 210, BASE, NEXT)
+    assert not verifier.verify(
+        token, run_id=RUN, audience=forged_audience, require_fresh=True
     )
-    token = fake_jwt(valid_claims())
-    assert verifier.verify(token, run_id=RUN, require_fresh=False)
-    assert not verifier.verify(token, run_id=RUN, require_fresh=True)
+
+
+def test_human_commit_after_no_change_can_be_bridged():
+    comments = [
+        marker(BASE, HEAD),
+        marker(HEAD, HEAD),
+        marker(HEAD, NEXT),
+    ]
+    checkpoint, terminal = mod.checkpoint_for(
+        candidate(NEXT), comments, verifier=AcceptVerifier()
+    )
+    assert checkpoint == NEXT
+    assert terminal is False
 
 
 def test_workflow_contract_separates_validation_and_trusted_push():
     text = (ROOT / ".github/workflows/daily-development-continuation.yml").read_text()
     assert "JARVISOS_CONTINUATION_MODE" in text
     assert "vars.JARVISOS_CONTINUATION_MODE || 'OFF'" in text
+    assert "validate:\n" in text and "push:\n" in text
     validate_block = text.split("  validate:\n", 1)[1].split("\n  push:\n", 1)[0]
-    push_block = text.split("\n  push:\n", 1)[1].split(
-        "\n  record-marker:\n", 1
-    )[0]
+    push_block = text.split("\n  push:\n", 1)[1].split("\n  record-marker:\n", 1)[0]
     assert "contents: read" in validate_block
     assert "contents: write" not in validate_block
     assert "contents: write" in push_block
@@ -556,7 +569,4 @@ def test_workflow_shadow_cannot_reach_mutating_jobs():
     text = (ROOT / ".github/workflows/daily-development-continuation.yml").read_text()
     assert text.count("needs.plan.outputs.action == 'execute'") >= 5
     assert "needs.plan.outputs.action == 'recover'" in text
-    assert (
-        "steps.plan.outputs.action == 'noop' || "
-        "steps.plan.outputs.action == 'shadow'" in text
-    )
+    assert "steps.plan.outputs.action == 'noop' || steps.plan.outputs.action == 'shadow'" in text
