@@ -432,12 +432,13 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           tree_sha=$(git write-tree)
           payload="v1|spec=${{ needs.plan.outputs.spec_id }}|pr=${{ needs.plan.outputs.pr_number }}|input=$EXPECTED_HEAD|tree=$tree_sha|result=changed"
-          audience=$(python -c 'import hashlib,sys; print("jarvisos-continuation-commit-v1-" + hashlib.sha256(sys.argv[1].encode()).hexdigest())' "$payload")
+          audience=$(python -I -S -c 'import hashlib,sys; print("jarvisos-continuation-commit-v1-" + hashlib.sha256(sys.argv[1].encode()).hexdigest())' "$payload")
           url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=$audience"
           commit_oidc_token=$(curl --fail --silent --show-error \
             -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$url" \
-            | python -c 'import json,sys; print(json.load(sys.stdin)["value"])')
+            | python -I -S -c 'import json,sys; print(json.load(sys.stdin)["value"])')
           echo "::add-mask::$commit_oidc_token"
+          test "$(git write-tree)" = "$tree_sha"
           git commit --no-verify \
             -m "Continue spec ${{ needs.plan.outputs.spec_id }} from scheduled checkpoint" \
             -m "Jarvis-Continuation: v2" \
