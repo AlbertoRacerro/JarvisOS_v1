@@ -343,6 +343,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
+      id-token: write
     outputs:
       output_head: ${{ steps.push.outputs.output_head }}
     steps:
@@ -397,12 +398,23 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          tree_sha=$(git write-tree)
+          payload="v1|spec=${{ needs.plan.outputs.spec_id }}|pr=${{ needs.plan.outputs.pr_number }}|input=$EXPECTED_HEAD|tree=$tree_sha|result=changed"
+          audience=$(python -c 'import hashlib,sys; print("jarvisos-continuation-commit-v1-" + hashlib.sha256(sys.argv[1].encode()).hexdigest())' "$payload")
+          url="${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=$audience"
+          commit_oidc_token=$(curl --fail --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "$url" \
+            | python -c 'import json,sys; print(json.load(sys.stdin)["value"])')
+          echo "::add-mask::$commit_oidc_token"
           git commit --no-verify \
             -m "Continue spec ${{ needs.plan.outputs.spec_id }} from scheduled checkpoint" \
-            -m "Jarvis-Continuation: v1" \
+            -m "Jarvis-Continuation: v2" \
             -m "Jarvis-Spec: ${{ needs.plan.outputs.spec_id }}" \
             -m "Jarvis-PR: ${{ needs.plan.outputs.pr_number }}" \
-            -m "Jarvis-Input: $EXPECTED_HEAD"
+            -m "Jarvis-Input: $EXPECTED_HEAD" \
+            -m "Jarvis-Tree: $tree_sha" \
+            -m "Jarvis-Run: $GITHUB_RUN_ID" \
+            -m "Jarvis-OIDC: $commit_oidc_token"
           git -c http.extraheader="AUTHORIZATION: basic $auth" push origin \
             "HEAD:refs/heads/$HEAD_REF"
           echo "output_head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
