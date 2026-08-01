@@ -15,9 +15,10 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Callable, Protocol
+from typing import Protocol
 
 API_ROOT = "https://api.github.com"
 OIDC_ISSUER = "https://token.actions.githubusercontent.com"

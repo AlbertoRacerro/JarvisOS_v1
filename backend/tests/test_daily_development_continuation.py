@@ -852,3 +852,9 @@ def test_workflow_shadow_cannot_reach_mutating_jobs():
     assert text.count("needs.plan.outputs.action == 'execute'") >= 5
     assert "needs.plan.outputs.action == 'recover'" in text
     assert "steps.plan.outputs.action == 'noop' || steps.plan.outputs.action == 'shadow'" in text
+
+
+def test_control_script_uses_modern_callable_import():
+    text = SCRIPT.read_text(encoding="utf-8")
+    assert "from collections.abc import Callable" in text
+    assert "from typing import Callable" not in text
