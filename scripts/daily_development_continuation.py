@@ -80,6 +80,7 @@ class Plan:
     head_sha: str = ""
     base_sha: str = ""
     checkpoint_sha: str = ""
+    recovery_output_sha: str = ""
 
 
 class GitHubReader(Protocol):
@@ -90,6 +91,8 @@ class GitHubReader(Protocol):
     def comments(self, number: int) -> list[dict[str, object]]: ...
 
     def compare(self, base: str, head: str) -> str: ...
+
+    def commit_info(self, sha: str) -> dict[str, object]: ...
 
 
 class RestGitHubReader:
@@ -155,6 +158,12 @@ class RestGitHubReader:
         if not isinstance(payload, dict) or not isinstance(payload.get("status"), str):
             raise ContinuationError("GitHub compare response is incomplete")
         return str(payload["status"])
+
+    def commit_info(self, sha: str) -> dict[str, object]:
+        payload = self._request(f"{API_ROOT}/repos/{self.repository}/commits/{sha}")
+        if not isinstance(payload, dict):
+            raise ContinuationError("GitHub commit response is incomplete")
+        return payload
 
 
 def parse_registry(text: str) -> dict[str, RegistryRow]:
@@ -233,7 +242,9 @@ def discover_candidate(repository: str, reader: GitHubReader) -> Candidate | Non
             continue
         if row.prs != (number,):
             raise ContinuationError(f"PR #{number} registry does not bind itself exactly")
-        binding_text = " ".join(str(pull.get(key) or "") for key in ("title", "body")) + f" {head_ref}"
+        binding_text = " ".join(
+            str(pull.get(key) or "") for key in ("title", "body")
+        ) + f" {head_ref}"
         if row.spec_id not in {value.lower() for value in SPEC_BINDING_RE.findall(binding_text)}:
             raise ContinuationError(f"PR #{number} does not bind spec {row.spec_id}")
         candidates.append(Candidate(row.spec_id, number, head_ref, head_sha, base_sha))
@@ -281,9 +292,12 @@ def checkpoint_for(candidate: Candidate, comments: list[dict[str, object]]) -> t
         output_head = match.group("output")
         result = match.group("result")
         value = (output_head, result)
-        previous = seen_inputs.setdefault(input_head, value)
-        if previous != value:
-            raise ContinuationError("incompatible continuation markers share one input head")
+        previous = seen_inputs.get(input_head)
+        if previous is not None:
+            if previous != value:
+                raise ContinuationError("incompatible continuation markers share one input head")
+            continue
+        seen_inputs[input_head] = value
         if input_head != checkpoint:
             raise ContinuationError("continuation marker chain is not contiguous")
         if result == "no_change" and output_head != input_head:
@@ -296,7 +310,90 @@ def checkpoint_for(candidate: Candidate, comments: list[dict[str, object]]) -> t
     return checkpoint, terminal
 
 
-def build_plan(*, mode: str, repository: str, reader: GitHubReader, token_present: bool) -> Plan:
+def _continuation_commit(
+    payload: dict[str, object], *, candidate: Candidate, checkpoint: str
+) -> str | None:
+    sha = payload.get("sha")
+    commit = payload.get("commit")
+    parents = payload.get("parents")
+    author = payload.get("author")
+    committer = payload.get("committer")
+    if not isinstance(sha, str) or not SHA_RE.fullmatch(sha):
+        raise ContinuationError("GitHub commit SHA is incomplete")
+    if not isinstance(commit, dict) or not isinstance(parents, list):
+        raise ContinuationError("GitHub commit metadata is incomplete")
+    if not isinstance(author, dict) or not isinstance(committer, dict):
+        return None
+    if author.get("login") != "github-actions[bot]" or committer.get("login") != "github-actions[bot]":
+        return None
+    message = commit.get("message")
+    if not isinstance(message, str):
+        raise ContinuationError("GitHub commit message is incomplete")
+    trailers: dict[str, str] = {}
+    for line in message.splitlines():
+        if ": " in line:
+            key, value = line.split(": ", 1)
+            if key.startswith("Jarvis-"):
+                if key in trailers and trailers[key] != value:
+                    raise ContinuationError("continuation commit has conflicting trailers")
+                trailers[key] = value
+    if trailers.get("Jarvis-Continuation") != "v1":
+        return None
+    expected = {
+        "Jarvis-Spec": candidate.spec_id,
+        "Jarvis-PR": str(candidate.pr_number),
+        "Jarvis-Input": checkpoint,
+    }
+    if any(trailers.get(key) != value for key, value in expected.items()):
+        return None
+    parent_shas = [item.get("sha") for item in parents if isinstance(item, dict)]
+    if parent_shas != [checkpoint]:
+        raise ContinuationError("continuation commit does not have the checkpoint as sole parent")
+    return sha
+
+
+def find_unrecorded_continuation(
+    candidate: Candidate, checkpoint: str, reader: GitHubReader
+) -> str | None:
+    if candidate.head_sha == checkpoint:
+        return None
+    pending = [candidate.head_sha]
+    visited: set[str] = set()
+    recovered: list[str] = []
+    reached_checkpoint = False
+    while pending:
+        sha = pending.pop()
+        if sha in visited:
+            continue
+        visited.add(sha)
+        if len(visited) > 100:
+            raise ContinuationError("continuation recovery ancestry exceeds the v0 bound")
+        if sha == checkpoint:
+            reached_checkpoint = True
+            continue
+        payload = reader.commit_info(sha)
+        recovered_sha = _continuation_commit(
+            payload, candidate=candidate, checkpoint=checkpoint
+        )
+        if recovered_sha is not None:
+            recovered.append(recovered_sha)
+        parents = payload.get("parents")
+        if not isinstance(parents, list) or not parents:
+            raise ContinuationError("GitHub commit parents are incomplete")
+        for parent in parents:
+            if not isinstance(parent, dict) or not isinstance(parent.get("sha"), str):
+                raise ContinuationError("GitHub commit parent is incomplete")
+            pending.append(str(parent["sha"]))
+    if not reached_checkpoint:
+        raise ContinuationError("checkpoint was not reached during recovery walk")
+    unique = sorted(set(recovered))
+    if len(unique) > 1:
+        raise ContinuationError("multiple unrecorded continuation commits were found")
+    return unique[0] if unique else None
+
+def build_plan(
+    *, mode: str, repository: str, reader: GitHubReader, token_present: bool
+) -> Plan:
     normalized_mode = mode.strip().upper()
     if normalized_mode not in MODES:
         raise ContinuationError("continuation mode must be OFF, SHADOW, or EXECUTE_NO_MERGE")
@@ -319,6 +416,15 @@ def build_plan(*, mode: str, repository: str, reader: GitHubReader, token_presen
     status = reader.compare(checkpoint, candidate.head_sha)
     if status not in {"ahead", "identical"}:
         raise ContinuationError("current PR head does not descend from the checkpoint")
+    recovery_output = find_unrecorded_continuation(candidate, checkpoint, reader)
+    if recovery_output is not None:
+        action = "shadow" if normalized_mode == "SHADOW" else "recover"
+        reason = "unrecorded_push_detected"
+        return Plan(
+            action, normalized_mode, reason, candidate.spec_id, candidate.pr_number,
+            candidate.head_ref, candidate.head_sha, candidate.base_sha, checkpoint,
+            recovery_output,
+        )
     action = "shadow" if normalized_mode == "SHADOW" else "execute"
     if action == "execute" and not token_present:
         raise ContinuationError("CLAUDE_CODE_OAUTH_TOKEN is not configured")
@@ -346,11 +452,18 @@ def validate_changed_paths(paths: list[str]) -> None:
 def validate_status_change(before: str, after: str, active_spec: str) -> None:
     before_rows = parse_registry(before)
     after_rows = parse_registry(after)
-    if set(before_rows) != set(after_rows):
+    if set(before_rows) != set(after_rows) or active_spec not in before_rows:
         raise ContinuationError("continuation may not add or remove registry rows")
-    for spec_id in before_rows:
-        if spec_id != active_spec and before_rows[spec_id] != after_rows[spec_id]:
-            raise ContinuationError("STATUS.md may change only the active spec row")
+    prefix = f"| {active_spec} |"
+    before_lines = before.splitlines(keepends=True)
+    after_lines = after.splitlines(keepends=True)
+    before_indexes = [index for index, line in enumerate(before_lines) if line.startswith(prefix)]
+    after_indexes = [index for index, line in enumerate(after_lines) if line.startswith(prefix)]
+    if len(before_indexes) != 1 or before_indexes != after_indexes:
+        raise ContinuationError("active STATUS.md row is missing, duplicated, or moved")
+    index = before_indexes[0]
+    if before_lines[:index] != after_lines[:index] or before_lines[index + 1 :] != after_lines[index + 1 :]:
+        raise ContinuationError("STATUS.md may change only the exact active spec row")
 
 
 def _post_comment(repository: str, pr: int, token: str, body: str) -> None:
@@ -364,12 +477,16 @@ def _post_comment(repository: str, pr: int, token: str, body: str) -> None:
     request.add_header("Accept", "application/vnd.github+json")
     request.add_header("X-GitHub-Api-Version", "2022-11-28")
     request.add_header("Content-Type", "application/json")
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            if response.status != 201:
-                raise ContinuationError("checkpoint comment was not created")
-    except urllib.error.URLError as exc:
-        raise ContinuationError(f"checkpoint comment failed: {exc}") from exc
+    last_error: Exception | None = None
+    for _ in range(3):
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                if response.status == 201:
+                    return
+                last_error = ContinuationError("checkpoint comment was not created")
+        except urllib.error.URLError as exc:
+            last_error = exc
+    raise ContinuationError(f"checkpoint comment failed after retries: {last_error}")
 
 
 def append_outputs(plan: Plan, path: Path) -> None:
