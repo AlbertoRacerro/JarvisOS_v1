@@ -22,7 +22,8 @@ from typing import Callable, Protocol
 API_ROOT = "https://api.github.com"
 OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 OIDC_JWKS = f"{OIDC_ISSUER}/.well-known/jwks"
-OIDC_AUDIENCE_PREFIX = "jarvisos-continuation-marker-v1"
+MARKER_OIDC_AUDIENCE_PREFIX = "jarvisos-continuation-marker-v1"
+COMMIT_OIDC_AUDIENCE_PREFIX = "jarvisos-continuation-commit-v1"
 WORKFLOW_PATH = ".github/workflows/daily-development-continuation.yml"
 MODES = {"OFF", "SHADOW", "EXECUTE_NO_MERGE"}
 ACTIVE_STATUSES = {"in_progress", "in_review"}
@@ -261,7 +262,11 @@ class GitHubOIDCVerifier:
             claims = _json_object(_b64url_decode(parts[1]), "claims")
             if header.get("alg") != "RS256" or not isinstance(header.get("kid"), str):
                 return False
-            if not audience.startswith(f"{OIDC_AUDIENCE_PREFIX}-"):
+            prefixes = (
+                f"{MARKER_OIDC_AUDIENCE_PREFIX}-",
+                f"{COMMIT_OIDC_AUDIENCE_PREFIX}-",
+            )
+            if not audience.startswith(prefixes):
                 return False
             if self._jwks is None:
                 self._jwks = self.jwks_loader()
@@ -412,7 +417,16 @@ def marker_audience(
         f"output={output_head}|result={result}"
     )
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    return f"{OIDC_AUDIENCE_PREFIX}-{digest}"
+    return f"{MARKER_OIDC_AUDIENCE_PREFIX}-{digest}"
+
+
+def commit_audience(spec: str, pr: int, input_head: str, tree_sha: str) -> str:
+    canonical = (
+        f"v1|spec={spec.lower()}|pr={pr}|input={input_head}|"
+        f"tree={tree_sha}|result=changed"
+    )
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return f"{COMMIT_OIDC_AUDIENCE_PREFIX}-{digest}"
 
 
 def marker_text(
@@ -513,7 +527,11 @@ def checkpoint_for(
     return checkpoint, terminal and checkpoint == candidate.head_sha
 
 
-def _continuation_commit(payload: dict[str, object], candidate: Candidate) -> tuple[str, str] | None:
+def _continuation_commit(
+    payload: dict[str, object],
+    candidate: Candidate,
+    verifier: MarkerVerifier,
+) -> tuple[str, str] | None:
     sha, commit, parents = payload.get("sha"), payload.get("commit"), payload.get("parents")
     author, committer = payload.get("author"), payload.get("committer")
     if not isinstance(sha, str) or not SHA_RE.fullmatch(sha):
@@ -524,9 +542,12 @@ def _continuation_commit(payload: dict[str, object], candidate: Candidate) -> tu
         return None
     if author.get("login") != "github-actions[bot]" or committer.get("login") != "github-actions[bot]":
         return None
-    message = commit.get("message")
-    if not isinstance(message, str):
-        raise ContinuationError("GitHub commit message is incomplete")
+    message, tree = commit.get("message"), commit.get("tree")
+    if not isinstance(message, str) or not isinstance(tree, dict):
+        raise ContinuationError("GitHub commit message or tree is incomplete")
+    actual_tree = tree.get("sha")
+    if not isinstance(actual_tree, str) or not SHA_RE.fullmatch(actual_tree):
+        raise ContinuationError("GitHub commit tree SHA is incomplete")
     trailers: dict[str, str] = {}
     for line in message.splitlines():
         if ": " not in line:
@@ -536,20 +557,33 @@ def _continuation_commit(payload: dict[str, object], candidate: Candidate) -> tu
             if key in trailers and trailers[key] != value:
                 raise ContinuationError("continuation commit has conflicting trailers")
             trailers[key] = value
-    if trailers.get("Jarvis-Continuation") != "v1":
+    if trailers.get("Jarvis-Continuation") != "v2":
         return None
     input_head = trailers.get("Jarvis-Input", "")
+    tree_sha = trailers.get("Jarvis-Tree", "")
+    run_id = trailers.get("Jarvis-Run", "")
+    oidc_token = trailers.get("Jarvis-OIDC", "")
     expected = {"Jarvis-Spec": candidate.spec_id, "Jarvis-PR": str(candidate.pr_number)}
     if any(trailers.get(key) != value for key, value in expected.items()):
         return None
     parent_shas = [item.get("sha") for item in parents if isinstance(item, dict)]
     if not SHA_RE.fullmatch(input_head) or parent_shas != [input_head]:
         raise ContinuationError("continuation commit does not have its declared input as sole parent")
+    if tree_sha != actual_tree:
+        raise ContinuationError("continuation commit tree does not match its authenticated trailer")
+    if not run_id.isdigit() or not oidc_token:
+        raise ContinuationError("continuation commit OIDC proof is incomplete")
+    audience = commit_audience(candidate.spec_id, candidate.pr_number, input_head, tree_sha)
+    if not verifier.verify(oidc_token, run_id=run_id, audience=audience):
+        return None
     return input_head, sha
 
 
 def find_unrecorded_continuation(
-    candidate: Candidate, checkpoint: str, reader: GitHubReader
+    candidate: Candidate,
+    checkpoint: str,
+    reader: GitHubReader,
+    verifier: MarkerVerifier,
 ) -> str | None:
     if candidate.head_sha == checkpoint:
         return None
@@ -568,7 +602,7 @@ def find_unrecorded_continuation(
             reached_checkpoint = True
             continue
         payload = reader.commit_info(sha)
-        recovered_edge = _continuation_commit(payload, candidate)
+        recovered_edge = _continuation_commit(payload, candidate, verifier)
         if recovered_edge is not None:
             recovered.add(recovered_edge[1])
         parents = payload.get("parents")
@@ -623,7 +657,9 @@ def build_plan(
         raise ContinuationError("current PR head does not descend from the PR base")
     if reader.compare(checkpoint, candidate.head_sha) not in {"ahead", "identical"}:
         raise ContinuationError("current PR head does not descend from the checkpoint")
-    recovery_output = find_unrecorded_continuation(candidate, checkpoint, reader)
+    recovery_output = find_unrecorded_continuation(
+        candidate, checkpoint, reader, verifier
+    )
     if recovery_output is not None:
         action = "shadow" if normalized_mode == "SHADOW" else "recover"
         return Plan(

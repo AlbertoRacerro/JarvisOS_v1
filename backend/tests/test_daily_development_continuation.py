@@ -22,6 +22,7 @@ HEAD = "2" * 40
 NEXT = "3" * 40
 SIDE = "4" * 40
 RUN = "12345"
+TREE = "a" * 40
 
 
 def registry(status: str = "in_review", pr: int = 210, extra: str = "") -> str:
@@ -71,7 +72,12 @@ class AcceptVerifier:
         return (
             token == "valid.jwt.token"
             and run_id == RUN
-            and audience.startswith(f"{mod.OIDC_AUDIENCE_PREFIX}-")
+            and audience.startswith(
+                (
+                    f"{mod.MARKER_OIDC_AUDIENCE_PREFIX}-",
+                    f"{mod.COMMIT_OIDC_AUDIENCE_PREFIX}-",
+                )
+            )
         )
 
 
@@ -99,6 +105,7 @@ class FakeReader:
             HEAD: commit(HEAD, [BASE], "human")
         }
         self.open_pull_calls = 0
+        self.commit_reads: list[str] = []
 
     def open_pulls(self):
         self.open_pull_calls += 1
@@ -116,23 +123,36 @@ class FakeReader:
         return self.compares.get((base, head), "behind")
 
     def commit_info(self, sha):
+        self.commit_reads.append(sha)
         return self.commits[sha]
 
 
-def commit(sha: str, parents: list[str], kind: str, input_head: str | None = None):
+def commit(
+    sha: str,
+    parents: list[str],
+    kind: str,
+    input_head: str | None = None,
+    *,
+    token: str = "valid.jwt.token",
+    tree_sha: str = TREE,
+    declared_tree: str | None = None,
+):
     message = "ordinary"
     author = {"login": "AlbertoRacerro"}
     committer = {"login": "AlbertoRacerro"}
     if kind == "continuation":
         input_head = input_head or parents[0]
+        declared_tree = declared_tree or tree_sha
         message = (
-            "Continue spec 079\n\nJarvis-Continuation: v1\nJarvis-Spec: 079\n"
-            f"Jarvis-PR: 210\nJarvis-Input: {input_head}"
+            "Continue spec 079\n\nJarvis-Continuation: v2\nJarvis-Spec: 079\n"
+            f"Jarvis-PR: 210\nJarvis-Input: {input_head}\n"
+            f"Jarvis-Tree: {declared_tree}\nJarvis-Run: {RUN}\n"
+            f"Jarvis-OIDC: {token}"
         )
         author = committer = {"login": "github-actions[bot]"}
     return {
         "sha": sha,
-        "commit": {"message": message},
+        "commit": {"message": message, "tree": {"sha": tree_sha}},
         "parents": [{"sha": parent} for parent in parents],
         "author": author,
         "committer": committer,
@@ -372,6 +392,40 @@ def test_recovery_finds_single_unrecorded_continuation_commit():
     assert plan.recovery_output_sha == NEXT
 
 
+def test_recovery_rejects_forged_shared_actions_commit():
+    reader = FakeReader(
+        statuses={NEXT: registry()},
+        pulls=[pull(head=NEXT)],
+        compares={(BASE, NEXT): "ahead"},
+        commits={
+            NEXT: commit(
+                NEXT, [BASE], "continuation", BASE, token="forged.jwt.token"
+            )
+        },
+    )
+    plan = mod.build_plan(
+        mode="EXECUTE_NO_MERGE", repository=REPOSITORY, reader=reader,
+        token_present=True, verifier=AcceptVerifier(),
+    )
+    assert plan.action == "execute"
+    assert plan.recovery_output_sha == ""
+
+
+def test_recovery_rejects_authenticated_tree_mismatch():
+    reader = FakeReader(
+        commits={
+            NEXT: commit(
+                NEXT, [BASE], "continuation", BASE, declared_tree="b" * 40
+            )
+        },
+        compares={(BASE, NEXT): "ahead"},
+    )
+    with pytest.raises(mod.ContinuationError, match="tree does not match"):
+        mod.find_unrecorded_continuation(
+            candidate(NEXT), BASE, reader, AcceptVerifier()
+        )
+
+
 def test_recovery_ignores_unrelated_merge_side_history():
     merge = "5" * 40
     reader = FakeReader(
@@ -386,9 +440,11 @@ def test_recovery_ignores_unrelated_merge_side_history():
             (BASE, merge): "ahead",
         },
     )
-    found = mod.find_unrecorded_continuation(candidate(merge), BASE, reader)
+    found = mod.find_unrecorded_continuation(
+        candidate(merge), BASE, reader, AcceptVerifier()
+    )
     assert found == NEXT
-    assert SIDE not in reader.commits or True
+    assert SIDE not in reader.commit_reads
 
 
 def test_recovery_fails_on_multiple_continuation_commits():
@@ -401,7 +457,9 @@ def test_recovery_fails_on_multiple_continuation_commits():
         compares={(BASE, NEXT): "ahead"},
     )
     with pytest.raises(mod.ContinuationError, match="multiple"):
-        mod.find_unrecorded_continuation(candidate(fourth), BASE, reader)
+        mod.find_unrecorded_continuation(
+            candidate(fourth), BASE, reader, AcceptVerifier()
+        )
 
 
 @pytest.mark.parametrize(
@@ -542,6 +600,13 @@ def test_oidc_audience_binds_marker_payload(monkeypatch):
     )
 
 
+def test_commit_audience_is_bound_to_input_and_tree():
+    expected = mod.commit_audience("079", 210, BASE, TREE)
+    assert expected.startswith(f"{mod.COMMIT_OIDC_AUDIENCE_PREFIX}-")
+    assert expected != mod.commit_audience("079", 210, HEAD, TREE)
+    assert expected != mod.commit_audience("079", 210, BASE, "b" * 40)
+
+
 def test_human_commit_after_no_change_can_be_bridged():
     comments = [
         marker(BASE, HEAD),
@@ -576,9 +641,16 @@ def test_workflow_contract_separates_validation_and_trusted_push():
     assert "python scripts/daily_development_continuation.py validate" not in push_block
 
 
-def test_workflow_marker_jobs_use_oidc_and_no_claude_secret():
+def test_workflow_oidc_authority_is_confined_to_trusted_jobs():
     text = (ROOT / ".github/workflows/daily-development-continuation.yml").read_text()
-    assert text.count("id-token: write") >= 3
+    generate_block = text.split("  generate-patch:\n", 1)[1].split("\n  validate:\n", 1)[0]
+    push_block = text.split("  push:\n", 1)[1].split("\n  record-marker:\n", 1)[0]
+    assert text.count("id-token: write") == 4
+    assert "id-token: write" not in generate_block
+    assert "id-token: write" in push_block
+    assert "jarvisos-continuation-commit-v1-" in push_block
+    assert "Jarvis-Continuation: v2" in push_block
+    assert "Jarvis-OIDC:" in push_block
     assert "CONTINUATION_OIDC_TOKEN" in text
     marker_region = text.split("  record-marker:\n", 1)[1]
     assert "CLAUDE_CODE_OAUTH_TOKEN" not in marker_region
