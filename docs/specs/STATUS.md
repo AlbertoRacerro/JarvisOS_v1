@@ -54,17 +54,17 @@ before Codex or another coding agent may act on them.
 
 The binding queue is:
 
-1. complete and integrate 079 minimal scheduled continuation;
-2. promote 078 from its merged planning kernel to a complete specification using repository evidence and primary scientific literature;
-3. report and stop.
+1. preserve integrated 079 minimal scheduled continuation;
+2. complete and review the documentation-only full specification for 078 through PR #211;
+3. report and stop without implementing 078.
 
 Specs 066, 067, 068, and 070 remain frozen. Spec 080 is a separate planned review/repair capability and is not part of 079.
 
 ## Current priority and drafting order
 
 1. Preserve merged 059a/059b, 061a/061b, 075, 076, and 077 authority boundaries.
-2. Complete the sole active implementation front, 079, through PR #210.
-3. After 079 is merged and reconciled, complete the full specification for 078 without implementing it.
+2. Preserve merged 079 authority from PR #210.
+3. Complete and review the full specification for 078 through PR #211 without implementing it.
 4. Leave 080 planned and separate.
 5. Resume no other frozen or planned front unless it appears in a later explicit queue.
 
@@ -159,8 +159,8 @@ Specs 066, 067, 068, and 070 remain frozen. Spec 080 is a separate planned revie
 | 075 | merged | [#191](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/191) | PROCESS-KERNEL-1: streams, components, units, and unit operations | 043, 047, 048, 071 | Re-express validated 047 as an acyclic flowsheet of typed material/scalar ports and reusable blocks, add additive unit-contract v2 and component/stream foundations, and require exact canonical 047 result identity before broader solver work. Readiness evidence and implementation ownership are frozen in [the 2026-07-27 readiness decision](075-readiness-2026-07-27.md). |
 | 076 | merged | [#195](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/195) | EVIDENCE-SIGHT-0: bounded evidence-guided structural repair | 010, 038, 044, 059b, 061a, 061b | Add an opt-in, separately budgeted structural-repair cycle using deterministic attempt-scoped evidence; preserve valid candidate state and artifact pointers on every unsuccessful path; no new states, migration, promotion, or egress authority. |
 | 077 | merged | [#198](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/198) | EVIDENCE-EGRESS-0: canonical evidence provenance and classification | 044, 059a, 059b, 076 | Bind canonical evidence rows and rendered evidence derivatives to workspace-scoped provenance, sensitivity, staleness, and exact-packet lineage before external model use; reuse 059a/059b authority and add no alternate egress path. Readiness sequencing, prompt authority, and no-migration packet lineage are frozen in [the 2026-07-28 readiness decision](077-readiness-2026-07-28.md). |
-| 078 | planned | — | PBR-MODELING-0: bounded photobioreactor modeling kernel | 043, 047, 048, 049, 071, 075 | Define the smallest bounded extension from static `048` biomass and `049` optical screening toward photobioreactor modeling: a closed server-bundled typed rate-law registry for light-limited kinetics, an incident-PAR quantity with a declared path-averaged irradiance built on the existing 049 optical-parameter separation, and CO2/O2 gas-liquid transfer with externally supplied kLa and an explicit sufficiency check against the carbon demand already derivable in 048; 048 and 049 identities, outputs, and fixtures remain unchanged, and no solver, expression language, dependency, or migration is added. Full-spec promotion is the second item in the 2026-08-01 queue. |
-| 079 | in_review | [#210](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/210) | AUTONOMOUS-DEVELOPMENT-LOOP-0: minimal scheduled continuation | 022 | Resume exactly one existing in-review implementation PR once daily by reading the registry from exact PR heads, reusing Claude Code Action in OFF/SHADOW/EXECUTE_NO_MERGE modes, validating an untrusted patch with deterministic gates, and permitting only a non-forced same-branch push; no merge or review/repair authority. |
+| 078 | planned | — | PBR-MODELING-0: bounded photobioreactor modeling kernel | 043, 047, 048, 049, 071, 075 | The planning kernel is merged. The complete documentation-only contract and verified scientific-evidence companion are under review in PR #211; 078 has no implementation PR, readiness decision, migration, dependency, or runtime authorization. |
+| 079 | merged | [#210](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/210) | AUTONOMOUS-DEVELOPMENT-LOOP-0: minimal scheduled continuation | 022 | Merged through PR #210. Resume exactly one existing in-review implementation PR once daily by reading the registry from exact PR heads, reusing Claude Code Action in OFF/SHADOW/EXECUTE_NO_MERGE modes, validating an untrusted patch with deterministic gates, and permitting only a non-forced same-branch push; no merge or review/repair authority. |
 | 080 | planned | — | AUTONOMOUS-REVIEW-REPAIR-0 | 004, 017, 019, 022, 079 | Define separately removable implementer/reviewer separation and bounded finding, correction, and re-review state; it is not part of 079 and is not authorized for implementation. |
 
 ## Superseded planning aliases and resolved collisions
