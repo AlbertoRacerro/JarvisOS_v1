@@ -4,9 +4,14 @@
 
 **Depends on:** 043, 047, 048, 049, 071, 075.
 
-**Supersedes for implementation decisions:** unresolved items `RT-37`, `U1`, `U2`, `U3`, `U5`, and literature gates `LIT-01` through `LIT-07` in `078-pbr-modeling-0.md` and its evidence companion.
+**Normative companions:**
 
-**Authority boundary:** this pull request is documentation-only. It authorizes no runtime code, migration, dependency, workflow, frontend, provider call, spend, implementation branch, or implementation pull request.
+- `078-full-specification-source-evidence-2026-08-02.md`;
+- `078-full-specification-quantity-contract-2026-08-02.md`.
+
+**Supersedes for implementation decisions:** unresolved items `RT-37`, `U1`, `U2`, `U3`, `U5`, and literature gates `LIT-01` through `LIT-07` in the merged planning kernel and its evidence register.
+
+**Authority boundary:** this pull request is documentation-only. It authorizes no runtime code, migration, dependency, workflow, frontend, provider call, spend, implementation branch, readiness promotion, or implementation pull request.
 
 ---
 
@@ -14,147 +19,144 @@
 
 078 defines the smallest bounded step from merged static BlueRev screening models toward photobioreactor calculations that connect:
 
-1. incident photosynthetically active radiation to one declared optical-path average;
-2. that average to one source-bound light-response law;
-3. net biomass production to carbon-dioxide demand;
-4. externally characterized gas transfer to CO2 supply and O2 removal sufficiency.
+1. incident photosynthetically active radiation to one declared optical-path average proxy;
+2. that scalar light quantity to one source-bound *Nannochloropsis gaditana* growth relation;
+3. gross biomass synthesis to gross carbon-fixation demand;
+4. externally characterized gas transfer to conservative CO2-supply and O2-stripping sufficiency checks.
 
 The first implementation is a closed set of deterministic algebraic forward models. It is not a dynamic reactor, generic process simulator, equation-oriented language, CFD model, carbonate/pH model, property package, inverse solver, optimizer, or automatic `kLa` estimator.
 
 ## 2. Existing authority preserved unchanged
 
-The implementation must preserve all merged contracts, files, numerical fixtures, canonical JSON bytes, and digests owned by 043, 047, 048, 049, 071, and 075.
+The implementation must preserve every merged contract, file, numerical fixture, canonical JSON byte sequence, and digest owned by 043, 047, 048, 049, 071, and 075.
 
 In particular:
 
-- 048 remains the authority for its static biomass, nutrient, harvest, gas-equivalent, energy, and economic screening outputs.
-- 049 remains the authority for its tube/culture transmission proxies and existing disclaimers.
-- 071 remains the authority for editable caller bindings and forward degree-of-freedom inspection.
-- 075 remains the authority for typed ports, streams, components, units, acyclic execution, and canonical 047 identity.
+- 048 remains authority for its static biomass, nutrient, harvest, gas-equivalent, energy, and economic screening outputs;
+- 049 remains authority for its tube/culture transmission proxies and disclaimers;
+- 071 remains authority for editable caller bindings and forward degree-of-freedom inspection;
+- 075 remains authority for typed ports, streams, components, semantic units, acyclic execution, and canonical 047 identity;
 - `MaterialStream.composition`, `COMPONENT_CATALOG`, `fixture_biomass`, `process_semantic_units_v1`, and every pre-078 profile remain byte-for-byte unchanged.
 
-Every 078 model has a new identity and coexists with 047, 048, and 049. No existing model is rewritten or silently upgraded.
+Every 078 model receives a new identity and coexists with 047, 048, and 049. No existing model is rewritten, reinterpreted, or silently upgraded.
 
 ## 3. Closed architecture
 
-### 3.1 Model registry
+### 3.1 Server-bundled profile registry
 
-078 adds a closed server-bundled registry. A caller selects a known profile identifier but cannot submit equations, Python, expressions, arbitrary parameter names, or a custom model definition.
+078 adds a closed server-bundled profile registry. A caller selects a known profile identifier but cannot submit equations, Python, expressions, arbitrary parameter names, or a custom model definition.
 
 Each profile record must contain:
 
 - `profile_id` and `profile_version`;
 - exact model identities used by the profile;
-- content hash over canonical profile metadata and constants;
+- canonical content hash over metadata and constants;
 - organism, strain, culture mode, medium/salinity, temperature, acclimation and measurement context;
-- every constant with unit, semantic basis, source locator, applicable range, uncertainty when reported, and transformation history;
-- an explicit operational state: `verification_only` or `operational`.
+- every constant with canonical unit, semantic basis, source locator, applicable range, uncertainty when reported, and transformation history;
+- explicit status `verification_only` or `operational`.
 
-A profile is `operational` only when all constants needed by the selected models have primary-source or approved experimental authority and compatible validity envelopes. Missing evidence is never replaced by a default.
+A profile is `operational` only when all constants needed by the selected models have compatible primary-source or approved-experiment authority and the caller state lies inside their intersected validity envelopes. Missing evidence is never replaced by a default.
 
 ### 3.2 Initial model identities
 
 The first bounded implementation consists of four independently removable algebraic models:
 
 1. `pbr_optical_path_average_v0`;
-2. `pbr_light_growth_bernard_remond_v0`;
+2. `pbr_light_growth_monod_path_average_v0`;
 3. `pbr_co2_transfer_sufficiency_v0`;
 4. `pbr_o2_stripping_sufficiency_v0`.
 
-They may be assembled in a bundled profile, but each model retains its own inputs, outputs, diagnostics, validity envelope, and tests.
+They may be assembled in one bundled profile, but each retains its own contracts, diagnostics, validity envelope, and tests.
 
 ## 4. Decision closures
 
 ### 4.1 `RT-37` — identity and numerical verification
 
-The exact 075 identity test is limited to canonical 047 equivalence in the same runtime. It does not grant an exact-digest class to new 078 calculations.
+The 075 exact-identity test proves canonical 047 equivalence in the same runtime. It does not grant an exact-digest class to new 078 calculations.
 
-078 uses three distinct verification classes:
+078 uses three verification classes:
 
 - **structural identity:** exact model/profile identifiers, canonical metadata, input/output keys, units, semantic bases, source records, and content hashes;
-- **algebraic numerical tolerance:** `pytest.approx(rel=1e-12, abs=1e-15)` unless an individual oracle defines a tighter bound;
-- **pinned-platform digest:** prohibited for normal acceptance and permitted only in a future explicitly environment-gated canary.
+- **algebraic numerical tolerance:** `pytest.approx(rel=1e-12, abs=1e-15)` unless a named oracle defines a tighter tolerance;
+- **pinned-platform digest:** prohibited for ordinary acceptance and permitted only in a future explicitly environment-gated canary.
 
-Cross-platform bit identity for floating-point outputs must not be claimed.
+Cross-platform bit identity for new floating-point outputs must not be claimed.
 
 ### 4.2 `U1` — dissolved-gas representation
 
 Dissolved free CO2 and O2 are absolute scalar liquid-phase molar concentrations outside `MaterialStream.composition`.
 
-Canonical quantities:
+They are not component fractions, do not participate in the stream composition sum, and do not imply carbonate speciation, alkalinity, pH dynamics, phase split, or a thermodynamic property package.
 
-- `dissolved_co2_concentration`, unit `mol/m3`, semantic basis `dissolved_free_co2_liquid`;
-- `dissolved_o2_concentration`, unit `mol/m3`, semantic basis `dissolved_o2_liquid`;
-- corresponding equilibrium concentrations with separate semantic bases.
-
-They are not component fractions, do not participate in the stream composition sum, and do not imply carbonate speciation or a phase-equilibrium package.
+The exact quantities, units, and semantic bases are normative in the quantity-contract companion.
 
 ### 4.3 `U2` — semantic units
 
-078 requires an additive registry version `process_semantic_units_v2`. Version 1 remains immutable and all existing profiles stay bound to it.
+078 requires an additive `process_semantic_units_v2`. Version 1 remains immutable and all existing profiles stay bound to it.
 
-The v2 contract adds only the dimensions and reviewed tokens required by the four models:
+V2 adds only the reviewed dimensions/tokens required by the four models: photon-flux density, amount concentration, inverse time, dry-biomass concentration and productivity, extinction area per dry mass, growth slope per photon flux, carbon mass fraction, carbon molar mass, gas-specific molar rates, and gas-specific stoichiometric ratios.
 
-- photon-flux density: `umol_photons/m2/s`;
-- amount concentration: `mol/m3`;
-- inverse time: `1/s` and `1/d`;
-- dry-biomass concentration: `kgDW/m3` and `gDW/L`;
-- dry-biomass volumetric productivity: `kgDW/m3/s` and `gDW/L/d`;
-- molar volumetric rate: `mol/m3/s`.
-
-Every token must resolve to a distinct declared semantic basis where physical dimensions alone are ambiguous. V2 is additive, has its own canonical hash, requires no database migration, and must not change the v1 payload or digest.
+V2 has its own canonical hash, requires no database migration, and must not change the v1 payload or digest. Exact tokens, dimensions, semantic bases, and boundary conversions are defined in the quantity-contract companion.
 
 ### 4.4 `U3` — biomass authority
 
 078 does not modify `COMPONENT_CATALOG` or promote `fixture_biomass` into a universal scientific component.
 
-Biomass concentration is a scalar operating quantity. Carbon mass fraction, photosynthetic quotient, respiration rate, and any other composition-dependent property are profile constants bound to organism, strain, conditions, source, and validity envelope.
+Biomass concentration is a scalar operating quantity. Carbon mass fraction, light-growth constants, specific biomass-loss rate, photosynthetic quotient, and every composition-dependent property are profile constants bound to organism, strain, conditions, source, and validity envelope.
 
-No universal *Nannochloropsis* composition is asserted. A profile lacking an authoritative carbon fraction cannot compute gas-demand sufficiency and must return `not_computable` rather than substitute a value.
+No universal *Nannochloropsis* composition is asserted. Missing carbon fraction or gas stoichiometry produces `not_computable` rather than a substituted value.
 
-### 4.5 `U5` — light-response relation
+### 4.5 `U5` and `LIT-01` — selected light-growth relation
 
-The selected mathematical identity is the optimum-shaped Bernard–Rémond light-response form:
+The V0 operational mathematical identity is the Monod-like light-saturation relation fitted in primary experiments on *Nannochloropsis gaditana* grown in a quasi-isoactinic reactor under multiple photon-flux densities:
 
 ```text
-mu_gross(I) = mu_max * I
-              / (I + (mu_max / alpha) * (I / I_opt - 1)^2)
+mu_gross(I) = mu_max * I / (i_half + I)
 ```
 
 with:
 
 - `I >= 0`;
 - `mu_max > 0`;
-- `alpha > 0`;
-- `I_opt > 0`.
+- `i_half > 0`.
 
-Net specific growth is:
+Gross and net biomass rates are separated:
 
 ```text
-mu_net = mu_gross(I_path_avg) - respiration_rate
+gross_biomass_productivity = mu_gross(I_path_avg)
+                             * biomass_concentration
+
+net_specific_growth_rate = mu_gross(I_path_avg)
+                           - specific_biomass_loss_rate
+
+net_biomass_productivity = net_specific_growth_rate
+                           * biomass_concentration
 ```
 
-The formula is selected as a bounded, differentiable identity with an explicit interior optimum and analytic limiting cases. It is not declared universally correct for *Nannochloropsis*.
+`mu_max`, `i_half`, and `specific_biomass_loss_rate` are mandatory profile constants with exact source/envelope metadata. The loss term must be labelled `respiration`, `decay`, or `combined_loss` according to its evidence; no respiratory carbon or oxygen stoichiometry is inferred from that scalar.
 
-`mu_max`, `alpha`, `I_opt`, and `respiration_rate` are mandatory server-owned profile constants. They may not be translated from another strain, temperature, salinity, acclimation state, spectral regime, or measured response without an explicit reviewed transformation and uncertainty statement.
+The selected law does **not** model photoinhibition. An operational profile must reject light above its qualified source/calibration envelope with `pbr_validity_envelope_exceeded`; it may not extrapolate the saturation curve into high-light conditions. Bernard–Rémond, Steele, Platt, Haldane/Andrews, or photoacclimation models require separate source-compatible identities and are not aliases of V0.
+
+This closes `LIT-01` for V0 because the selected family is supported by target-organism experiments and is explicitly restricted to the non-photoinhibitory envelope actually characterized. It does not authorize importing the published fitted values without an independent extraction and provenance record.
 
 ## 5. Optical-path model
 
-### 5.1 Inputs
+### 5.1 Inputs and constant
 
 Caller inputs:
 
-- `incident_par`, `umol_photons/m2/s`, `>= 0`;
-- `tube_clean_transmittance`, dimensionless, `[0, 1]`;
-- `fouling_transmittance_factor`, dimensionless, `[0, 1]`;
-- `biomass_concentration`, `kgDW/m3`, `>= 0`;
-- `optical_path_length`, `m`, `>= 0`.
+- incident PAR;
+- clean-tube transmittance;
+- fouling transmittance factor;
+- biomass concentration;
+- optical path length;
+- explicit fouling convention.
 
 Profile constant:
 
-- `biomass_extinction_coefficient`, `m2/kgDW`, `>= 0`, with source and envelope.
+- biomass PAR extinction coefficient with source and envelope.
 
-The caller must explicitly select the fouling convention. Reuse of 049's end-of-cleaning-interval value must be labelled `end_interval`; a cycle average requires a separate future model and cannot be inferred.
+Exact names, units, semantic bases, and domains are defined in the quantity-contract companion.
 
 ### 5.2 Formula
 
@@ -175,99 +177,92 @@ I_path_avg = I_wall                           for tau = 0
 
 ### 5.3 Claims and non-claims
 
-The output is a one-dimensional Beer–Lambert-like path-average proxy. It does not claim:
+The result is a one-dimensional absorption-only path-average proxy. Primary tubular-PBR evidence shows that geometry, scattering, and wavelength dependence can materially affect light distribution; therefore V0 does not claim:
 
-- a radial or angular light field;
+- radial or angular light fields;
 - direct/diffuse decomposition;
 - scattering;
 - spectral resolution;
 - self-consistent pigment acclimation;
 - a quantified error against radiative transfer.
 
-Those claims remain outside 078.
+This claim restriction closes `LIT-02`. A higher-fidelity optical model requires a new identity.
 
-## 6. Light-growth model
+## 6. Light-growth outputs
 
-### 6.1 Inputs and outputs
+The light-growth model emits:
 
-Caller inputs:
-
-- `path_average_par` from the optical model or a caller-supplied measured value;
-- `biomass_concentration`.
-
-Profile constants:
-
-- `mu_max`;
-- `alpha`;
-- `I_opt`;
-- `respiration_rate`;
-- the complete calibration envelope.
-
-Outputs:
-
-- `gross_specific_growth_rate`;
-- `net_specific_growth_rate`;
-- `derived_biomass_productivity = mu_net * biomass_concentration`;
+- gross specific growth rate;
+- gross biomass productivity;
+- net specific growth rate;
+- net biomass productivity;
 - `growth_status`: `net_growth`, `zero_net_growth`, or `net_biomass_decline`.
 
-A negative net rate is a valid physical screening outcome, not an exception.
+A negative net rate is a valid screening outcome, not an exception. Gross quantities remain non-negative and are used for conservative instantaneous gas-demand calculations.
 
 ## 7. CO2 transfer sufficiency
 
-### 7.1 Required quantities
+### 7.1 Boundary and ownership
 
-Caller inputs:
+Caller/profile-bound inputs are:
 
-- `dissolved_co2_concentration`;
-- `co2_equilibrium_concentration`;
+- dissolved free-CO2 concentration;
+- CO2 equilibrium concentration;
 - `kla_co2`;
-- net biomass productivity, either produced by the selected 078 growth model or supplied with explicit provenance.
+- gross biomass productivity from the selected 078 growth model or an explicitly sourced compatible input.
 
-Profile constants:
+Profile constants are:
 
-- `biomass_carbon_mass_fraction`;
-- carbon molar mass authority.
+- dry-biomass carbon mass fraction;
+- carbon molar-mass authority.
 
-Equilibrium concentration is caller/profile supplied with temperature, salinity, gas composition, pressure/fugacity convention, source, and calculation provenance. 078 does not calculate it from pH, alkalinity, total inorganic carbon, or a generic Henry-law package.
+Equilibrium concentration must carry temperature, salinity, gas composition, pressure/fugacity convention, source, and calculation provenance. 078 does not calculate it from pH, alkalinity, total inorganic carbon, or a general Henry/property package. This external-equilibrium boundary closes `LIT-03`.
+
+`kla_co2` is supplied from compatible characterization evidence; no automatic correlation is authorized. This closes the CO2 part of `LIT-04`.
 
 ### 7.2 Sign convention and formula
 
-Positive transfer is into the liquid:
+Positive gas transfer is into the liquid:
 
 ```text
 r_co2_transfer = kla_co2
                  * (co2_equilibrium_concentration
                     - dissolved_co2_concentration)
 
-r_co2_demand = max(derived_biomass_productivity, 0)
-               * biomass_carbon_mass_fraction
-               / molar_mass_carbon
+r_co2_transfer_C_equivalent = r_co2_transfer
+                              * (1 molC / 1 molCO2)
 
-co2_margin = r_co2_transfer - r_co2_demand
+r_gross_C_fixation = gross_biomass_productivity
+                     * biomass_carbon_mass_fraction
+                     / molar_mass_carbon
+
+co2_margin = r_co2_transfer_C_equivalent
+             - r_gross_C_fixation
 ```
 
-When `r_co2_demand > 0`:
+When gross fixation is positive:
 
 ```text
-co2_supply_ratio = r_co2_transfer / r_co2_demand
+co2_supply_ratio = r_co2_transfer_C_equivalent
+                   / r_gross_C_fixation
 ```
 
-Otherwise the ratio is `not_computable`, while the signed rates and margin remain available.
+Otherwise the ratio is `not_computable`, while signed rates and margin remain available.
 
-`co2_status` is `sufficient` when the margin is non-negative and `insufficient` otherwise. Insufficiency is a diagnostic engineering result, not a hard execution failure.
+The check compares transfer against **gross instantaneous carbon fixation**, not net biomass accumulation. It is conservative for external makeup because respiratory CO2 recycling is outside V0. `co2_status` is `sufficient` when the margin is non-negative and `insufficient` otherwise. Insufficiency is an engineering result, not an execution failure.
 
 ## 8. O2 stripping sufficiency
 
-Caller inputs:
+Caller/profile-bound inputs are:
 
-- `dissolved_o2_concentration`;
-- `o2_equilibrium_concentration`;
+- dissolved O2 concentration;
+- O2 equilibrium concentration;
 - `kla_o2`;
-- carbon-demand rate from §7.
+- gross carbon-fixation rate from §7.
 
 Profile constant:
 
-- `photosynthetic_quotient`, mol O2 generated per mol C fixed, with source and envelope.
+- photosynthetic quotient, mol O2 generated per mol C gross-fixed, with source and envelope.
 
 The same positive-into-liquid convention applies:
 
@@ -276,31 +271,41 @@ r_o2_transfer = kla_o2
                 * (o2_equilibrium_concentration
                    - dissolved_o2_concentration)
 
-r_o2_generation = photosynthetic_quotient * r_co2_demand
+r_gross_o2_generation = photosynthetic_quotient
+                        * r_gross_C_fixation
 
 o2_stripping_capacity = max(0, -r_o2_transfer)
 
-o2_stripping_margin = o2_stripping_capacity - r_o2_generation
+o2_stripping_margin = o2_stripping_capacity
+                      - r_gross_o2_generation
 ```
 
 The result is `sufficient`, `insufficient`, or `not_computable`.
 
-`kla_co2` and `kla_o2` are distinct quantities. A shared value is forbidden unless a source and reviewed transformation explicitly justify it.
+This corrects the failure mode of basing O2 generation on net biomass accumulation. Respiratory O2 consumption is not inferred; using gross O2 generation therefore yields a conservative stripping check. A future net-O2 model requires sourced respiratory oxygen stoichiometry and a new identity.
 
-This model does not claim a complete elemental oxygen balance: water, nutrients, photorespiration products, and detailed biomass composition are outside its system boundary.
+`kla_co2` and `kla_o2` are distinct quantities. A shared value is forbidden unless a source-compatible transformation explicitly justifies it. This closes the O2 part of `LIT-04`.
 
-## 9. Validity envelopes and provenance
+The model does not claim a complete elemental oxygen balance: water, nutrients, photorespiration products, detailed biomass composition, and respiratory gas stoichiometry are outside its boundary.
 
-Every operational profile must fail closed before arithmetic if any required operating value lies outside the intersection of the source envelopes for the selected constants.
+## 9. Biomass composition and loss evidence
+
+`LIT-05` is closed by profile ownership: carbon fraction and photosynthetic quotient are mandatory source-bound constants, not universal component properties.
+
+`LIT-06` is closed by requiring a source-bound specific loss term and by withholding unsupported respiratory gas stoichiometry. If compatible evidence cannot distinguish respiration from death/decay, the profile must use `combined_loss` and the gas checks remain gross/conservative.
+
+## 10. Validity envelopes and provenance
+
+Every operational profile fails closed before arithmetic if any required operating value lies outside the intersection of source envelopes.
 
 At minimum, the profile records and validates when applicable:
 
 - organism and strain;
-- batch/continuous/turbidostat context;
+- batch, continuous, or turbidostat context;
 - temperature range;
 - salinity or medium;
-- pH range when reported by the source, without modelling pH;
-- incident-light range and spectral basis;
+- pH range reported by the source, without modelling pH;
+- incident-light range, spectrum, and averaging basis;
 - biomass-concentration range;
 - acclimation regime;
 - gas composition and pressure basis;
@@ -308,9 +313,9 @@ At minimum, the profile records and validates when applicable:
 - measurement method;
 - parameter uncertainty or `not_reported`.
 
-Interpolation within a source envelope may be allowed only when the profile defines it. Extrapolation raises `pbr_validity_envelope_exceeded`.
+Interpolation is allowed only when explicitly defined by the profile. Extrapolation raises `pbr_validity_envelope_exceeded`.
 
-## 10. Diagnostics and failure semantics
+## 11. Diagnostics and failure semantics
 
 Hard failures:
 
@@ -328,87 +333,103 @@ Non-failing result states:
 - `not_computable` with a machine-readable reason;
 - `net_biomass_decline`.
 
-Diagnostics must include model/profile identities and hashes, source IDs, active envelopes, fouling convention, sign convention, every withheld claim, and residuals or margins used for classification.
+Diagnostics include model/profile identities and hashes, source IDs, active envelopes, light-averaging and fouling conventions, gas sign convention, gross-versus-net basis, conservative-bound labels, withheld claims, and every margin used for classification.
 
-NaN and infinity are prohibited. All outputs must carry explicit units and semantic bases.
+NaN and infinity are prohibited. All quantities carry the exact units and semantic bases in the normative quantity contract.
 
-## 11. Acceptance tests
+## 12. Acceptance tests
 
-### 11.1 Preservation gates
+### 12.1 Preservation gates
 
 - Existing 047, 048, 049, 071, and 075 tests remain unchanged and green.
-- Existing canonical fixture values, `float.hex()` values, JSON bytes, script/profile hashes, and result digests remain unchanged.
+- Existing canonical values, `float.hex()` values, JSON bytes, hashes, and result digests remain unchanged.
 - `process_semantic_units_v1` and the component-catalog payload/digest remain unchanged.
 
-### 11.2 Optical oracles
+### 12.2 Optical oracles
 
-- `tau = 0` gives `I_path_avg = I_wall` exactly through the defined branch.
-- For positive finite inputs, `0 <= I_path_avg <= I_wall`.
+- `tau = 0` gives `I_path_avg = I_wall` through the explicit branch.
+- For finite valid inputs, `0 <= I_path_avg <= I_wall`.
 - `I_path_avg` decreases monotonically with extinction coefficient, biomass concentration, and path length.
-- Near zero, the implementation agrees with the analytic series within the numerical tolerance class.
+- Near zero, the implementation agrees with the analytic series within tolerance.
 
-### 11.3 Growth oracles
+### 12.3 Growth oracles
 
 - `mu_gross(0) = 0`.
-- The initial slope is `alpha` within tolerance.
-- `mu_gross(I_opt) = mu_max`.
-- The response increases below `I_opt` and decreases above it for positive parameters.
-- `mu_gross(I) -> 0` as `I -> infinity`.
-- Net productivity equals `mu_net * biomass_concentration` and preserves negative outcomes.
+- Initial slope is `mu_max / i_half` within tolerance.
+- `mu_gross(i_half) = mu_max / 2`.
+- The response is monotone increasing inside the qualified envelope.
+- `mu_gross(I)` approaches `mu_max` from below.
+- Inputs above the qualified non-photoinhibitory envelope fail closed rather than extrapolate.
+- Gross and net productivity equal their defined specific rates times biomass concentration.
+- Negative net outcomes are preserved.
 
-### 11.4 Gas-transfer oracles
+### 12.4 Gas-transfer oracles
 
 For each gas:
 
 - transfer is zero at equilibrium;
-- the sign changes correctly across equilibrium;
-- magnitude is linear in `kLa` and the concentration driving force;
+- sign changes correctly across equilibrium;
+- magnitude is linear in `kLa` and driving force;
 - zero `kLa` yields zero transfer;
-- sufficiency classifications equal the sign of the defined margin;
-- separate CO2 and O2 coefficients cannot be silently interchanged.
+- classifications equal the sign of the defined margin;
+- CO2 and O2 coefficients cannot be interchanged.
 
-The closed linear relaxation equation
+Additional gates:
+
+- one mol CO2 maps explicitly to one mol carbon-equivalent before comparison;
+- CO2 demand and O2 generation use gross carbon fixation;
+- increasing the loss rate cannot reduce the gross gas burden at fixed gross growth;
+- no respiratory O2-consumption credit is applied without a separate sourced identity.
+
+The analytic relaxation equation
 
 ```text
 C(t) = C_star + (C0 - C_star) * exp(-kla * t)
 ```
 
-may be used as an analytic verification fixture, but time integration is not part of the v0 runtime models.
+may be used as a verification fixture, but time integration is not part of V0 runtime.
 
-### 11.5 Profile and evidence gates
+### 12.5 Profile and evidence gates
 
-- every operational constant resolves to a recorded primary source or approved experimental record;
-- every source locator and DOI is syntactically and semantically checked;
-- no profile becomes operational with `not_reported` for a load-bearing validity dimension unless the specification explicitly permits the omission;
-- the pilot-scale dataset in `LIT-07` is not called a validation until a versioned extraction maps measured quantities to model outputs and records excluded physics.
+- every operational constant resolves to a primary source or approved experimental record;
+- source locator and DOI metadata are checked;
+- no profile is operational with a missing load-bearing validity dimension unless explicitly permitted;
+- published fitted values are imported only through a reviewed extraction with units, uncertainty, and transformation provenance;
+- the `LIT-07` pilot dataset is not called validation until a versioned extraction maps measured quantities to model outputs and proves parameter independence.
 
-## 12. Implementation slices
+## 13. `LIT-07` benchmark closure
+
+A primary pilot-scale tubular-PBR dataset for *Nannochloropsis granulata* is identified as the candidate independent benchmark.
+
+`LIT-07` is closed for specification by naming this dataset and the acceptance conditions. No validation claim exists until implementation slice 078-D provides:
+
+- immutable source locator and extraction hash;
+- included/excluded experiments and time windows;
+- unit conversions;
+- measured-to-model quantity mapping;
+- parameter-independence audit;
+- excluded-physics statement;
+- predeclared comparison metrics and thresholds.
+
+## 14. Implementation slices
 
 Implementation remains unauthorized until a separate dated readiness decision promotes 078 to `ready` and names one implementation PR.
 
 Candidate independently reviewable slices are:
 
-- **078-A — contracts, v2 units, profile registry, optical and light-growth algebraic models**;
-- **078-B — CO2 transfer sufficiency**;
-- **078-C — O2 stripping sufficiency**;
+- **078-A — contracts, V2 units, profile registry, optical proxy, and Monod path-average growth**;
+- **078-B — conservative gross CO2-transfer sufficiency**;
+- **078-C — conservative gross O2-stripping sufficiency**;
 - **078-D — source-bound operational profile and external benchmark extraction**.
 
-A readiness decision may combine only slices whose shared change is strictly smaller and safer than separate delivery. No slice may add dynamics, a general solver, expression execution, carbonate chemistry, automatic `kLa`, CFD, or a UI.
+No slice may add dynamics, a general solver, expression execution, carbonate chemistry, automatic `kLa`, CFD, or UI.
 
-## 13. Migration and rollback
+## 15. Migration and rollback
 
 No database migration is required. New code, profiles, units, and tests are additive and separately removable.
 
-Reverting every 078 implementation artifact must restore the pre-078 tree and preserve byte-identical results for all pre-existing model fixtures. A proposal unable to satisfy this rollback property is outside 078.
+Reverting every 078 implementation artifact must restore the pre-078 tree and preserve byte-identical results for every pre-existing model fixture. A proposal unable to satisfy this rollback property is outside 078.
 
-## 14. Literature closure and withheld claims
+## 16. Final invariant
 
-Scientific evidence and exact bibliographic records are maintained in `078-full-specification-source-evidence-2026-08-02.md`. The earlier `078-pbr-modeling-source-evidence.md` remains authoritative for the runtime/repository evidence and historical planning record.
-
-The literature supports the selected model families and the decision to require condition-specific parameters. It does not support universal *Nannochloropsis* constants, a universal biomass composition, a shared gas-transfer coefficient, a resolved cylindrical light field, or automatic validation of an integrated reactor.
-
-`LIT-01` through `LIT-06` are closed for specification by selecting bounded identities and converting unsupported universal values into mandatory sourced profile constants. `LIT-07` is closed for specification by identifying a candidate independent pilot-scale dataset while explicitly deferring any validation claim until a versioned compatible extraction exists.
-
-## 15. Final invariant
-
-> JarvisOS may emit a photobioreactor quantity only when its formula, unit and semantic basis, input ownership, parameter source, validity envelope, diagnostics, and independent oracle are explicit. Otherwise the quantity is `not_computable` or an honestly labelled proxy; it is never silently estimated.
+> JarvisOS may emit a photobioreactor quantity only when its formula, unit and semantic basis, gross/net basis, input ownership, parameter source, validity envelope, diagnostics, and independent oracle are explicit. Otherwise the quantity is `not_computable` or an honestly labelled proxy; it is never silently estimated.
