@@ -88,12 +88,20 @@ Tobias Weise, Claudia Grewe, and Michael Pfaff, “Experimental and Model-Based 
 
 **Does not support:** calling the bounded 078 algebraic models validated before measured variables, time windows, exclusions, units, and parameter independence are versioned and matched.
 
+### `SRC-078-10` — limits of absorption-only light attenuation in tubular PBRs
+
+F. G. A. Fernández, F. G. Camacho, J. A. S. Pérez, J. M. F. Sevilla, and E. M. Grima, “A model for light distribution and average solar irradiance inside outdoor tubular photobioreactors for the microalgal mass culture,” *Biotechnology and Bioengineering*, volume 55, issue 5, 1997, pages 701–714. DOI: https://doi.org/10.1002/(SICI)1097-0290(19970905)55:5%3C701::AID-BIT1%3E3.0.CO;2-F
+
+**Supports:** tubular-PBR average irradiance requires geometric/light-path treatment; an absorption-only Lambert–Beer representation omits scattering and wavelength-dependent attenuation and therefore must remain a bounded proxy.
+
+**Does not support:** using the paper's empirical optical relation or fitted values for the BlueRev geometry, species, or operating state without a separate compatibility review.
+
 ## 3. Literature-gate closure matrix
 
 | Gate | Closure for specification | Evidence | Residual implementation obligation |
 |---|---|---|---|
 | `LIT-01` | **Closed by bounded selection.** Adopt the Bernard–Rémond identity, but require source-bound `mu_max`, `alpha`, `I_opt`, and respiration parameters. | `SRC-078-01`, `SRC-078-02` | No operational profile until strain/condition calibration and envelope are recorded. |
-| `LIT-02` | **Closed by claim restriction.** Use only the analytic one-dimensional path-average proxy and explicitly withhold resolved cylindrical-field accuracy. | `SRC-078-09` plus the analytic Beer–Lambert limiting oracle | No scattering, spectral, radial, direct/diffuse, or error-bound claim. |
+| `LIT-02` | **Closed by claim restriction.** Use only the analytic one-dimensional path-average proxy and explicitly withhold resolved cylindrical-field accuracy. | `SRC-078-10` plus the analytic Beer–Lambert limiting oracle | No scattering, spectral, radial, direct/diffuse, or error-bound claim. |
 | `LIT-03` | **Closed by external-equilibrium boundary.** Require CO2/O2 equilibrium concentrations with T, salinity, gas basis, source, and calculation provenance. | `SRC-078-03`, `SRC-078-04` | No automatic Henry/property/carbonate subsystem in 078. |
 | `LIT-04` | **Closed by external-`kLa` boundary.** Require separate characterized `kla_co2` and `kla_o2`; prohibit a universal/shared coefficient and automatic correlation. | `SRC-078-05`, `SRC-078-06` | Each operational value must match reactor, phase, culture, method, and operating envelope. |
 | `LIT-05` | **Closed by profile ownership.** Biomass carbon fraction and photosynthetic quotient are profile constants; no universal composition is asserted. | `SRC-078-07` | Missing carbon fraction or quotient produces `not_computable`. |
