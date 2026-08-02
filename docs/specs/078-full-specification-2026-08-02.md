@@ -94,7 +94,7 @@ The exact quantities, units, and semantic bases are normative in the quantity-co
 
 078 requires an additive `process_semantic_units_v2`. Version 1 remains immutable and all existing profiles stay bound to it.
 
-V2 adds only the reviewed dimensions/tokens required by the four models: photon-flux density, amount concentration, inverse time, dry-biomass concentration and productivity, extinction area per dry mass, growth slope per photon flux, carbon mass fraction, carbon molar mass, gas-specific molar rates, and gas-specific stoichiometric ratios.
+V2 adds only the reviewed dimensions/tokens required by the four models: photon-flux density, amount concentration, inverse time, dry-biomass concentration and productivity, extinction area per dry mass, carbon mass fraction, carbon molar mass, gas-specific molar rates, and gas-specific stoichiometric ratios.
 
 V2 has its own canonical hash, requires no database migration, and must not change the v1 payload or digest. Exact tokens, dimensions, semantic bases, and boundary conversions are defined in the quantity-contract companion.
 
