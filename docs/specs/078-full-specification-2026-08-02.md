@@ -403,7 +403,7 @@ Reverting every 078 implementation artifact must restore the pre-078 tree and pr
 
 ## 14. Literature closure and withheld claims
 
-Scientific evidence and exact bibliographic records are maintained in `078-pbr-modeling-source-evidence.md`.
+Scientific evidence and exact bibliographic records are maintained in `078-full-specification-source-evidence-2026-08-02.md`. The earlier `078-pbr-modeling-source-evidence.md` remains authoritative for the runtime/repository evidence and historical planning record.
 
 The literature supports the selected model families and the decision to require condition-specific parameters. It does not support universal *Nannochloropsis* constants, a universal biomass composition, a shared gas-transfer coefficient, a resolved cylindrical light field, or automatic validation of an integrated reactor.
 
