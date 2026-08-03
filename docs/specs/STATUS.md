@@ -4,18 +4,18 @@ This file is the single live source of truth for JarvisOS spec state and near-te
 roadmap. Individual spec files define scope, acceptance criteria, tests, and
 non-goals; their legacy `Status:` lines are not authoritative.
 
-Update this table whenever work starts, a PR opens, a dependency changes, or a spec
-merges or is cancelled. GitHub PR diffs are the authoritative list of files created
-or modified by a spec; this registry intentionally does not copy those file lists
-into a second place.
+Update this table whenever work starts, a PR opens, a dependency changes, a PR
+merges, or a spec is cancelled. GitHub PR diffs are the authoritative list of
+files created or modified by a spec; this registry intentionally does not copy
+those file lists into a second place.
 
 The `Implementation PR` column records implementation PRs only. A PR that merely
-creates or revises a spec does not occupy that column and does not move the spec to
-`in_review`; link such planning evidence in the description only when useful.
+creates or revises a spec does not occupy that column and does not move the spec
+to `in_review`; link such planning evidence in the description only when useful.
 
-Rows marked `planned` are roadmap outlines, not implementation contracts. They must
-pass the normal backlog row → kernel → full spec → implementation ladder before
-Codex or another coding agent may act on them.
+Rows marked `planned` are roadmap outlines, not implementation contracts. They
+must pass the normal backlog row → kernel → full spec → implementation ladder
+before Codex or another coding agent may act on them.
 
 ## Status values
 
