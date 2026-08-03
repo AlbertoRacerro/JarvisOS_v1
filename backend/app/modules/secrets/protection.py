@@ -112,8 +112,7 @@ class WindowsDpapiCurrentUserProtector:
             CRYPTPROTECT_UI_FORBIDDEN,
             ctypes.byref(output_blob),
         )
-        if len(input_buffer) != len(plaintext):
-            raise SecretProtectionOperationError("secret_protect_failed")
+        _ = input_buffer
         return self._copy_and_free_output(
             succeeded,
             output_blob,
@@ -132,8 +131,7 @@ class WindowsDpapiCurrentUserProtector:
             CRYPTPROTECT_UI_FORBIDDEN,
             ctypes.byref(output_blob),
         )
-        if len(input_buffer) != len(ciphertext):
-            raise SecretProtectionOperationError("secret_unprotect_failed")
+        _ = input_buffer
         return self._copy_and_free_output(
             succeeded,
             output_blob,
@@ -155,7 +153,7 @@ class WindowsDpapiCurrentUserProtector:
         finally:
             if output_blob.pbData:
                 self._kernel32.LocalFree(
-                    ctypes.cast(output_blob.pbData, wintypes.HLOCAL)
+                    ctypes.cast(output_blob.pbData, ctypes.c_void_p)
                 )
 
 
