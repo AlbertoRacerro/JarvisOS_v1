@@ -103,7 +103,6 @@ class WindowsDpapiCurrentUserProtector:
     def _call_protect(self, secret_id: str, plaintext: bytes) -> bytes:
         input_buffer, input_blob = _input_blob(plaintext)
         output_blob = _DataBlob()
-        del input_buffer
         succeeded = self._crypt32.CryptProtectData(
             ctypes.byref(input_blob),
             wintypes.LPCWSTR(f"JarvisOS:{secret_id}"),
@@ -113,6 +112,8 @@ class WindowsDpapiCurrentUserProtector:
             CRYPTPROTECT_UI_FORBIDDEN,
             ctypes.byref(output_blob),
         )
+        if len(input_buffer) != len(plaintext):
+            raise SecretProtectionOperationError("secret_protect_failed")
         return self._copy_and_free_output(
             succeeded,
             output_blob,
@@ -122,7 +123,6 @@ class WindowsDpapiCurrentUserProtector:
     def _call_unprotect(self, ciphertext: bytes) -> bytes:
         input_buffer, input_blob = _input_blob(ciphertext)
         output_blob = _DataBlob()
-        del input_buffer
         succeeded = self._crypt32.CryptUnprotectData(
             ctypes.byref(input_blob),
             None,
@@ -132,6 +132,8 @@ class WindowsDpapiCurrentUserProtector:
             CRYPTPROTECT_UI_FORBIDDEN,
             ctypes.byref(output_blob),
         )
+        if len(input_buffer) != len(ciphertext):
+            raise SecretProtectionOperationError("secret_unprotect_failed")
         return self._copy_and_free_output(
             succeeded,
             output_blob,
