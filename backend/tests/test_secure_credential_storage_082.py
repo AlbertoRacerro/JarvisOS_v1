@@ -3,13 +3,13 @@ from __future__ import annotations
 import ctypes
 import hashlib
 import json
-import os
 import sys
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.database import initialize_database
 from app.core.paths import JarvisPaths, build_paths
 from app.modules.secrets import protection, storage
 from app.modules.secrets.protection import WINDOWS_DPAPI_PROTECTOR_ID
@@ -240,6 +240,7 @@ def test_snapshot_excludes_secret_and_restore_removes_it(
     from scripts.data_root_recovery.snapshot import create_snapshot
 
     paths = build_paths()
+    initialize_database()
     paths.workspaces_dir.mkdir(parents=True, exist_ok=True)
     paths.artifacts_dir.mkdir(parents=True, exist_ok=True)
     paths.secrets_dir.mkdir(parents=True, exist_ok=True)
