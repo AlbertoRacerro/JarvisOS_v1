@@ -51,23 +51,58 @@ before Codex or another coding agent may act on them.
 - New infrastructure, credentials, state stores, or scope must pass the mandatory minimum-necessary test in the PR body.
 - Independently removable specifications remain separate.
 
-The 2026-08-01 binding queue is exhausted:
+The frontend-beta direction and binding delivery queue are defined by spec 081.
 
-1. spec 079 minimal scheduled continuation was integrated through PR #210;
-2. the documentation-only full specification for 078 was integrated through PR #211;
-3. the required report-and-stop boundary was reached without implementing 078.
+The queue remains sequential and every implementation slice must still pass the normal
+backlog row → kernel or definition → full spec → readiness → implementation → exact-head
+gates → review → merge → registry-reconciliation lifecycle. A `planned` row is not
+implementation authority.
 
-No implementation front is currently authorized. The next binding queue requires an explicit maintainer decision after the current-capability and frontend-readiness audit.
+The binding order is:
 
-Specs 066, 067, 068, and 070 remain frozen. Spec 080 is a separate planned review/repair capability and is not part of 079.
+1. 081 FRONTEND-BETA-AUTHORITY-0 definition and registry reconciliation;
+2. 082 SECURE-CREDENTIAL-STORAGE-0;
+3. 070 UI-FOUNDATION-1, freshly re-derived from current `master`;
+4. 083 APP-SHELL-1;
+5. 084 BLUECAD-READ-MODEL-1;
+6. 085 BLUECAD-WORKBENCH-2;
+7. 086 MODEL-INSPECTION-A0;
+8. 087 LINEAGE-OVERVIEW-1;
+9. 088 RUNS-WORKBENCH-1;
+10. 035 ENGINEERING-DATA-1, freshly re-derived;
+11. 089 ANALYTICS-DOCK-1;
+12. 054 PROPOSAL-REVIEW-1, freshly re-derived;
+13. request and complete the 062 operator-design session when the operator is available;
+14. 090 AI-THREADS-0;
+15. 091 JARVIS-SIDECAR-1;
+16. 029 SETTINGS-1, freshly re-derived;
+17. 092 SCENE-BINDING-0;
+18. 058c SCENE-SEMANTICS-A1, freshly re-derived;
+19. 006b PARAMETRIC-VARIANTS-1, freshly re-derived;
+20. 058b VARIANT-COMPARISON-1, freshly re-derived.
+
+The 062 design session is not an implementation front and may remain pending while Phase 5
+proceeds. No Phase-5 slice may add, imitate, consume, or redesign the grade surface, and all
+062-dependent work remains blocked until the operator design is complete.
+
+Specs 066, 067, 068, and 080 remain frozen for the duration of this queue. Spec 078 remains
+planned without implementation authority. Spec 093 and any Aspen-like editable flowsheet are
+outside the binding queue.
+
+The queue is binding but not immutable. If a slice proves non-implementable within its
+accepted boundary, or a prerequisite proves insufficient, the active front stops and a later
+definition-only authority spec may re-derive the remaining queue. Re-derivation must preserve
+already merged slices, record the stop reason and reached state, retain the 066–068 freeze,
+and explicitly identify any product decision from spec 081 that it changes. Silent
+abandonment or substitution is not authorized.
 
 ## Current priority and drafting order
 
 1. Preserve merged 059a/059b, 061a/061b, 075, 076, 077, and 079 authority boundaries.
-2. Preserve the merged documentation contract for 078 without treating it as implementation authorization.
-3. Keep 078 `planned` until a dated readiness decision names an implementation scope and pull request.
-4. Leave 080 planned and separate.
-5. Start no backend or frontend implementation until a new explicit queue selects the next independently removable front.
+2. Complete and merge the definition-only 081 authority and registry reconciliation.
+3. Derive 082 as the first implementation slice; no frontend implementation precedes it.
+4. Preserve the merged documentation contract for 078 without treating it as implementation authorization.
+5. Keep 066–068 and 080 frozen, and keep 062 blocked until its operator-design decision.
 
 ## Registry
 
@@ -80,7 +115,7 @@ Specs 066, 067, 068, and 070 remain frozen. Spec 080 is a separate planned revie
 | 005 | merged | [#12](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/12) | BLUECAD CAD adapter MVP | — | Define GeometrySpec v0, deterministic CAD construction/export, and Tier 0–1 validation foundations. |
 | 005b | merged | [#19](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/19) | BLUECAD remaining part-kind builders | 005 | Add deterministic manifold, float, anchor-mount, and harvest-module builders plus interface-aware ports. |
 | 006 | merged | [#23](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/23) | BLUECAD workbench + 3D viewer | 005, 010 | Add the operator workbench, secure BLUECAD artifact serving, candidate detail, validation reports, attempt history, and GLB viewing. |
-| 006b | blocked | — | BLUECAD parametric variants | 006 | Full spec is ready, but the maintainer has deferred frontend work; keep the backend and slider surface as one slice and resume only when the UI window reopens. |
+| 006b | blocked | — | BLUECAD parametric variants | 006, 083, 085, 092, 058c | Remains blocked through Phases 1–5. Phase 6 may freshly re-derive deterministic child variants only after the new shell, migrated BLUECAD workbench, verified scene binding, and A1 scene semantics exist. |
 | 006c | merged | [#30](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/30) | BLUECAD workbench UX pass | 006 | Add archive, malformed-detail inspection, promotion, retry/duplicate-brief flows, and safer validation rendering. |
 | 007 | merged | [#17](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/17) | BLUECAD tool registry | 005 | Add fail-closed tool registration, health/hash checks, subprocess execution boundaries, and CI license-boundary enforcement. |
 | 008 | merged | [#32](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/32) | BLUECAD Gmsh mesh adapter | 005, 007 | Generate deterministic Gmsh inputs and physical groups, invoke Gmsh through the registry, and return structured mesh-quality outcomes. |
@@ -105,15 +140,15 @@ Specs 066, 067, 068, and 070 remain frozen. Spec 080 is a separate planned revie
 | 026 | planned | — | BoardSession stateful multi-persona sessions | 011, 034, 040 | Deferred post-alpha: add shared-state multi-persona sessions only after the advisory panel and memory/context spine prove useful in real work. |
 | 027 | planned | — | Modal and thermal analysis types | 009, 024 | Extend the verified static-FEM boundary only when a real BlueRev decision requires modal or thermal analysis; do not pre-build a broad solver matrix. |
 | 028 | planned | — | Additive migration discipline | — | Document and test the existing versioned, additive migration policy before schema growth makes drift costly; no migration framework rewrite. |
-| 029 | planned | — | Settings and secrets operator page | 015, 018, 061a | Expose existing provider mode, budget, token-cap, secret-entry, and today/month token+spend counters per provider from existing status APIs; reuse `/ai/status`, and keep keys out of localStorage, logs, repository files, and normal frontend state. |
-| 030 | planned | — | Conversation-to-proposal handoff | 037, 042, 060, 068 | Superseded in part by Hermes for the conversation loop. Retain only the JarvisOS-side contract that turns a workspace-scoped conversation result into a drafted brief, record proposal, or GeometrySpec with explicit approval before existing deterministic execution. |
-| 031 | planned | — | Policy-owned design vocabulary surface | 005, 030, 067 | Superseded in part by Hermes chat configuration. Retain the JarvisOS-owned capability/vocabulary contract exposed through bounded services/MCP so any orchestrator reports what is expressible, approximate, or unsupported. |
-| 032 | planned | — | Core Team critique inside design conversation | 011, 030, 034 | Add advisory persona critiques to the approved design-conversation flow without pretending independent agents or bypassing validation and promotion gates. |
+| 029 | planned | — | Settings and secrets operator page | 015, 018, 061a, 082, 083, 090 | Re-derive as SETTINGS-1 after secure persistence, the application shell, and thread provenance exist; expose provider, budget, usage, storage and diagnostic state without placing keys in localStorage, logs, repository files, or normal frontend state. |
+| 030 | cancelled | — | Conversation-to-proposal handoff | 042 | Cancelled as a standalone conversation slice. Its valid workspace-scoped proposal handoff is absorbed by 090 and 091 and must continue to use existing MemoryStore and deterministic execution boundaries. |
+| 031 | planned | — | Policy-owned design vocabulary surface | 005, 067, 090, 091 | Retain the JarvisOS-owned bounded capability and vocabulary contract so any future interaction surface reports what is expressible, approximate, or unsupported; no second conversation engine or authority. |
+| 032 | planned | — | Core Team critique inside design conversation | 011, 034, 091 | Add advisory persona critiques to the approved Jarvis sidecar flow without pretending independent agents or bypassing validation and promotion gates. |
 | 033 | planned | — | Human-gated reusable part-kind proposal | 011, 012, 031, 056 | Promote exploration into reusable typed builders only through explicit human code promotion, protected property/conformance tests, parameter-schema review, and golden fixtures; no autonomous trusted-vocabulary mutation. |
 | 034 | planned | — | Persona policy and capability metadata | 060, 068 | Superseded in part by Hermes personas/subagents. Retain only versioned JarvisOS policy metadata, capability labels, context profiles, and advisory/authority constraints; no independent memory, permissions, route ownership, or promotion. |
-| 035 | planned | — | Domain Foundation navigator | 040, 050 | Add searchable/editable modeling-record navigation designed around provenance and future depends-on/feeds edges rather than a flat database list. |
-| 036 | planned | — | Honest orchestrator status and authority UI | 034, 058, 060, 068 | Superseded in part by the Hermes interaction surface. Retain only thin JarvisOS UI contracts needed to show advisory identity, active route/policy status, proposal state, and human authority without claiming that personas or Hermes are independent authorities. |
-| 037 | planned | — | Chat entry point to BLUECAD workbench | 010, 042 | Add the smallest chat on-ramp that creates or drafts a candidate in the existing workbench instead of introducing a second product surface. |
+| 035 | planned | — | Domain Foundation navigator | 040, 050, 051, 083, 087, 088 | Re-derive as ENGINEERING-DATA-1: searchable engineering-record navigation integrated with the shell, lineage/freshness overview, and run surfaces rather than a flat database list. |
+| 036 | planned | — | Honest orchestrator status and authority UI | 029, 034, 060, 068, 083, 091 | Retain only thin JarvisOS UI contracts needed to show advisory identity, route and policy state, proposal status, and human authority; no claim that personas or Hermes are independent authorities. |
+| 037 | cancelled | — | Chat entry point to BLUECAD workbench | 010, 042 | Cancelled as a standalone chat surface. Its valid candidate-drafting on-ramp is absorbed by 090 and 091 inside the single application shell. |
 | 038 | merged | [#65](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/65) | SIM-WIRE | 044 | Wire the existing mesh and static-FEM adapters into the BLUECAD attempt loop as an opt-in advisory stage with evidence records and no auto-promotion. |
 | 039 | planned | — | FRONTIER-1 provider route | 015, 018, 059b | Add the frontier provider adapter/route only behind the same server-owned egress, projected-budget, sensitivity, sanitization, provenance, trigger, and audit boundaries as every other external call. |
 | 040 | merged | [#38](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/38) | MEMORYSTORE-0 | — | Add the single proposal/promotion boundary for AI- and calculation-originated engineering records with provenance and additive migration support. |
@@ -130,13 +165,13 @@ Specs 066, 067, 068, and 070 remain frozen. Spec 080 is a separate planned revie
 | 051 | merged | [#159](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/159) | FLOWSHEET-RECALC stale propagation | 050 | When an accepted input changes, deterministically mark dependent outputs stale and explain the dependency path; no automatic recomputation or silent promotion. |
 | 052 | merged | [#170](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/170) | CAD-LINK-0: 047 M0 cylinder proxy to BLUECAD | 005, 038, 050, 051, 071 | Convert one fresh successful bundled-047 run with accepted parameter-backed geometry inputs into an idempotent one-`tube_run` BLUECAD candidate, reconcile CAD geometry against 047 volume/area outputs, and return dependency/evidence lineage; full-reactor topology and tube-count semantics remain deferred. |
 | 053 | planned | — | Decision packet and dossier export | 041, 044, 048 | Export recommendations, alternatives, evidence, assumptions, uncertainty, and provenance as a readable decision-to-evidence dossier for thesis, advisor, investor, or later IP/grant workflows. |
-| 054 | planned | — | Proposal-review UI | 040, 041, 058 | Show proposed records with provenance and provide explicit promote/reject actions over existing endpoints; this is the load-bearing human authority surface. |
-| 055 | planned | — | Project view: Mark-1 as one navigable object | 035, 044, 050 | Assemble decisions, calculations, CAD, evidence, and flowsheet for one workspace without inventing a second store or duplicating canonical data; 3D/digital-twin rendering follows the ADR-058 contract (`scene_component_id` plus a typed binding manifest to `<kind>:<id>` records; no engineering values stored in the view). |
+| 054 | planned | — | Proposal-review UI | 040, 041, 083, 035, 087 | Re-derive as PROPOSAL-REVIEW-1 over the application shell, engineering-data navigation, and lineage overview; preserve explicit promote/reject authority and do not implement the blocked 062 grade surface. |
+| 055 | planned | — | Project view: Mark-1 as one navigable object | 035, 044, 050, 092 | Assemble decisions, calculations, CAD, evidence, and lineage for one workspace without a second store; semantic 3D identity requires the verified 092 binding contract and stores no engineering truth in the view. |
 | 056 | merged | [#88](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/88) | BLUECAD property-based geometry testing + determinism canary | 005 | Valid-domain property coverage, same-environment repeatability, and the canonical Linux full-manifest digest canary are merged. |
 | 057 | cancelled | — | SPEC-LEDGER-0 | — | Cancelled after [planning PR #64](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/64): a generated ledger script and parallel handoff file are unnecessary while this canonical registry is sufficient. |
-| 058 | planned | — | Unified workspace home layout | 006, 029, 037, 061a | Replace page-first navigation with the BLUECAD workbench/3D surface, persistent right-side AI entry, compact status strip with today/month token+spend counters per provider from existing status APIs, and shared design tokens. |
-| 058b | planned | — | Workbench UX pass 2: variant comparison and design history | 006b, 058 | Add bounded side-by-side variant comparison and a parent-link history tree after parametric variants and the unified workspace exist. |
-| 058c | planned | — | Report-to-3D linking | 006, 044, 058 | Let a failed validation/evidence check highlight the affected named geometry in the viewer, reusing existing artifact/node identities. |
+| 058 | cancelled | — | Unified workspace home layout | — | Cancelled as a monolithic implementation slice. Its product objective is redistributed across 070 UI foundation, 083 application shell, 091 Jarvis sidecar, and 029 Settings. |
+| 058b | planned | — | Workbench UX pass 2: variant comparison and design history | 006b, 083, 085, 089 | Re-derive as VARIANT-COMPARISON-1 after deterministic variants, the application shell, the migrated BLUECAD workbench, and unit-aware analytics exist. |
+| 058c | planned | — | Report-to-3D linking | 044, 085, 092 | Re-derive as SCENE-SEMANTICS-A1 only after the migrated BLUECAD workbench and verified scene-binding manifest exist; no mesh-index or exporter-order identity. |
 | 059 | planned | — | IP-EGRESS-1 umbrella definition | 003, 015, 018, 021, 040, 042 | Definition amended through PR #95 and reconciled with ADR-059 for external policy autopilot, automatic sanitization, sampled audit, and explicit maintainer residual-risk acceptance; this row remains definition-only. |
 | 059a | merged | [#90](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/90) | IP-EGRESS-1A: sensitivity and context foundation | 003, 015, 018, 021, 040, 042 | Digest-bound labels/derivatives, deterministic floors, stale handling, coherent read-snapshot selection, and S0/S1-only external preview merged in #90. |
 | 059b | merged | [#119](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/119) | IP-EGRESS-1B: policy autopilot and execution enforcement | 059a | Prompt/manual-context authority, automatic sanitizer provenance, exact per-binding packets and decisions, ticket-ID confirmation, atomic projected-budget reservation, sampled audit, fallback enforcement, and usage-source-bound accounting are merged. |
@@ -144,34 +179,51 @@ Specs 066, 067, 068, and 070 remain frozen. Spec 080 is a separate planned revie
 | 061 | planned | — | TOKEN-FLOW-0 umbrella definition | 021, 059b | Definition-only umbrella for complete flow economics and bounded completion; implementation is owned by 061a core and 061b continuation slices. |
 | 061a | merged | [#134](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/134) | TOKEN-FLOW-CORE-0 | 021, 059b | Correlate no-execution, synthetic, local-compute, and external-provider attempts in one canonical flow; separate adapter invocation from external dispatch, preserve 059b accounting authority, aggregate only external provider spend in USD, and expose local compute as unpriced. Continuation execution remains deferred to 061b. |
 | 061b | merged | [#145](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/145) | TOKEN-FLOW-CONTINUATION-0 | 061a | Add exact-length continuation, protected accumulated segments, restart-safe 059b confirmation resume, assembled-output digests, single final record capture, and safe continuation status after 061a is merged. |
-| 062 | blocked | — | GRADE-0 | 021, 059b, 061a, 061b | Backend PRs #166 and #167 are merged. The operator-visible four-choice result surface is blocked pending joint operator design of placement, interaction states, accessibility, revision and withdrawal behavior, and stale-subject conflict handling; no autonomous frontend implementation is authorized. |
+| 062 | blocked | — | GRADE-0 | 021, 059b, 061a, 061b | Backend PRs #166 and #167 are merged. The four-choice operator surface remains blocked pending joint operator design after Phase 4; no autonomous frontend implementation is authorized. That non-implementation session may remain pending while Phase 5 proceeds, but no Phase-5 slice may touch grade placement, state, revision, withdrawal, accessibility, or stale-subject conflicts. |
 | 063 | planned | — | CAPTURE-VAULT-0 | 040, 042 | Add a local markdown vault and rebuildable local vector working layer, merged with canonical SQLite retrieval under explicit authority/conflict tags; no vectors over canonical records. |
 | 064 | planned | — | LIT-RAG-0 | 042, 063 | Add corpus-tagged public-literature retrieval to the local working layer with source locators and canonical-over-literature authority; boundary consolidation remains a separately unnumbered planning gap. |
 | 065 | planned | — | Provider-family diversification policy hook | 059b | After policy autopilot is proven, add a configurable hook that may separate families of S2/S3-derived content across provider accounts without weakening exact-packet, budget, sensitivity, or audit gates. |
-| 066 | planned | — | HERMES-PASSTHROUGH-0 | 015, 018, 021, 059b, 061a, 061b, 062 | Frozen by maintainer decision on 2026-07-29. The prior definition branch is retained; restart requires explicit maintainer approval and fresh re-derivation from current `master`. |
-| 067 | planned | — | JARVIS-MCP-0 | 005, 010, 040, 042, 043, 044, 059a | Frozen by maintainer decision on 2026-07-29. The prior definition branch is retained; restart requires explicit maintainer approval and fresh re-derivation from current `master`. |
-| 068 | planned | — | HERMES-CONFIG-0 | 066, 067 | Frozen by maintainer decision on 2026-07-29. The prior definition branch is retained; restart requires explicit maintainer approval and fresh re-derivation from current `master`. |
+| 066 | planned | — | HERMES-PASSTHROUGH-0 | 015, 018, 021, 059b, 061a, 061b, 062 | Frozen by maintainer decision on 2026-07-29 and not reopened by 081. The prior definition branch is retained; restart requires explicit maintainer approval and fresh re-derivation from current `master`. |
+| 067 | planned | — | JARVIS-MCP-0 | 005, 010, 040, 042, 043, 044, 059a | Frozen by maintainer decision on 2026-07-29 and not reopened by 081. The prior definition branch is retained; restart requires explicit maintainer approval and fresh re-derivation from current `master`. |
+| 068 | planned | — | HERMES-CONFIG-0 | 066, 067 | Frozen by maintainer decision on 2026-07-29 and not reopened by 081. The prior definition branch is retained; restart requires explicit maintainer approval and fresh re-derivation from current `master`. |
 | 069 | planned | — | MEMORY-CONSOLIDATE-0 | 040, 042, 061a, 061b, 062, 066, 067, 068 | First Hermes dogfood: consolidate bounded accepted records/evidence into MemoryStore proposals with conflict preservation, provenance, grading, and cost evidence; never promote, overwrite, delete, or lower sensitivity. |
-| 070 | planned | — | UI-FOUNDATION-0: design tokens, appearance themes, and shared primitives | 006 | Frozen by maintainer decision on 2026-07-29. Definition PR #132 was closed without merge and its branch is retained; restart requires explicit maintainer approval and fresh re-derivation from current `master`. |
+| 070 | planned | — | UI-FOUNDATION-0: design tokens, appearance themes, and shared primitives | 006, 082 | The 2026-07-29 freeze is lifted by 081 only for a fresh UI-FOUNDATION-1 definition after 082. Closed PR #132 and its retained branch are historical input, not implementation authority. |
 | 071 | merged | [#147](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/147) | MODEL-SCENARIO-DOF-0: editable bindings, scenario runs, and degree-of-freedom inspection | 040, 043, 047 | Expose immutable value-free model input contracts, side-effect-free forward binding/DOF preview, parameter-backed or manual scenario bindings, existing-runner execution, and one bounded Domain Foundation panel; no inverse solver, targets, optimizer, automatic promotion, or embedded design defaults. |
-| 072 | merged | [#172](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/172) | BLUEREV-PROCESS-3: explicit symmetric hydraulic topology M1 | 043, 047, 050, 051, 052, 071 | Add one deterministic fixed-topology closed loop with common supply/return sections and 1–12 identical parallel branches; separate installed geometry from the representative hydraulic path, emit a canonical topology manifest, and prove reduction to 047 without adding a generic network solver, CAD layout, automatic recompute, or UI. |
+| 072 | merged | [#172](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/172) | BLUEREV-PROCESS-3: explicit symmetric hydraulic topology M1 | 043, 047, 050, 051, 052, 071 | Preserve the validated deterministic parallel M1 topology as an inspectable experiment and alternative architecture. It is not the canonical BlueRev v1 serial Smart-Joint/tube topology and receives no new work in the frontend-beta queue. |
 | 073 | merged | [#174](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/174) | BLUECAD-PRIMITIVE-1: fluid-open capped branch manifold | 005, 005b, 056 | Add one deterministic capped branch-header primitive with exactly one common port and 1–12 branch ports, explicit branch bores through the header wall, closed-end geometry, kernel-volume reconciliation, and property/conformance tests; no process link, layout solver, project defaults, or UI. |
-| 074 | merged | [#183](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/183) | CAD-LINK-1: 072 M1 topology to deterministic multi-part BLUECAD | 038, 050, 051, 052, 071, 072, 073 | Convert a fresh 072 topology manifest into an idempotent multi-part BLUECAD candidate only through an explicit reviewed spatial-layout contract; reconcile process geometry, ports, volume/area, and lineage without inferring bend handedness, routing, or design defaults. |
+| 074 | merged | [#183](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/183) | CAD-LINK-1: 072 M1 topology to deterministic multi-part BLUECAD | 038, 050, 051, 052, 071, 072, 073 | Preserve the deterministic multi-part CAD link for the 072 parallel-topology experiment. It remains inspectable and supported but is not the canonical BlueRev v1 default. |
 | 075 | merged | [#191](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/191) | PROCESS-KERNEL-1: streams, components, units, and unit operations | 043, 047, 048, 071 | Re-express validated 047 as an acyclic flowsheet of typed material/scalar ports and reusable blocks, add additive unit-contract v2 and component/stream foundations, and require exact canonical 047 result identity before broader solver work. Readiness evidence and implementation ownership are frozen in [the 2026-07-27 readiness decision](075-readiness-2026-07-27.md). |
 | 076 | merged | [#195](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/195) | EVIDENCE-SIGHT-0: bounded evidence-guided structural repair | 010, 038, 044, 059b, 061a, 061b | Add an opt-in, separately budgeted structural-repair cycle using deterministic attempt-scoped evidence; preserve valid candidate state and artifact pointers on every unsuccessful path; no new states, migration, promotion, or egress authority. |
 | 077 | merged | [#198](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/198) | EVIDENCE-EGRESS-0: canonical evidence provenance and classification | 044, 059a, 059b, 076 | Bind canonical evidence rows and rendered evidence derivatives to workspace-scoped provenance, sensitivity, staleness, and exact-packet lineage before external model use; reuse 059a/059b authority and add no alternate egress path. Readiness sequencing, prompt authority, and no-migration packet lineage are frozen in [the 2026-07-28 readiness decision](077-readiness-2026-07-28.md). |
 | 078 | planned | — | PBR-MODELING-0: bounded photobioreactor modeling kernel | 043, 047, 048, 049, 071, 075 | The planning kernel and complete documentation-only full specification with verified scientific-evidence companions are merged through PR #211. 078 remains `planned` with no readiness decision, implementation PR, migration, dependency, or runtime authorization. |
 | 079 | merged | [#210](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/210) | AUTONOMOUS-DEVELOPMENT-LOOP-0: minimal scheduled continuation | 022 | Merged through PR #210. Resume exactly one existing in-review implementation PR once daily by reading the registry from exact PR heads, reusing Claude Code Action in OFF/SHADOW/EXECUTE_NO_MERGE modes, validating an untrusted patch with deterministic gates, and permitting only a non-forced same-branch push; no merge or review/repair authority. |
-| 080 | planned | — | AUTONOMOUS-REVIEW-REPAIR-0 | 004, 017, 019, 022, 079 | Define separately removable implementer/reviewer separation and bounded finding, correction, and re-review state; it is not part of 079 and is not authorized for implementation. |
+| 080 | planned | — | AUTONOMOUS-REVIEW-REPAIR-0 | 004, 017, 019, 022, 079 | Frozen for the duration of the frontend-beta queue. It remains separate from 079 and receives no implementation authority until a later explicit queue reopens it. |
+| 081 | planned | — | FRONTEND-BETA-AUTHORITY-0 | — | Definition-only umbrella derived from `master` at `2183b2282d239ed570c59d0982e227e54c62dad7`; freezes product direction, queue, phase evidence, transition continuity, and re-derivation rules. It must never receive an implementation PR. |
+| 082 | planned | — | SECURE-CREDENTIAL-STORAGE-0 | 015, 018, 021, 059b, 061a | Add restart-safe, deletable and corruption-aware provider-secret persistence through the existing secrets boundary, with OS-backed at-rest protection and no frontend, log, repository, or plaintext-database secret authority. |
+| 083 | planned | — | APP-SHELL-1 | 006, 070 | Add the routed desktop-first application shell, static PrimaryStage registry, contextual sidecar, closed-by-default analysis dock, and explicitly labelled legacy diagnostic routes without changing backend authority. |
+| 084 | planned | — | BLUECAD-READ-MODEL-1 | 006, 044, 050, 051, 083 | Add the smallest candidate aggregate read surface needed by the new shell for artifacts, attempts, evidence, run links, lifecycle status, and freshness without duplicating canonical data. |
+| 085 | planned | — | BLUECAD-WORKBENCH-2 | 006, 006c, 083, 084 | Migrate the complete working BLUECAD lifecycle into the new shell while preserving real GLB rendering, archive, retry, validation, evidence and promotion semantics. |
+| 086 | planned | — | MODEL-INSPECTION-A0 | 006, 085 | Add geometry-only viewer inspection and lifecycle hardening; all hits are session-scoped and carry no semantic record or scene-component identity. |
+| 087 | planned | — | LINEAGE-OVERVIEW-1 | 050, 051, 083 | Add an early read-only dependency, provenance and freshness overview with a compact inspector; no recomputation, mutation, or requirement for the full Engineering Data area. |
+| 088 | planned | — | RUNS-WORKBENCH-1 | 043, 071, 083 | Add operator run list/detail, binding preview, results, diagnostics, logs and artifacts over existing runner and simulation-run authority. |
+| 089 | planned | — | ANALYTICS-DOCK-1 | 035, 083, 087, 088 | Add closed-by-default, real-data analytics with declared units and comparability contracts; reject incompatible comparisons instead of normalizing them silently. |
+| 090 | planned | — | AI-THREADS-0 | 040, 041, 042, 059b, 061a, 061b, 083 | Add local episodic thread persistence and thread-to-attempt provenance while preserving distinct provider/fallback, token-flow, BLUECAD workflow, proposal, cost and latency evidence. Raw complete-thread external egress remains forbidden. |
+| 091 | planned | — | JARVIS-SIDECAR-1 | 042, 059b, 061a, 061b, 083, 090 | Add contextual Jarvis interaction and advisory role profiles inside the shared sidecar, reusing the existing execution, context, proposal, budget and egress boundaries; no Hermes runtime or fake autonomous presence. |
+| 092 | planned | — | SCENE-BINDING-0 | 005, 006, 056, 085 | Add a verified backend GLB/component binding manifest with deterministic component IDs, artifact and manifest digests, stable node resolution, tamper rejection and parsed-binary tests. |
+| 093 | planned | — | BLUEREV-SERIAL-TOPOLOGY-0 | 043, 047, 048, 049, 050, 051, 071, 075 | Future implementation authority for the canonical serial Smart-Joint/tubular-section BlueRev topology and side-stream harvest arrangement. It is outside the frontend-beta binding queue. |
 ## Superseded planning aliases and resolved collisions
 
 - Historical `045 = AGENT-ORCH` references are superseded by `060`; `045` is
   cancelled as a standalone isolation program and may be reopened only by its
   explicit product-reachability or non-bundled-execution triggers.
-- Historical `057 = Workspace home`, `057b`, and `057c` references are
-  superseded by `058`, `058b`, and `058c`; `057` remains the cancelled
-  SPEC-LEDGER-0 and must not be reused.
-- Specs 030, 031, 034, and 036 are superseded in part by the Hermes integration
-  umbrella 060 and config slice 068. Their residual JarvisOS-side contracts remain
-  live as described in the registry; they are not cancelled and do not authorize a
-  second conversation or orchestration engine.
+- Historical `057 = Workspace home`, `057b`, and `057c` references remain
+  superseded and must not be reused. Monolithic 058 is now cancelled; its product
+  objective is redistributed across 070, 083, 091, and 029, while 058b and 058c
+  retain their own re-derived Phase-6 scopes.
+- Specs 030 and 037 are cancelled as standalone conversation surfaces; their valid
+  proposal and BLUECAD on-ramp responsibilities are absorbed by 090 and 091.
+- Specs 031, 034, and 036 retain only bounded JarvisOS-side vocabulary, persona-policy,
+  and authority-display contracts. They do not authorize a second conversation or
+  orchestration engine and do not reopen frozen 066–068.
+- IDs 081–093 are reserved by FRONTEND-BETA-AUTHORITY-0 as recorded in the registry;
+  all references use the canonical three-digit form required by the registry gate.
