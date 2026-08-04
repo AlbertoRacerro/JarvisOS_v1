@@ -280,7 +280,17 @@ def evaluate_live_scaleway_smoke_gate(settings: AISettingsRead, provider_mode: s
         return "scaleway_monthly_token_cap_zero"
     if settings.scaleway_hard_stop_token_cap <= 0:
         return "scaleway_hard_stop_token_cap_zero"
-    current_usage = settings.scaleway_input_tokens_month_to_date + settings.scaleway_output_tokens_month_to_date
+
+    # Smoke-console usage is owned by the legacy ai_settings counters, while
+    # normal routed Scaleway attempts are owned by ai_jobs. These sources are
+    # disjoint on the current execution paths, so summing them preserves the
+    # historical monthly/hard-stop authority without double-counting.
+    legacy_usage = (
+        settings.scaleway_input_tokens_month_to_date
+        + settings.scaleway_output_tokens_month_to_date
+    )
+    routed_usage, _ = provider_month_to_date_usage("scaleway")
+    current_usage = legacy_usage + routed_usage
     if current_usage >= settings.scaleway_monthly_token_cap:
         return "scaleway_monthly_token_cap_exhausted"
     if current_usage >= settings.scaleway_hard_stop_token_cap:
