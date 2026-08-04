@@ -2,7 +2,7 @@
 
 **Definition status:** complete implementation contract; implementation authority depends on the registry readiness decision in `094-readiness-2026-08-04.md`.
 
-**Depends on:** 015, 018, 021, 059b, 061a, 061b, 082
+**Depends on:** 015, 018, 021, 059b, 061a, 061b
 
 **Authority:** spec 081 re-derivation rule for an active slice that proved non-implementable within its accepted boundary
 
