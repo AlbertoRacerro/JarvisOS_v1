@@ -537,7 +537,12 @@ def _hard_blocking_reason(
     settings = connection.execute(
         """
         SELECT policy_mode, monthly_api_budget_usd,
-               api_spend_month_to_date_usd, paid_ai_enabled
+               api_spend_month_to_date_usd, paid_ai_enabled,
+               provider_mode, scaleway_enabled,
+               scaleway_monthly_token_cap,
+               scaleway_hard_stop_token_cap,
+               scaleway_input_tokens_month_to_date,
+               scaleway_output_tokens_month_to_date
         FROM ai_settings WHERE id = 'default'
         """
     ).fetchone()
@@ -550,6 +555,12 @@ def _hard_blocking_reason(
     monthly_budget = float(settings["monthly_api_budget_usd"])
     if monthly_budget <= 0:
         return "monthly_budget_zero"
+
+    if material.provider_id == "scaleway":
+        if settings["provider_mode"] != "scaleway":
+            return "scaleway_provider_mode_required"
+        if not bool(settings["scaleway_enabled"]):
+            return "scaleway_disabled"
 
     provider = registry.providers[material.provider_id]
     try:
@@ -574,14 +585,35 @@ def _hard_blocking_reason(
         + projection.projected_input_tokens
         + projection.projected_output_tokens
     )
-    if provider.monthly_token_cap > 0 and projected_provider_tokens > provider.monthly_token_cap:
+    if material.provider_id == "scaleway":
+        monthly_cap = int(settings["scaleway_monthly_token_cap"])
+        hard_stop_cap = int(settings["scaleway_hard_stop_token_cap"])
+        if monthly_cap <= 0:
+            return "scaleway_monthly_token_cap_zero"
+        if hard_stop_cap <= 0:
+            return "scaleway_hard_stop_token_cap_zero"
+        legacy_tokens = int(
+            settings["scaleway_input_tokens_month_to_date"]
+        ) + int(settings["scaleway_output_tokens_month_to_date"])
+        projected_scaleway_tokens = legacy_tokens + projected_provider_tokens
+        if projected_scaleway_tokens > monthly_cap:
+            return "scaleway_monthly_token_cap_exceeded"
+        if projected_scaleway_tokens > hard_stop_cap:
+            return "scaleway_hard_stop_token_cap_exceeded"
+    if (
+        provider.monthly_token_cap > 0
+        and projected_provider_tokens > provider.monthly_token_cap
+    ):
         return "provider_monthly_token_cap_exceeded"
     projected_provider_cost = (
         snapshot.provider_actual_cost_usd
         + snapshot.provider_reserved_cost_usd
         + projection.projected_cost_upper_usd
     )
-    if provider.monthly_cost_cap_usd > 0 and projected_provider_cost > provider.monthly_cost_cap_usd:
+    if (
+        provider.monthly_cost_cap_usd > 0
+        and projected_provider_cost > provider.monthly_cost_cap_usd
+    ):
         return "provider_monthly_cost_cap_exceeded"
     return None
 
@@ -648,8 +680,12 @@ def _budget_snapshot(
     now_dt: datetime,
     now_iso: str,
 ) -> _BudgetSnapshot:
-    month_start = now_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
-    day_start = now_dt.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    month_start = now_dt.replace(
+        day=1, hour=0, minute=0, second=0, microsecond=0
+    ).isoformat()
+    day_start = now_dt.replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ).isoformat()
     global_row = connection.execute(
         """
         SELECT COALESCE(SUM(COALESCE(cost_estimate, 0)), 0) AS cost

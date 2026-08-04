@@ -1,14 +1,20 @@
 from app.core.database import open_sqlite_connection
-from app.modules.ai.budget import evaluate_live_scaleway_smoke_gate
-from app.modules.ai.contracts import AIPrivacyClass, AIRequest, AITaskType
-from app.modules.ai.models import AISettingsRead, SmokeConsoleRequest, SmokeConsoleResponse, SmokeTestTokenMetadata
+from app.modules.ai.budget import (
+    evaluate_live_scaleway_smoke_gate,
+    scaleway_usage_snapshot,
+)
+from app.modules.ai.execution import AiTaskOutcome, run_ai_task
+from app.modules.ai.models import AISettingsRead, SmokeConsoleRequest, SmokeConsoleResponse
 from app.modules.ai.privacy import PrivacyPolicyEngine
-from app.modules.ai.providers.scaleway_adapter import SCALEWAY_ADAPTER_INTERFACE, ScalewayProviderAdapter
-from app.modules.ai.settings import get_ai_settings, record_scaleway_token_usage
-from app.modules.ai.token_guard import estimate_tokens, evaluate_token_guard, metadata_with_reported_usage
+from app.modules.ai.provider_registry import registry_bindings
+from app.modules.ai.providers.scaleway_adapter import SCALEWAY_ADAPTER_INTERFACE
+from app.modules.ai.settings import get_ai_settings
+from app.modules.ai.token_guard import estimate_tokens
 from app.modules.events.service import log_event, utc_now
 
 SMOKE_CONSOLE_MODE = "live_smoke_console"
+SMOKE_CONSOLE_ROUTE = "external:scaleway"
+SMOKE_CONSOLE_TASK_KIND = "synthesis"
 SMOKE_CONSOLE_TOKEN_THRESHOLD = 500000
 SMOKE_CONSOLE_DEFAULT_OUTPUT_TOKENS = 80
 SMOKE_CONSOLE_MAX_OUTPUT_TOKENS = 80
@@ -17,19 +23,22 @@ SMOKE_CONSOLE_MAX_PROMPT_LENGTH = 500
 
 def run_smoke_console(request: SmokeConsoleRequest) -> SmokeConsoleResponse:
     settings = get_ai_settings()
-    adapter = ScalewayProviderAdapter()
-    provider = adapter.provider
-    model = provider.model()
+    provider, model = _binding_identity()
     prompt = request.prompt.strip()
-    requested_output_tokens = request.max_output_tokens or SMOKE_CONSOLE_DEFAULT_OUTPUT_TOKENS
-    estimated_output_tokens = min(requested_output_tokens, SMOKE_CONSOLE_MAX_OUTPUT_TOKENS)
+    requested_output_tokens = (
+        request.max_output_tokens or SMOKE_CONSOLE_DEFAULT_OUTPUT_TOKENS
+    )
+    estimated_output_tokens = min(
+        requested_output_tokens,
+        SMOKE_CONSOLE_MAX_OUTPUT_TOKENS,
+    )
     estimated_input_tokens = estimate_tokens(prompt) if prompt else 0
 
     _log_console_event(
         "AISmokeConsoleStarted",
         settings=settings,
         workspace_id=request.workspace_id,
-        provider=provider.name,
+        provider=provider,
         model=model,
         privacy_class="not_evaluated",
         blocked_reason=None,
@@ -43,12 +52,15 @@ def run_smoke_console(request: SmokeConsoleRequest) -> SmokeConsoleResponse:
         prompt_length=len(prompt),
     )
 
-    gate_reason = evaluate_live_scaleway_smoke_gate(settings, settings.provider_mode)
+    gate_reason = evaluate_live_scaleway_smoke_gate(
+        settings,
+        settings.provider_mode,
+    )
     if gate_reason:
         return _blocked_response(
             settings=settings,
             workspace_id=request.workspace_id,
-            provider=provider.name,
+            provider=provider,
             model=model,
             privacy_class="not_evaluated",
             blocked_reason=gate_reason,
@@ -65,7 +77,7 @@ def run_smoke_console(request: SmokeConsoleRequest) -> SmokeConsoleResponse:
         return _blocked_response(
             settings=settings,
             workspace_id=request.workspace_id,
-            provider=provider.name,
+            provider=provider,
             model=model,
             privacy_class="unknown",
             blocked_reason="smoke_console_prompt_empty",
@@ -82,7 +94,7 @@ def run_smoke_console(request: SmokeConsoleRequest) -> SmokeConsoleResponse:
         return _blocked_response(
             settings=settings,
             workspace_id=request.workspace_id,
-            provider=provider.name,
+            provider=provider,
             model=model,
             privacy_class="unknown",
             blocked_reason="smoke_console_prompt_too_long",
@@ -99,7 +111,7 @@ def run_smoke_console(request: SmokeConsoleRequest) -> SmokeConsoleResponse:
         return _blocked_response(
             settings=settings,
             workspace_id=request.workspace_id,
-            provider=provider.name,
+            provider=provider,
             model=model,
             privacy_class="unknown",
             blocked_reason="smoke_console_max_output_tokens_exceeded",
@@ -112,15 +124,20 @@ def run_smoke_console(request: SmokeConsoleRequest) -> SmokeConsoleResponse:
             prompt_length=len(prompt),
         )
 
-    policy_decision = PrivacyPolicyEngine().decide_for_smoke_console(prompt, policy_mode=settings.policy_mode)
+    policy_decision = PrivacyPolicyEngine().decide_for_smoke_console(
+        prompt,
+        policy_mode=settings.policy_mode,
+    )
     if not policy_decision.external_allowed:
         return _blocked_response(
             settings=settings,
             workspace_id=request.workspace_id,
-            provider=provider.name,
+            provider=provider,
             model=model,
             privacy_class=policy_decision.privacy_class,
-            blocked_reason=policy_decision.blocking_reason or "privacy_policy_blocked",
+            blocked_reason=(
+                policy_decision.blocking_reason or "privacy_policy_blocked"
+            ),
             external_call_attempted=False,
             estimated_input_tokens=estimated_input_tokens,
             estimated_output_tokens=estimated_output_tokens,
@@ -130,112 +147,135 @@ def run_smoke_console(request: SmokeConsoleRequest) -> SmokeConsoleResponse:
             prompt_length=len(prompt),
         )
 
-    token_decision = evaluate_token_guard(
-        settings,
-        input_text=prompt,
-        estimated_output_tokens=estimated_output_tokens,
-    )
-    if not token_decision.allowed:
-        return _blocked_response(
-            settings=settings,
+    try:
+        outcome = run_ai_task(
+            user_prompt=prompt,
+            task_kind=SMOKE_CONSOLE_TASK_KIND,
+            route_class=SMOKE_CONSOLE_ROUTE,
+            max_output_tokens=estimated_output_tokens,
             workspace_id=request.workspace_id,
-            provider=provider.name,
+        )
+    except Exception as exc:
+        return _blocked_response(
+            settings=get_ai_settings(),
+            workspace_id=request.workspace_id,
+            provider=provider,
             model=model,
             privacy_class=policy_decision.privacy_class,
-            blocked_reason=token_decision.reason or "scaleway_monthly_token_cap_exceeded",
+            blocked_reason="smoke_console_execution_failed",
             external_call_attempted=False,
-            estimated_input_tokens=token_decision.metadata.estimated_input_tokens,
-            estimated_output_tokens=token_decision.metadata.estimated_output_tokens,
+            estimated_input_tokens=estimated_input_tokens,
+            estimated_output_tokens=estimated_output_tokens,
             actual_input_tokens=None,
             actual_output_tokens=None,
-            usage_source=token_decision.metadata.usage_source,
+            usage_source="estimated",
             prompt_length=len(prompt),
-            token_metadata=token_decision.metadata,
+            error_type=type(exc).__name__,
         )
 
-    live_response = adapter.complete(
-        AIRequest(
-            task_type=AITaskType.smoke_console_test,
-            privacy_class=AIPrivacyClass(policy_decision.privacy_class),
-            prompt=prompt,
-            workspace_id=request.workspace_id,
-            model_preference=model,
-            max_output_tokens=token_decision.metadata.estimated_output_tokens,
-            metadata={"mode": SMOKE_CONSOLE_MODE},
-        )
-    )
-    if live_response.error:
+    settings = get_ai_settings()
+    if outcome.status != "success" or outcome.response is None:
+        attempted = _external_call_attempted(outcome)
         return _blocked_response(
             settings=settings,
             workspace_id=request.workspace_id,
-            provider=live_response.provider_id,
-            model=live_response.model_id,
+            provider=(
+                outcome.response.provider_id
+                if outcome.response is not None
+                else provider
+            ),
+            model=(
+                outcome.response.model_id
+                if outcome.response is not None
+                else model
+            ),
             privacy_class=policy_decision.privacy_class,
-            blocked_reason=live_response.blocked_reason or "scaleway_live_call_failed",
-            external_call_attempted=bool(live_response.raw_provider_metadata.get("external_call_attempted", True)),
-            estimated_input_tokens=token_decision.metadata.estimated_input_tokens,
-            estimated_output_tokens=token_decision.metadata.estimated_output_tokens,
+            blocked_reason=_outcome_blocking_reason(outcome),
+            external_call_attempted=attempted,
+            estimated_input_tokens=estimated_input_tokens,
+            estimated_output_tokens=estimated_output_tokens,
             actual_input_tokens=None,
             actual_output_tokens=None,
-            usage_source=token_decision.metadata.usage_source,
+            usage_source="estimated",
             prompt_length=len(prompt),
-            token_metadata=token_decision.metadata,
-            error_type=_optional_string(live_response.error.safe_metadata.get("error_type")),
+            error_type=outcome.error_type,
+            egress_decision_id=outcome.egress_decision_id,
+            egress_ticket_id=outcome.egress_ticket_id,
+            egress_reservation_id=outcome.egress_reservation_id,
         )
 
-    usage_metadata = metadata_with_reported_usage(
-        token_decision.metadata,
-        reported_input_tokens=_reported_token(live_response.raw_provider_metadata.get("reported_input_tokens")),
-        reported_output_tokens=_reported_token(live_response.raw_provider_metadata.get("reported_output_tokens")),
+    response = outcome.response
+    actual_input_tokens = _reported_token(
+        response.raw_provider_metadata.get("reported_input_tokens")
     )
-    input_tokens_to_record = (
-        usage_metadata.reported_input_tokens
-        if usage_metadata.reported_input_tokens is not None
-        else token_decision.metadata.estimated_input_tokens
+    actual_output_tokens = _reported_token(
+        response.raw_provider_metadata.get("reported_output_tokens")
     )
-    output_tokens_to_record = (
-        usage_metadata.reported_output_tokens
-        if usage_metadata.reported_output_tokens is not None
-        else token_decision.metadata.estimated_output_tokens
-    )
-    settings = record_scaleway_token_usage(
-        input_tokens=input_tokens_to_record,
-        output_tokens=output_tokens_to_record,
-    )
-
-    response = _response(
+    usage_source = _usage_source_value(response.usage.usage_source)
+    result = _response(
         settings=settings,
-        response_text=live_response.text,
-        provider=live_response.provider_id,
-        model=live_response.model_id,
+        response_text=response.text,
+        provider=response.provider_id,
+        model=response.model_id,
         privacy_class=policy_decision.privacy_class,
         blocked_reason=None,
-        external_call_attempted=True,
+        external_call_attempted=_external_call_attempted(outcome),
         external_call_succeeded=True,
-        estimated_input_tokens=usage_metadata.estimated_input_tokens,
-        estimated_output_tokens=usage_metadata.estimated_output_tokens,
-        actual_input_tokens=usage_metadata.reported_input_tokens,
-        actual_output_tokens=usage_metadata.reported_output_tokens,
-        usage_source=usage_metadata.usage_source,
+        estimated_input_tokens=estimated_input_tokens,
+        estimated_output_tokens=estimated_output_tokens,
+        actual_input_tokens=actual_input_tokens,
+        actual_output_tokens=actual_output_tokens,
+        usage_source=usage_source,
     )
     _log_console_event(
         "AISmokeConsoleCompleted",
         settings=settings,
         workspace_id=request.workspace_id,
-        provider=live_response.provider_id,
-        model=live_response.model_id,
+        provider=response.provider_id,
+        model=response.model_id,
         privacy_class=policy_decision.privacy_class,
         blocked_reason=None,
-        external_call_attempted=True,
+        external_call_attempted=result.external_call_attempted,
         external_call_succeeded=True,
-        estimated_input_tokens=response.estimated_input_tokens,
-        estimated_output_tokens=response.estimated_output_tokens,
-        actual_input_tokens=response.actual_input_tokens,
-        actual_output_tokens=response.actual_output_tokens,
-        usage_source=response.usage_source,
+        estimated_input_tokens=result.estimated_input_tokens,
+        estimated_output_tokens=result.estimated_output_tokens,
+        actual_input_tokens=result.actual_input_tokens,
+        actual_output_tokens=result.actual_output_tokens,
+        usage_source=result.usage_source,
         prompt_length=len(prompt),
+        egress_decision_id=outcome.egress_decision_id,
+        egress_ticket_id=outcome.egress_ticket_id,
+        egress_reservation_id=outcome.egress_reservation_id,
     )
-    return response
+    return result
+
+
+def _binding_identity() -> tuple[str, str]:
+    binding = registry_bindings().get(SMOKE_CONSOLE_ROUTE)
+    if binding is None:
+        return "scaleway", "unbound"
+    return binding.provider_id, binding.model_id
+
+
+def _external_call_attempted(outcome: AiTaskOutcome) -> bool:
+    if outcome.response is None:
+        return False
+    return bool(
+        outcome.response.raw_provider_metadata.get(
+            "external_call_attempted",
+            False,
+        )
+    )
+
+
+def _outcome_blocking_reason(outcome: AiTaskOutcome) -> str:
+    if outcome.response is not None and outcome.response.blocked_reason:
+        return outcome.response.blocked_reason
+    if outcome.egress_reason_code:
+        return outcome.egress_reason_code
+    if outcome.error_type:
+        return outcome.error_type
+    return outcome.status
 
 
 def _blocked_response(
@@ -253,8 +293,10 @@ def _blocked_response(
     actual_output_tokens: int | None,
     usage_source: str,
     prompt_length: int,
-    token_metadata: SmokeTestTokenMetadata | None = None,
     error_type: str | None = None,
+    egress_decision_id: str | None = None,
+    egress_ticket_id: str | None = None,
+    egress_reservation_id: str | None = None,
 ) -> SmokeConsoleResponse:
     response = _response(
         settings=settings,
@@ -287,8 +329,10 @@ def _blocked_response(
         actual_output_tokens=response.actual_output_tokens,
         usage_source=response.usage_source,
         prompt_length=prompt_length,
-        blocked_by_token_cap=token_metadata.blocked_by_token_cap if token_metadata else False,
         error_type=error_type,
+        egress_decision_id=egress_decision_id,
+        egress_ticket_id=egress_ticket_id,
+        egress_reservation_id=egress_reservation_id,
     )
     return response
 
@@ -309,9 +353,10 @@ def _response(
     actual_output_tokens: int | None,
     usage_source: str,
 ) -> SmokeConsoleResponse:
-    current_input = settings.scaleway_input_tokens_month_to_date
-    current_output = settings.scaleway_output_tokens_month_to_date
-    current_total = current_input + current_output
+    usage = scaleway_usage_snapshot(settings)
+    current_input = usage.total_input_tokens
+    current_output = usage.total_output_tokens
+    current_total = usage.total_tokens
     return SmokeConsoleResponse(
         response_text=response_text,
         provider=provider,
@@ -332,7 +377,10 @@ def _response(
         configured_monthly_token_cap=settings.scaleway_monthly_token_cap,
         token_threshold=SMOKE_CONSOLE_TOKEN_THRESHOLD,
         token_threshold_percent=_threshold_percent(current_total),
-        remaining_tokens_to_threshold=max(SMOKE_CONSOLE_TOKEN_THRESHOLD - current_total, 0),
+        remaining_tokens_to_threshold=max(
+            SMOKE_CONSOLE_TOKEN_THRESHOLD - current_total,
+            0,
+        ),
     )
 
 
@@ -349,10 +397,9 @@ def _reported_token(value: object) -> int | None:
         return None
 
 
-def _optional_string(value: object) -> str | None:
-    if value is None:
-        return None
-    return str(value)
+def _usage_source_value(value: object) -> str:
+    enum_value = getattr(value, "value", None)
+    return str(enum_value if enum_value is not None else value)
 
 
 def _log_console_event(
@@ -372,10 +419,13 @@ def _log_console_event(
     actual_output_tokens: int | None,
     usage_source: str,
     prompt_length: int,
-    blocked_by_token_cap: bool = False,
     error_type: str | None = None,
+    egress_decision_id: str | None = None,
+    egress_ticket_id: str | None = None,
+    egress_reservation_id: str | None = None,
 ) -> None:
-    current_total = settings.scaleway_input_tokens_month_to_date + settings.scaleway_output_tokens_month_to_date
+    usage = scaleway_usage_snapshot(settings)
+    current_total = usage.total_tokens
     payload = {
         "workspace_id": workspace_id,
         "provider": provider,
@@ -384,6 +434,7 @@ def _log_console_event(
         "model_id": model,
         "adapter_interface": SCALEWAY_ADAPTER_INTERFACE,
         "mode": SMOKE_CONSOLE_MODE,
+        "route_class": SMOKE_CONSOLE_ROUTE,
         "policy_mode": settings.policy_mode.value,
         "privacy_class": privacy_class,
         "blocked_reason": blocked_reason,
@@ -394,17 +445,22 @@ def _log_console_event(
         "actual_input_tokens": actual_input_tokens,
         "actual_output_tokens": actual_output_tokens,
         "usage_source": usage_source,
-        "current_month_input_tokens": settings.scaleway_input_tokens_month_to_date,
-        "current_month_output_tokens": settings.scaleway_output_tokens_month_to_date,
+        "current_month_input_tokens": usage.total_input_tokens,
+        "current_month_output_tokens": usage.total_output_tokens,
         "current_month_total_tokens": current_total,
         "configured_monthly_token_cap": settings.scaleway_monthly_token_cap,
         "token_threshold": SMOKE_CONSOLE_TOKEN_THRESHOLD,
         "token_threshold_percent": _threshold_percent(current_total),
-        "remaining_tokens_to_threshold": max(SMOKE_CONSOLE_TOKEN_THRESHOLD - current_total, 0),
-        "blocked_by_token_cap": blocked_by_token_cap,
+        "remaining_tokens_to_threshold": max(
+            SMOKE_CONSOLE_TOKEN_THRESHOLD - current_total,
+            0,
+        ),
         "prompt_length": prompt_length,
         "timestamp": utc_now(),
         "error_type": error_type,
+        "egress_decision_id": egress_decision_id,
+        "egress_ticket_id": egress_ticket_id,
+        "egress_reservation_id": egress_reservation_id,
     }
     with open_sqlite_connection() as connection:
         log_event(

@@ -421,7 +421,9 @@ def _validate_provider_execution_contract(provider: ProviderConfig) -> None:
         if provider.base_url is not None and not _is_loopback_url(provider.base_url):
             raise ValueError(f"{owner} local_compute endpoint must be loopback")
         return
-    if provider.kind != "openai_compatible" or not provider.requires_network:
+    if provider.kind == "scaleway" and provider.provider_id != "scaleway":
+        raise ValueError(f"{owner} dedicated Scaleway kind requires provider id scaleway")
+    if provider.kind not in {"openai_compatible", "scaleway"} or not provider.requires_network:
         raise ValueError(f"{owner} external_provider classification contradicts kind/egress metadata")
     if provider.base_url is None or provider.api_key_ref is None:
         raise ValueError(f"{owner} external_provider requires endpoint and credential reference")

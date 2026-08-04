@@ -61,13 +61,29 @@ class ScalewayProviderAdapter:
     def complete(self, request: AIRequest) -> AIResponse:
         prompt = _prompt_from_request(request)
         estimated_output_tokens = request.max_output_tokens or 80
+        call_kwargs: dict[str, object] = {
+            "prompt": prompt,
+            "estimated_output_tokens": estimated_output_tokens,
+        }
 
         if request.task_type == AITaskType.smoke_console_test:
             live_call = self.provider.create_live_console_completion
         elif request.task_type == AITaskType.smoke_test:
             live_call = self.provider.create_live_smoke_completion
         elif request.task_type in SCALEWAY_WORK_TASK_TYPES:
+            if not request.model_preference or not request.model_preference.strip():
+                return self._error_response(
+                    request,
+                    prompt=prompt,
+                    estimated_output_tokens=estimated_output_tokens,
+                    code=AIProviderErrorCode.provider_bad_request,
+                    blocked_reason="scaleway_routed_model_missing",
+                    message="Scaleway routed work requires a registry-bound model.",
+                    retryable=False,
+                    dispatch_state=AIExternalDispatchState.not_started,
+                )
             live_call = self.provider.create_work_completion
+            call_kwargs["model"] = request.model_preference.strip()
         else:
             return self._error_response(
                 request,
@@ -81,10 +97,7 @@ class ScalewayProviderAdapter:
             )
 
         try:
-            result = live_call(
-                prompt=prompt,
-                estimated_output_tokens=estimated_output_tokens,
-            )
+            result = live_call(**call_kwargs)
         except ScalewayNotConfiguredError as exc:
             return self._error_response(
                 request,
@@ -108,6 +121,18 @@ class ScalewayProviderAdapter:
                 retryable=isinstance(exc, (httpx.TimeoutException, httpx.NetworkError)),
                 error_type=type(exc).__name__,
                 dispatch_state=AIExternalDispatchState.unknown,
+            )
+
+        if not result.response_text.strip():
+            return self._error_response(
+                request,
+                prompt=prompt,
+                estimated_output_tokens=estimated_output_tokens,
+                code=AIProviderErrorCode.provider_unknown_error,
+                blocked_reason="scaleway_empty_completion",
+                message="Scaleway returned an empty completion.",
+                retryable=False,
+                dispatch_state=AIExternalDispatchState.started,
             )
 
         return _response_from_scaleway_result(

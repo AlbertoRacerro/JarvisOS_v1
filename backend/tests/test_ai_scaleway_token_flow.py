@@ -19,6 +19,8 @@ from app.modules.ai.models import AISettingsUpdate
 from app.modules.ai.provider_registry import parse_provider_registry
 from app.modules.ai.settings import ensure_ai_settings, update_ai_settings
 
+MODEL_ID = "gemma-4-26b-a4b-it"
+
 
 @dataclass
 class _ScalewayAdapter:
@@ -31,14 +33,14 @@ class _ScalewayAdapter:
         self.requests.append(request)
         return AIResponse(
             provider_id="scaleway",
-            model_id="llama-3.1-8b",
+            model_id=MODEL_ID,
             request_id=request.request_id,
             correlation_id=request.correlation_id,
             text="registered scaleway response",
             content="registered scaleway response",
             usage=AIUsage(
                 provider_id="scaleway",
-                model_id="llama-3.1-8b",
+                model_id=MODEL_ID,
                 input_tokens=13,
                 output_tokens=3,
                 usage_source=AIUsageSource.actual,
@@ -66,15 +68,15 @@ def _registry():
             "version": 1,
             "providers": {
                 "scaleway": {
-                    "kind": "openai_compatible",
+                    "kind": "scaleway",
                     "execution_class": "external_provider",
                     "enabled": True,
                     "requires_network": True,
                     "base_url": "https://api.scaleway.test/v1",
                     "api_key_ref": "env:SCALEWAY_API_KEY",
                     "models": {
-                        "llama-3.1-8b": {
-                            "provider_model_name": "llama-3.1-8b",
+                        MODEL_ID: {
+                            "provider_model_name": MODEL_ID,
                             "route_classes": ["external:scaleway"],
                             "context_window_tokens": 8192,
                             "max_output_tokens": 256,
@@ -89,7 +91,7 @@ def _registry():
                     },
                 }
             },
-            "fallback_chains": {"external:scaleway": ["scaleway/llama-3.1-8b"]},
+            "fallback_chains": {},
         }
     )
 
@@ -102,7 +104,10 @@ def test_registered_scaleway_attempt_uses_external_flow_contract(monkeypatch) ->
             policy_mode="FAST_DEV",
             monthly_api_budget_usd=100,
             paid_ai_enabled=True,
-            provider_mode="deepseek",
+            provider_mode="scaleway",
+            scaleway_enabled=True,
+            scaleway_smoke_test_enabled=True,
+            scaleway_live_smoke_test_enabled=True,
         )
     )
     monkeypatch.setenv("SCALEWAY_API_KEY", "test-only-secret")
@@ -148,6 +153,7 @@ def test_registered_scaleway_attempt_uses_external_flow_contract(monkeypatch) ->
     assert confirmed.status == "success"
     assert confirmed.flow_id == paused.flow_id
     assert len(adapter.requests) == 1
+    assert adapter.requests[0].model_preference == MODEL_ID
     with open_sqlite_connection() as connection:
         job = connection.execute(
             "SELECT execution_class, adapter_invoked, external_dispatch_state, "

@@ -49,6 +49,30 @@ providers:
         route_classes: [local:coder_heavy]
         context_window_tokens: 8192
         max_output_tokens: 512
+  scaleway:
+    kind: scaleway
+    execution_class: external_provider
+    enabled: true
+    requires_network: true
+    base_url: https://api.scaleway.ai/v1
+    api_key_ref: env:SCALEWAY_API_KEY
+    timeout_seconds: 20
+    monthly_token_cap: 1000000
+    monthly_cost_cap_usd: 25
+    models:
+      gemma-4-26b-a4b-it:
+        provider_model_name: gemma-4-26b-a4b-it
+        route_classes: [external:scaleway]
+        # Conservative JarvisOS operating bound, below current provider capability.
+        context_window_tokens: 8192
+        max_output_tokens: 256
+        # Conservative USD execution ceiling, not a vendor-price claim.
+        pricing:
+          currency: USD
+          input_usd_per_1m_tokens: 5.0
+          output_usd_per_1m_tokens: 20.0
+          pricing_version: operator-conservative-scaleway-v1
+          pricing_effective_at: "2026-08-04T00:00:00Z"
   deepseek:
     kind: openai_compatible
     execution_class: external_provider
