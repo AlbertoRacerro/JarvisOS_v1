@@ -107,6 +107,18 @@ def _evaluate_external_provider_policy(
     if settings.api_spend_month_to_date_usd >= settings.monthly_api_budget_usd:
         return ProviderBudgetGate(False, "monthly_budget_exhausted", provider_id)
 
+    if provider_id == "scaleway":
+        scaleway_blocking_reason = evaluate_live_scaleway_smoke_gate(
+            settings,
+            settings.provider_mode,
+        )
+        if scaleway_blocking_reason is not None:
+            return ProviderBudgetGate(
+                False,
+                scaleway_blocking_reason,
+                provider_id,
+            )
+
     provider = _registry_provider(provider_id)
     if provider is None or not provider.enabled:
         return ProviderBudgetGate(False, f"{provider_id}_disabled", provider_id)
