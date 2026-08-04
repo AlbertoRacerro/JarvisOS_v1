@@ -121,6 +121,14 @@ def _reservation_count() -> int:
         )
 
 
+def _prepare_first_use_ticket() -> str:
+    prepared = prepare_egress_attempt(_source_free_material(), now=NOW)
+    assert prepared.result == "pause"
+    assert prepared.ticket_id is not None
+    assert _reservation_count() == 0
+    return prepared.ticket_id
+
+
 def test_projected_request_cannot_cross_legacy_monthly_cap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -176,17 +184,9 @@ def test_projected_request_combines_legacy_and_routed_usage_at_hard_stop(
     [
         ({"provider_mode": "fake"}, "scaleway_provider_mode_required"),
         ({"scaleway_enabled": False}, "scaleway_disabled"),
-        (
-            {"scaleway_smoke_test_enabled": False},
-            "scaleway_smoke_test_disabled",
-        ),
-        (
-            {"scaleway_live_smoke_test_enabled": False},
-            "scaleway_live_smoke_test_disabled",
-        ),
     ],
 )
-def test_ticket_consumption_revalidates_scaleway_switches_atomically(
+def test_ticket_consumption_revalidates_route_switches_atomically(
     monkeypatch: pytest.MonkeyPatch,
     settings_update: dict[str, object],
     blocking_reason: str,
@@ -198,18 +198,44 @@ def test_ticket_consumption_revalidates_scaleway_switches_atomically(
         monthly_cap=1_000,
         hard_stop_cap=1_000,
     )
-    prepared = prepare_egress_attempt(_source_free_material(), now=NOW)
-    assert prepared.result == "pause"
-    assert prepared.ticket_id is not None
-    assert _reservation_count() == 0
+    ticket_id = _prepare_first_use_ticket()
 
     update_ai_settings(AISettingsUpdate(**settings_update))
-    consumed = consume_confirmation_ticket(prepared.ticket_id, now=NOW)
+    consumed = consume_confirmation_ticket(ticket_id, now=NOW)
 
     assert consumed.authorized is False
     assert consumed.reason_code == blocking_reason
     assert consumed.reservation_id is None
     assert _reservation_count() == 0
+
+
+@pytest.mark.parametrize(
+    "settings_update",
+    [
+        {"scaleway_smoke_test_enabled": False},
+        {"scaleway_live_smoke_test_enabled": False},
+    ],
+)
+def test_ticket_consumption_ignores_wrapper_only_smoke_switches(
+    monkeypatch: pytest.MonkeyPatch,
+    settings_update: dict[str, object],
+) -> None:
+    _bootstrap(monkeypatch)
+    _set_legacy_usage_and_caps(
+        input_tokens=0,
+        output_tokens=0,
+        monthly_cap=1_000,
+        hard_stop_cap=1_000,
+    )
+    ticket_id = _prepare_first_use_ticket()
+
+    update_ai_settings(AISettingsUpdate(**settings_update))
+    consumed = consume_confirmation_ticket(ticket_id, now=NOW)
+
+    assert consumed.authorized is True
+    assert consumed.reason_code == "confirmed"
+    assert consumed.reservation_id is not None
+    assert _reservation_count() == 1
 
 
 def test_active_routed_reservation_is_included_in_next_scaleway_projection(
@@ -223,10 +249,8 @@ def test_active_routed_reservation_is_included_in_next_scaleway_projection(
         hard_stop_cap=200,
     )
 
-    prepared = prepare_egress_attempt(_source_free_material(), now=NOW)
-    assert prepared.result == "pause"
-    assert prepared.ticket_id is not None
-    consumed = consume_confirmation_ticket(prepared.ticket_id, now=NOW)
+    ticket_id = _prepare_first_use_ticket()
+    consumed = consume_confirmation_ticket(ticket_id, now=NOW)
     assert consumed.authorized is True
     assert consumed.reservation_id is not None
     assert _reservation_count() == 1
