@@ -536,8 +536,10 @@ def _hard_blocking_reason(
 ) -> str | None:
     settings = connection.execute(
         """
-        SELECT policy_mode, monthly_api_budget_usd,
+        SELECT policy_mode, provider_mode, monthly_api_budget_usd,
                api_spend_month_to_date_usd, paid_ai_enabled,
+               scaleway_enabled, scaleway_smoke_test_enabled,
+               scaleway_live_smoke_test_enabled,
                scaleway_monthly_token_cap, scaleway_hard_stop_token_cap,
                scaleway_input_tokens_month_to_date,
                scaleway_output_tokens_month_to_date
@@ -553,6 +555,16 @@ def _hard_blocking_reason(
     monthly_budget = float(settings["monthly_api_budget_usd"])
     if monthly_budget <= 0:
         return "monthly_budget_zero"
+
+    if material.provider_id == "scaleway":
+        if settings["provider_mode"] != "scaleway":
+            return "scaleway_provider_mode_required"
+        if not bool(settings["scaleway_enabled"]):
+            return "scaleway_disabled"
+        if not bool(settings["scaleway_smoke_test_enabled"]):
+            return "scaleway_smoke_test_disabled"
+        if not bool(settings["scaleway_live_smoke_test_enabled"]):
+            return "scaleway_live_smoke_test_disabled"
 
     provider = registry.providers[material.provider_id]
     try:
