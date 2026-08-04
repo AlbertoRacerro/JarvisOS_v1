@@ -13,6 +13,14 @@ class JarvisPaths:
     logs_dir: Path
 
     @property
+    def secrets_dir(self) -> Path:
+        return self.data_root / "secrets"
+
+    @property
+    def scaleway_secret_file(self) -> Path:
+        return self.secrets_dir / "scaleway-api-key.v1.json"
+
+    @property
     def data_root_exists(self) -> bool:
         return self.data_root.exists()
 
@@ -44,6 +52,7 @@ def ensure_data_directories(paths: JarvisPaths | None = None) -> JarvisPaths:
         resolved.workspaces_dir,
         resolved.artifacts_dir,
         resolved.logs_dir,
+        resolved.secrets_dir,
     ]:
         directory.mkdir(parents=True, exist_ok=True)
     return resolved

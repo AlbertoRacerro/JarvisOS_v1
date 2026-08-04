@@ -2,6 +2,9 @@ from fastapi import APIRouter, HTTPException, Request
 
 from app.modules.secrets.models import ScalewaySecretStatus
 from app.modules.secrets.service import (
+    SecretEnvironmentOverrideError,
+    SecretStorageError,
+    SecretStorageUnavailableError,
     delete_scaleway_api_key,
     read_scaleway_secret_status,
     save_scaleway_api_key,
@@ -32,8 +35,49 @@ async def set_scaleway_api_key(request: Request) -> ScalewaySecretStatus:
                 "message": "Scaleway API key must be a non-empty single token.",
             },
         ) from None
+    except SecretEnvironmentOverrideError:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "scaleway_api_key_environment_override",
+                "message": "The environment-provided Scaleway credential is authoritative.",
+            },
+        ) from None
+    except SecretStorageUnavailableError:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "scaleway_api_key_persistence_unavailable",
+                "message": "Secure credential persistence is unavailable.",
+            },
+        ) from None
+    except SecretStorageError:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "scaleway_api_key_persistence_failed",
+                "message": "The credential could not be persisted safely.",
+            },
+        ) from None
 
 
 @router.delete("/scaleway/api-key", response_model=ScalewaySecretStatus)
 def remove_scaleway_api_key() -> ScalewaySecretStatus:
-    return delete_scaleway_api_key()
+    try:
+        return delete_scaleway_api_key()
+    except SecretStorageUnavailableError:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "scaleway_api_key_persistence_unavailable",
+                "message": "Secure credential persistence is unavailable.",
+            },
+        ) from None
+    except SecretStorageError:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "scaleway_api_key_delete_failed",
+                "message": "The persisted credential could not be deleted safely.",
+            },
+        ) from None
