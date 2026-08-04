@@ -30,6 +30,7 @@ def test_default_provider_registry_loads_with_complete_execution_metadata(monkey
     monkeypatch.delenv("AI_ROUTE_FAKE_MODEL", raising=False)
     monkeypatch.delenv("AI_ROUTE_CHEAP_MODEL", raising=False)
     monkeypatch.delenv("AI_ROUTE_REASONING_MODEL", raising=False)
+    monkeypatch.delenv("SCALEWAY_MODEL", raising=False)
     registry = load_provider_registry()
 
     fake = registry.bindings["local:fake"]
@@ -44,7 +45,17 @@ def test_default_provider_registry_loads_with_complete_execution_metadata(monkey
     assert local.requires_network is False
     assert local.context_window_tokens == 8192
 
-    assert "scaleway" not in registry.providers
+    scaleway = registry.bindings["external:scaleway"]
+    assert registry.providers["scaleway"].kind == "scaleway"
+    assert registry.providers["scaleway"].api_key_ref == "env:SCALEWAY_API_KEY"
+    assert scaleway.provider_id == "scaleway"
+    assert scaleway.model_id == "gemma-4-26b-a4b-it"
+    assert scaleway.execution_class == "external_provider"
+    assert scaleway.requires_network is True
+    assert scaleway.context_window_tokens == 8192
+    assert scaleway.max_output_tokens == 256
+    assert "external:scaleway" not in registry.fallback_chains
+
     cheap = registry.bindings["external:cheap"]
     assert cheap.provider_id == "deepseek"
     assert cheap.model_id == "deepseek-v4-pro"
