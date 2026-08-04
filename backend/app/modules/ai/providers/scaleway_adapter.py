@@ -84,10 +84,13 @@ class ScalewayProviderAdapter:
             "prompt": prompt,
             "estimated_output_tokens": estimated_output_tokens,
         }
-        # Preserve the historical direct smoke API and its operator-selected
-        # default. Normal routed work must instead execute the concrete model
-        # already validated by the provider registry binding.
-        if request.task_type in SCALEWAY_WORK_TASK_TYPES:
+        # Preserve historical injected provider doubles and direct-smoke APIs.
+        # The real Scaleway provider receives the concrete model already
+        # validated by the route binding for normal routed work.
+        if (
+            request.task_type in SCALEWAY_WORK_TASK_TYPES
+            and isinstance(self.provider, ScalewayProvider)
+        ):
             call_kwargs["model"] = request.model_preference
 
         try:
