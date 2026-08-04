@@ -36,7 +36,7 @@ class ScalewayChatResult:
 class ScalewayProvider:
     name = "scaleway"
     default_base_url = "https://api.scaleway.ai/v1"
-    default_model = "llama-3.1-8b-instruct"
+    default_model = "gemma-4-26b-a4b-it"
 
     def status(self) -> ScalewayProviderStatus:
         key = get_effective_scaleway_api_key()
