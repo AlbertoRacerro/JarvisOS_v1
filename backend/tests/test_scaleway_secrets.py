@@ -1,8 +1,34 @@
+import hashlib
 import json
 from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
+
+from app.modules.secrets.protection import WINDOWS_DPAPI_PROTECTOR_ID
+
+
+class DeterministicTestProtector:
+    protector_id = WINDOWS_DPAPI_PROTECTOR_ID
+
+    @staticmethod
+    def _stream(secret_id: str, size: int) -> bytes:
+        seed = hashlib.sha256(f"test-only:{secret_id}".encode()).digest()
+        return (seed * ((size // len(seed)) + 1))[:size]
+
+    def protect(self, *, secret_id: str, plaintext: bytes) -> bytes:
+        stream = self._stream(secret_id, len(plaintext))
+        return b"TEST1" + bytes(
+            left ^ right
+            for left, right in zip(plaintext, stream, strict=True)
+        )
+
+    def unprotect(self, *, secret_id: str, ciphertext: bytes) -> bytes:
+        body = ciphertext.removeprefix(b"TEST1")
+        stream = self._stream(secret_id, len(body))
+        return bytes(
+            left ^ right for left, right in zip(body, stream, strict=True)
+        )
 
 
 @pytest.fixture
@@ -13,7 +39,13 @@ def client(tmp_path, monkeypatch) -> Iterator[TestClient]:
     monkeypatch.delenv("SCALEWAY_MODEL", raising=False)
 
     from app.core.config import get_settings
+    from app.modules.secrets import storage
 
+    monkeypatch.setattr(
+        storage,
+        "build_product_secret_protector",
+        DeterministicTestProtector,
+    )
     get_settings.cache_clear()
 
     from app.core.bootstrap import initialize_storage
@@ -36,7 +68,7 @@ def _event_payloads(event_type: str) -> list[dict[str, object]]:
     return [json.loads(row["payload"]) for row in rows]
 
 
-def test_scaleway_key_can_be_set_without_returning_raw_key(client: TestClient) -> None:
+def test_scaleway_key_can_be_persisted_without_returning_raw_key(client: TestClient) -> None:
     raw_key = "sk-test-secret-1234abcd"
 
     response = client.post("/secrets/scaleway/api-key", json={"api_key": raw_key})
@@ -44,15 +76,17 @@ def test_scaleway_key_can_be_set_without_returning_raw_key(client: TestClient) -
     assert response.status_code == 200
     body = response.json()
     assert body["key_present"] is True
-    assert body["source"] == "runtime_memory"
-    assert body["masked_preview"] == "sk-...abcd"
+    assert body["source"] == "secure_persisted"
+    assert body["effective_source"] == "secure_persisted"
+    assert body["persisted_state"] == "usable"
+    assert body["masked_preview"] is None
     assert body["last_updated_at"]
     assert raw_key not in json.dumps(body)
 
     status_response = client.get("/secrets/scaleway/status")
     assert status_response.status_code == 200
     assert status_response.json()["key_present"] is True
-    assert status_response.json()["source"] == "runtime_memory"
+    assert status_response.json()["source"] == "secure_persisted"
     assert raw_key not in json.dumps(status_response.json())
 
     ai_status = client.get("/ai/status").json()
@@ -60,7 +94,7 @@ def test_scaleway_key_can_be_set_without_returning_raw_key(client: TestClient) -
     assert raw_key not in json.dumps(ai_status)
 
 
-def test_scaleway_key_delete_removes_app_managed_runtime_key(client: TestClient) -> None:
+def test_scaleway_key_delete_removes_persisted_key(client: TestClient) -> None:
     client.post("/secrets/scaleway/api-key", json={"api_key": "sk-test-delete-1234abcd"})
 
     response = client.delete("/secrets/scaleway/api-key")
@@ -69,34 +103,38 @@ def test_scaleway_key_delete_removes_app_managed_runtime_key(client: TestClient)
     body = response.json()
     assert body["key_present"] is False
     assert body["source"] == "none"
+    assert body["persisted_state"] == "absent"
     assert body["masked_preview"] is None
     assert client.get("/ai/status").json()["scaleway_api_key_configured"] is False
 
 
-def test_env_var_source_still_works_and_takes_priority(client: TestClient, monkeypatch) -> None:
-    raw_runtime_key = "sk-runtime-secret-1234abcd"
+def test_env_var_source_takes_priority_without_preview(client: TestClient, monkeypatch) -> None:
+    raw_persisted_key = "sk-persisted-secret-1234abcd"
     raw_env_key = "sk-env-secret-5678wxyz"
-    client.post("/secrets/scaleway/api-key", json={"api_key": raw_runtime_key})
+    client.post("/secrets/scaleway/api-key", json={"api_key": raw_persisted_key})
 
     monkeypatch.setenv("SCALEWAY_API_KEY", raw_env_key)
 
     status = client.get("/secrets/scaleway/status").json()
     assert status["key_present"] is True
     assert status["source"] == "env"
-    assert status["masked_preview"] == "sk-...wxyz"
+    assert status["effective_source"] == "environment"
+    assert status["persisted_state"] == "usable"
+    assert status["masked_preview"] is None
     assert raw_env_key not in json.dumps(status)
-    assert raw_runtime_key not in json.dumps(status)
+    assert raw_persisted_key not in json.dumps(status)
 
     delete_response = client.delete("/secrets/scaleway/api-key")
     assert delete_response.status_code == 200
     assert delete_response.json()["source"] == "env"
     assert delete_response.json()["key_present"] is True
+    assert delete_response.json()["persisted_state"] == "absent"
 
 
-def test_provider_key_resolution_prefers_env_over_runtime_memory(client: TestClient, monkeypatch) -> None:
+def test_provider_key_resolution_prefers_env_over_persisted(client: TestClient, monkeypatch) -> None:
     from app.modules.secrets.storage import get_effective_scaleway_api_key
 
-    client.post("/secrets/scaleway/api-key", json={"api_key": "sk-runtime-secret-1234abcd"})
+    client.post("/secrets/scaleway/api-key", json={"api_key": "sk-persisted-secret-1234abcd"})
     monkeypatch.setenv("SCALEWAY_API_KEY", "sk-env-secret-5678wxyz")
 
     resolved = get_effective_scaleway_api_key()
@@ -174,10 +212,10 @@ def test_secret_events_never_include_raw_key(client: TestClient) -> None:
     }
 
 
-def test_existing_smoke_console_can_use_runtime_key_with_mocked_provider(client: TestClient, monkeypatch) -> None:
+def test_existing_smoke_console_can_use_persisted_key_with_mocked_provider(client: TestClient, monkeypatch) -> None:
     from app.modules.ai.providers.scaleway import ScalewayChatResult, ScalewayProvider
 
-    raw_key = "sk-runtime-smoke-secret-1234abcd"
+    raw_key = "sk-persisted-smoke-secret-1234abcd"
     client.post("/secrets/scaleway/api-key", json={"api_key": raw_key})
     client.put(
         "/ai/settings",
@@ -221,10 +259,10 @@ def test_existing_smoke_console_can_use_runtime_key_with_mocked_provider(client:
     assert raw_key not in json.dumps(body)
 
 
-def test_existing_live_smoke_tests_can_use_runtime_key_with_mocked_provider(client: TestClient, monkeypatch) -> None:
+def test_existing_live_smoke_tests_can_use_persisted_key_with_mocked_provider(client: TestClient, monkeypatch) -> None:
     from app.modules.ai.providers.scaleway import ScalewayChatResult, ScalewayProvider
 
-    raw_key = "sk-runtime-fixed-smoke-secret-1234abcd"
+    raw_key = "sk-persisted-fixed-smoke-secret-1234abcd"
     client.post("/secrets/scaleway/api-key", json={"api_key": raw_key})
     client.put(
         "/ai/settings",
