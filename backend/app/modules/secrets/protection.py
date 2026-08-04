@@ -98,14 +98,14 @@ class WindowsDpapiCurrentUserProtector:
             raise ValueError("secret_id is required")
         if not isinstance(ciphertext, bytes) or not ciphertext:
             raise ValueError("ciphertext must be non-empty bytes")
-        return self._call_unprotect(ciphertext)
+        return self._call_unprotect(secret_id, ciphertext)
 
     def _call_protect(self, secret_id: str, plaintext: bytes) -> bytes:
         input_buffer, input_blob = _input_blob(plaintext)
         output_blob = _DataBlob()
         succeeded = self._crypt32.CryptProtectData(
             ctypes.byref(input_blob),
-            wintypes.LPCWSTR(f"JarvisOS:{secret_id}"),
+            wintypes.LPCWSTR(_description_for_secret(secret_id)),
             None,
             None,
             None,
@@ -119,12 +119,13 @@ class WindowsDpapiCurrentUserProtector:
             "secret_protect_failed",
         )
 
-    def _call_unprotect(self, ciphertext: bytes) -> bytes:
+    def _call_unprotect(self, secret_id: str, ciphertext: bytes) -> bytes:
         input_buffer, input_blob = _input_blob(ciphertext)
         output_blob = _DataBlob()
+        description = wintypes.LPWSTR()
         succeeded = self._crypt32.CryptUnprotectData(
             ctypes.byref(input_blob),
-            None,
+            ctypes.byref(description),
             None,
             None,
             None,
@@ -136,6 +137,8 @@ class WindowsDpapiCurrentUserProtector:
             succeeded,
             output_blob,
             "secret_unprotect_failed",
+            description=description,
+            expected_description=_description_for_secret(secret_id),
         )
 
     def _copy_and_free_output(
@@ -143,10 +146,16 @@ class WindowsDpapiCurrentUserProtector:
         succeeded: int,
         output_blob: _DataBlob,
         reason: str,
+        *,
+        description: wintypes.LPWSTR | None = None,
+        expected_description: str | None = None,
     ) -> bytes:
         try:
             if not succeeded:
                 raise SecretProtectionOperationError(reason)
+            if expected_description is not None:
+                if not description or description.value != expected_description:
+                    raise SecretProtectionOperationError(reason)
             if not output_blob.pbData or output_blob.cbData < 1:
                 raise SecretProtectionOperationError(reason)
             return ctypes.string_at(output_blob.pbData, output_blob.cbData)
@@ -155,6 +164,12 @@ class WindowsDpapiCurrentUserProtector:
                 self._kernel32.LocalFree(
                     ctypes.cast(output_blob.pbData, ctypes.c_void_p)
                 )
+            if description:
+                self._kernel32.LocalFree(ctypes.cast(description, ctypes.c_void_p))
+
+
+def _description_for_secret(secret_id: str) -> str:
+    return f"JarvisOS:{secret_id}"
 
 
 def _input_blob(value: bytes) -> tuple[ctypes.Array[ctypes.c_char], _DataBlob]:
