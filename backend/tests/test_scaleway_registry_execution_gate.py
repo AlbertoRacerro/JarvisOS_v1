@@ -135,6 +135,52 @@ def test_registry_scaleway_preserves_legacy_token_caps(
     assert gate.blocking_reason == blocking_reason
 
 
+def test_registry_scaleway_counts_route_only_usage_in_monthly_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _allow_registry_scaleway(monkeypatch)
+    monkeypatch.setattr(
+        budget,
+        "provider_month_to_date_usage",
+        lambda _provider_id: (100, 0.0),
+    )
+
+    gate = budget.evaluate_provider_budget_gate(
+        _settings(
+            scaleway_monthly_token_cap=100,
+            scaleway_hard_stop_token_cap=200,
+        ),
+        "scaleway",
+    )
+
+    assert gate.allowed is False
+    assert gate.blocking_reason == "scaleway_monthly_token_cap_exhausted"
+
+
+def test_registry_scaleway_combines_smoke_and_routed_usage_in_hard_stop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _allow_registry_scaleway(monkeypatch)
+    monkeypatch.setattr(
+        budget,
+        "provider_month_to_date_usage",
+        lambda _provider_id: (60, 0.0),
+    )
+
+    gate = budget.evaluate_provider_budget_gate(
+        _settings(
+            scaleway_input_tokens_month_to_date=25,
+            scaleway_output_tokens_month_to_date=15,
+            scaleway_monthly_token_cap=200,
+            scaleway_hard_stop_token_cap=100,
+        ),
+        "scaleway",
+    )
+
+    assert gate.allowed is False
+    assert gate.blocking_reason == "scaleway_hard_stop_token_cap_exhausted"
+
+
 def test_registry_scaleway_still_applies_registry_cost_cap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
