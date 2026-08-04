@@ -36,7 +36,10 @@ class ScalewayChatResult:
 class ScalewayProvider:
     name = "scaleway"
     default_base_url = "https://api.scaleway.ai/v1"
-    default_model = "gemma-4-26b-a4b-it"
+    # Preserve the historical direct smoke-test default. Normal routed work
+    # passes its registry-validated concrete model explicitly through the
+    # provider-neutral adapter instead of changing this legacy authority.
+    default_model = "llama-3.1-8b-instruct"
 
     def status(self) -> ScalewayProviderStatus:
         key = get_effective_scaleway_api_key()
@@ -67,7 +70,11 @@ class ScalewayProvider:
         return f"{base_url}/chat/completions"
 
     def create_live_smoke_completion(
-        self, *, prompt: str, estimated_output_tokens: int
+        self,
+        *,
+        prompt: str,
+        estimated_output_tokens: int,
+        model: str | None = None,
     ) -> ScalewayChatResult:
         return self._create_chat_completion(
             prompt=prompt,
@@ -78,10 +85,15 @@ class ScalewayProvider:
                 "Reply with one short sentence."
             ),
             mode="live",
+            model=model,
         )
 
     def create_live_console_completion(
-        self, *, prompt: str, estimated_output_tokens: int
+        self,
+        *,
+        prompt: str,
+        estimated_output_tokens: int,
+        model: str | None = None,
     ) -> ScalewayChatResult:
         return self._create_chat_completion(
             prompt=prompt,
@@ -92,10 +104,15 @@ class ScalewayProvider:
                 "proprietary material, or private strategy."
             ),
             mode="live_smoke_console",
+            model=model,
         )
 
     def create_work_completion(
-        self, *, prompt: str, estimated_output_tokens: int
+        self,
+        *,
+        prompt: str,
+        estimated_output_tokens: int,
+        model: str | None = None,
     ) -> ScalewayChatResult:
         return self._create_chat_completion(
             prompt=prompt,
@@ -105,6 +122,7 @@ class ScalewayProvider:
                 "Answer the user's request concisely and usefully."
             ),
             mode="work",
+            model=model,
         )
 
     def _create_chat_completion(
@@ -114,6 +132,7 @@ class ScalewayProvider:
         estimated_output_tokens: int,
         system_prompt: str,
         mode: str,
+        model: str | None = None,
     ) -> ScalewayChatResult:
         secret = get_effective_scaleway_api_key()
         if not secret.value:
@@ -121,9 +140,9 @@ class ScalewayProvider:
                 "Scaleway credentials are unavailable before transport handoff."
             )
 
-        model = self.model()
+        resolved_model = model or self.model()
         payload = {
-            "model": model,
+            "model": resolved_model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},
@@ -157,7 +176,7 @@ class ScalewayProvider:
 
         return ScalewayChatResult(
             provider_name=self.name,
-            model=model,
+            model=resolved_model,
             mode=mode,
             external_call_attempted=True,
             external_call_succeeded=True,
