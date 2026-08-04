@@ -44,7 +44,14 @@ def test_default_provider_registry_loads_with_complete_execution_metadata(monkey
     assert local.requires_network is False
     assert local.context_window_tokens == 8192
 
-    assert "scaleway" not in registry.providers
+    scaleway = registry.bindings["external:scaleway"]
+    assert scaleway.provider_id == "scaleway"
+    assert scaleway.model_id == "gemma-4-26b-a4b-it"
+    assert scaleway.execution_class == "external_provider"
+    assert scaleway.requires_network is True
+    assert scaleway.context_window_tokens == 8192
+    assert scaleway.max_output_tokens == 256
+    assert registry.providers["scaleway"].api_key_ref == "env:SCALEWAY_API_KEY"
     cheap = registry.bindings["external:cheap"]
     assert cheap.provider_id == "deepseek"
     assert cheap.model_id == "deepseek-v4-pro"
