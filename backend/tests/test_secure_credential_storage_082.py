@@ -227,14 +227,21 @@ def test_secret_post_conflicts_with_environment_override(
     from app.main import create_app
 
     with TestClient(create_app()) as client:
-        response = client.post(
-            "/secrets/scaleway/api-key",
-            json={"api_key": SENTINEL},
-        )
-        assert response.status_code == 409
-        assert response.json()["detail"]["code"] == (
-            "scaleway_api_key_environment_override"
-        )
+        for payload in (
+            {"api_key": SENTINEL},
+            {},
+            {"api_key": ""},
+            {"api_key": "contains whitespace"},
+            {"api_key": "x" * (storage.MAX_SCALEWAY_API_KEY_LENGTH + 1)},
+        ):
+            response = client.post(
+                "/secrets/scaleway/api-key",
+                json=payload,
+            )
+            assert response.status_code == 409
+            assert response.json()["detail"]["code"] == (
+                "scaleway_api_key_environment_override"
+            )
         status = client.get("/secrets/scaleway/status").json()
         assert status["effective_source"] == "environment"
         assert status["masked_preview"] is None
@@ -293,6 +300,7 @@ class _FakeCrypt32:
     def __init__(self) -> None:
         self.buffers: list[ctypes.Array[ctypes.c_char]] = []
         self.flags: list[int] = []
+        self.protected_description: str | None = None
         self.CryptProtectData = _NativeFunction(self._protect)
         self.CryptUnprotectData = _NativeFunction(self._unprotect)
 
@@ -312,10 +320,21 @@ class _FakeCrypt32:
 
     def _protect(self, *args: object) -> int:
         self.flags.append(int(args[5]))
+        self.protected_description = ctypes.cast(
+            args[1],
+            ctypes.c_wchar_p,
+        ).value
         return self._write(args[6], b"protected")
 
     def _unprotect(self, *args: object) -> int:
         self.flags.append(int(args[5]))
+        if self.protected_description is None:
+            return 0
+        description = ctypes.cast(
+            args[1],
+            ctypes.POINTER(ctypes.c_wchar_p),
+        )
+        description.contents.value = self.protected_description
         return self._write(args[6], b"plaintext")
 
 
@@ -357,6 +376,14 @@ def test_dpapi_wrapper_uses_current_user_noninteractive_flags_and_frees_buffers(
         secret_id="scaleway_api_key",
         ciphertext=b"protected",
     ) == b"plaintext"
-    assert crypt32.flags == [protection.CRYPTPROTECT_UI_FORBIDDEN] * 2
+    with pytest.raises(
+        protection.SecretProtectionOperationError,
+        match="secret_unprotect_failed",
+    ):
+        protector.unprotect(
+            secret_id="another_secret",
+            ciphertext=b"protected",
+        )
+    assert crypt32.flags == [protection.CRYPTPROTECT_UI_FORBIDDEN] * 3
     assert all(flag & 0x4 == 0 for flag in crypt32.flags)
-    assert kernel32.free_calls == 2
+    assert kernel32.free_calls == 5
