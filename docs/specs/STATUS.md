@@ -62,24 +62,25 @@ The binding order is:
 
 1. 081 FRONTEND-BETA-AUTHORITY-0 definition and registry reconciliation;
 2. 082 SECURE-CREDENTIAL-STORAGE-0;
-3. 070 UI-FOUNDATION-1, freshly re-derived from current `master`;
-4. 083 APP-SHELL-1;
-5. 084 BLUECAD-READ-MODEL-1;
-6. 085 BLUECAD-WORKBENCH-2;
-7. 086 MODEL-INSPECTION-A0;
-8. 087 LINEAGE-OVERVIEW-1;
-9. 088 RUNS-WORKBENCH-1;
-10. 035 ENGINEERING-DATA-1, freshly re-derived;
-11. 089 ANALYTICS-DOCK-1;
-12. 054 PROPOSAL-REVIEW-1, freshly re-derived;
-13. request and complete the 062 operator-design session when the operator is available;
-14. 090 AI-THREADS-0;
-15. 091 JARVIS-SIDECAR-1;
-16. 029 SETTINGS-1, freshly re-derived;
-17. 092 SCENE-BINDING-0;
-18. 058c SCENE-SEMANTICS-A1, freshly re-derived;
-19. 006b PARAMETRIC-VARIANTS-1, freshly re-derived;
-20. 058b VARIANT-COMPARISON-1, freshly re-derived.
+3. 094 SCALEWAY-NORMAL-SPINE-0;
+4. 070 UI-FOUNDATION-1, freshly re-derived from current `master`;
+5. 083 APP-SHELL-1;
+6. 084 BLUECAD-READ-MODEL-1;
+7. 085 BLUECAD-WORKBENCH-2;
+8. 086 MODEL-INSPECTION-A0;
+9. 087 LINEAGE-OVERVIEW-1;
+10. 088 RUNS-WORKBENCH-1;
+11. 035 ENGINEERING-DATA-1, freshly re-derived;
+12. 089 ANALYTICS-DOCK-1;
+13. 054 PROPOSAL-REVIEW-1, freshly re-derived;
+14. request and complete the 062 operator-design session when the operator is available;
+15. 090 AI-THREADS-0;
+16. 091 JARVIS-SIDECAR-1;
+17. 029 SETTINGS-1, freshly re-derived;
+18. 092 SCENE-BINDING-0;
+19. 058c SCENE-SEMANTICS-A1, freshly re-derived;
+20. 006b PARAMETRIC-VARIANTS-1, freshly re-derived;
+21. 058b VARIANT-COMPARISON-1, freshly re-derived.
 
 The 062 design session is not an implementation front and may remain pending while Phase 5
 proceeds. No Phase-5 slice may add, imitate, consume, or redesign the grade surface, and all
@@ -99,8 +100,8 @@ abandonment or substitution is not authorized.
 ## Current priority and drafting order
 
 1. Preserve merged 059a/059b, 061a/061b, 075, 076, 077, and 079 authority boundaries.
-2. Complete and merge the definition-only 081 authority and registry reconciliation.
-3. Derive 082 as the first implementation slice; no frontend implementation precedes it.
+2. Merge the 094 definition/readiness reconciliation, then complete its single-spine implementation before fresh 070 derivation.
+3. Keep 082 blocked until merged 094 implementation, the bounded Windows normal-spine call, and the required secret-leak scan are recorded.
 4. Preserve the merged documentation contract for 078 without treating it as implementation authorization.
 5. Keep 066–068 and 080 frozen, and keep 062 blocked until its operator-design decision.
 
@@ -187,7 +188,7 @@ abandonment or substitution is not authorized.
 | 067 | planned | — | JARVIS-MCP-0 | 005, 010, 040, 042, 043, 044, 059a | Frozen by maintainer decision on 2026-07-29 and not reopened by 081. The prior definition branch is retained; restart requires explicit maintainer approval and fresh re-derivation from current `master`. |
 | 068 | planned | — | HERMES-CONFIG-0 | 066, 067 | Frozen by maintainer decision on 2026-07-29 and not reopened by 081. The prior definition branch is retained; restart requires explicit maintainer approval and fresh re-derivation from current `master`. |
 | 069 | planned | — | MEMORY-CONSOLIDATE-0 | 040, 042, 061a, 061b, 062, 066, 067, 068 | First Hermes dogfood: consolidate bounded accepted records/evidence into MemoryStore proposals with conflict preservation, provenance, grading, and cost evidence; never promote, overwrite, delete, or lower sensitivity. |
-| 070 | planned | — | UI-FOUNDATION-0: design tokens, appearance themes, and shared primitives | 006, 082 | The 2026-07-29 freeze is lifted by 081 only for a fresh UI-FOUNDATION-1 definition after 082. Closed PR #132 and its retained branch are historical input, not implementation authority. |
+| 070 | planned | — | UI-FOUNDATION-0: design tokens, appearance themes, and shared primitives | 006, 082, 094 | The 2026-07-29 freeze is lifted by 081 only for a fresh UI-FOUNDATION-1 definition after the merged 082/094 checkpoint reconciliation. Closed PR #132 and its retained branch are historical input, not implementation authority. |
 | 071 | merged | [#147](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/147) | MODEL-SCENARIO-DOF-0: editable bindings, scenario runs, and degree-of-freedom inspection | 040, 043, 047 | Expose immutable value-free model input contracts, side-effect-free forward binding/DOF preview, parameter-backed or manual scenario bindings, existing-runner execution, and one bounded Domain Foundation panel; no inverse solver, targets, optimizer, automatic promotion, or embedded design defaults. |
 | 072 | merged | [#172](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/172) | BLUEREV-PROCESS-3: explicit symmetric hydraulic topology M1 | 043, 047, 050, 051, 052, 071 | Preserve the validated deterministic parallel M1 topology as an inspectable experiment and alternative architecture. It is not the canonical BlueRev v1 serial Smart-Joint/tube topology and receives no new work in the frontend-beta queue. |
 | 073 | merged | [#174](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/174) | BLUECAD-PRIMITIVE-1: fluid-open capped branch manifold | 005, 005b, 056 | Add one deterministic capped branch-header primitive with exactly one common port and 1–12 branch ports, explicit branch bores through the header wall, closed-end geometry, kernel-volume reconciliation, and property/conformance tests; no process link, layout solver, project defaults, or UI. |
@@ -199,7 +200,8 @@ abandonment or substitution is not authorized.
 | 079 | merged | [#210](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/210) | AUTONOMOUS-DEVELOPMENT-LOOP-0: minimal scheduled continuation | 022 | Merged through PR #210. Resume exactly one existing in-review implementation PR once daily by reading the registry from exact PR heads, reusing Claude Code Action in OFF/SHADOW/EXECUTE_NO_MERGE modes, validating an untrusted patch with deterministic gates, and permitting only a non-forced same-branch push; no merge or review/repair authority. |
 | 080 | planned | — | AUTONOMOUS-REVIEW-REPAIR-0 | 004, 017, 019, 022, 079 | Frozen for the duration of the frontend-beta queue. It remains separate from 079 and receives no implementation authority until a later explicit queue reopens it. |
 | 081 | planned | — | FRONTEND-BETA-AUTHORITY-0 | — | Definition-only umbrella derived from `master` at `2183b2282d239ed570c59d0982e227e54c62dad7`; freezes product direction, queue, phase evidence, transition continuity, and re-derivation rules. It must never receive an implementation PR. |
-| 082 | blocked | — | SECURE-CREDENTIAL-STORAGE-0 | 015, 018, 021, 059b, 061a | Implementation and post-merge repair are merged through PRs [#216](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/216) and [#217](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/217). Final acceptance is blocked only on the required Windows operator checkpoint: save a real credential through the existing secret endpoint or UI, restart the backend, confirm `secure_persisted` status without re-entry, execute one bounded external AI call, and verify no secret material appears in responses, logs, events, SQLite, or repository files. No 070 work starts until the checkpoint is recorded. |
+| 082 | blocked | — | SECURE-CREDENTIAL-STORAGE-0 | 015, 018, 021, 059b, 061a | Implementation and post-merge repair are merged through PRs [#216](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/216) and [#217](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/217). Real Windows save, same-user backend restart without `SCALEWAY_API_KEY`, and post-restart `secure_persisted / usable` status are complete. Final acceptance is blocked on merged 094 implementation, one bounded post-restart normal-spine Scaleway call, and the required response/log/event/SQLite/repository secret-leak scan. No 070 work starts until the 082/094 checkpoint reconciliation is recorded. |
+| 094 | ready | — | SCALEWAY-NORMAL-SPINE-0 | 015, 018, 021, 059b, 061a, 061b, 082 | Authorize one dedicated no-fallback Scaleway route and convert existing live smoke surfaces into wrappers over the normal `run_ai_task`/059b execution, reservation and ledger spine; no second ledger, schema, frontend or credential-persistence change. |
 | 083 | planned | — | APP-SHELL-1 | 006, 070 | Add the routed desktop-first application shell, static PrimaryStage registry, contextual sidecar, closed-by-default analysis dock, and explicitly labelled legacy diagnostic routes without changing backend authority. |
 | 084 | planned | — | BLUECAD-READ-MODEL-1 | 006, 044, 050, 051, 083 | Add the smallest candidate aggregate read surface needed by the new shell for artifacts, attempts, evidence, run links, lifecycle status, and freshness without duplicating canonical data. |
 | 085 | planned | — | BLUECAD-WORKBENCH-2 | 006, 006c, 083, 084 | Migrate the complete working BLUECAD lifecycle into the new shell while preserving real GLB rendering, archive, retry, validation, evidence and promotion semantics. |
@@ -225,5 +227,5 @@ abandonment or substitution is not authorized.
 - Specs 031, 034, and 036 retain only bounded JarvisOS-side vocabulary, persona-policy,
   and authority-display contracts. They do not authorize a second conversation or
   orchestration engine and do not reopen frozen 066–068.
-- IDs 081–093 are reserved by FRONTEND-BETA-AUTHORITY-0 as recorded in the registry;
+- IDs 081–094 are reserved by FRONTEND-BETA-AUTHORITY-0 and its authorized 094 re-derivation as recorded in the registry;
   all references use the canonical three-digit form required by the registry gate.
