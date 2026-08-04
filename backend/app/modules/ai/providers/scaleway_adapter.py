@@ -80,12 +80,18 @@ class ScalewayProviderAdapter:
                 dispatch_state=AIExternalDispatchState.not_started,
             )
 
+        call_kwargs: dict[str, object] = {
+            "prompt": prompt,
+            "estimated_output_tokens": estimated_output_tokens,
+        }
+        # Preserve the historical direct smoke API and its operator-selected
+        # default. Normal routed work must instead execute the concrete model
+        # already validated by the provider registry binding.
+        if request.task_type in SCALEWAY_WORK_TASK_TYPES:
+            call_kwargs["model"] = request.model_preference
+
         try:
-            result = live_call(
-                prompt=prompt,
-                estimated_output_tokens=estimated_output_tokens,
-                model=request.model_preference,
-            )
+            result = live_call(**call_kwargs)
         except ScalewayNotConfiguredError as exc:
             return self._error_response(
                 request,
