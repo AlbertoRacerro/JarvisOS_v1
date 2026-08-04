@@ -537,7 +537,10 @@ def _hard_blocking_reason(
     settings = connection.execute(
         """
         SELECT policy_mode, monthly_api_budget_usd,
-               api_spend_month_to_date_usd, paid_ai_enabled
+               api_spend_month_to_date_usd, paid_ai_enabled,
+               scaleway_monthly_token_cap, scaleway_hard_stop_token_cap,
+               scaleway_input_tokens_month_to_date,
+               scaleway_output_tokens_month_to_date
         FROM ai_settings WHERE id = 'default'
         """
     ).fetchone()
@@ -574,6 +577,21 @@ def _hard_blocking_reason(
         + projection.projected_input_tokens
         + projection.projected_output_tokens
     )
+    if material.provider_id == "scaleway":
+        scaleway_monthly_cap = int(settings["scaleway_monthly_token_cap"])
+        scaleway_hard_stop_cap = int(settings["scaleway_hard_stop_token_cap"])
+        if scaleway_monthly_cap <= 0:
+            return "scaleway_monthly_token_cap_zero"
+        if scaleway_hard_stop_cap <= 0:
+            return "scaleway_hard_stop_token_cap_zero"
+        legacy_smoke_tokens = int(
+            settings["scaleway_input_tokens_month_to_date"]
+        ) + int(settings["scaleway_output_tokens_month_to_date"])
+        projected_scaleway_tokens = legacy_smoke_tokens + projected_provider_tokens
+        if projected_scaleway_tokens > scaleway_monthly_cap:
+            return "scaleway_monthly_token_cap_exceeded"
+        if projected_scaleway_tokens > scaleway_hard_stop_cap:
+            return "scaleway_hard_stop_token_cap_exceeded"
     if provider.monthly_token_cap > 0 and projected_provider_tokens > provider.monthly_token_cap:
         return "provider_monthly_token_cap_exceeded"
     projected_provider_cost = (
