@@ -1,3 +1,4 @@
+import hashlib
 import json
 from collections.abc import Iterator
 
@@ -28,6 +29,30 @@ from app.modules.ai.providers.scaleway_adapter import (
     scaleway_model_registry_entry,
     scaleway_provider_registry_entry,
 )
+from app.modules.secrets.protection import WINDOWS_DPAPI_PROTECTOR_ID
+
+
+class DeterministicTestProtector:
+    protector_id = WINDOWS_DPAPI_PROTECTOR_ID
+
+    @staticmethod
+    def _stream(secret_id: str, size: int) -> bytes:
+        seed = hashlib.sha256(f"test-only:{secret_id}".encode()).digest()
+        return (seed * ((size // len(seed)) + 1))[:size]
+
+    def protect(self, *, secret_id: str, plaintext: bytes) -> bytes:
+        stream = self._stream(secret_id, len(plaintext))
+        return b"TEST1" + bytes(
+            left ^ right
+            for left, right in zip(plaintext, stream, strict=True)
+        )
+
+    def unprotect(self, *, secret_id: str, ciphertext: bytes) -> bytes:
+        body = ciphertext.removeprefix(b"TEST1")
+        stream = self._stream(secret_id, len(body))
+        return bytes(
+            left ^ right for left, right in zip(body, stream, strict=True)
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -38,12 +63,16 @@ def isolated_secret_state(tmp_path, monkeypatch) -> Iterator[None]:
     monkeypatch.delenv("SCALEWAY_MODEL", raising=False)
 
     from app.core.config import get_settings
-    from app.modules.secrets.storage import delete_runtime_scaleway_api_key
+    from app.modules.secrets import storage
 
+    monkeypatch.setattr(
+        storage,
+        "build_product_secret_protector",
+        DeterministicTestProtector,
+    )
     get_settings.cache_clear()
-    delete_runtime_scaleway_api_key()
     yield
-    delete_runtime_scaleway_api_key()
+    storage.delete_persisted_scaleway_api_key()
     get_settings.cache_clear()
 
 
@@ -274,11 +303,14 @@ def test_unsupported_task_type_does_not_call_scaleway(monkeypatch) -> None:
     assert response.raw_provider_metadata["external_call_attempted"] is False
 
 
-def test_runtime_memory_key_and_env_priority_remain_in_existing_provider_boundary(monkeypatch) -> None:
-    from app.modules.secrets.storage import get_effective_scaleway_api_key, set_runtime_scaleway_api_key
+def test_persisted_key_and_env_priority_remain_in_existing_provider_boundary(monkeypatch) -> None:
+    from app.modules.secrets.storage import (
+        get_effective_scaleway_api_key,
+        set_persisted_scaleway_api_key,
+    )
 
-    set_runtime_scaleway_api_key("runtime-test-key")
-    assert get_effective_scaleway_api_key().source == "runtime_memory"
+    set_persisted_scaleway_api_key("persisted-test-key")
+    assert get_effective_scaleway_api_key().source == "secure_persisted"
     assert ScalewayProviderAdapter().health() == AIProviderHealth.healthy
 
     monkeypatch.setenv("SCALEWAY_API_KEY", "env-test-key")
