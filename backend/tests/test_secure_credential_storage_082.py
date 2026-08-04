@@ -299,6 +299,7 @@ class _NativeFunction:
 class _FakeCrypt32:
     def __init__(self) -> None:
         self.buffers: list[ctypes.Array[ctypes.c_char]] = []
+        self.description_buffers: list[ctypes.Array[ctypes.c_wchar]] = []
         self.flags: list[int] = []
         self.protected_description: str | None = None
         self.CryptProtectData = _NativeFunction(self._protect)
@@ -330,11 +331,13 @@ class _FakeCrypt32:
         self.flags.append(int(args[5]))
         if self.protected_description is None:
             return 0
+        buffer = ctypes.create_unicode_buffer(self.protected_description)
+        self.description_buffers.append(buffer)
         description = ctypes.cast(
             args[1],
             ctypes.POINTER(ctypes.c_wchar_p),
         )
-        description.contents.value = self.protected_description
+        description[0] = ctypes.cast(buffer, ctypes.c_wchar_p)
         return self._write(args[6], b"plaintext")
 
 
