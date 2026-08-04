@@ -4,7 +4,7 @@ This file is the single live source of truth for JarvisOS spec state and near-te
 roadmap. Individual spec files define scope, acceptance criteria, tests, and
 non-goals; their legacy `Status:` lines are not authoritative.
 
-Update this table whenever work starts, a PR opens, a dependency changes, a PR
+Update this table whenever work starts, a PR opens, a dependency changes, or a PR
 merges, or a spec is cancelled. GitHub PR diffs are the authoritative list of
 files created or modified by a spec; this registry intentionally does not copy
 those file lists into a second place.
@@ -120,7 +120,7 @@ abandonment or substitution is not authorized.
 | 006c | merged | [#30](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/30) | BLUECAD workbench UX pass | 006 | Add archive, malformed-detail inspection, promotion, retry/duplicate-brief flows, and safer validation rendering. |
 | 007 | merged | [#17](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/17) | BLUECAD tool registry | 005 | Add fail-closed tool registration, health/hash checks, subprocess execution boundaries, and CI license-boundary enforcement. |
 | 008 | merged | [#32](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/32) | BLUECAD Gmsh mesh adapter | 005, 007 | Generate deterministic Gmsh inputs and physical groups, invoke Gmsh through the registry, and return structured mesh-quality outcomes. |
-| 009 | merged | [#35](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/35) | BLUECAD CalculiX FEM adapter | 008 | Assemble deterministic static CalculiX decks, run the registered solver, parse result summaries, and evaluate Tier 3 criteria. |
+| 009 | merged | [#35](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/35) | BLUECAD CalculiX FEM adapter | 008 | Assemble deterministic static CalculiX decks, run result summaries, and evaluate Tier 3 criteria. |
 | 010 | merged | [#20](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/20), [#26](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/26), [#28](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/28) | BLUECAD AI loop v0 | 005 | Add the bounded candidate/attempt loop, safe-default parking, prompt/schema flow, validation, repair attempts, and traceable prompt versions. |
 | 011 | planned | — | Core Team review panel | 034 | Add advisory persona reviews over artifacts and evidence; personas are bounded configurations, not autonomous authorities or a fake swarm. |
 | 012 | planned | — | L2 ephemeral free-script proposals | 010, 016 | Trigger-gated only: reopen after non-loopback access, a second user, remote-agent/Hermes/MCP runner reachability, or a demonstrated need for non-bundled execution, and only behind a separate proven OS-isolation specification. |
@@ -131,7 +131,7 @@ abandonment or substitution is not authorized.
 | 017 | merged | [#37](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/37) | Autonomous three-tier review | 004 | Historical automatic chain; Cheap, Senior, and Expert reviews are now explicit maintainer actions with no automatic Codex or label actuation. |
 | 018 | merged | [#33](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/33), [#43](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/43) | PROVIDER-GW-2 | 015 | Complete provider-cap/fallback enforcement and correct provider usage accounting while preserving explicit routing and audit controls. |
 | 019 | merged | [#40](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/40), [#41](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/41), [#44](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/44) | Senior review hardening | 017 | Retain bounded requests, streaming, parsing, staleness, and diagnostics for manually dispatched reviews only. |
-| 020 | cancelled | — | Pipeline doctor | 017 | Cancelled because the automatic review/fix pipeline was removed; deterministic CI and explicit maintainer review remain authoritative. |
+| 020 | cancelled | — | Pipeline doctor | 017, 019 | Cancelled because the automatic review/fix pipeline was removed; deterministic CI and explicit maintainer review remain authoritative. |
 | 021 | merged | [#70](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/70) | ALPHA-GATE hardening | — | Enforce the server-owned external-provider decision at the shared execution spine for every concrete network binding and fallback; PR #70 supersedes stale PR #66. |
 | 021b | merged | [#72](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/72), [#75](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/75) | ALPHA-GATE completion: real-tool proof + recoverable data root | 021, 038, 044 | Strict hash-verified real-tool proof merged in [#72](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/72), and atomic path-rebased backup/restore merged in [#75](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/75). |
 | 022 | merged | [#49](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/49) | Codex PR autopush without automerge | 017, 019 | Retain the bounded same-branch actuator for explicit maintainer-requested Codex work; no workflow dispatches it automatically. |
@@ -227,4 +227,5 @@ abandonment or substitution is not authorized.
 - Specs 031, 034, and 036 retain only bounded JarvisOS-side vocabulary, persona-policy,
   and authority-display contracts. They do not authorize a second conversation or
   orchestration engine and do not reopen frozen 066–068.
-- IDs 081–094 are reserved by FRONTEND-BETA-AUTHORITY-0 and its authorized 094 re-derivation as recorded in the registry; all references use the canonical three-digit form required by the registry gate.
+- IDs 081–094 are reserved by FRONTEND-BETA-AUTHORITY-0 and its authorized 094 re-derivation as recorded in the registry;
+  all references use the canonical three-digit form required by the registry gate.
