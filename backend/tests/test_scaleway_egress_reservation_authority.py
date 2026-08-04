@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import pytest
+
 from app.core.database import initialize_database, open_sqlite_connection
 from app.modules.ai.egress_lifecycle import consume_confirmation_ticket
 from app.modules.ai.egress_persistence import prepare_egress_attempt
@@ -101,6 +103,23 @@ def _material(**overrides: object) -> EgressPacketMaterial:
     return EgressPacketMaterial(**values)
 
 
+def _source_free_material() -> EgressPacketMaterial:
+    return _material(
+        context_blocks=(),
+        included_manifest=(),
+        source_digests=(),
+    )
+
+
+def _reservation_count() -> int:
+    with open_sqlite_connection() as connection:
+        return int(
+            connection.execute(
+                "SELECT COUNT(*) AS count FROM egress_budget_reservations"
+            ).fetchone()["count"]
+        )
+
+
 def test_projected_request_cannot_cross_legacy_monthly_cap(monkeypatch) -> None:
     _bootstrap(monkeypatch)
     _set_legacy_usage_and_caps(
@@ -115,11 +134,7 @@ def test_projected_request_cannot_cross_legacy_monthly_cap(monkeypatch) -> None:
     assert result.result == "deny"
     assert result.reason_code == "scaleway_monthly_token_cap_exceeded"
     assert result.reservation_id is None
-    with open_sqlite_connection() as connection:
-        count = connection.execute(
-            "SELECT COUNT(*) AS count FROM egress_budget_reservations"
-        ).fetchone()["count"]
-    assert count == 0
+    assert _reservation_count() == 0
 
 
 def test_projected_request_combines_smoke_and_routed_usage_at_hard_stop(
@@ -184,3 +199,38 @@ def test_confirmation_ticket_is_revoked_fail_closed_after_budget_policy_drift(
     assert consumed.authorized is False
     assert consumed.reason_code == "ticket_binding_or_policy_drift"
     assert consumed.reservation_id is None
+
+
+@pytest.mark.parametrize(
+    ("settings_update", "blocking_reason"),
+    [
+        ({"provider_mode": "fake"}, "scaleway_provider_mode_required"),
+        ({"scaleway_enabled": False}, "scaleway_disabled"),
+        (
+            {"scaleway_smoke_test_enabled": False},
+            "scaleway_smoke_test_disabled",
+        ),
+        (
+            {"scaleway_live_smoke_test_enabled": False},
+            "scaleway_live_smoke_test_disabled",
+        ),
+    ],
+)
+def test_ticket_consumption_revalidates_scaleway_switches_atomically(
+    monkeypatch,
+    settings_update: dict[str, object],
+    blocking_reason: str,
+) -> None:
+    _bootstrap(monkeypatch)
+    prepared = prepare_egress_attempt(_source_free_material(), now=NOW)
+    assert prepared.result == "pause"
+    assert prepared.ticket_id is not None
+    assert _reservation_count() == 0
+
+    update_ai_settings(AISettingsUpdate(**settings_update))
+    consumed = consume_confirmation_ticket(prepared.ticket_id, now=NOW)
+
+    assert consumed.authorized is False
+    assert consumed.reason_code == blocking_reason
+    assert consumed.reservation_id is None
+    assert _reservation_count() == 0
