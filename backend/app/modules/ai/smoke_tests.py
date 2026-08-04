@@ -2,10 +2,11 @@ from dataclasses import dataclass
 
 from app.core.database import open_sqlite_connection
 from app.modules.ai.budget import (
-    evaluate_ai_status,
     evaluate_live_scaleway_smoke_gate,
+    scaleway_api_key_configured,
     scaleway_usage_snapshot,
 )
+from app.modules.ai.contracts import AIPolicyMode
 from app.modules.ai.execution import AiTaskOutcome, run_ai_task
 from app.modules.ai.models import SmokeTestResponse, SmokeTestResult, SmokeTestTokenMetadata
 from app.modules.ai.privacy import PrivacyPolicyEngine
@@ -69,7 +70,13 @@ def run_smoke_tests(
     mode = provider_mode or settings.provider_mode
     selected_smoke_mode = "live" if smoke_mode == "live" else "synthetic"
     fake_provider = FakeModelingProvider()
-    scaleway_model = _scaleway_route_model()
+    scaleway_provider = ScalewayProvider()
+    scaleway_route_model = _scaleway_route_model()
+    scaleway_event_model = (
+        scaleway_route_model
+        if selected_smoke_mode == "live"
+        else scaleway_provider.model()
+    )
     policy = PrivacyPolicyEngine()
     external_attempted = False
     external_succeeded = False
@@ -83,7 +90,7 @@ def run_smoke_tests(
         model=_event_model_for_mode(
             mode,
             settings.default_ai_model,
-            scaleway_model,
+            scaleway_event_model,
         ),
         reason=None,
         external_call_attempted=False,
@@ -149,21 +156,6 @@ def run_smoke_tests(
 
         if selected_smoke_mode == "live":
             token_metadata = _live_token_metadata(settings, case.text)
-            if shared_live_block is not None:
-                reason, provider_metadata = shared_live_block
-                results.append(
-                    _blocked_result(
-                        case,
-                        mode,
-                        selected_smoke_mode,
-                        reason,
-                        local_decision.privacy_class,
-                        token_metadata,
-                        provider_metadata=provider_metadata,
-                    )
-                )
-                continue
-
             gate_reason = evaluate_live_scaleway_smoke_gate(settings, mode)
             if gate_reason:
                 results.append(
@@ -201,6 +193,21 @@ def run_smoke_tests(
                         "live_smoke_case_not_allowed",
                         local_decision.privacy_class,
                         token_metadata,
+                    )
+                )
+                continue
+
+            if shared_live_block is not None:
+                reason, provider_metadata = shared_live_block
+                results.append(
+                    _blocked_result(
+                        case,
+                        mode,
+                        selected_smoke_mode,
+                        reason,
+                        local_decision.privacy_class,
+                        token_metadata,
+                        provider_metadata=provider_metadata,
                     )
                 )
                 continue
@@ -289,17 +296,17 @@ def run_smoke_tests(
             )
             continue
 
-        status = evaluate_ai_status(settings, "scaleway")
-        token_metadata = _live_token_metadata(settings, case.text)
-        if status.blocking_reason:
+        gate_reason = _synthetic_scaleway_gate(settings)
+        token_decision = evaluate_token_guard(settings, input_text=case.text)
+        if gate_reason:
             results.append(
                 _blocked_result(
                     case,
                     mode,
                     selected_smoke_mode,
-                    status.blocking_reason,
+                    gate_reason,
                     local_decision.privacy_class,
-                    token_metadata,
+                    token_decision.metadata,
                 )
             )
             continue
@@ -312,12 +319,26 @@ def run_smoke_tests(
                     selected_smoke_mode,
                     local_decision.blocking_reason or "privacy_policy_blocked",
                     local_decision.privacy_class,
-                    token_metadata,
+                    token_decision.metadata,
                 )
             )
             continue
 
-        provider_status = ScalewayProvider().status()
+        if not token_decision.allowed:
+            results.append(
+                _blocked_result(
+                    case,
+                    mode,
+                    selected_smoke_mode,
+                    token_decision.reason
+                    or "scaleway_monthly_token_cap_exceeded",
+                    local_decision.privacy_class,
+                    token_decision.metadata,
+                )
+            )
+            continue
+
+        provider_status = scaleway_provider.status()
         results.append(
             _blocked_result(
                 case,
@@ -325,10 +346,10 @@ def run_smoke_tests(
                 selected_smoke_mode,
                 provider_status.implementation,
                 local_decision.privacy_class,
-                token_metadata,
+                token_decision.metadata,
                 provider_metadata={
                     "implementation": provider_status.implementation,
-                    "route_class": LIVE_SMOKE_ROUTE,
+                    "route_class": None,
                 },
             )
         )
@@ -346,7 +367,7 @@ def run_smoke_tests(
         model=_event_model_for_mode(
             mode,
             settings.default_ai_model,
-            scaleway_model,
+            scaleway_event_model,
         ),
         reason=(
             "blocked_results_present"
@@ -365,6 +386,24 @@ def run_smoke_tests(
         external_call_succeeded=external_succeeded,
         results=results,
     )
+
+
+def _synthetic_scaleway_gate(settings) -> str | None:
+    if settings.policy_mode == AIPolicyMode.DISABLED:
+        return "ai_policy_disabled"
+    if not settings.paid_ai_enabled:
+        return "paid_ai_disabled"
+    if settings.monthly_api_budget_usd <= 0:
+        return "monthly_budget_zero"
+    if settings.api_spend_month_to_date_usd >= settings.monthly_api_budget_usd:
+        return "monthly_budget_exhausted"
+    if not settings.scaleway_enabled:
+        return "scaleway_disabled"
+    if not settings.scaleway_smoke_test_enabled:
+        return "scaleway_smoke_test_disabled"
+    if not scaleway_api_key_configured():
+        return "scaleway_api_key_missing"
+    return None
 
 
 def _scaleway_route_model() -> str:
@@ -551,11 +590,13 @@ def _log_smoke_event(
                 "model_id": model,
                 "adapter_interface": (
                     SCALEWAY_ADAPTER_INTERFACE
-                    if provider == "scaleway"
+                    if provider == "scaleway" and smoke_mode == "live"
                     else None
                 ),
                 "route_class": (
-                    LIVE_SMOKE_ROUTE if provider == "scaleway" else None
+                    LIVE_SMOKE_ROUTE
+                    if provider == "scaleway" and smoke_mode == "live"
+                    else None
                 ),
                 "reason": reason,
                 "result_count": result_count,
