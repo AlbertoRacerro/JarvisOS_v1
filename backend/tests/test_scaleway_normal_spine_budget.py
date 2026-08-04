@@ -75,22 +75,7 @@ def _usage(
     )
 
 
-@pytest.mark.parametrize(
-    ("setting_name", "blocking_reason"),
-    [
-        ("scaleway_enabled", "scaleway_disabled"),
-        ("scaleway_smoke_test_enabled", "scaleway_smoke_test_disabled"),
-        (
-            "scaleway_live_smoke_test_enabled",
-            "scaleway_live_smoke_test_disabled",
-        ),
-    ],
-)
-def test_scaleway_gate_preserves_execution_switches(
-    monkeypatch: pytest.MonkeyPatch,
-    setting_name: str,
-    blocking_reason: str,
-) -> None:
+def _allow_empty_usage(monkeypatch: pytest.MonkeyPatch) -> None:
     _allow_registry_scaleway(monkeypatch)
     monkeypatch.setattr(
         budget,
@@ -98,13 +83,74 @@ def test_scaleway_gate_preserves_execution_switches(
         lambda _settings: _usage(),
     )
 
+
+@pytest.mark.parametrize(
+    ("settings", "blocking_reason"),
+    [
+        ({"provider_mode": "fake"}, "scaleway_provider_mode_required"),
+        ({"scaleway_enabled": False}, "scaleway_disabled"),
+    ],
+)
+def test_scaleway_normal_route_preserves_route_level_switches(
+    monkeypatch: pytest.MonkeyPatch,
+    settings: dict[str, object],
+    blocking_reason: str,
+) -> None:
+    _allow_empty_usage(monkeypatch)
+
     gate = budget.evaluate_provider_budget_gate(
-        _settings(**{setting_name: False}),
+        _settings(**settings),
         "scaleway",
     )
 
     assert gate.allowed is False
     assert gate.blocking_reason == blocking_reason
+
+
+def test_scaleway_normal_route_ignores_wrapper_only_smoke_switches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _allow_empty_usage(monkeypatch)
+    settings = _settings(
+        scaleway_smoke_test_enabled=False,
+        scaleway_live_smoke_test_enabled=False,
+    )
+
+    gate = budget.evaluate_provider_budget_gate(settings, "scaleway")
+    status = budget.evaluate_ai_status(settings)
+
+    assert gate.allowed is True
+    assert gate.blocking_reason is None
+    assert status.external_calls_allowed is True
+    assert status.blocking_reason is None
+
+
+@pytest.mark.parametrize(
+    ("settings", "blocking_reason"),
+    [
+        (
+            {"scaleway_smoke_test_enabled": False},
+            "scaleway_smoke_test_disabled",
+        ),
+        (
+            {"scaleway_live_smoke_test_enabled": False},
+            "scaleway_live_smoke_test_disabled",
+        ),
+    ],
+)
+def test_scaleway_live_wrapper_preserves_wrapper_only_switches(
+    monkeypatch: pytest.MonkeyPatch,
+    settings: dict[str, object],
+    blocking_reason: str,
+) -> None:
+    _allow_empty_usage(monkeypatch)
+
+    reason = budget.evaluate_live_scaleway_smoke_gate(
+        _settings(**settings),
+        "scaleway",
+    )
+
+    assert reason == blocking_reason
 
 
 def test_scaleway_gate_counts_active_reservations(
