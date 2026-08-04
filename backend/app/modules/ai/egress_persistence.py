@@ -539,8 +539,6 @@ def _hard_blocking_reason(
         SELECT policy_mode, monthly_api_budget_usd,
                api_spend_month_to_date_usd, paid_ai_enabled,
                provider_mode, scaleway_enabled,
-               scaleway_smoke_test_enabled,
-               scaleway_live_smoke_test_enabled,
                scaleway_monthly_token_cap,
                scaleway_hard_stop_token_cap,
                scaleway_input_tokens_month_to_date,
@@ -563,10 +561,6 @@ def _hard_blocking_reason(
             return "scaleway_provider_mode_required"
         if not bool(settings["scaleway_enabled"]):
             return "scaleway_disabled"
-        if not bool(settings["scaleway_smoke_test_enabled"]):
-            return "scaleway_smoke_test_disabled"
-        if not bool(settings["scaleway_live_smoke_test_enabled"]):
-            return "scaleway_live_smoke_test_disabled"
 
     provider = registry.providers[material.provider_id]
     try:
