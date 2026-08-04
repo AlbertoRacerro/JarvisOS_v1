@@ -1,3 +1,5 @@
+import os
+
 from app.core.database import open_sqlite_connection
 from app.modules.events.service import log_event
 from app.modules.secrets.models import ScalewaySecretStatus
@@ -6,6 +8,7 @@ from app.modules.secrets.storage import (
     PERSISTED_CORRUPTED,
     PERSISTED_SOURCE,
     PERSISTED_UNAVAILABLE,
+    SCALEWAY_API_KEY_ENV_VAR,
     EffectiveSecret,
     SecretEnvironmentOverrideError,
     SecretStorageError,
@@ -29,6 +32,8 @@ def read_scaleway_secret_status(*, log_status_check: bool = False) -> ScalewaySe
 
 
 def save_scaleway_api_key(api_key: str | None) -> ScalewaySecretStatus:
+    if os.getenv(SCALEWAY_API_KEY_ENV_VAR):
+        raise SecretEnvironmentOverrideError("secret_environment_override")
     normalized = normalize_scaleway_api_key(api_key)
     secret = set_persisted_scaleway_api_key(normalized)
     status = _status_from_secret(secret)
