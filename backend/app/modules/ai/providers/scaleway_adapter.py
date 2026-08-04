@@ -84,6 +84,7 @@ class ScalewayProviderAdapter:
             result = live_call(
                 prompt=prompt,
                 estimated_output_tokens=estimated_output_tokens,
+                model=request.model_preference,
             )
         except ScalewayNotConfiguredError as exc:
             return self._error_response(
