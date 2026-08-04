@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 from typing import Literal
 
 from pydantic import BaseModel
-
 
 EffectiveSource = Literal["environment", "secure_persisted", "none"]
 PersistedState = Literal["absent", "usable", "corrupted", "unavailable"]
