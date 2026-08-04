@@ -153,7 +153,9 @@ def test_projected_request_combines_smoke_and_routed_usage_at_hard_stop(
     assert result.reservation_id is None
 
 
-def test_confirmation_consumption_revalidates_projected_legacy_cap(monkeypatch) -> None:
+def test_confirmation_ticket_is_revoked_fail_closed_after_budget_policy_drift(
+    monkeypatch,
+) -> None:
     _bootstrap(monkeypatch)
     _set_legacy_usage_and_caps(
         input_tokens=0,
@@ -165,6 +167,9 @@ def test_confirmation_consumption_revalidates_projected_legacy_cap(monkeypatch) 
     assert prepared.result == "pause"
     assert prepared.ticket_id is not None
 
+    # Changing either counters or caps after the ticket was issued changes the
+    # bound policy material. Ticket consumption must stop at this stronger
+    # fail-closed drift check rather than silently reusing stale authority.
     _set_legacy_usage_and_caps(
         input_tokens=999,
         output_tokens=0,
@@ -177,5 +182,5 @@ def test_confirmation_consumption_revalidates_projected_legacy_cap(monkeypatch) 
     )
 
     assert consumed.authorized is False
-    assert consumed.reason_code == "scaleway_monthly_token_cap_exceeded"
+    assert consumed.reason_code == "ticket_binding_or_policy_drift"
     assert consumed.reservation_id is None
