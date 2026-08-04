@@ -219,8 +219,8 @@ def test_active_routed_reservation_is_included_in_next_scaleway_projection(
     _set_legacy_usage_and_caps(
         input_tokens=0,
         output_tokens=0,
-        monthly_cap=20,
-        hard_stop_cap=100,
+        monthly_cap=100,
+        hard_stop_cap=200,
     )
 
     prepared = prepare_egress_attempt(_source_free_material(), now=NOW)
