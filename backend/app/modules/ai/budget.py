@@ -376,6 +376,12 @@ def evaluate_ai_status(
 def evaluate_live_scaleway_smoke_gate(
     settings: AISettingsRead, provider_mode: str
 ) -> str | None:
+    wrapper_reason = _scaleway_smoke_switch_blocking_reason(
+        settings,
+        provider_mode=provider_mode,
+    )
+    if wrapper_reason is not None:
+        return wrapper_reason
     gate = _evaluate_external_provider_policy(
         settings,
         "scaleway",
@@ -389,10 +395,25 @@ def _scaleway_switch_blocking_reason(
     *,
     provider_mode: str,
 ) -> str | None:
+    """Route-level Scaleway switches shared by status, execution and 059b."""
     if provider_mode != "scaleway":
         return "scaleway_provider_mode_required"
     if not settings.scaleway_enabled:
         return "scaleway_disabled"
+    return None
+
+
+def _scaleway_smoke_switch_blocking_reason(
+    settings: AISettingsRead,
+    *,
+    provider_mode: str,
+) -> str | None:
+    route_reason = _scaleway_switch_blocking_reason(
+        settings,
+        provider_mode=provider_mode,
+    )
+    if route_reason is not None:
+        return route_reason
     if not settings.scaleway_smoke_test_enabled:
         return "scaleway_smoke_test_disabled"
     if not settings.scaleway_live_smoke_test_enabled:
