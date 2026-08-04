@@ -4,7 +4,7 @@ This file is the single live source of truth for JarvisOS spec state and near-te
 roadmap. Individual spec files define scope, acceptance criteria, tests, and
 non-goals; their legacy `Status:` lines are not authoritative.
 
-Update this table whenever work starts, a PR opens, a dependency changes, or a PR
+Update this table whenever work starts, a PR opens, a dependency changes, a PR
 merges, or a spec is cancelled. GitHub PR diffs are the authoritative list of
 files created or modified by a spec; this registry intentionally does not copy
 those file lists into a second place.
@@ -120,7 +120,7 @@ abandonment or substitution is not authorized.
 | 006c | merged | [#30](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/30) | BLUECAD workbench UX pass | 006 | Add archive, malformed-detail inspection, promotion, retry/duplicate-brief flows, and safer validation rendering. |
 | 007 | merged | [#17](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/17) | BLUECAD tool registry | 005 | Add fail-closed tool registration, health/hash checks, subprocess execution boundaries, and CI license-boundary enforcement. |
 | 008 | merged | [#32](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/32) | BLUECAD Gmsh mesh adapter | 005, 007 | Generate deterministic Gmsh inputs and physical groups, invoke Gmsh through the registry, and return structured mesh-quality outcomes. |
-| 009 | merged | [#35](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/35) | BLUECAD CalculiX FEM adapter | 008 | Assemble deterministic static CalculiX decks, run result summaries, and evaluate Tier 3 criteria. |
+| 009 | merged | [#35](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/35) | BLUECAD CalculiX FEM adapter | 008 | Assemble deterministic static CalculiX decks, run the registered solver, parse result summaries, and evaluate Tier 3 criteria. |
 | 010 | merged | [#20](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/20), [#26](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/26), [#28](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/28) | BLUECAD AI loop v0 | 005 | Add the bounded candidate/attempt loop, safe-default parking, prompt/schema flow, validation, repair attempts, and traceable prompt versions. |
 | 011 | planned | — | Core Team review panel | 034 | Add advisory persona reviews over artifacts and evidence; personas are bounded configurations, not autonomous authorities or a fake swarm. |
 | 012 | planned | — | L2 ephemeral free-script proposals | 010, 016 | Trigger-gated only: reopen after non-loopback access, a second user, remote-agent/Hermes/MCP runner reachability, or a demonstrated need for non-bundled execution, and only behind a separate proven OS-isolation specification. |
