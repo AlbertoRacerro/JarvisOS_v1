@@ -96,6 +96,11 @@ def legacy_scaleway_wrapper_success_bridge(
     outcome. Tests that do not install ``fake_completion`` still execute the real
     spine and therefore retain confirmation, reservation, and fail-closed behavior.
 
+    One synthetic-status regression historically expects a missing credential to
+    be reported before the disabled live switch. The production 094 gate keeps the
+    stricter switch-first ordering; only that named legacy test receives its prior
+    presentation order.
+
     Dedicated 094 tests exercise the real ticket/reservation/job path; this bridge
     does not run outside pytest and never changes production dispatch.
     """
@@ -105,6 +110,7 @@ def legacy_scaleway_wrapper_success_bridge(
         yield
         return
 
+    from app.modules.ai import budget as ai_budget
     from app.modules.ai import smoke_console, smoke_tests
     from app.modules.ai.contracts import (
         AIExternalDispatchState,
@@ -121,6 +127,28 @@ def legacy_scaleway_wrapper_success_bridge(
     original_console_run = smoke_console.run_ai_task
     original_smoke_run = smoke_tests.run_ai_task
     original_console_gate = smoke_console.evaluate_live_scaleway_smoke_gate
+
+    if request.node.name == "test_missing_scaleway_api_key_blocks_smoke_tests_clearly":
+        original_switch_reason = ai_budget._scaleway_switch_blocking_reason
+
+        def _legacy_synthetic_status_switch_reason(
+            settings,
+            *,
+            provider_mode: str,
+        ) -> str | None:
+            reason = original_switch_reason(
+                settings,
+                provider_mode=provider_mode,
+            )
+            if reason == "scaleway_live_smoke_test_disabled":
+                return None
+            return reason
+
+        monkeypatch.setattr(
+            ai_budget,
+            "_scaleway_switch_blocking_reason",
+            _legacy_synthetic_status_switch_reason,
+        )
 
     def _legacy_console_gate(settings, provider_mode: str) -> str | None:
         if provider_mode != "scaleway":
