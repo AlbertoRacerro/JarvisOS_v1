@@ -38,7 +38,8 @@ class DeterministicTestProtector:
     def protect(self, *, secret_id: str, plaintext: bytes) -> bytes:
         stream = self._stream(secret_id, len(plaintext))
         return b"TEST1" + bytes(
-            left ^ right for left, right in zip(plaintext, stream)
+            left ^ right
+            for left, right in zip(plaintext, stream, strict=True)
         )
 
     def unprotect(self, *, secret_id: str, ciphertext: bytes) -> bytes:
@@ -48,7 +49,9 @@ class DeterministicTestProtector:
             )
         body = ciphertext[5:]
         stream = self._stream(secret_id, len(body))
-        return bytes(left ^ right for left, right in zip(body, stream))
+        return bytes(
+            left ^ right for left, right in zip(body, stream, strict=True)
+        )
 
 
 def _paths(root: Path) -> JarvisPaths:
@@ -166,13 +169,17 @@ def test_symlinked_secret_path_fails_closed(tmp_path: Path) -> None:
 
 
 def test_secret_routes_persist_without_returning_fragments(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("JARVISOS_DATA_ROOT", str(tmp_path / "JarvisOS"))
+    monkeypatch.delenv(storage.SCALEWAY_API_KEY_ENV_VAR, raising=False)
     monkeypatch.setattr(
         storage,
         "build_product_secret_protector",
         DeterministicTestProtector,
     )
+    initialize_database()
     from app.main import create_app
 
     with TestClient(create_app()) as client:
@@ -203,8 +210,10 @@ def test_secret_routes_persist_without_returning_fragments(
 
 
 def test_secret_post_conflicts_with_environment_override(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("JARVISOS_DATA_ROOT", str(tmp_path / "JarvisOS"))
     monkeypatch.setenv(
         storage.SCALEWAY_API_KEY_ENV_VAR,
         "sk-env-authoritative-82",
@@ -214,6 +223,7 @@ def test_secret_post_conflicts_with_environment_override(
         "build_product_secret_protector",
         DeterministicTestProtector,
     )
+    initialize_database()
     from app.main import create_app
 
     with TestClient(create_app()) as client:
