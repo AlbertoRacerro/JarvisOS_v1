@@ -58,6 +58,11 @@ class ScalewayProvider:
         return os.getenv("SCALEWAY_BASE_URL", self.default_base_url).rstrip("/")
 
     def model(self) -> str:
+        """Return the legacy direct-smoke model control.
+
+        Normal routed work receives its model from the validated provider binding
+        and does not consult SCALEWAY_MODEL.
+        """
         return os.getenv("SCALEWAY_MODEL", self.default_model)
 
     def chat_completions_url(self) -> str:
@@ -78,6 +83,7 @@ class ScalewayProvider:
                 "Reply with one short sentence."
             ),
             mode="live",
+            model_override=None,
         )
 
     def create_live_console_completion(
@@ -92,11 +98,18 @@ class ScalewayProvider:
                 "proprietary material, or private strategy."
             ),
             mode="live_smoke_console",
+            model_override=None,
         )
 
     def create_work_completion(
-        self, *, prompt: str, estimated_output_tokens: int
+        self,
+        *,
+        prompt: str,
+        estimated_output_tokens: int,
+        model: str,
     ) -> ScalewayChatResult:
+        if not model.strip():
+            raise ValueError("scaleway routed model must be non-empty")
         return self._create_chat_completion(
             prompt=prompt,
             estimated_output_tokens=estimated_output_tokens,
@@ -105,6 +118,7 @@ class ScalewayProvider:
                 "Answer the user's request concisely and usefully."
             ),
             mode="work",
+            model_override=model.strip(),
         )
 
     def _create_chat_completion(
@@ -114,6 +128,7 @@ class ScalewayProvider:
         estimated_output_tokens: int,
         system_prompt: str,
         mode: str,
+        model_override: str | None,
     ) -> ScalewayChatResult:
         secret = get_effective_scaleway_api_key()
         if not secret.value:
@@ -121,7 +136,7 @@ class ScalewayProvider:
                 "Scaleway credentials are unavailable before transport handoff."
             )
 
-        model = self.model()
+        model = model_override or self.model()
         payload = {
             "model": model,
             "messages": [
@@ -150,6 +165,8 @@ class ScalewayProvider:
         first_choice = choices[0] if choices else {}
         message = first_choice.get("message") or {}
         response_text = str(message.get("content") or "").strip()
+        if not response_text:
+            raise ValueError("scaleway_empty_completion")
 
         prompt_tokens = _optional_int(usage.get("prompt_tokens"))
         completion_tokens = _optional_int(usage.get("completion_tokens"))
