@@ -233,7 +233,7 @@ def test_ticket_consumption_ignores_wrapper_only_smoke_switches(
     consumed = consume_confirmation_ticket(ticket_id, now=NOW)
 
     assert consumed.authorized is True
-    assert consumed.reason_code == "confirmed"
+    assert consumed.reason_code == "ticket_consumed"
     assert consumed.reservation_id is not None
     assert _reservation_count() == 1
 
