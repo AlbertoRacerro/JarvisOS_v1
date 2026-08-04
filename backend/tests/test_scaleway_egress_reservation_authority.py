@@ -103,11 +103,12 @@ def _material(**overrides: object) -> EgressPacketMaterial:
     return EgressPacketMaterial(**values)
 
 
-def _source_free_material() -> EgressPacketMaterial:
+def _source_free_material(**overrides: object) -> EgressPacketMaterial:
     return _material(
         context_blocks=(),
         included_manifest=(),
         source_digests=(),
+        **overrides,
     )
 
 
@@ -218,32 +219,24 @@ def test_active_routed_reservation_is_included_in_next_scaleway_projection(
     _set_legacy_usage_and_caps(
         input_tokens=0,
         output_tokens=0,
-        monthly_cap=30,
+        monthly_cap=20,
         hard_stop_cap=100,
     )
-    with open_sqlite_connection() as connection:
-        connection.execute(
-            """
-            INSERT INTO egress_budget_reservations (
-                id, decision_id, packet_digest, provider_id, model_id,
-                projected_input_tokens, projected_output_tokens,
-                projected_cost_upper_usd, state, created_at, expires_at
-            ) VALUES (?, ?, ?, 'scaleway', ?, 10, 10, 0.01,
-                      'active', ?, ?)
-            """,
-            (
-                str(uuid4()),
-                str(uuid4()),
-                "reserved-packet",
-                MODEL_ID,
-                NOW.isoformat(),
-                datetime(2026, 8, 4, 10, 0, tzinfo=UTC).isoformat(),
-            ),
-        )
-        connection.commit()
 
-    result = prepare_egress_attempt(_source_free_material(), now=NOW)
+    prepared = prepare_egress_attempt(_source_free_material(), now=NOW)
+    assert prepared.result == "pause"
+    assert prepared.ticket_id is not None
+    consumed = consume_confirmation_ticket(prepared.ticket_id, now=NOW)
+    assert consumed.authorized is True
+    assert consumed.reservation_id is not None
+    assert _reservation_count() == 1
+
+    result = prepare_egress_attempt(
+        _source_free_material(prompt="Reply with the word YES."),
+        now=NOW,
+    )
 
     assert result.result == "deny"
     assert result.reason_code == "scaleway_monthly_token_cap_exceeded"
     assert result.reservation_id is None
+    assert _reservation_count() == 1
