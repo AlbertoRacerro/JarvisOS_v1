@@ -71,6 +71,8 @@ def test_missing_assets_and_non_html_requests_remain_404(tmp_path: Path) -> None
 
     rejected_accept_values = (
         "application/json",
+        "text/html;q",
+        "text/html;Q",
         "text/html;q=0",
         "text/html;q=0.000",
         "text/html;q=invalid",
