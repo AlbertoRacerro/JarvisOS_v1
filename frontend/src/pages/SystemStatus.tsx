@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react";
 
 import { getSystemInfo, type SystemInfoResponse } from "../api/client";
+import InlineNotice from "../components/ui/InlineNotice";
+import StatusBadge, { type StatusTone } from "../components/ui/StatusBadge";
+import Surface from "../components/ui/Surface";
+
+function backendStatusTone(status: string | undefined): StatusTone {
+  if (!status || status === "checking") return "proposed";
+  if (["ok", "ready", "healthy", "running"].includes(status.toLowerCase())) return "success";
+  if (["failed", "error", "unhealthy"].includes(status.toLowerCase())) return "danger";
+  return "unavailable";
+}
 
 function SystemStatus() {
   const [system, setSystem] = useState<SystemInfoResponse | null>(null);
@@ -12,6 +22,8 @@ function SystemStatus() {
       .catch((caught: Error) => setError(caught.message));
   }, []);
 
+  const backendStatus = system?.status ?? "checking";
+
   return (
     <section className="page">
       <div className="page-header">
@@ -19,14 +31,15 @@ function SystemStatus() {
         <h2>System Status</h2>
       </div>
 
-      {error && <div className="error-banner">Backend unavailable: {error}</div>}
+      {error && <InlineNotice tone="danger">Backend unavailable: {error}</InlineNotice>}
+      {!system && !error && <InlineNotice tone="info">Checking local backend and storage state.</InlineNotice>}
 
-      <section className="panel">
+      <Surface className="panel">
         <h3>Backend</h3>
         <dl className="details">
           <div>
             <dt>Status</dt>
-            <dd>{system?.status ?? "checking"}</dd>
+            <dd><StatusBadge tone={backendStatusTone(backendStatus)}>{backendStatus}</StatusBadge></dd>
           </div>
           <div>
             <dt>App</dt>
@@ -37,9 +50,9 @@ function SystemStatus() {
             <dd>{system?.environment ?? "local"}</dd>
           </div>
         </dl>
-      </section>
+      </Surface>
 
-      <section className="panel">
+      <Surface className="panel">
         <h3>Storage</h3>
         <dl className="details">
           <div>
@@ -63,9 +76,9 @@ function SystemStatus() {
             <dd>{system ? String(system.database.initialized) : "checking"}</dd>
           </div>
         </dl>
-      </section>
+      </Surface>
 
-      <section className="panel">
+      <Surface className="panel">
         <h3>AI Gateway</h3>
         <dl className="details">
           <div>
@@ -139,7 +152,7 @@ function SystemStatus() {
             <dd>{system?.ai.blocking_reason ?? "none"}</dd>
           </div>
         </dl>
-      </section>
+      </Surface>
     </section>
   );
 }

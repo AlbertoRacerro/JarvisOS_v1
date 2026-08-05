@@ -1,5 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
+import InlineNotice from "./ui/InlineNotice";
+
 type PageErrorBoundaryProps = {
   children: ReactNode;
 };
@@ -23,11 +25,11 @@ class PageErrorBoundary extends Component<PageErrorBoundaryProps, PageErrorBound
     if (this.state.message) {
       return (
         <section className="page">
-          <div className="error-banner">
+          <InlineNotice tone="danger">
             This page could not be rendered. Check the browser console for details.
             <br />
             <small>{this.state.message}</small>
-          </div>
+          </InlineNotice>
         </section>
       );
     }

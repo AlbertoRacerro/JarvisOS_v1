@@ -1,0 +1,171 @@
+:root {
+  color-scheme: light;
+
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "SFMono-Regular", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+  --font-size-caption: 0.75rem;
+  --font-size-label: 0.8125rem;
+  --font-size-body: 0.9375rem;
+  --font-size-section-title: 1.125rem;
+  --font-size-page-title: clamp(1.55rem, 1.2rem + 0.9vw, 2.15rem);
+  --line-height-body: 1.55;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-7: 2rem;
+  --space-8: 3rem;
+
+  --control-height-compact: 2rem;
+  --control-height-default: 2.5rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-pill: 999px;
+  --border-width-default: 1px;
+  --shadow-raised: 0 1px 2px rgb(8 17 13 / 0.12), 0 8px 24px rgb(8 17 13 / 0.1);
+  --motion-fast: 120ms;
+  --motion-standard: 180ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  --layout-sidebar-width: 17.5rem;
+  --layout-content-max-width: 100rem;
+}
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  --palette-neutral-0: #ffffff;
+  --palette-neutral-50: #f6f8f7;
+  --palette-neutral-100: #e8eeeb;
+  --palette-neutral-300: #76867f;
+  --palette-neutral-500: #56665f;
+  --palette-neutral-700: #304039;
+  --palette-neutral-900: #102019;
+  --palette-neutral-950: #08110d;
+  --palette-green-700: #0f5c3b;
+  --palette-green-800: #0b452d;
+  --palette-green-900: #082d20;
+  --palette-blue-700: #005fcc;
+  --palette-amber-50: #fff4d6;
+  --palette-amber-800: #684600;
+  --palette-red-50: #fff0ef;
+  --palette-red-800: #8d2424;
+  --palette-violet-50: #f3edff;
+  --palette-violet-800: #5b3698;
+  --palette-cyan-50: #e9f5f7;
+  --palette-cyan-800: #31566a;
+
+  --color-bg-canvas: var(--palette-neutral-50);
+  --color-bg-shell: var(--palette-green-900);
+  --color-bg-surface: var(--palette-neutral-0);
+  --color-bg-surface-raised: var(--palette-neutral-0);
+  --color-bg-subtle: var(--palette-neutral-100);
+  --color-bg-technical-viewport: var(--palette-neutral-950);
+  --color-text-primary: var(--palette-neutral-950);
+  --color-text-secondary: var(--palette-neutral-700);
+  --color-text-muted: var(--palette-neutral-500);
+  --color-text-inverse: var(--palette-neutral-0);
+  --color-text-on-accent: var(--palette-neutral-0);
+  --color-border-default: var(--palette-neutral-300);
+  --color-border-strong: var(--palette-neutral-500);
+  --color-accent-primary: var(--palette-green-700);
+  --color-accent-hover: var(--palette-green-800);
+  --color-focus-ring: var(--palette-blue-700);
+  --color-focus-separator: var(--palette-neutral-0);
+
+  --color-status-info-bg: #e7f1fb;
+  --color-status-info-text: #12588e;
+  --color-status-success-bg: #e4f4e9;
+  --color-status-success-text: #155f37;
+  --color-status-warning-bg: var(--palette-amber-50);
+  --color-status-warning-text: var(--palette-amber-800);
+  --color-status-danger-bg: var(--palette-red-50);
+  --color-status-danger-text: var(--palette-red-800);
+  --color-status-neutral-bg: var(--palette-neutral-100);
+  --color-status-neutral-text: var(--palette-neutral-700);
+  --color-status-proposed-bg: var(--palette-violet-50);
+  --color-status-proposed-text: var(--palette-violet-800);
+  --color-status-stale-bg: #fff0d8;
+  --color-status-stale-text: #704000;
+  --color-status-unavailable-bg: #e9edef;
+  --color-status-unavailable-text: #3c5059;
+  --color-status-synthetic-bg: var(--palette-cyan-50);
+  --color-status-synthetic-text: var(--palette-cyan-800);
+  --color-status-archived-bg: #e7e9e8;
+  --color-status-archived-text: #3e4b45;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --palette-neutral-0: #f4f7f5;
+  --palette-neutral-50: #e6ebe8;
+  --palette-neutral-100: #27332e;
+  --palette-neutral-300: #71867b;
+  --palette-neutral-500: #9aaba3;
+  --palette-neutral-700: #c8d2cd;
+  --palette-neutral-900: #17211d;
+  --palette-neutral-950: #0b1210;
+  --palette-green-700: #58bd82;
+  --palette-green-800: #84d7a3;
+  --palette-green-900: #071c14;
+  --palette-blue-700: #8bdce3;
+  --palette-amber-50: #35270c;
+  --palette-amber-800: #f4ca68;
+  --palette-red-50: #341719;
+  --palette-red-800: #ffaaa5;
+  --palette-violet-50: #281d3c;
+  --palette-violet-800: #d5b7ff;
+  --palette-cyan-50: #16303c;
+  --palette-cyan-800: #a9d9e8;
+
+  --color-bg-canvas: #0d1512;
+  --color-bg-shell: var(--palette-green-900);
+  --color-bg-surface: var(--palette-neutral-900);
+  --color-bg-surface-raised: #21302a;
+  --color-bg-subtle: var(--palette-neutral-100);
+  --color-bg-technical-viewport: var(--palette-neutral-950);
+  --color-text-primary: var(--palette-neutral-0);
+  --color-text-secondary: var(--palette-neutral-700);
+  --color-text-muted: var(--palette-neutral-500);
+  --color-text-inverse: var(--palette-neutral-0);
+  --color-text-on-accent: var(--palette-neutral-950);
+  --color-border-default: var(--palette-neutral-300);
+  --color-border-strong: var(--palette-neutral-500);
+  --color-accent-primary: var(--palette-green-700);
+  --color-accent-hover: var(--palette-green-800);
+  --color-focus-ring: var(--palette-blue-700);
+  --color-focus-separator: var(--palette-neutral-950);
+
+  --color-status-info-bg: #142a3a;
+  --color-status-info-text: #9bd3f5;
+  --color-status-success-bg: #132b20;
+  --color-status-success-text: #92dfad;
+  --color-status-warning-bg: var(--palette-amber-50);
+  --color-status-warning-text: var(--palette-amber-800);
+  --color-status-danger-bg: var(--palette-red-50);
+  --color-status-danger-text: var(--palette-red-800);
+  --color-status-neutral-bg: var(--palette-neutral-100);
+  --color-status-neutral-text: var(--palette-neutral-700);
+  --color-status-proposed-bg: var(--palette-violet-50);
+  --color-status-proposed-text: var(--palette-violet-800);
+  --color-status-stale-bg: #3a260f;
+  --color-status-stale-text: #ffd18b;
+  --color-status-unavailable-bg: #202a2f;
+  --color-status-unavailable-text: #bdc9cf;
+  --color-status-synthetic-bg: var(--palette-cyan-50);
+  --color-status-synthetic-text: var(--palette-cyan-800);
+  --color-status-archived-bg: #242b28;
+  --color-status-archived-text: #c2cbc6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-standard: 0ms;
+  }
+}
