@@ -79,6 +79,8 @@ def test_missing_assets_and_non_html_requests_remain_404(tmp_path: Path) -> None
         "text/html;q=1.0001",
         "text/html;q=-1",
         "text/html;q=.5",
+        "text/html;q=0;q=1",
+        "text/html;q=1;q=0.5",
     )
     for accept in rejected_accept_values:
         response = client.get("/home", headers={"accept": accept})
