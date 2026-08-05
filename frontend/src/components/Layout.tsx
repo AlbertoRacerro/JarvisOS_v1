@@ -17,6 +17,7 @@ import ContextualNavigator from "./shell/ContextualNavigator";
 import ContextualSidecar from "./shell/ContextualSidecar";
 import Rail from "./shell/Rail";
 import TopBar from "./shell/TopBar";
+import Button from "./ui/Button";
 import Field from "./ui/Field";
 
 type LayoutProps = Readonly<{
@@ -85,11 +86,44 @@ function Layout({ route, navigate, selection, children }: LayoutProps) {
     window.requestAnimationFrame(() => dockToggleRef.current?.focus());
   }, []);
 
+  const panelControls = (
+    <>
+      <Button
+        ref={navigatorToggleRef}
+        variant="ghost"
+        aria-expanded={navigatorOpen}
+        aria-controls="shell-navigator"
+        onClick={() => setNavigatorOpen((current) => !current)}
+      >
+        {navigatorOpen ? "Hide navigator" : "Show navigator"}
+      </Button>
+      <Button
+        ref={sidecarToggleRef}
+        variant="ghost"
+        aria-expanded={sidecarOpen}
+        aria-controls="shell-sidecar"
+        onClick={() => setSidecarOpen((current) => !current)}
+      >
+        {sidecarOpen ? "Hide context" : "Show context"}
+      </Button>
+      <Button
+        ref={dockToggleRef}
+        variant="ghost"
+        aria-expanded={dockOpen}
+        aria-controls="shell-analysis-dock"
+        onClick={() => setDockOpen((current) => !current)}
+      >
+        {dockOpen ? "Hide analysis" : "Show analysis"}
+      </Button>
+    </>
+  );
+
   return (
     <div className="application-shell">
       <a className="shell-skip-link" href="#app-main">Skip to main content</a>
       <TopBar
         title={route.title}
+        panelControls={panelControls}
         appearanceControl={(
           <Field
             className="appearance-control shell-appearance-control"
@@ -97,32 +131,6 @@ function Layout({ route, navigate, selection, children }: LayoutProps) {
             control={appearanceSelect}
           />
         )}
-        toggles={[
-          {
-            id: "navigator",
-            label: navigatorOpen ? "Hide navigator" : "Show navigator",
-            expanded: navigatorOpen,
-            controls: "shell-navigator",
-            ref: navigatorToggleRef,
-            onToggle: () => setNavigatorOpen((current) => !current)
-          },
-          {
-            id: "sidecar",
-            label: sidecarOpen ? "Hide context" : "Show context",
-            expanded: sidecarOpen,
-            controls: "shell-sidecar",
-            ref: sidecarToggleRef,
-            onToggle: () => setSidecarOpen((current) => !current)
-          },
-          {
-            id: "analysis",
-            label: dockOpen ? "Hide analysis" : "Show analysis",
-            expanded: dockOpen,
-            controls: "shell-analysis-dock",
-            ref: dockToggleRef,
-            onToggle: () => setDockOpen((current) => !current)
-          }
-        ]}
       />
       <Rail current={route.primaryNav} navigate={navigate} />
       <div className="shell-workspace">
