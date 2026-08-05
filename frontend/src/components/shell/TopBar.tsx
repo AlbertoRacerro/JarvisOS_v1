@@ -1,23 +1,12 @@
-import type { ReactNode, RefObject } from "react";
-
-import Button from "../ui/Button";
-
-type PanelToggle = Readonly<{
-  id: string;
-  label: string;
-  expanded: boolean;
-  controls: string;
-  ref: RefObject<HTMLButtonElement>;
-  onToggle(): void;
-}>;
+import type { ReactNode } from "react";
 
 type TopBarProps = Readonly<{
   title: string;
+  panelControls: ReactNode;
   appearanceControl: ReactNode;
-  toggles: readonly PanelToggle[];
 }>;
 
-function TopBar({ title, appearanceControl, toggles }: TopBarProps) {
+function TopBar({ title, panelControls, appearanceControl }: TopBarProps) {
   return (
     <header className="shell-topbar">
       <div className="shell-topbar__title">
@@ -25,18 +14,7 @@ function TopBar({ title, appearanceControl, toggles }: TopBarProps) {
         <strong>{title}</strong>
       </div>
       <div className="shell-topbar__controls">
-        {toggles.map((toggle) => (
-          <Button
-            key={toggle.id}
-            ref={toggle.ref}
-            variant="ghost"
-            aria-expanded={toggle.expanded}
-            aria-controls={toggle.controls}
-            onClick={toggle.onToggle}
-          >
-            {toggle.label}
-          </Button>
-        ))}
+        {panelControls}
         {appearanceControl}
       </div>
     </header>
