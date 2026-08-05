@@ -2,6 +2,7 @@ import type { ChangeEvent, RefObject } from "react";
 
 import { APPEARANCE_OPTIONS, type AppearancePreference } from "../../theme";
 import Button from "../ui/Button";
+import Field from "../ui/Field";
 
 type PanelToggle = Readonly<{
   id: string;
@@ -24,6 +25,16 @@ function TopBar({ title, appearance, onAppearanceChange, toggles }: TopBarProps)
     onAppearanceChange(event.target.value as AppearancePreference);
   };
 
+  const appearanceSelect = (
+    <select value={appearance} onChange={handleAppearance} aria-label="Appearance preference">
+      {APPEARANCE_OPTIONS.map((option) => (
+        <option key={option} value={option}>
+          {option[0].toUpperCase() + option.slice(1)}
+        </option>
+      ))}
+    </select>
+  );
+
   return (
     <header className="shell-topbar">
       <div className="shell-topbar__title">
@@ -43,16 +54,7 @@ function TopBar({ title, appearance, onAppearanceChange, toggles }: TopBarProps)
             {toggle.label}
           </Button>
         ))}
-        <label className="appearance-control shell-appearance-control">
-          <span>Appearance</span>
-          <select value={appearance} onChange={handleAppearance} aria-label="Appearance preference">
-            {APPEARANCE_OPTIONS.map((option) => (
-              <option key={option} value={option}>
-                {option[0].toUpperCase() + option.slice(1)}
-              </option>
-            ))}
-          </select>
-        </label>
+        <Field className="appearance-control shell-appearance-control" label="Appearance" control={appearanceSelect} />
       </div>
     </header>
   );
