@@ -35,10 +35,15 @@ def _accepts_html(scope: Scope) -> bool:
         if media_type.lower() != "text/html":
             continue
         quality = 1.0
+        quality_seen = False
         for parameter in parameters:
             name, separator, value = parameter.partition("=")
             if not separator or name.strip().lower() != "q":
                 continue
+            if quality_seen:
+                quality = 0.0
+                break
+            quality_seen = True
             raw_quality = value.strip()
             if _QVALUE.fullmatch(raw_quality) is None:
                 quality = 0.0
