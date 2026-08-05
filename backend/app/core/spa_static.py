@@ -38,9 +38,9 @@ def _accepts_html(scope: Scope) -> bool:
         quality_seen = False
         for parameter in parameters:
             name, separator, value = parameter.partition("=")
-            if not separator or name.strip().lower() != "q":
+            if name.strip().lower() != "q":
                 continue
-            if quality_seen:
+            if not separator or quality_seen:
                 quality = 0.0
                 break
             quality_seen = True
