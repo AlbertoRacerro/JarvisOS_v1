@@ -4,6 +4,7 @@ from __future__ import annotations
 import ast
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -17,13 +18,44 @@ MAIN = FRONTEND / "main.tsx"
 SHELL_CSS = FRONTEND / "styles/shell.css"
 PACKAGE = ROOT / "frontend/package.json"
 STATUS = ROOT / "docs/specs/STATUS.md"
+IMPLEMENTATION_BASE = "994b40009f5bf898aac7f9ba978c4925c610e505"
 
 SHELL_DIRS = (
     FRONTEND / "app",
     FRONTEND / "components/shell",
     FRONTEND / "stages",
 )
-
+AUTHORIZED_DIFF = frozenset(
+    {
+        "backend/app/core/spa_static.py",
+        "backend/app/main.py",
+        "backend/tests/test_spa_static.py",
+        "docs/specs/STATUS.md",
+        "frontend/src/App.tsx",
+        "frontend/src/app/AppLink.tsx",
+        "frontend/src/app/routes.ts",
+        "frontend/src/app/selection.ts",
+        "frontend/src/app/useAppRouter.ts",
+        "frontend/src/components/Layout.tsx",
+        "frontend/src/components/shell/AnalysisDock.tsx",
+        "frontend/src/components/shell/ContextualNavigator.tsx",
+        "frontend/src/components/shell/ContextualSidecar.tsx",
+        "frontend/src/components/shell/LegacyDiagnosticSurface.tsx",
+        "frontend/src/components/shell/MigrationPendingSurface.tsx",
+        "frontend/src/components/shell/Rail.tsx",
+        "frontend/src/components/shell/TopBar.tsx",
+        "frontend/src/main.tsx",
+        "frontend/src/stages/FlowsheetStage.tsx",
+        "frontend/src/stages/ModelStage.tsx",
+        "frontend/src/stages/ResultsStage.tsx",
+        "frontend/src/stages/ReviewStage.tsx",
+        "frontend/src/stages/registry.ts",
+        "frontend/src/styles/responsive.css",
+        "frontend/src/styles/shell.css",
+        "scripts/check_app_shell.py",
+        "scripts/check_ui_foundation.py",
+    }
+)
 PRODUCTION_PATHS = {
     "/home",
     "/design/model",
@@ -38,8 +70,16 @@ PRODUCTION_PATHS = {
     "/legacy/system-status",
 }
 DEV_PATH = "/legacy/dev-local-chat"
-PRIMARY_LABELS = ("Home", "Design", "Runs", "Engineering Data", "Review", "Settings")
+PRIMARY_ITEMS = (
+    ("Home", "/home"),
+    ("Design", "/design/model"),
+    ("Runs", "/runs"),
+    ("Engineering Data", "/engineering-data"),
+    ("Review", "/review"),
+    ("Settings", "/settings"),
+)
 STAGE_KINDS = ("model", "results", "review", "flowsheet")
+ROUTE_PATH = re.compile(r'path\s*:\s*"(/[^"]+)"')
 RAW_COLOR = re.compile(
     r"(?<![\w-])(?:#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|\b(?:black|white|red|blue|green|yellow|purple|orange|cyan|magenta)\b)",
     re.IGNORECASE,
@@ -69,10 +109,14 @@ def shell_files() -> list[Path]:
     return files
 
 
+def registry_row_valid(row: str) -> bool:
+    return row.startswith("| 083 |") and "| in_review |" in row and "pull/231" in row
+
+
 def check_self_cases() -> None:
     samples = {
-        "raw hex": (RAW_COLOR, "color: #fff"),
-        "raw rgb": (RAW_COLOR, "background: rgb(0 0 0)"),
+        "raw hex": (RAW_COLOR, "/* color: #fff */"),
+        "raw rgb template": (RAW_COLOR, "const value = `rgb(${r} ${g} ${b})`;"),
         "inline style": (INLINE_STYLE, "<div\n style = {value} />"),
         "storage": (STORAGE, "window.localStorage.setItem('x', 'y')"),
         "external asset": (EXTERNAL_ASSET, "https://example.invalid/a.svg"),
@@ -80,13 +124,41 @@ def check_self_cases() -> None:
     for label, (pattern, sample) in samples.items():
         if pattern.search(sample) is None:
             fail(f"self-case detector failed for {label}")
+    if ROUTE_PATH.findall('const route = { path : "/home" };') != ["/home"]:
+        fail("route detector does not cover whitespace evasions")
+    if not registry_row_valid("| 083 | in_review | [#231](https://github.com/x/y/pull/231) |"):
+        fail("registry detector rejects the valid review state")
+    if registry_row_valid("| 083 | ready | [#231](https://github.com/x/y/pull/231) |"):
+        fail("registry detector accepts a stale ready state")
+    if registry_row_valid("| 083 | in_review | [#999](https://github.com/x/y/pull/999) |"):
+        fail("registry detector accepts the wrong implementation PR")
+
+
+def check_exact_file_set() -> None:
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--name-only", "--diff-filter=ACMRT", IMPLEMENTATION_BASE, "HEAD", "--"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        fail(f"cannot verify exact implementation diff from {IMPLEMENTATION_BASE}: {exc}")
+    changed = frozenset(line.strip() for line in result.stdout.splitlines() if line.strip())
+    if changed != AUTHORIZED_DIFF:
+        fail(
+            "implementation file set differs: "
+            f"missing={sorted(AUTHORIZED_DIFF - changed)}, extra={sorted(changed - AUTHORIZED_DIFF)}"
+        )
 
 
 def check_routes() -> None:
     body = read(ROUTES)
-    found = set(re.findall(r'path:\s*"(/[^"]+)"', body))
-    if found != PRODUCTION_PATHS | {DEV_PATH}:
-        fail(f"route paths differ: missing={sorted((PRODUCTION_PATHS | {DEV_PATH}) - found)}, extra={sorted(found - (PRODUCTION_PATHS | {DEV_PATH}))}")
+    found = set(ROUTE_PATH.findall(body))
+    expected_paths = PRODUCTION_PATHS | {DEV_PATH}
+    if found != expected_paths:
+        fail(f"route paths differ: missing={sorted(expected_paths - found)}, extra={sorted(found - expected_paths)}")
     if 'normalized === "/"' not in body or 'canonicalPath: "/home"' not in body or "shouldReplace: true" not in body:
         fail("root canonicalization does not replace / with /home")
     if "replace(/^\\/+|\\/+$/g" not in body:
@@ -94,9 +166,17 @@ def check_routes() -> None:
     if "import.meta.env.DEV" not in body or "devOnly: true" not in body:
         fail("development route is not gated")
 
-    for label in PRIMARY_LABELS:
-        if body.count(f'label: "{label}"') != 1:
-            fail(f"primary navigation label must appear exactly once: {label}")
+    start = body.find("export const PRIMARY_NAV_ITEMS")
+    end = body.find("] as const", start)
+    if start < 0 or end < 0:
+        fail("primary navigation registry is missing")
+    primary_block = body[start:end]
+    pairs = tuple(re.findall(r'label\s*:\s*"([^"]+)"\s*,\s*href\s*:\s*"([^"]+)"', primary_block))
+    if pairs != PRIMARY_ITEMS:
+        fail(f"primary navigation differs: expected={PRIMARY_ITEMS}, found={pairs}")
+    if "/legacy/" in primary_block:
+        fail("legacy routes appear in primary navigation")
+
     for legacy in ("/legacy/domain-foundation", "/legacy/ai-draft", "/legacy/system-status"):
         if legacy not in body:
             fail(f"required legacy route missing: {legacy}")
@@ -134,7 +214,10 @@ def check_stage_registry() -> None:
 
 
 def check_navigation_and_accessibility() -> None:
-    combined = "\n".join(read(path) for path in (APP, LAYOUT, FRONTEND / "components/shell/Rail.tsx", FRONTEND / "components/shell/TopBar.tsx"))
+    combined = "\n".join(
+        read(path)
+        for path in (APP, LAYOUT, FRONTEND / "components/shell/Rail.tsx", FRONTEND / "components/shell/TopBar.tsx")
+    )
     required = (
         "Skip to main content",
         'aria-current=',
@@ -169,6 +252,8 @@ def check_styles_and_modules() -> None:
     for path in shell_files():
         body = read(path)
         relative = path.relative_to(ROOT)
+        if RAW_COLOR.search(body):
+            fail(f"raw color found in shell module: {relative}")
         if INLINE_STYLE.search(body):
             fail(f"inline style found: {relative}")
         if "dangerouslySetInnerHTML" in body or "<svg" in body.lower():
@@ -209,12 +294,13 @@ def check_registry_state() -> None:
     row = next((line for line in read(STATUS).splitlines() if line.startswith("| 083 |")), "")
     if not row:
         fail("spec 083 registry row is missing")
-    if "| in_review |" not in row or "pull/231" not in row:
+    if not registry_row_valid(row):
         fail("spec 083 registry row must be in_review and linked to implementation PR #231")
 
 
 def main() -> None:
     check_self_cases()
+    check_exact_file_set()
     check_routes()
     check_router()
     check_stage_registry()
