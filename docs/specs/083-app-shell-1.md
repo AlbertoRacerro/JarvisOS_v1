@@ -24,15 +24,16 @@ last registry reconciliation: PR #227
 
 ## 1. Purpose
 
-Define the smallest durable desktop-first application shell that can replace the current component-state page switcher without changing backend authority, duplicating existing frontend functionality, or absorbing the page-specific work assigned to specs 084–092 and re-derived legacy specifications.
+Define the smallest durable desktop-first application shell that can replace the current component-state page switcher without changing backend authority, duplicating existing frontend functionality, or absorbing page-specific work assigned to specs 084–092 and re-derived 029, 035, 054, and 058c.
 
 The eventual 083 implementation must provide:
 
 - URL-backed navigation and refresh/back/forward continuity;
 - one application shell with a rail, top bar, dominant primary-stage region, contextual navigator, one sidecar slot, and an analysis dock closed by default;
 - a static, compile-time PrimaryStage registry containing exactly ModelStage, ResultsStage, ReviewStage, and FlowsheetStage;
+- the current real BLUECAD workbench mounted inside ModelStage through a compatibility adapter until spec 085 replaces it;
 - honest unavailable states where later specifications own the real capability;
-- explicit legacy routes preserving every current page and existing BLUECAD behavior;
+- explicit legacy diagnostic routes preserving current non-migrated pages;
 - responsive containment, keyboard reachability, visible focus, and 200% zoom usability built on spec 070;
 - no backend, provider, credential, budget, ledger, egress, MemoryStore, BLUECAD lifecycle, or Three.js authority change.
 
@@ -93,18 +94,18 @@ Only the 070 appearance enum may remain in browser storage. 083 must not persist
 
 083 must not add Redux, Zustand, MobX, XState, another state framework, or a second store of engineering truth. A bounded React context is permitted only if ordinary prop composition becomes materially worse and the context owns transient shell state only. That necessity must be justified in the full spec/readiness record.
 
-## 4. Current route inventory
+## 4. Current page inventory and transition ownership
 
 The current application has page identities but no URL routes:
 
-| Current page | Current behavior to preserve | 083 classification |
+| Current page | Current behavior to preserve | 083 transition treatment |
 | --- | --- | --- |
-| `Dashboard` | backend health and current foundation summary | legacy/current home input |
-| `SystemStatus` | backend, storage, AI, provider, budget, diagnostics | explicit legacy diagnostic route |
-| `DomainFoundation` | combined records, scenarios, bindings, runs, decisions | explicit legacy operational route |
-| `BlueCAD` | complete current candidate lifecycle and real GLB viewer | explicit legacy operational route; deep migration belongs to 085 |
-| `AIDraft` | AI task/settings/credential/smoke/draft surface | explicit legacy diagnostic route; not Jarvis sidecar |
-| `DevLocalChat` | development-only local-chat diagnostic | development-only legacy route |
+| `Dashboard` | backend health and current foundation summary | mounted as the initial `/home` compatibility content or replaced only by a proven equivalent shell home |
+| `SystemStatus` | backend, storage, AI, provider, budget, diagnostics | required `/legacy/system-status` diagnostic route |
+| `DomainFoundation` | combined records, scenarios, bindings, runs, decisions | required `/legacy/domain-foundation` diagnostic route |
+| `BlueCAD` | complete current candidate lifecycle and real GLB viewer | mounted in ModelStage through a compatibility adapter; deep migration belongs to 085 |
+| `AIDraft` | AI task/settings/credential/smoke/draft surface | required `/legacy/ai-draft` diagnostic route; not Jarvis sidecar |
+| `DevLocalChat` | development-only local-chat diagnostic | development-only direct legacy route when `import.meta.env.DEV` is true |
 
 083 must preserve each page component and its current API behavior. It may wrap a page in shell chrome and add an explicit legacy label. It must not silently rename a diagnostic surface into a finished product capability.
 
@@ -112,44 +113,76 @@ The current application has page identities but no URL routes:
 
 The full spec must retain or refine the following route classes without reducing continuity.
 
-### 5.1 Shell routes
+### 5.1 Shell and primary-navigation routes
 
 ```text
 /                         -> deterministic redirect to /home
-/home                     -> shell home using real current health/status inputs only
-/design/model             -> ModelStage shell container
+/home                     -> real current home/health compatibility content
+/design/model             -> ModelStage with current BLUECAD compatibility adapter
 /design/results           -> ResultsStage honest unavailable/legacy-handoff state
+/runs                     -> honest migration-pending route with access to current run/scenario surface
+/engineering-data         -> honest migration-pending route with access to current domain-record surface
 /review                   -> ReviewStage honest unavailable/legacy-handoff state
+/settings                 -> honest migration-pending route with access to current diagnostic surfaces
 /design/flowsheet         -> FlowsheetStage honest unavailable state
-/runs                     -> honest handoff to current legacy run/scenario surface
-/engineering-data         -> honest handoff to current legacy domain-record surface
-/settings                 -> honest migration-pending index to current diagnostic surfaces
 ```
 
-The route labels `Runs`, `Engineering Data`, `Review`, and `Settings` must not imply that future workbenches already exist. Availability and legacy status must be visible in text, not color alone.
-
-### 5.2 Required explicit legacy routes
+Primary navigation may contain only the product destinations defined by 081:
 
 ```text
-/legacy/dashboard
-/legacy/system-status
-/legacy/domain-foundation
-/legacy/bluecad
-/legacy/ai-execution
-/legacy/dev-local-chat     -> available only when import.meta.env.DEV is true
+Home
+Design
+Runs
+Engineering Data
+Review
+Settings
 ```
 
-Requirements:
+Legacy route names are not primary-navigation destinations.
 
-- every current page is directly reachable by URL;
-- refresh on every production legacy route renders the same page rather than falling back to an unrelated page;
+The labels `Runs`, `Engineering Data`, `Review`, and `Settings` must not imply that future workbenches already exist. Availability and migration status must be visible in text, not color alone.
+
+### 5.2 Required explicit legacy diagnostic routes
+
+Spec 081 requires:
+
+```text
+/legacy/domain-foundation
+/legacy/ai-draft
+/legacy/system-status
+```
+
+Each route must:
+
+- carry the visible text label `Legacy diagnostic surface`;
+- remain directly reachable by URL;
+- stay outside primary navigation;
+- retain current backend authority boundaries;
+- remain inside the application shell and `PageErrorBoundary`;
+- be removed only by the competent spec after functional replacement is proved.
+
+Additional transition route permitted by current-page continuity:
+
+```text
+/legacy/dev-local-chat    -> development-only; absent or explicitly unavailable in production
+```
+
+A compatibility alias `/legacy/bluecad` may redirect deterministically to `/design/model` if browser evidence or existing links require it. It must not create a second independently evolving BLUECAD surface. The authoritative transition behavior is the compatibility-mounted current workbench inside ModelStage.
+
+No migrated function may remain indefinitely in two primary-navigation locations.
+
+### 5.3 Route behavior requirements
+
+- refresh on every production route renders the same route rather than an unrelated page;
 - browser back/forward works;
-- unknown routes render a bounded not-found state with a route back to `/home` and the legacy route index;
-- the development-only route is absent or explicitly unavailable in production builds and must not leak a hidden production capability;
-- route labels identify legacy and diagnostic status honestly;
-- no route bypasses `PageErrorBoundary`.
+- unknown routes render a bounded not-found state with routes back to `/home` and relevant product destinations;
+- the development-only route does not leak a hidden production capability;
+- route labels identify legacy/diagnostic/migration-pending status honestly;
+- no route bypasses `PageErrorBoundary`;
+- shell route transitions must not reset the 070 appearance preference;
+- geometry-hit selection never enters the URL.
 
-### 5.3 Router implementation boundary
+### 5.4 Router implementation boundary
 
 URL behavior is required; a specific router package is not yet authorized.
 
@@ -190,25 +223,16 @@ ApplicationShell
 
 ### 6.2 Rail
 
-Initial information architecture:
-
-```text
-Home
-Design
-Runs
-Engineering Data
-Review
-Settings
-```
-
 The rail must:
 
 - use links or link-equivalent native navigation semantics;
 - expose the current route with `aria-current="page"` where applicable;
 - retain visible text at compact desktop sizes unless a reviewed icon system with accessible names exists;
 - not require hover to discover a destination;
-- provide a clearly labelled route to legacy tools;
+- exclude `/legacy/*` destinations from primary navigation;
 - avoid provider/model-specific navigation.
+
+Legacy routes may be linked contextually from migration-pending content or a secondary diagnostics index, never as peer primary destinations.
 
 ### 6.3 Contextual navigator
 
@@ -222,7 +246,7 @@ The navigator is a shell container, not an 083 data browser.
 - route-aware handoff links;
 - a compact default.
 
-083 must not implement candidate aggregates, lineage trees, run browsers, engineering-data search, assembly trees, or scene semantics. Those belong to 084–092 or re-derived page specs.
+083 must not implement candidate aggregates, lineage trees, run browsers, engineering-data search, assembly trees, or scene semantics. Those belong to 084, 087, 088, re-derived 035, 092, or other competent page specs.
 
 ### 6.4 Contextual sidecar
 
@@ -240,7 +264,7 @@ There is exactly one right-side secondary slot. It may host an inspector in futu
 
 ### 6.5 Analysis dock
 
-The dock is closed on initial load and after a fresh route load unless the final full spec proves a different accessible URL-backed behavior.
+The dock is closed on initial load and after a fresh route load unless the later full spec proves a different accessible URL-backed behavior.
 
 083 may implement only shell chrome, toggle behavior, focus management, and an honest migration-pending state. Charts, widgets, run comparison, analytics persistence, and metric semantics belong to 089.
 
@@ -284,7 +308,17 @@ The exact exported names may change in the full spec if TypeScript evidence just
 
 ### 7.1 ModelStage
 
-083 establishes only the shell container and honest handoff to the current real BLUECAD route. Full BLUECAD workbench migration belongs to 085; inspection tools belong to 086; scene semantics belong to 092.
+083 must mount the current working `BlueCAD` page through a bounded compatibility adapter inside ModelStage.
+
+The adapter must:
+
+- preserve every current BLUECAD action and API call;
+- preserve real GLB rendering and current viewer internals;
+- preserve validation, attempts, archive, retry/duplicate, and promotion behavior;
+- add only shell/compatibility boundaries and explicit transitional labelling where needed;
+- remain independently removable by spec 085;
+- not create a second BLUECAD page implementation or state store;
+- not implement inspection A0, read-model aggregation, or scene semantics.
 
 ### 7.2 ResultsStage
 
@@ -292,11 +326,13 @@ The exact exported names may change in the full spec if TypeScript evidence just
 
 ### 7.3 ReviewStage
 
-083 establishes only the stage frame and an honest unavailable/legacy-handoff state. Proposal review requires the re-derived 054 boundary and must not bypass blocked operator-design work.
+083 establishes only the stage frame and an honest unavailable/legacy-handoff state. Proposal review requires re-derived 054 and must not bypass blocked operator-design work.
 
 ### 7.4 FlowsheetStage
 
-FlowsheetStage must state plainly that an editable flowsheet is unavailable. It must not render draggable fake nodes, simulated stream values, editable connections, fake solver status, or an Aspen-like canvas. Process-kernel records in 075 do not authorize an editable flowsheet product.
+FlowsheetStage must state plainly that an editable flowsheet is unavailable. It must direct the operator to the real Runs surface and identify Lineage as future work under 087.
+
+It must not render draggable fake nodes, simulated stream values, editable connections, fake solver status, or an Aspen-like canvas. Process-kernel records in 075 do not authorize an editable flowsheet product.
 
 ## 8. Selection contract
 
@@ -324,11 +360,12 @@ Binding rules:
 - `record` means a real typed backend record reference;
 - `geometry-hit` is session-scoped and ephemeral;
 - a geometry hit is not a RecordRef, scene component, part identity, evidence target, promotion target, or persistence key;
-- geometry selection must be cleared when its viewer session is disposed or replaced;
-- 083 must not infer semantic identity from a Three.js object name, traversal index, material, mesh order, or pointer hit;
+- geometry selection must be cleared when its viewer session is disposed, its artifact reloads, or its viewer is replaced;
+- 083 must not infer semantic identity from a Three.js object name, UUID, traversal index, material, mesh order, or pointer hit;
 - 083 must not persist selection in browser storage;
 - URL deep links may include real record IDs only after the full spec defines validation and not-found behavior; geometry hits never enter the URL;
-- 092 owns stable scene binding.
+- consumers must discriminate the union exhaustively;
+- 092 and re-derived 058c own stable scene binding and semantic selection.
 
 ## 9. Visual scope classification
 
@@ -342,7 +379,7 @@ Binding rules:
 - shell-level typographic hierarchy using existing semantic roles;
 - shell chrome necessary to distinguish primary and secondary regions;
 - compact-desktop and 200%-zoom shell behavior;
-- honest unavailable and legacy-route presentation.
+- honest unavailable, migration-pending, and legacy-route presentation.
 
 ### B — reuse from 070
 
@@ -377,12 +414,14 @@ Not owned by this kernel or by 083 implementation unless a later queue re-deriva
 - geometry inspection A0: 086;
 - lineage: 087;
 - runs: 088;
+- engineering-data navigation: re-derived 035;
 - analytics: 089;
 - AI threads: 090;
 - Jarvis sidecar behavior: 091;
 - stable scene binding: 092;
 - Settings: re-derived 029;
-- proposal review: re-derived 054.
+- proposal review: re-derived 054;
+- semantic scene tools: re-derived 058c.
 
 ## 10. Confirmed shell-level visual direction
 
@@ -406,11 +445,11 @@ The eventual implementation must provide:
 - one skip link to the main stage/content region;
 - semantic landmarks for header, primary navigation, main content, complementary sidecar, and dock where open;
 - link semantics for URL navigation;
-- `aria-current` for the active destination;
+- `aria-current` for the active primary destination;
 - visible text labels for navigation and panel toggles;
 - visible `:focus-visible` treatment using 070 roles in both themes;
 - deterministic focus restoration after route changes, panel close, and not-found recovery;
-- keyboard reachability of rail, stage controls, navigator, sidecar, dock, appearance control, and all legacy route links;
+- keyboard reachability of rail, stage controls, navigator, sidecar, dock, appearance control, and all direct legacy links;
 - no hover-only action or state explanation;
 - status and availability meaning conveyed with text/shape/pattern, not color alone;
 - reduced-motion behavior for rail/panel transitions;
@@ -432,7 +471,7 @@ Binding outcomes:
 - at one compact desktop width, visible-text navigation remains available without an icon-only dependency;
 - when horizontal space is insufficient, secondary regions collapse, overlay, or stack according to an explicit priority: primary stage first, rail/navigation second, contextual sidecar third, analysis dock last;
 - no content is clipped solely to preserve the desktop composition;
-- the real BLUECAD legacy page and GLB viewer remain usable without page-level horizontal overflow;
+- the real BLUECAD compatibility-mounted page and GLB viewer remain usable without page-level horizontal overflow;
 - open/close controls remain reachable after reflow.
 
 Exact breakpoints and dimensions are intentionally not frozen by this kernel because the visual reference pack is incomplete. The full spec must define measured acceptance widths without inventing a global identity system.
@@ -445,15 +484,16 @@ Required continuity:
 
 - current page components remain in the repository;
 - current API calls and response handling remain unchanged unless the full spec identifies a proven shell-only correction;
-- all current BLUECAD actions and real GLB behavior remain available through `/legacy/bluecad`;
-- existing candidate validation, attempt, artifact, archive, retry, and promotion semantics remain unchanged;
-- current Domain Foundation records/scenario/run behavior remains available;
-- current AI task, settings, secret-status, smoke, and draft behavior remains available as explicitly legacy/diagnostic UI;
-- current System Status remains available;
+- current BLUECAD is mounted through the ModelStage compatibility adapter;
+- all current BLUECAD actions, validation/attempt data, archive, retry, promotion, artifacts, and real GLB behavior remain available;
+- current Domain Foundation records/scenario/run behavior remains available under `/legacy/domain-foundation`;
+- current AI task, settings, secret-status, smoke, and draft behavior remains available under `/legacy/ai-draft` with `Legacy diagnostic surface` labelling;
+- current System Status remains available under `/legacy/system-status` with `Legacy diagnostic surface` labelling;
 - development-only chat remains development-only;
-- no legacy page is hidden behind an unavailable future stage;
-- no fake replacement is presented as equivalent to a working legacy page;
-- removal of a legacy route requires a later competent page spec proving equivalent or better behavior.
+- legacy routes stay outside primary navigation;
+- no working function is hidden behind an unavailable future stage;
+- no fake replacement is presented as equivalent to a working current page;
+- removal of a legacy route requires the competent page spec to prove equivalent or better behavior.
 
 ## 14. Security, privacy, and economic boundaries
 
@@ -476,13 +516,14 @@ Required continuity:
 083 does not implement:
 
 - a global visual identity rewrite;
-- page redesign beyond shell wrapping and explicit legacy labels;
+- page redesign beyond shell wrapping, compatibility mounting, and explicit legacy labels;
 - full BLUECAD migration;
 - candidate aggregate endpoints;
 - model inspection tools;
 - semantic scene selection;
 - lineage graph;
 - run workbench;
+- engineering-data search/navigation;
 - analytics widgets;
 - AI threads or persistence;
 - Jarvis conversational behavior;
@@ -503,13 +544,15 @@ Required continuity:
 This kernel may be considered successfully merged when:
 
 1. it records the exact derivation SHA;
-2. it records the current route/page inventory;
+2. it records the current page/transition inventory;
 3. it defines shell, stage, selection, legacy continuity, accessibility, responsive, security, non-goal, and rollback boundaries;
-4. it classifies visual requirements A/B/C/D;
-5. it records Route 3 and does not freeze unsupported identity values;
-6. it does not modify runtime code or mark 083 ready;
-7. it does not place a definition PR in the registry's Implementation PR column;
-8. it does not alter another spec row or queue order.
+4. it preserves the exact 081 legacy diagnostic route names and visible label requirement;
+5. it mounts current BLUECAD through a ModelStage compatibility adapter rather than replacing it with a handoff;
+6. it classifies visual requirements A/B/C/D;
+7. it records Route 3 and does not freeze unsupported identity values;
+8. it does not modify runtime code or mark 083 ready;
+9. it does not place a definition PR in the registry's Implementation PR column;
+10. it does not alter another spec row or queue order.
 
 ## 17. Requirements for the later full-spec revision
 
@@ -518,15 +561,15 @@ Before 083 can enter readiness, a later definition revision must:
 - re-read exact `master` and all open PRs/branches;
 - resolve the remaining visual decision items in the companion record or explicitly assign them to a separately authorized visual-identity lane;
 - choose and justify native routing versus a router dependency;
-- freeze the exact route table, redirect/not-found behavior, and development-route behavior;
-- freeze the shell component/state ownership map;
+- freeze the exact route table, redirects/aliases, not-found behavior, and development-route behavior;
+- freeze the shell component/state ownership map and BLUECAD compatibility-adapter seam;
 - define exact responsive evidence widths and 200% zoom procedure;
 - define exact focus restoration behavior;
 - define which existing health/status calls, if any, top-bar chrome may use;
 - define the complete implementation file set;
 - define a deterministic shell checker or equivalent evidence strategy;
 - define exact acceptance tests for browser history, refresh, unknown routes, legacy continuity, sidecar/dock defaults, and no global overflow;
-- confirm no 084–092 scope has entered the implementation;
+- confirm no 084–092 or re-derived 029/035/054/058c scope has entered the implementation;
 - confirm dependencies 006 and 070 remain merged;
 - keep 083 `planned` until a separate readiness audit promotes it.
 
@@ -536,7 +579,10 @@ The later full spec must require at least:
 
 ### Deterministic/static evidence
 
-- exact route table and legacy-route inventory check;
+- exact primary route table and required legacy diagnostic route inventory check;
+- exact visible `Legacy diagnostic surface` labelling for required legacy pages;
+- no `/legacy/*` route in primary navigation;
+- current BLUECAD imported exactly once through the ModelStage compatibility seam;
 - no disallowed dependency/store/backend/provider imports;
 - static stage registry contains exactly four allowed stage kinds;
 - FlowsheetStage contains an explicit unavailable state and no editable canvas behavior;
@@ -546,17 +592,17 @@ The later full spec must require at least:
 
 ### Browser evidence
 
-- direct load and refresh of every production shell and legacy route;
+- direct load and refresh of every production shell and required legacy diagnostic route;
 - browser back/forward across shell and legacy routes;
 - unknown-route recovery;
 - keyboard-only navigation and visible focus in system/light/dark;
 - live system theme behavior remains intact;
 - navigator, sidecar, and dock initial closed/compact states;
 - no focus loss when panels close;
-- 200% zoom on shell home, each stage route, legacy BLUECAD, and one dense legacy page;
+- 200% zoom on shell home, each stage route, compatibility-mounted BLUECAD, and one dense legacy diagnostic page;
 - compact desktop width on the same set;
 - no document-level horizontal overflow; local table/viewer overflow remains local;
-- real BLUECAD candidate, validation/attempt data, and real GLB viewer reachable through the legacy route when available;
+- real BLUECAD candidate, validation/attempt data, and real GLB viewer available in ModelStage when runtime data exists;
 - backend unavailable state without false success;
 - development-only route absent/unavailable in a production build.
 
@@ -569,7 +615,7 @@ No screenshot may contain secrets, provider responses, private engineering conte
 A compliant rollback can:
 
 1. restore the prior `App.tsx` component-state page switcher and `Layout.tsx` sidebar;
-2. remove shell-only route, stage, navigator, sidecar, and dock components;
+2. remove shell-only route, stage, navigator, sidecar, dock, and compatibility-adapter components;
 3. retain all current pages, API client functions, 070 appearance/theme utilities, 070 primitives, BLUECAD viewer, and backend behavior;
 4. remove no database record and require no backend migration;
 5. leave no browser-stored shell state to migrate.
@@ -577,14 +623,14 @@ A compliant rollback can:
 Stop and return 083 to `planned` or `blocked` if implementation would require:
 
 - changing backend authority or adding a second store;
-- losing any current legacy behavior;
+- losing any current legacy or BLUECAD behavior;
 - treating geometry hits as stable records;
 - faking a future stage capability;
 - adding unreviewed global visual identity changes;
 - adding a dependency without minimum-necessary evidence;
 - persisting shell or engineering state outside the backend;
 - changing Three.js internals or BLUECAD lifecycle before the competent spec;
-- absorbing 084–092 or re-derived 029/054 work.
+- absorbing 084–092 or re-derived 029/035/054/058c work.
 
 ## 20. Readiness status
 
@@ -592,7 +638,7 @@ Stop and return 083 to `planned` or `blocked` if implementation would require:
 
 The current blockers are definition blockers, not implementation defects:
 
-1. the available visual handoff does not contain inspectable image/font/palette assets sufficient to freeze a global identity;
+1. the available visual handoff does not contain inspectable image/font/palette assets sufficient to freeze a global identity or explicitly separate it from 083 through a queue decision;
 2. the routing implementation choice has not yet been justified by a bounded comparison;
 3. the exact implementation file set and deterministic shell-check strategy are not yet frozen;
 4. the full browser evidence matrix still needs exact widths and route-by-route acceptance steps.
