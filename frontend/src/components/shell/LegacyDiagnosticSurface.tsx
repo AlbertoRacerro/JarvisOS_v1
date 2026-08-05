@@ -15,7 +15,7 @@ function LegacyDiagnosticSurface({ title, children }: LegacyDiagnosticSurfacePro
           <p className="eyebrow">Transition route</p>
           <h1 id="legacy-diagnostic-title">{title}</h1>
         </div>
-        <StatusBadge state="stale">Legacy diagnostic surface</StatusBadge>
+        <StatusBadge tone="stale">Legacy diagnostic surface</StatusBadge>
       </header>
       <div className="shell-legacy__content">{children}</div>
     </section>
