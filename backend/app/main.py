@@ -3,13 +3,13 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from app.api.dev_message_route import router as dev_message_route_router
 from app.api.health import router as health_router
 from app.api.system import router as system_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.core.spa_static import SpaStaticFiles, derive_reserved_roots
 from app.modules.ai.routes import router as ai_router
 from app.modules.ai.sensitivity_routes import router as sensitivity_router
 from app.modules.bluecad.routes import router as bluecad_router
@@ -66,11 +66,16 @@ def create_app() -> FastAPI:
     app.include_router(flowsheet_router)
 
     # Serve the built frontend (single-process desktop launch) when present.
-    # Conditional so tests/dev without a build are unaffected; API routers are
-    # registered above and take precedence over this catch-all static mount.
+    # API routers are registered first and their literal top-level roots remain
+    # reserved so an API/static miss can never become a successful HTML shell.
     frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
     if frontend_dist.is_dir():
-        app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+        reserved_roots = derive_reserved_roots(app.routes)
+        app.mount(
+            "/",
+            SpaStaticFiles(directory=frontend_dist, reserved_roots=reserved_roots),
+            name="frontend",
+        )
 
     return app
 
