@@ -16,9 +16,16 @@ Core principle:
 - The Modeling Workbench is the future design interface; BlueRev Foundry is the
   future model-capital system.
 
+This README is an onboarding document, not the live roadmap, merge authority, or
+runtime source of truth. For current work state read `docs/specs/STATUS.md`; for
+agent execution read `AGENTS.md` and
+`docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md`; for actual behavior inspect
+current code and exact-head deterministic evidence.
+
 ## Current Runtime Status
 
-Verified against code as of 2026-07-02.
+Verified against code as of 2026-07-02. Later merged specs and current code
+supersede any stale detail in this dated orientation section.
 
 **AI execution spine.** Every AI task goes through `run_ai_task` and
 `POST /ai/tasks/run`; every call writes a ledger row to `ai_jobs` (route,
@@ -72,18 +79,26 @@ adaptive routing.
 
 ## Development Workflow
 
-- `AGENTS.md` is the single source of instructions for AI coding agents:
-  invariants, environments (Windows local vs Linux CI/cloud), test gate,
-  conventions.
-- Work items are specs in `docs/specs/`; the live status and roadmap are in
+- `AGENTS.md` owns hard invariants, safety boundaries, environments, test gates,
+  and general coding-agent conduct.
+- `docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md` owns exact-SHA delivery,
+  autonomous continuation, ChatGPT/Codex/Claude collaboration, finding closure,
+  post-beta deferral, minimal handoffs, and documentation-drift handling.
+- Work items are specs in `docs/specs/`; the sole live status and roadmap are in
   `docs/specs/STATUS.md`, and the execution workflow is in
   `docs/specs/README.md`.
-- CI (GitHub Actions) runs ruff + the full backend pytest suite on every PR.
-  Automated code review is advisory; merge authority is CI green plus human
-  review. No self-merge, no auto-merge, no direct pushes to `master`.
+- One implementation branch and PR are used per spec, with one active writer and
+  no overlapping runtime front.
+- Automated and model reviews are advisory evidence. The assigned technical
+  merge owner may merge with an expected-head SHA only after required gates and
+  proof are green and no current blocking finding remains.
+- No GitHub auto-merge and no direct pushes to `master`.
 
 ## Canonical Docs
 
+- Agent invariants: `AGENTS.md`
+- Agent execution and automation: `docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md`
+- Documentation authority map: `docs/README.md`
 - Architecture: `docs/ARCHITECTURE.md`
 - Decisions: `docs/DECISIONS.md`
 - Runbooks: `docs/RUNBOOKS.md`
@@ -94,8 +109,9 @@ adaptive routing.
 - Strategy review pack: `docs/strategy/FABLE_REVIEW_INDEX.md`
 
 Everything else under `docs/` is design material or historical milestone
-evidence (see `docs/README.md`). When an older milestone doc conflicts with the
-files above or with current code, the canonical docs and code win.
+evidence (see `docs/README.md`). When an older document conflicts with current
+code or a more specific authority, use the hierarchy and correction procedure in
+`docs/README.md`.
 
 ## Repository Layout
 

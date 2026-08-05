@@ -1,42 +1,25 @@
 # Work-item specs
 
-Each file `NNN-<slug>.md` is one implementation slice, sized for a single agent
-session and a single reviewable diff. Specs are written by the maintainer (with
-strategic-review support) and executed by AI coding agents.
+Each file `NNN-<slug>.md` is one implementation slice, normally sized for one reviewable implementation branch and pull request. Specs are written from current repository authority and executed by AI coding agents under `AGENTS.md` and `../AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md`.
 
-The live status and roadmap are maintained only in [`STATUS.md`](STATUS.md).
-Individual spec files define scope, acceptance criteria, tests, and non-goals;
-legacy `Status:` lines inside those files are not authoritative.
+The live status and roadmap are maintained only in [`STATUS.md`](STATUS.md). Individual spec files define scope, acceptance criteria, tests, and non-goals; legacy `Status:` lines inside those files are not authoritative.
 
 ## Execution workflow
 
-1. Read [`STATUS.md`](STATUS.md). Pick a `ready` spec only after confirming all
-   hard dependencies are `merged` and no active PR overlaps the same files or
-   runtime boundary.
-2. Read the selected spec fully, then create a branch: `spec/NNN-<slug>`.
-3. Set the registry row to `in_progress` when implementation starts.
-4. **Verify the "Files likely touched" list against the actual code before
-   writing anything** — specs are written from docs-level knowledge and may be
-   slightly stale. If reality conflicts with the spec, stop and report.
-5. Implement within scope. Non-goals are binding.
-6. Run the test gate in `AGENTS.md` and
-   `python scripts/check_spec_status.py --self-test`.
-7. Open one PR, declare `**Spec gate:** implementation NNN` in the PR body, set
-   the registry row to `in_review`, and add the implementation PR number. CI
-   checks that the row exists, the status/PR match, and all hard dependencies
-   are `merged`.
-8. Note deviations or discoveries in the PR summary or an
-   `## Implementation notes` section in the spec when needed.
-9. The merge owner changes the registry row to `merged` immediately after merge.
+1. Read [`STATUS.md`](STATUS.md). Pick a `ready` spec only after confirming all hard dependencies are `merged` and no active PR overlaps the same files or runtime boundary.
+2. Read `../../AGENTS.md`, `../AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md`, the selected spec, and its readiness record from exact SHAs.
+3. Create the implementation branch `spec/NNN-<slug>` and set the registry row to `in_progress` when implementation begins.
+4. Verify the spec's "Files likely touched" list against current code before writing. Specs can become stale. If code reality conflicts with the spec, identify the exact conflict and resolve it through the authority hierarchy rather than guessing.
+5. Implement within scope. Acceptance criteria and non-goals are binding.
+6. Run the test gate in `AGENTS.md`, `python scripts/check_spec_status.py --self-test`, and all spec-specific gates.
+7. Open one implementation PR with `**Spec gate:** implementation NNN`, set the row to `in_review`, and add the implementation PR number. CI checks row presence, status/PR alignment, and merged hard dependencies.
+8. Record material deviations, decisions, and deferred non-blocking findings in the PR or the canonical post-beta backlog defined by the execution protocol. Do not create duplicate live status lists.
+9. Handle review findings on the same branch. Reproduce or trace each finding against the exact head and classify whether it is blocking, non-blocking, resolved, superseded, or unsupported.
+10. Merge only under the exact-head gate in `AGENTS.md` and the execution protocol. After merge, verify `master` and reconcile the registry row to `merged` immediately.
 
-A PR that only creates or revises a spec declares
-`**Spec gate:** definition NNN`; the row stays `planned`, `blocked`, or `ready`
-and its implementation PR column remains `—`. Unnumbered infrastructure or
-process work declares `**Spec gate:** N/A`.
+A PR that only creates or revises a spec declares `**Spec gate:** definition NNN`; the row stays `planned`, `blocked`, or `ready` and its implementation PR column remains `—`. Unnumbered infrastructure or process work declares `**Spec gate:** N/A`.
 
-Review is human-controlled and supported by automated review. A spec is merged
-only when its implementation PR is incorporated into `master`; model verdicts or
-passing self-authored tests do not change status by themselves.
+Model and automated reviews are advisory evidence. Passing self-authored tests or receiving a model verdict does not change status by itself. The assigned technical merge owner may merge autonomously only after exact-head deterministic gates, required proof, scope validation, and closure of current blocking findings. GitHub auto-merge remains prohibited.
 
 ## Status values
 
@@ -48,6 +31,4 @@ passing self-authored tests do not change status by themselves.
 - `merged`
 - `cancelled`
 
-Definitions and update rules live in [`STATUS.md`](STATUS.md). Do not recreate a
-second live index in this file, the root README, strategy documents, chat
-handoffs, or individual specs.
+Definitions and update rules live in [`STATUS.md`](STATUS.md). Do not recreate a second live index in this file, the root README, strategy documents, architecture prose, chat handoffs, or individual specs.
