@@ -209,8 +209,8 @@ def check_registry_state() -> None:
     row = next((line for line in read(STATUS).splitlines() if line.startswith("| 083 |")), "")
     if not row:
         fail("spec 083 registry row is missing")
-    if "| ready |" not in row and "| in_progress |" not in row and "| in_review |" not in row:
-        fail("spec 083 registry state is not implementation-compatible")
+    if "| in_review |" not in row or "pull/231" not in row:
+        fail("spec 083 registry row must be in_review and linked to implementation PR #231")
 
 
 def main() -> None:
