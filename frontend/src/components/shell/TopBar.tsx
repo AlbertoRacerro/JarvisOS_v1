@@ -8,7 +8,7 @@ type PanelToggle = Readonly<{
   label: string;
   expanded: boolean;
   controls: string;
-  ref: RefObject<HTMLButtonElement | null>;
+  ref: RefObject<HTMLButtonElement>;
   onToggle(): void;
 }>;
 
