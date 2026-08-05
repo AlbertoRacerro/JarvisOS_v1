@@ -49,7 +49,7 @@ function Layout({ route, navigate, selection, children }: LayoutProps) {
     document.title = `${route.title} · JarvisOS`;
     const frame = window.requestAnimationFrame(() => mainRef.current?.focus());
     return () => window.cancelAnimationFrame(frame);
-  }, [route.id, route.title]);
+  }, [route.id, route.path, route.title]);
 
   const onAppearanceChange = (preference: AppearancePreference) => {
     writeAppearancePreference(preference);
