@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type KeyboardEvent } from "react";
 
 import Button from "../ui/Button";
 import InlineNotice from "../ui/InlineNotice";
@@ -12,19 +12,24 @@ function AnalysisDock({ open, onClose }: AnalysisDockProps) {
   const headingRef = useRef<HTMLHeadingElement | null>(null);
 
   useEffect(() => {
-    if (!open) return undefined;
-    headingRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
+    if (open) headingRef.current?.focus();
+  }, [open]);
+
+  const onPanelKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Escape") return;
+    event.stopPropagation();
+    onClose();
+  };
 
   if (!open) return null;
 
   return (
-    <section id="shell-analysis-dock" className="shell-panel shell-analysis-dock" aria-labelledby="shell-analysis-title">
+    <section
+      id="shell-analysis-dock"
+      className="shell-panel shell-analysis-dock"
+      aria-labelledby="shell-analysis-title"
+      onKeyDown={onPanelKeyDown}
+    >
       <div className="shell-panel__header">
         <h2 id="shell-analysis-title" ref={headingRef} tabIndex={-1}>Analysis dock</h2>
         <Button variant="ghost" onClick={onClose}>Close analysis dock</Button>
