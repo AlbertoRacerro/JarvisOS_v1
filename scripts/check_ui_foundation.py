@@ -40,6 +40,7 @@ RAW_COLOR = re.compile(
     r"(?<![\w-])(?:#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|\b(?:black|white|red|blue|green|yellow|purple|orange|cyan|magenta)\b)",
     re.IGNORECASE,
 )
+INLINE_STYLE = re.compile(r"\bstyle\s*=\s*\{", re.IGNORECASE)
 FORBIDDEN_IMPORT = re.compile(
     r"from\s+[\"'](?:\.\./)+(?:api|pages|services|router|modules|backend)(?:/|[\"'])",
     re.IGNORECASE,
@@ -126,8 +127,8 @@ def check_primitives() -> None:
         body = read(path)
         if FORBIDDEN_IMPORT.search(body):
             fail(f"primitive imports application authority: {path.relative_to(ROOT)}")
-        if "style={{" in body or "style={`" in body or "style={" in body:
-            fail(f"primitive uses inline style: {path.relative_to(ROOT)}")
+        if INLINE_STYLE.search(body):
+            fail(f"primitive uses inline/template style: {path.relative_to(ROOT)}")
         if RAW_COLOR.search(body):
             fail(f"primitive contains a raw color literal: {path.relative_to(ROOT)}")
         if "<svg" in body.lower() or re.search(r"from\s+[\"'][^\"']+\.svg[\"']", body, re.IGNORECASE):
@@ -173,7 +174,7 @@ def check_migration() -> None:
     )
     for path in migrated:
         body = read(path)
-        if "style={{" in body or "style={`" in body or "style={" in body:
+        if INLINE_STYLE.search(body):
             fail(f"inline/template style found in migrated file: {path.relative_to(ROOT)}")
         if RAW_COLOR.search(body):
             fail(f"raw color found in migrated file: {path.relative_to(ROOT)}")
@@ -190,6 +191,14 @@ def check_migration() -> None:
 
     if ".bluecad-viewer" not in foundation or "var(--color-bg-technical-viewport)" not in block(foundation, ".bluecad-viewer"):
         fail("BLUECAD CSS container does not consume the technical viewport token")
+
+    evasion_samples = (
+        "<div style={{ color: token }} />",
+        "<div style = {{ color: token }} />",
+        "<div\n  style\n  =\n  {computedStyle}\n/>",
+    )
+    if any(INLINE_STYLE.search(sample) is None for sample in evasion_samples):
+        fail("inline-style detector does not cover whitespace/newline evasions")
 
 
 def check_registry() -> None:

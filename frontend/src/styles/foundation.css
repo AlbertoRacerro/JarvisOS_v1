@@ -186,8 +186,14 @@ summary:focus-visible,
 .ai-task-route-help,
 .ai-draft-advanced-metadata summary,
 .bluecad-candidate small,
-.parked-reason {
+.parked-reason,
+.budget-meter-label,
+.budget-chars {
   color: var(--color-text-secondary);
+}
+
+.budget-empty {
+  color: var(--color-text-muted);
 }
 
 .details dd,
@@ -213,8 +219,8 @@ summary:focus-visible,
 }
 
 input:not([type="checkbox"]):not([type="radio"]),
-select,
-textarea {
+select:not([data-ui-foundation-exempt]),
+textarea:not([data-ui-foundation-exempt]) {
   min-height: var(--control-height-default);
   border: var(--border-width-default) solid var(--color-border-default);
   border-radius: var(--radius-md);
@@ -225,6 +231,10 @@ textarea {
 input::placeholder,
 textarea::placeholder {
   color: var(--color-text-muted);
+}
+
+.checkbox-line {
+  color: var(--color-text-primary) !important;
 }
 
 button:not(.nav-button):not(.bluecad-candidate),
@@ -420,6 +430,12 @@ button:disabled,
   border-color: var(--color-status-danger-text);
 }
 
+.ai-draft-route-pill {
+  border-color: var(--color-border-default);
+  background: var(--color-status-neutral-bg);
+  color: var(--color-status-neutral-text);
+}
+
 .bluecad-candidate {
   border-color: var(--color-border-default);
   border-radius: var(--radius-md);
@@ -437,6 +453,40 @@ button:disabled,
   border-color: var(--color-border-strong);
   border-radius: var(--radius-md);
   background: var(--color-bg-technical-viewport);
+}
+
+.bluecad-promoted {
+  color: var(--color-status-success-text);
+}
+
+.bluecad-table details summary {
+  color: var(--color-focus-ring);
+}
+
+.binding-state.invalid {
+  border-color: var(--color-status-danger-text);
+  color: var(--color-status-danger-text);
+}
+
+.binding-state.manual,
+.binding-state.parameter {
+  border-color: var(--color-status-success-text);
+  color: var(--color-status-success-text);
+}
+
+.scenario-result,
+.scenario-output-list div {
+  border-color: var(--color-border-default);
+}
+
+.token-meter-track,
+.budget-bar-outer {
+  background: var(--color-bg-subtle);
+}
+
+.token-meter-fill,
+.budget-bar-inner {
+  background: var(--color-accent-primary);
 }
 
 .smoke-table th,
