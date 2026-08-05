@@ -25,18 +25,14 @@ SHELL_DIRS = (
     FRONTEND / "components/shell",
     FRONTEND / "stages",
 )
-AUTHORIZED_DIFF = frozenset(
+AUTHORIZED_ADDED = frozenset(
     {
         "backend/app/core/spa_static.py",
-        "backend/app/main.py",
         "backend/tests/test_spa_static.py",
-        "docs/specs/STATUS.md",
-        "frontend/src/App.tsx",
         "frontend/src/app/AppLink.tsx",
         "frontend/src/app/routes.ts",
         "frontend/src/app/selection.ts",
         "frontend/src/app/useAppRouter.ts",
-        "frontend/src/components/Layout.tsx",
         "frontend/src/components/shell/AnalysisDock.tsx",
         "frontend/src/components/shell/ContextualNavigator.tsx",
         "frontend/src/components/shell/ContextualSidecar.tsx",
@@ -44,15 +40,23 @@ AUTHORIZED_DIFF = frozenset(
         "frontend/src/components/shell/MigrationPendingSurface.tsx",
         "frontend/src/components/shell/Rail.tsx",
         "frontend/src/components/shell/TopBar.tsx",
-        "frontend/src/main.tsx",
         "frontend/src/stages/FlowsheetStage.tsx",
         "frontend/src/stages/ModelStage.tsx",
         "frontend/src/stages/ResultsStage.tsx",
         "frontend/src/stages/ReviewStage.tsx",
         "frontend/src/stages/registry.ts",
-        "frontend/src/styles/responsive.css",
         "frontend/src/styles/shell.css",
         "scripts/check_app_shell.py",
+    }
+)
+AUTHORIZED_MODIFIED = frozenset(
+    {
+        "backend/app/main.py",
+        "docs/specs/STATUS.md",
+        "frontend/src/App.tsx",
+        "frontend/src/components/Layout.tsx",
+        "frontend/src/main.tsx",
+        "frontend/src/styles/responsive.css",
         "scripts/check_ui_foundation.py",
     }
 )
@@ -113,6 +117,23 @@ def registry_row_valid(row: str) -> bool:
     return row.startswith("| 083 |") and "| in_review |" in row and "pull/231" in row
 
 
+def parse_name_status(output: str) -> tuple[frozenset[str], frozenset[str]]:
+    added: set[str] = set()
+    modified: set[str] = set()
+    for raw_line in output.splitlines():
+        if not raw_line.strip():
+            continue
+        fields = raw_line.split("\t")
+        status = fields[0]
+        if status == "A" and len(fields) == 2:
+            added.add(fields[1])
+        elif status == "M" and len(fields) == 2:
+            modified.add(fields[1])
+        else:
+            fail(f"unauthorized diff status or malformed record: {raw_line!r}")
+    return frozenset(added), frozenset(modified)
+
+
 def check_self_cases() -> None:
     samples = {
         "raw hex": (RAW_COLOR, "/* color: #fff */"),
@@ -132,12 +153,15 @@ def check_self_cases() -> None:
         fail("registry detector accepts a stale ready state")
     if registry_row_valid("| 083 | in_review | [#999](https://github.com/x/y/pull/999) |"):
         fail("registry detector accepts the wrong implementation PR")
+    parsed_added, parsed_modified = parse_name_status("A\tnew.ts\nM\texisting.ts\n")
+    if parsed_added != {"new.ts"} or parsed_modified != {"existing.ts"}:
+        fail("name-status detector does not preserve add/modify classes")
 
 
 def check_exact_file_set() -> None:
     try:
         result = subprocess.run(
-            ["git", "diff", "--name-only", "--diff-filter=ACMRT", IMPLEMENTATION_BASE, "HEAD", "--"],
+            ["git", "diff", "--name-status", "--no-renames", IMPLEMENTATION_BASE, "HEAD", "--"],
             cwd=ROOT,
             check=True,
             capture_output=True,
@@ -145,11 +169,13 @@ def check_exact_file_set() -> None:
         )
     except (OSError, subprocess.CalledProcessError) as exc:
         fail(f"cannot verify exact implementation diff from {IMPLEMENTATION_BASE}: {exc}")
-    changed = frozenset(line.strip() for line in result.stdout.splitlines() if line.strip())
-    if changed != AUTHORIZED_DIFF:
+    added, modified = parse_name_status(result.stdout)
+    if added != AUTHORIZED_ADDED or modified != AUTHORIZED_MODIFIED:
         fail(
-            "implementation file set differs: "
-            f"missing={sorted(AUTHORIZED_DIFF - changed)}, extra={sorted(changed - AUTHORIZED_DIFF)}"
+            "implementation file/status set differs: "
+            f"missing_added={sorted(AUTHORIZED_ADDED - added)}, extra_added={sorted(added - AUTHORIZED_ADDED)}, "
+            f"missing_modified={sorted(AUTHORIZED_MODIFIED - modified)}, "
+            f"extra_modified={sorted(modified - AUTHORIZED_MODIFIED)}"
         )
 
 
