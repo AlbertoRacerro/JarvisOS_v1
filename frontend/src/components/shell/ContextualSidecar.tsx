@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type KeyboardEvent } from "react";
 
 import type { StageSelection } from "../../app/selection";
 import Button from "../ui/Button";
@@ -14,19 +14,24 @@ function ContextualSidecar({ open, selection, onClose }: ContextualSidecarProps)
   const headingRef = useRef<HTMLHeadingElement | null>(null);
 
   useEffect(() => {
-    if (!open) return undefined;
-    headingRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
+    if (open) headingRef.current?.focus();
+  }, [open]);
+
+  const onPanelKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Escape") return;
+    event.stopPropagation();
+    onClose();
+  };
 
   if (!open) return null;
 
   return (
-    <aside id="shell-sidecar" className="shell-panel shell-sidecar" aria-labelledby="shell-sidecar-title">
+    <aside
+      id="shell-sidecar"
+      className="shell-panel shell-sidecar"
+      aria-labelledby="shell-sidecar-title"
+      onKeyDown={onPanelKeyDown}
+    >
       <div className="shell-panel__header">
         <h2 id="shell-sidecar-title" ref={headingRef} tabIndex={-1}>Context</h2>
         <Button variant="ghost" onClick={onClose}>Close sidecar</Button>
