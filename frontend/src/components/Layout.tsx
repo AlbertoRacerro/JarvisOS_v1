@@ -136,7 +136,7 @@ function Layout({ route, navigate, selection, children }: LayoutProps) {
       <div className="shell-workspace">
         <ContextualNavigator
           open={navigatorOpen}
-          currentStage={route.stageKind}
+          currentStage={route.primaryNav === "design" ? route.stageKind : undefined}
           navigate={navigate}
           onClose={closeNavigator}
         />
