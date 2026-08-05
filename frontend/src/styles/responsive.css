@@ -1,0 +1,21 @@
+/* Spec 070 responsive containment correction.
+ * Wide tables and technical viewports keep their own local overflow; shell and
+ * BLUECAD grid items must be allowed to shrink inside the available viewport.
+ */
+.main-panel,
+.page,
+.panel,
+.ui-surface,
+.bluecad-page,
+.bluecad-grid,
+.bluecad-grid > *,
+.bluecad-detail,
+.bluecad-candidate-list,
+.bluecad-viewer-shell,
+.table-wrap {
+  min-width: 0;
+}
+
+.page {
+  width: 100%;
+}
