@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
-import { useAppRouter } from "./app/useAppRouter";
 import type { StageSelection } from "./app/selection";
+import { useAppRouter } from "./app/useAppRouter";
 import Layout from "./components/Layout";
 import PageErrorBoundary from "./components/PageErrorBoundary";
 import LegacyDiagnosticSurface from "./components/shell/LegacyDiagnosticSurface";
@@ -30,7 +30,15 @@ function App() {
   } else {
     switch (route.id) {
       case "home":
-        content = <Dashboard />;
+        content = (
+          <section className="shell-home" aria-labelledby="shell-home-title">
+            <header className="shell-home__header">
+              <p className="eyebrow">Application shell</p>
+              <h1 id="shell-home-title">Home</h1>
+            </header>
+            <div className="shell-home__content"><Dashboard /></div>
+          </section>
+        );
         break;
       case "runs":
         content = (
@@ -99,7 +107,7 @@ function App() {
 
   return (
     <Layout route={route} navigate={navigate} selection={selection}>
-      <PageErrorBoundary key={route.id}>{content}</PageErrorBoundary>
+      <PageErrorBoundary key={resolved.canonicalPath}>{content}</PageErrorBoundary>
     </Layout>
   );
 }
