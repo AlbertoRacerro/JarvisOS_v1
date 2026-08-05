@@ -1,6 +1,6 @@
+import re
 from collections.abc import Collection, Iterable
 from pathlib import Path, PurePosixPath
-import re
 
 from starlette.datastructures import Headers
 from starlette.exceptions import HTTPException
