@@ -31,7 +31,7 @@ The following are sufficiently repeated and compatible with repository authority
 - contextual navigator rather than a permanently expanded tree;
 - one right-side secondary slot shared by inspector/Jarvis modes rather than multiple columns;
 - analysis dock closed by default;
-- clear current workspace/route/stage/selection/mode;
+- clear current route, stage, selection, mode, and migration status;
 - educational empty and unavailable states;
 - real artifacts and backend state over conceptual renders or fake telemetry;
 - explicit accepted/proposed/rejected/superseded/stale/invalid/running/failed/diagnostic distinctions;
@@ -63,13 +63,20 @@ Confirmed hierarchy:
 
 When space is constrained, lower-priority regions yield before the primary stage.
 
+Spec 081 additionally requires:
+
+- exactly ModelStage, ResultsStage, ReviewStage, and FlowsheetStage;
+- current BLUECAD mounted in ModelStage through a compatibility adapter during 083;
+- required legacy diagnostic routes kept outside primary navigation;
+- FlowsheetStage rendered as an honest unavailable state.
+
 ## 4. Typography
 
 ### Confirmed
 
 - clear distinction among product identity, route/stage title, section title, control label, technical metadata, and monospaced identifiers/values;
-- body and control text must remain readable at 200% zoom;
-- technical density must not be achieved through undersized text;
+- body and control text remain readable at 200% zoom;
+- technical density is not achieved through undersized text;
 - unit-bearing values, statuses, evidence, and identifiers outrank decorative copy.
 
 ### Unresolved
@@ -80,7 +87,7 @@ When space is constrained, lower-priority regions yield before the primary stage
 - font source/licensing/delivery method;
 - weight range;
 - exact type scale and tracking;
-- whether current system-font fallback remains the shipping baseline.
+- whether the current system-font fallback remains the shipping baseline.
 
 No font replacement is authorized by 083 on current evidence.
 
@@ -89,10 +96,10 @@ No font replacement is authorized by 083 on current evidence.
 ### Confirmed
 
 - semantic roles from 070 remain authoritative;
-- light and dark must express the same state meanings;
+- light and dark express the same state meanings;
 - a technical viewport may remain darker than surrounding light-theme surfaces when justified by 3D readability;
 - status is never color-only;
-- accents are restrained and must not make provisional or unavailable state look canonical;
+- accents are restrained and do not make provisional or unavailable state look canonical;
 - fake live indicators and decorative telemetry colors are prohibited.
 
 ### Unresolved
@@ -111,12 +118,12 @@ The current token values are temporary implementation values, not final brand au
 
 ### Confirmed
 
-- surface hierarchy must be legible without excessive elevation;
-- separators must support navigation and information grouping rather than decorate every region;
-- panel boundaries must remain visible in both themes;
-- the primary stage should not be fragmented into generic dashboard cards;
-- overlays must be sparse, purposeful, and dismissible/collapsible where secondary;
-- technical tables and viewports may own local overflow.
+- surface hierarchy is legible without excessive elevation;
+- separators support navigation and information grouping rather than decorate every region;
+- panel boundaries remain visible in both themes;
+- the primary stage is not fragmented into generic dashboard cards;
+- overlays are sparse, purposeful, and collapsible where secondary;
+- technical tables and viewports own local overflow.
 
 ### Unresolved
 
@@ -145,13 +152,13 @@ A global replacement of these values is category C and must not be hidden in 083
 ### Unresolved
 
 - exact spacing scale changes beyond 070;
-- exact rail width, sidecar width, navigator width, top-bar height, and dock height;
-- exact compact-desktop breakpoint behavior;
+- exact rail, sidecar, navigator, top-bar, and dock dimensions;
+- exact compact-desktop transformation;
 - whether panel resizing is needed in 083 or deferred.
 
 The full 083 spec must freeze measurable responsive outcomes, not infer a visual grid from absent images.
 
-## 8. Navigation and shell chrome
+## 8. Navigation and shell chrome classification
 
 ### Category A — 083
 
@@ -161,10 +168,10 @@ The full 083 spec must freeze measurable responsive outcomes, not infer a visual
 - contextual navigator placement;
 - one contextual sidecar slot;
 - analysis dock closed by default;
-- explicit legacy-route labels;
-- unavailable-state grammar at shell level;
+- shell-level unavailable, migration-pending, and legacy-diagnostic presentation;
 - shell-level type hierarchy using semantic roles;
-- compact-desktop and 200%-zoom behavior.
+- compact-desktop and 200%-zoom behavior;
+- BLUECAD compatibility mounting inside ModelStage without page redesign.
 
 ### Category B — reuse 070
 
@@ -188,26 +195,29 @@ The full 083 spec must freeze measurable responsive outcomes, not infer a visual
 
 ### Category D — competent future page spec
 
-- BLUECAD workbench detail: 085;
-- candidate aggregate: 084;
+- candidate aggregate/read model: 084;
+- full BLUECAD workbench: 085;
 - model inspection: 086;
 - lineage: 087;
 - runs: 088;
+- Engineering Data: re-derived 035;
 - analytics: 089;
 - AI threads: 090;
 - Jarvis behavior: 091;
 - scene binding: 092;
 - Settings: re-derived 029;
-- proposal review: re-derived 054.
+- proposal review: re-derived 054;
+- semantic scene tools: re-derived 058c.
 
 ## 9. Stage chrome and technical graphics
 
 ### Confirmed
 
-- stage chrome must expose route/stage identity and availability honestly;
+- stage chrome exposes route/stage identity and availability honestly;
 - grids, callouts, tags, axes, and technical overlays are allowed only when tied to real data, real viewer behavior, or clearly labelled diagnostic scaffolding;
-- the actual GLB remains the artifact in BLUECAD; a conceptual ocean render cannot be presented as backend output;
-- future exploded view and semantic callouts require the competent scene-binding spec.
+- the actual GLB remains the artifact in BLUECAD; a conceptual render cannot be presented as backend output;
+- current BLUECAD is preserved through a compatibility adapter in ModelStage;
+- future exploded view and semantic callouts require the competent scene-binding/semantic-selection specs.
 
 ### Prohibited in 083
 
@@ -217,7 +227,7 @@ The full 083 spec must freeze measurable responsive outcomes, not infer a visual
 - fake agent status;
 - ornamental graph wallpaper;
 - simulated numerical readouts;
-- semantic part labels inferred from Three.js mesh order or names;
+- semantic part labels inferred from Three.js mesh order, UUIDs, or names;
 - speculative instrument tags detached from backend records.
 
 ## 10. Controls, badges, tables, and forms
@@ -226,9 +236,10 @@ The full 083 spec must freeze measurable responsive outcomes, not infer a visual
 
 - reuse the 070 primitives and native semantics;
 - status labels remain textual and structurally distinct;
-- controls must not become icon-only because no icon system is authorized;
+- controls do not become icon-only because no icon system is authorized;
 - dense technical tables keep local horizontal overflow;
-- unavailable, diagnostic-only, proposed, stale, synthetic, archived, success, warning, and danger states must remain distinguishable without hue alone.
+- unavailable, diagnostic-only, proposed, stale, synthetic, archived, success, warning, and danger states remain distinguishable without hue alone;
+- required legacy pages carry the exact visible label `Legacy diagnostic surface` and remain outside primary navigation.
 
 ### Unresolved / category C or D
 
@@ -242,7 +253,7 @@ The full 083 spec must freeze measurable responsive outcomes, not infer a visual
 
 ## 11. Light/dark relationship
 
-The shell must support all 070 preferences:
+The shell supports all 070 preferences:
 
 ```text
 system
@@ -268,10 +279,10 @@ Exact palettes remain unresolved.
 ### Confirmed
 
 - motion is restrained and functional;
-- panel transitions must not delay access or hide state;
+- panel transitions do not delay access or hide state;
 - reduced-motion removes nonessential movement;
 - no ambient, looping, glowing, parallax, or ornamental animation;
-- focus and route transitions must not create motion-dependent comprehension.
+- focus and route transitions do not create motion-dependent comprehension.
 
 ### Unresolved / category C
 
@@ -283,7 +294,7 @@ Exact palettes remain unresolved.
 
 083 may use existing 070 motion roles only after the full spec defines the minimum shell transitions required.
 
-## 13. Distinctiveness without “generic SaaS”
+## 13. Distinctiveness without generic SaaS treatment
 
 Distinctiveness must come from product structure and truthful engineering behavior, not decorative excess.
 
@@ -293,8 +304,8 @@ Evidence-backed differentiators:
 - explicit authority and lifecycle states;
 - engineering identifiers, units, evidence, and provenance in the correct context;
 - contextual rather than dashboard-style secondary information;
-- honest unavailable capability boundaries;
-- real GLB/validation/run surfaces retained during migration;
+- honest unavailable and migration-pending boundaries;
+- real BLUECAD/validation/run surfaces retained during migration;
 - stage-specific technical chrome only when real data supports it.
 
 Avoid:
@@ -305,14 +316,14 @@ Avoid:
 - card grids that flatten workflow hierarchy;
 - excessive pills and rounded rectangles;
 - decorative analytics;
-- universal “online” dots;
+- universal online dots;
 - interchangeable admin-dashboard navigation.
 
 ## 14. Contradictions and resolutions
 
 ### Dark-first reference vs system/light/dark foundation
 
-Resolution: preserve all three appearance preferences. Dark may be a preferred visual reference, not the only supported mode.
+Resolution: preserve all three appearance preferences. Dark may be a preferred reference, not the only supported mode.
 
 ### Jarvis on the right vs inspector on the right
 
@@ -326,55 +337,43 @@ Resolution: overlays require real stage data or explicit diagnostic/unavailable 
 
 Resolution: density comes from hierarchy, progressive disclosure, and contextual panels, not tiny text or undersized targets.
 
-### Premium feel vs minimal implementation scope
+### Premium feel vs minimum implementation scope
 
 Resolution: 083 may establish spatial hierarchy and truthful shell chrome. Global visual identity remains independently removable and separately authorized.
 
-### Stage-centered product vs legacy page continuity
+### Stage-centered product vs current BLUECAD continuity
 
-Resolution: preserve legacy pages through explicit routes until competent page specs migrate equivalent functionality. Do not hide working features behind empty future stages.
+Resolution: mount the real current BLUECAD workbench in ModelStage through a bounded compatibility adapter; do not replace it with a link or placeholder before 085.
+
+### Primary information architecture vs legacy diagnostics
+
+Resolution: required `/legacy/domain-foundation`, `/legacy/ai-draft`, and `/legacy/system-status` routes remain directly reachable but are not primary-navigation destinations.
 
 ## 15. Look-risk analysis
 
 ### Gaming/HUD risk
 
-Triggers:
+Triggers: glow, neon accents, dark-only palette, permanent graphs, animated grids, fake targeting reticles, dense overlays.
 
-- glow, neon accents, dark-only palette, permanent graphs, animated grids, fake targeting reticles, dense overlays.
-
-Control:
-
-- restrained accents, real data only, visible text, no ambient motion, secondary panels closed by default.
+Control: restrained accents, real data only, visible text, no ambient motion, secondary panels closed by default.
 
 ### Consumer-app risk
 
-Triggers:
+Triggers: oversized cards, excessive whitespace, simplified status language, hidden technical detail, rounded-everything controls.
 
-- oversized cards, excessive whitespace, simplified status language, hidden technical detail, rounded-everything controls.
-
-Control:
-
-- preserve technical density, units, evidence, IDs, detailed legacy routes, and explicit state vocabulary.
+Control: preserve technical density, units, evidence, IDs, detailed compatibility/legacy surfaces, and explicit state vocabulary.
 
 ### Corporate/admin risk
 
-Triggers:
+Triggers: generic sidebar + dashboard cards, uniform blue/green buttons, provider-centric settings, metric-card home page.
 
-- generic sidebar + dashboard cards, uniform blue/green buttons, provider-centric settings, metric-card home page.
-
-Control:
-
-- stage-first layout, contextual navigation, workflow-specific state, real artifacts, non-generic route hierarchy.
+Control: stage-first layout, contextual navigation, workflow-specific state, real artifacts, non-generic route hierarchy.
 
 ### Engineering-legibility risk
 
-Triggers:
+Triggers: low-contrast separators, decorative fonts, tiny metadata, color-only state, global overflow, overlay collision.
 
-- low-contrast separators, decorative fonts, tiny metadata, color-only state, global overflow, overlay collision.
-
-Control:
-
-- 070 accessibility contracts, measured contrast, visible focus, local overflow, 200% zoom and compact-desktop browser evidence.
+Control: 070 accessibility contracts, measured contrast, visible focus, local overflow, 200% zoom and compact-desktop browser evidence.
 
 ## 16. Purely decorative elements not justified
 
@@ -415,15 +414,13 @@ Result:
 
 ## 18. Exit conditions from Route 3
 
-A later definition pass may leave Route 3 when one of these is true:
-
 ### Route 1 exit
 
-The available reference pack is sufficient to specify only shell-owned hierarchy/chrome while global page identity remains outside 083. The full 083 spec then records measurable shell decisions and proceeds to readiness.
+The available reference pack is sufficient to specify only shell-owned hierarchy/chrome while global page identity remains outside 083. The full 083 spec records measurable shell decisions and proceeds to readiness.
 
 ### Route 2 exit
 
-The reference pack requires a global, independently removable rewrite of typography, palette, component grammar, borders/surfaces, iconography, or motion. A queue proposal is then documented without silently changing `STATUS.md`; 081 re-derivation decides whether it precedes, accompanies, or follows 083.
+The reference pack requires a global, independently removable rewrite of typography, palette, component grammar, borders/surfaces, iconography, or motion. A queue proposal is documented without silently changing `STATUS.md`; 081 re-derivation decides whether it precedes, accompanies, or follows 083.
 
 In both cases the later decision must cite exact assets and translate them into testable criteria rather than aesthetic adjectives.
 
@@ -436,9 +433,9 @@ In both cases the later decision must cite exact assets and translate them into 
 | Accent/palette | open | maintainer rejects current green but replacement not evidenced | palette/reference images and semantic-role mapping |
 | Border/line grammar | open | rejection is clear; replacement is not | component/shell reference with measurable contrast/weight |
 | Radius system | open | no consistent reference values | component reference or explicit range |
-| Surface/elevation grammar | open | “premium engineering” is not measurable alone | shell/panel references and hierarchy criteria |
+| Surface/elevation grammar | open | premium engineering is not measurable alone | shell/panel references and hierarchy criteria |
 | Icon system | open | no asset/family selection | icon source/license/accessibility plan |
-| Exact rail/topbar/sidecar dimensions | open | relationship known, dimensions not | measured reference or browser-layout study |
+| Exact shell dimensions | open | relationship known, dimensions not | measured reference or browser-layout study |
 | Compact-desktop transformation | open | outcome known, composition not | exact target widths and browser proof plan |
 | Shell motion | open | restraint known, behavior not | transition inventory and reduced-motion alternative |
 | Light/dark palette relationship | open | semantic parity known, values not | paired theme reference or token proposal with contrast evidence |
