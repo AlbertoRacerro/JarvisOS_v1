@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
 
 import type { StageSelection } from "./app/selection";
 import { useAppRouter } from "./app/useAppRouter";
@@ -8,10 +8,11 @@ import LegacyDiagnosticSurface from "./components/shell/LegacyDiagnosticSurface"
 import MigrationPendingSurface from "./components/shell/MigrationPendingSurface";
 import AIDraft from "./pages/AIDraft";
 import Dashboard from "./pages/Dashboard";
-import DevLocalChat from "./pages/DevLocalChat";
 import DomainFoundation from "./pages/DomainFoundation";
 import SystemStatus from "./pages/SystemStatus";
 import { PRIMARY_STAGES } from "./stages/registry";
+
+const DevLocalChat = import.meta.env.DEV ? lazy(() => import("./pages/DevLocalChat")) : null;
 
 function App() {
   const { resolved, navigate } = useAppRouter();
@@ -83,8 +84,12 @@ function App() {
         content = <LegacyDiagnosticSurface title="System Status"><SystemStatus /></LegacyDiagnosticSurface>;
         break;
       case "legacy-dev-local-chat":
-        content = import.meta.env.DEV ? (
-          <LegacyDiagnosticSurface title="Development Local Chat"><DevLocalChat /></LegacyDiagnosticSurface>
+        content = import.meta.env.DEV && DevLocalChat ? (
+          <LegacyDiagnosticSurface title="Development Local Chat">
+            <Suspense fallback={<p>Loading development diagnostic…</p>}>
+              <DevLocalChat />
+            </Suspense>
+          </LegacyDiagnosticSurface>
         ) : null;
         break;
       case "not-found":
