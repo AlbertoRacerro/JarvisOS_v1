@@ -23,19 +23,20 @@ function Field({ label, control, hint, error, required, className }: FieldProps)
   const errorId = error ? `${generatedId}-error` : undefined;
   const describedBy = [control.props["aria-describedby"], hintId, errorId].filter(Boolean).join(" ") || undefined;
   const classes = ["ui-field", className].filter(Boolean).join(" ");
+  const isRequired = required ?? Boolean(control.props.required);
 
   const linkedControl = cloneElement(control, {
     id: controlId,
-    required,
+    required: isRequired,
     "aria-describedby": describedBy,
-    "aria-invalid": error ? true : undefined
+    "aria-invalid": error ? true : control.props["aria-invalid"]
   });
 
   return (
     <div className={classes}>
       <label className="ui-field__label" htmlFor={controlId}>
         {label}
-        {required && <span aria-hidden="true"> *</span>}
+        {isRequired && <span aria-hidden="true"> *</span>}
       </label>
       {linkedControl}
       {hint && <span id={hintId} className="ui-field__hint">{hint}</span>}

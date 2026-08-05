@@ -67,6 +67,10 @@ summary:focus-visible,
   font-size: var(--font-size-caption);
 }
 
+.sidebar .eyebrow {
+  color: var(--color-text-inverse);
+}
+
 .nav {
   gap: var(--space-2);
 }
