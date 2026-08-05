@@ -52,6 +52,11 @@ def test_html_navigation_routes_fall_back_to_index(tmp_path: Path) -> None:
         assert INDEX_MARKER in response.text
         assert "text/html" in response.headers["content-type"]
 
+    for accept in ("text/html;q=0.001", "text/html;q=1", "text/html;q=1.000"):
+        response = client.get("/home", headers={"accept": accept})
+        assert response.status_code == 200
+        assert INDEX_MARKER in response.text
+
     head = client.head("/design/model", headers={"accept": "text/html"})
     assert head.status_code == 200
     assert head.content == b""
@@ -64,7 +69,18 @@ def test_missing_assets_and_non_html_requests_remain_404(tmp_path: Path) -> None
     assert missing_asset.status_code == 404
     assert INDEX_MARKER not in missing_asset.text
 
-    for accept in ("application/json", "text/html;q=0", "text/html;q=invalid"):
+    rejected_accept_values = (
+        "application/json",
+        "text/html;q=0",
+        "text/html;q=0.000",
+        "text/html;q=invalid",
+        "text/html;q=2",
+        "text/html;q=Infinity",
+        "text/html;q=1.0001",
+        "text/html;q=-1",
+        "text/html;q=.5",
+    )
+    for accept in rejected_accept_values:
         response = client.get("/home", headers={"accept": accept})
         assert response.status_code == 404
         assert INDEX_MARKER not in response.text
