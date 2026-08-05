@@ -3,174 +3,162 @@
 Status: canonical operational process
 Effective date: 2026-08-05
 
-This document defines how AI coding agents, review agents, scheduled continuations, and coordinating chats execute JarvisOS repository work. It complements `AGENTS.md`: hard invariants and repository safety remain owned by `AGENTS.md`; this file owns the detailed delivery, collaboration, continuation, finding, and documentation-drift process.
+This document defines repository delivery, autonomous continuation, model collaboration, finding closure, post-beta deferral, and documentation-drift handling for JarvisOS coding and review agents.
 
-It does not change JarvisOS runtime authority, provider policy, credentials, budgets, egress, schemas, or product behavior.
+`AGENTS.md` remains authoritative for hard invariants, safety boundaries, general conduct, and the exhaustive maintainer-interruption classes. This protocol adds execution detail without changing JarvisOS runtime authority, provider policy, credentials, budgets, egress, schemas, or product behavior.
 
 ## 1. Minimal startup sequence
 
-A new coordinating chat or agent session must begin by reading, from exact Git SHAs:
+A coordinating chat or agent session starts by reading, from exact Git SHAs:
 
 1. `AGENTS.md`;
 2. this document;
 3. `docs/specs/STATUS.md`;
 4. `docs/specs/README.md`;
-5. the selected specification and its readiness record, if any;
-6. the active pull request body, exact head, diff, workflow results, reviews, and unresolved threads.
+5. the selected spec and readiness record;
+6. the active PR body, exact head, diff, workflows, reviews, and unresolved threads.
 
-A minimal handoff should normally contain only:
+A continuation handoff should normally contain only:
 
-- repository name;
-- active PR number;
+- repository;
 - exact `master` SHA;
+- active PR;
 - exact PR-head SHA;
-- the current checkpoint marker;
-- any maintainer decision that is not yet recorded in the repository.
+- canonical checkpoint comment;
+- maintainer decisions not yet recorded in the repository.
 
-Do not reproduce the queue, full spec, or operating rules in chat handoffs. Read them from the repository.
+Do not copy the queue, spec text, or operating rules into every chat handoff.
 
-## 2. Authority and conflict resolution
+## 2. Authority by question
 
-Use the following authority hierarchy for the specific question being answered:
-
-1. Current code, runtime behavior, deterministic tests, and exact-head evidence describe what the system actually does.
+1. Current code, runtime behavior, deterministic tests, and exact-head evidence describe actual behavior.
 2. `AGENTS.md` defines hard invariants, safety boundaries, and general agent conduct.
-3. This document defines repository delivery, autonomous continuation, collaboration, finding closure, and documentation-drift handling.
-4. `docs/specs/STATUS.md` is the sole live authority for spec state, dependencies, queue order, and implementation PR association.
-5. The selected spec and readiness record define the current slice's scope, acceptance criteria, tests, and non-goals.
+3. This document defines delivery and autonomous execution mechanics.
+4. `docs/specs/STATUS.md` is the sole live authority for spec state, dependencies, queue order, and implementation-PR association.
+5. The selected spec and readiness record define slice scope, acceptance criteria, tests, and non-goals.
 6. `docs/DECISIONS.md` records durable architecture decisions.
-7. `docs/ARCHITECTURE.md` describes current stable architecture only where it is consistent with current code, accepted decisions, and current spec state.
-8. Root and directory README files are onboarding and navigation documents, not independent runtime, roadmap, or merge authority.
-9. Strategy packs, design documents, milestone reports, task summaries, model comments, and chat handoffs are advisory or historical unless promoted by a canonical source.
+7. `docs/ARCHITECTURE.md` describes stable architecture only where consistent with current code, accepted decisions, and current spec state.
+8. README files are onboarding and navigation, not independent runtime, roadmap, or merge authority.
+9. Strategy packs, design docs, milestone reports, model summaries, and chat handoffs are advisory or historical unless promoted by a canonical source.
 
-When two canonical sources appear to conflict:
+When sources conflict:
 
-- do not resolve by plausibility;
-- identify the exact claims and their dates or SHAs;
-- prefer current runtime for behavior, `STATUS.md` for work state, the selected spec for slice scope, and accepted ADRs for durable architecture;
-- fix the stale canonical document in a bounded documentation change;
-- preserve superseded history rather than silently deleting provenance.
+- identify exact claims, dates, and SHAs;
+- use runtime evidence for behavior, `STATUS.md` for work state, the active spec for slice scope, and accepted ADRs for durable architecture;
+- do not resolve by plausibility alone;
+- fix stale canonical prose in a bounded documentation change;
+- preserve superseded history when it carries provenance.
 
 ## 3. Exact-SHA and freshness rule
 
 Branch names such as `master`, `latest`, or `current head` are not sufficient evidence.
 
-Every implementation, review, checkpoint, audit, and merge decision must record the full 40-character SHA it examined. Reading a file by branch name is acceptable only to discover an SHA; conclusions must be tied to the resolved commit.
+Every implementation, review, checkpoint, audit, and merge decision records the full 40-character SHA examined. A branch name may be used to discover an SHA, but conclusions are tied to the resolved commit.
 
-When an active PR head changes:
+When the PR head changes:
 
-- prior CI and reviews become evidence for the old head only;
-- revalidate findings against the new head;
-- mark conclusions as still valid, resolved, superseded, or requiring revalidation;
-- never merge using a review or gate that belongs to a different head.
+- earlier CI and reviews remain evidence only for the old head;
+- findings are revalidated;
+- conclusions are classified as still valid, resolved, superseded, or requiring revalidation;
+- no merge relies on a gate from another head.
 
 ## 4. Delivery states
 
-Use these terms precisely:
-
-- `REMOTE_VERIFIED`: the branch advanced, complete files are readable from GitHub, the diff is authorized, and evidence belongs to that exact head.
+- `REMOTE_VERIFIED`: branch advanced; complete files are readable from GitHub; diff is authorized; evidence belongs to that exact head.
 - `LOCAL_ONLY`: work exists only in an agent checkout, temporary filesystem, or unpushed commit.
-- `DECLARED_NOT_VERIFIED`: an agent claims a result, but the remote artifact or evidence has not been independently verified.
-- `DELIVERY_FAILURE`: an agent completed or claimed work but failed to make a recoverable remote delivery.
-- `BLOCKED`: no authorized practical route remains without maintainer action or a prohibited risk.
+- `DECLARED_NOT_VERIFIED`: an agent claims a result without independently verified remote evidence.
+- `DELIVERY_FAILURE`: work was claimed or completed but no recoverable remote delivery exists.
+- `BLOCKED`: no authorized practical route remains without maintainer action or prohibited risk.
 
-A local commit SHA, task link, summary comment, digest of an unavailable artifact, or statement that tests passed is not delivery.
+A local commit SHA, task link, summary comment, or test claim is not delivery.
 
 ## 5. One active front and one writer
 
-- Follow the binding queue in `STATUS.md`.
-- Finish, verify, and merge the first authorized implementation slice before opening the next runtime front.
+- Follow the queue in `STATUS.md`.
+- Finish, verify, and merge the first authorized runtime slice before opening the next runtime front.
 - Use one implementation branch and one implementation PR per spec.
-- Allow only one writer at a time on the active PR.
-- Read-only audits may run in parallel only when explicitly useful and must not become competing coordination systems.
-- Never create concurrent implementations that touch the same files or runtime boundary.
-- If a failover writer is needed, it must use an exact-head guard. The first valid remote write wins; every stale writer stops.
+- Allow one writer at a time on the active PR.
+- Do not create concurrent implementations over the same files or runtime boundary.
+- A failover writer uses an exact-head guard. The first valid remote write wins; stale writers stop.
+- A maintainer-requested documentation reconciliation may temporarily become the active front. Resume the paused implementation after it is resolved.
 
-Documentation-only reconciliation requested by the maintainer may temporarily become the active front. Resume the paused implementation after the documentation change is merged or otherwise resolved.
-
-## 6. Autonomous continuation loop
-
-The current frontend sprint uses three cooperating scheduled roles. The roles are reusable even if the exact schedule later changes.
+## 6. Autonomous continuation roles
 
 ### Checkpoint
 
 The checkpoint role:
 
-- reads GitHub as the source of truth;
-- completes unfinished verification from the prior cycle;
-- updates one canonical PR comment marked `AUTONOMOUS_FRONTEND_CHECKPOINT_V1`;
-- records exact master and PR-head SHAs, delivery state, gates, findings, blockers, owner, and next exact action;
-- does not create duplicate status comments or a second live registry.
+- reads GitHub as source of truth;
+- completes unfinished verification;
+- maintains one PR comment marked `AUTONOMOUS_FRONTEND_CHECKPOINT_V1`;
+- records exact SHAs, delivery state, gates, findings, blocker, owner, and next exact action;
+- does not create another registry or duplicate status comments.
 
 ### Builder
 
 The builder role:
 
-- resumes from the canonical checkpoint;
+- resumes from the checkpoint;
 - acts like a maintainer command to continue;
-- performs all sequential safe work available in the current cycle rather than stopping after one micro-action;
+- performs all sequential safe work available in the cycle instead of stopping after one micro-action;
 - may implement, publish, verify, correct, consume CI/reviews, merge with an expected-head guard, reconcile status, and advance to the next authorized slice;
-- stops only at a real external gate, a maintainer-owned decision, or completion of the slice.
+- stops at a real external gate, a valid maintainer interruption, or slice completion.
 
 ### Watchdog
 
 The watchdog role:
 
-- detects stalled delivery, completed-but-unconsumed CI/review, abandoned agent tasks, stale checkpoints, or an executable next action;
-- does nothing while the pipeline is genuinely progressing or a real gate is running;
-- becomes a failover writer only with an exact-head guard and only when no valid writer remains active.
+- detects stalled delivery, abandoned agent tasks, completed but unconsumed CI/review, stale checkpoints, and executable next actions;
+- does nothing while the pipeline is genuinely progressing;
+- becomes failover writer only with an exact-head guard and no valid writer still active.
 
-### Current time-bounded sprint profile
+### Current time-bounded frontend sprint profile
 
-For the 2026-08-05 through 2026-08-15 frontend sprint:
+For 2026-08-05 through 2026-08-15:
 
 - checkpoint: hourly at minute `00`;
 - builder: hourly at minute `10`;
 - watchdog: hourly at minute `40`;
-- final inspection package: 2026-08-15 after the last operational cycle.
+- final inspection package: 2026-08-15 after the final operational cycle.
 
-The schedule is an operational profile, not product architecture. Future schedules may change without changing the safety and delivery rules above.
+This schedule is an operational profile, not product architecture.
 
 ## 7. Work allocation and model economy
 
-The coordinating chat is the primary reasoning and orchestration layer. It should directly perform all work that does not require a specialized coding environment or specialist plugin, including:
+The coordinating chat is the primary reasoning and orchestration layer. It directly performs work that does not require a specialist coding environment or plugin, including:
 
-- repository reading and diff analysis;
+- repository and diff analysis;
 - spec, readiness, PR, and documentation drafting;
 - architecture and scope reasoning;
 - CI and review consumption;
 - finding consolidation;
-- contrast calculations and deterministic evidence analysis;
-- patch reconstruction, integrity checks, and mechanical GitHub writes;
-- exact-head merge decisions;
-- handoff and checkpoint maintenance.
+- contrast and deterministic evidence analysis;
+- patch reconstruction and integrity checks;
+- mechanical GitHub writes and exact-head merge decisions;
+- checkpoint and handoff maintenance.
 
-Codex and Claude have finite capacity. Minimize delegated work, but do not impose arbitrary numeric budgets or stop necessary correction because an iteration count was reached.
+Codex and Claude have finite capacity. Minimize delegation, but do not impose numerical iteration budgets or stop a necessary correction because a call count was reached.
 
-Use Codex when it adds material value for:
+Use Codex for material implementation, non-trivial code correction, codebase-wide mechanical work that cannot be safely applied directly, or exact-SHA technical review likely to expose defects not covered by gates.
 
-- implementation or non-trivial code correction;
-- codebase-wide mechanical work that cannot be safely applied directly;
-- exact-SHA technical review likely to find defects not covered by deterministic gates.
+Do not use Codex for routine planning, broad repository reading, CI polling, recap, consolidation, or simple documentation edits.
 
-Do not use Codex for routine planning, general repository reading, CI polling, recap, finding consolidation, or simple documentation edits.
+Use Claude when specialist design, UX, accessibility, testing-strategy, or architecture critique adds material value. Claude is normally a read-only reviewer on the same PR and SHA, not a competing implementer.
 
-Use Claude when its specialist design, UX, accessibility, testing-strategy, or architecture critique adds material value. Claude is normally a read-only reviewer on the same PR and exact SHA, not a concurrent implementer.
+Do not ask Codex and Claude the same generic question.
 
-Do not ask Codex and Claude the same generic question. Give each a distinct role.
+## 8. Claude consultation and reversible decisions
 
-## 8. Claude consultation protocol
+For a reversible structural or specialist UI decision:
 
-For a reversible structural decision or specialist UI question:
-
-1. The coordinator first inspects the code, spec, constraints, and evidence and forms a preferred proposal.
-2. If material ambiguity remains, publish a SHA-bound request in the active PR.
-3. Claude reads the same exact SHA, the governing sources, and only the files needed for the question.
+1. The coordinator inspects code, spec, constraints, and evidence and forms a preferred proposal.
+2. If material ambiguity remains, it publishes a SHA-bound request in the active PR.
+3. Claude reads the same exact SHA and governing sources.
 4. Claude returns concrete criticism, risks, minimal corrections, and optional improvements.
 5. The coordinator challenges unsupported or over-broad recommendations.
-6. Continue only while each iteration adds new evidence or materially reduces risk.
-7. Stop when the answer is stable, repetitive, or entering over-engineering.
-8. The coordinator records the final decision and rationale.
+6. Continue while each iteration adds evidence or materially reduces risk.
+7. Stop when the result is stable, repetitive, marginal, or entering over-engineering.
+8. The coordinator records and executes the final decision.
 
 Recommended markers:
 
@@ -182,75 +170,60 @@ CLAUDE_REVIEW_V2
 COORDINATOR_DECISION_V1
 ```
 
-Claude may advise without the maintainer when the decision is reversible, bounded to the active spec, and does not change security, spending, credentials, egress, schemas, migrations, incompatible APIs, or destructive architecture.
+Reversible, bounded choices may proceed without the maintainer even when they concern UI structure, internal architecture, schemas, or APIs, provided they do not trigger one of the four interruption classes below and remain within accepted spec authority.
 
 ## 9. Maintainer interruption boundary
 
-Proceed autonomously through reversible repository work. Interrupt the maintainer for decisions involving any of the following:
+The four interruption classes in `AGENTS.md` are exhaustive:
 
-- real spending, a new provider/account, or a budget risk;
-- missing credentials, repository, organization, or external account;
-- security exposure, secrets, or material data-loss risk;
-- schema or migration choices with durable data consequences;
-- new credential or egress authority;
-- intentionally incompatible API changes;
-- destructive merges, force pushes, or hard-to-reverse architecture changes;
-- conflicting canonical authority that cannot be resolved from current evidence;
-- an obstacle with no two practicable safe routes.
+1. real spending is required or a budget limit is at risk;
+2. a required credential, account, repository, or organization does not exist;
+3. a security issue, secret exposure, or material data-loss risk exists;
+4. an obstacle has no two practicable safe routes forward.
 
-Do not interrupt for ordinary implementation choices, reversible UI structure, naming, bounded refactors required by the spec, or recoverable technical obstacles.
+Schema, migration, incompatible API, egress, credential-authority, destructive merge, or hard-to-reverse architecture questions require the maintainer only when they fall into one of those four classes. Otherwise choose the least-cost reversible route, use Claude critique when valuable, record the decision, and proceed.
+
+Do not interrupt for ordinary implementation choices, reversible UI structure, naming, bounded required refactors, or recoverable technical obstacles.
 
 ## 10. Finding severity and engineering closure
 
-Severity labels guide analysis but do not replace engineering judgment.
-
 - `P0`: safety, secret exposure, data loss, destructive authority failure, or catastrophic behavior.
-- `P1`: a required acceptance criterion fails, a main workflow is unusable, or a material regression exists.
-- `P2`: a real defect or weakness whose beta impact must be assessed.
+- `P1`: required acceptance criterion fails, main workflow is unusable, or a material regression exists.
+- `P2`: real defect or weakness whose beta impact must be assessed.
 - `P3`: optional refinement, polish, or future improvement.
 
 A merge is blocked by:
 
-- any current P0 or P1;
-- a P2 that materially affects beta correctness, normal use, accessibility, inspectability, or regression risk;
-- a violated spec requirement;
-- an unresolved substantial review thread;
-- a missing required gate.
+- current P0 or P1;
+- P2 that materially affects beta correctness, normal use, accessibility, inspectability, or regression risk;
+- violated spec requirement;
+- unresolved substantial review finding;
+- missing required gate.
 
-A merge is not automatically blocked by every P2, any P3, stylistic preference, theoretical refactor, premature generalization, or improvement whose value is predominantly post-beta.
+A merge is not automatically blocked by every P2, any P3, stylistic preference, theoretical refactor, premature generalization, or primarily post-beta improvement.
 
-Evaluate each finding by:
+Evaluate each finding by probability, user impact, operational risk, reversibility, correction cost, regression risk, beta relevance, and value of another iteration.
 
-- probability and user impact;
-- operational and security risk;
-- reversibility;
-- correction cost and regression risk;
-- beta relevance;
-- value gained by another iteration.
-
-Continue for as many iterations as necessary to resolve material defects. Stop when further work becomes marginal polish, repeated argument, unnecessary abstraction, or over-engineering.
+Continue for as many iterations as necessary to resolve material defects. Stop when additional work becomes marginal polish, repeated argument, unnecessary abstraction, or over-engineering.
 
 ## 11. Post-beta backlog
 
-A real non-blocking finding must not be silently discarded.
+A real non-blocking finding is not silently discarded.
 
-Maintain one canonical post-beta backlog rather than per-PR duplicate lists. Each entry must record:
+Maintain one canonical post-beta backlog rather than per-PR duplicate lists. Create it only when the first real deferred finding exists. Each entry records:
 
 - stable finding ID;
 - source PR and exact SHA;
-- evidence;
-- user or operational impact;
+- evidence and impact;
 - reason for deferral;
 - residual risk;
-- concrete condition for reopening.
+- concrete reopening condition.
 
-The backlog is not a second `STATUS.md`, does not change spec state, and does not authorize implementation by itself.
-
-Create the backlog file only when the first real deferred finding exists. Until then, the active PR may record that no canonical backlog entry was necessary.
+The backlog is not a second `STATUS.md` and does not authorize implementation by itself.
 
 ## 12. Merge gate
 
-Merge only when all of the following hold on one exact head:
+Merge only when all hold on one exact head:
 
 1. authorized diff and scope;
 2. acceptance criteria satisfied;
@@ -258,37 +231,38 @@ Merge only when all of the following hold on one exact head:
 4. no P0, P1, or beta-blocking P2;
 5. no unresolved substantial review finding;
 6. no secret, spending, dependency, schema, provider, or authority conflict;
-7. registry state and implementation PR association are correct.
+7. registry state and implementation-PR association correct.
 
-Use `expected_head_sha`. Never enable auto-merge. After merge, verify the PR state, resulting commit, `master`, and registry reconciliation.
+Use `expected_head_sha`. Never enable auto-merge. After merge, verify PR state, resulting commit, `master`, and registry reconciliation.
 
 ## 13. Documentation drift review
 
-Canonical documents must be treated as maintained interfaces, not static prose.
+At definition, readiness, implementation completion, and major queue transitions, compare claims touched by the work across:
 
-At definition, readiness, implementation completion, and major queue transitions:
+- `README.md`;
+- `AGENTS.md`;
+- this document;
+- `docs/README.md`;
+- `docs/ARCHITECTURE.md`;
+- `docs/DECISIONS.md`;
+- `docs/specs/README.md`;
+- `docs/specs/STATUS.md`.
 
-- compare `README.md`, `AGENTS.md`, this document, `docs/README.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/specs/README.md`, and `docs/specs/STATUS.md` for claims touched by the work;
-- distinguish onboarding, process, live state, durable architecture, future design, and historical evidence;
-- correct stale canonical claims in the smallest bounded documentation change;
-- do not copy the current queue into another document;
-- date time-sensitive assertions and identify their source SHA or PR.
+Distinguish onboarding, process, live state, durable architecture, future design, and historical evidence. Correct stale canonical claims in the smallest bounded documentation change. Do not copy the live queue into another document.
 
 ### Audit performed on 2026-08-05
 
-The following conflicts were confirmed against `master` `a86be9e7d18d6a8cbe2d60a71fdc0ce41ffe2786`:
+Against `master` `a86be9e7d18d6a8cbe2d60a71fdc0ce41ffe2786`:
 
-1. Root `README.md` stated that merge authority required human review and prohibited self-merge. `AGENTS.md` had already superseded that rule with assigned-agent exact-head merge authority after deterministic gates and blocking-finding closure.
-2. `docs/specs/README.md` described review as human-controlled. The current process uses advisory model review plus an assigned technical merge owner under `AGENTS.md` and this protocol.
-3. `docs/ARCHITECTURE.md` called `docs/specs/README.md` the live roadmap and copied an obsolete early sequence. `docs/specs/STATUS.md` is the sole live roadmap and must not be duplicated.
-4. `docs/ARCHITECTURE.md` still described Scaleway app-entered credentials as runtime-memory-only. Secure Windows DPAPI persistence is merged and evidenced by specs 082 and 094 and their Windows checkpoint.
-5. `docs/README.md` did not define separate authority for live work state, agent execution process, and descriptive architecture, allowing stale architectural prose to appear stronger than current code or `STATUS.md`.
+1. Root `README.md` required human review and prohibited self-merge, while `AGENTS.md` authorized assigned-agent exact-head merge after gates and blocking-finding closure.
+2. `docs/specs/README.md` described review as human-controlled, conflicting with current merge ownership.
+3. `docs/ARCHITECTURE.md` called `docs/specs/README.md` the live roadmap and copied an obsolete early sequence; `docs/specs/STATUS.md` is the sole live roadmap.
+4. `docs/ARCHITECTURE.md` still described Scaleway app-entered credentials as runtime-memory-only, while secure Windows DPAPI persistence is merged and evidenced by specs 082 and 094.
+5. `docs/README.md` did not separate live work-state authority, agent process authority, durable decisions, and descriptive architecture.
 
-The entry-point documents are updated with this protocol. Until the stale descriptive passages in `docs/ARCHITECTURE.md` are directly refreshed, they are explicitly superseded for roadmap, delivery process, and credential-persistence status by current code, accepted specs/decisions, `STATUS.md`, `AGENTS.md`, and this document.
+The entry-point documents now resolve those authority conflicts. Until the stale passages in `docs/ARCHITECTURE.md` receive a direct bounded refresh, they are superseded for roadmap, delivery process, and credential-persistence status by current code, accepted specs and decisions, `STATUS.md`, `AGENTS.md`, and this protocol.
 
 ## 14. Minimal continuation handoff
-
-Use this format when opening a new coordinating chat:
 
 ```text
 JARVISOS_CONTINUATION_V1
