@@ -5,7 +5,9 @@ Effective date: 2026-08-05
 
 This document defines repository delivery, autonomous continuation, model collaboration, finding closure, post-beta deferral, and documentation-drift handling for JarvisOS coding and review agents.
 
-`AGENTS.md` remains authoritative for hard invariants, safety boundaries, general conduct, and the exhaustive maintainer-interruption classes. This protocol adds execution detail without changing JarvisOS runtime authority, provider policy, credentials, budgets, egress, schemas, or product behavior.
+`AGENTS.md` remains authoritative for hard invariants, safety boundaries, general conduct, the exhaustive maintainer-interruption classes, and every accepted specification-specific exception. This protocol adds execution detail without changing JarvisOS runtime authority, provider policy, credentials, budgets, egress, schemas, or product behavior.
+
+In particular, this document does not expand spec 079. The repository-internal 079 scheduled continuation keeps its accepted implementation-only authority and cannot review, repair findings, merge, select a new spec, or advance the queue. The checkpoint/builder/watchdog roles described below are external coordinating automations acting through the maintainer-authorized ChatGPT/GitHub control plane, not the 079 workflow.
 
 ## 1. Minimal startup sequence
 
@@ -32,8 +34,8 @@ Do not copy the queue, spec text, or operating rules into every chat handoff.
 ## 2. Authority by question
 
 1. Current code, runtime behavior, deterministic tests, and exact-head evidence describe actual behavior.
-2. `AGENTS.md` defines hard invariants, safety boundaries, and general agent conduct.
-3. This document defines delivery and autonomous execution mechanics.
+2. `AGENTS.md` defines hard invariants, safety boundaries, general agent conduct, and accepted spec-specific exceptions.
+3. This document defines delivery and external coordinating-automation mechanics.
 4. `docs/specs/STATUS.md` is the sole live authority for spec state, dependencies, queue order, and implementation-PR association.
 5. The selected spec and readiness record define slice scope, acceptance criteria, tests, and non-goals.
 6. `docs/DECISIONS.md` records durable architecture decisions.
@@ -45,6 +47,7 @@ When sources conflict:
 
 - identify exact claims, dates, and SHAs;
 - use runtime evidence for behavior, `STATUS.md` for work state, the active spec for slice scope, and accepted ADRs for durable architecture;
+- use the narrower accepted spec for exceptions such as 079;
 - do not resolve by plausibility alone;
 - fix stale canonical prose in a bounded documentation change;
 - preserve superseded history when it carries provenance.
@@ -82,11 +85,15 @@ A local commit SHA, task link, summary comment, or test claim is not delivery.
 - A failover writer uses an exact-head guard. The first valid remote write wins; stale writers stop.
 - A maintainer-requested documentation reconciliation may temporarily become the active front. Resume the paused implementation after it is resolved.
 
-## 6. Autonomous continuation roles
+## 6. External coordinating automation roles
+
+The roles in this section describe maintainer-authorized external ChatGPT automations that inspect and mutate the repository through the GitHub control plane. They are not the repository-internal spec 079 workflow.
+
+A job running under spec 079 must ignore any broader capability described here and remain within 079's implementation-only, no-review, no-repair, no-merge, no-new-spec boundary.
 
 ### Checkpoint
 
-The checkpoint role:
+The external checkpoint role:
 
 - reads GitHub as source of truth;
 - completes unfinished verification;
@@ -96,32 +103,36 @@ The checkpoint role:
 
 ### Builder
 
-The builder role:
+The external builder role:
 
 - resumes from the checkpoint;
 - acts like a maintainer command to continue;
 - performs all sequential safe work available in the cycle instead of stopping after one micro-action;
-- may implement, publish, verify, correct, consume CI/reviews, merge with an expected-head guard, reconcile status, and advance to the next authorized slice;
+- may implement, publish, verify, correct, consume CI and reviews, merge with an expected-head guard, reconcile status, and advance to the next authorized slice because it acts under the general assigned technical merge-owner regime in `AGENTS.md`;
 - stops at a real external gate, a valid maintainer interruption, or slice completion.
+
+A 079 continuation job may use only the implementation, local patch production, deterministic validation, and permitted same-branch delivery subset authorized by spec 079. It must stop before review handling, correction authority, merge, registry reconciliation beyond the active row, or next-slice selection.
 
 ### Watchdog
 
-The watchdog role:
+The external watchdog role:
 
-- detects stalled delivery, abandoned agent tasks, completed but unconsumed CI/review, stale checkpoints, and executable next actions;
+- detects stalled delivery, abandoned agent tasks, completed but unconsumed CI or review, stale checkpoints, and executable next actions;
 - does nothing while the pipeline is genuinely progressing;
 - becomes failover writer only with an exact-head guard and no valid writer still active.
 
+A 079 job is never a watchdog for review, merge, or queue advancement.
+
 ### Current time-bounded frontend sprint profile
 
-For 2026-08-05 through 2026-08-15:
+For 2026-08-05 through 2026-08-15, using external ChatGPT automations:
 
 - checkpoint: hourly at minute `00`;
 - builder: hourly at minute `10`;
 - watchdog: hourly at minute `40`;
 - final inspection package: 2026-08-15 after the final operational cycle.
 
-This schedule is an operational profile, not product architecture.
+This schedule is an external operational profile, not product architecture and not a change to spec 079.
 
 ## 7. Work allocation and model economy
 
