@@ -27,7 +27,21 @@ def derive_reserved_roots(routes: Iterable[BaseRoute]) -> frozenset[str]:
 
 def _accepts_html(scope: Scope) -> bool:
     accept = Headers(scope=scope).get("accept", "")
-    return any(part.split(";", 1)[0].strip().lower() == "text/html" for part in accept.split(","))
+    for item in accept.split(","):
+        media_type, *parameters = (part.strip() for part in item.split(";"))
+        if media_type.lower() != "text/html":
+            continue
+        quality = 1.0
+        for parameter in parameters:
+            name, separator, value = parameter.partition("=")
+            if separator and name.strip().lower() == "q":
+                try:
+                    quality = float(value.strip())
+                except ValueError:
+                    quality = 0.0
+        if quality > 0:
+            return True
+    return False
 
 
 def _safe_extensionless_path(path: str) -> bool:
