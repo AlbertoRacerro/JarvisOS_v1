@@ -73,7 +73,7 @@
   color: var(--color-text-secondary);
 }
 
-.shell-appearance-control > span {
+.shell-appearance-control .ui-field__label {
   color: var(--color-text-secondary);
   font-size: var(--font-size-caption);
   font-weight: 700;
