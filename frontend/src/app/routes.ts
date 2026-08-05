@@ -46,14 +46,6 @@ export const PRODUCTION_ROUTES: readonly AppRouteDefinition[] = [
   { id: "legacy-system-status", path: "/legacy/system-status", title: "System Status", legacy: true }
 ] as const;
 
-export const DEV_ROUTE: AppRouteDefinition = {
-  id: "legacy-dev-local-chat",
-  path: "/legacy/dev-local-chat",
-  title: "Development Local Chat",
-  legacy: true,
-  devOnly: true
-};
-
 export const PRIMARY_NAV_ITEMS = [
   { id: "home", label: "Home", href: "/home" },
   { id: "design", label: "Design", href: "/design/model" },
@@ -82,7 +74,7 @@ export function normalizePathname(pathname: string): string {
   return trimmed ? `/${trimmed}` : "/";
 }
 
-export function resolveRoute(pathname: string, devEnabled = import.meta.env.DEV): ResolvedRoute {
+export function resolveRoute(pathname: string): ResolvedRoute {
   const normalized = normalizePathname(pathname);
 
   if (normalized === "/") {
@@ -93,13 +85,26 @@ export function resolveRoute(pathname: string, devEnabled = import.meta.env.DEV)
     };
   }
 
-  const route = PRODUCTION_ROUTES.find((candidate) => candidate.path === normalized) ??
-    (devEnabled && DEV_ROUTE.path === normalized ? DEV_ROUTE : undefined);
+  const route = PRODUCTION_ROUTES.find((candidate) => candidate.path === normalized);
 
   if (route) {
     return {
       route,
       canonicalPath: route.path,
+      shouldReplace: normalized !== pathname
+    };
+  }
+
+  if (import.meta.env.DEV && normalized === "/legacy/dev-local-chat") {
+    return {
+      route: {
+        id: "legacy-dev-local-chat",
+        path: "/legacy/dev-local-chat",
+        title: "Development Local Chat",
+        legacy: true,
+        devOnly: true
+      },
+      canonicalPath: "/legacy/dev-local-chat",
       shouldReplace: normalized !== pathname
     };
   }
