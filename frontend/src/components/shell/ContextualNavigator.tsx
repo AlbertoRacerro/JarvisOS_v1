@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type KeyboardEvent } from "react";
 
 import AppLink, { type Navigate } from "../../app/AppLink";
 import { DESIGN_STAGE_ITEMS, type StageKind } from "../../app/routes";
@@ -15,19 +15,24 @@ function ContextualNavigator({ open, currentStage, navigate, onClose }: Contextu
   const headingRef = useRef<HTMLHeadingElement | null>(null);
 
   useEffect(() => {
-    if (!open) return undefined;
-    headingRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
+    if (open) headingRef.current?.focus();
+  }, [open]);
+
+  const onPanelKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Escape") return;
+    event.stopPropagation();
+    onClose();
+  };
 
   if (!open) return null;
 
   return (
-    <aside id="shell-navigator" className="shell-panel shell-navigator" aria-labelledby="shell-navigator-title">
+    <aside
+      id="shell-navigator"
+      className="shell-panel shell-navigator"
+      aria-labelledby="shell-navigator-title"
+      onKeyDown={onPanelKeyDown}
+    >
       <div className="shell-panel__header">
         <h2 id="shell-navigator-title" ref={headingRef} tabIndex={-1}>Navigator</h2>
         <Button variant="ghost" onClick={onClose}>Close navigator</Button>
