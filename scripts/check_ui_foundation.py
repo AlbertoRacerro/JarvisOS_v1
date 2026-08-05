@@ -204,8 +204,8 @@ def check_migration() -> None:
 def check_registry() -> None:
     status = read(STATUS)
     row = next((line for line in status.splitlines() if line.startswith("| 070 |")), "")
-    if "| in_review |" not in row or "pull/225" not in row:
-        fail("spec 070 registry row must be in_review and linked to PR #225")
+    if "| merged |" not in row or "pull/225" not in row:
+        fail("spec 070 registry row must be merged and linked to PR #225")
 
 
 def main() -> None:
