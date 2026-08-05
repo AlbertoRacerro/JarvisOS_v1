@@ -64,9 +64,10 @@ def test_missing_assets_and_non_html_requests_remain_404(tmp_path: Path) -> None
     assert missing_asset.status_code == 404
     assert INDEX_MARKER not in missing_asset.text
 
-    non_html = client.get("/home", headers={"accept": "application/json"})
-    assert non_html.status_code == 404
-    assert INDEX_MARKER not in non_html.text
+    for accept in ("application/json", "text/html;q=0", "text/html;q=invalid"):
+        response = client.get("/home", headers={"accept": accept})
+        assert response.status_code == 404
+        assert INDEX_MARKER not in response.text
 
 
 def test_registered_and_unknown_api_paths_never_receive_index(tmp_path: Path) -> None:
