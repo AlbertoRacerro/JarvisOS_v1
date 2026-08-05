@@ -4,6 +4,7 @@ import type { Navigate } from "../app/AppLink";
 import type { AppRouteDefinition } from "../app/routes";
 import type { StageSelection } from "../app/selection";
 import {
+  APPEARANCE_OPTIONS,
   applyAppearancePreference,
   applyResolvedAppearance,
   readAppearancePreference,
@@ -16,6 +17,7 @@ import ContextualNavigator from "./shell/ContextualNavigator";
 import ContextualSidecar from "./shell/ContextualSidecar";
 import Rail from "./shell/Rail";
 import TopBar from "./shell/TopBar";
+import Field from "./ui/Field";
 
 type LayoutProps = Readonly<{
   route: AppRouteDefinition;
@@ -54,6 +56,20 @@ function Layout({ route, navigate, selection, children }: LayoutProps) {
     setAppearance(preference);
   };
 
+  const appearanceSelect = (
+    <select
+      aria-label="Appearance preference"
+      value={appearance}
+      onChange={(event) => onAppearanceChange(event.target.value as AppearancePreference)}
+    >
+      {APPEARANCE_OPTIONS.map((option) => (
+        <option key={option} value={option}>
+          {option[0].toUpperCase() + option.slice(1)}
+        </option>
+      ))}
+    </select>
+  );
+
   const closeNavigator = useCallback(() => {
     setNavigatorOpen(false);
     window.requestAnimationFrame(() => navigatorToggleRef.current?.focus());
@@ -74,8 +90,13 @@ function Layout({ route, navigate, selection, children }: LayoutProps) {
       <a className="shell-skip-link" href="#app-main">Skip to main content</a>
       <TopBar
         title={route.title}
-        appearance={appearance}
-        onAppearanceChange={onAppearanceChange}
+        appearanceControl={(
+          <Field
+            className="appearance-control shell-appearance-control"
+            label="Appearance"
+            control={appearanceSelect}
+          />
+        )}
         toggles={[
           {
             id: "navigator",
