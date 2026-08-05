@@ -33,6 +33,10 @@ async def lifespan(app: FastAPI):
         await lifecycle.shutdown()
 
 
+def _frontend_dist_path() -> Path:
+    return Path(__file__).resolve().parents[2] / "frontend" / "dist"
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging()
@@ -68,7 +72,7 @@ def create_app() -> FastAPI:
     # Serve the built frontend (single-process desktop launch) when present.
     # API routers are registered first and their literal top-level roots remain
     # reserved so an API/static miss can never become a successful HTML shell.
-    frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+    frontend_dist = _frontend_dist_path()
     if frontend_dist.is_dir():
         reserved_roots = derive_reserved_roots(app.routes)
         app.mount(
