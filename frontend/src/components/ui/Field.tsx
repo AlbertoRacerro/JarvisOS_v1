@@ -1,10 +1,4 @@
-import {
-  cloneElement,
-  isValidElement,
-  useId,
-  type ReactElement,
-  type ReactNode
-} from "react";
+import { cloneElement, useId, type ReactElement, type ReactNode } from "react";
 
 type FieldControlProps = {
   id?: string;
@@ -19,26 +13,26 @@ export type FieldProps = {
   hint?: ReactNode;
   error?: ReactNode;
   required?: boolean;
+  className?: string;
 };
 
-function Field({ label, control, hint, error, required }: FieldProps) {
+function Field({ label, control, hint, error, required, className }: FieldProps) {
   const generatedId = useId();
   const controlId = control.props.id ?? `${generatedId}-control`;
   const hintId = hint ? `${generatedId}-hint` : undefined;
   const errorId = error ? `${generatedId}-error` : undefined;
   const describedBy = [control.props["aria-describedby"], hintId, errorId].filter(Boolean).join(" ") || undefined;
+  const classes = ["ui-field", className].filter(Boolean).join(" ");
 
-  const linkedControl = isValidElement(control)
-    ? cloneElement(control, {
-        id: controlId,
-        required,
-        "aria-describedby": describedBy,
-        "aria-invalid": error ? true : undefined
-      })
-    : control;
+  const linkedControl = cloneElement(control, {
+    id: controlId,
+    required,
+    "aria-describedby": describedBy,
+    "aria-invalid": error ? true : undefined
+  });
 
   return (
-    <div className="ui-field">
+    <div className={classes}>
       <label className="ui-field__label" htmlFor={controlId}>
         {label}
         {required && <span aria-hidden="true"> *</span>}

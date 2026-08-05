@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { getSystemInfo, type SystemInfoResponse } from "../api/client";
 import InlineNotice from "../components/ui/InlineNotice";
 import StatusBadge, { type StatusTone } from "../components/ui/StatusBadge";
+import Surface from "../components/ui/Surface";
 
 function backendStatusTone(status: string | undefined): StatusTone {
   if (!status || status === "checking") return "proposed";
@@ -33,7 +34,7 @@ function SystemStatus() {
       {error && <InlineNotice tone="danger">Backend unavailable: {error}</InlineNotice>}
       {!system && !error && <InlineNotice tone="info">Checking local backend and storage state.</InlineNotice>}
 
-      <section className="panel">
+      <Surface className="panel">
         <h3>Backend</h3>
         <dl className="details">
           <div>
@@ -49,9 +50,9 @@ function SystemStatus() {
             <dd>{system?.environment ?? "local"}</dd>
           </div>
         </dl>
-      </section>
+      </Surface>
 
-      <section className="panel">
+      <Surface className="panel">
         <h3>Storage</h3>
         <dl className="details">
           <div>
@@ -75,9 +76,9 @@ function SystemStatus() {
             <dd>{system ? String(system.database.initialized) : "checking"}</dd>
           </div>
         </dl>
-      </section>
+      </Surface>
 
-      <section className="panel">
+      <Surface className="panel">
         <h3>AI Gateway</h3>
         <dl className="details">
           <div>
@@ -151,7 +152,7 @@ function SystemStatus() {
             <dd>{system?.ai.blocking_reason ?? "none"}</dd>
           </div>
         </dl>
-      </section>
+      </Surface>
     </section>
   );
 }

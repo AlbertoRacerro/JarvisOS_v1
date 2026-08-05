@@ -31,7 +31,7 @@ summary,
     border-color var(--motion-fast) var(--ease-standard),
     background-color var(--motion-fast) var(--ease-standard),
     color var(--motion-fast) var(--ease-standard),
-    box-shadow var(--motion-fast) var(--ease-standard);
+    box-shadow var(--motion-standard) var(--ease-standard);
 }
 
 button:focus-visible,
@@ -71,32 +71,40 @@ summary:focus-visible,
   gap: var(--space-2);
 }
 
-.nav-button {
+.nav-button,
+.nav-button.ui-button {
+  width: 100%;
   min-height: var(--control-height-default);
   padding: var(--space-3) var(--space-4);
-  border: var(--border-width-default) solid var(--color-border-default);
+  border: var(--border-width-default) solid var(--color-border-default) !important;
   border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-text-inverse);
+  background: transparent !important;
+  color: var(--color-text-inverse) !important;
+  text-align: left;
 }
 
 .nav-button:hover,
-.nav-button.active {
-  border-color: var(--color-focus-ring);
-  background: var(--color-accent-primary);
-  color: var(--color-text-on-accent);
+.nav-button.active,
+.nav-button.ui-button:hover,
+.nav-button.ui-button.active {
+  border-color: var(--color-focus-ring) !important;
+  background: var(--color-accent-primary) !important;
+  color: var(--color-text-on-accent) !important;
 }
 
-.nav-button--dev {
-  border-style: dashed;
-  color: var(--color-status-warning-text);
+.nav-button--dev,
+.nav-button--dev.ui-button {
+  border-style: dashed !important;
+  color: var(--color-text-inverse) !important;
 }
 
 .nav-button--dev:hover,
-.nav-button--dev.active {
-  border-color: var(--color-status-warning-text);
-  background: var(--color-status-warning-bg);
-  color: var(--color-status-warning-text);
+.nav-button--dev.active,
+.nav-button--dev.ui-button:hover,
+.nav-button--dev.ui-button.active {
+  border-color: var(--color-status-warning-text) !important;
+  background: var(--color-status-warning-bg) !important;
+  color: var(--color-status-warning-text) !important;
 }
 
 .appearance-control {
@@ -106,6 +114,10 @@ summary:focus-visible,
   color: var(--color-text-inverse);
   font-size: var(--font-size-label);
   font-weight: 700;
+}
+
+.appearance-control .ui-field__label {
+  color: var(--color-text-inverse);
 }
 
 .appearance-control select {
@@ -144,6 +156,7 @@ summary:focus-visible,
 .metric-card {
   gap: var(--space-3);
   padding: var(--space-5);
+  box-shadow: var(--shadow-raised);
 }
 
 .panel,
@@ -211,7 +224,7 @@ textarea::placeholder {
 }
 
 button:not(.nav-button):not(.bluecad-candidate),
-.ui-button {
+.ui-button:not(.nav-button) {
   min-height: var(--control-height-default);
   padding: var(--space-2) var(--space-4);
   border: var(--border-width-default) solid var(--color-accent-primary);
@@ -222,7 +235,7 @@ button:not(.nav-button):not(.bluecad-candidate),
 }
 
 button:not(.nav-button):not(.bluecad-candidate):hover:not(:disabled),
-.ui-button--primary:hover:not(:disabled) {
+.ui-button:not(.nav-button):hover:not(:disabled) {
   border-color: var(--color-accent-hover);
   background: var(--color-accent-hover);
 }
@@ -244,8 +257,8 @@ button:not(.nav-button):not(.bluecad-candidate):hover:not(:disabled),
 
 .ui-button--danger {
   border-color: var(--color-status-danger-text) !important;
-  background: var(--color-status-danger-text) !important;
-  color: var(--color-text-inverse) !important;
+  background: var(--color-status-danger-bg) !important;
+  color: var(--color-status-danger-text) !important;
 }
 
 button:disabled,
@@ -305,6 +318,7 @@ button:disabled,
   align-items: center;
   justify-self: start;
   gap: var(--space-1);
+  min-height: var(--control-height-compact);
   padding: var(--space-1) var(--space-3);
   border: var(--border-width-default) solid currentColor;
   border-radius: var(--radius-pill);

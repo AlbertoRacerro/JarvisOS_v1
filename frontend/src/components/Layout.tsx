@@ -10,6 +10,8 @@ import {
   writeAppearancePreference,
   type AppearancePreference
 } from "../theme";
+import Button from "./ui/Button";
+import Field from "./ui/Field";
 
 type LayoutProps = {
   activePage: AppPage;
@@ -37,6 +39,18 @@ function Layout({ activePage, children, onNavigate }: LayoutProps) {
     setAppearance(preference);
   };
 
+  const appearanceSelect = (
+    <select
+      aria-label="Appearance preference"
+      value={appearance}
+      onChange={(event) => onAppearanceChange(event.target.value as AppearancePreference)}
+    >
+      {APPEARANCE_OPTIONS.map((option) => (
+        <option key={option} value={option}>{APPEARANCE_LABELS[option]}</option>
+      ))}
+    </select>
+  );
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -45,63 +59,52 @@ function Layout({ activePage, children, onNavigate }: LayoutProps) {
           <h1>BlueRev Model Foundry</h1>
         </div>
         <nav className="nav" aria-label="Main navigation">
-          <button
+          <Button
+            variant="ghost"
             className={activePage === "dashboard" ? "nav-button active" : "nav-button"}
-            type="button"
             onClick={() => onNavigate("dashboard")}
           >
             Dashboard
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
             className={activePage === "system" ? "nav-button active" : "nav-button"}
-            type="button"
             onClick={() => onNavigate("system")}
           >
             System Status
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
             className={activePage === "foundation" ? "nav-button active" : "nav-button"}
-            type="button"
             onClick={() => onNavigate("foundation")}
           >
             Domain Foundation
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
             className={activePage === "bluecad" ? "nav-button active" : "nav-button"}
-            type="button"
             onClick={() => onNavigate("bluecad")}
           >
             BLUECAD
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
             className={activePage === "ai" ? "nav-button active" : "nav-button"}
-            type="button"
             onClick={() => onNavigate("ai")}
           >
             AI Draft
-          </button>
+          </Button>
           {import.meta.env.DEV && (
-            <button
+            <Button
+              variant="ghost"
               className={activePage === "devlocalchat" ? "nav-button active nav-button--dev" : "nav-button nav-button--dev"}
-              type="button"
               onClick={() => onNavigate("devlocalchat")}
             >
               Dev Local Chat
-            </button>
+            </Button>
           )}
         </nav>
-        <label className="appearance-control">
-          <span>Appearance</span>
-          <select
-            aria-label="Appearance preference"
-            value={appearance}
-            onChange={(event) => onAppearanceChange(event.target.value as AppearancePreference)}
-          >
-            {APPEARANCE_OPTIONS.map((option) => (
-              <option key={option} value={option}>{APPEARANCE_LABELS[option]}</option>
-            ))}
-          </select>
-        </label>
+        <Field className="appearance-control" label="Appearance" control={appearanceSelect} />
       </aside>
       <main className="main-panel">{children}</main>
     </div>

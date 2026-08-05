@@ -61,7 +61,7 @@ def read(path: Path) -> str:
 def block(css: str, selector: str) -> str:
     start = css.find(selector)
     if start < 0:
-        fail(f"missing selector {selector!r} in tokens.css")
+        fail(f"missing selector {selector!r}")
     brace = css.find("{", start)
     depth = 0
     for index in range(brace, len(css)):
@@ -81,7 +81,8 @@ def variables(css_block: str, prefix: str | None = None) -> set[str]:
 
 def check_tokens() -> None:
     css = read(TOKENS)
-    missing = sorted((REQUIRED_COLORS | REQUIRED_NON_COLORS) - variables(css))
+    required = REQUIRED_COLORS | REQUIRED_NON_COLORS
+    missing = sorted(required - variables(css))
     if missing:
         fail(f"missing required tokens: {', '.join(missing)}")
     for forbidden in ("bluecad", "dashboard", "settings", "ai-draft"):
@@ -132,6 +133,18 @@ def check_primitives() -> None:
         if "<svg" in body.lower() or re.search(r"from\s+[\"'][^\"']+\.svg[\"']", body, re.IGNORECASE):
             fail(f"primitive contains or imports SVG markup: {path.relative_to(ROOT)}")
 
+    consumers = "\n".join(
+        read(path)
+        for path in (
+            LAYOUT,
+            ROOT / "frontend/src/components/PageErrorBoundary.tsx",
+            ROOT / "frontend/src/pages/SystemStatus.tsx",
+        )
+    )
+    for primitive in ("Button", "Surface", "StatusBadge", "Field", "InlineNotice"):
+        if not re.search(rf'import\s+{primitive}\b', consumers):
+            fail(f"required primitive is defined but not consumed: {primitive}")
+
 
 def check_migration() -> None:
     foundation = read(FOUNDATION)
@@ -139,26 +152,34 @@ def check_migration() -> None:
         fail("foundation.css contains raw color literals")
     if "prefers-reduced-motion: reduce" not in foundation or "transition-duration: 0ms" not in foundation:
         fail("reduced-motion must disable actual transitions")
-    for token in (
-        "--color-bg-canvas", "--color-bg-shell", "--color-bg-surface",
-        "--color-bg-technical-viewport", "--color-focus-ring", "--color-border-default",
-        "--color-accent-primary", "--motion-fast",
-    ):
+
+    for token in sorted(REQUIRED_COLORS | REQUIRED_NON_COLORS):
         if f"var({token})" not in foundation:
-            fail(f"required migration token is not consumed: {token}")
+            fail(f"required token is defined but not consumed: {token}")
+
     for tone, marker in (("proposed", "dashed"), ("stale", "double"), ("unavailable", "dotted")):
-        selector = f".ui-status-badge--{tone}"
-        section = block(foundation, selector)
+        section = block(foundation, f".ui-status-badge--{tone}")
         if f"border-style: {marker}" not in section:
             fail(f"{tone} status lacks non-color distinction")
     synthetic = block(foundation, ".ui-status-badge--synthetic")
     if "border-radius: var(--radius-sm)" not in synthetic:
         fail("synthetic status is not geometrically distinct from unavailable")
 
-    for path in (MAIN, LAYOUT, ROOT / "frontend/src/components/PageErrorBoundary.tsx", ROOT / "frontend/src/pages/SystemStatus.tsx"):
+    migrated = (
+        MAIN,
+        LAYOUT,
+        ROOT / "frontend/src/components/PageErrorBoundary.tsx",
+        ROOT / "frontend/src/pages/SystemStatus.tsx",
+    )
+    for path in migrated:
         body = read(path)
         if "style={{" in body or "style={`" in body or "style={" in body:
             fail(f"inline/template style found in migrated file: {path.relative_to(ROOT)}")
+        if RAW_COLOR.search(body):
+            fail(f"raw color found in migrated file: {path.relative_to(ROOT)}")
+        if "<svg" in body.lower() or re.search(r"from\s+[\"'][^\"']+\.svg[\"']", body, re.IGNORECASE):
+            fail(f"SVG literal/import found in migrated file: {path.relative_to(ROOT)}")
+
     main = read(MAIN)
     expected_order = ["./styles/tokens.css", "./styles/global.css", "./styles/foundation.css"]
     positions = [main.find(item) for item in expected_order]
@@ -166,6 +187,9 @@ def check_migration() -> None:
         fail("token, legacy, and foundation stylesheets are not imported in the required order")
     if "applyStoredAppearance();" not in main:
         fail("stored appearance is not applied before React mount")
+
+    if ".bluecad-viewer" not in foundation or "var(--color-bg-technical-viewport)" not in block(foundation, ".bluecad-viewer"):
+        fail("BLUECAD CSS container does not consume the technical viewport token")
 
 
 def check_registry() -> None:
