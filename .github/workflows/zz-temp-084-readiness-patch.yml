@@ -1,0 +1,70 @@
+name: Temporary 084 readiness patch
+
+on:
+  push:
+    branches:
+      - spec/084-bluecad-read-model-1-readiness
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: spec/084-bluecad-read-model-1-readiness
+          fetch-depth: 2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Verify exact parent and apply bounded patch
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD^)" = "94856411e8ccf4f8e254df6fa265f452ab5a79bc"
+          python - <<'PY'
+          from pathlib import Path
+
+          status_path = Path('docs/specs/STATUS.md')
+          status = status_path.read_text(encoding='utf-8')
+          old_priority = '3. Specs 070 UI-FOUNDATION-1 and 083 APP-SHELL-1 are merged and reconciled; spec 084 BLUECAD-READ-MODEL-1 remains the next planned frontend-beta slice. The Penpot visual-identity work remains a separate independently removable lane.'
+          new_priority = '3. Specs 070 UI-FOUNDATION-1 and 083 APP-SHELL-1 are merged and reconciled; spec 084 BLUECAD-READ-MODEL-1 is ready for one bounded identity-independent implementation under [the 2026-08-06 readiness decision](084-readiness-2026-08-06.md). The Penpot visual-identity work remains a separate independently removable lane.'
+          old_row = '| 084 | planned | — | BLUECAD-READ-MODEL-1 | 006, 044, 050, 051, 083 | Add the smallest candidate aggregate read surface needed by the new shell for artifacts, attempts, evidence, run links, lifecycle status, and freshness without duplicating canonical data. |'
+          new_row = '| 084 | ready | — | BLUECAD-READ-MODEL-1 | 006, 044, 050, 051, 083 | Ready for one bounded identity-independent implementation under [the 2026-08-06 readiness decision](084-readiness-2026-08-06.md) and [the complete specification](084-bluecad-read-model-1.md): add one coherent candidate aggregate read surface without schema, cache, UI migration, workflow, provider or Penpot changes. |'
+          for old, new, label in ((old_priority, new_priority, 'priority'), (old_row, new_row, 'row 084')):
+              if status.count(old) != 1:
+                  raise SystemExit(f'{label} replacement count is {status.count(old)}, expected 1')
+              status = status.replace(old, new, 1)
+          status_path.write_text(status, encoding='utf-8')
+
+          readiness_path = Path('docs/specs/084-readiness-2026-08-06.md')
+          readiness = readiness_path.read_text(encoding='utf-8')
+          old_block_tail = 'scripts/check_bluecad_read_model.py\n```'
+          new_block_tail = 'scripts/check_bluecad_read_model.py\ndocs/specs/STATUS.md                         # lifecycle state and exact implementation PR only\n```'
+          if readiness.count(old_block_tail) != 1:
+              raise SystemExit('allowed-file block replacement count is not 1')
+          readiness = readiness.replace(old_block_tail, new_block_tail, 1)
+          old_scope = 'No other runtime, test, schema, package, lockfile, workflow, shell, page, stage, viewer, appearance, provider, credential, budget or egress file is authorized.'
+          new_scope = '`docs/specs/STATUS.md` is authorized only for the implementation lifecycle state and exact PR number required by `AGENTS.md`; no other documentation change is authorized. No other runtime, test, schema, package, lockfile, workflow, shell, page, stage, viewer, appearance, provider, credential, budget or egress file is authorized.'
+          if readiness.count(old_scope) != 1:
+              raise SystemExit('scope sentence replacement count is not 1')
+          readiness_path.write_text(readiness.replace(old_scope, new_scope, 1), encoding='utf-8')
+          PY
+
+      - name: Validate and self-remove
+        shell: bash
+        run: |
+          python scripts/check_spec_status.py --self-test
+          git diff --check
+          rm .github/workflows/zz-temp-084-readiness-patch.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/specs/STATUS.md docs/specs/084-readiness-2026-08-06.md .github/workflows/zz-temp-084-readiness-patch.yml
+          git diff --cached --check
+          git commit -m 'Finalize spec 084 readiness'
+          git push origin HEAD:spec/084-bluecad-read-model-1-readiness
