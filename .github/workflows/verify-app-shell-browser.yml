@@ -1,0 +1,508 @@
+name: TEMP APP-SHELL Browser Verification
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/verify-app-shell-browser.yml
+
+permissions:
+  contents: read
+
+jobs:
+  browser-matrix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      TARGET_SHA: 8c65977cafcd7237341fedf7adbf19053713f860
+      JARVISOS_DATA_ROOT: ${{ runner.temp }}/jarvisos-browser-data
+      JARVISOS_AI_PROVIDER: none
+      JARVISOS_ENV: browser-verification
+      BASE_URL: http://127.0.0.1:8000
+      DEV_URL: http://127.0.0.1:5173
+      MATRIX_REPORT: ${{ runner.temp }}/app-shell-browser-matrix.json
+
+    steps:
+      - name: Checkout exact APP-SHELL head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 1
+
+      - name: Verify exact checkout
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          test -z "$(git status --short)"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build locked production frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Prove production DEV exclusion
+        shell: bash
+        run: |
+          test -d frontend/dist
+          if grep -RIlF -e '/legacy/dev-local-chat' -e 'Development Local Chat' -e 'Dev Local Chat' frontend/dist; then
+            echo 'Development-only route or label found in production dist' >&2
+            exit 1
+          fi
+
+      - name: Install Chromium verifier
+        working-directory: frontend
+        run: |
+          npm install --no-save --package-lock=false playwright@1.54.2
+          npx playwright install --with-deps chromium
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend and initialize isolated storage
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          mkdir -p "$JARVISOS_DATA_ROOT"
+          python -m app.core.bootstrap
+
+      - name: Start production FastAPI and Vite development server
+        shell: bash
+        run: |
+          (cd backend && python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > "$RUNNER_TEMP/fastapi.log" 2>&1 & echo $! > "$RUNNER_TEMP/fastapi.pid")
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent "$BASE_URL/health" > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent "$BASE_URL/health" > /dev/null
+
+          (cd frontend && npm run dev -- --host 127.0.0.1 --port 5173 > "$RUNNER_TEMP/vite.log" 2>&1 & echo $! > "$RUNNER_TEMP/vite.pid")
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent "$DEV_URL/home" > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent "$DEV_URL/home" > /dev/null
+
+      - name: Run exact-head production browser matrix
+        working-directory: frontend
+        shell: bash
+        run: |
+          cat > .tmp-app-shell-browser.mjs <<'EOF'
+          import fs from 'node:fs';
+          import net from 'node:net';
+          import process from 'node:process';
+          import { chromium } from 'playwright';
+
+          const targetSha = process.env.TARGET_SHA;
+          const baseUrl = process.env.BASE_URL;
+          const devUrl = process.env.DEV_URL;
+          const reportPath = process.env.MATRIX_REPORT;
+          const results = [];
+          const consoleErrors = [];
+          const pageErrors = [];
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message);
+          }
+
+          function detail(value) {
+            if (value === undefined) return {};
+            return typeof value === 'object' && value !== null ? value : { value };
+          }
+
+          async function check(name, fn) {
+            try {
+              const value = await fn();
+              results.push({ name, status: 'PASS', ...detail(value) });
+            } catch (error) {
+              results.push({
+                name,
+                status: 'FAIL',
+                error: error instanceof Error ? error.stack ?? error.message : String(error),
+              });
+            }
+          }
+
+          function observe(page, label) {
+            page.on('pageerror', (error) => pageErrors.push({ label, message: error.message }));
+            page.on('console', (message) => {
+              if (message.type() === 'error') {
+                consoleErrors.push({ label, message: message.text() });
+              }
+            });
+          }
+
+          async function waitMain(page) {
+            await page.locator('#app-main').waitFor({ state: 'visible' });
+            await page.waitForTimeout(100);
+          }
+
+          async function waitPath(page, expected) {
+            await page.waitForFunction((path) => window.location.pathname === path, expected);
+          }
+
+          async function waitMainFocus(page) {
+            await page.waitForFunction(() => document.activeElement?.id === 'app-main');
+          }
+
+          function rawHttp(path, extraHeaders = []) {
+            return new Promise((resolve, reject) => {
+              const socket = net.createConnection({ host: '127.0.0.1', port: 8000 });
+              let response = '';
+              socket.setEncoding('utf8');
+              socket.setTimeout(10000);
+              socket.on('connect', () => {
+                const lines = [
+                  `GET ${path} HTTP/1.1`,
+                  'Host: 127.0.0.1:8000',
+                  ...extraHeaders,
+                  'Connection: close',
+                  '',
+                  '',
+                ];
+                socket.write(lines.join('\r\n'));
+              });
+              socket.on('data', (chunk) => { response += chunk; });
+              socket.on('timeout', () => socket.destroy(new Error('raw HTTP timeout')));
+              socket.on('error', reject);
+              socket.on('end', () => {
+                const separator = response.indexOf('\r\n\r\n');
+                const headers = separator >= 0 ? response.slice(0, separator) : response;
+                const body = separator >= 0 ? response.slice(separator + 4) : '';
+                const match = headers.match(/^HTTP\/1\.[01] (\d{3})/);
+                resolve({ status: match ? Number(match[1]) : 0, headers, body });
+              });
+            });
+          }
+
+          const browser = await chromium.launch({ headless: true });
+          const browserVersion = browser.version();
+
+          const routeTitles = new Map([
+            ['/home', 'Home · JarvisOS'],
+            ['/design/model', 'Model · JarvisOS'],
+            ['/design/results', 'Results · JarvisOS'],
+            ['/design/flowsheet', 'Flowsheet · JarvisOS'],
+            ['/runs', 'Runs · JarvisOS'],
+            ['/engineering-data', 'Engineering Data · JarvisOS'],
+            ['/review', 'Review · JarvisOS'],
+            ['/settings', 'Settings · JarvisOS'],
+            ['/legacy/domain-foundation', 'Domain Foundation · JarvisOS'],
+            ['/legacy/ai-draft', 'AI Draft · JarvisOS'],
+            ['/legacy/system-status', 'System Status · JarvisOS'],
+          ]);
+
+          for (const [path, expectedTitle] of routeTitles) {
+            await check(`direct-load-and-refresh:${path}`, async () => {
+              const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+              const page = await context.newPage();
+              observe(page, path);
+              const response = await page.goto(`${baseUrl}${path}`, { waitUntil: 'domcontentloaded' });
+              assert(response?.status() === 200, `direct status was ${response?.status()}`);
+              await waitMain(page);
+              assert(await page.title() === expectedTitle, `title was ${await page.title()}`);
+              await waitMainFocus(page);
+              const refreshed = await page.reload({ waitUntil: 'domcontentloaded' });
+              assert(refreshed?.status() === 200, `refresh status was ${refreshed?.status()}`);
+              await waitMain(page);
+              assert(await page.title() === expectedTitle, `refresh title was ${await page.title()}`);
+              await waitMainFocus(page);
+              await context.close();
+              return { expectedTitle };
+            });
+          }
+
+          await check('root-canonicalizes-to-home', async () => {
+            const context = await browser.newContext();
+            const page = await context.newPage();
+            observe(page, 'root');
+            const response = await page.goto(`${baseUrl}/`, { waitUntil: 'domcontentloaded' });
+            assert(response?.status() === 200, `status was ${response?.status()}`);
+            await waitMain(page);
+            assert(new URL(page.url()).pathname === '/home', `pathname was ${new URL(page.url()).pathname}`);
+            assert(await page.title() === 'Home · JarvisOS', `title was ${await page.title()}`);
+            await context.close();
+          });
+
+          await check('trailing-slash-uses-replace-semantics', async () => {
+            const context = await browser.newContext();
+            const page = await context.newPage();
+            observe(page, 'trailing-slash');
+            await page.goto(`${baseUrl}/settings`, { waitUntil: 'domcontentloaded' });
+            await waitMain(page);
+            await page.goto(`${baseUrl}/home/`, { waitUntil: 'domcontentloaded' });
+            await waitPath(page, '/home');
+            await page.goBack();
+            await waitPath(page, '/settings');
+            assert(await page.title() === 'Settings · JarvisOS', `back title was ${await page.title()}`);
+            await context.close();
+          });
+
+          for (const path of ['//home', '////home']) {
+            await check(`multiple-leading-slash-not-found:${path}`, async () => {
+              const context = await browser.newContext();
+              const page = await context.newPage();
+              observe(page, path);
+              const response = await page.goto(`${baseUrl}${path}`, { waitUntil: 'domcontentloaded' });
+              assert(response?.status() === 200, `shell status was ${response?.status()}`);
+              await waitMain(page);
+              const actualPath = new URL(page.url()).pathname;
+              assert(actualPath === path, `pathname was ${actualPath}`);
+              assert(await page.title() === 'Page not found · JarvisOS', `title was ${await page.title()}`);
+              assert(await page.getByRole('heading', { name: 'Page not found' }).count() === 1, 'not-found heading missing');
+              await context.close();
+            });
+          }
+
+          await check('history-back-forward-title-aria-current-main-focus', async () => {
+            const context = await browser.newContext();
+            const page = await context.newPage();
+            observe(page, 'history');
+            await page.goto(`${baseUrl}/home`, { waitUntil: 'domcontentloaded' });
+            await waitMain(page);
+            const marker = await page.evaluate(() => {
+              window.__jarvisDocumentMarker = crypto.randomUUID();
+              return window.__jarvisDocumentMarker;
+            });
+            await page.getByRole('link', { name: 'Design', exact: true }).click();
+            await waitPath(page, '/design/model');
+            assert(await page.evaluate(() => window.__jarvisDocumentMarker) === marker, 'document reloaded on Design navigation');
+            assert(await page.title() === 'Model · JarvisOS', `title was ${await page.title()}`);
+            assert(await page.getByRole('link', { name: 'Design', exact: true }).getAttribute('aria-current') === 'page', 'Design aria-current missing');
+            await waitMainFocus(page);
+            await page.getByRole('link', { name: 'Settings', exact: true }).click();
+            await waitPath(page, '/settings');
+            await page.goBack();
+            await waitPath(page, '/design/model');
+            assert(await page.title() === 'Model · JarvisOS', 'back did not restore Model title');
+            assert(await page.getByRole('link', { name: 'Design', exact: true }).getAttribute('aria-current') === 'page', 'back aria-current incorrect');
+            await waitMainFocus(page);
+            await page.goForward();
+            await waitPath(page, '/settings');
+            assert(await page.title() === 'Settings · JarvisOS', 'forward did not restore Settings title');
+            assert(await page.getByRole('link', { name: 'Settings', exact: true }).getAttribute('aria-current') === 'page', 'forward aria-current incorrect');
+            await waitMainFocus(page);
+            await context.close();
+          });
+
+          for (const path of ['/design/results', '/design/flowsheet']) {
+            await check(`stage-open-runs-no-reload:${path}`, async () => {
+              const context = await browser.newContext();
+              const page = await context.newPage();
+              observe(page, path);
+              await page.goto(`${baseUrl}${path}`, { waitUntil: 'domcontentloaded' });
+              await waitMain(page);
+              const marker = await page.evaluate(() => {
+                window.__jarvisDocumentMarker = crypto.randomUUID();
+                return window.__jarvisDocumentMarker;
+              });
+              await page.getByRole('link', { name: 'Open Runs', exact: true }).click();
+              await waitPath(page, '/runs');
+              assert(await page.evaluate(() => window.__jarvisDocumentMarker) === marker, 'document reloaded');
+              assert(await page.title() === 'Runs · JarvisOS', `title was ${await page.title()}`);
+              await waitMainFocus(page);
+              await context.close();
+            });
+          }
+
+          await check('panel-focus-escape-restore-and-route-close', async () => {
+            const context = await browser.newContext();
+            const page = await context.newPage();
+            observe(page, 'panels');
+            await page.goto(`${baseUrl}/home`, { waitUntil: 'domcontentloaded' });
+            await waitMain(page);
+
+            for (const panel of [
+              { show: 'Show navigator', id: 'shell-navigator', heading: 'shell-navigator-title' },
+              { show: 'Show context', id: 'shell-sidecar', heading: 'shell-sidecar-title' },
+              { show: 'Show analysis', id: 'shell-analysis-dock', heading: 'shell-analysis-title' },
+            ]) {
+              const trigger = page.getByRole('button', { name: panel.show, exact: true });
+              await trigger.click();
+              await page.waitForFunction((id) => document.activeElement?.id === id, panel.heading);
+              await page.keyboard.press('Escape');
+              await page.waitForFunction((id) => document.getElementById(id) === null, panel.id);
+              assert(await trigger.evaluate((element) => element === document.activeElement), `${panel.show} focus not restored`);
+            }
+
+            await page.getByRole('button', { name: 'Show navigator', exact: true }).click();
+            await page.getByRole('button', { name: 'Show context', exact: true }).click();
+            await page.getByRole('button', { name: 'Show analysis', exact: true }).click();
+            await page.getByRole('link', { name: 'Settings', exact: true }).click();
+            await waitPath(page, '/settings');
+            assert(await page.locator('#shell-navigator, #shell-sidecar, #shell-analysis-dock').count() === 0, 'panels remained after route change');
+            await waitMainFocus(page);
+            await context.close();
+          });
+
+          await check('production-dev-route-excluded', async () => {
+            const context = await browser.newContext();
+            const page = await context.newPage();
+            observe(page, 'prod-dev-exclusion');
+            await page.goto(`${baseUrl}/legacy/dev-local-chat`, { waitUntil: 'domcontentloaded' });
+            await waitMain(page);
+            assert(await page.title() === 'Page not found · JarvisOS', `title was ${await page.title()}`);
+            const body = await page.locator('body').innerText();
+            assert(!body.includes('Development Local Chat'), 'production DOM contains Development Local Chat');
+            assert(!body.includes('Dev Local Chat'), 'production DOM contains Dev Local Chat');
+            await context.close();
+          });
+
+          await check('api-static-and-traversal-isolation', async () => {
+            const context = await browser.newContext();
+            const request = context.request;
+            for (const path of ['/api/missing', '/health/missing', '/assets/missing.js', '/assets/missing']) {
+              const response = await request.get(`${baseUrl}${path}`, { headers: { Accept: 'text/html' } });
+              const body = await response.text();
+              assert(response.status() === 404, `${path} status was ${response.status()}`);
+              assert(!body.includes('<div id="root">'), `${path} received SPA index`);
+            }
+
+            const repeated = await rawHttp('/home', ['Accept: application/json', 'Accept: text/html']);
+            assert(repeated.status === 200, `repeated Accept status was ${repeated.status}`);
+            assert(repeated.body.includes('<div id="root">'), 'repeated Accept did not receive SPA index');
+            const repeatedZero = await rawHttp('/home', ['Accept: text/html;q=0', 'Accept: application/json']);
+            assert(repeatedZero.status === 404, `zero-quality repeated Accept status was ${repeatedZero.status}`);
+
+            for (const path of ['/foo/%2e%2e/home', '/foo/%2E%2E/home', '/foo/%5C..%5Chome']) {
+              const response = await rawHttp(path, ['Accept: text/html']);
+              assert(response.status === 404, `${path} status was ${response.status}`);
+              assert(!response.body.includes('<div id="root">'), `${path} received SPA index`);
+            }
+            await context.close();
+          });
+
+          const viewportCases = [
+            { name: '1440x900', width: 1440, height: 900 },
+            { name: '1024x768', width: 1024, height: 768 },
+            { name: '1280x720', width: 1280, height: 720 },
+            { name: 'effective-200-percent', width: 640, height: 360 },
+          ];
+          for (const viewport of viewportCases) {
+            await check(`no-document-overflow:${viewport.name}`, async () => {
+              const context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height } });
+              const page = await context.newPage();
+              observe(page, `overflow-${viewport.name}`);
+              for (const path of ['/home', '/design/model', '/legacy/ai-draft']) {
+                await page.goto(`${baseUrl}${path}`, { waitUntil: 'domcontentloaded' });
+                await waitMain(page);
+                const dimensions = await page.evaluate(() => ({
+                  scrollWidth: document.documentElement.scrollWidth,
+                  clientWidth: document.documentElement.clientWidth,
+                }));
+                assert(dimensions.scrollWidth <= dimensions.clientWidth + 1, `${path} overflow ${JSON.stringify(dimensions)}`);
+              }
+              await context.close();
+              return viewport;
+            });
+          }
+
+          await check('appearance-live-system-reduced-motion-keyboard', async () => {
+            const context = await browser.newContext({ colorScheme: 'light', reducedMotion: 'no-preference' });
+            const page = await context.newPage();
+            observe(page, 'appearance-keyboard');
+            await page.goto(`${baseUrl}/home`, { waitUntil: 'domcontentloaded' });
+            await waitMain(page);
+            const select = page.locator('.shell-appearance-control select');
+            await select.selectOption('dark');
+            await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+            await select.selectOption('light');
+            await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
+            await select.selectOption('system');
+            await page.emulateMedia({ colorScheme: 'dark' });
+            await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+            await page.emulateMedia({ colorScheme: 'light' });
+            await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
+
+            await page.emulateMedia({ reducedMotion: 'reduce' });
+            const transitionDurations = await page.getByRole('button', { name: 'Show navigator', exact: true }).evaluate((element) => getComputedStyle(element).transitionDuration);
+            assert(transitionDurations.split(',').every((value) => Number.parseFloat(value) === 0), `transition duration was ${transitionDurations}`);
+
+            const skip = page.locator('.shell-skip-link');
+            await skip.focus();
+            assert(await skip.evaluate((element) => element === document.activeElement), 'skip link could not receive keyboard focus');
+            await page.keyboard.press('Enter');
+            await waitMainFocus(page);
+
+            const designLink = page.getByRole('link', { name: 'Design', exact: true });
+            await designLink.focus();
+            await page.keyboard.press('Enter');
+            await waitPath(page, '/design/model');
+            await waitMainFocus(page);
+            await context.close();
+          });
+
+          await check('vite-development-dev-chat-available-without-provider-call', async () => {
+            const context = await browser.newContext();
+            const page = await context.newPage();
+            const requests = [];
+            observe(page, 'vite-dev-chat');
+            page.on('request', (request) => requests.push({ method: request.method(), url: request.url() }));
+            const response = await page.goto(`${devUrl}/legacy/dev-local-chat`, { waitUntil: 'domcontentloaded' });
+            assert(response?.status() === 200, `Vite status was ${response?.status()}`);
+            await page.locator('#app-main').waitFor({ state: 'visible' });
+            assert(await page.getByRole('heading', { name: 'Development Local Chat' }).count() === 1, 'development route missing');
+            assert(!requests.some((request) => request.method === 'POST' || request.url.includes('/api/dev/local-chat')), `provider-capable request observed: ${JSON.stringify(requests)}`);
+            await context.close();
+          });
+
+          await check('no-uncaught-page-or-console-errors', async () => {
+            assert(pageErrors.length === 0, JSON.stringify(pageErrors));
+            assert(consoleErrors.length === 0, JSON.stringify(consoleErrors));
+            return { pageErrors, consoleErrors };
+          });
+
+          await browser.close();
+          const report = {
+            schema: 'jarvisos.app-shell-browser-matrix.v1',
+            target_sha: targetSha,
+            browser: `Chromium ${browserVersion}`,
+            node: process.version,
+            base_url: baseUrl,
+            dev_url: devUrl,
+            provider: process.env.JARVISOS_AI_PROVIDER,
+            provider_calls: 0,
+            summary: {
+              passed: results.filter((item) => item.status === 'PASS').length,
+              failed: results.filter((item) => item.status === 'FAIL').length,
+            },
+            results,
+          };
+          fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+          console.log(JSON.stringify(report, null, 2));
+          if (report.summary.failed > 0) process.exit(1);
+          EOF
+
+          node .tmp-app-shell-browser.mjs
+          rm -f .tmp-app-shell-browser.mjs
+          test -z "$(git status --short)"
+
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-shell-browser-matrix-8c65977
+          path: |
+            ${{ runner.temp }}/app-shell-browser-matrix.json
+            ${{ runner.temp }}/fastapi.log
+            ${{ runner.temp }}/vite.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Stop temporary servers
+        if: always()
+        shell: bash
+        run: |
+          test ! -f "$RUNNER_TEMP/vite.pid" || kill "$(cat "$RUNNER_TEMP/vite.pid")" || true
+          test ! -f "$RUNNER_TEMP/fastapi.pid" || kill "$(cat "$RUNNER_TEMP/fastapi.pid")" || true
