@@ -206,24 +206,52 @@ def exact_scope_required(registry_state: str, canonical_master: bool) -> bool:
     return registry_state != "merged" or not canonical_master
 
 
-def on_canonical_master() -> bool:
-    event_name = os.environ.get("GITHUB_EVENT_NAME")
-    github_ref = os.environ.get("GITHUB_REF")
-    if event_name == "pull_request":
-        return False
-    if github_ref:
-        return github_ref == "refs/heads/master"
+def canonical_master_context(
+    *,
+    event_name: str | None,
+    github_ref: str | None,
+    github_sha: str | None,
+    head_sha: str | None,
+    branch: str | None,
+    remote_master_sha: str | None,
+) -> bool:
+    if event_name is not None:
+        return (
+            event_name == "push"
+            and github_ref == "refs/heads/master"
+            and github_sha is not None
+            and github_sha == head_sha
+        )
+    return (
+        branch == "master"
+        and head_sha is not None
+        and remote_master_sha is not None
+        and head_sha == remote_master_sha
+    )
+
+
+def git_output(*arguments: str) -> str | None:
     try:
-        branch = subprocess.run(
-            ["git", "branch", "--show-current"],
+        return subprocess.run(
+            ["git", *arguments],
             cwd=ROOT,
             check=True,
             capture_output=True,
             text=True,
         ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
-        return False
-    return branch == "master"
+        return None
+
+
+def on_canonical_master() -> bool:
+    return canonical_master_context(
+        event_name=os.environ.get("GITHUB_EVENT_NAME"),
+        github_ref=os.environ.get("GITHUB_REF"),
+        github_sha=os.environ.get("GITHUB_SHA"),
+        head_sha=git_output("rev-parse", "HEAD"),
+        branch=git_output("branch", "--show-current"),
+        remote_master_sha=git_output("rev-parse", "refs/remotes/origin/master"),
+    )
 
 
 def route_normalizer_source_valid(body: str) -> bool:
@@ -303,6 +331,51 @@ def check_self_cases() -> None:
         fail("merged registry state relaxes scope away from canonical master")
     if exact_scope_required("merged", canonical_master=True):
         fail("merged scope remains exact on canonical master")
+    if not canonical_master_context(
+        event_name="push",
+        github_ref="refs/heads/master",
+        github_sha="abc",
+        head_sha="abc",
+        branch=None,
+        remote_master_sha=None,
+    ):
+        fail("verified push-to-master context is rejected")
+    if canonical_master_context(
+        event_name="pull_request",
+        github_ref="refs/pull/231/merge",
+        github_sha="abc",
+        head_sha="abc",
+        branch="master",
+        remote_master_sha="abc",
+    ):
+        fail("pull-request context is accepted as canonical master")
+    if canonical_master_context(
+        event_name="push",
+        github_ref="refs/heads/master",
+        github_sha="stale",
+        head_sha="abc",
+        branch=None,
+        remote_master_sha=None,
+    ):
+        fail("push context with mismatched HEAD is accepted")
+    if not canonical_master_context(
+        event_name=None,
+        github_ref=None,
+        github_sha=None,
+        head_sha="abc",
+        branch="master",
+        remote_master_sha="abc",
+    ):
+        fail("local master equal to origin/master is rejected")
+    if canonical_master_context(
+        event_name=None,
+        github_ref=None,
+        github_sha=None,
+        head_sha="abc",
+        branch="master",
+        remote_master_sha="different",
+    ):
+        fail("local master diverged from origin/master is accepted")
 
 
 def check_exact_file_set(registry_state: str) -> None:
@@ -343,14 +416,15 @@ def check_exact_file_set(registry_state: str) -> None:
 
 
 def check_routes() -> None:
-    body = without_ts_comments(read(ROUTES))
+    raw_body = read(ROUTES)
+    body = without_ts_comments(raw_body)
     found = set(ROUTE_PATH.findall(body))
     expected_paths = PRODUCTION_PATHS | {DEV_PATH}
     if found != expected_paths:
         fail(f"route paths differ: missing={sorted(expected_paths - found)}, extra={sorted(found - expected_paths)}")
     if 'normalized === "/"' not in body or 'canonicalPath: "/home"' not in body or "shouldReplace: true" not in body:
         fail("root canonicalization does not replace / with /home")
-    if not route_normalizer_source_valid(body):
+    if not route_normalizer_source_valid(raw_body):
         fail("route normalization must reject multiple leading slashes and remove trailing slashes only")
     if "import.meta.env.DEV" not in body or "devOnly: true" not in body:
         fail("development route is not gated")
