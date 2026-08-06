@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
 import subprocess
 import sys
@@ -201,6 +202,30 @@ def parse_name_status(output: str) -> dict[str, str]:
     return records
 
 
+def exact_scope_required(registry_state: str, canonical_master: bool) -> bool:
+    return registry_state != "merged" or not canonical_master
+
+
+def on_canonical_master() -> bool:
+    event_name = os.environ.get("GITHUB_EVENT_NAME")
+    github_ref = os.environ.get("GITHUB_REF")
+    if event_name == "pull_request":
+        return False
+    if github_ref:
+        return github_ref == "refs/heads/master"
+    try:
+        branch = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return False
+    return branch == "master"
+
+
 def check_self_cases() -> None:
     samples = {
         "raw hex": (RAW_COLOR, "/* color: #fff */"),
@@ -255,6 +280,12 @@ def check_self_cases() -> None:
     parsed = parse_name_status("A\tnew.ts\nM\texisting.ts\nD\tlater.ts\n")
     if parsed != {"new.ts": "A", "existing.ts": "M", "later.ts": "D"}:
         fail("name-status detector does not preserve change classes")
+    if not exact_scope_required("in_review", canonical_master=True):
+        fail("in-review scope can be relaxed on canonical master")
+    if not exact_scope_required("merged", canonical_master=False):
+        fail("merged registry state relaxes scope away from canonical master")
+    if exact_scope_required("merged", canonical_master=True):
+        fail("merged scope remains exact on canonical master")
 
 
 def check_exact_file_set(registry_state: str) -> None:
@@ -271,13 +302,13 @@ def check_exact_file_set(registry_state: str) -> None:
     records = parse_name_status(result.stdout)
     expected = {path: "A" for path in AUTHORIZED_ADDED} | {path: "M" for path in AUTHORIZED_MODIFIED}
 
-    if registry_state == "in_review":
+    if exact_scope_required(registry_state, on_canonical_master()):
         unexpected_status = {path: status for path, status in records.items() if status not in {"A", "M"}}
         added = frozenset(path for path, status in records.items() if status == "A")
         modified = frozenset(path for path, status in records.items() if status == "M")
         if unexpected_status or added != AUTHORIZED_ADDED or modified != AUTHORIZED_MODIFIED:
             fail(
-                "active implementation file/status set differs: "
+                "active or non-canonical implementation file/status set differs: "
                 f"unexpected_status={unexpected_status}, "
                 f"missing_added={sorted(AUTHORIZED_ADDED - added)}, extra_added={sorted(added - AUTHORIZED_ADDED)}, "
                 f"missing_modified={sorted(AUTHORIZED_MODIFIED - modified)}, "
