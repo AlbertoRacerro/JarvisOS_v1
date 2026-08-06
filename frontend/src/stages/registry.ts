@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 
+import type { Navigate } from "../app/AppLink";
 import type { StageSelection } from "../app/selection";
 import type { StageKind } from "../app/routes";
 import FlowsheetStage from "./FlowsheetStage";
@@ -11,6 +12,7 @@ export type PrimaryStageProps = Readonly<{
   workspaceId: string | null;
   selection: StageSelection | null;
   onSelectionChange(next: StageSelection | null): void;
+  navigate: Navigate;
 }>;
 
 export type StageDefinition = Readonly<{
