@@ -36,6 +36,10 @@ REQUIRED_NON_COLORS = {
     "--motion-standard", "--ease-standard", *{f"--space-{number}" for number in range(1, 9)},
 }
 APPROVED_KEY = "jarvisos:appearance:v1"
+IMPLEMENTATION_PR_LINK = "[#225](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/225)"
+REGISTRY_HEADER = "| Spec | Status | Implementation PR | Name | Depends on | Description |"
+REGISTRY_SEPARATOR = "| --- | --- | --- | --- | --- | --- |"
+HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 RAW_COLOR = re.compile(
     r"(?<![\w-])(?:#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|\b(?:black|white|red|blue|green|yellow|purple|orange|cyan|magenta)\b)",
     re.IGNORECASE,
@@ -78,6 +82,47 @@ def block(css: str, selector: str) -> str:
 def variables(css_block: str, prefix: str | None = None) -> set[str]:
     names = set(re.findall(r"(--[\w-]+)\s*:", css_block))
     return {name for name in names if prefix is None or name.startswith(prefix)}
+
+
+def canonical_registry_row(text: str, spec_id: str) -> str:
+    lines = HTML_COMMENT.sub("", text).splitlines()
+    registry_headers = [index for index, line in enumerate(lines) if line.strip() == "## Registry"]
+    if len(registry_headers) != 1:
+        fail("STATUS.md must contain exactly one canonical Registry section")
+
+    section_start = registry_headers[0] + 1
+    section_end = next(
+        (
+            index
+            for index in range(section_start, len(lines))
+            if lines[index].strip().startswith("## ")
+        ),
+        len(lines),
+    )
+    section = lines[section_start:section_end]
+    header_indexes = [index for index, line in enumerate(section) if line.strip() == REGISTRY_HEADER]
+    if len(header_indexes) != 1:
+        fail("STATUS.md canonical Registry must contain exactly one exact table header")
+
+    header_index = header_indexes[0]
+    if header_index + 1 >= len(section) or section[header_index + 1].strip() != REGISTRY_SEPARATOR:
+        fail("STATUS.md canonical Registry separator is missing or malformed")
+
+    rows: list[str] = []
+    for line in section[header_index + 2 :]:
+        stripped = line.strip()
+        if not stripped or not stripped.startswith("|"):
+            break
+        rows.append(stripped)
+
+    matches = [
+        row
+        for row in rows
+        if tuple(cell.strip() for cell in row.strip("|").split("|"))[0] == spec_id
+    ]
+    if len(matches) != 1:
+        fail(f"STATUS.md canonical Registry must contain exactly one spec {spec_id} row; found {len(matches)}")
+    return matches[0]
 
 
 def check_tokens() -> None:
@@ -162,7 +207,7 @@ def check_migration() -> None:
         section = block(foundation, f".ui-status-badge--{tone}")
         if f"border-style: {marker}" not in section:
             fail(f"{tone} status lacks non-color distinction")
-    synthetic = block(foundation, ".ui-status-badge--synthetic")
+    synthetic = block(foundation, '.ui-status-badge--synthetic')
     if "border-radius: var(--radius-sm)" not in synthetic:
         fail("synthetic status is not geometrically distinct from unavailable")
 
@@ -202,10 +247,28 @@ def check_migration() -> None:
 
 
 def check_registry() -> None:
-    status = read(STATUS)
-    row = next((line for line in status.splitlines() if line.startswith("| 070 |")), "")
-    if "| in_review |" not in row or "pull/225" not in row:
-        fail("spec 070 registry row must be in_review and linked to PR #225")
+    row = canonical_registry_row(read(STATUS), "070")
+    cells = tuple(cell.strip() for cell in row.strip().strip("|").split("|"))
+    if len(cells) != 6 or cells[1] != "merged" or cells[2] != IMPLEMENTATION_PR_LINK:
+        fail("spec 070 canonical registry row must be merged and contain the exact implementation PR #225 link")
+
+    valid = f"| 070 | merged | {IMPLEMENTATION_PR_LINK} | UI-FOUNDATION-1 | 006, 082, 094 | done |"
+    wrong_prefix = "[#2250](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/2250)"
+    synthetic = "\n".join(
+        [
+            "<!--",
+            f"| 070 | merged | {wrong_prefix} | decoy | — | decoy |",
+            "-->",
+            "## Registry",
+            REGISTRY_HEADER,
+            REGISTRY_SEPARATOR,
+            valid,
+            "",
+            f"| 070 | merged | {wrong_prefix} | post-table | — | decoy |",
+        ]
+    )
+    if canonical_registry_row(synthetic, "070") != valid:
+        fail("spec 070 canonical registry parser accepts a decoy or PR-prefix collision")
 
 
 def main() -> None:
