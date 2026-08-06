@@ -83,6 +83,7 @@ PRIMARY_ITEMS = (
     ("Settings", "/settings"),
 )
 STAGE_KINDS = ("model", "results", "review", "flowsheet")
+REGISTRY_STATES = ("in_review", "merged")
 ROUTE_PATH = re.compile(r'path\s*:\s*"(/[^"]+)"')
 RAW_COLOR = re.compile(
     r"(?<![\w-])(?:#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|\b(?:black|white|red|blue|green|yellow|purple|orange|cyan|magenta)\b)",
@@ -114,7 +115,8 @@ def shell_files() -> list[Path]:
 
 
 def registry_row_valid(row: str) -> bool:
-    return row.startswith("| 083 |") and "| in_review |" in row and "pull/231" in row
+    has_terminal_state = any(f"| {state} |" in row for state in REGISTRY_STATES)
+    return row.startswith("| 083 |") and has_terminal_state and "pull/231" in row
 
 
 def parse_name_status(output: str) -> tuple[frozenset[str], frozenset[str]]:
@@ -149,10 +151,14 @@ def check_self_cases() -> None:
         fail("route detector does not cover whitespace evasions")
     if not registry_row_valid("| 083 | in_review | [#231](https://github.com/x/y/pull/231) |"):
         fail("registry detector rejects the valid review state")
+    if not registry_row_valid("| 083 | merged | [#231](https://github.com/x/y/pull/231) |"):
+        fail("registry detector rejects the valid merged state")
     if registry_row_valid("| 083 | ready | [#231](https://github.com/x/y/pull/231) |"):
         fail("registry detector accepts a stale ready state")
     if registry_row_valid("| 083 | in_review | [#999](https://github.com/x/y/pull/999) |"):
         fail("registry detector accepts the wrong implementation PR")
+    if registry_row_valid("| 083 | merged | [#999](https://github.com/x/y/pull/999) |"):
+        fail("registry detector accepts a merged row with the wrong implementation PR")
     parsed_added, parsed_modified = parse_name_status("A\tnew.ts\nM\texisting.ts\n")
     if parsed_added != {"new.ts"} or parsed_modified != {"existing.ts"}:
         fail("name-status detector does not preserve add/modify classes")
@@ -321,7 +327,7 @@ def check_registry_state() -> None:
     if not row:
         fail("spec 083 registry row is missing")
     if not registry_row_valid(row):
-        fail("spec 083 registry row must be in_review and linked to implementation PR #231")
+        fail("spec 083 registry row must be in_review or merged and linked to implementation PR #231")
 
 
 def main() -> None:
