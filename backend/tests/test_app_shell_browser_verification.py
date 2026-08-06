@@ -82,6 +82,27 @@ def _extract_browser_script(repo_root: Path, destination: Path) -> None:
         raise AssertionError("browser script end marker missing")
     body = body.split(end, 1)[0]
     lines = [line[10:] if line.startswith("          ") else line for line in body.splitlines()]
+
+    focus_assertion_index = next(
+        (
+            index
+            for index, line in enumerate(lines)
+            if "assert(await trigger.evaluate" in line
+            and "focus not restored" in line
+        ),
+        None,
+    )
+    if focus_assertion_index is None:
+        raise AssertionError("focus-restoration assertion marker missing")
+    focus_assertion = lines[focus_assertion_index]
+    indentation = focus_assertion[: len(focus_assertion) - len(focus_assertion.lstrip())]
+    lines.insert(
+        focus_assertion_index,
+        indentation
+        + "await page.waitForFunction((label) => "
+        + "document.activeElement?.textContent?.trim() === label, panel.show);",
+    )
+
     destination.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
