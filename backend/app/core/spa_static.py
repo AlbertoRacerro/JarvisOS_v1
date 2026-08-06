@@ -29,10 +29,40 @@ def derive_reserved_roots(routes: Iterable[BaseRoute]) -> frozenset[str]:
     return frozenset(roots)
 
 
+def _split_quoted(value: str, delimiter: str) -> list[str] | None:
+    parts: list[str] = []
+    start = 0
+    quoted = False
+    escaped = False
+    for index, character in enumerate(value):
+        if escaped:
+            escaped = False
+            continue
+        if quoted and character == "\\":
+            escaped = True
+            continue
+        if character == '"':
+            quoted = not quoted
+            continue
+        if character == delimiter and not quoted:
+            parts.append(value[start:index])
+            start = index + 1
+    if quoted or escaped:
+        return None
+    parts.append(value[start:])
+    return parts
+
+
 def _accepts_html(scope: Scope) -> bool:
     accept = Headers(scope=scope).get("accept", "")
-    for item in accept.split(","):
-        media_type, *parameters = (part.strip() for part in item.split(";"))
+    items = _split_quoted(accept, ",")
+    if items is None:
+        return False
+    for item in items:
+        parts = _split_quoted(item, ";")
+        if not parts:
+            return False
+        media_type, *parameters = (part.strip() for part in parts)
         if media_type.lower() != "text/html":
             continue
         quality = 1.0
