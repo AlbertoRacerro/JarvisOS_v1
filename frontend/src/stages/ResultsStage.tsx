@@ -1,8 +1,9 @@
+import AppLink from "../app/AppLink";
 import InlineNotice from "../components/ui/InlineNotice";
 import Surface from "../components/ui/Surface";
 import type { PrimaryStageProps } from "./registry";
 
-function ResultsStage(_props: PrimaryStageProps) {
+function ResultsStage({ navigate }: PrimaryStageProps) {
   return (
     <section className="shell-placeholder" aria-labelledby="results-stage-title">
       <div className="page-header">
@@ -14,7 +15,7 @@ function ResultsStage(_props: PrimaryStageProps) {
           A dedicated results workbench is not available yet. APP-SHELL-1 provides only the stage boundary.
         </InlineNotice>
         <nav className="shell-placeholder__links" aria-label="Results alternatives">
-          <a href="/runs" className="shell-text-link">Open Runs</a>
+          <AppLink href="/runs" navigate={navigate} className="shell-text-link">Open Runs</AppLink>
         </nav>
       </Surface>
     </section>
