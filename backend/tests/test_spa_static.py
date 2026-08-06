@@ -65,9 +65,10 @@ def test_html_navigation_routes_fall_back_to_index(tmp_path: Path) -> None:
 def test_missing_assets_and_non_html_requests_remain_404(tmp_path: Path) -> None:
     client = _build_client(tmp_path)
 
-    missing_asset = client.get("/assets/missing.js", headers={"accept": "text/html"})
-    assert missing_asset.status_code == 404
-    assert INDEX_MARKER not in missing_asset.text
+    for path in ("/assets/missing.js", "/assets/missing"):
+        missing_asset = client.get(path, headers={"accept": "text/html"})
+        assert missing_asset.status_code == 404
+        assert INDEX_MARKER not in missing_asset.text
 
     rejected_accept_values = (
         "application/json",
