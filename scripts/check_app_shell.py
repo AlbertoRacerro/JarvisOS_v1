@@ -120,31 +120,40 @@ def shell_files() -> list[Path]:
     return files
 
 
-def registry_row_valid(row: str) -> bool:
+def registry_row_state(row: str) -> str | None:
     cells = tuple(cell.strip() for cell in row.strip().strip("|").split("|"))
-    return (
+    if (
         len(cells) == 6
         and cells[0] == "083"
         and cells[1] in REGISTRY_STATES
         and cells[2] == IMPLEMENTATION_PR_LINK
-    )
+    ):
+        return cells[1]
+    return None
 
 
-def parse_name_status(output: str) -> tuple[frozenset[str], frozenset[str]]:
-    added: set[str] = set()
-    modified: set[str] = set()
+def registry_row_valid(row: str) -> bool:
+    return registry_row_state(row) is not None
+
+
+def parse_name_status(output: str) -> dict[str, str]:
+    records: dict[str, str] = {}
     for raw_line in output.splitlines():
         if not raw_line.strip():
             continue
         fields = raw_line.split("\t")
-        status = fields[0]
-        if status == "A" and len(fields) == 2:
-            added.add(fields[1])
-        elif status == "M" and len(fields) == 2:
-            modified.add(fields[1])
+        status = fields[0][:1]
+        if len(fields) == 2:
+            paths = fields[1:]
+        elif len(fields) == 3 and status in {"R", "C"}:
+            paths = fields[1:]
         else:
-            fail(f"unauthorized diff status or malformed record: {raw_line!r}")
-    return frozenset(added), frozenset(modified)
+            fail(f"malformed diff record: {raw_line!r}")
+        for path in paths:
+            if path in records:
+                fail(f"duplicate diff path: {path!r}")
+            records[path] = status
+    return records
 
 
 def check_self_cases() -> None:
@@ -165,9 +174,9 @@ def check_self_cases() -> None:
         fail("route detector accepts commented-out route evidence")
     valid_review = f"| 083 | in_review | {IMPLEMENTATION_PR_LINK} | APP-SHELL-1 | 006, 070 | active |"
     valid_merged = f"| 083 | merged | {IMPLEMENTATION_PR_LINK} | APP-SHELL-1 | 006, 070 | done |"
-    if not registry_row_valid(valid_review):
+    if registry_row_state(valid_review) != "in_review":
         fail("registry detector rejects the valid review state")
-    if not registry_row_valid(valid_merged):
+    if registry_row_state(valid_merged) != "merged":
         fail("registry detector rejects the valid merged state")
     if registry_row_valid(f"| 083 | ready | {IMPLEMENTATION_PR_LINK} | APP-SHELL-1 | 006, 070 | stale |"):
         fail("registry detector accepts a stale ready state")
@@ -179,12 +188,12 @@ def check_self_cases() -> None:
         fail("registry detector accepts an implementation PR prefix collision")
     if registry_row_valid(f"| 083 | in_review | — | APP-SHELL-1 | 006, 070 | mentions {IMPLEMENTATION_PR_LINK} only here |"):
         fail("registry detector accepts the PR link outside the implementation-PR column")
-    parsed_added, parsed_modified = parse_name_status("A\tnew.ts\nM\texisting.ts\n")
-    if parsed_added != {"new.ts"} or parsed_modified != {"existing.ts"}:
-        fail("name-status detector does not preserve add/modify classes")
+    parsed = parse_name_status("A\tnew.ts\nM\texisting.ts\nD\tlater.ts\n")
+    if parsed != {"new.ts": "A", "existing.ts": "M", "later.ts": "D"}:
+        fail("name-status detector does not preserve change classes")
 
 
-def check_exact_file_set() -> None:
+def check_exact_file_set(registry_state: str) -> None:
     try:
         result = subprocess.run(
             ["git", "diff", "--name-status", "--no-renames", IMPLEMENTATION_BASE, "HEAD", "--"],
@@ -194,15 +203,31 @@ def check_exact_file_set() -> None:
             text=True,
         )
     except (OSError, subprocess.CalledProcessError) as exc:
-        fail(f"cannot verify exact implementation diff from {IMPLEMENTATION_BASE}: {exc}")
-    added, modified = parse_name_status(result.stdout)
-    if added != AUTHORIZED_ADDED or modified != AUTHORIZED_MODIFIED:
-        fail(
-            "implementation file/status set differs: "
-            f"missing_added={sorted(AUTHORIZED_ADDED - added)}, extra_added={sorted(added - AUTHORIZED_ADDED)}, "
-            f"missing_modified={sorted(AUTHORIZED_MODIFIED - modified)}, "
-            f"extra_modified={sorted(modified - AUTHORIZED_MODIFIED)}"
-        )
+        fail(f"cannot verify implementation diff from {IMPLEMENTATION_BASE}: {exc}")
+    records = parse_name_status(result.stdout)
+    expected = {path: "A" for path in AUTHORIZED_ADDED} | {path: "M" for path in AUTHORIZED_MODIFIED}
+
+    if registry_state == "in_review":
+        unexpected_status = {path: status for path, status in records.items() if status not in {"A", "M"}}
+        added = frozenset(path for path, status in records.items() if status == "A")
+        modified = frozenset(path for path, status in records.items() if status == "M")
+        if unexpected_status or added != AUTHORIZED_ADDED or modified != AUTHORIZED_MODIFIED:
+            fail(
+                "active implementation file/status set differs: "
+                f"unexpected_status={unexpected_status}, "
+                f"missing_added={sorted(AUTHORIZED_ADDED - added)}, extra_added={sorted(added - AUTHORIZED_ADDED)}, "
+                f"missing_modified={sorted(AUTHORIZED_MODIFIED - modified)}, "
+                f"extra_modified={sorted(modified - AUTHORIZED_MODIFIED)}"
+            )
+        return
+
+    mismatched = {
+        path: {"expected": status, "actual": records.get(path)}
+        for path, status in expected.items()
+        if records.get(path) != status
+    }
+    if mismatched:
+        fail(f"merged implementation footprint drifted: {mismatched}")
 
 
 def check_routes() -> None:
@@ -342,24 +367,26 @@ def check_dependencies_and_import_order() -> None:
         fail("stylesheet import order is not tokens/global/foundation/shell/responsive")
 
 
-def check_registry_state() -> None:
+def check_registry_state() -> str:
     row = next((line for line in read(STATUS).splitlines() if line.startswith("| 083 |")), "")
     if not row:
         fail("spec 083 registry row is missing")
-    if not registry_row_valid(row):
+    registry_state = registry_row_state(row)
+    if registry_state is None:
         fail("spec 083 registry row must be in_review or merged and contain the exact implementation PR #231 link")
+    return registry_state
 
 
 def main() -> None:
     check_self_cases()
-    check_exact_file_set()
+    registry_state = check_registry_state()
+    check_exact_file_set(registry_state)
     check_routes()
     check_router()
     check_stage_registry()
     check_navigation_and_accessibility()
     check_styles_and_modules()
     check_dependencies_and_import_order()
-    check_registry_state()
     ast.parse(read(Path(__file__)))
     print("APP-SHELL-1 checks passed")
 
