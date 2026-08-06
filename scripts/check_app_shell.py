@@ -87,6 +87,7 @@ STAGE_KINDS = ("model", "results", "review", "flowsheet")
 REGISTRY_STATES = ("in_review", "merged")
 ROUTE_PATH = re.compile(r'path\s*:\s*"(/[^"]+)"')
 TS_COMMENT = re.compile(r"//[^\n]*|/\*.*?\*/", re.DOTALL)
+HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 RAW_COLOR = re.compile(
     r"(?<![\w-])(?:#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|\b(?:black|white|red|blue|green|yellow|purple|orange|cyan|magenta)\b)",
     re.IGNORECASE,
@@ -94,6 +95,7 @@ RAW_COLOR = re.compile(
 INLINE_STYLE = re.compile(r"\bstyle\s*=\s*\{", re.IGNORECASE)
 STORAGE = re.compile(r"\b(?:localStorage|sessionStorage|indexedDB|document\.cookie)\b")
 EXTERNAL_ASSET = re.compile(r"https?://", re.IGNORECASE)
+RAW_INTERNAL_ANCHOR = re.compile(r"<a\b[^>]*\bhref\s*=\s*[\"']/", re.IGNORECASE | re.DOTALL)
 
 
 def fail(message: str) -> None:
@@ -136,6 +138,43 @@ def registry_row_valid(row: str) -> bool:
     return registry_row_state(row) is not None
 
 
+def canonical_registry_row(text: str) -> str:
+    text = HTML_COMMENT.sub("", text)
+    lines = text.splitlines()
+    registry_headers = [index for index, line in enumerate(lines) if line.strip() == "## Registry"]
+    if len(registry_headers) != 1:
+        fail("STATUS.md must contain exactly one canonical Registry section")
+
+    rows: list[str] = []
+    table_started = False
+    for line in lines[registry_headers[0] + 1 :]:
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            break
+        if not table_started:
+            if stripped.startswith("| Spec |"):
+                table_started = True
+            continue
+        if stripped.startswith("| --- |"):
+            continue
+        if stripped.startswith("|"):
+            rows.append(stripped)
+            continue
+        if rows and stripped:
+            break
+
+    if not table_started:
+        fail("STATUS.md canonical Registry table header is missing")
+    matches = [
+        row
+        for row in rows
+        if tuple(cell.strip() for cell in row.strip("|").split("|"))[0] == "083"
+    ]
+    if len(matches) != 1:
+        fail(f"STATUS.md canonical Registry must contain exactly one spec 083 row; found {len(matches)}")
+    return matches[0]
+
+
 def parse_name_status(output: str) -> dict[str, str]:
     records: dict[str, str] = {}
     for raw_line in output.splitlines():
@@ -163,6 +202,7 @@ def check_self_cases() -> None:
         "inline style": (INLINE_STYLE, "<div\n style = {value} />"),
         "storage": (STORAGE, "window.localStorage.setItem('x', 'y')"),
         "external asset": (EXTERNAL_ASSET, "https://example.invalid/a.svg"),
+        "raw internal anchor": (RAW_INTERNAL_ANCHOR, '<a className="x" href="/runs">Runs</a>'),
     }
     for label, (pattern, sample) in samples.items():
         if pattern.search(sample) is None:
@@ -188,6 +228,22 @@ def check_self_cases() -> None:
         fail("registry detector accepts an implementation PR prefix collision")
     if registry_row_valid(f"| 083 | in_review | — | APP-SHELL-1 | 006, 070 | mentions {IMPLEMENTATION_PR_LINK} only here |"):
         fail("registry detector accepts the PR link outside the implementation-PR column")
+    decoy_status = "\n".join(
+        [
+            "<!--",
+            valid_merged,
+            "-->",
+            "```text",
+            valid_merged,
+            "```",
+            "## Registry",
+            "| Spec | Status | Implementation PR | Name | Depends on | Description |",
+            "| --- | --- | --- | --- | --- | --- |",
+            valid_review,
+        ]
+    )
+    if canonical_registry_row(decoy_status) != valid_review:
+        fail("canonical registry parser accepts a pre-registry decoy row")
     parsed = parse_name_status("A\tnew.ts\nM\texisting.ts\nD\tlater.ts\n")
     if parsed != {"new.ts": "A", "existing.ts": "M", "later.ts": "D"}:
         fail("name-status detector does not preserve change classes")
@@ -339,6 +395,8 @@ def check_styles_and_modules() -> None:
             fail(f"external asset URL found: {relative}")
         if STORAGE.search(body):
             fail(f"forbidden browser persistence found: {relative}")
+        if RAW_INTERNAL_ANCHOR.search(body):
+            fail(f"raw internal anchor bypasses AppLink: {relative}")
         if re.search(r"\b(?:ollama|run_ai_task|filesystem|api[_-]?key)\b", body, re.IGNORECASE):
             fail(f"provider/tool authority string introduced: {relative}")
 
@@ -368,12 +426,10 @@ def check_dependencies_and_import_order() -> None:
 
 
 def check_registry_state() -> str:
-    row = next((line for line in read(STATUS).splitlines() if line.startswith("| 083 |")), "")
-    if not row:
-        fail("spec 083 registry row is missing")
+    row = canonical_registry_row(read(STATUS))
     registry_state = registry_row_state(row)
     if registry_state is None:
-        fail("spec 083 registry row must be in_review or merged and contain the exact implementation PR #231 link")
+        fail("spec 083 canonical registry row must be in_review or merged with exact implementation PR #231")
     return registry_state
 
 
