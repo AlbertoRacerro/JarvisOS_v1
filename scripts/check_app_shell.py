@@ -85,6 +85,7 @@ PRIMARY_ITEMS = (
 STAGE_KINDS = ("model", "results", "review", "flowsheet")
 REGISTRY_STATES = ("in_review", "merged")
 ROUTE_PATH = re.compile(r'path\s*:\s*"(/[^"]+)"')
+TS_COMMENT = re.compile(r"//[^\n]*|/\*.*?\*/", re.DOTALL)
 RAW_COLOR = re.compile(
     r"(?<![\w-])(?:#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|\b(?:black|white|red|blue|green|yellow|purple|orange|cyan|magenta)\b)",
     re.IGNORECASE,
@@ -106,6 +107,10 @@ def read(path: Path) -> str:
         fail(f"missing required file: {path.relative_to(ROOT)}")
 
 
+def without_ts_comments(body: str) -> str:
+    return TS_COMMENT.sub("", body)
+
+
 def shell_files() -> list[Path]:
     files: list[Path] = [APP, LAYOUT]
     for directory in SHELL_DIRS:
@@ -115,8 +120,13 @@ def shell_files() -> list[Path]:
 
 
 def registry_row_valid(row: str) -> bool:
-    has_terminal_state = any(f"| {state} |" in row for state in REGISTRY_STATES)
-    return row.startswith("| 083 |") and has_terminal_state and "pull/231" in row
+    cells = tuple(cell.strip() for cell in row.strip().strip("|").split("|"))
+    return (
+        len(cells) == 6
+        and cells[0] == "083"
+        and cells[1] in REGISTRY_STATES
+        and "pull/231" in cells[2]
+    )
 
 
 def parse_name_status(output: str) -> tuple[frozenset[str], frozenset[str]]:
@@ -149,16 +159,21 @@ def check_self_cases() -> None:
             fail(f"self-case detector failed for {label}")
     if ROUTE_PATH.findall('const route = { path : "/home" };') != ["/home"]:
         fail("route detector does not cover whitespace evasions")
-    if not registry_row_valid("| 083 | in_review | [#231](https://github.com/x/y/pull/231) |"):
+    comment_only_routes = '// path: "/home"\n/* path: "/design/model" */'
+    if ROUTE_PATH.findall(without_ts_comments(comment_only_routes)):
+        fail("route detector accepts commented-out route evidence")
+    valid_review = "| 083 | in_review | [#231](https://github.com/x/y/pull/231) | APP-SHELL-1 | 006, 070 | active |"
+    valid_merged = "| 083 | merged | [#231](https://github.com/x/y/pull/231) | APP-SHELL-1 | 006, 070 | done |"
+    if not registry_row_valid(valid_review):
         fail("registry detector rejects the valid review state")
-    if not registry_row_valid("| 083 | merged | [#231](https://github.com/x/y/pull/231) |"):
+    if not registry_row_valid(valid_merged):
         fail("registry detector rejects the valid merged state")
-    if registry_row_valid("| 083 | ready | [#231](https://github.com/x/y/pull/231) |"):
+    if registry_row_valid("| 083 | ready | [#231](https://github.com/x/y/pull/231) | APP-SHELL-1 | 006, 070 | stale |"):
         fail("registry detector accepts a stale ready state")
-    if registry_row_valid("| 083 | in_review | [#999](https://github.com/x/y/pull/999) |"):
+    if registry_row_valid("| 083 | in_review | [#999](https://github.com/x/y/pull/999) | APP-SHELL-1 | 006, 070 | wrong |"):
         fail("registry detector accepts the wrong implementation PR")
-    if registry_row_valid("| 083 | merged | [#999](https://github.com/x/y/pull/999) |"):
-        fail("registry detector accepts a merged row with the wrong implementation PR")
+    if registry_row_valid("| 083 | in_review | — | APP-SHELL-1 | 006, 070 | mentions pull/231 only here |"):
+        fail("registry detector accepts the PR link outside the implementation-PR column")
     parsed_added, parsed_modified = parse_name_status("A\tnew.ts\nM\texisting.ts\n")
     if parsed_added != {"new.ts"} or parsed_modified != {"existing.ts"}:
         fail("name-status detector does not preserve add/modify classes")
@@ -186,7 +201,7 @@ def check_exact_file_set() -> None:
 
 
 def check_routes() -> None:
-    body = read(ROUTES)
+    body = without_ts_comments(read(ROUTES))
     found = set(ROUTE_PATH.findall(body))
     expected_paths = PRODUCTION_PATHS | {DEV_PATH}
     if found != expected_paths:
@@ -215,7 +230,7 @@ def check_routes() -> None:
 
 
 def check_router() -> None:
-    body = read(ROUTER)
+    body = without_ts_comments(read(ROUTER))
     if body.count('addEventListener("popstate"') != 1 or body.count('removeEventListener("popstate"') != 1:
         fail("router must contain one popstate subscription and cleanup")
     if "window.history.pushState" not in body or "window.history.replaceState" not in body:
@@ -225,12 +240,12 @@ def check_router() -> None:
 
 
 def check_stage_registry() -> None:
-    routes = read(ROUTES)
+    routes = without_ts_comments(read(ROUTES))
     expected_union = 'type StageKind = "model" | "results" | "review" | "flowsheet"'
     if expected_union not in routes:
         fail("StageKind union is not exactly model/results/review/flowsheet")
 
-    registry = read(FRONTEND / "stages/registry.ts")
+    registry = without_ts_comments(read(FRONTEND / "stages/registry.ts"))
     for kind in STAGE_KINDS:
         if len(re.findall(rf"^\s*{kind}:\s*\{{", registry, re.MULTILINE)) != 1:
             fail(f"stage registry entry missing or duplicated: {kind}")
@@ -239,7 +254,7 @@ def check_stage_registry() -> None:
 
     bluecad_importers = []
     for path in shell_files():
-        if re.search(r'import\s+BlueCAD\s+from\s+["\']', read(path)):
+        if re.search(r'import\s+BlueCAD\s+from\s+["\']', without_ts_comments(read(path))):
             bluecad_importers.append(path.relative_to(ROOT).as_posix())
     if bluecad_importers != ["frontend/src/stages/ModelStage.tsx"]:
         fail(f"BlueCAD must be imported only by ModelStage; found {bluecad_importers}")
@@ -247,7 +262,7 @@ def check_stage_registry() -> None:
 
 def check_navigation_and_accessibility() -> None:
     combined = "\n".join(
-        read(path)
+        without_ts_comments(read(path))
         for path in (APP, LAYOUT, FRONTEND / "components/shell/Rail.tsx", FRONTEND / "components/shell/TopBar.tsx")
     )
     required = (
@@ -263,11 +278,11 @@ def check_navigation_and_accessibility() -> None:
         if marker not in combined:
             fail(f"accessibility marker missing: {marker}")
 
-    legacy = read(FRONTEND / "components/shell/LegacyDiagnosticSurface.tsx")
+    legacy = without_ts_comments(read(FRONTEND / "components/shell/LegacyDiagnosticSurface.tsx"))
     if "Legacy diagnostic surface" not in legacy:
         fail("legacy routes lack the exact transition label")
     for panel in ("ContextualNavigator.tsx", "ContextualSidecar.tsx", "AnalysisDock.tsx"):
-        body = read(FRONTEND / "components/shell" / panel)
+        body = without_ts_comments(read(FRONTEND / "components/shell" / panel))
         if 'event.key !== "Escape"' not in body or "onKeyDown={onPanelKeyDown}" not in body:
             fail(f"focused-panel Escape behavior missing: {panel}")
 
@@ -309,7 +324,7 @@ def check_dependencies_and_import_order() -> None:
     if unexpected:
         fail(f"forbidden routing/state/icon/UI dependency found: {unexpected}")
 
-    main = read(MAIN)
+    main = without_ts_comments(read(MAIN))
     expected = (
         "./styles/tokens.css",
         "./styles/global.css",
