@@ -137,6 +137,15 @@ def test_reserved_root_derivation_is_literal_and_ignores_mounts(tmp_path: Path) 
     assert derive_reserved_roots(app.routes) == before_mount
 
 
+def test_encoded_traversal_does_not_receive_index(tmp_path: Path) -> None:
+    client = _build_client(tmp_path)
+
+    for path in ("/foo/%2e%2e/home", "/foo/%2E%2E/home"):
+        response = client.get(path, headers={"accept": "text/html"})
+        assert response.status_code == 404
+        assert INDEX_MARKER not in response.text
+
+
 def test_traversal_and_malformed_paths_are_not_fallback_candidates() -> None:
     assert not _safe_extensionless_path("../secret")
     assert not _safe_extensionless_path("folder/../../secret")
