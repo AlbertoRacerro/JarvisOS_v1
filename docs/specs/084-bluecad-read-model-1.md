@@ -104,6 +104,7 @@ class BluecadRunRefRead(BaseModel):
     ref: str
     kind: str
     status: str | None
+    stale: bool | None
     created_at: str | None
     source_ref: str | None
 
@@ -236,7 +237,7 @@ frontend/src/api/client.ts
 scripts/check_bluecad_read_model.py                # dependency-free conformance checker if justified at readiness
 ```
 
-No schema, migration, package manifest, lockfile, workflow, appearance, shell layout, viewer, provider, credential, budget, ledger, egress or Penpot file is authorized.
+No schema, migration, package manifest, lockfile, workflow, appearance, shell layout, viewer, provider, credential, budget, new ledger/store, ledger-authority change, egress or Penpot file is authorized. A bounded edit to the existing canonical `backend/app/modules/bluecad/ledger.py` remains permissible only if readiness proves it is the minimum-necessary read helper.
 
 Readiness must replace this list with an exact allowed file set after inspecting current code.
 
