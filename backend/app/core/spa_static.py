@@ -68,7 +68,8 @@ def _valid_parameter(parameter: str) -> tuple[str, str] | None:
 
 
 def _accepts_html(scope: Scope) -> bool:
-    accept = Headers(scope=scope).get("accept", "")
+    accept_values = Headers(scope=scope).getlist("accept")
+    accept = ",".join(accept_values)
     items = _split_quoted(accept, ",")
     if items is None:
         return False
