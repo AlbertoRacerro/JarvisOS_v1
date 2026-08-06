@@ -1,5 +1,7 @@
+import os
 from pathlib import Path
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -95,6 +97,9 @@ def test_missing_assets_and_non_html_requests_remain_404(tmp_path: Path) -> None
         'text/html;level="1;2";q=0',
         'text/html;level="1\\\",2";q=0',
         'text/html;level="1,2;q=1',
+        'text/html;level="a"junk',
+        'text/html;level="a""b";q=1',
+        'text/html;level=a"b";q=1',
     )
     for accept in rejected_accept_values:
         response = client.get("/home", headers={"accept": accept})
@@ -155,6 +160,25 @@ def test_encoded_traversal_does_not_receive_index(tmp_path: Path) -> None:
         response = client.get(path, headers={"accept": "text/html"})
         assert response.status_code == 404
         assert INDEX_MARKER not in response.text
+
+
+def test_fallback_index_cannot_escape_static_root_via_symlink(tmp_path: Path) -> None:
+    outside = tmp_path.parent / "outside-index.html"
+    outside.write_text("external-secret", encoding="utf-8")
+    (tmp_path / "assets").mkdir()
+    try:
+        os.symlink(outside, tmp_path / "index.html")
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation is unavailable")
+
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    app.mount("/", SpaStaticFiles(directory=tmp_path, reserved_roots=frozenset()), name="frontend")
+    response = TestClient(app, raise_server_exceptions=False).get(
+        "/home", headers={"accept": "text/html"}
+    )
+
+    assert response.status_code == 404
+    assert "external-secret" not in response.text
 
 
 def test_traversal_and_malformed_paths_are_not_fallback_candidates() -> None:
