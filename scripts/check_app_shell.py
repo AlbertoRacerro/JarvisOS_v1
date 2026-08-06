@@ -19,6 +19,7 @@ SHELL_CSS = FRONTEND / "styles/shell.css"
 PACKAGE = ROOT / "frontend/package.json"
 STATUS = ROOT / "docs/specs/STATUS.md"
 IMPLEMENTATION_BASE = "994b40009f5bf898aac7f9ba978c4925c610e505"
+IMPLEMENTATION_PR_LINK = "[#231](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/231)"
 
 SHELL_DIRS = (
     FRONTEND / "app",
@@ -125,7 +126,7 @@ def registry_row_valid(row: str) -> bool:
         len(cells) == 6
         and cells[0] == "083"
         and cells[1] in REGISTRY_STATES
-        and "pull/231" in cells[2]
+        and cells[2] == IMPLEMENTATION_PR_LINK
     )
 
 
@@ -162,17 +163,21 @@ def check_self_cases() -> None:
     comment_only_routes = '// path: "/home"\n/* path: "/design/model" */'
     if ROUTE_PATH.findall(without_ts_comments(comment_only_routes)):
         fail("route detector accepts commented-out route evidence")
-    valid_review = "| 083 | in_review | [#231](https://github.com/x/y/pull/231) | APP-SHELL-1 | 006, 070 | active |"
-    valid_merged = "| 083 | merged | [#231](https://github.com/x/y/pull/231) | APP-SHELL-1 | 006, 070 | done |"
+    valid_review = f"| 083 | in_review | {IMPLEMENTATION_PR_LINK} | APP-SHELL-1 | 006, 070 | active |"
+    valid_merged = f"| 083 | merged | {IMPLEMENTATION_PR_LINK} | APP-SHELL-1 | 006, 070 | done |"
     if not registry_row_valid(valid_review):
         fail("registry detector rejects the valid review state")
     if not registry_row_valid(valid_merged):
         fail("registry detector rejects the valid merged state")
-    if registry_row_valid("| 083 | ready | [#231](https://github.com/x/y/pull/231) | APP-SHELL-1 | 006, 070 | stale |"):
+    if registry_row_valid(f"| 083 | ready | {IMPLEMENTATION_PR_LINK} | APP-SHELL-1 | 006, 070 | stale |"):
         fail("registry detector accepts a stale ready state")
-    if registry_row_valid("| 083 | in_review | [#999](https://github.com/x/y/pull/999) | APP-SHELL-1 | 006, 070 | wrong |"):
+    wrong_pr = "[#999](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/999)"
+    if registry_row_valid(f"| 083 | in_review | {wrong_pr} | APP-SHELL-1 | 006, 070 | wrong |"):
         fail("registry detector accepts the wrong implementation PR")
-    if registry_row_valid("| 083 | in_review | — | APP-SHELL-1 | 006, 070 | mentions pull/231 only here |"):
+    prefix_collision = "[#2310](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/2310)"
+    if registry_row_valid(f"| 083 | merged | {prefix_collision} | APP-SHELL-1 | 006, 070 | wrong |"):
+        fail("registry detector accepts an implementation PR prefix collision")
+    if registry_row_valid(f"| 083 | in_review | — | APP-SHELL-1 | 006, 070 | mentions {IMPLEMENTATION_PR_LINK} only here |"):
         fail("registry detector accepts the PR link outside the implementation-PR column")
     parsed_added, parsed_modified = parse_name_status("A\tnew.ts\nM\texisting.ts\n")
     if parsed_added != {"new.ts"} or parsed_modified != {"existing.ts"}:
@@ -342,7 +347,7 @@ def check_registry_state() -> None:
     if not row:
         fail("spec 083 registry row is missing")
     if not registry_row_valid(row):
-        fail("spec 083 registry row must be in_review or merged and linked to implementation PR #231")
+        fail("spec 083 registry row must be in_review or merged and contain the exact implementation PR #231 link")
 
 
 def main() -> None:
