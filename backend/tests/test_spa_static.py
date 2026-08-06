@@ -140,7 +140,7 @@ def test_reserved_root_derivation_is_literal_and_ignores_mounts(tmp_path: Path) 
 def test_encoded_traversal_does_not_receive_index(tmp_path: Path) -> None:
     client = _build_client(tmp_path)
 
-    for path in ("/foo/%2e%2e/home", "/foo/%2E%2E/home"):
+    for path in ("/foo/%2e%2e/home", "/foo/%2E%2E/home", "/foo%5c..%5chome"):
         response = client.get(path, headers={"accept": "text/html"})
         assert response.status_code == 404
         assert INDEX_MARKER not in response.text
@@ -149,6 +149,8 @@ def test_encoded_traversal_does_not_receive_index(tmp_path: Path) -> None:
 def test_traversal_and_malformed_paths_are_not_fallback_candidates() -> None:
     assert not _safe_extensionless_path("../secret")
     assert not _safe_extensionless_path("folder/../../secret")
+    assert not _safe_extensionless_path(r"folder\..\secret")
+    assert not _safe_extensionless_path("folder/secret\x00")
     assert not _safe_extensionless_path("")
     assert not _safe_extensionless_path("assets/app.js")
     assert _safe_extensionless_path("design/model")
