@@ -223,8 +223,7 @@ def canonical_master_context(
             and github_sha == head_sha
         )
     return (
-        branch == "master"
-        and head_sha is not None
+        head_sha is not None
         and remote_master_sha is not None
         and head_sha == remote_master_sha
     )
@@ -367,15 +366,24 @@ def check_self_cases() -> None:
         remote_master_sha="abc",
     ):
         fail("local master equal to origin/master is rejected")
+    if not canonical_master_context(
+        event_name=None,
+        github_ref=None,
+        github_sha=None,
+        head_sha="abc",
+        branch="",
+        remote_master_sha="abc",
+    ):
+        fail("detached HEAD equal to origin/master is rejected")
     if canonical_master_context(
         event_name=None,
         github_ref=None,
         github_sha=None,
         head_sha="abc",
-        branch="master",
+        branch="",
         remote_master_sha="different",
     ):
-        fail("local master diverged from origin/master is accepted")
+        fail("detached HEAD diverged from origin/master is accepted")
 
 
 def check_exact_file_set(registry_state: str) -> None:
