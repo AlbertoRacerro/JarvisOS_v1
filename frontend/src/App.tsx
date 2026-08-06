@@ -27,7 +27,14 @@ function App() {
 
   if (route.stageKind) {
     const Stage = PRIMARY_STAGES[route.stageKind].render;
-    content = <Stage workspaceId={null} selection={selection} onSelectionChange={setSelection} />;
+    content = (
+      <Stage
+        workspaceId={null}
+        selection={selection}
+        onSelectionChange={setSelection}
+        navigate={navigate}
+      />
+    );
   } else {
     switch (route.id) {
       case "home":
