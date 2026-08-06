@@ -74,6 +74,9 @@ class SpaStaticFiles(StaticFiles):
     def _eligible_for_index(self, path: str, scope: Scope) -> bool:
         if scope.get("method") not in {"GET", "HEAD"}:
             return False
+        original_path = scope.get("path")
+        if not isinstance(original_path, str) or not _safe_extensionless_path(original_path):
+            return False
         if not _accepts_html(scope) or not _safe_extensionless_path(path):
             return False
         first = next((segment for segment in path.split("/") if segment), "")
