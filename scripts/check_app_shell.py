@@ -20,6 +20,8 @@ PACKAGE = ROOT / "frontend/package.json"
 STATUS = ROOT / "docs/specs/STATUS.md"
 IMPLEMENTATION_BASE = "994b40009f5bf898aac7f9ba978c4925c610e505"
 IMPLEMENTATION_PR_LINK = "[#231](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/231)"
+REGISTRY_HEADER = "| Spec | Status | Implementation PR | Name | Depends on | Description |"
+REGISTRY_SEPARATOR = "| --- | --- | --- | --- | --- | --- |"
 
 SHELL_DIRS = (
     FRONTEND / "app",
@@ -139,32 +141,36 @@ def registry_row_valid(row: str) -> bool:
 
 
 def canonical_registry_row(text: str) -> str:
-    text = HTML_COMMENT.sub("", text)
-    lines = text.splitlines()
+    lines = HTML_COMMENT.sub("", text).splitlines()
     registry_headers = [index for index, line in enumerate(lines) if line.strip() == "## Registry"]
     if len(registry_headers) != 1:
         fail("STATUS.md must contain exactly one canonical Registry section")
 
-    rows: list[str] = []
-    table_started = False
-    for line in lines[registry_headers[0] + 1 :]:
-        stripped = line.strip()
-        if stripped.startswith("## "):
-            break
-        if not table_started:
-            if stripped.startswith("| Spec |"):
-                table_started = True
-            continue
-        if stripped.startswith("| --- |"):
-            continue
-        if stripped.startswith("|"):
-            rows.append(stripped)
-            continue
-        if rows and stripped:
-            break
+    section_start = registry_headers[0] + 1
+    section_end = next(
+        (
+            index
+            for index in range(section_start, len(lines))
+            if lines[index].strip().startswith("## ")
+        ),
+        len(lines),
+    )
+    section = lines[section_start:section_end]
+    header_indexes = [index for index, line in enumerate(section) if line.strip() == REGISTRY_HEADER]
+    if len(header_indexes) != 1:
+        fail("STATUS.md canonical Registry must contain exactly one exact table header")
 
-    if not table_started:
-        fail("STATUS.md canonical Registry table header is missing")
+    header_index = header_indexes[0]
+    if header_index + 1 >= len(section) or section[header_index + 1].strip() != REGISTRY_SEPARATOR:
+        fail("STATUS.md canonical Registry separator is missing or malformed")
+
+    rows: list[str] = []
+    for line in section[header_index + 2 :]:
+        stripped = line.strip()
+        if not stripped or not stripped.startswith("|"):
+            break
+        rows.append(stripped)
+
     matches = [
         row
         for row in rows
@@ -237,13 +243,15 @@ def check_self_cases() -> None:
             valid_merged,
             "```",
             "## Registry",
-            "| Spec | Status | Implementation PR | Name | Depends on | Description |",
-            "| --- | --- | --- | --- | --- | --- |",
+            REGISTRY_HEADER,
+            REGISTRY_SEPARATOR,
             valid_review,
+            "",
+            valid_merged,
         ]
     )
     if canonical_registry_row(decoy_status) != valid_review:
-        fail("canonical registry parser accepts a pre-registry decoy row")
+        fail("canonical registry parser accepts a pre-registry or post-table decoy row")
     parsed = parse_name_status("A\tnew.ts\nM\texisting.ts\nD\tlater.ts\n")
     if parsed != {"new.ts": "A", "existing.ts": "M", "later.ts": "D"}:
         fail("name-status detector does not preserve change classes")
