@@ -69,6 +69,24 @@ def _stop_process(process: subprocess.Popen[str] | None) -> None:
         process.wait(timeout=10)
 
 
+def _insert_wait_before(
+    lines: list[str],
+    *,
+    marker: str,
+    wait_statement: str,
+    missing_message: str,
+) -> None:
+    assertion_index = next(
+        (index for index, line in enumerate(lines) if marker in line),
+        None,
+    )
+    if assertion_index is None:
+        raise AssertionError(missing_message)
+    assertion = lines[assertion_index]
+    indentation = assertion[: len(assertion) - len(assertion.lstrip())]
+    lines.insert(assertion_index, indentation + wait_statement)
+
+
 def _extract_browser_script(repo_root: Path, destination: Path) -> None:
     source = (
         repo_root / ".github" / "workflows" / "verify-app-shell-browser.yml"
@@ -83,24 +101,24 @@ def _extract_browser_script(repo_root: Path, destination: Path) -> None:
     body = body.split(end, 1)[0]
     lines = [line[10:] if line.startswith("          ") else line for line in body.splitlines()]
 
-    focus_assertion_index = next(
-        (
-            index
-            for index, line in enumerate(lines)
-            if "assert(await trigger.evaluate" in line
-            and "focus not restored" in line
+    _insert_wait_before(
+        lines,
+        marker="assert(await trigger.evaluate",
+        wait_statement=(
+            "await page.waitForFunction((label) => "
+            "document.activeElement?.textContent?.trim() === label, panel.show);"
         ),
-        None,
+        missing_message="focus-restoration assertion marker missing",
     )
-    if focus_assertion_index is None:
-        raise AssertionError("focus-restoration assertion marker missing")
-    focus_assertion = lines[focus_assertion_index]
-    indentation = focus_assertion[: len(focus_assertion) - len(focus_assertion.lstrip())]
-    lines.insert(
-        focus_assertion_index,
-        indentation
-        + "await page.waitForFunction((label) => "
-        + "document.activeElement?.textContent?.trim() === label, panel.show);",
+    _insert_wait_before(
+        lines,
+        marker="panels remained after route change",
+        wait_statement=(
+            "await page.waitForFunction(() => "
+            "document.querySelectorAll('#shell-navigator, #shell-sidecar, "
+            "#shell-analysis-dock').length === 0);"
+        ),
+        missing_message="route-panel closure assertion marker missing",
     )
 
     destination.write_text("\n".join(lines) + "\n", encoding="utf-8")
