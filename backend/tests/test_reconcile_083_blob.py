@@ -2,8 +2,10 @@ import base64
 import hashlib
 from pathlib import Path
 
+import pytest
 
-def test_generate_exact_083_reconciliation_blob() -> None:
+
+def test_generate_exact_083_reconciliation_blob(capsys: pytest.CaptureFixture[str]) -> None:
     root = Path(__file__).resolve().parents[2]
     status_path = root / "docs" / "specs" / "STATUS.md"
     source = status_path.read_text(encoding="utf-8")
@@ -26,6 +28,7 @@ def test_generate_exact_083_reconciliation_blob() -> None:
 
     encoded = base64.b64encode(result.encode("utf-8")).decode("ascii")
     digest = hashlib.sha256(result.encode("utf-8")).hexdigest()
-    print(f"RECONCILE_083_BYTES={len(result.encode('utf-8'))}")
-    print(f"RECONCILE_083_SHA256={digest}")
-    print(f"RECONCILE_083_BASE64={encoded}")
+    with capsys.disabled():
+        print(f"RECONCILE_083_BYTES={len(result.encode('utf-8'))}", flush=True)
+        print(f"RECONCILE_083_SHA256={digest}", flush=True)
+        print(f"RECONCILE_083_BASE64={encoded}", flush=True)
