@@ -226,6 +226,14 @@ def on_canonical_master() -> bool:
     return branch == "master"
 
 
+def route_normalizer_source_valid(body: str) -> bool:
+    return (
+        'pathOnly.startsWith("//")' in body
+        and "replace(/\\/+$/g" in body
+        and "replace(/^\\/+|\\/+$/g" not in body
+    )
+
+
 def check_self_cases() -> None:
     samples = {
         "raw hex": (RAW_COLOR, "/* color: #fff */"),
@@ -243,6 +251,15 @@ def check_self_cases() -> None:
     comment_only_routes = '// path: "/home"\n/* path: "/design/model" */'
     if ROUTE_PATH.findall(without_ts_comments(comment_only_routes)):
         fail("route detector accepts commented-out route evidence")
+    accepted_normalizer = (
+        'if (!pathOnly.startsWith("/") || pathOnly.startsWith("//")) return pathOnly;\n'
+        'const trimmed = pathOnly.replace(/\\/+$/g, "");'
+    )
+    historical_normalizer = 'const trimmed = pathOnly.replace(/^\\/+|\\/+$/g, "");'
+    if not route_normalizer_source_valid(accepted_normalizer):
+        fail("route normalizer detector rejects the trailing-only canonical implementation")
+    if route_normalizer_source_valid(historical_normalizer):
+        fail("route normalizer detector accepts leading-slash normalization")
     valid_review = f"| 083 | in_review | {IMPLEMENTATION_PR_LINK} | APP-SHELL-1 | 006, 070 | active |"
     valid_merged = f"| 083 | merged | {IMPLEMENTATION_PR_LINK} | APP-SHELL-1 | 006, 070 | done |"
     if registry_row_state(valid_review) != "in_review":
@@ -333,8 +350,8 @@ def check_routes() -> None:
         fail(f"route paths differ: missing={sorted(expected_paths - found)}, extra={sorted(found - expected_paths)}")
     if 'normalized === "/"' not in body or 'canonicalPath: "/home"' not in body or "shouldReplace: true" not in body:
         fail("root canonicalization does not replace / with /home")
-    if "replace(/^\\/+|\\/+$/g" not in body:
-        fail("trailing-slash normalization is missing")
+    if not route_normalizer_source_valid(body):
+        fail("route normalization must reject multiple leading slashes and remove trailing slashes only")
     if "import.meta.env.DEV" not in body or "devOnly: true" not in body:
         fail("development route is not gated")
 
