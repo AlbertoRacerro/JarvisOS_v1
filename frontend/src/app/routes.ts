@@ -70,8 +70,9 @@ export type ResolvedRoute = Readonly<{
 export function normalizePathname(pathname: string): string {
   const pathOnly = pathname.split(/[?#]/, 1)[0] ?? "/";
   if (pathOnly === "/" || pathOnly.length === 0) return "/";
-  const trimmed = pathOnly.replace(/^\/+|\/+$/g, "");
-  return trimmed ? `/${trimmed}` : "/";
+  if (!pathOnly.startsWith("/") || pathOnly.startsWith("//")) return pathOnly;
+  const trimmed = pathOnly.replace(/\/+$/g, "");
+  return trimmed || "/";
 }
 
 export function resolveRoute(pathname: string): ResolvedRoute {
