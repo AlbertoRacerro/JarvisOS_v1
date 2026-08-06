@@ -10,6 +10,7 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
 _QVALUE = re.compile(r"^(?:0(?:\.\d{0,3})?|1(?:\.0{0,3})?)$")
+_STATIC_ASSET_ROOTS = frozenset({"assets"})
 
 
 def derive_reserved_roots(routes: Iterable[BaseRoute]) -> frozenset[str]:
@@ -68,7 +69,7 @@ class SpaStaticFiles(StaticFiles):
     def __init__(self, *, directory: Path, reserved_roots: Collection[str]) -> None:
         super().__init__(directory=directory, html=True, check_dir=True)
         self._index_path = directory / "index.html"
-        self._reserved_roots = frozenset(reserved_roots)
+        self._reserved_roots = frozenset(reserved_roots) | _STATIC_ASSET_ROOTS
 
     def _eligible_for_index(self, path: str, scope: Scope) -> bool:
         if scope.get("method") not in {"GET", "HEAD"}:
