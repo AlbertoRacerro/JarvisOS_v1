@@ -56,6 +56,8 @@ def _accepts_html(scope: Scope) -> bool:
 
 
 def _safe_extensionless_path(path: str) -> bool:
+    if "\\" in path or any(ord(character) < 32 for character in path):
+        return False
     parts = PurePosixPath(path).parts
     if any(part in {".", ".."} for part in parts):
         return False
