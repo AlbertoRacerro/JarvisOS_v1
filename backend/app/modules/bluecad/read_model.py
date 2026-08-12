@@ -208,6 +208,16 @@ def _load_artifacts(
                 )
             )
             continue
+        if row["sha256"] is None:
+            diagnostics.append(
+                BluecadReadDiagnostic(
+                    code="malformed_reference",
+                    source="bluecad.artifact.sha256",
+                    reference=artifact_id,
+                    message="Referenced BLUECAD artifact has no canonical content digest.",
+                )
+            )
+            continue
         result.append(
             BluecadArtifactRefRead(
                 id=artifact_id,
@@ -282,12 +292,18 @@ def _build_runs(
         if edge.downstream_ref in bridge_refs and upstream.kind in {"simulation_run", "runner_job"}:
             associations.add((upstream.ref, edge.downstream_ref))
 
-    simulation_refs = {ref for ref, _source in associations if nodes[ref].kind == "simulation_run"}
+    associated_refs = {ref for ref, _source in associations}
     for edge in graph.edges:
-        if edge.upstream_ref in simulation_refs and nodes.get(edge.downstream_ref, _EMPTY_NODE).kind == "runner_job":
-            associations.add((edge.downstream_ref, edge.upstream_ref))
-        if edge.downstream_ref in simulation_refs and nodes.get(edge.upstream_ref, _EMPTY_NODE).kind == "runner_job":
-            associations.add((edge.upstream_ref, edge.downstream_ref))
+        upstream = nodes.get(edge.upstream_ref)
+        downstream = nodes.get(edge.downstream_ref)
+        if upstream is None or downstream is None:
+            continue
+        if upstream.kind != "simulation_run" or downstream.kind != "runner_job":
+            continue
+        if upstream.ref in associated_refs:
+            associations.add((downstream.ref, upstream.ref))
+        if downstream.ref in associated_refs:
+            associations.add((upstream.ref, downstream.ref))
 
     return [
         BluecadRunRefRead(
@@ -341,20 +357,25 @@ def _append_graph_diagnostics(
     runs: list[BluecadRunRefRead],
     diagnostics: list[BluecadReadDiagnostic],
 ) -> None:
-    relevant_refs = {f"bluecad_candidate:{candidate.id}"}
-    relevant_refs.update(f"bluecad_attempt:{attempt.id}" for attempt in candidate.attempts)
+    subject_refs = {f"bluecad_candidate:{candidate.id}"}
+    subject_refs.update(f"bluecad_attempt:{attempt.id}" for attempt in candidate.attempts)
+    relevant_refs = set(subject_refs)
     relevant_refs.update(f"artifact:{artifact.id}" for artifact in artifacts)
     relevant_refs.update(item.ref for item in evidence)
     relevant_refs.update(item.ref for item in runs)
     for item in graph.diagnostics.unresolved_references:
-        if item.owner_ref not in relevant_refs and (item.raw_ref is None or item.raw_ref not in relevant_refs):
+        raw_ref = item.raw_ref
+        raw_subject_match = raw_ref is not None and any(
+            raw_ref == subject_ref or raw_ref.startswith(f"{subject_ref}:") for subject_ref in subject_refs
+        )
+        if item.owner_ref not in relevant_refs and not raw_subject_match:
             continue
         code = _GRAPH_DIAGNOSTIC_MAP.get(item.code, "malformed_reference")
         diagnostics.append(
             BluecadReadDiagnostic(
                 code=code,
                 source=item.source_field,
-                reference=item.raw_ref or item.owner_ref,
+                reference=raw_ref or item.owner_ref,
                 message=f"Flowsheet reference could not be resolved ({item.code}).",
             )
         )
