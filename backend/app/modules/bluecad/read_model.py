@@ -1,6 +1,6 @@
 """Read-only BLUECAD candidate aggregate assembled from canonical owner services."""
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: I001
 
 import collections
 import sqlite3
