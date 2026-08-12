@@ -515,6 +515,53 @@ export type BluecadCandidate = {
   attempts: BluecadAttempt[];
 };
 
+export type BluecadArtifactRefRead = {
+  id: string;
+  roles: string[];
+  filename: string;
+  mime_type: string;
+  sha256: string;
+  status: string;
+  source_ref?: string | null;
+  created_at: string;
+  content_url: string;
+};
+
+export type BluecadEvidenceRefRead = {
+  ref: string;
+  kind: string;
+  subject_ref: string;
+  status: string;
+  stale?: boolean | null;
+  created_at?: string | null;
+  summary?: string | null;
+};
+
+export type BluecadRunRefRead = {
+  ref: string;
+  kind: "simulation_run" | "runner_job";
+  status?: string | null;
+  stale?: boolean | null;
+  created_at?: string | null;
+  source_ref?: string | null;
+};
+
+export type BluecadReadDiagnostic = {
+  code: "missing_reference" | "malformed_reference" | "inaccessible_reference" | "unsupported_reference";
+  source: string;
+  reference: string;
+  message: string;
+};
+
+export type BluecadCandidateAggregateRead = {
+  candidate: BluecadCandidate;
+  artifacts: BluecadArtifactRefRead[];
+  evidence: BluecadEvidenceRefRead[];
+  runs: BluecadRunRefRead[];
+  freshness: "fresh" | "stale" | "unknown" | "mixed";
+  diagnostics: BluecadReadDiagnostic[];
+};
+
 export type BluecadValidationCheck = {
   id?: string;
   check_id?: string;
@@ -540,6 +587,17 @@ export function archiveBluecadCandidate(workspaceId: string, candidateId: string
 
 export function promoteBluecadCandidate(workspaceId: string, candidateId: string): Promise<BluecadCandidate> {
   return postJson<BluecadCandidate>(`/workspaces/${workspaceId}/bluecad/candidates/${candidateId}/promote`);
+}
+
+export function getBluecadCandidateAggregate(
+  workspaceId: string,
+  candidateId: string
+): Promise<BluecadCandidateAggregateRead> {
+  const encodedWorkspaceId = encodeURIComponent(workspaceId);
+  const encodedCandidateId = encodeURIComponent(candidateId);
+  return getJson<BluecadCandidateAggregateRead>(
+    `/workspaces/${encodedWorkspaceId}/bluecad/candidates/${encodedCandidateId}/aggregate`
+  );
 }
 
 export function bluecadArtifactContentUrl(workspaceId: string, artifactId: string): string {
