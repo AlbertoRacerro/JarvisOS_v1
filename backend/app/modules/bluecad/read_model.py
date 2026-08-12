@@ -2,35 +2,29 @@
 
 from __future__ import annotations
 
+import collections
 import sqlite3
-from collections import defaultdict
-from typing import Literal
-from urllib.parse import quote
+import typing
+import urllib.parse
 
 from pydantic import BaseModel, Field
 
 from app.core.database import open_sqlite_connection
-from app.modules.bluecad.evidence import (
-    EvidenceRecord,
-    select_candidate_evidence_records,
-)
+from app.modules.bluecad.evidence import EvidenceRecord, select_candidate_evidence_records
 from app.modules.bluecad.ledger import get_candidate_from_connection
 from app.modules.bluecad.models import BluecadCandidateRead
 from app.modules.flowsheet.freshness import get_resolved_node_stale_states_from_connection
 from app.modules.flowsheet.models import FlowsheetGraphRead, FlowsheetNodeRead
-from app.modules.flowsheet.service import (
-    FlowsheetError,
-    build_flowsheet_graph_from_connection,
-)
+from app.modules.flowsheet.service import FlowsheetError, build_flowsheet_graph_from_connection
 
 
-ReadDiagnosticCode = Literal[
+ReadDiagnosticCode = typing.Literal[
     "missing_reference",
     "malformed_reference",
     "inaccessible_reference",
     "unsupported_reference",
 ]
-AggregateFreshness = Literal["fresh", "stale", "unknown", "mixed"]
+AggregateFreshness = typing.Literal["fresh", "stale", "unknown", "mixed"]
 
 
 class BluecadArtifactRefRead(BaseModel):
@@ -57,7 +51,7 @@ class BluecadEvidenceRefRead(BaseModel):
 
 class BluecadRunRefRead(BaseModel):
     ref: str
-    kind: Literal["simulation_run", "runner_job"]
+    kind: typing.Literal["simulation_run", "runner_job"]
     status: str | None = None
     stale: bool | None = None
     created_at: str | None = None
@@ -169,7 +163,7 @@ def _aggregate_from_connection(
 
 
 def _collect_artifact_roles(candidate: BluecadCandidateRead) -> dict[str, set[str]]:
-    roles: dict[str, set[str]] = defaultdict(set)
+    roles: dict[str, set[str]] = collections.defaultdict(set)
     for role, field_name in _ARTIFACT_ROLE_FIELDS:
         reference = getattr(candidate, field_name)
         if reference:
@@ -225,8 +219,8 @@ def _load_artifacts(
                 source_ref=None if row["source_ref"] is None else str(row["source_ref"]),
                 created_at=str(row["created_at"]),
                 content_url=(
-                    f"/workspaces/{quote(workspace_id, safe='')}/bluecad/artifacts/"
-                    f"{quote(artifact_id, safe='')}/content"
+                    f"/workspaces/{urllib.parse.quote(workspace_id, safe='')}/bluecad/artifacts/"
+                    f"{urllib.parse.quote(artifact_id, safe='')}/content"
                 ),
             )
         )
