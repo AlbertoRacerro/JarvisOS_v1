@@ -23,6 +23,7 @@ from app.modules.flowsheet.service import (
 MAX_FRESHNESS_PATH_NODES = 100
 MAX_FRESHNESS_MARKS_PER_INVALIDATION = 1000
 _REASON_CODE = "upstream_parameter_superseded"
+_BATCH_REF_LIMIT = 400
 
 
 class FreshnessError(ValueError):
@@ -235,6 +236,40 @@ def get_node_freshness_from_connection(
         invalidation_count=count,
         latest_invalidation=None if latest is None else _latest_summary(latest),
     )
+
+
+def get_resolved_node_stale_states_from_connection(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    node_refs: list[str] | set[str],
+) -> dict[str, bool]:
+    """Return 051 stale state for canonical refs already resolved in the caller's graph snapshot.
+
+    This helper deliberately does not resolve references again. Callers must derive the refs
+    from the canonical flowsheet graph first. Missing freshness marks mean fresh under 051.
+    Queries are batched under a fixed bound instead of growing one query per reference.
+    """
+    ordered_refs = sorted(set(node_refs))
+    states = {ref: False for ref in ordered_refs}
+    for start in range(0, len(ordered_refs), _BATCH_REF_LIMIT):
+        batch = ordered_refs[start : start + _BATCH_REF_LIMIT]
+        if not batch:
+            continue
+        placeholders = ",".join("?" for _ in batch)
+        rows = connection.execute(
+            f"""
+            SELECT record_ref, COUNT(*) AS count
+            FROM freshness_marks
+            WHERE workspace_id = ? AND record_ref IN ({placeholders})
+            GROUP BY record_ref
+            """,
+            (workspace_id, *batch),
+        ).fetchall()
+        for row in rows:
+            ref = str(row["record_ref"])
+            if ref in states:
+                states[ref] = int(row["count"]) > 0
+    return states
 
 
 def get_freshness_invalidation(workspace_id: str, invalidation_id: str) -> FlowsheetFreshnessInvalidationDetailRead:
