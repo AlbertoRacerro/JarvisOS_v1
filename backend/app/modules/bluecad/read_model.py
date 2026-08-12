@@ -119,6 +119,7 @@ def _aggregate_from_connection(
 
     diagnostics: list[BluecadReadDiagnostic] = []
     artifact_roles = _collect_artifact_roles(candidate)
+    artifact_ids = set(artifact_roles)
     artifacts = _load_artifacts(connection, workspace_id, artifact_roles, diagnostics)
     evidence_records = select_candidate_evidence_records(
         connection,
@@ -145,9 +146,9 @@ def _aggregate_from_connection(
     runs: list[BluecadRunRefRead] = []
     freshness_states: list[str] = []
     if graph is not None:
-        runs = _build_runs(candidate, set(artifact_roles), evidence, graph)
+        runs = _build_runs(candidate, artifact_ids, evidence, graph)
         freshness_states = _apply_freshness(connection, workspace_id, graph, evidence, runs)
-        _append_graph_diagnostics(graph, candidate, artifacts, evidence, runs, diagnostics)
+        _append_graph_diagnostics(graph, candidate, artifact_ids, evidence, runs, diagnostics)
 
     return BluecadCandidateAggregateRead(
         candidate=candidate,
@@ -352,7 +353,7 @@ def _apply_freshness(
 def _append_graph_diagnostics(
     graph: FlowsheetGraphRead,
     candidate: BluecadCandidateRead,
-    artifacts: list[BluecadArtifactRefRead],
+    artifact_ids: set[str],
     evidence: list[BluecadEvidenceRefRead],
     runs: list[BluecadRunRefRead],
     diagnostics: list[BluecadReadDiagnostic],
@@ -360,7 +361,7 @@ def _append_graph_diagnostics(
     subject_refs = {f"bluecad_candidate:{candidate.id}"}
     subject_refs.update(f"bluecad_attempt:{attempt.id}" for attempt in candidate.attempts)
     relevant_refs = set(subject_refs)
-    relevant_refs.update(f"artifact:{artifact.id}" for artifact in artifacts)
+    relevant_refs.update(f"artifact:{artifact_id}" for artifact_id in artifact_ids)
     relevant_refs.update(item.ref for item in evidence)
     relevant_refs.update(item.ref for item in runs)
     for item in graph.diagnostics.unresolved_references:
