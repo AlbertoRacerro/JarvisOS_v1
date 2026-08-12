@@ -145,7 +145,7 @@ def _aggregate_from_connection(
     runs: list[BluecadRunRefRead] = []
     freshness_states: list[str] = []
     if graph is not None:
-        runs = _build_runs(candidate, artifacts, evidence, graph)
+        runs = _build_runs(candidate, set(artifact_roles), evidence, graph)
         freshness_states = _apply_freshness(connection, workspace_id, graph, evidence, runs)
         _append_graph_diagnostics(graph, candidate, artifacts, evidence, runs, diagnostics)
 
@@ -266,7 +266,7 @@ def _build_evidence(
 
 def _build_runs(
     candidate: BluecadCandidateRead,
-    artifacts: list[BluecadArtifactRefRead],
+    artifact_ids: set[str],
     evidence: list[BluecadEvidenceRefRead],
     graph: FlowsheetGraphRead,
 ) -> list[BluecadRunRefRead]:
@@ -274,7 +274,7 @@ def _build_runs(
     subject_refs = {f"bluecad_candidate:{candidate.id}"}
     subject_refs.update(f"bluecad_attempt:{attempt.id}" for attempt in candidate.attempts)
     bridge_refs = set(subject_refs)
-    bridge_refs.update(f"artifact:{artifact.id}" for artifact in artifacts)
+    bridge_refs.update(f"artifact:{artifact_id}" for artifact_id in artifact_ids)
     bridge_refs.update(item.ref for item in evidence)
     if candidate.promoted_decision_id:
         decision_ref = f"decision:{candidate.promoted_decision_id}"
