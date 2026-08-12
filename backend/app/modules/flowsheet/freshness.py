@@ -199,34 +199,42 @@ def get_node_freshness(workspace_id: str, node_ref: str) -> FlowsheetNodeFreshne
         connection.execute("PRAGMA query_only = ON")
         connection.execute("BEGIN")
         try:
-            node = resolve_flowsheet_node_from_connection(connection, workspace_id, node_ref)
-            count = int(
-                connection.execute(
-                    "SELECT COUNT(*) AS count FROM freshness_marks WHERE workspace_id = ? AND record_ref = ?",
-                    (workspace_id, node.ref),
-                ).fetchone()["count"]
-            )
-            latest = connection.execute(
-                """
-                SELECT fi.id AS invalidation_id, fi.superseded_parameter_id,
-                       fi.replacement_parameter_id, fi.created_at, fm.reason_code,
-                       fm.path_json, fm.path_digest
-                FROM freshness_marks fm
-                JOIN freshness_invalidations fi ON fi.id = fm.invalidation_id
-                WHERE fm.workspace_id = ? AND fm.record_ref = ?
-                ORDER BY fi.created_at DESC, fi.id DESC
-                LIMIT 1
-                """,
-                (workspace_id, node.ref),
-            ).fetchone()
-            return FlowsheetNodeFreshnessRead(
-                record_ref=node.ref,
-                state="fresh" if count == 0 else "stale",
-                invalidation_count=count,
-                latest_invalidation=None if latest is None else _latest_summary(latest),
-            )
+            return get_node_freshness_from_connection(connection, workspace_id, node_ref)
         finally:
             connection.rollback()
+
+
+def get_node_freshness_from_connection(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    node_ref: str,
+) -> FlowsheetNodeFreshnessRead:
+    node = resolve_flowsheet_node_from_connection(connection, workspace_id, node_ref)
+    count = int(
+        connection.execute(
+            "SELECT COUNT(*) AS count FROM freshness_marks WHERE workspace_id = ? AND record_ref = ?",
+            (workspace_id, node.ref),
+        ).fetchone()["count"]
+    )
+    latest = connection.execute(
+        """
+        SELECT fi.id AS invalidation_id, fi.superseded_parameter_id,
+               fi.replacement_parameter_id, fi.created_at, fm.reason_code,
+               fm.path_json, fm.path_digest
+        FROM freshness_marks fm
+        JOIN freshness_invalidations fi ON fi.id = fm.invalidation_id
+        WHERE fm.workspace_id = ? AND fm.record_ref = ?
+        ORDER BY fi.created_at DESC, fi.id DESC
+        LIMIT 1
+        """,
+        (workspace_id, node.ref),
+    ).fetchone()
+    return FlowsheetNodeFreshnessRead(
+        record_ref=node.ref,
+        state="fresh" if count == 0 else "stale",
+        invalidation_count=count,
+        latest_invalidation=None if latest is None else _latest_summary(latest),
+    )
 
 
 def get_freshness_invalidation(workspace_id: str, invalidation_id: str) -> FlowsheetFreshnessInvalidationDetailRead:
