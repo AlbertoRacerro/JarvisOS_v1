@@ -357,7 +357,7 @@ def test_digestless_artifact_keeps_source_reference_diagnostic() -> None:
     assert any(
         item.source == "artifacts.source_ref"
         and item.reference == "not-a-canonical-reference"
-        and item.code == "malformed_reference"
+        and item.code == "unsupported_reference"
         for item in aggregate.diagnostics
     )
 
