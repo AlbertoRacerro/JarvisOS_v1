@@ -1,0 +1,423 @@
+"""Read-only BLUECAD candidate aggregate assembled from canonical owner services."""
+
+from __future__ import annotations
+
+import sqlite3
+from collections import defaultdict
+from typing import Literal
+from urllib.parse import quote
+
+from pydantic import BaseModel, Field
+
+from app.core.database import open_sqlite_connection
+from app.modules.bluecad.evidence import EvidenceRecord, select_candidate_evidence_records
+from app.modules.bluecad.ledger import get_candidate_from_connection
+from app.modules.bluecad.models import BluecadCandidateRead
+from app.modules.flowsheet.freshness import get_node_freshness_from_connection
+from app.modules.flowsheet.models import FlowsheetGraphRead, FlowsheetNodeRead
+from app.modules.flowsheet.service import FlowsheetError, build_flowsheet_graph_from_connection
+
+
+ReadDiagnosticCode = Literal[
+    "missing_reference",
+    "malformed_reference",
+    "inaccessible_reference",
+    "unsupported_reference",
+]
+AggregateFreshness = Literal["fresh", "stale", "unknown", "mixed"]
+
+
+class BluecadArtifactRefRead(BaseModel):
+    id: str
+    roles: list[str]
+    filename: str
+    mime_type: str
+    sha256: str
+    status: str
+    source_ref: str | None = None
+    created_at: str
+    content_url: str
+
+
+class BluecadEvidenceRefRead(BaseModel):
+    ref: str
+    kind: str
+    subject_ref: str
+    status: str
+    stale: bool | None = None
+    created_at: str | None = None
+    summary: str | None = None
+
+
+class BluecadRunRefRead(BaseModel):
+    ref: str
+    kind: Literal["simulation_run", "runner_job"]
+    status: str | None = None
+    stale: bool | None = None
+    created_at: str | None = None
+    source_ref: str | None = None
+
+
+class BluecadReadDiagnostic(BaseModel):
+    code: ReadDiagnosticCode
+    source: str
+    reference: str
+    message: str
+
+
+class BluecadCandidateAggregateRead(BaseModel):
+    candidate: BluecadCandidateRead
+    artifacts: list[BluecadArtifactRefRead] = Field(default_factory=list)
+    evidence: list[BluecadEvidenceRefRead] = Field(default_factory=list)
+    runs: list[BluecadRunRefRead] = Field(default_factory=list)
+    freshness: AggregateFreshness
+    diagnostics: list[BluecadReadDiagnostic] = Field(default_factory=list)
+
+
+_ARTIFACT_ROLE_FIELDS = (
+    ("candidate.spec_artifact_id", "spec_artifact_id"),
+    ("candidate.glb_artifact_id", "glb_artifact_id"),
+    ("candidate.report_artifact_id", "report_artifact_id"),
+)
+_ATTEMPT_ARTIFACT_ROLE_FIELDS = (
+    ("attempt.spec_artifact_id", "spec_artifact_id"),
+    ("attempt.report_artifact_id", "report_artifact_id"),
+    ("attempt.manifest_artifact_id", "manifest_artifact_id"),
+)
+_GRAPH_DIAGNOSTIC_MAP: dict[str, ReadDiagnosticCode] = {
+    "dangling_reference": "missing_reference",
+    "unsupported_reference": "unsupported_reference",
+    "malformed_reference": "malformed_reference",
+    "payload_invalid": "malformed_reference",
+    "payload_reference_invalid": "malformed_reference",
+    "context_manifest_invalid": "malformed_reference",
+}
+
+
+def get_bluecad_candidate_aggregate(
+    workspace_id: str,
+    candidate_id: str,
+) -> BluecadCandidateAggregateRead | None:
+    """Return one coherent read-only candidate aggregate or ``None`` for an inaccessible candidate."""
+    with open_sqlite_connection() as connection:
+        connection.execute("PRAGMA query_only = ON")
+        connection.execute("BEGIN")
+        try:
+            return _aggregate_from_connection(connection, workspace_id, candidate_id)
+        finally:
+            connection.rollback()
+
+
+def _aggregate_from_connection(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    candidate_id: str,
+) -> BluecadCandidateAggregateRead | None:
+    candidate = get_candidate_from_connection(connection, workspace_id, candidate_id)
+    if candidate is None:
+        return None
+
+    diagnostics: list[BluecadReadDiagnostic] = []
+    artifact_roles = _collect_artifact_roles(candidate)
+    artifacts = _load_artifacts(
+        connection,
+        workspace_id,
+        artifact_roles,
+        diagnostics,
+    )
+    attempt_ids = [attempt.id for attempt in candidate.attempts]
+    evidence_records = select_candidate_evidence_records(
+        connection,
+        workspace_id=workspace_id,
+        candidate_id=candidate.id,
+        attempt_ids=attempt_ids,
+    )
+
+    graph: FlowsheetGraphRead | None
+    try:
+        graph = build_flowsheet_graph_from_connection(connection, workspace_id)
+    except (FlowsheetError, ValueError) as exc:
+        graph = None
+        diagnostics.append(
+            BluecadReadDiagnostic(
+                code="inaccessible_reference",
+                source="flowsheet.graph",
+                reference=f"bluecad_candidate:{candidate.id}",
+                message=f"Flowsheet provenance is unavailable: {type(exc).__name__}.",
+            )
+        )
+
+    evidence, freshness_states = _build_evidence(
+        connection,
+        workspace_id,
+        candidate,
+        evidence_records,
+    )
+    runs: list[BluecadRunRefRead] = []
+    if graph is not None:
+        runs, run_states = _build_runs(
+            connection,
+            workspace_id,
+            candidate,
+            artifacts,
+            evidence,
+            graph,
+        )
+        freshness_states.extend(run_states)
+        _append_graph_diagnostics(
+            graph,
+            candidate,
+            artifacts,
+            evidence,
+            runs,
+            diagnostics,
+        )
+
+    return BluecadCandidateAggregateRead(
+        candidate=candidate,
+        artifacts=artifacts,
+        evidence=evidence,
+        runs=runs,
+        freshness=_aggregate_freshness(freshness_states),
+        diagnostics=sorted(
+            _dedupe_diagnostics(diagnostics),
+            key=lambda item: (item.source, item.reference, item.code, item.message),
+        ),
+    )
+
+
+def _collect_artifact_roles(candidate: BluecadCandidateRead) -> dict[str, set[str]]:
+    roles: dict[str, set[str]] = defaultdict(set)
+    for role, field_name in _ARTIFACT_ROLE_FIELDS:
+        reference = getattr(candidate, field_name)
+        if reference:
+            roles[str(reference)].add(role)
+    for attempt in candidate.attempts:
+        for role, field_name in _ATTEMPT_ARTIFACT_ROLE_FIELDS:
+            reference = getattr(attempt, field_name)
+            if reference:
+                roles[str(reference)].add(role)
+    return roles
+
+
+def _load_artifacts(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    artifact_roles: dict[str, set[str]],
+    diagnostics: list[BluecadReadDiagnostic],
+) -> list[BluecadArtifactRefRead]:
+    if not artifact_roles:
+        return []
+    artifact_ids = sorted(artifact_roles)
+    placeholders = ", ".join("?" for _ in artifact_ids)
+    rows = connection.execute(
+        f"""
+        SELECT id, filename, mime_type, sha256, status, source_ref, created_at
+        FROM artifacts
+        WHERE workspace_id = ? AND id IN ({placeholders})
+        """,
+        (workspace_id, *artifact_ids),
+    ).fetchall()
+    rows_by_id = {str(row["id"]): row for row in rows}
+    result: list[BluecadArtifactRefRead] = []
+    for artifact_id in artifact_ids:
+        row = rows_by_id.get(artifact_id)
+        if row is None:
+            diagnostics.append(
+                BluecadReadDiagnostic(
+                    code="missing_reference",
+                    source="bluecad.artifact",
+                    reference=artifact_id,
+                    message="Referenced BLUECAD artifact is missing or inaccessible in this workspace.",
+                )
+            )
+            continue
+        result.append(
+            BluecadArtifactRefRead(
+                id=artifact_id,
+                roles=sorted(artifact_roles[artifact_id]),
+                filename=str(row["filename"]),
+                mime_type=str(row["mime_type"] or "application/octet-stream"),
+                sha256=str(row["sha256"]),
+                status=str(row["status"]),
+                source_ref=None if row["source_ref"] is None else str(row["source_ref"]),
+                created_at=str(row["created_at"]),
+                content_url=(
+                    f"/workspaces/{quote(workspace_id, safe='')}/bluecad/artifacts/"
+                    f"{quote(artifact_id, safe='')}/content"
+                ),
+            )
+        )
+    return sorted(result, key=lambda item: (item.id, tuple(item.roles)))
+
+
+def _build_evidence(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    candidate: BluecadCandidateRead,
+    records: list[EvidenceRecord],
+) -> tuple[list[BluecadEvidenceRefRead], list[str]]:
+    attempt_refs = {attempt.id: f"bluecad_attempt:{attempt.id}" for attempt in candidate.attempts}
+    candidate_ref = f"bluecad_candidate:{candidate.id}"
+    result: list[BluecadEvidenceRefRead] = []
+    freshness_states: list[str] = []
+    freshness_by_ref: dict[str, tuple[bool | None, str | None]] = {}
+
+    for record in records:
+        ref = f"evidence:{record.id}"
+        if ref not in freshness_by_ref:
+            stale, state = _freshness_for_ref(connection, workspace_id, ref)
+            freshness_by_ref[ref] = (stale, state)
+            if state is not None:
+                freshness_states.append(state)
+        stale, _state = freshness_by_ref[ref]
+
+        subject_refs: set[str] = set()
+        if record.candidate_id == candidate.id:
+            subject_refs.add(candidate_ref)
+        if record.attempt_id in attempt_refs:
+            subject_refs.add(attempt_refs[str(record.attempt_id)])
+        for subject_ref in sorted(subject_refs):
+            result.append(
+                BluecadEvidenceRefRead(
+                    ref=ref,
+                    kind=record.kind,
+                    subject_ref=subject_ref,
+                    status=record.verdict,
+                    stale=stale,
+                    created_at=record.created_at,
+                    summary=None,
+                )
+            )
+    return sorted(result, key=lambda item: (item.ref, item.subject_ref)), freshness_states
+
+
+def _build_runs(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    candidate: BluecadCandidateRead,
+    artifacts: list[BluecadArtifactRefRead],
+    evidence: list[BluecadEvidenceRefRead],
+    graph: FlowsheetGraphRead,
+) -> tuple[list[BluecadRunRefRead], list[str]]:
+    nodes = {node.ref: node for node in graph.nodes}
+    subject_refs = {f"bluecad_candidate:{candidate.id}"}
+    subject_refs.update(f"bluecad_attempt:{attempt.id}" for attempt in candidate.attempts)
+    bridge_refs = set(subject_refs)
+    bridge_refs.update(f"artifact:{artifact.id}" for artifact in artifacts)
+    bridge_refs.update(item.ref for item in evidence)
+    if candidate.promoted_decision_id:
+        decision_ref = f"decision:{candidate.promoted_decision_id}"
+        if decision_ref in nodes:
+            bridge_refs.add(decision_ref)
+
+    associations: set[tuple[str, str | None]] = set()
+    for edge in graph.edges:
+        upstream = nodes.get(edge.upstream_ref)
+        downstream = nodes.get(edge.downstream_ref)
+        if upstream is None or downstream is None:
+            continue
+        if edge.upstream_ref in bridge_refs and downstream.kind in {"simulation_run", "runner_job"}:
+            associations.add((downstream.ref, edge.upstream_ref))
+        if edge.downstream_ref in bridge_refs and upstream.kind in {"simulation_run", "runner_job"}:
+            associations.add((upstream.ref, edge.downstream_ref))
+
+    simulation_refs = {ref for ref, _source in associations if nodes[ref].kind == "simulation_run"}
+    for edge in graph.edges:
+        if edge.upstream_ref in simulation_refs and nodes.get(edge.downstream_ref, _EMPTY_NODE).kind == "runner_job":
+            associations.add((edge.downstream_ref, edge.upstream_ref))
+        if edge.downstream_ref in simulation_refs and nodes.get(edge.upstream_ref, _EMPTY_NODE).kind == "runner_job":
+            associations.add((edge.upstream_ref, edge.downstream_ref))
+
+    freshness_by_ref: dict[str, tuple[bool | None, str | None]] = {}
+    freshness_states: list[str] = []
+    result: list[BluecadRunRefRead] = []
+    for ref, source_ref in sorted(associations, key=lambda item: (item[0], item[1] or "")):
+        node = nodes[ref]
+        if ref not in freshness_by_ref:
+            stale, state = _freshness_for_ref(connection, workspace_id, ref)
+            freshness_by_ref[ref] = (stale, state)
+            if state is not None:
+                freshness_states.append(state)
+        stale, _state = freshness_by_ref[ref]
+        result.append(
+            BluecadRunRefRead(
+                ref=ref,
+                kind=node.kind,
+                status=node.status,
+                stale=stale,
+                created_at=node.created_at,
+                source_ref=source_ref,
+            )
+        )
+    return result, freshness_states
+
+
+_EMPTY_NODE = FlowsheetNodeRead(
+    ref="unsupported:missing",
+    kind="artifact",
+    id="missing",
+    label="missing",
+)
+
+
+def _append_graph_diagnostics(
+    graph: FlowsheetGraphRead,
+    candidate: BluecadCandidateRead,
+    artifacts: list[BluecadArtifactRefRead],
+    evidence: list[BluecadEvidenceRefRead],
+    runs: list[BluecadRunRefRead],
+    diagnostics: list[BluecadReadDiagnostic],
+) -> None:
+    relevant_refs = {f"bluecad_candidate:{candidate.id}"}
+    relevant_refs.update(f"bluecad_attempt:{attempt.id}" for attempt in candidate.attempts)
+    relevant_refs.update(f"artifact:{artifact.id}" for artifact in artifacts)
+    relevant_refs.update(item.ref for item in evidence)
+    relevant_refs.update(item.ref for item in runs)
+    for item in graph.diagnostics.unresolved_references:
+        if item.owner_ref not in relevant_refs and (item.raw_ref is None or item.raw_ref not in relevant_refs):
+            continue
+        code = _GRAPH_DIAGNOSTIC_MAP.get(item.code, "malformed_reference")
+        diagnostics.append(
+            BluecadReadDiagnostic(
+                code=code,
+                source=item.source_field,
+                reference=item.raw_ref or item.owner_ref,
+                message=f"Flowsheet reference could not be resolved ({item.code}).",
+            )
+        )
+
+
+def _freshness_for_ref(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    ref: str,
+) -> tuple[bool | None, str | None]:
+    try:
+        freshness = get_node_freshness_from_connection(connection, workspace_id, ref)
+    except (FlowsheetError, ValueError):
+        return None, None
+    return freshness.state == "stale", freshness.state
+
+
+def _aggregate_freshness(states: list[str]) -> AggregateFreshness:
+    unique = set(states)
+    if unique == {"fresh"}:
+        return "fresh"
+    if unique == {"stale"}:
+        return "stale"
+    if unique == {"fresh", "stale"}:
+        return "mixed"
+    return "unknown"
+
+
+def _dedupe_diagnostics(items: list[BluecadReadDiagnostic]) -> list[BluecadReadDiagnostic]:
+    seen: set[tuple[str, str, str, str]] = set()
+    result: list[BluecadReadDiagnostic] = []
+    for item in items:
+        key = (item.source, item.reference, item.code, item.message)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
+    return result
