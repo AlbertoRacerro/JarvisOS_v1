@@ -29,7 +29,9 @@ def _seed_artifact(
     *,
     workspace_id: str = "bluerev",
     source_ref: str | None = None,
+    sha256: str | None = "auto",
 ) -> None:
+    digest = artifact_id[0] * 64 if sha256 == "auto" else sha256
     connection.execute(
         """
         INSERT INTO artifacts (
@@ -42,7 +44,7 @@ def _seed_artifact(
             workspace_id,
             f"{artifact_id}.json",
             f"/private/{workspace_id}/{artifact_id}.json",
-            artifact_id[0] * 64,
+            digest,
             source_ref,
             NOW,
         ),
@@ -308,6 +310,33 @@ def test_explicit_evidence_run_links_and_four_state_freshness() -> None:
     empty = get_bluecad_candidate_aggregate("bluerev", "candidate-empty")
     assert empty is not None
     assert empty.freshness == "unknown"
+
+
+def test_digestless_artifact_keeps_explicit_run_provenance_without_fabricated_checksum() -> None:
+    _init_fixture()
+    with open_sqlite_connection() as connection:
+        _seed_run(connection, "run-linked")
+        _seed_artifact(
+            connection,
+            "artifact-a",
+            source_ref="simulation_run:run-linked",
+            sha256=None,
+        )
+        _seed_candidate(connection, "candidate-a", report_artifact_id="artifact-a")
+        connection.commit()
+
+    aggregate = get_bluecad_candidate_aggregate("bluerev", "candidate-a")
+    assert aggregate is not None
+    assert aggregate.artifacts == []
+    assert {item.ref for item in aggregate.runs} == {"simulation_run:run-linked"}
+    assert aggregate.freshness == "fresh"
+    assert any(
+        item.source == "bluecad.artifact.sha256"
+        and item.reference == "artifact-a"
+        and item.code == "malformed_reference"
+        for item in aggregate.diagnostics
+    )
+    assert '"sha256":"None"' not in aggregate.model_dump_json()
 
 
 def test_aggregate_performs_zero_writes_and_query_count_is_not_per_evidence() -> None:
