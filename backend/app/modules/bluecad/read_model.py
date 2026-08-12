@@ -10,12 +10,18 @@ from urllib.parse import quote
 from pydantic import BaseModel, Field
 
 from app.core.database import open_sqlite_connection
-from app.modules.bluecad.evidence import EvidenceRecord, select_candidate_evidence_records
+from app.modules.bluecad.evidence import (
+    EvidenceRecord,
+    select_candidate_evidence_records,
+)
 from app.modules.bluecad.ledger import get_candidate_from_connection
 from app.modules.bluecad.models import BluecadCandidateRead
 from app.modules.flowsheet.freshness import get_resolved_node_stale_states_from_connection
 from app.modules.flowsheet.models import FlowsheetGraphRead, FlowsheetNodeRead
-from app.modules.flowsheet.service import FlowsheetError, build_flowsheet_graph_from_connection
+from app.modules.flowsheet.service import (
+    FlowsheetError,
+    build_flowsheet_graph_from_connection,
+)
 
 
 ReadDiagnosticCode = Literal[
