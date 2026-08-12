@@ -339,6 +339,29 @@ def test_digestless_artifact_keeps_explicit_run_provenance_without_fabricated_ch
     assert '"sha256":"None"' not in aggregate.model_dump_json()
 
 
+def test_digestless_artifact_keeps_source_reference_diagnostic() -> None:
+    _init_fixture()
+    with open_sqlite_connection() as connection:
+        _seed_artifact(
+            connection,
+            "artifact-a",
+            source_ref="not-a-canonical-reference",
+            sha256=None,
+        )
+        _seed_candidate(connection, "candidate-a", report_artifact_id="artifact-a")
+        connection.commit()
+
+    aggregate = get_bluecad_candidate_aggregate("bluerev", "candidate-a")
+    assert aggregate is not None
+    assert aggregate.artifacts == []
+    assert any(
+        item.source == "artifacts.source_ref"
+        and item.reference == "not-a-canonical-reference"
+        and item.code == "malformed_reference"
+        for item in aggregate.diagnostics
+    )
+
+
 def test_aggregate_performs_zero_writes_and_query_count_is_not_per_evidence() -> None:
     _init_fixture()
     with open_sqlite_connection() as connection:
