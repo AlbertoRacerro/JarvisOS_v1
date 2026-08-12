@@ -13,7 +13,7 @@ from app.core.database import open_sqlite_connection
 from app.modules.bluecad.evidence import EvidenceRecord, select_candidate_evidence_records
 from app.modules.bluecad.ledger import get_candidate_from_connection
 from app.modules.bluecad.models import BluecadCandidateRead
-from app.modules.flowsheet.freshness import get_node_freshness_from_connection
+from app.modules.flowsheet.freshness import get_resolved_node_stale_states_from_connection
 from app.modules.flowsheet.models import FlowsheetGraphRead, FlowsheetNodeRead
 from app.modules.flowsheet.service import FlowsheetError, build_flowsheet_graph_from_connection
 
@@ -119,19 +119,14 @@ def _aggregate_from_connection(
 
     diagnostics: list[BluecadReadDiagnostic] = []
     artifact_roles = _collect_artifact_roles(candidate)
-    artifacts = _load_artifacts(
-        connection,
-        workspace_id,
-        artifact_roles,
-        diagnostics,
-    )
-    attempt_ids = [attempt.id for attempt in candidate.attempts]
+    artifacts = _load_artifacts(connection, workspace_id, artifact_roles, diagnostics)
     evidence_records = select_candidate_evidence_records(
         connection,
         workspace_id=workspace_id,
         candidate_id=candidate.id,
-        attempt_ids=attempt_ids,
+        attempt_ids=[attempt.id for attempt in candidate.attempts],
     )
+    evidence = _build_evidence(candidate, evidence_records)
 
     graph: FlowsheetGraphRead | None
     try:
@@ -147,31 +142,12 @@ def _aggregate_from_connection(
             )
         )
 
-    evidence, freshness_states = _build_evidence(
-        connection,
-        workspace_id,
-        candidate,
-        evidence_records,
-    )
     runs: list[BluecadRunRefRead] = []
+    freshness_states: list[str] = []
     if graph is not None:
-        runs, run_states = _build_runs(
-            connection,
-            workspace_id,
-            candidate,
-            artifacts,
-            evidence,
-            graph,
-        )
-        freshness_states.extend(run_states)
-        _append_graph_diagnostics(
-            graph,
-            candidate,
-            artifacts,
-            evidence,
-            runs,
-            diagnostics,
-        )
+        runs = _build_runs(candidate, artifacts, evidence, graph)
+        freshness_states = _apply_freshness(connection, workspace_id, graph, evidence, runs)
+        _append_graph_diagnostics(graph, candidate, artifacts, evidence, runs, diagnostics)
 
     return BluecadCandidateAggregateRead(
         candidate=candidate,
@@ -252,26 +228,13 @@ def _load_artifacts(
 
 
 def _build_evidence(
-    connection: sqlite3.Connection,
-    workspace_id: str,
     candidate: BluecadCandidateRead,
     records: list[EvidenceRecord],
-) -> tuple[list[BluecadEvidenceRefRead], list[str]]:
+) -> list[BluecadEvidenceRefRead]:
     attempt_refs = {attempt.id: f"bluecad_attempt:{attempt.id}" for attempt in candidate.attempts}
     candidate_ref = f"bluecad_candidate:{candidate.id}"
     result: list[BluecadEvidenceRefRead] = []
-    freshness_states: list[str] = []
-    freshness_by_ref: dict[str, tuple[bool | None, str | None]] = {}
-
     for record in records:
-        ref = f"evidence:{record.id}"
-        if ref not in freshness_by_ref:
-            stale, state = _freshness_for_ref(connection, workspace_id, ref)
-            freshness_by_ref[ref] = (stale, state)
-            if state is not None:
-                freshness_states.append(state)
-        stale, _state = freshness_by_ref[ref]
-
         subject_refs: set[str] = set()
         if record.candidate_id == candidate.id:
             subject_refs.add(candidate_ref)
@@ -280,26 +243,23 @@ def _build_evidence(
         for subject_ref in sorted(subject_refs):
             result.append(
                 BluecadEvidenceRefRead(
-                    ref=ref,
+                    ref=f"evidence:{record.id}",
                     kind=record.kind,
                     subject_ref=subject_ref,
                     status=record.verdict,
-                    stale=stale,
                     created_at=record.created_at,
                     summary=None,
                 )
             )
-    return sorted(result, key=lambda item: (item.ref, item.subject_ref)), freshness_states
+    return sorted(result, key=lambda item: (item.ref, item.subject_ref))
 
 
 def _build_runs(
-    connection: sqlite3.Connection,
-    workspace_id: str,
     candidate: BluecadCandidateRead,
     artifacts: list[BluecadArtifactRefRead],
     evidence: list[BluecadEvidenceRefRead],
     graph: FlowsheetGraphRead,
-) -> tuple[list[BluecadRunRefRead], list[str]]:
+) -> list[BluecadRunRefRead]:
     nodes = {node.ref: node for node in graph.nodes}
     subject_refs = {f"bluecad_candidate:{candidate.id}"}
     subject_refs.update(f"bluecad_attempt:{attempt.id}" for attempt in candidate.attempts)
@@ -329,28 +289,16 @@ def _build_runs(
         if edge.downstream_ref in simulation_refs and nodes.get(edge.upstream_ref, _EMPTY_NODE).kind == "runner_job":
             associations.add((edge.upstream_ref, edge.downstream_ref))
 
-    freshness_by_ref: dict[str, tuple[bool | None, str | None]] = {}
-    freshness_states: list[str] = []
-    result: list[BluecadRunRefRead] = []
-    for ref, source_ref in sorted(associations, key=lambda item: (item[0], item[1] or "")):
-        node = nodes[ref]
-        if ref not in freshness_by_ref:
-            stale, state = _freshness_for_ref(connection, workspace_id, ref)
-            freshness_by_ref[ref] = (stale, state)
-            if state is not None:
-                freshness_states.append(state)
-        stale, _state = freshness_by_ref[ref]
-        result.append(
-            BluecadRunRefRead(
-                ref=ref,
-                kind=node.kind,
-                status=node.status,
-                stale=stale,
-                created_at=node.created_at,
-                source_ref=source_ref,
-            )
+    return [
+        BluecadRunRefRead(
+            ref=ref,
+            kind=nodes[ref].kind,
+            status=nodes[ref].status,
+            created_at=nodes[ref].created_at,
+            source_ref=source_ref,
         )
-    return result, freshness_states
+        for ref, source_ref in sorted(associations, key=lambda item: (item[0], item[1] or ""))
+    ]
 
 
 _EMPTY_NODE = FlowsheetNodeRead(
@@ -359,6 +307,30 @@ _EMPTY_NODE = FlowsheetNodeRead(
     id="missing",
     label="missing",
 )
+
+
+def _apply_freshness(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    graph: FlowsheetGraphRead,
+    evidence: list[BluecadEvidenceRefRead],
+    runs: list[BluecadRunRefRead],
+) -> list[str]:
+    resolved_refs = {node.ref for node in graph.nodes}
+    freshness_refs = ({item.ref for item in evidence} | {item.ref for item in runs}) & resolved_refs
+    stale_by_ref = get_resolved_node_stale_states_from_connection(connection, workspace_id, freshness_refs)
+    states: list[str] = []
+    for item in evidence:
+        if item.ref not in stale_by_ref:
+            continue
+        item.stale = stale_by_ref[item.ref]
+        states.append("stale" if item.stale else "fresh")
+    for item in runs:
+        if item.ref not in stale_by_ref:
+            continue
+        item.stale = stale_by_ref[item.ref]
+        states.append("stale" if item.stale else "fresh")
+    return states
 
 
 def _append_graph_diagnostics(
@@ -386,18 +358,6 @@ def _append_graph_diagnostics(
                 message=f"Flowsheet reference could not be resolved ({item.code}).",
             )
         )
-
-
-def _freshness_for_ref(
-    connection: sqlite3.Connection,
-    workspace_id: str,
-    ref: str,
-) -> tuple[bool | None, str | None]:
-    try:
-        freshness = get_node_freshness_from_connection(connection, workspace_id, ref)
-    except (FlowsheetError, ValueError):
-        return None, None
-    return freshness.state == "stale", freshness.state
 
 
 def _aggregate_freshness(states: list[str]) -> AggregateFreshness:
