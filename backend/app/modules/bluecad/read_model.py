@@ -306,8 +306,9 @@ def _build_runs(
     nodes = {node.ref: node for node in graph.nodes}
     subject_refs = {f"bluecad_candidate:{candidate.id}"}
     subject_refs.update(f"bluecad_attempt:{attempt.id}" for attempt in candidate.attempts)
+    artifact_refs = {f"artifact:{artifact_id}" for artifact_id in artifact_ids}
     bridge_refs = set(subject_refs)
-    bridge_refs.update(f"artifact:{artifact_id}" for artifact_id in artifact_ids)
+    bridge_refs.update(artifact_refs)
     bridge_refs.update(item.ref for item in evidence)
     if candidate.promoted_decision_id:
         decision_ref = f"decision:{candidate.promoted_decision_id}"
@@ -324,6 +325,28 @@ def _build_runs(
             associations.add((downstream.ref, edge.upstream_ref))
         if edge.downstream_ref in bridge_refs and upstream.kind in {"simulation_run", "runner_job"}:
             associations.add((upstream.ref, edge.downstream_ref))
+
+    # Follow only accepted forward provenance/dependency paths rooted in candidate-owned
+    # artifacts. Restrict intermediate kinds so shared model-spec or unrelated workspace
+    # nodes cannot pull in runs heuristically.
+    forward_refs = set(artifact_refs)
+    frontier = sorted(artifact_refs)
+    safe_intermediate_kinds = {"artifact", "model_version"}
+    while frontier:
+        current_ref = frontier.pop(0)
+        for edge in graph.edges:
+            if edge.upstream_ref != current_ref:
+                continue
+            downstream = nodes.get(edge.downstream_ref)
+            if downstream is None:
+                continue
+            if downstream.kind in {"simulation_run", "runner_job"}:
+                associations.add((downstream.ref, current_ref))
+                continue
+            if downstream.kind not in safe_intermediate_kinds or downstream.ref in forward_refs:
+                continue
+            forward_refs.add(downstream.ref)
+            frontier.append(downstream.ref)
 
     associated_refs = {ref for ref, _source in associations}
     for edge in graph.edges:
