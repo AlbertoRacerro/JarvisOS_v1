@@ -27,6 +27,7 @@ from app.modules.bluecad.cad_link_topology_execute import execute_cad_link_072
 from app.modules.bluecad.ledger import archive_candidate, get_candidate, list_candidates, mark_promoted
 from app.modules.bluecad.loop import create_bluecad_candidate
 from app.modules.bluecad.models import BluecadCandidateCreate, BluecadCandidateRead
+from app.modules.bluecad.read_model import BluecadCandidateAggregateRead, get_bluecad_candidate_aggregate
 from app.modules.modeling.models import DecisionCreate
 from app.modules.modeling.service import create_decision
 
@@ -135,6 +136,14 @@ def list_candidates_endpoint(workspace_id: str) -> list[BluecadCandidateRead]:
         return list_candidates(workspace_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail={"error": str(exc)}) from exc
+
+
+@router.get("/candidates/{candidate_id}/aggregate", response_model=BluecadCandidateAggregateRead)
+def get_candidate_aggregate_endpoint(workspace_id: str, candidate_id: str) -> BluecadCandidateAggregateRead:
+    candidate = get_bluecad_candidate_aggregate(workspace_id, candidate_id)
+    if candidate is None:
+        raise HTTPException(status_code=404, detail={"error": "BLUECAD candidate not found."})
+    return candidate
 
 
 @router.get("/candidates/{candidate_id}", response_model=BluecadCandidateRead)

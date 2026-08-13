@@ -252,13 +252,21 @@ def list_candidates(workspace_id: str) -> list[BluecadCandidateRead]:
 
 def get_candidate(workspace_id: str, candidate_id: str) -> BluecadCandidateRead | None:
     with open_sqlite_connection() as connection:
-        row = connection.execute(
-            "SELECT * FROM bluecad_candidates WHERE workspace_id = ? AND id = ?",
-            (workspace_id, candidate_id),
-        ).fetchone()
+        return get_candidate_from_connection(connection, workspace_id, candidate_id)
+
+
+def get_candidate_from_connection(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    candidate_id: str,
+) -> BluecadCandidateRead | None:
+    row = connection.execute(
+        "SELECT * FROM bluecad_candidates WHERE workspace_id = ? AND id = ?",
+        (workspace_id, candidate_id),
+    ).fetchone()
     if row is None:
         return None
-    return _with_attempts(row_to_model(row, BluecadCandidateRead))
+    return _with_attempts_from_connection(connection, row_to_model(row, BluecadCandidateRead))
 
 
 def get_attempt(attempt_id: str) -> BluecadAttemptRead | None:
@@ -271,16 +279,32 @@ def get_attempt(attempt_id: str) -> BluecadAttemptRead | None:
 
 def list_attempts(candidate_id: str) -> list[BluecadAttemptRead]:
     with open_sqlite_connection() as connection:
-        rows = connection.execute(
-            "SELECT * FROM bluecad_attempts WHERE candidate_id = ? ORDER BY attempt_no ASC",
-            (candidate_id,),
-        ).fetchall()
+        return list_attempts_from_connection(connection, candidate_id)
+
+
+def list_attempts_from_connection(
+    connection: sqlite3.Connection,
+    candidate_id: str,
+) -> list[BluecadAttemptRead]:
+    rows = connection.execute(
+        "SELECT * FROM bluecad_attempts WHERE candidate_id = ? ORDER BY attempt_no ASC, id ASC",
+        (candidate_id,),
+    ).fetchall()
     return rows_to_models(rows, BluecadAttemptRead)
 
 
 def _with_attempts(candidate: BluecadCandidateRead) -> BluecadCandidateRead:
     data = candidate.model_dump()
     data["attempts"] = list_attempts(candidate.id)
+    return BluecadCandidateRead(**data)
+
+
+def _with_attempts_from_connection(
+    connection: sqlite3.Connection,
+    candidate: BluecadCandidateRead,
+) -> BluecadCandidateRead:
+    data = candidate.model_dump()
+    data["attempts"] = list_attempts_from_connection(connection, candidate.id)
     return BluecadCandidateRead(**data)
 
 

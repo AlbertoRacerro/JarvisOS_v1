@@ -310,6 +310,33 @@ def select_evidence_records(
     return rows_to_models(rows, EvidenceRecord)
 
 
+def select_candidate_evidence_records(
+    connection: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    candidate_id: str,
+    attempt_ids: list[str],
+) -> list[EvidenceRecord]:
+    """Select only evidence explicitly owned by this candidate or one of its attempts."""
+    values: list[object] = [workspace_id, candidate_id]
+    ownership = ["candidate_id = ?"]
+    if attempt_ids:
+        ordered_attempt_ids = sorted(set(attempt_ids))
+        placeholders = ", ".join("?" for _ in ordered_attempt_ids)
+        ownership.append(f"attempt_id IN ({placeholders})")
+        values.extend(ordered_attempt_ids)
+    rows = connection.execute(
+        f"""
+        SELECT *
+        FROM evidence_records
+        WHERE workspace_id = ? AND ({' OR '.join(ownership)})
+        ORDER BY id ASC
+        """,
+        tuple(values),
+    ).fetchall()
+    return rows_to_models(rows, EvidenceRecord)
+
+
 def evidence_pack_line(record: EvidenceRecord) -> str:
     metrics = json.loads(record.metrics_json)
     if not isinstance(metrics, dict):
