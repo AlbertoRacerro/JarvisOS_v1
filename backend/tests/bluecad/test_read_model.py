@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from app.core.bootstrap import initialize_storage
 from app.core.database import open_sqlite_connection
+from app.core.paths import build_paths
 from app.main import create_app
 from app.modules.bluecad.read_model import _aggregate_from_connection, get_bluecad_candidate_aggregate
 
@@ -30,8 +31,15 @@ def _seed_artifact(
     workspace_id: str = "bluerev",
     source_ref: str | None = None,
     sha256: str | None = "auto",
+    stored_path: str | None = None,
 ) -> None:
     digest = artifact_id[0] * 64 if sha256 == "auto" else sha256
+    filename = f"{artifact_id}.json"
+    if stored_path is None:
+        artifact_path = build_paths().artifacts_dir / workspace_id / "bluecad" / artifact_id / filename
+        artifact_path.parent.mkdir(parents=True, exist_ok=True)
+        artifact_path.write_text("{}", encoding="utf-8")
+        stored_path = str(artifact_path)
     connection.execute(
         """
         INSERT INTO artifacts (
@@ -42,8 +50,8 @@ def _seed_artifact(
         (
             artifact_id,
             workspace_id,
-            f"{artifact_id}.json",
-            f"/private/{workspace_id}/{artifact_id}.json",
+            filename,
+            stored_path,
             digest,
             source_ref,
             NOW,
@@ -260,7 +268,6 @@ def test_aggregate_is_deterministic_workspace_scoped_and_lossless() -> None:
     ]
     serialized = first.model_dump_json()
     assert "stored_path" not in serialized
-    assert "/private/" not in serialized
     assert "artifact-b.json" not in serialized
     assert any(item.reference == "artifact-b" and item.code == "missing_reference" for item in first.diagnostics)
     assert get_bluecad_candidate_aggregate("bluerev", "candidate-other") is None
@@ -392,6 +399,25 @@ def test_inaccessible_promoted_decision_keeps_dangling_reference_diagnostic() ->
         and item.code == "missing_reference"
         for item in aggregate.diagnostics
     )
+
+
+def test_inaccessible_artifact_content_is_not_advertised() -> None:
+    _init_fixture()
+    with open_sqlite_connection() as connection:
+        _seed_artifact(connection, "artifact-a", stored_path="/outside/data-root/artifact-a.json")
+        _seed_candidate(connection, "candidate-a", report_artifact_id="artifact-a")
+        connection.commit()
+
+    aggregate = get_bluecad_candidate_aggregate("bluerev", "candidate-a")
+    assert aggregate is not None
+    assert aggregate.artifacts == []
+    assert any(
+        item.source == "bluecad.artifact.content"
+        and item.reference == "artifact-a"
+        and item.code == "inaccessible_reference"
+        for item in aggregate.diagnostics
+    )
+    assert "/bluecad/artifacts/artifact-a/content" not in aggregate.model_dump_json()
 
 
 def test_aggregate_performs_zero_writes_and_query_count_is_not_per_evidence() -> None:
