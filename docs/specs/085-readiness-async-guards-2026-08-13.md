@@ -40,6 +40,18 @@ The 085 migration must preserve the legacy workbench's usable failure and empty-
 
 These states must remain distinct from aggregate-detail failures. A failure in candidate discovery must not fabricate stale detail, while a detail failure must not erase otherwise valid discovery state. Mutation failure must leave the backend result authoritative, surface a bounded diagnostic to the operator, and preserve/reload current canonical state according to the main readiness rules.
 
+## Structured validation-detail readability
+
+A valid canonical validation report may contain structured check detail such as `{actual, declared, rel_err, rel_tol}` rather than only scalar text. The native workbench must preserve the 006c readability contract: structured detail must be formatted into stable human-readable labeled values, must not render as raw unbounded JSON or `[object Object]`, and must never crash when optional keys are absent or additional keys are present.
+
+Deterministic presentation/source proof plus browser/manual evidence must include at least one well-formed structured validation detail containing `actual`, `declared`, `rel_err`, and `rel_tol`, and one irregular-but-valid object shape. `scripts/check_bluecad_workbench.py` must fail if the native workbench removes the readable structured-detail formatter or falls back to unsafe implicit object stringification for validation detail.
+
+## Duplicate-brief reveal and focus parity
+
+Duplicate-brief remains a frontend-only creation-form transition, but lifecycle parity includes the existing one-click editing affordance. Invoking duplicate-brief must not only copy the source brief into the creation form: if the creation form lives in a shell region that is currently closed or collapsed, the action must reveal/open the owning region through the existing shell contribution/control seam, make the populated form visible, and move keyboard focus to the editable brief field without pointer-only recovery. If layout requires scrolling within a bounded local pane, the focused field must be brought into view without introducing page-level horizontal overflow.
+
+The executable state harness continues to prove that duplicate-brief performs no backend mutation or silent clone. In addition, deterministic rendering/source proof plus browser/manual evidence must prove closed-region invocation, region reveal, populated value, focus transfer to the textarea/input, and retained keyboard operability. `scripts/check_bluecad_workbench.py` must fail if duplicate-brief can leave the populated form hidden or omit a deterministic focus/reveal path.
+
 ## Gate impact
 
-All cases in this addendum are beta-blocking acceptance criteria. A conforming 085 implementation cannot claim readiness completion or merge while an older generation can overwrite newer same-context state, a secondary asynchronous path can overwrite state belonging to a newer selection/artifact, archive/filter transitions can strand keyboard focus, or mandatory discovery/mutation failure states are absent. No backend, schema, dependency, workflow, provider, credential, budget, egress or global visual-identity change is authorized by this addendum.
+All cases in this addendum are beta-blocking acceptance criteria. A conforming 085 implementation cannot claim readiness completion or merge while an older generation can overwrite newer same-context state, a secondary asynchronous path can overwrite state belonging to a newer selection/artifact, archive/filter transitions can strand keyboard focus, structured validation detail becomes unreadable, duplicate-brief can leave its editable form hidden or unfocused, or mandatory discovery/mutation failure states are absent. No backend, schema, dependency, workflow, provider, credential, budget, egress or global visual-identity change is authorized by this addendum.
