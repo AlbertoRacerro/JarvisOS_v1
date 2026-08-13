@@ -189,7 +189,7 @@ def _load_artifacts(
     placeholders = ", ".join("?" for _ in artifact_ids)
     rows = connection.execute(
         f"""
-        SELECT id, filename, mime_type, sha256, status, source_ref, created_at
+        SELECT id, artifact_type, filename, mime_type, sha256, status, source_ref, created_at
         FROM artifacts
         WHERE workspace_id = ? AND id IN ({placeholders})
         """,
@@ -206,6 +206,16 @@ def _load_artifacts(
                     source="bluecad.artifact",
                     reference=artifact_id,
                     message="Referenced BLUECAD artifact is missing or inaccessible in this workspace.",
+                )
+            )
+            continue
+        if not str(row["artifact_type"] or "").startswith("bluecad_"):
+            diagnostics.append(
+                BluecadReadDiagnostic(
+                    code="inaccessible_reference",
+                    source="bluecad.artifact",
+                    reference=artifact_id,
+                    message="Referenced artifact is not accessible through the BLUECAD artifact surface.",
                 )
             )
             continue
