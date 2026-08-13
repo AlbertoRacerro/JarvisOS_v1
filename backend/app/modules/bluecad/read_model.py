@@ -374,6 +374,8 @@ def _append_graph_diagnostics(
     relevant_refs.update(f"artifact:{artifact_id}" for artifact_id in artifact_ids)
     relevant_refs.update(item.ref for item in evidence)
     relevant_refs.update(item.ref for item in runs)
+    if candidate.promoted_decision_id:
+        relevant_refs.add(f"decision:{candidate.promoted_decision_id}")
     for item in graph.diagnostics.unresolved_references:
         raw_ref = item.raw_ref
         raw_subject_match = raw_ref is not None and any(
