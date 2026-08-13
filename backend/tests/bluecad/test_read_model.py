@@ -462,3 +462,53 @@ def test_route_hides_cross_workspace_candidate_existence() -> None:
     assert missing.status_code == 404
     assert cross_workspace.status_code == 404
     assert missing.json() == cross_workspace.json()
+
+
+def test_candidate_artifact_model_version_path_includes_only_traceable_runs() -> None:
+    _init_fixture()
+    with open_sqlite_connection() as connection:
+        _seed_artifact(connection, "artifact-a")
+        _seed_artifact(connection, "artifact-other")
+        _seed_candidate(connection, "candidate-a", report_artifact_id="artifact-a")
+        connection.execute(
+            """
+            INSERT INTO model_specs (
+                id, workspace_id, title, engineering_question, status, maturity_status,
+                created_at, updated_at
+            ) VALUES
+                ('spec-a', 'bluerev', 'spec a', 'fixture', 'active', 'draft', ?, ?),
+                ('spec-other', 'bluerev', 'spec other', 'fixture', 'active', 'draft', ?, ?)
+            """,
+            (NOW, NOW, NOW, NOW),
+        )
+        connection.execute(
+            """
+            INSERT INTO model_versions (
+                id, workspace_id, model_spec_id, version_label, implementation_artifact_id,
+                implementation_kind, status, created_at
+            ) VALUES
+                ('version-a', 'bluerev', 'spec-a', 'v1', 'artifact-a', 'batch_growth_v0', 'active', ?),
+                ('version-other', 'bluerev', 'spec-other', 'v1', 'artifact-other', 'batch_growth_v0', 'active', ?)
+            """,
+            (NOW, NOW),
+        )
+        connection.execute(
+            """
+            INSERT INTO simulation_runs (
+                id, workspace_id, model_version_id, run_label, status, input_payload,
+                parameter_payload, output_payload, created_at
+            ) VALUES
+                ('run-linked', 'bluerev', 'version-a', 'linked', 'succeeded', '{}', '{}', '{}', ?),
+                ('run-unrelated', 'bluerev', 'version-other', 'unrelated', 'succeeded', '{}', '{}', '{}', ?)
+            """,
+            (NOW, NOW),
+        )
+        _mark_stale(connection, "simulation_run:run-linked", "model-run")
+        connection.commit()
+
+    aggregate = get_bluecad_candidate_aggregate("bluerev", "candidate-a")
+    assert aggregate is not None
+    assert {item.ref for item in aggregate.runs} == {"simulation_run:run-linked"}
+    linked = next(item for item in aggregate.runs if item.ref == "simulation_run:run-linked")
+    assert linked.stale is True
+    assert aggregate.freshness == "stale"
