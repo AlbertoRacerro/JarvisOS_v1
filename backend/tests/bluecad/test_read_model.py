@@ -51,6 +51,17 @@ def _seed_artifact(
     )
 
 
+def _seed_decision(connection: sqlite3.Connection, decision_id: str, *, workspace_id: str) -> None:
+    connection.execute(
+        """
+        INSERT INTO decisions (
+            id, workspace_id, title, decision_text, status, origin, created_at, updated_at
+        ) VALUES (?, ?, 'fixture decision', 'fixture decision', 'accepted', 'user', ?, ?)
+        """,
+        (decision_id, workspace_id, NOW, NOW),
+    )
+
+
 def _seed_candidate(
     connection: sqlite3.Connection,
     candidate_id: str,
@@ -59,6 +70,7 @@ def _seed_candidate(
     spec_artifact_id: str | None = None,
     glb_artifact_id: str | None = None,
     report_artifact_id: str | None = None,
+    promoted_decision_id: str | None = None,
 ) -> None:
     connection.execute(
         """
@@ -67,7 +79,7 @@ def _seed_candidate(
             spec_artifact_id, glb_artifact_id, report_artifact_id,
             promoted_decision_id, origin, parent_candidate_id, loop_config_json,
             created_at, updated_at, notes
-        ) VALUES (?, ?, 'fixture brief', ?, 'valid', NULL, ?, ?, ?, NULL,
+        ) VALUES (?, ?, 'fixture brief', ?, 'valid', NULL, ?, ?, ?, ?,
                   'ai', NULL, '{}', ?, ?, NULL)
         """,
         (
@@ -77,6 +89,7 @@ def _seed_candidate(
             spec_artifact_id,
             glb_artifact_id,
             report_artifact_id,
+            promoted_decision_id,
             NOW,
             NOW,
         ),
@@ -358,6 +371,25 @@ def test_digestless_artifact_keeps_source_reference_diagnostic() -> None:
         item.source == "artifacts.source_ref"
         and item.reference == "not-a-canonical-reference"
         and item.code == "unsupported_reference"
+        for item in aggregate.diagnostics
+    )
+
+
+def test_inaccessible_promoted_decision_keeps_dangling_reference_diagnostic() -> None:
+    _init_fixture()
+    with open_sqlite_connection() as connection:
+        _seed_workspace(connection, "other", "other")
+        _seed_decision(connection, "decision-other", workspace_id="other")
+        _seed_candidate(connection, "candidate-a", promoted_decision_id="decision-other")
+        connection.commit()
+
+    aggregate = get_bluecad_candidate_aggregate("bluerev", "candidate-a")
+    assert aggregate is not None
+    assert aggregate.candidate.promoted_decision_id == "decision-other"
+    assert any(
+        item.source == "bluecad_candidates.promoted_decision_id"
+        and item.reference == "decision:decision-other"
+        and item.code == "missing_reference"
         for item in aggregate.diagnostics
     )
 
