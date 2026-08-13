@@ -3,6 +3,7 @@
 from __future__ import annotations  # noqa: I001
 
 import collections
+from pathlib import Path
 import sqlite3
 import typing
 import urllib.parse
@@ -10,6 +11,7 @@ import urllib.parse
 from pydantic import BaseModel, Field
 
 from app.core.database import open_sqlite_connection
+from app.core.paths import build_paths
 from app.modules.bluecad.evidence import EvidenceRecord, select_candidate_evidence_records
 from app.modules.bluecad.ledger import get_candidate_from_connection
 from app.modules.bluecad.models import BluecadCandidateRead
@@ -177,6 +179,16 @@ def _collect_artifact_roles(candidate: BluecadCandidateRead) -> dict[str, set[st
     return roles
 
 
+def _artifact_content_is_accessible(stored_path_value: object) -> bool:
+    try:
+        stored_path = Path(str(stored_path_value)).resolve()
+        data_root = build_paths().data_root.resolve()
+        stored_path.relative_to(data_root)
+    except (OSError, RuntimeError, ValueError):
+        return False
+    return stored_path.exists() and stored_path.is_file()
+
+
 def _load_artifacts(
     connection: sqlite3.Connection,
     workspace_id: str,
@@ -189,7 +201,7 @@ def _load_artifacts(
     placeholders = ", ".join("?" for _ in artifact_ids)
     rows = connection.execute(
         f"""
-        SELECT id, artifact_type, filename, mime_type, sha256, status, source_ref, created_at
+        SELECT id, artifact_type, filename, stored_path, mime_type, sha256, status, source_ref, created_at
         FROM artifacts
         WHERE workspace_id = ? AND id IN ({placeholders})
         """,
@@ -216,6 +228,16 @@ def _load_artifacts(
                     source="bluecad.artifact",
                     reference=artifact_id,
                     message="Referenced artifact is not accessible through the BLUECAD artifact surface.",
+                )
+            )
+            continue
+        if not _artifact_content_is_accessible(row["stored_path"]):
+            diagnostics.append(
+                BluecadReadDiagnostic(
+                    code="inaccessible_reference",
+                    source="bluecad.artifact.content",
+                    reference=artifact_id,
+                    message="Referenced BLUECAD artifact content is not accessible through the content route.",
                 )
             )
             continue
