@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 25
     env:
       RUN_BLUECAD_WORKBENCH_BROWSER_PROOF: "true"
-      TARGET_IMPLEMENTATION_SHA: "39ad8f17fb4f599cc6606c0326b437c0f0aa5087"
+      TARGET_IMPLEMENTATION_SHA: "db3780579a6debcdebfae45b0806e9484a8dd825"
     steps:
       - uses: actions/checkout@v4
         with:
