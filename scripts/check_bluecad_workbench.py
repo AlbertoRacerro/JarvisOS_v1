@@ -116,18 +116,19 @@ def registry_lines(text: str) -> list[str]:
     fence_char: str | None = None
     fence_len = 0
     for line in cleaned.splitlines():
-        marker = FENCE_START.match(line)
-        if marker:
-            token = marker.group(1)
-            if fence_char is None:
-                fence_char = token[0]
-                fence_len = len(token)
-            elif token[0] == fence_char and len(token) >= fence_len:
+        stripped = line.strip()
+        if fence_char is not None:
+            if len(stripped) >= fence_len and stripped == fence_char * len(stripped):
                 fence_char = None
                 fence_len = 0
             continue
-        if fence_char is None:
-            result.append(line)
+        marker = FENCE_START.match(line)
+        if marker:
+            token = marker.group(1)
+            fence_char = token[0]
+            fence_len = len(token)
+            continue
+        result.append(line)
     return result
 
 
@@ -250,6 +251,11 @@ def self_test() -> None:
     check_registry_text(status_fixture(valid, decoy=decoy))
     fenced_decoy = "```markdown\n## Registry\n\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid + "\n```"
     check_registry_text(status_fixture(valid, decoy=fenced_decoy))
+    malformed_close_decoy = (
+        "```markdown\n```not-a-close\n## Registry\n\n"
+        + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid + "\n```"
+    )
+    check_registry_text(status_fixture(valid, decoy=malformed_close_decoy))
     for invalid in (
         "| 085 | ready | — | BLUECAD-WORKBENCH-2 | deps | wrong |",
         "| 084 | merged | — | OTHER | deps | no 085 |",
@@ -260,12 +266,13 @@ def self_test() -> None:
             pass
         else:
             fail("registry self-test accepted non-canonical or invalid 085 lifecycle evidence")
-    try:
-        check_registry_text(fenced_decoy)
-    except SystemExit:
-        pass
-    else:
-        fail("registry self-test accepted a fenced decoy as canonical evidence")
+    for fenced_only in (fenced_decoy, malformed_close_decoy):
+        try:
+            check_registry_text(fenced_only)
+        except SystemExit:
+            pass
+        else:
+            fail("registry self-test accepted fenced lifecycle evidence as canonical")
 
 
 def main() -> None:
