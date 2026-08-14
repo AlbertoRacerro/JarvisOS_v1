@@ -291,6 +291,17 @@ def check_async_addendum_contracts() -> None:
         if marker not in workbench:
             fail(f"async addendum contract missing: {label}")
 
+    aggregate_body = between(workbench, "const loadAggregate =", "const loadValidation =")
+    aggregate_404_requirements = {
+        "404 revalidates canonical discovery": "const items = await loadCandidates(targetWorkspaceId, candidateId)",
+        "404 retained-selection guard": "selectedRef.current === candidateId",
+        "404 retained-selection settles detail error": 'setAggregateState("error")',
+        "404 retained-selection exposes retryable state": 'setMessage("Candidate detail unavailable. Use Refresh to retry.")',
+    }
+    for label, marker in aggregate_404_requirements.items():
+        if marker not in aggregate_body:
+            fail(f"aggregate 404 settlement regressed: {label}")
+
     handle_brief_ref_body = between(workbench, "const handleBriefRef =", "const visibleCandidates =")
     duplicate_body = between(workbench, "const duplicateSelectedBrief =", "const navigator =")
     navigator_body = between(workbench, "const navigator =", "const sidecar =")
