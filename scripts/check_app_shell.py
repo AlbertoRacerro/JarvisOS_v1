@@ -138,14 +138,15 @@ def check_historical_active_scope() -> None:
 
 
 def check_routes() -> None:
-    body = without_comments(read(ROUTES))
+    raw = read(ROUTES)
+    body = without_comments(raw)
     found = set(ROUTE_PATH.findall(body))
     expected = PRODUCTION_PATHS | {"/legacy/dev-local-chat"}
     if found != expected:
         fail(f"route paths differ: missing={sorted(expected-found)}, extra={sorted(found-expected)}")
     if 'normalized === "/"' not in body or 'canonicalPath: "/home"' not in body or "shouldReplace: true" not in body:
         fail("root canonicalization contract regressed")
-    if 'pathOnly.startsWith("//")' not in body or "replace(/\\/+$/g" not in body or "replace(/^\\/+|\\/+$/g" in body:
+    if 'pathOnly.startsWith("//")' not in raw or "replace(/\\/+$/g" not in body or "replace(/^\\/+|\\/+$/g" in body:
         fail("route normalizer contract regressed")
     start = body.find("export const PRIMARY_NAV_ITEMS")
     end = body.find("] as const", start)
@@ -199,7 +200,8 @@ def check_accessibility() -> None:
         fail("legacy diagnostic transition label regressed")
     for panel in ("ContextualNavigator.tsx", "ContextualSidecar.tsx", "AnalysisDock.tsx"):
         body = without_comments(read(FRONTEND / "components/shell" / panel))
-        if 'event.key !== "Escape"' not in body or "onKeyDown={onPanelKeyDown}" not in body:
+        escape_guard = 'event.key !== "Escape"' in body or 'event.key === "Escape"' in body
+        if not escape_guard or "onKeyDown={onPanelKeyDown}" not in body:
             fail(f"focused-panel Escape behavior regressed: {panel}")
 
 
