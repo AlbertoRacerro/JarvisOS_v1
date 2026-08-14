@@ -108,7 +108,10 @@ def registry_lines(text: str) -> list[str]:
     for line in cleaned.splitlines():
         stripped = line.strip()
         if fence_char is not None:
-            if len(stripped) >= fence_len and stripped == fence_char * len(stripped):
+            closer = line.rstrip()
+            indent = len(closer) - len(closer.lstrip(" "))
+            token = closer[indent:]
+            if indent <= 3 and len(token) >= fence_len and token == fence_char * len(token):
                 fence_char = None
                 fence_len = 0
             continue
@@ -318,6 +321,13 @@ def self_test() -> None:
     fenced_decoy = "```markdown\n" + status_fixture(valid_merged) + "\n```"
     if registry_state(status_fixture(valid_active, decoy=fenced_decoy)) != "in_review":
         fail("registry parser accepted a fenced Registry decoy over canonical evidence")
+    overindented_closer_decoy = "```markdown\n    ```\n" + status_fixture(valid_merged) + "\n```"
+    try:
+        registry_state(overindented_closer_decoy)
+    except SystemExit:
+        pass
+    else:
+        fail("registry parser accepted lifecycle evidence after an over-indented fence closer")
     try:
         registry_state(status_fixture("| 084 | merged | — | OTHER | — | no 083 |", decoy=decoy))
     except SystemExit:
