@@ -18,9 +18,12 @@ import {
 import type { ShellRegion, ShellRegionContributions } from "../../stages/registry";
 import BluecadGlbViewer from "../BluecadGlbViewer";
 import {
+  acceptsMutation,
   acceptsRequest,
   duplicateBrief,
+  mutationConflicts,
   revalidateSelection,
+  type MutationContext,
   type RequestContext
 } from "./workbenchState";
 
@@ -57,6 +60,9 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const listGeneration = useRef(0);
   const detailGeneration = useRef(0);
   const validationGeneration = useRef(0);
+  const mutationGeneration = useRef(0);
+  const workspaceRef = useRef("");
+  const selectedRef = useRef<string | null>(null);
   const currentList = useRef<RequestContext | null>(null);
   const currentDetail = useRef<RequestContext | null>(null);
   const currentValidation = useRef<RequestContext | null>(null);
@@ -85,9 +91,14 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   }, [onSelectionChange]);
 
   const chooseCandidate = useCallback((candidateId: string | null) => {
+    mutationGeneration.current += 1;
+    selectedRef.current = candidateId;
+    currentList.current = null;
+    currentDetail.current = null;
+    currentValidation.current = null;
     setSelectedId(candidateId);
-    publishSelection(workspaceId, candidateId);
-  }, [publishSelection, workspaceId]);
+    publishSelection(workspaceRef.current, candidateId);
+  }, [publishSelection]);
 
   const loadCandidates = useCallback(async (targetWorkspaceId: string, preferredId: string | null) => {
     const request: RequestContext = {
@@ -99,9 +110,12 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     setCandidateState("loading");
     try {
       const items = await listBluecadCandidates(targetWorkspaceId);
-      if (!currentList.current || !acceptsRequest(currentList.current, request)) return items;
+      if (!currentList.current || !acceptsRequest(currentList.current, request)) return null;
       setCandidates(items);
       const nextId = revalidateSelection(items, preferredId, showArchived);
+      selectedRef.current = nextId;
+      currentDetail.current = null;
+      currentValidation.current = null;
       setSelectedId(nextId);
       publishSelection(targetWorkspaceId, nextId);
       setCandidateState("ready");
@@ -111,7 +125,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
         setCandidateState("error");
         setMessage(error instanceof Error ? error.message : "Candidate discovery failed.");
       }
-      return [];
+      return null;
     }
   }, [publishSelection, showArchived]);
 
@@ -164,9 +178,12 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     let active = true;
     listWorkspaces().then((items) => {
       if (!active) return;
+      const firstWorkspaceId = items[0]?.id ?? "";
+      workspaceRef.current = firstWorkspaceId;
+      selectedRef.current = null;
       setWorkspaces(items);
       setWorkspaceState("ready");
-      setWorkspaceId(items[0]?.id ?? "");
+      setWorkspaceId(firstWorkspaceId);
     }).catch((error: Error) => {
       if (!active) return;
       setWorkspaceState("error");
@@ -218,6 +235,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const refresh = useCallback(async () => {
     if (!workspaceId) return;
     const items = await loadCandidates(workspaceId, selectedId);
+    if (!items) return;
     const nextId = revalidateSelection(items, selectedId, showArchived);
     if (nextId) await loadAggregate(workspaceId, nextId);
   }, [loadAggregate, loadCandidates, selectedId, showArchived, workspaceId]);
@@ -225,61 +243,105 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const onCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const brief = briefText.trim();
-    if (!brief || !workspaceId || pendingAction) return;
-    const startedWorkspace = workspaceId;
-    const generation = listGeneration.current;
+    if (!brief || !workspaceId || mutationConflicts(pendingAction, "create")) return;
+    const mutation: MutationContext = {
+      generation: ++mutationGeneration.current,
+      workspaceId: workspaceRef.current,
+      candidateId: selectedRef.current,
+      kind: "create"
+    };
     setPendingAction("create");
     setMessage(null);
     try {
-      const created = await createBluecadCandidate(startedWorkspace, brief);
-      if (workspaceId !== startedWorkspace || listGeneration.current !== generation) return;
-      const items = await loadCandidates(startedWorkspace, created.id);
-      if (workspaceId !== startedWorkspace || !items.some((item) => item.id === created.id)) return;
+      const created = await createBluecadCandidate(mutation.workspaceId, brief);
+      if (!acceptsMutation({
+        generation: mutationGeneration.current,
+        workspaceId: workspaceRef.current,
+        candidateId: selectedRef.current
+      }, mutation)) return;
+      const items = await loadCandidates(mutation.workspaceId, created.id);
+      if (!items || !items.some((item) => item.id === created.id)) return;
       setBriefText("");
-      chooseCandidate(created.id);
-      await loadAggregate(startedWorkspace, created.id);
+      const detail = await loadAggregate(mutation.workspaceId, created.id);
+      if (!detail || workspaceRef.current !== mutation.workspaceId || selectedRef.current !== created.id) return;
       setMessage("Candidate created.");
     } catch (error) {
-      if (workspaceId === startedWorkspace) setMessage(error instanceof Error ? error.message : "Candidate creation failed.");
+      if (acceptsMutation({
+        generation: mutationGeneration.current,
+        workspaceId: workspaceRef.current,
+        candidateId: selectedRef.current
+      }, mutation)) {
+        setMessage(error instanceof Error ? error.message : "Candidate creation failed.");
+      }
     } finally {
-      if (workspaceId === startedWorkspace) setPendingAction(null);
+      setPendingAction(null);
     }
   };
 
   const onArchive = async () => {
-    if (!selected || pendingAction) return;
-    const startedWorkspace = workspaceId;
-    const startedCandidate = selected.id;
+    if (!selected || mutationConflicts(pendingAction, "archive")) return;
+    const mutation: MutationContext = {
+      generation: ++mutationGeneration.current,
+      workspaceId: workspaceRef.current,
+      candidateId: selected.id,
+      kind: "archive"
+    };
     setPendingAction("archive");
     setMessage(null);
     try {
-      await archiveBluecadCandidate(startedWorkspace, startedCandidate);
-      if (workspaceId !== startedWorkspace || selectedId !== startedCandidate) return;
+      await archiveBluecadCandidate(mutation.workspaceId, mutation.candidateId!);
+      if (!acceptsMutation({
+        generation: mutationGeneration.current,
+        workspaceId: workspaceRef.current,
+        candidateId: selectedRef.current
+      }, mutation)) return;
       focusAfterSelectionChange.current = true;
-      await loadCandidates(startedWorkspace, startedCandidate);
+      const items = await loadCandidates(mutation.workspaceId, mutation.candidateId ?? null);
+      if (!items || workspaceRef.current !== mutation.workspaceId) return;
       setMessage("Candidate archived.");
     } catch (error) {
-      if (workspaceId === startedWorkspace && selectedId === startedCandidate) setMessage(error instanceof Error ? error.message : "Archive failed.");
+      if (acceptsMutation({
+        generation: mutationGeneration.current,
+        workspaceId: workspaceRef.current,
+        candidateId: selectedRef.current
+      }, mutation)) {
+        setMessage(error instanceof Error ? error.message : "Archive failed.");
+      }
     } finally {
-      if (workspaceId === startedWorkspace) setPendingAction(null);
+      setPendingAction(null);
     }
   };
 
   const onPromote = async () => {
-    if (!selected || pendingAction) return;
-    const startedWorkspace = workspaceId;
-    const startedCandidate = selected.id;
+    if (!selected || mutationConflicts(pendingAction, "promote")) return;
+    const mutation: MutationContext = {
+      generation: ++mutationGeneration.current,
+      workspaceId: workspaceRef.current,
+      candidateId: selected.id,
+      kind: "promote"
+    };
     setPendingAction("promote");
     setMessage(null);
     try {
-      const promoted = await promoteBluecadCandidate(startedWorkspace, startedCandidate);
-      if (workspaceId !== startedWorkspace || selectedId !== startedCandidate) return;
+      const promoted = await promoteBluecadCandidate(mutation.workspaceId, mutation.candidateId!);
+      if (!acceptsMutation({
+        generation: mutationGeneration.current,
+        workspaceId: workspaceRef.current,
+        candidateId: selectedRef.current
+      }, mutation)) return;
       await refresh();
+      if (workspaceRef.current !== mutation.workspaceId || selectedRef.current !== mutation.candidateId) return;
       setMessage(`Promoted to Decision ${promoted.promoted_decision_id ?? "(pending id)"}.`);
     } catch (error) {
-      if (workspaceId === startedWorkspace && selectedId === startedCandidate) setMessage(error instanceof Error ? error.message : "Promotion failed.");
+      if (acceptsMutation({
+        generation: mutationGeneration.current,
+        workspaceId: workspaceRef.current,
+        candidateId: selectedRef.current
+      }, mutation)) {
+        setMessage(error instanceof Error ? error.message : "Promotion failed.");
+      }
     } finally {
-      if (workspaceId === startedWorkspace) setPendingAction(null);
+      setPendingAction(null);
     }
   };
 
@@ -295,10 +357,19 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
 
   const navigator = useMemo<ReactNode>(() => (
     <div className="bluecad-workbench__navigator">
-      <label>Workspace<select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} disabled={workspaceState !== "ready" || workspaces.length === 0}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
+      <label>Workspace<select value={workspaceId} onChange={(event) => {
+        const nextWorkspaceId = event.target.value;
+        mutationGeneration.current += 1;
+        workspaceRef.current = nextWorkspaceId;
+        selectedRef.current = null;
+        currentList.current = null;
+        currentDetail.current = null;
+        currentValidation.current = null;
+        setWorkspaceId(nextWorkspaceId);
+      }} disabled={workspaceState !== "ready" || workspaces.length === 0}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
       <label>Filter candidates<input value={filterText} onChange={(event) => setFilterText(event.target.value)} /></label>
       <label className="checkbox-line"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />Show archived</label>
-      <button type="button" className="secondary-button" onClick={() => void refresh()} disabled={!workspaceId || candidateState === "loading"}>Refresh</button>
+      <button type="button" className="secondary-button" onClick={() => void refresh()} disabled={!workspaceId || candidateState === "loading" || pendingAction !== null}>Refresh</button>
       <form className="bluecad-new-form" onSubmit={onCreate}><label>New candidate brief<textarea ref={briefRef} value={briefText} onChange={(event) => setBriefText(event.target.value)} required /></label><button type="submit" disabled={!briefText.trim() || pendingAction !== null}>{pendingAction === "create" ? "Creating…" : "New candidate"}</button></form>
       {workspaceState === "loading" && <p>Loading workspaces…</p>}
       {workspaceState === "error" && <p className="error-banner">Workspace discovery failed.</p>}
