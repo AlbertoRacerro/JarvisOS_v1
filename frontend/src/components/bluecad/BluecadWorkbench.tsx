@@ -378,9 +378,9 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     try {
       await archiveBluecadCandidate(mutation.workspaceId, mutation.candidateId!);
       if (!acceptsMutation({ generation: mutationGeneration.current, workspaceId: workspaceRef.current, candidateId: selectedRef.current }, mutation)) return;
+      focusAfterArchive.current = true;
       const items = await loadCandidates(mutation.workspaceId, mutation.candidateId ?? null);
       if (!items || workspaceRef.current !== mutation.workspaceId) return;
-      focusAfterArchive.current = true;
       if (selectedRef.current === mutation.candidateId) void loadAggregate(mutation.workspaceId, mutation.candidateId!);
       setMessage("Candidate archived.");
     } catch (error) {
