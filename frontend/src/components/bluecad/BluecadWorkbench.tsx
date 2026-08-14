@@ -2,6 +2,7 @@ import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef
 
 import type { StageSelection } from "../../app/selection";
 import {
+  API_BASE_URL,
   archiveBluecadCandidate,
   bluecadArtifactContentUrl,
   createBluecadCandidate,
@@ -50,6 +51,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const [aggregate, setAggregate] = useState<BluecadCandidateAggregateRead | null>(null);
   const [aggregateState, setAggregateState] = useState<LoadState>("idle");
   const [checks, setChecks] = useState<BluecadValidationCheck[]>([]);
+  const [validationState, setValidationState] = useState<LoadState>("idle");
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [filterText, setFilterText] = useState("");
@@ -68,6 +70,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const currentList = useRef<RequestContext | null>(null);
   const currentDetail = useRef<RequestContext | null>(null);
   const currentValidation = useRef<RequestContext | null>(null);
+  const suppressNextDetailEffect = useRef<string | null>(null);
   const briefRef = useRef<HTMLTextAreaElement | null>(null);
   const candidateRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const emptyCandidatesRef = useRef<HTMLParagraphElement | null>(null);
@@ -97,6 +100,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     setAggregate(null);
     setAggregateState(nextState);
     setChecks([]);
+    setValidationState("idle");
     setValidationMessage(null);
   }, []);
 
@@ -107,6 +111,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     currentList.current = null;
     currentDetail.current = null;
     currentValidation.current = null;
+    suppressNextDetailEffect.current = null;
     clearVisibleDetail(candidateId ? "loading" : "idle");
     setSelectedId(candidateId);
     publishSelection(workspaceRef.current, candidateId);
@@ -177,13 +182,19 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     currentValidation.current = request;
     setChecks([]);
     setValidationMessage(null);
-    if (!candidate.report_artifact_id) return;
+    if (!candidate.report_artifact_id) {
+      setValidationState("ready");
+      return;
+    }
+    setValidationState("loading");
     try {
       const report = await getBluecadArtifactJson<ValidationReport>(candidate.workspace_id, candidate.report_artifact_id);
       if (!currentValidation.current || !acceptsRequest(currentValidation.current, request)) return;
       setChecks(report.checks ?? report.validation?.checks ?? []);
+      setValidationState("ready");
     } catch (error) {
       if (!currentValidation.current || !acceptsRequest(currentValidation.current, request)) return;
+      setValidationState("error");
       setValidationMessage(error instanceof Error ? error.message : "Validation report unavailable.");
     }
   }, []);
@@ -220,6 +231,10 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   useEffect(() => {
     if (!workspaceId || !selectedId) {
       clearVisibleDetail("idle");
+      return;
+    }
+    if (suppressNextDetailEffect.current === selectedId) {
+      suppressNextDetailEffect.current = null;
       return;
     }
     void loadAggregate(workspaceId, selectedId);
@@ -270,13 +285,18 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     try {
       const created = await createBluecadCandidate(mutation.workspaceId, brief);
       if (!acceptsMutation({ generation: mutationGeneration.current, workspaceId: workspaceRef.current, candidateId: selectedRef.current }, mutation)) return;
+      suppressNextDetailEffect.current = created.id;
       const items = await loadCandidates(mutation.workspaceId, created.id);
-      if (!items || !items.some((item) => item.id === created.id)) return;
+      if (!items || !items.some((item) => item.id === created.id)) {
+        suppressNextDetailEffect.current = null;
+        return;
+      }
       setBriefText("");
       const detail = await loadAggregate(mutation.workspaceId, created.id);
       if (!detail || workspaceRef.current !== mutation.workspaceId || selectedRef.current !== created.id) return;
       setMessage("Candidate created.");
     } catch (error) {
+      suppressNextDetailEffect.current = null;
       if (acceptsMutation({ generation: mutationGeneration.current, workspaceId: workspaceRef.current, candidateId: selectedRef.current }, mutation)) setMessage(error instanceof Error ? error.message : "Candidate creation failed.");
     } finally {
       setPendingAction(null);
@@ -341,6 +361,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
         currentList.current = null;
         currentDetail.current = null;
         currentValidation.current = null;
+        suppressNextDetailEffect.current = null;
         clearVisibleDetail("idle");
         setWorkspaceId(nextWorkspaceId);
       }} disabled={workspaceState !== "ready" || workspaces.length === 0}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
@@ -365,8 +386,15 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       if (selectedId && aggregateState === "error") return <p className="error-banner">Candidate detail unavailable. Use Refresh to retry.</p>;
       return <p>{aggregateState === "loading" ? "Loading candidate detail…" : "Select a candidate to inspect canonical detail."}</p>;
     }
-    return <div className="bluecad-workbench__sidecar"><h3>Candidate</h3><dl className="details"><div><dt>Lifecycle</dt><dd>{candidate.status}</dd></div><div><dt>Freshness</dt><dd>{aggregate.freshness}</dd></div><div><dt>Promotion</dt><dd>{candidate.promoted_decision_id ?? "Not promoted"}</dd></div></dl>{candidate.parked_reason && <p className="warning-banner">Parked reason: {candidate.parked_reason}</p>}<h3>Validation</h3>{validationMessage ? <p className="error-banner">Validation report unavailable: {validationMessage}</p> : <ReportTable checks={checks} />}<h3>Artifacts</h3>{aggregate.artifacts.length === 0 ? <p>No aggregate-linked artifacts.</p> : <ul>{aggregate.artifacts.map((artifact) => <li key={artifact.id}><a href={artifact.content_url}>{artifact.filename}</a> · {artifact.roles.join(", ")} · {artifact.status}</li>)}</ul>}<h3>Canonical references</h3><p>{aggregate.evidence.length} evidence refs · {aggregate.runs.length} run refs</p>{aggregate.diagnostics.map((diagnostic, index) => <p className="warning-banner" key={`${diagnostic.code}-${index}`}>{diagnostic.message}</p>)}</div>;
-  }, [aggregate, aggregateState, checks, selectedId, validationMessage]);
+    const validation = !candidate.report_artifact_id
+      ? <p>No validation report is available.</p>
+      : validationState === "loading"
+        ? <p>Loading validation report…</p>
+        : validationState === "error" || validationMessage
+          ? <p className="error-banner">Validation report unavailable: {validationMessage ?? "Request failed."}</p>
+          : <ReportTable checks={checks} />;
+    return <div className="bluecad-workbench__sidecar"><h3>Candidate</h3><dl className="details"><div><dt>Lifecycle</dt><dd>{candidate.status}</dd></div><div><dt>Freshness</dt><dd>{aggregate.freshness}</dd></div><div><dt>Promotion</dt><dd>{candidate.promoted_decision_id ?? "Not promoted"}</dd></div></dl>{candidate.parked_reason && <p className="warning-banner">Parked reason: {candidate.parked_reason}</p>}<h3>Validation</h3>{validation}<h3>Artifacts</h3>{aggregate.artifacts.length === 0 ? <p>No aggregate-linked artifacts.</p> : <ul>{aggregate.artifacts.map((artifact) => <li key={artifact.id}><a href={`${API_BASE_URL}${artifact.content_url}`}>{artifact.filename}</a> · {artifact.roles.join(", ")} · {artifact.status}</li>)}</ul>}<h3>Canonical references</h3><p>{aggregate.evidence.length} evidence refs · {aggregate.runs.length} run refs</p>{aggregate.diagnostics.map((diagnostic, index) => <p className="warning-banner" key={`${diagnostic.code}-${index}`}>{diagnostic.message}</p>)}</div>;
+  }, [aggregate, aggregateState, checks, selectedId, validationMessage, validationState]);
 
   const dock = useMemo<ReactNode>(() => {
     const activeAggregate = aggregate?.candidate.id === selectedId ? aggregate : null;
@@ -381,6 +409,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     currentList.current = null;
     currentDetail.current = null;
     currentValidation.current = null;
+    suppressNextDetailEffect.current = null;
     mutationGeneration.current += 1;
     onShellRegionsChange({});
   }, [onShellRegionsChange]);
@@ -389,7 +418,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const canPromote = candidate?.status === "valid" && !candidate.promoted_decision_id;
   const viewportFallback = selectedId && aggregateState === "error" ? "Candidate detail unavailable. Use Refresh to retry." : aggregateState === "loading" ? "Loading candidate geometry…" : "Select a candidate from the navigator.";
 
-  return <section className="bluecad-workbench" aria-labelledby="bluecad-workbench-title"><header className="bluecad-workbench__chrome"><div><p className="eyebrow">BLUECAD</p><h1 id="bluecad-workbench-title">Model workbench</h1></div>{candidate && <div className="button-row"><span className={`status-pill status-${candidate.status}`}>{candidate.status}</span><button type="button" className="secondary-button" onClick={duplicateSelectedBrief}>Duplicate brief</button>{candidate.status !== "archived" && <button type="button" className="secondary-button" onClick={() => void onArchive()} disabled={pendingAction !== null}>Archive</button>}{canPromote && <button type="button" onClick={() => void onPromote()} disabled={pendingAction !== null}>Promote to Decision</button>}</div>}</header>{message && <div className="error-banner" role="status">{message}</div>}<div className="bluecad-workbench__viewport">{candidate?.glb_artifact_id ? <BluecadGlbViewer artifactUrl={bluecadArtifactContentUrl(candidate.workspace_id, candidate.glb_artifact_id)} /> : candidate ? <div className="bluecad-workbench__empty-viewer"><h2>Geometry unavailable</h2><p>{candidate.parked_reason ? `Candidate is parked: ${candidate.parked_reason}` : "No GLB artifact is available for this candidate yet."}</p></div> : <div className="bluecad-workbench__empty-viewer"><p>{viewportFallback}</p></div>}</div></section>;
+  return <section className="bluecad-workbench" aria-labelledby="bluecad-workbench-title"><header className="bluecad-workbench__chrome"><div><p className="eyebrow">BLUECAD</p><h1 id="bluecad-workbench-title">Model workbench</h1>{candidate && <p className="panel-subtitle"><strong>{candidate.id}</strong> · {candidate.brief_text}</p>}</div>{candidate && <div className="button-row"><span className={`status-pill status-${candidate.status}`}>{candidate.status}</span><button type="button" className="secondary-button" onClick={duplicateSelectedBrief}>Duplicate brief</button>{candidate.status !== "archived" && <button type="button" className="secondary-button" onClick={() => void onArchive()} disabled={pendingAction !== null}>Archive</button>}{canPromote && <button type="button" onClick={() => void onPromote()} disabled={pendingAction !== null}>Promote to Decision</button>}</div>}</header>{message && <div className="panel-subtitle" role="status">{message}</div>}<div className="bluecad-workbench__viewport">{candidate?.glb_artifact_id ? <BluecadGlbViewer artifactUrl={bluecadArtifactContentUrl(candidate.workspace_id, candidate.glb_artifact_id)} /> : candidate ? <div className="bluecad-workbench__empty-viewer"><h2>Geometry unavailable</h2><p>{candidate.parked_reason ? `Candidate is parked: ${candidate.parked_reason}` : "No GLB artifact is available for this candidate yet."}</p></div> : <div className="bluecad-workbench__empty-viewer"><p>{viewportFallback}</p></div>}</div></section>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
