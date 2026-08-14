@@ -43,6 +43,13 @@ ALLOWED = {
     "scripts/check_bluecad_workbench.py",
     "docs/specs/STATUS.md",
 }
+UI_AUTHORITY_PATHS = tuple(
+    ROOT / path
+    for path in sorted(ALLOWED)
+    if path.startswith("frontend/src/")
+    and path.endswith((".ts", ".tsx"))
+    and path != "frontend/src/api/client.ts"
+)
 
 FAKE_TELEMETRY = re.compile(
     r"(?:AI\s+confidence|system\s+health|CPU\s*%|GPU\s*%|memory\s*%|stress\s*[:=]|186\.4\s*MPa|87%\s*validation)",
@@ -311,7 +318,11 @@ def check_async_addendum_contracts() -> None:
 
 
 def check_no_fake_authority() -> None:
-    bodies = [read(WORKBENCH), read(VIEWER)]
+    bodies = [
+        path.read_text(encoding="utf-8")
+        for path in UI_AUTHORITY_PATHS
+        if path.exists()
+    ]
     combined = "\n".join(bodies)
     if FAKE_TELEMETRY.search(combined):
         fail("mock workstation telemetry/confidence/engineering result introduced")
@@ -336,6 +347,16 @@ def self_test() -> None:
         fail("fake telemetry detector self-test failed")
     if FORBIDDEN_AUTHORITY.search("stored_path") is None:
         fail("forbidden authority detector self-test failed")
+    required_scanned_ui = {
+        FRONTEND / "components/bluecad/BluecadNavigator.tsx",
+        FRONTEND / "components/bluecad/BluecadSidecar.tsx",
+        FRONTEND / "components/bluecad/BluecadAnalysisDock.tsx",
+        FRONTEND / "components/shell/ContextualNavigator.tsx",
+        FRONTEND / "components/shell/ContextualSidecar.tsx",
+        FRONTEND / "components/shell/AnalysisDock.tsx",
+    }
+    if not required_scanned_ui.issubset(set(UI_AUTHORITY_PATHS)):
+        fail("authority scanner coverage self-test failed")
 
     valid = f"| 085 | in_review | {EXPECTED_PR} | BLUECAD-WORKBENCH-2 | 006, 006c, 083, 084 | active |"
     check_registry_text(status_fixture(valid))
