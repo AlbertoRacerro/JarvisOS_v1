@@ -7,6 +7,22 @@ type BluecadGlbViewerProps = {
   artifactUrl: string;
 };
 
+function disposeMaterial(material: THREE.Material) {
+  for (const value of Object.values(material)) {
+    if (value instanceof THREE.Texture) value.dispose();
+  }
+  material.dispose();
+}
+
+function disposeOwnedScene(root: THREE.Object3D) {
+  root.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    object.geometry?.dispose();
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    for (const material of materials) disposeMaterial(material);
+  });
+}
+
 function BluecadGlbViewer({ artifactUrl }: BluecadGlbViewerProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [message, setMessage] = useState("Loading GLB artifact…");
@@ -14,6 +30,7 @@ function BluecadGlbViewer({ artifactUrl }: BluecadGlbViewerProps) {
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount) return undefined;
+    setMessage("Loading GLB artifact…");
 
     let renderer: THREE.WebGLRenderer;
     try {
@@ -31,6 +48,8 @@ function BluecadGlbViewer({ artifactUrl }: BluecadGlbViewerProps) {
 
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(mount.clientWidth, mount.clientHeight);
+    renderer.domElement.setAttribute("role", "img");
+    renderer.domElement.setAttribute("aria-label", "Interactive 3D preview of generated BLUECAD geometry");
     mount.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -41,14 +60,20 @@ function BluecadGlbViewer({ artifactUrl }: BluecadGlbViewerProps) {
     const directional = new THREE.DirectionalLight(0xffffff, 2.4);
     directional.position.set(80, 120, 90);
     scene.add(directional);
-    scene.add(new THREE.GridHelper(220, 22, 0x94a3b8, 0xe2e8f0));
+    const grid = new THREE.GridHelper(220, 22, 0x94a3b8, 0xe2e8f0);
+    scene.add(grid);
 
     let disposed = false;
+    let loadedScene: THREE.Object3D | null = null;
     const loader = new GLTFLoader();
     loader.load(
       artifactUrl,
       (gltf: { scene: THREE.Object3D }) => {
-        if (disposed) return;
+        if (disposed) {
+          disposeOwnedScene(gltf.scene);
+          return;
+        }
+        loadedScene = gltf.scene;
         scene.add(gltf.scene);
         const box = new THREE.Box3().setFromObject(gltf.scene);
         const center = box.getCenter(new THREE.Vector3());
@@ -64,6 +89,7 @@ function BluecadGlbViewer({ artifactUrl }: BluecadGlbViewerProps) {
       },
       undefined,
       (error: unknown) => {
+        if (disposed) return;
         console.error(error);
         setMessage("Unable to load this GLB artifact.");
       }
@@ -74,31 +100,43 @@ function BluecadGlbViewer({ artifactUrl }: BluecadGlbViewerProps) {
       camera.updateProjectionMatrix();
       renderer.setSize(mount.clientWidth, mount.clientHeight);
     };
+    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(resize);
+    resizeObserver?.observe(mount);
     window.addEventListener("resize", resize);
 
+    let animationFrame = 0;
     const animate = () => {
       if (disposed) return;
       controls.update();
       renderer.render(scene, camera);
-      window.requestAnimationFrame(animate);
+      animationFrame = window.requestAnimationFrame(animate);
     };
     animate();
 
     return () => {
       disposed = true;
+      window.cancelAnimationFrame(animationFrame);
+      resizeObserver?.disconnect();
       window.removeEventListener("resize", resize);
+      if (loadedScene) {
+        scene.remove(loadedScene);
+        disposeOwnedScene(loadedScene);
+        loadedScene = null;
+      }
+      scene.remove(grid);
+      grid.geometry.dispose();
+      const gridMaterials = Array.isArray(grid.material) ? grid.material : [grid.material];
+      for (const material of gridMaterials) material.dispose();
       controls.dispose();
       renderer.dispose();
-      if (renderer.domElement.parentNode === mount) {
-        mount.removeChild(renderer.domElement);
-      }
+      if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement);
     };
   }, [artifactUrl]);
 
   return (
     <div className="bluecad-viewer-shell">
       <div ref={mountRef} className="bluecad-viewer" />
-      <p className="panel-subtitle">{message}</p>
+      <p className="panel-subtitle" aria-live="polite">{message}</p>
     </div>
   );
 }

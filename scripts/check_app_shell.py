@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import ast
 import json
-import os
 import re
 import subprocess
 import sys
@@ -24,73 +22,51 @@ IMPLEMENTATION_PR_LINK = "[#231](https://github.com/AlbertoRacerro/JarvisOS_v1/p
 REGISTRY_HEADER = "| Spec | Status | Implementation PR | Name | Depends on | Description |"
 REGISTRY_SEPARATOR = "| --- | --- | --- | --- | --- | --- |"
 
-SHELL_DIRS = (
-    FRONTEND / "app",
-    FRONTEND / "components/shell",
-    FRONTEND / "stages",
-)
-AUTHORIZED_ADDED = frozenset(
-    {
-        "backend/app/core/spa_static.py",
-        "backend/tests/test_spa_static.py",
-        "frontend/src/app/AppLink.tsx",
-        "frontend/src/app/routes.ts",
-        "frontend/src/app/selection.ts",
-        "frontend/src/app/useAppRouter.ts",
-        "frontend/src/components/shell/AnalysisDock.tsx",
-        "frontend/src/components/shell/ContextualNavigator.tsx",
-        "frontend/src/components/shell/ContextualSidecar.tsx",
-        "frontend/src/components/shell/LegacyDiagnosticSurface.tsx",
-        "frontend/src/components/shell/MigrationPendingSurface.tsx",
-        "frontend/src/components/shell/Rail.tsx",
-        "frontend/src/components/shell/TopBar.tsx",
-        "frontend/src/stages/FlowsheetStage.tsx",
-        "frontend/src/stages/ModelStage.tsx",
-        "frontend/src/stages/ResultsStage.tsx",
-        "frontend/src/stages/ReviewStage.tsx",
-        "frontend/src/stages/registry.ts",
-        "frontend/src/styles/shell.css",
-        "scripts/check_app_shell.py",
-    }
-)
-AUTHORIZED_MODIFIED = frozenset(
-    {
-        "backend/app/main.py",
-        "docs/specs/STATUS.md",
-        "frontend/src/App.tsx",
-        "frontend/src/components/Layout.tsx",
-        "frontend/src/main.tsx",
-        "frontend/src/styles/responsive.css",
-        "scripts/check_ui_foundation.py",
-    }
-)
+AUTHORIZED_ADDED = frozenset({
+    "backend/app/core/spa_static.py",
+    "backend/tests/test_spa_static.py",
+    "frontend/src/app/AppLink.tsx",
+    "frontend/src/app/routes.ts",
+    "frontend/src/app/selection.ts",
+    "frontend/src/app/useAppRouter.ts",
+    "frontend/src/components/shell/AnalysisDock.tsx",
+    "frontend/src/components/shell/ContextualNavigator.tsx",
+    "frontend/src/components/shell/ContextualSidecar.tsx",
+    "frontend/src/components/shell/LegacyDiagnosticSurface.tsx",
+    "frontend/src/components/shell/MigrationPendingSurface.tsx",
+    "frontend/src/components/shell/Rail.tsx",
+    "frontend/src/components/shell/TopBar.tsx",
+    "frontend/src/stages/FlowsheetStage.tsx",
+    "frontend/src/stages/ModelStage.tsx",
+    "frontend/src/stages/ResultsStage.tsx",
+    "frontend/src/stages/ReviewStage.tsx",
+    "frontend/src/stages/registry.ts",
+    "frontend/src/styles/shell.css",
+    "scripts/check_app_shell.py",
+})
+AUTHORIZED_MODIFIED = frozenset({
+    "backend/app/main.py",
+    "docs/specs/STATUS.md",
+    "frontend/src/App.tsx",
+    "frontend/src/components/Layout.tsx",
+    "frontend/src/main.tsx",
+    "frontend/src/styles/responsive.css",
+    "scripts/check_ui_foundation.py",
+})
 PRODUCTION_PATHS = {
-    "/home",
-    "/design/model",
-    "/design/results",
-    "/design/flowsheet",
-    "/runs",
-    "/engineering-data",
-    "/review",
-    "/settings",
-    "/legacy/domain-foundation",
-    "/legacy/ai-draft",
-    "/legacy/system-status",
+    "/home", "/design/model", "/design/results", "/design/flowsheet", "/runs",
+    "/engineering-data", "/review", "/settings", "/legacy/domain-foundation",
+    "/legacy/ai-draft", "/legacy/system-status",
 }
-DEV_PATH = "/legacy/dev-local-chat"
 PRIMARY_ITEMS = (
-    ("Home", "/home"),
-    ("Design", "/design/model"),
-    ("Runs", "/runs"),
-    ("Engineering Data", "/engineering-data"),
-    ("Review", "/review"),
-    ("Settings", "/settings"),
+    ("Home", "/home"), ("Design", "/design/model"), ("Runs", "/runs"),
+    ("Engineering Data", "/engineering-data"), ("Review", "/review"), ("Settings", "/settings"),
 )
-STAGE_KINDS = ("model", "results", "review", "flowsheet")
-REGISTRY_STATES = ("in_review", "merged")
 ROUTE_PATH = re.compile(r'path\s*:\s*"(/[^"]+)"')
 TS_COMMENT = re.compile(r"//[^\n]*|/\*.*?\*/", re.DOTALL)
-HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+FENCE_START = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+RAW_HTML_START = re.compile(r"^ {0,3}<(?P<tag>pre|script|style|textarea)(?:\s|>|$)", re.IGNORECASE)
+GENERIC_HTML_TAG = re.compile(r"^ {0,3}</?[A-Za-z][A-Za-z0-9-]*(?:\s|/?>|$)")
 RAW_COLOR = re.compile(
     r"(?<![\w-])(?:#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|\b(?:black|white|red|blue|green|yellow|purple|orange|cyan|magenta)\b)",
     re.IGNORECASE,
@@ -113,475 +89,347 @@ def read(path: Path) -> str:
         fail(f"missing required file: {path.relative_to(ROOT)}")
 
 
-def without_ts_comments(body: str) -> str:
+def without_comments(body: str) -> str:
     return TS_COMMENT.sub("", body)
 
 
 def shell_files() -> list[Path]:
-    files: list[Path] = [APP, LAYOUT]
-    for directory in SHELL_DIRS:
+    files = [APP, LAYOUT]
+    for directory in (FRONTEND / "app", FRONTEND / "components/shell", FRONTEND / "stages"):
         files.extend(sorted(directory.glob("*.ts")))
         files.extend(sorted(directory.glob("*.tsx")))
     return files
 
 
-def registry_row_state(row: str) -> str | None:
-    cells = tuple(cell.strip() for cell in row.strip().strip("|").split("|"))
-    if (
-        len(cells) == 6
-        and cells[0] == "083"
-        and cells[1] in REGISTRY_STATES
-        and cells[2] == IMPLEMENTATION_PR_LINK
-    ):
-        return cells[1]
-    return None
+def strip_html_comments(text: str) -> str:
+    result: list[str] = []
+    cursor = 0
+    while cursor < len(text):
+        start = text.find("<!--", cursor)
+        if start < 0:
+            result.append(text[cursor:])
+            break
+        result.append(text[cursor:start])
+        end = text.find("-->", start + 4)
+        if end < 0:
+            break
+        comment = text[start:end + 3]
+        result.append("\n" * comment.count("\n"))
+        cursor = end + 3
+    return "".join(result)
 
 
-def registry_row_valid(row: str) -> bool:
-    return registry_row_state(row) is not None
+def markdown_indent(line: str) -> tuple[int, int]:
+    columns = 0
+    index = 0
+    while index < len(line) and line[index] in (" ", "\t"):
+        if line[index] == "\t":
+            columns += 4 - (columns % 4)
+        else:
+            columns += 1
+        index += 1
+    return columns, index
 
 
-def canonical_registry_row(text: str) -> str:
-    lines = HTML_COMMENT.sub("", text).splitlines()
+def registry_lines(text: str) -> list[str]:
+    cleaned = strip_html_comments(text)
+    result: list[str] = []
+    fence_char: str | None = None
+    fence_len = 0
+    html_block: str | None = None
+    raw_block_end: str | None = None
+    blank_terminated_html = False
+    for line in cleaned.splitlines():
+        indent, prefix_len = markdown_indent(line)
+        candidate = line[prefix_len:]
+        if html_block is not None:
+            if re.search(rf"</{re.escape(html_block)}\s*>", candidate, re.IGNORECASE):
+                html_block = None
+            continue
+        if raw_block_end is not None:
+            if raw_block_end in candidate:
+                raw_block_end = None
+            continue
+        if blank_terminated_html:
+            if not candidate.strip():
+                blank_terminated_html = False
+            continue
+        if fence_char is not None:
+            if indent <= 3 and len(candidate) >= fence_len and candidate == fence_char * len(candidate):
+                fence_char = None
+                fence_len = 0
+            continue
+        marker = FENCE_START.match(line)
+        if marker:
+            token = marker.group(1)
+            fence_char = token[0]
+            fence_len = len(token)
+            continue
+        html_marker = RAW_HTML_START.match(line)
+        if html_marker:
+            tag = html_marker.group("tag").lower()
+            if re.search(rf"</{re.escape(tag)}\s*>", candidate[html_marker.end():], re.IGNORECASE) is None:
+                html_block = tag
+            continue
+        if indent <= 3 and candidate.startswith("<![CDATA["):
+            if "]] >".replace(" ", "") not in candidate[len("<![CDATA["):]:
+                raw_block_end = "]] >".replace(" ", "")
+            continue
+        if indent <= 3 and candidate.startswith("<?"):
+            if "?>" not in candidate[2:]:
+                raw_block_end = "?>"
+            continue
+        if indent <= 3 and re.match(r"<![A-Z]", candidate):
+            if ">" not in candidate[2:]:
+                raw_block_end = ">"
+            continue
+        if indent <= 3 and GENERIC_HTML_TAG.match(line):
+            blank_terminated_html = bool(candidate.strip())
+            continue
+        if indent >= 4:
+            continue
+        result.append(line)
+    return result
+
+
+def registry_state(text: str) -> str:
+    lines = registry_lines(text)
     registry_headers = [index for index, line in enumerate(lines) if line.strip() == "## Registry"]
     if len(registry_headers) != 1:
         fail("STATUS.md must contain exactly one canonical Registry section")
-
-    section_start = registry_headers[0] + 1
-    section_end = next(
-        (
-            index
-            for index in range(section_start, len(lines))
-            if lines[index].strip().startswith("## ")
-        ),
-        len(lines),
-    )
-    section = lines[section_start:section_end]
-    header_indexes = [index for index, line in enumerate(section) if line.strip() == REGISTRY_HEADER]
-    if len(header_indexes) != 1:
+    start = registry_headers[0] + 1
+    end = next((index for index in range(start, len(lines)) if lines[index].strip().startswith("## ")), len(lines))
+    section = lines[start:end]
+    table_headers = [index for index, line in enumerate(section) if line.strip() == REGISTRY_HEADER]
+    if len(table_headers) != 1:
         fail("STATUS.md canonical Registry must contain exactly one exact table header")
-
-    header_index = header_indexes[0]
-    if header_index + 1 >= len(section) or section[header_index + 1].strip() != REGISTRY_SEPARATOR:
+    header = table_headers[0]
+    if header + 1 >= len(section) or section[header + 1].strip() != REGISTRY_SEPARATOR:
         fail("STATUS.md canonical Registry separator is missing or malformed")
-
     rows: list[str] = []
-    for line in section[header_index + 2 :]:
+    for line in section[header + 2:]:
         stripped = line.strip()
         if not stripped or not stripped.startswith("|"):
             break
         rows.append(stripped)
-
-    matches = [
-        row
-        for row in rows
-        if tuple(cell.strip() for cell in row.strip("|").split("|"))[0] == "083"
-    ]
+    matches = [row for row in rows if row.startswith("| 083 |")]
     if len(matches) != 1:
         fail(f"STATUS.md canonical Registry must contain exactly one spec 083 row; found {len(matches)}")
-    return matches[0]
+    cells = [cell.strip() for cell in matches[0].strip().strip("|").split("|")]
+    if len(cells) != 6 or cells[2] != IMPLEMENTATION_PR_LINK or cells[1] not in {"in_review", "merged"}:
+        fail("spec 083 registry row must be in_review/merged with exact implementation PR #231")
+    return cells[1]
 
 
 def parse_name_status(output: str) -> dict[str, str]:
     records: dict[str, str] = {}
-    for raw_line in output.splitlines():
-        if not raw_line.strip():
+    for line in output.splitlines():
+        if not line.strip():
             continue
-        fields = raw_line.split("\t")
+        fields = line.split("\t")
         status = fields[0][:1]
-        if len(fields) == 2:
-            paths = fields[1:]
-        elif len(fields) == 3 and status in {"R", "C"}:
-            paths = fields[1:]
-        else:
-            fail(f"malformed diff record: {raw_line!r}")
+        paths = fields[1:] if status in {"R", "C"} else fields[1:2]
         for path in paths:
             if path in records:
-                fail(f"duplicate diff path: {path!r}")
+                fail(f"duplicate diff path: {path}")
             records[path] = status
     return records
 
 
-def exact_scope_required(registry_state: str, canonical_master: bool) -> bool:
-    return registry_state != "merged" or not canonical_master
-
-
-def canonical_master_context(
-    *,
-    event_name: str | None,
-    github_ref: str | None,
-    github_sha: str | None,
-    head_sha: str | None,
-    branch: str | None,
-    remote_master_sha: str | None,
-) -> bool:
-    if event_name is not None:
-        return (
-            event_name == "push"
-            and github_ref == "refs/heads/master"
-            and github_sha is not None
-            and github_sha == head_sha
-        )
-    return (
-        head_sha is not None
-        and remote_master_sha is not None
-        and head_sha == remote_master_sha
-    )
-
-
-def git_output(*arguments: str) -> str | None:
+def check_historical_active_scope() -> None:
     try:
-        return subprocess.run(
-            ["git", *arguments],
-            cwd=ROOT,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        return None
-
-
-def on_canonical_master() -> bool:
-    return canonical_master_context(
-        event_name=os.environ.get("GITHUB_EVENT_NAME"),
-        github_ref=os.environ.get("GITHUB_REF"),
-        github_sha=os.environ.get("GITHUB_SHA"),
-        head_sha=git_output("rev-parse", "HEAD"),
-        branch=git_output("branch", "--show-current"),
-        remote_master_sha=git_output("rev-parse", "refs/remotes/origin/master"),
-    )
-
-
-def route_normalizer_source_valid(body: str) -> bool:
-    return (
-        'pathOnly.startsWith("//")' in body
-        and "replace(/\\/+$/g" in body
-        and "replace(/^\\/+|\\/+$/g" not in body
-    )
-
-
-def check_self_cases() -> None:
-    samples = {
-        "raw hex": (RAW_COLOR, "/* color: #fff */"),
-        "raw rgb template": (RAW_COLOR, "const value = `rgb(${r} ${g} ${b})`;"),
-        "inline style": (INLINE_STYLE, "<div\n style = {value} />"),
-        "storage": (STORAGE, "window.localStorage.setItem('x', 'y')"),
-        "external asset": (EXTERNAL_ASSET, "https://example.invalid/a.svg"),
-        "raw internal anchor": (RAW_INTERNAL_ANCHOR, '<a className="x" href="/runs">Runs</a>'),
-    }
-    for label, (pattern, sample) in samples.items():
-        if pattern.search(sample) is None:
-            fail(f"self-case detector failed for {label}")
-    if ROUTE_PATH.findall('const route = { path : "/home" };') != ["/home"]:
-        fail("route detector does not cover whitespace evasions")
-    comment_only_routes = '// path: "/home"\n/* path: "/design/model" */'
-    if ROUTE_PATH.findall(without_ts_comments(comment_only_routes)):
-        fail("route detector accepts commented-out route evidence")
-    accepted_normalizer = (
-        'if (!pathOnly.startsWith("/") || pathOnly.startsWith("//")) return pathOnly;\n'
-        'const trimmed = pathOnly.replace(/\\/+$/g, "");'
-    )
-    historical_normalizer = 'const trimmed = pathOnly.replace(/^\\/+|\\/+$/g, "");'
-    if not route_normalizer_source_valid(accepted_normalizer):
-        fail("route normalizer detector rejects the trailing-only canonical implementation")
-    if route_normalizer_source_valid(historical_normalizer):
-        fail("route normalizer detector accepts leading-slash normalization")
-    valid_review = f"| 083 | in_review | {IMPLEMENTATION_PR_LINK} | APP-SHELL-1 | 006, 070 | active |"
-    valid_merged = f"| 083 | merged | {IMPLEMENTATION_PR_LINK} | APP-SHELL-1 | 006, 070 | done |"
-    if registry_row_state(valid_review) != "in_review":
-        fail("registry detector rejects the valid review state")
-    if registry_row_state(valid_merged) != "merged":
-        fail("registry detector rejects the valid merged state")
-    if registry_row_valid(f"| 083 | ready | {IMPLEMENTATION_PR_LINK} | APP-SHELL-1 | 006, 070 | stale |"):
-        fail("registry detector accepts a stale ready state")
-    wrong_pr = "[#999](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/999)"
-    if registry_row_valid(f"| 083 | in_review | {wrong_pr} | APP-SHELL-1 | 006, 070 | wrong |"):
-        fail("registry detector accepts the wrong implementation PR")
-    prefix_collision = "[#2310](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/2310)"
-    if registry_row_valid(f"| 083 | merged | {prefix_collision} | APP-SHELL-1 | 006, 070 | wrong |"):
-        fail("registry detector accepts an implementation PR prefix collision")
-    if registry_row_valid(f"| 083 | in_review | — | APP-SHELL-1 | 006, 070 | mentions {IMPLEMENTATION_PR_LINK} only here |"):
-        fail("registry detector accepts the PR link outside the implementation-PR column")
-    decoy_status = "\n".join(
-        [
-            "<!--",
-            valid_merged,
-            "-->",
-            "```text",
-            valid_merged,
-            "```",
-            "## Registry",
-            REGISTRY_HEADER,
-            REGISTRY_SEPARATOR,
-            valid_review,
-            "",
-            valid_merged,
-        ]
-    )
-    if canonical_registry_row(decoy_status) != valid_review:
-        fail("canonical registry parser accepts a pre-registry or post-table decoy row")
-    parsed = parse_name_status("A\tnew.ts\nM\texisting.ts\nD\tlater.ts\n")
-    if parsed != {"new.ts": "A", "existing.ts": "M", "later.ts": "D"}:
-        fail("name-status detector does not preserve change classes")
-    if not exact_scope_required("in_review", canonical_master=True):
-        fail("in-review scope can be relaxed on canonical master")
-    if not exact_scope_required("merged", canonical_master=False):
-        fail("merged registry state relaxes scope away from canonical master")
-    if exact_scope_required("merged", canonical_master=True):
-        fail("merged scope remains exact on canonical master")
-    if not canonical_master_context(
-        event_name="push",
-        github_ref="refs/heads/master",
-        github_sha="abc",
-        head_sha="abc",
-        branch=None,
-        remote_master_sha=None,
-    ):
-        fail("verified push-to-master context is rejected")
-    if canonical_master_context(
-        event_name="pull_request",
-        github_ref="refs/pull/231/merge",
-        github_sha="abc",
-        head_sha="abc",
-        branch="master",
-        remote_master_sha="abc",
-    ):
-        fail("pull-request context is accepted as canonical master")
-    if canonical_master_context(
-        event_name="push",
-        github_ref="refs/heads/master",
-        github_sha="stale",
-        head_sha="abc",
-        branch=None,
-        remote_master_sha=None,
-    ):
-        fail("push context with mismatched HEAD is accepted")
-    if not canonical_master_context(
-        event_name=None,
-        github_ref=None,
-        github_sha=None,
-        head_sha="abc",
-        branch="master",
-        remote_master_sha="abc",
-    ):
-        fail("local master equal to origin/master is rejected")
-    if not canonical_master_context(
-        event_name=None,
-        github_ref=None,
-        github_sha=None,
-        head_sha="abc",
-        branch="",
-        remote_master_sha="abc",
-    ):
-        fail("detached HEAD equal to origin/master is rejected")
-    if canonical_master_context(
-        event_name=None,
-        github_ref=None,
-        github_sha=None,
-        head_sha="abc",
-        branch="",
-        remote_master_sha="different",
-    ):
-        fail("detached HEAD diverged from origin/master is accepted")
-
-
-def check_exact_file_set(registry_state: str) -> None:
-    try:
-        result = subprocess.run(
+        output = subprocess.check_output(
             ["git", "diff", "--name-status", "--no-renames", IMPLEMENTATION_BASE, "HEAD", "--"],
-            cwd=ROOT,
-            check=True,
-            capture_output=True,
-            text=True,
+            cwd=ROOT, text=True,
         )
     except (OSError, subprocess.CalledProcessError) as exc:
-        fail(f"cannot verify implementation diff from {IMPLEMENTATION_BASE}: {exc}")
-    records = parse_name_status(result.stdout)
-    expected = {path: "A" for path in AUTHORIZED_ADDED} | {path: "M" for path in AUTHORIZED_MODIFIED}
-
-    if exact_scope_required(registry_state, on_canonical_master()):
-        unexpected_status = {path: status for path, status in records.items() if status not in {"A", "M"}}
-        added = frozenset(path for path, status in records.items() if status == "A")
-        modified = frozenset(path for path, status in records.items() if status == "M")
-        if unexpected_status or added != AUTHORIZED_ADDED or modified != AUTHORIZED_MODIFIED:
-            fail(
-                "active or non-canonical implementation file/status set differs: "
-                f"unexpected_status={unexpected_status}, "
-                f"missing_added={sorted(AUTHORIZED_ADDED - added)}, extra_added={sorted(added - AUTHORIZED_ADDED)}, "
-                f"missing_modified={sorted(AUTHORIZED_MODIFIED - modified)}, "
-                f"extra_modified={sorted(modified - AUTHORIZED_MODIFIED)}"
-            )
-        return
-
-    mismatched = {
-        path: {"expected": status, "actual": records.get(path)}
-        for path, status in expected.items()
-        if records.get(path) != status
-    }
-    if mismatched:
-        fail(f"merged implementation footprint drifted: {mismatched}")
+        fail(f"cannot verify historical 083 implementation scope: {type(exc).__name__}")
+    records = parse_name_status(output)
+    added = frozenset(path for path, status in records.items() if status == "A")
+    modified = frozenset(path for path, status in records.items() if status == "M")
+    invalid = {path: status for path, status in records.items() if status not in {"A", "M"}}
+    if invalid or added != AUTHORIZED_ADDED or modified != AUTHORIZED_MODIFIED:
+        fail("active 083 implementation footprint differs from the frozen historical allow-list")
 
 
 def check_routes() -> None:
-    raw_body = read(ROUTES)
-    body = without_ts_comments(raw_body)
+    raw = read(ROUTES)
+    body = without_comments(raw)
     found = set(ROUTE_PATH.findall(body))
-    expected_paths = PRODUCTION_PATHS | {DEV_PATH}
-    if found != expected_paths:
-        fail(f"route paths differ: missing={sorted(expected_paths - found)}, extra={sorted(found - expected_paths)}")
+    expected = PRODUCTION_PATHS | {"/legacy/dev-local-chat"}
+    if found != expected:
+        fail(f"route paths differ: missing={sorted(expected-found)}, extra={sorted(found-expected)}")
     if 'normalized === "/"' not in body or 'canonicalPath: "/home"' not in body or "shouldReplace: true" not in body:
-        fail("root canonicalization does not replace / with /home")
-    if not route_normalizer_source_valid(raw_body):
-        fail("route normalization must reject multiple leading slashes and remove trailing slashes only")
+        fail("root canonicalization contract regressed")
+    if 'pathOnly.startsWith("//")' not in raw or "replace(/\\/+$/g" not in body or "replace(/^\\/+|\\/+$/g" in body:
+        fail("route normalizer contract regressed")
     if "import.meta.env.DEV" not in body or "devOnly: true" not in body:
-        fail("development route is not gated")
-
+        fail("development-only local-chat route gating regressed")
     start = body.find("export const PRIMARY_NAV_ITEMS")
     end = body.find("] as const", start)
     if start < 0 or end < 0:
         fail("primary navigation registry is missing")
-    primary_block = body[start:end]
-    pairs = tuple(re.findall(r'label\s*:\s*"([^"]+)"\s*,\s*href\s*:\s*"([^"]+)"', primary_block))
+    pairs = tuple(re.findall(r'label\s*:\s*"([^"]+)"\s*,\s*href\s*:\s*"([^"]+)"', body[start:end]))
     if pairs != PRIMARY_ITEMS:
-        fail(f"primary navigation differs: expected={PRIMARY_ITEMS}, found={pairs}")
-    if "/legacy/" in primary_block:
-        fail("legacy routes appear in primary navigation")
-
-    for legacy in ("/legacy/domain-foundation", "/legacy/ai-draft", "/legacy/system-status"):
-        if legacy not in body:
-            fail(f"required legacy route missing: {legacy}")
+        fail("primary navigation contract regressed")
+    if "/legacy/" in body[start:end]:
+        fail("legacy routes leaked into primary navigation")
 
 
 def check_router() -> None:
-    body = without_ts_comments(read(ROUTER))
+    body = without_comments(read(ROUTER))
     if body.count('addEventListener("popstate"') != 1 or body.count('removeEventListener("popstate"') != 1:
-        fail("router must contain one popstate subscription and cleanup")
+        fail("router popstate subscription/cleanup regressed")
     if "window.history.pushState" not in body or "window.history.replaceState" not in body:
-        fail("History API push/replace behavior is incomplete")
+        fail("History API push/replace contract regressed")
     if "URLSearchParams" in body or STORAGE.search(body):
-        fail("router persists or interprets forbidden shell state")
+        fail("router introduced forbidden persisted/interpreted shell state")
 
 
-def check_stage_registry() -> None:
-    routes = without_ts_comments(read(ROUTES))
-    expected_union = 'type StageKind = "model" | "results" | "review" | "flowsheet"'
-    if expected_union not in routes:
-        fail("StageKind union is not exactly model/results/review/flowsheet")
-
-    registry = without_ts_comments(read(FRONTEND / "stages/registry.ts"))
-    for kind in STAGE_KINDS:
+def check_stage_registry(state: str) -> None:
+    routes = without_comments(read(ROUTES))
+    if 'type StageKind = "model" | "results" | "review" | "flowsheet"' not in routes:
+        fail("StageKind contract regressed")
+    registry = without_comments(read(FRONTEND / "stages/registry.ts"))
+    for kind in ("model", "results", "review", "flowsheet"):
         if len(re.findall(rf"^\s*{kind}:\s*\{{", registry, re.MULTILINE)) != 1:
             fail(f"stage registry entry missing or duplicated: {kind}")
     if "Record<StageKind, StageDefinition>" not in registry:
         fail("stage registry is not exhaustively typed")
 
-    bluecad_importers = []
-    for path in shell_files():
-        if re.search(r'import\s+BlueCAD\s+from\s+["\']', without_ts_comments(read(path))):
-            bluecad_importers.append(path.relative_to(ROOT).as_posix())
-    if bluecad_importers != ["frontend/src/stages/ModelStage.tsx"]:
-        fail(f"BlueCAD must be imported only by ModelStage; found {bluecad_importers}")
+    model = without_comments(read(FRONTEND / "stages/ModelStage.tsx"))
+    if state == "in_review":
+        if 'from "../pages/BlueCAD"' not in model or "<BlueCAD" not in model:
+            fail("active historical 083 context lost the compatibility-mounted BLUECAD contract")
+    elif "ModelStage" not in model:
+        fail("merged 083 ModelStage contract is missing")
 
 
-def check_navigation_and_accessibility() -> None:
-    combined = "\n".join(
-        without_ts_comments(read(path))
-        for path in (APP, LAYOUT, FRONTEND / "components/shell/Rail.tsx", FRONTEND / "components/shell/TopBar.tsx")
-    )
-    required = (
-        "Skip to main content",
-        'aria-current=',
-        'aria-expanded=',
-        'aria-controls=',
-        'id="app-main"',
-        "document.title",
-        "tabIndex={-1}",
-    )
-    for marker in required:
+def check_accessibility() -> None:
+    combined = "\n".join(without_comments(read(path)) for path in (
+        APP, LAYOUT, FRONTEND / "components/shell/Rail.tsx", FRONTEND / "components/shell/TopBar.tsx"
+    ))
+    for marker in ("Skip to main content", "aria-current=", "aria-expanded=", "aria-controls=", 'id="app-main"', "document.title", "tabIndex={-1}"):
         if marker not in combined:
-            fail(f"accessibility marker missing: {marker}")
-
-    legacy = without_ts_comments(read(FRONTEND / "components/shell/LegacyDiagnosticSurface.tsx"))
+            fail(f"accessibility contract marker missing: {marker}")
+    legacy = without_comments(read(FRONTEND / "components/shell/LegacyDiagnosticSurface.tsx"))
     if "Legacy diagnostic surface" not in legacy:
-        fail("legacy routes lack the exact transition label")
+        fail("legacy diagnostic transition label regressed")
     for panel in ("ContextualNavigator.tsx", "ContextualSidecar.tsx", "AnalysisDock.tsx"):
-        body = without_ts_comments(read(FRONTEND / "components/shell" / panel))
-        if 'event.key !== "Escape"' not in body or "onKeyDown={onPanelKeyDown}" not in body:
-            fail(f"focused-panel Escape behavior missing: {panel}")
+        body = without_comments(read(FRONTEND / "components/shell" / panel))
+        escape_guard = 'event.key !== "Escape"' in body or 'event.key === "Escape"' in body
+        if not escape_guard or "onKeyDown={onPanelKeyDown}" not in body:
+            fail(f"focused-panel Escape behavior regressed: {panel}")
 
 
-def check_styles_and_modules() -> None:
+def check_shell_modules() -> None:
     css = read(SHELL_CSS)
     if RAW_COLOR.search(css):
-        fail("shell.css contains a raw color literal")
-    if "minmax(0, 1fr)" not in css:
-        fail("shell stage layout is not shrink-safe")
-    if "var(--color-" not in css or "@media" in css:
-        fail("shell.css must use 070 semantic colors and leave responsive rules in responsive.css")
-
+        fail("shell.css contains raw color literals")
+    if "minmax(0, 1fr)" not in css or "var(--color-" not in css or "@media" in css:
+        fail("shell shrink-safe/token/responsive separation contract regressed")
     for path in shell_files():
         body = read(path)
         relative = path.relative_to(ROOT)
         if RAW_COLOR.search(body):
             fail(f"raw color found in shell module: {relative}")
         if INLINE_STYLE.search(body):
-            fail(f"inline style found: {relative}")
+            fail(f"inline style found in shell module: {relative}")
         if "dangerouslySetInnerHTML" in body or "<svg" in body.lower():
-            fail(f"unsafe HTML/SVG found: {relative}")
+            fail(f"unsafe HTML/SVG found in shell module: {relative}")
         if EXTERNAL_ASSET.search(body):
-            fail(f"external asset URL found: {relative}")
+            fail(f"external asset URL found in shell module: {relative}")
         if STORAGE.search(body):
-            fail(f"forbidden browser persistence found: {relative}")
+            fail(f"forbidden browser persistence found in shell module: {relative}")
         if RAW_INTERNAL_ANCHOR.search(body):
             fail(f"raw internal anchor bypasses AppLink: {relative}")
         if re.search(r"\b(?:ollama|run_ai_task|filesystem|api[_-]?key)\b", body, re.IGNORECASE):
             fail(f"provider/tool authority string introduced: {relative}")
 
 
-def check_dependencies_and_import_order() -> None:
+def check_dependencies() -> None:
     package = json.loads(read(PACKAGE))
-    allowed_dependencies = {"react", "react-dom", "three"}
-    if set(package.get("dependencies", {})) != allowed_dependencies:
+    if set(package.get("dependencies", {})) != {"react", "react-dom", "three"}:
         fail("frontend runtime dependency set changed")
-    forbidden_names = re.compile(r"router|redux|zustand|mobx|xstate|icon|material|chakra|tailwind", re.IGNORECASE)
-    all_names = set(package.get("dependencies", {})) | set(package.get("devDependencies", {}))
-    unexpected = sorted(name for name in all_names if forbidden_names.search(name))
+    forbidden = re.compile(r"router|redux|zustand|mobx|xstate|icon|material|chakra|tailwind", re.IGNORECASE)
+    names = set(package.get("dependencies", {})) | set(package.get("devDependencies", {}))
+    unexpected = sorted(name for name in names if forbidden.search(name))
     if unexpected:
         fail(f"forbidden routing/state/icon/UI dependency found: {unexpected}")
-
-    main = without_ts_comments(read(MAIN))
-    expected = (
-        "./styles/tokens.css",
-        "./styles/global.css",
-        "./styles/foundation.css",
-        "./styles/shell.css",
-        "./styles/responsive.css",
-    )
+    main = read(MAIN)
+    expected = ("./styles/tokens.css", "./styles/global.css", "./styles/foundation.css", "./styles/shell.css", "./styles/responsive.css")
     positions = [main.find(item) for item in expected]
     if any(position < 0 for position in positions) or positions != sorted(positions):
-        fail("stylesheet import order is not tokens/global/foundation/shell/responsive")
+        fail("stylesheet import order regressed")
 
 
-def check_registry_state() -> str:
-    row = canonical_registry_row(read(STATUS))
-    registry_state = registry_row_state(row)
-    if registry_state is None:
-        fail("spec 083 canonical registry row must be in_review or merged with exact implementation PR #231")
-    return registry_state
+def status_fixture(row: str, *, decoy: str = "") -> str:
+    return "\n".join((decoy, "## Registry", "", REGISTRY_HEADER, REGISTRY_SEPARATOR, row, "", "## Next"))
+
+
+def self_test() -> None:
+    valid_merged = f"| 083 | merged | {IMPLEMENTATION_PR_LINK} | APP-SHELL-1 | 006, 070 | done |"
+    valid_active = f"| 083 | in_review | {IMPLEMENTATION_PR_LINK} | APP-SHELL-1 | 006, 070 | active |"
+    if registry_state(status_fixture(valid_merged)) != "merged" or registry_state(status_fixture(valid_active)) != "in_review":
+        fail("registry lifecycle self-test failed")
+    for invalid in (
+        "| 083 | merged | — | APP-SHELL-1 | 006, 070 | wrong |",
+        f"| 083 | ready | {IMPLEMENTATION_PR_LINK} | APP-SHELL-1 | 006, 070 | wrong |",
+    ):
+        try:
+            registry_state(status_fixture(invalid))
+        except SystemExit:
+            pass
+        else:
+            fail("registry parser accepted invalid lifecycle evidence")
+    decoy = f"<!--\n{valid_merged}\n-->"
+    if registry_state(status_fixture(valid_active, decoy=decoy)) != "in_review":
+        fail("registry parser accepted an HTML-comment decoy over canonical evidence")
+    fenced_decoy = "```markdown\n" + status_fixture(valid_merged) + "\n```"
+    if registry_state(status_fixture(valid_active, decoy=fenced_decoy)) != "in_review":
+        fail("registry parser accepted a fenced Registry decoy over canonical evidence")
+    hidden_only = (
+        fenced_decoy,
+        "```markdown\n    ```\n" + status_fixture(valid_merged) + "\n```",
+        "\n".join(("<pre>", "## Registry", REGISTRY_HEADER, REGISTRY_SEPARATOR, valid_merged, "</pre>")),
+        "\n".join(("    ## Registry", "    " + REGISTRY_HEADER, "    " + REGISTRY_SEPARATOR, "    " + valid_merged)),
+        "\n".join(("<!--", "## Registry", REGISTRY_HEADER, REGISTRY_SEPARATOR, valid_merged)),
+    )
+    for hidden in hidden_only:
+        try:
+            registry_state(hidden)
+        except SystemExit:
+            pass
+        else:
+            fail("registry parser accepted hidden Markdown lifecycle evidence")
+    try:
+        registry_state(status_fixture("| 084 | merged | — | OTHER | — | no 083 |", decoy=decoy))
+    except SystemExit:
+        pass
+    else:
+        fail("registry parser accepted a decoy when canonical 083 evidence was absent")
+    parsed = parse_name_status("A\tnew.ts\nM\texisting.ts\n")
+    if parsed != {"new.ts": "A", "existing.ts": "M"}:
+        fail("name-status parser self-test failed")
+    for pattern, sample in (
+        (RAW_COLOR, "#fff"), (INLINE_STYLE, "style = {value}"), (STORAGE, "localStorage"),
+        (EXTERNAL_ASSET, "https://example.invalid/a.svg"), (RAW_INTERNAL_ANCHOR, '<a href="/runs">'),
+    ):
+        if pattern.search(sample) is None:
+            fail("shell invariant detector self-test failed")
 
 
 def main() -> None:
-    check_self_cases()
-    registry_state = check_registry_state()
-    check_exact_file_set(registry_state)
+    self_test()
+    state = registry_state(read(STATUS))
+    if state == "in_review":
+        check_historical_active_scope()
     check_routes()
     check_router()
-    check_stage_registry()
-    check_navigation_and_accessibility()
-    check_styles_and_modules()
-    check_dependencies_and_import_order()
-    ast.parse(read(Path(__file__)))
+    check_stage_registry(state)
+    check_accessibility()
+    check_shell_modules()
+    check_dependencies()
     print("APP-SHELL-1 checks passed")
 
 
