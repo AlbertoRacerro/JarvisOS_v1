@@ -19,6 +19,7 @@ EXPECTED_PR = "[#239](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/239)"
 REGISTRY_HEADER = "| Spec | Status | Implementation PR | Name | Depends on | Description |"
 REGISTRY_SEPARATOR = "| --- | --- | --- | --- | --- | --- |"
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+FENCE_START = re.compile(r"^\s*(`{3,}|~{3,})")
 
 ALLOWED = {
     "frontend/src/App.tsx",
@@ -109,8 +110,29 @@ def validate_scope(paths: set[str]) -> None:
         fail(f"forbidden backend/dependency/workflow/schema surface changed: {', '.join(forbidden)}")
 
 
+def registry_lines(text: str) -> list[str]:
+    cleaned = HTML_COMMENT.sub("", text)
+    result: list[str] = []
+    fence_char: str | None = None
+    fence_len = 0
+    for line in cleaned.splitlines():
+        marker = FENCE_START.match(line)
+        if marker:
+            token = marker.group(1)
+            if fence_char is None:
+                fence_char = token[0]
+                fence_len = len(token)
+            elif token[0] == fence_char and len(token) >= fence_len:
+                fence_char = None
+                fence_len = 0
+            continue
+        if fence_char is None:
+            result.append(line)
+    return result
+
+
 def registry_row(text: str) -> str:
-    lines = HTML_COMMENT.sub("", text).splitlines()
+    lines = registry_lines(text)
     registry_headers = [index for index, line in enumerate(lines) if line.strip() == "## Registry"]
     if len(registry_headers) != 1:
         fail("STATUS.md must contain exactly one canonical Registry section")
@@ -226,6 +248,8 @@ def self_test() -> None:
     check_registry_text(status_fixture(valid))
     decoy = f"<!--\n{valid}\n-->"
     check_registry_text(status_fixture(valid, decoy=decoy))
+    fenced_decoy = "```markdown\n## Registry\n\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid + "\n```"
+    check_registry_text(status_fixture(valid, decoy=fenced_decoy))
     for invalid in (
         "| 085 | ready | — | BLUECAD-WORKBENCH-2 | deps | wrong |",
         "| 084 | merged | — | OTHER | deps | no 085 |",
@@ -236,6 +260,12 @@ def self_test() -> None:
             pass
         else:
             fail("registry self-test accepted non-canonical or invalid 085 lifecycle evidence")
+    try:
+        check_registry_text(fenced_decoy)
+    except SystemExit:
+        pass
+    else:
+        fail("registry self-test accepted a fenced decoy as canonical evidence")
 
 
 def main() -> None:
