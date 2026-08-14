@@ -62,6 +62,8 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const selectedRef = useRef<string | null>(null);
   const showArchivedRef = useRef(showArchived);
   showArchivedRef.current = showArchived;
+  const filterTextRef = useRef(filterText);
+  filterTextRef.current = filterText;
   const currentList = useRef<RequestContext | null>(null);
   const currentDetail = useRef<RequestContext | null>(null);
   const currentValidation = useRef<RequestContext | null>(null);
@@ -83,13 +85,10 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     node.focus();
   }, []);
 
-  const visibleCandidates = useMemo(() => {
-    const query = filterText.trim().toLowerCase();
-    return candidates.filter((candidate) => {
-      if (!showArchived && candidate.status === "archived") return false;
-      return !query || candidate.id.toLowerCase().includes(query) || candidate.brief_text.toLowerCase().includes(query);
-    });
-  }, [candidates, filterText, showArchived]);
+  const visibleCandidates = useMemo(
+    () => filterCandidates(candidates, filterText, showArchived),
+    [candidates, filterText, showArchived]
+  );
 
   const selected = useMemo(
     () => visibleCandidates.find((candidate) => candidate.id === selectedId) ?? null,
@@ -141,7 +140,8 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       const items = await listBluecadCandidates(targetWorkspaceId);
       if (!currentList.current || !acceptsRequest(currentList.current, request)) return null;
       setCandidates(items);
-      const nextId = revalidateSelection(items, preferredId, showArchivedRef.current);
+      const selectableItems = filterCandidates(items, filterTextRef.current, showArchivedRef.current);
+      const nextId = revalidateSelection(selectableItems, preferredId, true);
       selectedRef.current = nextId;
       currentDetail.current = null;
       currentValidation.current = null;
@@ -315,8 +315,8 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     currentValidation.current = null;
     clearVisibleDetail("loading");
     const items = await loadCandidates(workspaceId, selectedId, true);
-    if (!items) return false;
-    const nextId = revalidateSelection(items, selectedId, showArchivedRef.current);
+    if (!items || workspaceRef.current !== workspaceId) return false;
+    const nextId = selectedRef.current;
     if (!nextId) return false;
     const detail = await loadAggregate(workspaceId, nextId);
     return detail !== null;
@@ -330,7 +330,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     currentValidation.current = null;
     const items = await loadCandidates(mutation.workspaceId, preferredId, true);
     if (items && workspaceRef.current === mutation.workspaceId) {
-      const nextId = revalidateSelection(items, preferredId, showArchivedRef.current);
+      const nextId = selectedRef.current;
       if (nextId) await loadAggregate(mutation.workspaceId, nextId);
     }
     if (workspaceRef.current === mutation.workspaceId) setMessage(failureMessage);
@@ -351,6 +351,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     try {
       const created = await createBluecadCandidate(mutation.workspaceId, brief);
       if (!acceptsMutation({ generation: mutationGeneration.current, workspaceId: workspaceRef.current, candidateId: selectedRef.current }, mutation)) return;
+      filterTextRef.current = "";
       setFilterText("");
       suppressNextDetailEffect.current = created.id;
       const items = await loadCandidates(mutation.workspaceId, created.id);
@@ -440,7 +441,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
         setMessage(null);
         setWorkspaceId(nextWorkspaceId);
       }} disabled={workspaceState !== "ready" || workspaces.length === 0 || pendingAction !== null} style={{ width: "100%", minWidth: 0, maxWidth: "100%" }}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
-      <label>Filter candidates<input ref={filterRef} value={filterText} onChange={(event) => setFilterText(event.target.value)} disabled={candidateState === "loading" || pendingAction !== null} /></label>
+      <label>Filter candidates<input ref={filterRef} value={filterText} onChange={(event) => { filterTextRef.current = event.target.value; setFilterText(event.target.value); }} disabled={candidateState === "loading" || pendingAction !== null} /></label>
       <label className="checkbox-line"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} disabled={candidateState === "loading" || pendingAction !== null} />Show archived</label>
       <button type="button" className="secondary-button" onClick={() => void refresh()} disabled={!workspaceId || candidateState === "loading" || pendingAction !== null}>Refresh</button>
       <form className="bluecad-new-form" onSubmit={onCreate}><label>New candidate brief<textarea ref={handleBriefRef} value={briefText} onChange={(event) => setBriefText(event.target.value)} required /></label><button type="submit" disabled={!workspaceId || !briefText.trim() || pendingAction !== null}>{pendingAction === "create" ? "Creating…" : "New candidate"}</button></form>
@@ -493,9 +494,16 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const canPromote = candidate?.status === "valid" && !candidate.promoted_decision_id;
   const viewportFallback = selectedId && aggregateState === "error" ? "Candidate detail unavailable. Use Refresh to retry." : aggregateState === "loading" ? "Loading candidate geometry…" : "Select a candidate from the navigator.";
 
-  return <section className="bluecad-workbench" aria-labelledby="bluecad-workbench-title"><header className="bluecad-workbench__chrome"><div><p className="eyebrow">BLUECAD</p><h1 id="bluecad-workbench-title" ref={workbenchTitleRef} tabIndex={-1}>Model workbench</h1>{candidate && <p className="panel-subtitle" style={{ overflowWrap: "anywhere", minWidth: 0 }}><strong>{candidate.id}</strong> · {candidate.brief_text}</p>}</div>{candidate && <div className="button-row"><span className={`status-pill status-${candidate.status}`}>{candidate.status}</span><button type="button" className="secondary-button" onClick={duplicateSelectedBrief}>Duplicate brief</button>{candidate.status !== "archived" && <button type="button" className="secondary-button" onClick={() => void onArchive()} disabled={pendingAction !== null}>Archive</button>}{canPromote && <button type="button" onClick={() => void onPromote()} disabled={pendingAction !== null}>Promote to Decision</button>}</div>}</header>{message && <div className="panel-subtitle" role="status">{message}</div>}<div className="bluecad-workbench__viewport">{candidate?.glb_artifact_id ? <BluecadGlbViewer artifactUrl={bluecadArtifactContentUrl(candidate.workspace_id, candidate.glb_artifact_id)} /> : candidate ? <div className="bluecad-workbench__empty-viewer"><h2>Geometry unavailable</h2><p>{candidate.parked_reason ? `Candidate is parked: ${candidate.parked_reason}` : "No GLB artifact is available for this candidate yet."}</p></div> : <div className="bluecad-workbench__empty-viewer"><p>{viewportFallback}</p></div>}</div></section>;
+  return <section className="bluecad-workbench" aria-labelledby="bluecad-workbench-title"><header className="bluecad-workbench__chrome"><div><p className="eyebrow">BLUECAD</p><h1 id="bluecad-workbench-title" ref={workbenchTitleRef} tabIndex={-1}>Model workbench</h1>{candidate && <p className="panel-subtitle" style={{ overflowWrap: "anywhere", minWidth: 0 }}><strong>{candidate.id}</strong> · {candidate.brief_text}</p>}</div>{candidate && <div className="button-row"><span className={`status-pill status-${candidate.status}`}>{candidate.status}</span><button type="button" className="secondary-button" onClick={duplicateSelectedBrief}>Duplicate brief</button>{candidate.status !== "archived" && <button type="button" className="secondary-button" onClick={() => void onArchive()} disabled={pendingAction !== null}>Archive</button>}{canPromote && <button type="button" onClick={() => void onPromote()} disabled={pendingAction !== null}>Promote to Decision</button>}</div>}</header>{message && <div className="panel-subtitle" role="status">{message}</div>}<div className="bluecad-workbench__viewport" style={{ minHeight: "min(26rem, 55vh)" }}>{candidate?.glb_artifact_id ? <BluecadGlbViewer artifactUrl={bluecadArtifactContentUrl(candidate.workspace_id, candidate.glb_artifact_id)} /> : candidate ? <div className="bluecad-workbench__empty-viewer"><h2>Geometry unavailable</h2><p>{candidate.parked_reason ? `Candidate is parked: ${candidate.parked_reason}` : "No GLB artifact is available for this candidate yet."}</p></div> : <div className="bluecad-workbench__empty-viewer"><p>{viewportFallback}</p></div>}</div></section>;
 }
 
+function filterCandidates(items: BluecadCandidate[], filterText: string, showArchived: boolean): BluecadCandidate[] {
+  const query = filterText.trim().toLowerCase();
+  return items.filter((candidate) => {
+    if (!showArchived && candidate.status === "archived") return false;
+    return !query || candidate.id.toLowerCase().includes(query) || candidate.brief_text.toLowerCase().includes(query);
+  });
+}
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 function isValidationCheck(value: unknown): value is BluecadValidationCheck {
   if (!isRecord(value)) return false;
