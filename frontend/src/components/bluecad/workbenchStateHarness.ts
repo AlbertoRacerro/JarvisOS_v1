@@ -11,7 +11,11 @@ assert(acceptsRequest(currentB, currentB), "current request rejected");
 assert(!acceptsRequest(currentB, { generation: 2, workspaceId: "B", candidateId: "b2" }), "stale candidate response accepted");
 
 const validationCurrent: RequestContext = { generation: 8, workspaceId: "B", candidateId: "b2", artifactId: "report-b2" };
-assert(!acceptsRequest(validationCurrent, { generation: 7, workspaceId: "B", candidateId: "b1", artifactId: "report-b1" }), "stale validation response accepted");
+const validationStale: RequestContext = { generation: 7, workspaceId: "B", candidateId: "b1", artifactId: "report-b1" };
+let visibleValidation = "candidate-b";
+if (acceptsRequest(validationCurrent, validationStale)) visibleValidation = "candidate-a";
+assert(!acceptsRequest(validationCurrent, validationStale), "stale validation response accepted");
+assert(visibleValidation === "candidate-b", "stale validation response mutated visible state");
 assert(acceptsRequest(validationCurrent, validationCurrent), "current validation response rejected");
 
 const candidates = [{ id: "a", status: "archived" }, { id: "b", status: "valid" }, { id: "c", status: "parked" }];
