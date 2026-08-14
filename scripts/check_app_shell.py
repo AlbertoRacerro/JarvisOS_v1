@@ -62,8 +62,14 @@ PRIMARY_ITEMS = (
 )
 ROUTE_PATH = re.compile(r'path\s*:\s*"(/[^"]+)"')
 TS_COMMENT = re.compile(r"//[^\n]*|/\*.*?\*/", re.DOTALL)
-RAW_COLOR = re.compile(r"(?<![\w-])(?:#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\()", re.IGNORECASE)
+RAW_COLOR = re.compile(
+    r"(?<![\w-])(?:#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|\b(?:black|white|red|blue|green|yellow|purple|orange|cyan|magenta)\b)",
+    re.IGNORECASE,
+)
+INLINE_STYLE = re.compile(r"\bstyle\s*=\s*\{", re.IGNORECASE)
 STORAGE = re.compile(r"\b(?:localStorage|sessionStorage|indexedDB|document\.cookie)\b")
+EXTERNAL_ASSET = re.compile(r"https?://", re.IGNORECASE)
+RAW_INTERNAL_ANCHOR = re.compile(r"<a\b[^>]*\bhref\s*=\s*[\"']/", re.IGNORECASE | re.DOTALL)
 
 
 def fail(message: str) -> None:
@@ -80,6 +86,14 @@ def read(path: Path) -> str:
 
 def without_comments(body: str) -> str:
     return TS_COMMENT.sub("", body)
+
+
+def shell_files() -> list[Path]:
+    files = [APP, LAYOUT]
+    for directory in (FRONTEND / "app", FRONTEND / "components/shell", FRONTEND / "stages"):
+        files.extend(sorted(directory.glob("*.ts")))
+        files.extend(sorted(directory.glob("*.tsx")))
+    return files
 
 
 def registry_state(text: str) -> str:
@@ -131,7 +145,7 @@ def check_routes() -> None:
         fail(f"route paths differ: missing={sorted(expected-found)}, extra={sorted(found-expected)}")
     if 'normalized === "/"' not in body or 'canonicalPath: "/home"' not in body or "shouldReplace: true" not in body:
         fail("root canonicalization contract regressed")
-    if 'pathOnly.startsWith("//")' not in body or "replace(/\\/+$/g" not in body:
+    if 'pathOnly.startsWith("//")' not in body or "replace(/\\/+$/g" not in body or "replace(/^\\/+|\\/+$/g" in body:
         fail("route normalizer contract regressed")
     start = body.find("export const PRIMARY_NAV_ITEMS")
     end = body.find("] as const", start)
@@ -140,6 +154,8 @@ def check_routes() -> None:
     pairs = tuple(re.findall(r'label\s*:\s*"([^"]+)"\s*,\s*href\s*:\s*"([^"]+)"', body[start:end]))
     if pairs != PRIMARY_ITEMS:
         fail("primary navigation contract regressed")
+    if "/legacy/" in body[start:end]:
+        fail("legacy routes leaked into primary navigation")
 
 
 def check_router() -> None:
@@ -148,8 +164,8 @@ def check_router() -> None:
         fail("router popstate subscription/cleanup regressed")
     if "window.history.pushState" not in body or "window.history.replaceState" not in body:
         fail("History API push/replace contract regressed")
-    if STORAGE.search(body):
-        fail("router introduced forbidden persisted shell state")
+    if "URLSearchParams" in body or STORAGE.search(body):
+        fail("router introduced forbidden persisted/interpreted shell state")
 
 
 def check_stage_registry(state: str) -> None:
@@ -167,9 +183,8 @@ def check_stage_registry(state: str) -> None:
     if state == "in_review":
         if 'from "../pages/BlueCAD"' not in model or "<BlueCAD" not in model:
             fail("active historical 083 context lost the compatibility-mounted BLUECAD contract")
-    else:
-        if "ModelStage" not in model:
-            fail("merged 083 ModelStage contract is missing")
+    elif "ModelStage" not in model:
+        fail("merged 083 ModelStage contract is missing")
 
 
 def check_accessibility() -> None:
@@ -179,21 +194,49 @@ def check_accessibility() -> None:
     for marker in ("Skip to main content", "aria-current=", "aria-expanded=", "aria-controls=", 'id="app-main"', "document.title", "tabIndex={-1}"):
         if marker not in combined:
             fail(f"accessibility contract marker missing: {marker}")
+    legacy = without_comments(read(FRONTEND / "components/shell/LegacyDiagnosticSurface.tsx"))
+    if "Legacy diagnostic surface" not in legacy:
+        fail("legacy diagnostic transition label regressed")
     for panel in ("ContextualNavigator.tsx", "ContextualSidecar.tsx", "AnalysisDock.tsx"):
         body = without_comments(read(FRONTEND / "components/shell" / panel))
         if 'event.key !== "Escape"' not in body or "onKeyDown={onPanelKeyDown}" not in body:
             fail(f"focused-panel Escape behavior regressed: {panel}")
 
 
-def check_styles_and_dependencies() -> None:
+def check_shell_modules() -> None:
     css = read(SHELL_CSS)
     if RAW_COLOR.search(css):
         fail("shell.css contains raw color literals")
-    if "minmax(0, 1fr)" not in css or "var(--color-" not in css:
-        fail("shell shrink-safe/semantic-token contract regressed")
+    if "minmax(0, 1fr)" not in css or "var(--color-" not in css or "@media" in css:
+        fail("shell shrink-safe/token/responsive separation contract regressed")
+    for path in shell_files():
+        body = read(path)
+        relative = path.relative_to(ROOT)
+        if RAW_COLOR.search(body):
+            fail(f"raw color found in shell module: {relative}")
+        if INLINE_STYLE.search(body):
+            fail(f"inline style found in shell module: {relative}")
+        if "dangerouslySetInnerHTML" in body or "<svg" in body.lower():
+            fail(f"unsafe HTML/SVG found in shell module: {relative}")
+        if EXTERNAL_ASSET.search(body):
+            fail(f"external asset URL found in shell module: {relative}")
+        if STORAGE.search(body):
+            fail(f"forbidden browser persistence found in shell module: {relative}")
+        if RAW_INTERNAL_ANCHOR.search(body):
+            fail(f"raw internal anchor bypasses AppLink: {relative}")
+        if re.search(r"\b(?:ollama|run_ai_task|filesystem|api[_-]?key)\b", body, re.IGNORECASE):
+            fail(f"provider/tool authority string introduced: {relative}")
+
+
+def check_dependencies() -> None:
     package = json.loads(read(PACKAGE))
     if set(package.get("dependencies", {})) != {"react", "react-dom", "three"}:
         fail("frontend runtime dependency set changed")
+    forbidden = re.compile(r"router|redux|zustand|mobx|xstate|icon|material|chakra|tailwind", re.IGNORECASE)
+    names = set(package.get("dependencies", {})) | set(package.get("devDependencies", {}))
+    unexpected = sorted(name for name in names if forbidden.search(name))
+    if unexpected:
+        fail(f"forbidden routing/state/icon/UI dependency found: {unexpected}")
     main = read(MAIN)
     expected = ("./styles/tokens.css", "./styles/global.css", "./styles/foundation.css", "./styles/shell.css", "./styles/responsive.css")
     positions = [main.find(item) for item in expected]
@@ -206,15 +249,25 @@ def self_test() -> None:
     valid_active = f"| 083 | in_review | {IMPLEMENTATION_PR_LINK} | APP-SHELL-1 | 006, 070 | active |"
     if registry_state(valid_merged) != "merged" or registry_state(valid_active) != "in_review":
         fail("registry lifecycle self-test failed")
-    try:
-        registry_state("| 083 | merged | — | APP-SHELL-1 | 006, 070 | wrong |")
-    except SystemExit:
-        pass
-    else:
-        fail("registry parser accepted wrong PR")
+    for invalid in (
+        "| 083 | merged | — | APP-SHELL-1 | 006, 070 | wrong |",
+        f"| 083 | ready | {IMPLEMENTATION_PR_LINK} | APP-SHELL-1 | 006, 070 | wrong |",
+    ):
+        try:
+            registry_state(invalid)
+        except SystemExit:
+            pass
+        else:
+            fail("registry parser accepted invalid lifecycle evidence")
     parsed = parse_name_status("A\tnew.ts\nM\texisting.ts\n")
     if parsed != {"new.ts": "A", "existing.ts": "M"}:
         fail("name-status parser self-test failed")
+    for pattern, sample in (
+        (RAW_COLOR, "#fff"), (INLINE_STYLE, "style = {value}"), (STORAGE, "localStorage"),
+        (EXTERNAL_ASSET, "https://example.invalid/a.svg"), (RAW_INTERNAL_ANCHOR, '<a href="/runs">'),
+    ):
+        if pattern.search(sample) is None:
+            fail("shell invariant detector self-test failed")
 
 
 def main() -> None:
@@ -226,7 +279,8 @@ def main() -> None:
     check_router()
     check_stage_registry(state)
     check_accessibility()
-    check_styles_and_dependencies()
+    check_shell_modules()
+    check_dependencies()
     print("APP-SHELL-1 checks passed")
 
 
