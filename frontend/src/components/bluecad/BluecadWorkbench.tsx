@@ -299,13 +299,16 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
 
   const refresh = useCallback(async () => {
     if (!workspaceId) return false;
+    currentDetail.current = null;
+    currentValidation.current = null;
+    clearVisibleDetail("loading");
     const items = await loadCandidates(workspaceId, selectedId, true);
     if (!items) return false;
     const nextId = revalidateSelection(items, selectedId, showArchivedRef.current);
     if (!nextId) return false;
     const detail = await loadAggregate(workspaceId, nextId);
     return detail !== null;
-  }, [loadAggregate, loadCandidates, selectedId, workspaceId]);
+  }, [clearVisibleDetail, loadAggregate, loadCandidates, selectedId, workspaceId]);
 
   const onCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
