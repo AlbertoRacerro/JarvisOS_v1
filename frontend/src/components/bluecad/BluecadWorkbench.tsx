@@ -72,6 +72,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const currentValidation = useRef<RequestContext | null>(null);
   const suppressNextDetailEffect = useRef<string | null>(null);
   const briefRef = useRef<HTMLTextAreaElement | null>(null);
+  const filterRef = useRef<HTMLInputElement | null>(null);
   const candidateRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const emptyCandidatesRef = useRef<HTMLParagraphElement | null>(null);
   const focusAfterSelectionChange = useRef(false);
@@ -257,7 +258,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   useEffect(() => {
     const nextId = revalidateSelection(visibleCandidates, selectedId, true);
     if (nextId === selectedId) return;
-    focusAfterSelectionChange.current = true;
+    focusAfterSelectionChange.current = document.activeElement !== filterRef.current;
     chooseCandidate(nextId);
   }, [chooseCandidate, selectedId, visibleCandidates]);
 
@@ -377,7 +378,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
         setMessage(null);
         setWorkspaceId(nextWorkspaceId);
       }} disabled={workspaceState !== "ready" || workspaces.length === 0}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
-      <label>Filter candidates<input value={filterText} onChange={(event) => setFilterText(event.target.value)} /></label>
+      <label>Filter candidates<input ref={filterRef} value={filterText} onChange={(event) => setFilterText(event.target.value)} /></label>
       <label className="checkbox-line"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />Show archived</label>
       <button type="button" className="secondary-button" onClick={() => void refresh()} disabled={!workspaceId || candidateState === "loading" || pendingAction !== null}>Refresh</button>
       <form className="bluecad-new-form" onSubmit={onCreate}><label>New candidate brief<textarea ref={briefRef} value={briefText} onChange={(event) => setBriefText(event.target.value)} required /></label><button type="submit" disabled={!workspaceId || !briefText.trim() || pendingAction !== null}>{pendingAction === "create" ? "Creating…" : "New candidate"}</button></form>
