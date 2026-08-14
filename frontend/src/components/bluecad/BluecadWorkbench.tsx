@@ -406,8 +406,8 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
         setMessage(null);
         setWorkspaceId(nextWorkspaceId);
       }} disabled={workspaceState !== "ready" || workspaces.length === 0}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
-      <label>Filter candidates<input ref={filterRef} value={filterText} onChange={(event) => setFilterText(event.target.value)} /></label>
-      <label className="checkbox-line"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />Show archived</label>
+      <label>Filter candidates<input ref={filterRef} value={filterText} onChange={(event) => setFilterText(event.target.value)} disabled={candidateState === "loading"} /></label>
+      <label className="checkbox-line"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} disabled={candidateState === "loading"} />Show archived</label>
       <button type="button" className="secondary-button" onClick={() => void refresh()} disabled={!workspaceId || candidateState === "loading" || pendingAction !== null}>Refresh</button>
       <form className="bluecad-new-form" onSubmit={onCreate}><label>New candidate brief<textarea ref={handleBriefRef} value={briefText} onChange={(event) => setBriefText(event.target.value)} required /></label><button type="submit" disabled={!workspaceId || !briefText.trim() || pendingAction !== null}>{pendingAction === "create" ? "Creating…" : "New candidate"}</button></form>
       {workspaceState === "loading" && <p>Loading workspaces…</p>}
