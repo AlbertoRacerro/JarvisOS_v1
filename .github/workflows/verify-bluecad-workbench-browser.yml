@@ -38,7 +38,16 @@ jobs:
           sed -i "s/^TARGET_SHA = .*/TARGET_SHA = \"${TARGET_IMPLEMENTATION_SHA}\"/" tests/test_bluecad_workbench_browser_verification.py
           sed -i 's/fixture parked after two failed attempts/attempts_exhausted/g' tests/test_bluecad_workbench_browser_verification.py
           sed -i 's/  const before = await canvas.boundingBox();/  await page.setViewportSize({ width: 1280, height: 720 });\n  await page.waitForTimeout(250);\n  const before = await canvas.boundingBox();/' tests/test_bluecad_workbench_browser_verification.py
-          sed -i 's/values: \\\[1,2\\\\]/values: \\\[2 items\\\\]/g' tests/test_bluecad_workbench_browser_verification.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("tests/test_bluecad_workbench_browser_verification.py")
+          body = path.read_text(encoding="utf-8")
+          old = r'await page.getByText(/values: \\[1,2\\]/).waitFor();'
+          new = r'await page.getByText(/values: \\[2 items\\]/).waitFor();'
+          if old not in body:
+              raise SystemExit("expected validation browser assertion was not found")
+          path.write_text(body.replace(old, new, 1), encoding="utf-8")
+          PY
           set +e
           python -m pytest -q tests/test_bluecad_workbench_browser_verification.py -s
           status=$?
