@@ -37,6 +37,9 @@ FORBIDDEN_MANIFEST_PARTS = (
 )
 CLIENT_SYMBOL = "getBluecadCandidateAggregate"
 IMPLEMENTATION_PR_LINK = "[#236](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/236)"
+REGISTRY_HEADER = "| Spec | Status | Implementation PR | Name | Depends on | Description |"
+REGISTRY_SEPARATOR = "| --- | --- | --- | --- | --- | --- |"
+HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 
 
 def fail(message: str) -> None:
@@ -52,10 +55,29 @@ def read(path: Path) -> str:
 
 
 def registry_state(text: str) -> str:
-    rows = [line for line in text.splitlines() if line.startswith("| 084 |")]
-    if len(rows) != 1:
-        fail(f"STATUS.md must contain exactly one canonical spec 084 row; found {len(rows)}")
-    cells = [cell.strip() for cell in rows[0].strip().strip("|").split("|")]
+    lines = HTML_COMMENT.sub("", text).splitlines()
+    registry_headers = [index for index, line in enumerate(lines) if line.strip() == "## Registry"]
+    if len(registry_headers) != 1:
+        fail("STATUS.md must contain exactly one canonical Registry section")
+    start = registry_headers[0] + 1
+    end = next((index for index in range(start, len(lines)) if lines[index].strip().startswith("## ")), len(lines))
+    section = lines[start:end]
+    table_headers = [index for index, line in enumerate(section) if line.strip() == REGISTRY_HEADER]
+    if len(table_headers) != 1:
+        fail("STATUS.md canonical Registry must contain exactly one exact table header")
+    header = table_headers[0]
+    if header + 1 >= len(section) or section[header + 1].strip() != REGISTRY_SEPARATOR:
+        fail("STATUS.md canonical Registry separator is missing or malformed")
+    rows: list[str] = []
+    for line in section[header + 2:]:
+        stripped = line.strip()
+        if not stripped or not stripped.startswith("|"):
+            break
+        rows.append(stripped)
+    matches = [row for row in rows if row.startswith("| 084 |")]
+    if len(matches) != 1:
+        fail(f"STATUS.md canonical Registry must contain exactly one spec 084 row; found {len(matches)}")
+    cells = [cell.strip() for cell in matches[0].strip().strip("|").split("|")]
     if len(cells) != 6 or cells[2] != IMPLEMENTATION_PR_LINK or cells[1] not in {"in_review", "merged"}:
         fail("spec 084 registry row must be in_review/merged with exact implementation PR #236")
     return cells[1]
@@ -163,6 +185,10 @@ def check_no_ui_consumption() -> None:
         fail(f"084 aggregate client is consumed by UI code: {', '.join(consumers)}")
 
 
+def status_fixture(row: str, *, decoy: str = "") -> str:
+    return "\n".join((decoy, "## Registry", "", REGISTRY_HEADER, REGISTRY_SEPARATOR, row, "", "## Next"))
+
+
 def self_test() -> None:
     validate_changed_paths(set())
     validate_changed_paths({"backend/app/modules/bluecad/read_model.py", "frontend/src/api/client.ts"})
@@ -175,14 +201,23 @@ def self_test() -> None:
 
     merged = f"| 084 | merged | {IMPLEMENTATION_PR_LINK} | BLUECAD-READ-MODEL-1 | deps | done |"
     active = f"| 084 | in_review | {IMPLEMENTATION_PR_LINK} | BLUECAD-READ-MODEL-1 | deps | active |"
-    if registry_state(merged) != "merged" or registry_state(active) != "in_review":
+    if registry_state(status_fixture(merged)) != "merged" or registry_state(status_fixture(active)) != "in_review":
         fail("registry lifecycle detector self-test failed")
     try:
-        registry_state("| 084 | merged | — | BLUECAD-READ-MODEL-1 | deps | wrong |")
+        registry_state(status_fixture("| 084 | merged | — | BLUECAD-READ-MODEL-1 | deps | wrong |"))
     except SystemExit:
         pass
     else:
         fail("registry lifecycle detector accepted wrong implementation PR")
+    decoy = f"<!--\n{merged}\n-->"
+    if registry_state(status_fixture(active, decoy=decoy)) != "in_review":
+        fail("registry lifecycle detector accepted an HTML-comment decoy over canonical evidence")
+    try:
+        registry_state(status_fixture("| 083 | merged | — | OTHER | deps | no 084 |", decoy=decoy))
+    except SystemExit:
+        pass
+    else:
+        fail("registry lifecycle detector accepted a decoy when canonical 084 evidence was absent")
 
     import tempfile
     with tempfile.TemporaryDirectory() as temp_dir:
