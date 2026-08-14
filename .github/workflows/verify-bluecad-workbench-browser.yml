@@ -1,0 +1,36 @@
+name: BLUECAD Workbench Browser Proof
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  verify-bluecad-workbench:
+    if: github.head_ref == 'verify-085-browser-3abd0ff' || github.ref == 'refs/heads/verify-085-browser-3abd0ff'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      RUN_BLUECAD_WORKBENCH_BROWSER_PROOF: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install backend test dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run exact-head BLUECAD workbench browser proof
+        working-directory: backend
+        run: python -m pytest -q tests/test_bluecad_workbench_browser_verification.py -s
