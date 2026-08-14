@@ -322,6 +322,19 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     return detail !== null;
   }, [clearVisibleDetail, loadAggregate, loadCandidates, selectedId, workspaceId]);
 
+  const reconcileAfterMutationError = useCallback(async (mutation: MutationContext, failureMessage: string) => {
+    if (!acceptsMutation({ generation: mutationGeneration.current, workspaceId: workspaceRef.current, candidateId: selectedRef.current }, mutation)) return;
+    const preferredId = selectedRef.current;
+    currentDetail.current = null;
+    currentValidation.current = null;
+    const items = await loadCandidates(mutation.workspaceId, preferredId, true);
+    if (items && workspaceRef.current === mutation.workspaceId) {
+      const nextId = revalidateSelection(items, preferredId, showArchivedRef.current);
+      if (nextId) await loadAggregate(mutation.workspaceId, nextId);
+    }
+    if (workspaceRef.current === mutation.workspaceId) setMessage(failureMessage);
+  }, [loadAggregate, loadCandidates]);
+
   const onCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const brief = briefText.trim();
@@ -350,7 +363,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       setMessage("Candidate created.");
     } catch (error) {
       suppressNextDetailEffect.current = null;
-      if (acceptsMutation({ generation: mutationGeneration.current, workspaceId: workspaceRef.current, candidateId: selectedRef.current }, mutation)) setMessage(error instanceof Error ? error.message : "Candidate creation failed.");
+      await reconcileAfterMutationError(mutation, error instanceof Error ? error.message : "Candidate creation failed.");
     } finally {
       setPendingAction(null);
     }
@@ -370,7 +383,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       if (selectedRef.current === mutation.candidateId) void loadAggregate(mutation.workspaceId, mutation.candidateId!);
       setMessage("Candidate archived.");
     } catch (error) {
-      if (acceptsMutation({ generation: mutationGeneration.current, workspaceId: workspaceRef.current, candidateId: selectedRef.current }, mutation)) setMessage(error instanceof Error ? error.message : "Archive failed.");
+      await reconcileAfterMutationError(mutation, error instanceof Error ? error.message : "Archive failed.");
     } finally {
       setPendingAction(null);
     }
@@ -392,7 +405,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       });
       setMessage(`Promoted to Decision ${promoted.promoted_decision_id ?? "(pending id)"}.`);
     } catch (error) {
-      if (acceptsMutation({ generation: mutationGeneration.current, workspaceId: workspaceRef.current, candidateId: selectedRef.current }, mutation)) setMessage(error instanceof Error ? error.message : "Promotion failed.");
+      await reconcileAfterMutationError(mutation, error instanceof Error ? error.message : "Promotion failed.");
     } finally {
       setPendingAction(null);
     }
