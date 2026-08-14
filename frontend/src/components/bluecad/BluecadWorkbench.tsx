@@ -187,7 +187,12 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       if (currentDetail.current && acceptsRequest(currentDetail.current, request)) {
         if (error instanceof Error && error.message === "Request failed with 404") {
           currentDetail.current = null;
-          await loadCandidates(targetWorkspaceId, candidateId);
+          const items = await loadCandidates(targetWorkspaceId, candidateId);
+          if (items && workspaceRef.current === targetWorkspaceId && selectedRef.current === candidateId) {
+            setAggregate(null);
+            setAggregateState("error");
+            setMessage("Candidate detail unavailable. Use Refresh to retry.");
+          }
           return null;
         }
         setAggregate(null);
