@@ -23,7 +23,8 @@ assert(revalidateSelection([{ id: "a", status: "archived" }], "a", true) === "a"
 assert(!mutationConflicts(null, "archive"), "idle mutation incorrectly blocked");
 assert(mutationConflicts("archive", "promote"), "archive/promote conflict not blocked");
 assert(mutationConflicts("promote", "archive"), "promote/archive conflict not blocked");
-assert(!mutationConflicts("create", "archive"), "independent create blocked candidate action");
+assert(mutationConflicts("create", "archive"), "concurrent create/candidate mutation not serialized");
+assert(mutationConflicts("archive", "create"), "concurrent candidate/create mutation not serialized");
 
 const createStart: MutationContext = { generation: 4, workspaceId: "A", candidateId: null, kind: "create" };
 assert(!acceptsMutation({ generation: 5, workspaceId: "B", candidateId: null }, createStart), "stale create completion accepted after workspace switch");
