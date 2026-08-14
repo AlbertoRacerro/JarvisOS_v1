@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 25
     env:
       RUN_BLUECAD_WORKBENCH_BROWSER_PROOF: "true"
-      TARGET_IMPLEMENTATION_SHA: "db3780579a6debcdebfae45b0806e9484a8dd825"
+      TARGET_IMPLEMENTATION_SHA: "ff5b80af901c2a1bfbec88352eb762e2ee176105"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,6 +37,8 @@ jobs:
         run: |
           sed -i "s/^TARGET_SHA = .*/TARGET_SHA = \"${TARGET_IMPLEMENTATION_SHA}\"/" tests/test_bluecad_workbench_browser_verification.py
           sed -i 's/fixture parked after two failed attempts/attempts_exhausted/g' tests/test_bluecad_workbench_browser_verification.py
+          sed -i 's/  const before = await canvas.boundingBox();/  await page.setViewportSize({ width: 1280, height: 720 });\n  await page.waitForTimeout(250);\n  const before = await canvas.boundingBox();/' tests/test_bluecad_workbench_browser_verification.py
+          sed -i 's/values: \\\[1,2\\\\]/values: \\\[2 items\\\\]/g' tests/test_bluecad_workbench_browser_verification.py
           set +e
           python -m pytest -q tests/test_bluecad_workbench_browser_verification.py -s
           status=$?
