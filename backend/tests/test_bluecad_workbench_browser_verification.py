@@ -10,7 +10,7 @@ from typing import TextIO
 
 import pytest
 
-TARGET_SHA = "c3517d2f0a50b3739bdbe9c3c32270164590fa74"
+TARGET_SHA = "999604b6236e5e704c0544c5cb0341a9c0c40bc9"
 TARGET_BRANCH = "spec/085-bluecad-workbench-2"
 BASE_URL = "http://127.0.0.1:8000"
 
