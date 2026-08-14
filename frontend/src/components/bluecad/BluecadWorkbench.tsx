@@ -370,6 +370,10 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       if (!acceptsMutation({ generation: mutationGeneration.current, workspaceId: workspaceRef.current, candidateId: selectedRef.current }, mutation)) return;
       const refreshed = await refresh();
       if (!refreshed || workspaceRef.current !== mutation.workspaceId || selectedRef.current !== mutation.candidateId) return;
+      window.requestAnimationFrame(() => {
+        const candidateNode = candidateRefs.current[mutation.candidateId!];
+        (candidateNode ?? workbenchTitleRef.current)?.focus();
+      });
       setMessage(`Promoted to Decision ${promoted.promoted_decision_id ?? "(pending id)"}.`);
     } catch (error) {
       if (acceptsMutation({ generation: mutationGeneration.current, workspaceId: workspaceRef.current, candidateId: selectedRef.current }, mutation)) setMessage(error instanceof Error ? error.message : "Promotion failed.");
@@ -405,7 +409,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
         clearVisibleDetail("idle");
         setMessage(null);
         setWorkspaceId(nextWorkspaceId);
-      }} disabled={workspaceState !== "ready" || workspaces.length === 0}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
+      }} disabled={workspaceState !== "ready" || workspaces.length === 0} style={{ width: "100%", minWidth: 0, maxWidth: "100%" }}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
       <label>Filter candidates<input ref={filterRef} value={filterText} onChange={(event) => setFilterText(event.target.value)} disabled={candidateState === "loading"} /></label>
       <label className="checkbox-line"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} disabled={candidateState === "loading"} />Show archived</label>
       <button type="button" className="secondary-button" onClick={() => void refresh()} disabled={!workspaceId || candidateState === "loading" || pendingAction !== null}>Refresh</button>
