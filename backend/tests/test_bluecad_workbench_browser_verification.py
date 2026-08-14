@@ -53,14 +53,204 @@ def _stop(process: subprocess.Popen[str] | None) -> None:
 
 def _write_seed_script(path: Path) -> None:
     path.write_text(
-        '''import json\nimport struct\nfrom pathlib import Path\nfrom app.core.database import open_sqlite_connection\nfrom app.modules.bluecad.ledger import create_candidate_record, mark_candidate_valid, register_artifact, update_candidate_artifacts\nfrom app.modules.bluecad.models import BluecadLoopConfig\n\nwith open_sqlite_connection() as connection:\n    row = connection.execute("SELECT id FROM workspaces ORDER BY created_at LIMIT 1").fetchone()\n    if row is None:\n        raise SystemExit("default workspace missing")\n    workspace_id = str(row["id"])\n    connection.execute("UPDATE workspaces SET name = ? WHERE id = ?", ("BLUECAD-" + "LONGWORKSPACENAME" * 12, workspace_id))\n    connection.commit()\n\ngltf = {\n    "asset": {"version": "2.0"},\n    "scene": 0,\n    "scenes": [{"nodes": [0]}],\n    "nodes": [{"mesh": 0}],\n    "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],\n    "buffers": [{"byteLength": 36}],\n    "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 36, "target": 34962}],\n    "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0, 0, 0], "max": [1, 1, 0]}],\n}\njson_bytes = json.dumps(gltf, separators=(",", ":")).encode()\njson_bytes += b" " * ((4 - len(json_bytes) % 4) % 4)\nbin_bytes = struct.pack("<9f", 0,0,0, 1,0,0, 0,1,0)\ntotal = 12 + 8 + len(json_bytes) + 8 + len(bin_bytes)\nglb = struct.pack("<III", 0x46546C67, 2, total)\nglb += struct.pack("<II", len(json_bytes), 0x4E4F534A) + json_bytes\nglb += struct.pack("<II", len(bin_bytes), 0x004E4942) + bin_bytes\nsource = Path("/tmp/bluecad-proof.glb")\nsource.write_bytes(glb)\n\ndef add_valid(brief):\n    candidate = create_candidate_record(workspace_id, brief, BluecadLoopConfig())\n    glb_id = register_artifact(workspace_id, source, role="bluecad_glb", source_ref=f"bluecad_candidate:{candidate.id}", producer_notes="Temporary exact-head browser proof fixture.")\n    update_candidate_artifacts(candidate.id, spec_artifact_id=None, glb_artifact_id=glb_id, report_artifact_id=None)\n    mark_candidate_valid(candidate.id)\n    return candidate, glb_id\n\ncandidate, glb_id = add_valid("Browser proof valid candidate")\nalternate, alternate_glb_id = add_valid("Browser proof alternate GLB candidate")\nPath("/tmp/bluecad-proof-seed.json").write_text(json.dumps({"workspace_id": workspace_id, "candidate_id": candidate.id, "glb_artifact_id": glb_id, "alternate_candidate_id": alternate.id, "alternate_glb_artifact_id": alternate_glb_id}))\n''',
+        '''import json
+import struct
+from pathlib import Path
+from app.core.database import open_sqlite_connection
+from app.modules.bluecad.ledger import create_candidate_record, mark_candidate_valid, register_artifact, update_candidate_artifacts
+from app.modules.bluecad.models import BluecadLoopConfig
+
+with open_sqlite_connection() as connection:
+    row = connection.execute("SELECT id FROM workspaces ORDER BY created_at LIMIT 1").fetchone()
+    if row is None:
+        raise SystemExit("default workspace missing")
+    workspace_id = str(row["id"])
+    connection.execute("UPDATE workspaces SET name = ? WHERE id = ?", ("BLUECAD-" + "LONGWORKSPACENAME" * 12, workspace_id))
+    connection.commit()
+
+gltf = {
+    "asset": {"version": "2.0"},
+    "scene": 0,
+    "scenes": [{"nodes": [0]}],
+    "nodes": [{"mesh": 0}],
+    "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+    "buffers": [{"byteLength": 36}],
+    "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 36, "target": 34962}],
+    "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0, 0, 0], "max": [1, 1, 0]}],
+}
+json_bytes = json.dumps(gltf, separators=(",", ":")).encode()
+json_bytes += b" " * ((4 - len(json_bytes) % 4) % 4)
+bin_bytes = struct.pack("<9f", 0, 0, 0, 1, 0, 0, 0, 1, 0)
+total = 12 + 8 + len(json_bytes) + 8 + len(bin_bytes)
+glb = struct.pack("<III", 0x46546C67, 2, total)
+glb += struct.pack("<II", len(json_bytes), 0x4E4F534A) + json_bytes
+glb += struct.pack("<II", len(bin_bytes), 0x004E4942) + bin_bytes
+source = Path("/tmp/bluecad-proof.glb")
+source.write_bytes(glb)
+
+def add_valid(brief):
+    candidate = create_candidate_record(workspace_id, brief, BluecadLoopConfig())
+    glb_id = register_artifact(workspace_id, source, role="bluecad_glb", source_ref=f"bluecad_candidate:{candidate.id}", producer_notes="Temporary exact-head browser proof fixture.")
+    update_candidate_artifacts(candidate.id, spec_artifact_id=None, glb_artifact_id=glb_id, report_artifact_id=None)
+    mark_candidate_valid(candidate.id)
+    return candidate, glb_id
+
+candidate, glb_id = add_valid("Browser proof valid candidate")
+alternate, alternate_glb_id = add_valid("Browser proof alternate GLB candidate")
+Path("/tmp/bluecad-proof-seed.json").write_text(json.dumps({"workspace_id": workspace_id, "candidate_id": candidate.id, "glb_artifact_id": glb_id, "alternate_candidate_id": alternate.id, "alternate_glb_artifact_id": alternate_glb_id}))
+''',
         encoding="utf-8",
     )
 
 
 def _write_browser_script(path: Path) -> None:
     path.write_text(
-        '''import fs from "node:fs";\nimport { chromium } from "playwright";\n\nconst base = process.env.BASE_URL;\nconst results = [];\nconst errors = [];\nconst assert = (value, message) => { if (!value) throw new Error(message); };\nasync function check(name, fn) {\n  try { await fn(); results.push({ name, status: "PASS" }); }\n  catch (error) { results.push({ name, status: "FAIL", error: error?.stack ?? String(error) }); }\n}\nconst focusSnapshot = page => page.evaluate(() => ({\n  tag: document.activeElement?.tagName ?? "",\n  id: document.activeElement?.id ?? "",\n  className: typeof document.activeElement?.className === "string" ? document.activeElement.className : "",\n  text: document.activeElement?.textContent ?? ""\n}));\nconst browser = await chromium.launch({ headless: true });\nconst context = await browser.newContext({ viewport: { width: 640, height: 360 } });\nconst page = await context.newPage();\nlet delayedFirstGlb = false;\nawait page.route("**/bluecad/artifacts/**/content", async route => {\n  if (!delayedFirstGlb) {\n    delayedFirstGlb = true;\n    await new Promise(resolve => setTimeout(resolve, 2500));\n  }\n  await route.continue();\n});\npage.on("pageerror", e => errors.push(`page:${e.message}`));\npage.on("console", m => { if (m.type() === "error") errors.push(`console:${m.text()}`); });\nawait page.goto(`${base}/design/model`, { waitUntil: "domcontentloaded" });\nawait page.locator("#app-main").waitFor({ state: "visible" });\nawait page.getByRole("heading", { name: "Model workbench" }).waitFor();\n\nawait check("effective-200-percent-no-global-overflow", async () => {\n  await page.getByRole("button", { name: "Show navigator", exact: true }).click();\n  await page.locator("#shell-navigator").waitFor();\n  const size = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));\n  assert(size.sw <= size.cw + 1, `document overflow ${JSON.stringify(size)}`);\n  const select = page.getByLabel("Workspace");\n  const contained = await select.evaluate(el => {\n    const a = el.getBoundingClientRect(); const p = el.parentElement?.getBoundingClientRect();\n    return !!p && a.left >= p.left - 1 && a.right <= p.right + 1;\n  });\n  assert(contained, "long workspace selector exceeds navigator label");\n});\n\nawait check("artifact-replacement-and-late-glb-completion", async () => {\n  const selected = page.locator(".bluecad-candidate[aria-pressed='true']");\n  await selected.waitFor({ timeout: 15000 });\n  const selectedText = await selected.textContent();\n  const other = selectedText?.includes("alternate GLB")\n    ? page.getByRole("button", { name: /Browser proof valid candidate/ })\n    : page.getByRole("button", { name: /Browser proof alternate GLB candidate/ });\n  const canvas = page.getByRole("img", { name: "Interactive 3D preview of generated BLUECAD geometry" });\n  await canvas.waitFor({ timeout: 15000 });\n  await canvas.evaluate(el => { el.dataset.proofCanvas = "stale"; });\n  await other.click();\n  await page.getByText("Orbit, pan, and zoom to inspect the generated geometry.").waitFor({ timeout: 15000 });\n  const marker = await canvas.evaluate(el => el.dataset.proofCanvas ?? "");\n  assert(marker !== "stale", "artifact replacement retained the prior renderer canvas");\n  await page.waitForTimeout(2800);\n  await page.getByText("Orbit, pan, and zoom to inspect the generated geometry.").waitFor();\n  assert(!errors.some(error => error.includes("GLB")), `late GLB completion produced an error: ${errors.join("\\n")}`);\n});\n\nawait check("real-glb-loads-and-resizes-with-shell", async () => {\n  await page.getByRole("button", { name: /Browser proof valid candidate/ }).click();\n  const canvas = page.getByRole("img", { name: "Interactive 3D preview of generated BLUECAD geometry" });\n  await canvas.waitFor({ timeout: 15000 });\n  await page.getByText("Orbit, pan, and zoom to inspect the generated geometry.").waitFor({ timeout: 15000 });\n  const before = await canvas.boundingBox();\n  await page.getByRole("button", { name: "Show context", exact: true }).click();\n  await page.waitForTimeout(250);\n  const after = await canvas.boundingBox();\n  assert(before && after && after.width !== before.width, `viewer did not resize ${JSON.stringify({before, after})}`);\n  const doc = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));\n  assert(doc.sw <= doc.cw + 1, `panel-open overflow ${JSON.stringify(doc)}`);\n});\n\nawait check("duplicate-brief-opens-navigator-and-focuses-textarea", async () => {\n  if (await page.locator("#shell-navigator").count()) {\n    await page.locator("#shell-navigator").press("Escape");\n    await page.locator("#shell-navigator").waitFor({ state: "detached" });\n  }\n  await page.getByRole("button", { name: "Duplicate brief", exact: true }).click();\n  const textarea = page.getByLabel("New candidate brief");\n  await textarea.waitFor();\n  await page.waitForFunction(() => document.activeElement?.tagName === "TEXTAREA");\n  assert((await textarea.inputValue()) === "Browser proof valid candidate", "duplicate brief did not preserve source text");\n});\n\nawait check("create-refresh-archive-use-real-api", async () => {\n  const textarea = page.getByLabel("New candidate brief");\n  await textarea.fill("Browser proof created candidate");\n  await page.getByRole("button", { name: "New candidate", exact: true }).click();\n  await page.getByText("Candidate created.").waitFor({ timeout: 15000 });\n  await page.getByText("Browser proof created candidate", { exact: false }).first().waitFor();\n  const refreshResponse = page.waitForResponse(response => {\n    const url = new URL(response.url());\n    return response.request().method() === "GET" && /\\/workspaces\\/[^/]+\\/bluecad\\/candidates$/.test(url.pathname) && response.ok();\n  });\n  await page.getByRole("button", { name: "Refresh", exact: true }).click();\n  await refreshResponse;\n  const archive = page.getByRole("button", { name: "Archive", exact: true });\n  await archive.waitFor();\n  await archive.click();\n  await page.getByText("Candidate archived.").waitFor({ timeout: 15000 });\n  assert(!(await page.getByRole("button", { name: /Browser proof created candidate/ }).count()), "archived candidate remained visible with Show archived off");\n  await page.waitForTimeout(150);\n  const focus = await focusSnapshot(page);\n  assert(focus.tag === "BUTTON" && focus.className.includes("bluecad-candidate"), `archive did not focus replacement row ${JSON.stringify(focus)}`);\n});\n\nawait check("promote-refresh-restores-keyboard-focus", async () => {\n  const valid = page.getByRole("button", { name: /Browser proof valid candidate/ });\n  await valid.click();\n  const promote = page.getByRole("button", { name: "Promote to Decision", exact: true });\n  await promote.waitFor();\n  await promote.focus();\n  await promote.press("Enter");\n  await page.getByText(/Promoted to Decision/).waitFor({ timeout: 15000 });\n  await page.waitForTimeout(150);\n  const focus = await focusSnapshot(page);\n  const candidateFocus = focus.tag === "BUTTON" && focus.className.includes("bluecad-candidate") && focus.text.includes("Browser proof valid candidate");\n  assert(candidateFocus || focus.id === "bluecad-workbench-title", `unexpected focus ${JSON.stringify(focus)}`);\n});\n\nawait check("no-uncaught-browser-errors", async () => assert(errors.length === 0, errors.join("\\n")));\nawait context.close();\nawait browser.close();\nconst report = { schema: "jarvisos.bluecad-workbench-browser-proof.v1", target_sha: process.env.TARGET_SHA, results, errors, summary: { passed: results.filter(x => x.status === "PASS").length, failed: results.filter(x => x.status === "FAIL").length } };\nfs.writeFileSync(process.env.PROOF_REPORT, JSON.stringify(report, null, 2) + "\\n");\nconsole.log("BLUECAD_WORKBENCH_BROWSER_PROOF=" + JSON.stringify(report));\nif (report.summary.failed) process.exit(1);\n''',
+        '''import fs from "node:fs";
+import { chromium } from "playwright";
+
+const base = process.env.BASE_URL;
+const results = [];
+const errors = [];
+const assert = (value, message) => { if (!value) throw new Error(message); };
+async function check(name, fn) {
+  try { await fn(); results.push({ name, status: "PASS" }); }
+  catch (error) { results.push({ name, status: "FAIL", error: error?.stack ?? String(error) }); }
+}
+const focusSnapshot = page => page.evaluate(() => ({
+  tag: document.activeElement?.tagName ?? "",
+  id: document.activeElement?.id ?? "",
+  className: typeof document.activeElement?.className === "string" ? document.activeElement.className : "",
+  text: document.activeElement?.textContent ?? ""
+}));
+const browser = await chromium.launch({ headless: true });
+const context = await browser.newContext({ viewport: { width: 640, height: 360 } });
+const page = await context.newPage();
+let delayedFirstGlb = false;
+await page.route("**/bluecad/artifacts/**/content", async route => {
+  if (!delayedFirstGlb) {
+    delayedFirstGlb = true;
+    await new Promise(resolve => setTimeout(resolve, 2500));
+  }
+  await route.continue();
+});
+page.on("pageerror", e => errors.push(`page:${e.message}`));
+page.on("console", m => { if (m.type() === "error") errors.push(`console:${m.text()}`); });
+await page.goto(`${base}/design/model`, { waitUntil: "domcontentloaded" });
+await page.locator("#app-main").waitFor({ state: "visible" });
+await page.getByRole("heading", { name: "Model workbench" }).waitFor();
+
+await check("effective-200-percent-no-global-overflow", async () => {
+  await page.getByRole("button", { name: "Show navigator", exact: true }).click();
+  await page.locator("#shell-navigator").waitFor();
+  const size = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
+  assert(size.sw <= size.cw + 1, `document overflow ${JSON.stringify(size)}`);
+  const select = page.getByLabel("Workspace");
+  const contained = await select.evaluate(el => {
+    const a = el.getBoundingClientRect();
+    const p = el.parentElement?.getBoundingClientRect();
+    return !!p && a.left >= p.left - 1 && a.right <= p.right + 1;
+  });
+  assert(contained, "long workspace selector exceeds navigator label");
+});
+
+await check("artifact-replacement-and-late-glb-completion", async () => {
+  const selected = page.locator(".bluecad-candidate[aria-pressed='true']");
+  await selected.waitFor({ timeout: 15000 });
+  const selectedText = await selected.textContent();
+  const other = selectedText?.includes("alternate GLB")
+    ? page.getByRole("button", { name: /Browser proof valid candidate/ })
+    : page.getByRole("button", { name: /Browser proof alternate GLB candidate/ });
+  const canvas = page.getByRole("img", { name: "Interactive 3D preview of generated BLUECAD geometry" });
+  await canvas.waitFor({ timeout: 15000 });
+  await canvas.evaluate(el => { el.dataset.proofCanvas = "stale"; });
+  await other.click();
+  await page.getByText("Orbit, pan, and zoom to inspect the generated geometry.").waitFor({ timeout: 15000 });
+  const marker = await canvas.evaluate(el => el.dataset.proofCanvas ?? "");
+  assert(marker !== "stale", "artifact replacement retained the prior renderer canvas");
+  await page.waitForTimeout(2800);
+  await page.getByText("Orbit, pan, and zoom to inspect the generated geometry.").waitFor();
+  assert(!errors.some(error => error.includes("GLB")), `late GLB completion produced an error: ${errors.join("\\n")}`);
+});
+
+await check("real-glb-loads-and-resizes-with-shell", async () => {
+  await page.getByRole("button", { name: /Browser proof valid candidate/ }).click();
+  const canvas = page.getByRole("img", { name: "Interactive 3D preview of generated BLUECAD geometry" });
+  await canvas.waitFor({ timeout: 15000 });
+  await page.getByText("Orbit, pan, and zoom to inspect the generated geometry.").waitFor({ timeout: 15000 });
+  const before = await canvas.boundingBox();
+  await page.getByRole("button", { name: "Show context", exact: true }).click();
+  await page.waitForTimeout(250);
+  const after = await canvas.boundingBox();
+  assert(before && after && after.width !== before.width, `viewer did not resize ${JSON.stringify({ before, after })}`);
+  const doc = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
+  assert(doc.sw <= doc.cw + 1, `panel-open overflow ${JSON.stringify(doc)}`);
+});
+
+await check("duplicate-brief-opens-navigator-and-focuses-textarea", async () => {
+  if (await page.locator("#shell-navigator").count()) {
+    await page.locator("#shell-navigator").press("Escape");
+    await page.locator("#shell-navigator").waitFor({ state: "detached" });
+  }
+  await page.getByRole("button", { name: "Duplicate brief", exact: true }).click();
+  const textarea = page.getByLabel("New candidate brief");
+  await textarea.waitFor();
+  await page.waitForFunction(() => document.activeElement?.tagName === "TEXTAREA");
+  assert((await textarea.inputValue()) === "Browser proof valid candidate", "duplicate brief did not preserve source text");
+});
+
+await check("create-refresh-archive-use-real-api", async () => {
+  const textarea = page.getByLabel("New candidate brief");
+  await textarea.fill("Browser proof created candidate");
+  await page.getByRole("button", { name: "New candidate", exact: true }).click();
+  await page.getByText("Candidate created.").waitFor({ timeout: 15000 });
+  await page.getByText("Browser proof created candidate", { exact: false }).first().waitFor();
+  const refreshResponse = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return response.request().method() === "GET" && /\\/workspaces\\/[^/]+\\/bluecad\\/candidates$/.test(url.pathname) && response.ok();
+  });
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await refreshResponse;
+  const archive = page.getByRole("button", { name: "Archive", exact: true });
+  await archive.waitFor();
+  await archive.click();
+  await page.getByText("Candidate archived.").waitFor({ timeout: 15000 });
+  assert(!(await page.getByRole("button", { name: /Browser proof created candidate/ }).count()), "archived candidate remained visible with Show archived off");
+  await page.waitForTimeout(150);
+  const focus = await focusSnapshot(page);
+  assert(focus.tag === "BUTTON" && focus.className.includes("bluecad-candidate"), `archive did not focus replacement row ${JSON.stringify(focus)}`);
+});
+
+await check("promote-refresh-restores-keyboard-focus", async () => {
+  const valid = page.getByRole("button", { name: /Browser proof valid candidate/ });
+  await valid.click();
+  const promote = page.getByRole("button", { name: "Promote to Decision", exact: true });
+  await promote.waitFor();
+  await promote.focus();
+  await promote.press("Enter");
+  await page.getByText(/Promoted to Decision/).waitFor({ timeout: 15000 });
+  await page.waitForTimeout(150);
+  const focus = await focusSnapshot(page);
+  const candidateFocus = focus.tag === "BUTTON" && focus.className.includes("bluecad-candidate") && focus.text.includes("Browser proof valid candidate");
+  assert(candidateFocus || focus.id === "bluecad-workbench-title", `unexpected focus ${JSON.stringify(focus)}`);
+});
+
+await check("no-uncaught-browser-errors", async () => assert(errors.length === 0, errors.join("\\n")));
+await context.close();
+await browser.close();
+const report = {
+  schema: "jarvisos.bluecad-workbench-browser-proof.v1",
+  target_sha: process.env.TARGET_SHA,
+  results,
+  errors,
+  summary: {
+    passed: results.filter(x => x.status === "PASS").length,
+    failed: results.filter(x => x.status === "FAIL").length
+  }
+};
+fs.writeFileSync(process.env.PROOF_REPORT, JSON.stringify(report, null, 2) + "\\n");
+console.log("BLUECAD_WORKBENCH_BROWSER_PROOF=" + JSON.stringify(report));
+if (report.summary.failed) process.exit(1);
+''',
         encoding="utf-8",
     )
 
@@ -97,6 +287,7 @@ def test_exact_head_bluecad_workbench_browser_proof(tmp_path: Path, capsys: pyte
         frontend = target / "frontend"
         backend = target / "backend"
         browser_script = frontend / ".bluecad-workbench-proof.mjs"
+        env["PYTHONPATH"] = str(backend)
         _run(["npm", "ci"], cwd=frontend, env=env, timeout=300)
         _run(["npm", "run", "build"], cwd=frontend, env=env, timeout=180)
         _run(["npm", "install", "--no-save", "--package-lock=false", "tsx@4.20.3", "playwright@1.54.2"], cwd=frontend, env=env, timeout=300)
