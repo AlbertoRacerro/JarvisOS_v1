@@ -120,7 +120,7 @@ for attempt_no in (1, 2):
     attempt = start_attempt(parked.id, attempt_no, "local", prompt_version="proof-v1")
     finish_attempt(
         attempt.id,
-        proposal_outcome="rejected",
+        proposal_outcome="malformed",
         build_outcome="failed",
         validation_verdict="fail",
         error_detail={"reason": f"fixture attempt {attempt_no}"},
