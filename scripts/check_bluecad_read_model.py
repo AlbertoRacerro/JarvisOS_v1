@@ -40,7 +40,7 @@ IMPLEMENTATION_PR_LINK = "[#236](https://github.com/AlbertoRacerro/JarvisOS_v1/p
 REGISTRY_HEADER = "| Spec | Status | Implementation PR | Name | Depends on | Description |"
 REGISTRY_SEPARATOR = "| --- | --- | --- | --- | --- | --- |"
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
-FENCE_START = re.compile(r"^\s*(`{3,}|~{3,})")
+FENCE_START = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 
 
 def fail(message: str) -> None:
@@ -61,9 +61,10 @@ def registry_lines(text: str) -> list[str]:
     fence_char: str | None = None
     fence_len = 0
     for line in cleaned.splitlines():
-        stripped = line.strip()
+        indent = len(line) - len(line.lstrip(" "))
+        candidate = line[indent:]
         if fence_char is not None:
-            if len(stripped) >= fence_len and stripped == fence_char * len(stripped):
+            if indent <= 3 and len(candidate) >= fence_len and candidate == fence_char * len(candidate):
                 fence_char = None
                 fence_len = 0
             continue
@@ -257,6 +258,13 @@ def self_test() -> None:
         pass
     else:
         fail("registry lifecycle detector treated a malformed fence line as a closing marker")
+    overindented_close = "\n".join(("```markdown", "    ```", "## Registry", REGISTRY_HEADER, REGISTRY_SEPARATOR, merged, "```"))
+    try:
+        registry_state(overindented_close)
+    except SystemExit:
+        pass
+    else:
+        fail("registry lifecycle detector treated an over-indented fence line as a closing marker")
 
     import tempfile
     with tempfile.TemporaryDirectory() as temp_dir:
