@@ -43,10 +43,8 @@ export function revalidateSelection(
   return visible[0]?.id ?? null;
 }
 
-export function mutationConflicts(pending: MutationKind | null, requested: MutationKind): boolean {
-  if (!pending) return false;
-  if (requested === "create") return pending === "create";
-  return pending === "archive" || pending === "promote";
+export function mutationConflicts(pending: MutationKind | null, _requested: MutationKind): boolean {
+  return pending !== null;
 }
 
 export function duplicateBrief(sourceBrief: string): { briefText: string; backendMutation: false } {
