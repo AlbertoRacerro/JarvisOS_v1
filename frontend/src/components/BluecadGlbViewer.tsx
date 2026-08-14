@@ -99,6 +99,8 @@ function BluecadGlbViewer({ artifactUrl }: BluecadGlbViewerProps) {
       camera.updateProjectionMatrix();
       renderer.setSize(mount.clientWidth, mount.clientHeight);
     };
+    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(resize);
+    resizeObserver?.observe(mount);
     window.addEventListener("resize", resize);
 
     let animationFrame = 0;
@@ -113,6 +115,7 @@ function BluecadGlbViewer({ artifactUrl }: BluecadGlbViewerProps) {
     return () => {
       disposed = true;
       window.cancelAnimationFrame(animationFrame);
+      resizeObserver?.disconnect();
       window.removeEventListener("resize", resize);
       if (loadedScene) {
         scene.remove(loadedScene);
