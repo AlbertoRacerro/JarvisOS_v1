@@ -57,7 +57,15 @@ def _write_seed_script(path: Path) -> None:
 import struct
 from pathlib import Path
 from app.core.database import open_sqlite_connection
-from app.modules.bluecad.ledger import create_candidate_record, mark_candidate_valid, register_artifact, update_candidate_artifacts
+from app.modules.bluecad.ledger import (
+    create_candidate_record,
+    finish_attempt,
+    mark_candidate_valid,
+    park_candidate,
+    register_artifact,
+    start_attempt,
+    update_candidate_artifacts,
+)
 from app.modules.bluecad.models import BluecadLoopConfig
 
 with open_sqlite_connection() as connection:
@@ -87,17 +95,59 @@ glb += struct.pack("<II", len(json_bytes), 0x4E4F534A) + json_bytes
 glb += struct.pack("<II", len(bin_bytes), 0x004E4942) + bin_bytes
 source = Path("/tmp/bluecad-proof.glb")
 source.write_bytes(glb)
+report_source = Path("/tmp/bluecad-proof-validation.json")
+report_source.write_text(json.dumps({
+    "checks": [
+        {
+            "id": "dimension-check",
+            "tier": 1,
+            "status": "pass",
+            "detail": {"actual": 1.01, "declared": 1.0, "rel_err": 0.01, "rel_tol": 0.02},
+            "hint": "Within tolerance",
+        },
+        {
+            "id": "irregular-detail",
+            "tier": "2",
+            "verdict": "warn",
+            "detail": {"message": "irregular", "values": [1, 2]},
+            "hint": "Inspect manually",
+        },
+    ]
+}))
 
-def add_valid(brief):
+parked = create_candidate_record(workspace_id, "Browser proof parked candidate", BluecadLoopConfig())
+for attempt_no in (1, 2):
+    attempt = start_attempt(parked.id, attempt_no, "local", prompt_version="proof-v1")
+    finish_attempt(
+        attempt.id,
+        proposal_outcome="rejected",
+        build_outcome="failed",
+        validation_verdict="fail",
+        error_detail={"reason": f"fixture attempt {attempt_no}"},
+    )
+park_candidate(parked.id, "fixture parked after two failed attempts")
+
+def add_valid(brief, with_report=False):
     candidate = create_candidate_record(workspace_id, brief, BluecadLoopConfig())
     glb_id = register_artifact(workspace_id, source, role="bluecad_glb", source_ref=f"bluecad_candidate:{candidate.id}", producer_notes="Temporary exact-head browser proof fixture.")
-    update_candidate_artifacts(candidate.id, spec_artifact_id=None, glb_artifact_id=glb_id, report_artifact_id=None)
+    report_id = None
+    if with_report:
+        report_id = register_artifact(workspace_id, report_source, role="bluecad_validation_report", source_ref=f"bluecad_candidate:{candidate.id}", producer_notes="Temporary exact-head browser proof fixture.")
+    update_candidate_artifacts(candidate.id, spec_artifact_id=None, glb_artifact_id=glb_id, report_artifact_id=report_id)
     mark_candidate_valid(candidate.id)
-    return candidate, glb_id
+    return candidate, glb_id, report_id
 
-candidate, glb_id = add_valid("Browser proof valid candidate")
-alternate, alternate_glb_id = add_valid("Browser proof alternate GLB candidate")
-Path("/tmp/bluecad-proof-seed.json").write_text(json.dumps({"workspace_id": workspace_id, "candidate_id": candidate.id, "glb_artifact_id": glb_id, "alternate_candidate_id": alternate.id, "alternate_glb_artifact_id": alternate_glb_id}))
+candidate, glb_id, report_id = add_valid("Browser proof valid candidate", with_report=True)
+alternate, alternate_glb_id, _ = add_valid("Browser proof alternate GLB candidate")
+Path("/tmp/bluecad-proof-seed.json").write_text(json.dumps({
+    "workspace_id": workspace_id,
+    "candidate_id": candidate.id,
+    "glb_artifact_id": glb_id,
+    "report_artifact_id": report_id,
+    "alternate_candidate_id": alternate.id,
+    "alternate_glb_artifact_id": alternate_glb_id,
+    "parked_candidate_id": parked.id,
+}))
 ''',
         encoding="utf-8",
     )
@@ -126,10 +176,12 @@ const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ viewport: { width: 640, height: 360 } });
 const page = await context.newPage();
 let delayedFirstGlb = false;
+let releaseFirstGlb;
+const firstGlbGate = new Promise(resolve => { releaseFirstGlb = resolve; });
 await page.route("**/bluecad/artifacts/**/content", async route => {
   if (!delayedFirstGlb) {
     delayedFirstGlb = true;
-    await new Promise(resolve => setTimeout(resolve, 2500));
+    await firstGlbGate;
   }
   await route.continue();
 });
@@ -165,9 +217,11 @@ await check("artifact-replacement-and-late-glb-completion", async () => {
   await canvas.evaluate(el => { el.dataset.proofCanvas = "stale"; });
   await other.click();
   await page.getByText("Orbit, pan, and zoom to inspect the generated geometry.").waitFor({ timeout: 15000 });
-  const marker = await canvas.evaluate(el => el.dataset.proofCanvas ?? "");
+  const replacementCanvas = page.getByRole("img", { name: "Interactive 3D preview of generated BLUECAD geometry" });
+  const marker = await replacementCanvas.evaluate(el => el.dataset.proofCanvas ?? "");
   assert(marker !== "stale", "artifact replacement retained the prior renderer canvas");
-  await page.waitForTimeout(2800);
+  releaseFirstGlb();
+  await page.waitForTimeout(500);
   await page.getByText("Orbit, pan, and zoom to inspect the generated geometry.").waitFor();
   assert(!errors.some(error => error.includes("GLB")), `late GLB completion produced an error: ${errors.join("\\n")}`);
 });
@@ -186,7 +240,32 @@ await check("real-glb-loads-and-resizes-with-shell", async () => {
   assert(doc.sw <= doc.cw + 1, `panel-open overflow ${JSON.stringify(doc)}`);
 });
 
+await check("structured-validation-detail-is-readable", async () => {
+  await page.getByRole("button", { name: /Browser proof valid candidate/ }).click();
+  await page.getByText("actual 1.01 vs declared 1").waitFor({ timeout: 15000 });
+  await page.getByText(/rel err 1.00% \/ tol 2.00%/).waitFor();
+  await page.getByText(/message: irregular/).waitFor();
+  await page.getByText(/values: \[1,2\]/).waitFor();
+  const sidecarText = await page.locator("#shell-sidecar").innerText();
+  assert(!sidecarText.includes("[object Object]"), "validation detail rendered an opaque object");
+});
+
+await check("parked-candidate-reason-and-attempt-trail", async () => {
+  await page.getByRole("button", { name: /Browser proof parked candidate/ }).click();
+  await page.getByText("Parked reason: fixture parked after two failed attempts").waitFor({ timeout: 15000 });
+  await page.getByRole("heading", { name: "Geometry unavailable" }).waitFor();
+  assert(!(await page.getByRole("img", { name: "Interactive 3D preview of generated BLUECAD geometry" }).count()), "parked candidate exposed a GLB canvas");
+  if (!(await page.locator("#shell-analysis-dock").count())) {
+    await page.getByRole("button", { name: "Show analysis", exact: true }).click();
+  }
+  await page.getByText(/fixture attempt 1/).waitFor();
+  await page.getByText(/fixture attempt 2/).waitFor();
+  const rows = page.locator("#shell-analysis-dock tbody tr");
+  assert((await rows.count()) >= 2, "parked candidate did not expose multiple attempts");
+});
+
 await check("duplicate-brief-opens-navigator-and-focuses-textarea", async () => {
+  await page.getByRole("button", { name: /Browser proof valid candidate/ }).click();
   if (await page.locator("#shell-navigator").count()) {
     await page.locator("#shell-navigator").press("Escape");
     await page.locator("#shell-navigator").waitFor({ state: "detached" });
@@ -216,8 +295,10 @@ await check("create-refresh-archive-use-real-api", async () => {
   await page.getByText("Candidate archived.").waitFor({ timeout: 15000 });
   assert(!(await page.getByRole("button", { name: /Browser proof created candidate/ }).count()), "archived candidate remained visible with Show archived off");
   await page.waitForTimeout(150);
-  const focus = await focusSnapshot(page);
-  assert(focus.tag === "BUTTON" && focus.className.includes("bluecad-candidate"), `archive did not focus replacement row ${JSON.stringify(focus)}`);
+  const selectedReplacement = page.locator(".bluecad-candidate[aria-pressed='true']");
+  await selectedReplacement.waitFor();
+  const focusedSelected = await selectedReplacement.evaluate(el => document.activeElement === el);
+  assert(focusedSelected, `archive did not focus selected replacement row ${JSON.stringify(await focusSnapshot(page))}`);
 });
 
 await check("promote-refresh-restores-keyboard-focus", async () => {
