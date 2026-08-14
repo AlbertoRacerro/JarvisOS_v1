@@ -221,16 +221,17 @@ def check_viewer_cleanup() -> None:
         fail("GLB error callback is not guarded against stale/unmounted completion")
 
 
+def between(source: str, start: str, end: str) -> str:
+    if start not in source or end not in source:
+        fail(f"cannot isolate lifecycle block: {start}")
+    return source.split(start, 1)[1].split(end, 1)[0]
+
+
 def check_async_addendum_contracts() -> None:
     workbench = read(WORKBENCH)
     harness = read(HARNESS)
     required_workbench = {
         "validation acceptance through production request guard": "acceptsRequest(currentValidation.current, request)",
-        "create lifecycle client": "createBluecadCandidate(",
-        "archive lifecycle client": "archiveBluecadCandidate(",
-        "promote lifecycle client": "promoteBluecadCandidate(",
-        "canonical candidate reload": "loadCandidates(",
-        "canonical aggregate reload": "loadAggregate(",
         "parked candidate diagnostic": "parked_reason",
         "structured validation formatter": "formatValidationDetail",
         "structured validation actual/declared labels": '"actual" in value && "declared" in value',
@@ -249,9 +250,26 @@ def check_async_addendum_contracts() -> None:
     for label, marker in required_workbench.items():
         if marker not in workbench:
             fail(f"async addendum contract missing: {label}")
+
+    refresh_body = between(workbench, "const refresh =", "const onCreate =")
+    create_body = between(workbench, "const onCreate =", "const onArchive =")
+    archive_body = between(workbench, "const onArchive =", "const onPromote =")
+    promote_body = between(workbench, "const onPromote =", "const duplicateSelectedBrief =")
+    lifecycle_requirements = {
+        "refresh": (refresh_body, ("loadCandidates(", "loadAggregate(")),
+        "create": (create_body, ("createBluecadCandidate(", "loadCandidates(", "loadAggregate(")),
+        "archive": (archive_body, ("archiveBluecadCandidate(", "loadCandidates(", "loadAggregate(")),
+        "promote": (promote_body, ("promoteBluecadCandidate(", "await refresh()")),
+    }
+    for label, (body, markers) in lifecycle_requirements.items():
+        missing = [marker for marker in markers if marker not in body]
+        if missing:
+            fail(f"{label} lifecycle is not tied to canonical reload path: {', '.join(missing)}")
+
     required_harness = (
         "stale same-context generation accepted",
         "stale validation response accepted",
+        "stale validation response mutated visible state",
         "current create completion rejected",
         "current archive completion rejected",
         "duplicate brief became backend mutation",
