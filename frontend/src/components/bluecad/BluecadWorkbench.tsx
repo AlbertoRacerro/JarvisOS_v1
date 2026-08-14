@@ -124,7 +124,11 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     publishSelection(workspaceRef.current, candidateId);
   }, [clearVisibleDetail, publishSelection]);
 
-  const loadCandidates = useCallback(async (targetWorkspaceId: string, preferredId: string | null) => {
+  const loadCandidates = useCallback(async (
+    targetWorkspaceId: string,
+    preferredId: string | null,
+    suppressDetailEffect = false
+  ) => {
     const request: RequestContext = {
       generation: ++listGeneration.current,
       workspaceId: targetWorkspaceId,
@@ -142,6 +146,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       currentValidation.current = null;
       clearVisibleDetail(nextId ? "loading" : "idle");
       setMessage(null);
+      if (suppressDetailEffect && nextId) suppressNextDetailEffect.current = nextId;
       setSelectedId(nextId);
       publishSelection(targetWorkspaceId, nextId);
       setCandidateState("ready");
@@ -214,10 +219,10 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       if (!isRecord(report)) throw new Error("Validation report has an invalid shape.");
       const nestedValidation = isRecord(report.validation) ? report.validation : null;
       const reportChecks = report.checks ?? nestedValidation?.checks;
-      if (reportChecks !== undefined && (!Array.isArray(reportChecks) || !reportChecks.every(isRecord))) {
+      if (reportChecks !== undefined && (!Array.isArray(reportChecks) || !reportChecks.every(isValidationCheck))) {
         throw new Error("Validation report checks have an invalid shape.");
       }
-      setChecks((reportChecks ?? []) as BluecadValidationCheck[]);
+      setChecks(reportChecks ?? []);
       setValidationState("ready");
     } catch (error) {
       if (!currentValidation.current || !acceptsRequest(currentValidation.current, request)) return;
@@ -289,7 +294,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
 
   const refresh = useCallback(async () => {
     if (!workspaceId) return false;
-    const items = await loadCandidates(workspaceId, selectedId);
+    const items = await loadCandidates(workspaceId, selectedId, true);
     if (!items) return false;
     const nextId = revalidateSelection(items, selectedId, showArchivedRef.current);
     if (!nextId) return false;
@@ -458,6 +463,18 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
+function isValidationCheck(value: unknown): value is BluecadValidationCheck {
+  if (!isRecord(value)) return false;
+  const optionalString = (field: unknown) => field === undefined || typeof field === "string";
+  const tier = value.tier;
+  const hint = value.hint;
+  return optionalString(value.id)
+    && optionalString(value.check_id)
+    && (tier === undefined || typeof tier === "string" || typeof tier === "number")
+    && optionalString(value.status)
+    && optionalString(value.verdict)
+    && (hint === undefined || hint === null || typeof hint === "string");
+}
 function formatCell(value: unknown): string { if (value === null || value === undefined) return ""; if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value); try { return JSON.stringify(value); } catch { return String(value); } }
 function formatPercent(value: unknown): string | null { return typeof value === "number" && Number.isFinite(value) ? `${(value * 100).toPrecision(3)}%` : null; }
 function formatValidationDetail(value: unknown): string { if (!isRecord(value)) return formatCell(value); if ("actual" in value && "declared" in value) { const relErr = formatPercent(value.rel_err); const relTol = formatPercent(value.rel_tol); return `actual ${formatCell(value.actual)} vs declared ${formatCell(value.declared)}${relErr ? ` (rel err ${relErr}${relTol ? ` / tol ${relTol}` : ""})` : ""}`; } return Object.entries(value).map(([key, item]) => `${key}: ${formatCell(item)}`).join(" · "); }
