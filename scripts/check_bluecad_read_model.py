@@ -40,6 +40,7 @@ IMPLEMENTATION_PR_LINK = "[#236](https://github.com/AlbertoRacerro/JarvisOS_v1/p
 REGISTRY_HEADER = "| Spec | Status | Implementation PR | Name | Depends on | Description |"
 REGISTRY_SEPARATOR = "| --- | --- | --- | --- | --- | --- |"
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+FENCE_START = re.compile(r"^\s*(`{3,}|~{3,})")
 
 
 def fail(message: str) -> None:
@@ -54,8 +55,30 @@ def read(path: Path) -> str:
         fail(f"missing required file: {path.relative_to(ROOT)}")
 
 
+def registry_lines(text: str) -> list[str]:
+    cleaned = HTML_COMMENT.sub("", text)
+    result: list[str] = []
+    fence_char: str | None = None
+    fence_len = 0
+    for line in cleaned.splitlines():
+        stripped = line.strip()
+        if fence_char is not None:
+            if len(stripped) >= fence_len and stripped == fence_char * len(stripped):
+                fence_char = None
+                fence_len = 0
+            continue
+        marker = FENCE_START.match(line)
+        if marker:
+            token = marker.group(1)
+            fence_char = token[0]
+            fence_len = len(token)
+            continue
+        result.append(line)
+    return result
+
+
 def registry_state(text: str) -> str:
-    lines = HTML_COMMENT.sub("", text).splitlines()
+    lines = registry_lines(text)
     registry_headers = [index for index, line in enumerate(lines) if line.strip() == "## Registry"]
     if len(registry_headers) != 1:
         fail("STATUS.md must contain exactly one canonical Registry section")
@@ -218,6 +241,22 @@ def self_test() -> None:
         pass
     else:
         fail("registry lifecycle detector accepted a decoy when canonical 084 evidence was absent")
+    fenced_decoy = "\n".join(("```markdown", "## Registry", REGISTRY_HEADER, REGISTRY_SEPARATOR, merged, "```"))
+    if registry_state(status_fixture(active, decoy=fenced_decoy)) != "in_review":
+        fail("registry lifecycle detector accepted a fenced decoy over canonical evidence")
+    try:
+        registry_state(fenced_decoy)
+    except SystemExit:
+        pass
+    else:
+        fail("registry lifecycle detector accepted fenced lifecycle evidence without a canonical Registry")
+    malformed_close = "\n".join(("```markdown", "```not-a-close", "## Registry", REGISTRY_HEADER, REGISTRY_SEPARATOR, merged, "```"))
+    try:
+        registry_state(malformed_close)
+    except SystemExit:
+        pass
+    else:
+        fail("registry lifecycle detector treated a malformed fence line as a closing marker")
 
     import tempfile
     with tempfile.TemporaryDirectory() as temp_dir:
