@@ -73,6 +73,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const emptyCandidatesRef = useRef<HTMLParagraphElement | null>(null);
   const workbenchTitleRef = useRef<HTMLHeadingElement | null>(null);
   const focusAfterSelectionChange = useRef(false);
+  const focusAfterArchive = useRef(false);
 
   const handleBriefRef = useCallback((node: HTMLTextAreaElement | null) => {
     briefRef.current = node;
@@ -297,6 +298,17 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     });
   }, [selectedId]);
 
+  useEffect(() => {
+    if (!focusAfterArchive.current || candidateState === "loading") return;
+    const finalId = revalidateSelection(visibleCandidates, selectedId, true);
+    if (finalId !== selectedId) return;
+    focusAfterArchive.current = false;
+    window.requestAnimationFrame(() => {
+      const candidateNode = finalId ? candidateRefs.current[finalId] : null;
+      (candidateNode ?? emptyCandidatesRef.current ?? workbenchTitleRef.current)?.focus();
+    });
+  }, [candidateState, selectedId, visibleCandidates]);
+
   const refresh = useCallback(async () => {
     if (!workspaceId) return false;
     currentDetail.current = null;
@@ -354,11 +366,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       if (!acceptsMutation({ generation: mutationGeneration.current, workspaceId: workspaceRef.current, candidateId: selectedRef.current }, mutation)) return;
       const items = await loadCandidates(mutation.workspaceId, mutation.candidateId ?? null);
       if (!items || workspaceRef.current !== mutation.workspaceId) return;
-      window.requestAnimationFrame(() => {
-        const nextId = selectedRef.current;
-        const candidateNode = nextId ? candidateRefs.current[nextId] : null;
-        (candidateNode ?? emptyCandidatesRef.current ?? workbenchTitleRef.current)?.focus();
-      });
+      focusAfterArchive.current = true;
       if (selectedRef.current === mutation.candidateId) void loadAggregate(mutation.workspaceId, mutation.candidateId!);
       setMessage("Candidate archived.");
     } catch (error) {
@@ -489,7 +497,29 @@ function isValidationCheck(value: unknown): value is BluecadValidationCheck {
 }
 function formatCell(value: unknown): string { if (value === null || value === undefined) return ""; if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value); try { return JSON.stringify(value); } catch { return String(value); } }
 function formatPercent(value: unknown): string | null { return typeof value === "number" && Number.isFinite(value) ? `${(value * 100).toPrecision(3)}%` : null; }
-function formatValidationDetail(value: unknown): string { if (!isRecord(value)) return formatCell(value); if ("actual" in value && "declared" in value) { const relErr = formatPercent(value.rel_err); const relTol = formatPercent(value.rel_tol); return `actual ${formatCell(value.actual)} vs declared ${formatCell(value.declared)}${relErr ? ` (rel err ${relErr}${relTol ? ` / tol ${relTol}` : ""})` : ""}`; } return Object.entries(value).map(([key, item]) => `${key}: ${formatCell(item)}`).join(" · "); }
+function formatValidationValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value.length <= 160 ? value : `${value.slice(0, 159)}…`;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return `[${value.length} items]`;
+  if (isRecord(value)) {
+    const keys = Object.keys(value);
+    const preview = keys.slice(0, 4).map((key) => key.length <= 40 ? key : `${key.slice(0, 39)}…`).join(", ");
+    return `{${preview}${keys.length > 4 ? ", …" : ""}}`;
+  }
+  return String(value).slice(0, 160);
+}
+function formatValidationDetail(value: unknown): string {
+  if (!isRecord(value)) return formatValidationValue(value);
+  if ("actual" in value && "declared" in value) {
+    const relErr = formatPercent(value.rel_err);
+    const relTol = formatPercent(value.rel_tol);
+    return `actual ${formatValidationValue(value.actual)} vs declared ${formatValidationValue(value.declared)}${relErr ? ` (rel err ${relErr}${relTol ? ` / tol ${relTol}` : ""})` : ""}`;
+  }
+  const entries = Object.entries(value);
+  const detail = entries.slice(0, 6).map(([key, item]) => `${formatValidationValue(key)}: ${formatValidationValue(item)}`).join(" · ");
+  return `${detail}${entries.length > 6 ? " · …" : ""}`;
+}
 function ReportTable({ checks }: { checks: BluecadValidationCheck[] }) { return checks.length === 0 ? <p>No validation checks are available.</p> : <div className="table-wrap"><table className="smoke-table bluecad-table"><thead><tr><th>Check</th><th>Tier</th><th>Status</th><th>Detail</th><th>Hint</th></tr></thead><tbody>{checks.map((check, index) => <tr key={`${check.id ?? check.check_id ?? "check"}-${index}`}><td>{check.id ?? check.check_id ?? `check-${index + 1}`}</td><td>{check.tier ?? "—"}</td><td>{check.status ?? check.verdict ?? "—"}</td><td>{formatValidationDetail(check.detail ?? check.message) || "—"}</td><td>{check.hint ?? "—"}</td></tr>)}</tbody></table></div>; }
 function formatAttemptDetail(value?: string | null): string { if (!value) return "—"; try { return formatCell(JSON.parse(value) as unknown); } catch { return value; } }
 
