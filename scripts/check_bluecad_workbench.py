@@ -19,7 +19,7 @@ EXPECTED_PR = "[#239](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/239)"
 REGISTRY_HEADER = "| Spec | Status | Implementation PR | Name | Depends on | Description |"
 REGISTRY_SEPARATOR = "| --- | --- | --- | --- | --- | --- |"
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
-FENCE_START = re.compile(r"^\s*(`{3,}|~{3,})")
+FENCE_START = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 
 ALLOWED = {
     "frontend/src/App.tsx",
@@ -116,9 +116,10 @@ def registry_lines(text: str) -> list[str]:
     fence_char: str | None = None
     fence_len = 0
     for line in cleaned.splitlines():
-        stripped = line.strip()
+        indent = len(line) - len(line.lstrip(" "))
+        candidate = line[indent:]
         if fence_char is not None:
-            if len(stripped) >= fence_len and stripped == fence_char * len(stripped):
+            if indent <= 3 and len(candidate) >= fence_len and candidate == fence_char * len(candidate):
                 fence_char = None
                 fence_len = 0
             continue
@@ -238,7 +239,7 @@ def check_async_addendum_contracts() -> None:
         "replacement candidate focus": "candidateRefs.current[selectedId]?.focus()",
         "empty candidate focus fallback": "emptyCandidatesRef.current?.focus()",
         "duplicate brief region reveal": 'requestShellRegionOpen("navigator")',
-        "duplicate brief focus transfer": "briefRef.current?.focus()",
+        "duplicate brief focus transfer": "briefRef.current",
         "workspace empty state": "No workspaces are available.",
         "workspace discovery failure state": "Workspace discovery failed.",
         "candidate loading state": "Loading candidates…",
@@ -317,6 +318,11 @@ def self_test() -> None:
         + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid + "\n```"
     )
     check_registry_text(status_fixture(valid, decoy=malformed_close_decoy))
+    overindented_close_decoy = (
+        "```markdown\n    ```\n## Registry\n\n"
+        + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid + "\n```"
+    )
+    check_registry_text(status_fixture(valid, decoy=overindented_close_decoy))
     for invalid in (
         "| 085 | ready | — | BLUECAD-WORKBENCH-2 | deps | wrong |",
         "| 084 | merged | — | OTHER | deps | no 085 |",
@@ -327,7 +333,7 @@ def self_test() -> None:
             pass
         else:
             fail("registry self-test accepted non-canonical or invalid 085 lifecycle evidence")
-    for fenced_only in (fenced_decoy, malformed_close_decoy):
+    for fenced_only in (fenced_decoy, malformed_close_decoy, overindented_close_decoy):
         try:
             check_registry_text(fenced_only)
         except SystemExit:
