@@ -216,6 +216,49 @@ def check_viewer_cleanup() -> None:
             fail(f"GLB owned-resource cleanup marker missing: {marker}")
     if 'aria-label", "Interactive 3D preview' not in viewer:
         fail("GLB canvas accessible label is missing")
+    error_callback = re.search(r"\(error: unknown\)\s*=>\s*\{(?P<body>.*?)\n\s*\}", viewer, re.DOTALL)
+    if not error_callback or "if (disposed) return;" not in error_callback.group("body"):
+        fail("GLB error callback is not guarded against stale/unmounted completion")
+
+
+def check_async_addendum_contracts() -> None:
+    workbench = read(WORKBENCH)
+    harness = read(HARNESS)
+    required_workbench = {
+        "validation acceptance through production request guard": "acceptsRequest(currentValidation.current, request)",
+        "create lifecycle client": "createBluecadCandidate(",
+        "archive lifecycle client": "archiveBluecadCandidate(",
+        "promote lifecycle client": "promoteBluecadCandidate(",
+        "canonical candidate reload": "loadCandidates(",
+        "canonical aggregate reload": "loadAggregate(",
+        "parked candidate diagnostic": "parked_reason",
+        "structured validation formatter": "formatValidationDetail",
+        "structured validation actual/declared labels": '"actual" in value && "declared" in value',
+        "replacement candidate focus": "candidateRefs.current[selectedId]?.focus()",
+        "empty candidate focus fallback": "emptyCandidatesRef.current?.focus()",
+        "duplicate brief region reveal": 'requestShellRegionOpen("navigator")',
+        "duplicate brief focus transfer": "briefRef.current?.focus()",
+        "workspace empty state": "No workspaces are available.",
+        "workspace discovery failure state": "Workspace discovery failed.",
+        "candidate loading state": "Loading candidates…",
+        "candidate failure state": "Candidate discovery failed.",
+        "candidate empty state": "No BLUECAD candidates exist in this workspace.",
+        "attempt trail": "Attempt history",
+        "malformed attempt detail preservation": "formatAttemptDetail",
+    }
+    for label, marker in required_workbench.items():
+        if marker not in workbench:
+            fail(f"async addendum contract missing: {label}")
+    required_harness = (
+        "stale same-context generation accepted",
+        "stale validation response accepted",
+        "current create completion rejected",
+        "current archive completion rejected",
+        "duplicate brief became backend mutation",
+    )
+    for marker in required_harness:
+        if marker not in harness:
+            fail(f"state harness addendum case missing: {marker}")
 
 
 def check_no_fake_authority() -> None:
@@ -288,6 +331,7 @@ def main() -> None:
     check_primary_composition()
     check_state_authority()
     check_viewer_cleanup()
+    check_async_addendum_contracts()
     check_no_fake_authority()
     print("BLUECAD workbench checks passed")
 
