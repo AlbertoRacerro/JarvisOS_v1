@@ -101,6 +101,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const chooseCandidate = useCallback((candidateId: string | null) => {
     mutationGeneration.current += 1;
     selectedRef.current = candidateId;
+    if (currentList.current) setCandidateState("ready");
     currentList.current = null;
     currentDetail.current = null;
     currentValidation.current = null;
@@ -289,6 +290,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       focusAfterSelectionChange.current = true;
       const items = await loadCandidates(mutation.workspaceId, mutation.candidateId ?? null);
       if (!items || workspaceRef.current !== mutation.workspaceId) return;
+      if (selectedRef.current === mutation.candidateId) void loadAggregate(mutation.workspaceId, mutation.candidateId!);
       setMessage("Candidate archived.");
     } catch (error) {
       if (acceptsMutation({ generation: mutationGeneration.current, workspaceId: workspaceRef.current, candidateId: selectedRef.current }, mutation)) setMessage(error instanceof Error ? error.message : "Archive failed.");
@@ -371,7 +373,13 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   }, [aggregate, selectedId]);
 
   useEffect(() => { onShellRegionsChange({ navigator, sidecar, dock }); }, [dock, navigator, onShellRegionsChange, sidecar]);
-  useEffect(() => () => onShellRegionsChange({}), [onShellRegionsChange]);
+  useEffect(() => () => {
+    currentList.current = null;
+    currentDetail.current = null;
+    currentValidation.current = null;
+    mutationGeneration.current += 1;
+    onShellRegionsChange({});
+  }, [onShellRegionsChange]);
 
   const candidate = aggregate?.candidate.id === selectedId ? aggregate.candidate : null;
   const canPromote = candidate?.status === "valid" && !candidate.promoted_decision_id;
