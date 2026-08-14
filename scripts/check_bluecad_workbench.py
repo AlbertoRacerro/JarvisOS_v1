@@ -19,7 +19,8 @@ EXPECTED_PR = "[#239](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/239)"
 REGISTRY_HEADER = "| Spec | Status | Implementation PR | Name | Depends on | Description |"
 REGISTRY_SEPARATOR = "| --- | --- | --- | --- | --- | --- |"
 FENCE_START = re.compile(r"^ {0,3}(`{3,}|~{3,})")
-RAW_HTML_START = re.compile(r"^ {0,3}<(?P<tag>pre|script|style)(?:\s|>|$)", re.IGNORECASE)
+RAW_HTML_START = re.compile(r"^ {0,3}<(?P<tag>pre|script|style|textarea)(?:\s|>|$)", re.IGNORECASE)
+GENERIC_HTML_TAG = re.compile(r"^ {0,3}</?[A-Za-z][A-Za-z0-9-]*(?:\s|/?>|$)")
 
 ALLOWED = {
     "frontend/src/App.tsx",
@@ -156,12 +157,22 @@ def registry_lines(text: str) -> list[str]:
     fence_char: str | None = None
     fence_len = 0
     html_block: str | None = None
+    raw_block_end: str | None = None
+    blank_terminated_html = False
     for line in cleaned.splitlines():
         indent, prefix_len = markdown_indent(line)
         candidate = line[prefix_len:]
         if html_block is not None:
             if re.search(rf"</{re.escape(html_block)}\s*>", candidate, re.IGNORECASE):
                 html_block = None
+            continue
+        if raw_block_end is not None:
+            if raw_block_end in candidate:
+                raw_block_end = None
+            continue
+        if blank_terminated_html:
+            if not candidate.strip():
+                blank_terminated_html = False
             continue
         if fence_char is not None:
             if indent <= 3 and len(candidate) >= fence_len and candidate == fence_char * len(candidate):
@@ -179,6 +190,21 @@ def registry_lines(text: str) -> list[str]:
             tag = html_marker.group("tag").lower()
             if re.search(rf"</{re.escape(tag)}\s*>", candidate[html_marker.end():], re.IGNORECASE) is None:
                 html_block = tag
+            continue
+        if indent <= 3 and candidate.startswith("<![CDATA["):
+            if "]] >".replace(" ", "") not in candidate[len("<![CDATA["):]:
+                raw_block_end = "]] >".replace(" ", "")
+            continue
+        if indent <= 3 and candidate.startswith("<?"):
+            if "?>" not in candidate[2:]:
+                raw_block_end = "?>"
+            continue
+        if indent <= 3 and re.match(r"<![A-Z]", candidate):
+            if ">" not in candidate[2:]:
+                raw_block_end = ">"
+            continue
+        if indent <= 3 and GENERIC_HTML_TAG.match(line):
+            blank_terminated_html = bool(candidate.strip())
             continue
         if indent >= 4:
             continue
@@ -435,7 +461,13 @@ def self_test() -> None:
     check_registry_text(status_fixture(valid, decoy=tab_indented_code_decoy))
     raw_html_decoys = tuple(
         f"<{tag}>\n## Registry\n\n{REGISTRY_HEADER}\n{REGISTRY_SEPARATOR}\n{valid}\n</{tag}>"
-        for tag in ("pre", "script", "style")
+        for tag in ("pre", "script", "style", "textarea")
+    )
+    raw_html_decoys += (
+        "<![CDATA[\n## Registry\n\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid + "\n]]>",
+        "<?hidden\n## Registry\n\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid + "\n?>",
+        "<!DOCTYPE hidden\n## Registry\n\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid + "\n>",
+        "<div>\n## Registry\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid + "\n</div>\n",
     )
     for raw_html_decoy in raw_html_decoys:
         check_registry_text(status_fixture(valid, decoy=raw_html_decoy))
