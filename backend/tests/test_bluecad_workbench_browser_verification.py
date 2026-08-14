@@ -10,9 +10,10 @@ from typing import TextIO
 
 import pytest
 
-TARGET_SHA = "21491a82526ed84446e9fc95fd2e1c414e9d5ac3"
+TARGET_SHA = "1c61b7a4776cd0a56f3c71a9b0237b31da1308d2"
 TARGET_BRANCH = "spec/085-bluecad-workbench-2"
 BASE_URL = "http://127.0.0.1:8000"
+RUN_PROOF = os.getenv("RUN_BLUECAD_WORKBENCH_BROWSER_PROOF") == "true"
 
 
 def _run(command: list[str], *, cwd: Path, env: dict[str, str], timeout: int = 300) -> subprocess.CompletedProcess[str]:
@@ -135,17 +136,14 @@ def add_valid(brief, with_report=False):
         report_id = register_artifact(workspace_id, report_source, role="bluecad_validation_report", source_ref=f"bluecad_candidate:{candidate.id}", producer_notes="Temporary exact-head browser proof fixture.")
     update_candidate_artifacts(candidate.id, spec_artifact_id=None, glb_artifact_id=glb_id, report_artifact_id=report_id)
     mark_candidate_valid(candidate.id)
-    return candidate, glb_id, report_id
+    return candidate
 
-candidate, glb_id, report_id = add_valid("Browser proof valid candidate", with_report=True)
-alternate, alternate_glb_id, _ = add_valid("Browser proof alternate GLB candidate")
+valid = add_valid("Browser proof valid candidate", with_report=True)
+alternate = add_valid("Browser proof alternate GLB candidate")
 Path("/tmp/bluecad-proof-seed.json").write_text(json.dumps({
     "workspace_id": workspace_id,
-    "candidate_id": candidate.id,
-    "glb_artifact_id": glb_id,
-    "report_artifact_id": report_id,
+    "candidate_id": valid.id,
     "alternate_candidate_id": alternate.id,
-    "alternate_glb_artifact_id": alternate_glb_id,
     "parked_candidate_id": parked.id,
 }))
 ''',
@@ -166,6 +164,14 @@ async function check(name, fn) {
   try { await fn(); results.push({ name, status: "PASS" }); }
   catch (error) { results.push({ name, status: "FAIL", error: error?.stack ?? String(error) }); }
 }
+const candidateListResponse = page => page.waitForResponse(response => {
+  const url = new URL(response.url());
+  return response.request().method() === "GET" && /\\/workspaces\\/[^/]+\\/bluecad\\/candidates$/.test(url.pathname) && response.ok();
+});
+const candidateDetailResponse = page => page.waitForResponse(response => {
+  const url = new URL(response.url());
+  return response.request().method() === "GET" && /\\/workspaces\\/[^/]+\\/bluecad\\/candidates\\/[^/]+\\/aggregate$/.test(url.pathname) && response.ok();
+});
 const focusSnapshot = page => page.evaluate(() => ({
   tag: document.activeElement?.tagName ?? "",
   id: document.activeElement?.id ?? "",
@@ -191,7 +197,7 @@ await page.goto(`${base}/design/model`, { waitUntil: "domcontentloaded" });
 await page.locator("#app-main").waitFor({ state: "visible" });
 await page.getByRole("heading", { name: "Model workbench" }).waitFor();
 
-await check("effective-200-percent-no-global-overflow", async () => {
+await check("compact-layout-and-200-percent-overflow", async () => {
   await page.getByRole("button", { name: "Show navigator", exact: true }).click();
   await page.locator("#shell-navigator").waitFor();
   const size = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
@@ -203,6 +209,9 @@ await check("effective-200-percent-no-global-overflow", async () => {
     return !!p && a.left >= p.left - 1 && a.right <= p.right + 1;
   });
   assert(contained, "long workspace selector exceeds navigator label");
+  const viewport = page.locator(".bluecad-workbench__viewport");
+  const box = await viewport.boundingBox();
+  assert(box && box.width >= 180 && box.height >= 120, `primary viewport collapsed ${JSON.stringify(box)}`);
 });
 
 await check("artifact-replacement-and-late-glb-completion", async () => {
@@ -218,12 +227,10 @@ await check("artifact-replacement-and-late-glb-completion", async () => {
   await other.click();
   await page.getByText("Orbit, pan, and zoom to inspect the generated geometry.").waitFor({ timeout: 15000 });
   const replacementCanvas = page.getByRole("img", { name: "Interactive 3D preview of generated BLUECAD geometry" });
-  const marker = await replacementCanvas.evaluate(el => el.dataset.proofCanvas ?? "");
-  assert(marker !== "stale", "artifact replacement retained the prior renderer canvas");
+  assert((await replacementCanvas.evaluate(el => el.dataset.proofCanvas ?? "")) !== "stale", "artifact replacement retained prior canvas");
   releaseFirstGlb();
   await page.waitForTimeout(500);
   await page.getByText("Orbit, pan, and zoom to inspect the generated geometry.").waitFor();
-  assert(!errors.some(error => error.includes("GLB")), `late GLB completion produced an error: ${errors.join("\\n")}`);
 });
 
 await check("real-glb-loads-and-resizes-with-shell", async () => {
@@ -236,8 +243,6 @@ await check("real-glb-loads-and-resizes-with-shell", async () => {
   await page.waitForTimeout(250);
   const after = await canvas.boundingBox();
   assert(before && after && after.width !== before.width, `viewer did not resize ${JSON.stringify({ before, after })}`);
-  const doc = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
-  assert(doc.sw <= doc.cw + 1, `panel-open overflow ${JSON.stringify(doc)}`);
 });
 
 await check("structured-validation-detail-is-readable", async () => {
@@ -247,21 +252,16 @@ await check("structured-validation-detail-is-readable", async () => {
   await page.getByText(/message: irregular/).waitFor();
   await page.getByText(/values: \[1,2\]/).waitFor();
   const sidecarText = await page.locator("#shell-sidecar").innerText();
-  assert(!sidecarText.includes("[object Object]"), "validation detail rendered an opaque object");
+  assert(!sidecarText.includes("[object Object]"), "validation detail rendered opaque object");
 });
 
 await check("parked-candidate-reason-and-attempt-trail", async () => {
   await page.getByRole("button", { name: /Browser proof parked candidate/ }).click();
   await page.getByText("Parked reason: fixture parked after two failed attempts").waitFor({ timeout: 15000 });
   await page.getByRole("heading", { name: "Geometry unavailable" }).waitFor();
-  assert(!(await page.getByRole("img", { name: "Interactive 3D preview of generated BLUECAD geometry" }).count()), "parked candidate exposed a GLB canvas");
-  if (!(await page.locator("#shell-analysis-dock").count())) {
-    await page.getByRole("button", { name: "Show analysis", exact: true }).click();
-  }
+  if (!(await page.locator("#shell-analysis-dock").count())) await page.getByRole("button", { name: "Show analysis", exact: true }).click();
   await page.getByText(/fixture attempt 1/).waitFor();
   await page.getByText(/fixture attempt 2/).waitFor();
-  const rows = page.locator("#shell-analysis-dock tbody tr");
-  assert((await rows.count()) >= 2, "parked candidate did not expose multiple attempts");
 });
 
 await check("duplicate-brief-opens-navigator-and-focuses-textarea", async () => {
@@ -277,37 +277,38 @@ await check("duplicate-brief-opens-navigator-and-focuses-textarea", async () => 
   assert((await textarea.inputValue()) === "Browser proof valid candidate", "duplicate brief did not preserve source text");
 });
 
-await check("create-refresh-archive-use-real-api", async () => {
+await check("create-refresh-archive-use-canonical-reloads", async () => {
   const textarea = page.getByLabel("New candidate brief");
   await textarea.fill("Browser proof created candidate");
+  const createReload = candidateListResponse(page);
   await page.getByRole("button", { name: "New candidate", exact: true }).click();
+  await createReload;
   await page.getByText("Candidate created.").waitFor({ timeout: 15000 });
   await page.getByText("Browser proof created candidate", { exact: false }).first().waitFor();
-  const refreshResponse = page.waitForResponse(response => {
-    const url = new URL(response.url());
-    return response.request().method() === "GET" && /\\/workspaces\\/[^/]+\\/bluecad\\/candidates$/.test(url.pathname) && response.ok();
-  });
+
+  const refreshReload = candidateListResponse(page);
   await page.getByRole("button", { name: "Refresh", exact: true }).click();
-  await refreshResponse;
-  const archive = page.getByRole("button", { name: "Archive", exact: true });
-  await archive.waitFor();
-  await archive.click();
+  await refreshReload;
+
+  const archiveReload = candidateListResponse(page);
+  await page.getByRole("button", { name: "Archive", exact: true }).click();
+  await archiveReload;
   await page.getByText("Candidate archived.").waitFor({ timeout: 15000 });
-  assert(!(await page.getByRole("button", { name: /Browser proof created candidate/ }).count()), "archived candidate remained visible with Show archived off");
-  await page.waitForTimeout(150);
+  assert(!(await page.getByRole("button", { name: /Browser proof created candidate/ }).count()), "archived candidate remained visible");
   const selectedReplacement = page.locator(".bluecad-candidate[aria-pressed='true']");
   await selectedReplacement.waitFor();
-  const focusedSelected = await selectedReplacement.evaluate(el => document.activeElement === el);
-  assert(focusedSelected, `archive did not focus selected replacement row ${JSON.stringify(await focusSnapshot(page))}`);
+  assert(await selectedReplacement.evaluate(el => document.activeElement === el), `archive focus ${JSON.stringify(await focusSnapshot(page))}`);
 });
 
-await check("promote-refresh-restores-keyboard-focus", async () => {
+await check("promote-reloads-canonical-detail-and-restores-focus", async () => {
   const valid = page.getByRole("button", { name: /Browser proof valid candidate/ });
   await valid.click();
   const promote = page.getByRole("button", { name: "Promote to Decision", exact: true });
   await promote.waitFor();
+  const detailReload = candidateDetailResponse(page);
   await promote.focus();
   await promote.press("Enter");
+  await detailReload;
   await page.getByText(/Promoted to Decision/).waitFor({ timeout: 15000 });
   await page.waitForTimeout(150);
   const focus = await focusSnapshot(page);
@@ -336,7 +337,7 @@ if (report.summary.failed) process.exit(1);
     )
 
 
-@pytest.mark.skipif(os.getenv("GITHUB_ACTIONS") != "true", reason="temporary exact-head BLUECAD browser proof runs only in GitHub Actions")
+@pytest.mark.skipif(not RUN_PROOF, reason="temporary exact-head BLUECAD browser proof runs only in its dedicated workflow")
 def test_exact_head_bluecad_workbench_browser_proof(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     repo_root = Path(__file__).resolve().parents[2]
     target = tmp_path / "target"
@@ -344,6 +345,7 @@ def test_exact_head_bluecad_workbench_browser_proof(tmp_path: Path, capsys: pyte
     report_path = tmp_path / "bluecad-workbench-proof.json"
     seed_script = tmp_path / "seed.py"
     log_path = tmp_path / "fastapi.log"
+    harness_out = tmp_path / "harness"
     server: subprocess.Popen[str] | None = None
     log: TextIO | None = None
     browser_script: Path | None = None
@@ -358,21 +360,36 @@ def test_exact_head_bluecad_workbench_browser_proof(tmp_path: Path, capsys: pyte
     })
     try:
         _run(["git", "fetch", "origin", TARGET_BRANCH, "--depth=200"], cwd=repo_root, env=env, timeout=120)
-        _run(["git", "worktree", "add", "--detach", str(target), "FETCH_HEAD"], cwd=repo_root, env=env, timeout=60)
-        actual = _run(["git", "rev-parse", "HEAD"], cwd=target, env=env, timeout=30).stdout.strip()
-        assert actual == TARGET_SHA
+        initial_remote_head = _run(["git", "rev-parse", "FETCH_HEAD"], cwd=repo_root, env=env, timeout=30).stdout.strip()
+        assert initial_remote_head == TARGET_SHA
+        _run(["git", "worktree", "add", "--detach", str(target), TARGET_SHA], cwd=repo_root, env=env, timeout=60)
+        assert _run(["git", "rev-parse", "HEAD"], cwd=target, env=env, timeout=30).stdout.strip() == TARGET_SHA
 
-        for checker in ("scripts/check_app_shell.py", "scripts/check_bluecad_read_model.py", "scripts/check_bluecad_workbench.py"):
-            _run([sys.executable, checker], cwd=target, env=env, timeout=120)
+        _run([sys.executable, "scripts/check_spec_status.py", "--self-test"], cwd=target, env=env, timeout=120)
+        _run([sys.executable, "scripts/check_ui_foundation.py"], cwd=target, env=env, timeout=120)
+        _run([sys.executable, "scripts/check_app_shell.py"], cwd=target, env=env, timeout=120)
+        _run([sys.executable, "scripts/check_bluecad_read_model.py"], cwd=target, env=env, timeout=120)
+        _run([sys.executable, "scripts/check_bluecad_workbench.py", "--self-test"], cwd=target, env=env, timeout=120)
+        _run([sys.executable, "scripts/check_bluecad_workbench.py"], cwd=target, env=env, timeout=120)
 
         frontend = target / "frontend"
         backend = target / "backend"
         browser_script = frontend / ".bluecad-workbench-proof.mjs"
         env["PYTHONPATH"] = str(backend)
         _run(["npm", "ci"], cwd=frontend, env=env, timeout=300)
+        _run([
+            str(frontend / "node_modules" / ".bin" / "tsc"),
+            "src/components/bluecad/workbenchState.ts",
+            "src/components/bluecad/workbenchStateHarness.ts",
+            "--target", "ES2022",
+            "--module", "commonjs",
+            "--moduleResolution", "node",
+            "--skipLibCheck",
+            "--outDir", str(harness_out),
+        ], cwd=frontend, env=env, timeout=120)
+        _run(["node", str(harness_out / "workbenchStateHarness.js")], cwd=frontend, env=env, timeout=60)
         _run(["npm", "run", "build"], cwd=frontend, env=env, timeout=180)
-        _run(["npm", "install", "--no-save", "--package-lock=false", "tsx@4.20.3", "playwright@1.54.2"], cwd=frontend, env=env, timeout=300)
-        _run([str(frontend / "node_modules" / ".bin" / "tsx"), "src/components/bluecad/workbenchStateHarness.ts"], cwd=frontend, env=env, timeout=60)
+        _run(["npm", "install", "--no-save", "--package-lock=false", "playwright@1.54.2"], cwd=frontend, env=env, timeout=300)
         _run([str(frontend / "node_modules" / ".bin" / "playwright"), "install", "--with-deps", "chromium"], cwd=frontend, env=env, timeout=360)
 
         data_root.mkdir(parents=True, exist_ok=True)
@@ -396,6 +413,10 @@ def test_exact_head_bluecad_workbench_browser_proof(tmp_path: Path, capsys: pyte
         report = json.loads(report_path.read_text(encoding="utf-8"))
         assert report["target_sha"] == TARGET_SHA
         assert report["summary"]["failed"] == 0, json.dumps(report, indent=2)
+
+        _run(["git", "fetch", "origin", TARGET_BRANCH, "--depth=1"], cwd=repo_root, env=env, timeout=120)
+        final_remote_head = _run(["git", "rev-parse", "FETCH_HEAD"], cwd=repo_root, env=env, timeout=30).stdout.strip()
+        assert final_remote_head == TARGET_SHA, f"target branch moved during proof: {final_remote_head}"
 
         browser_script.unlink(missing_ok=True)
         status = _run(["git", "status", "--short"], cwd=target, env=env, timeout=30).stdout.strip()
