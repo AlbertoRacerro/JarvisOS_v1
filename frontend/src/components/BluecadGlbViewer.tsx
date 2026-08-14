@@ -30,6 +30,7 @@ function BluecadGlbViewer({ artifactUrl }: BluecadGlbViewerProps) {
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount) return undefined;
+    setMessage("Loading GLB artifact…");
 
     let renderer: THREE.WebGLRenderer;
     try {
