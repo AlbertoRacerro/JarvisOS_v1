@@ -10,7 +10,7 @@ from typing import TextIO
 
 import pytest
 
-TARGET_SHA = "999604b6236e5e704c0544c5cb0341a9c0c40bc9"
+TARGET_SHA = "48e57b8397a885d85c013ce670088567555c77ee"
 TARGET_BRANCH = "spec/085-bluecad-workbench-2"
 BASE_URL = "http://127.0.0.1:8000"
 
@@ -86,7 +86,7 @@ def test_exact_head_bluecad_workbench_browser_proof(tmp_path: Path, capsys: pyte
         "PROOF_REPORT": str(report_path),
     })
     try:
-        _run(["git", "fetch", "origin", TARGET_BRANCH, "--depth=1"], cwd=repo_root, env=env, timeout=120)
+        _run(["git", "fetch", "origin", TARGET_BRANCH, "--depth=200"], cwd=repo_root, env=env, timeout=120)
         _run(["git", "worktree", "add", "--detach", str(target), "FETCH_HEAD"], cwd=repo_root, env=env, timeout=60)
         actual = _run(["git", "rev-parse", "HEAD"], cwd=target, env=env, timeout=30).stdout.strip()
         assert actual == TARGET_SHA
