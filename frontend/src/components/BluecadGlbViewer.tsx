@@ -60,7 +60,8 @@ function BluecadGlbViewer({ artifactUrl }: BluecadGlbViewerProps) {
     const directional = new THREE.DirectionalLight(0xffffff, 2.4);
     directional.position.set(80, 120, 90);
     scene.add(directional);
-    scene.add(new THREE.GridHelper(220, 22, 0x94a3b8, 0xe2e8f0));
+    const grid = new THREE.GridHelper(220, 22, 0x94a3b8, 0xe2e8f0);
+    scene.add(grid);
 
     let disposed = false;
     let loadedScene: THREE.Object3D | null = null;
@@ -122,6 +123,10 @@ function BluecadGlbViewer({ artifactUrl }: BluecadGlbViewerProps) {
         disposeOwnedScene(loadedScene);
         loadedScene = null;
       }
+      scene.remove(grid);
+      grid.geometry.dispose();
+      const gridMaterials = Array.isArray(grid.material) ? grid.material : [grid.material];
+      for (const material of gridMaterials) material.dispose();
       controls.dispose();
       renderer.dispose();
       if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement);
