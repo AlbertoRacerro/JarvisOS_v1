@@ -19,6 +19,7 @@ EXPECTED_PR = "[#239](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/239)"
 REGISTRY_HEADER = "| Spec | Status | Implementation PR | Name | Depends on | Description |"
 REGISTRY_SEPARATOR = "| --- | --- | --- | --- | --- | --- |"
 FENCE_START = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+RAW_HTML_START = re.compile(r"^ {0,3}<(?P<tag>pre|script|style)(?:\s|>|$)", re.IGNORECASE)
 
 ALLOWED = {
     "frontend/src/App.tsx",
@@ -154,9 +155,14 @@ def registry_lines(text: str) -> list[str]:
     result: list[str] = []
     fence_char: str | None = None
     fence_len = 0
+    html_block: str | None = None
     for line in cleaned.splitlines():
         indent, prefix_len = markdown_indent(line)
         candidate = line[prefix_len:]
+        if html_block is not None:
+            if re.search(rf"</{re.escape(html_block)}\s*>", candidate, re.IGNORECASE):
+                html_block = None
+            continue
         if fence_char is not None:
             if indent <= 3 and len(candidate) >= fence_len and candidate == fence_char * len(candidate):
                 fence_char = None
@@ -167,6 +173,12 @@ def registry_lines(text: str) -> list[str]:
             token = marker.group(1)
             fence_char = token[0]
             fence_len = len(token)
+            continue
+        html_marker = RAW_HTML_START.match(line)
+        if html_marker:
+            tag = html_marker.group("tag").lower()
+            if re.search(rf"</{re.escape(tag)}\s*>", candidate[html_marker.end():], re.IGNORECASE) is None:
+                html_block = tag
             continue
         if indent >= 4:
             continue
@@ -421,6 +433,12 @@ def self_test() -> None:
         + "\t" + valid
     )
     check_registry_text(status_fixture(valid, decoy=tab_indented_code_decoy))
+    raw_html_decoys = tuple(
+        f"<{tag}>\n## Registry\n\n{REGISTRY_HEADER}\n{REGISTRY_SEPARATOR}\n{valid}\n</{tag}>"
+        for tag in ("pre", "script", "style")
+    )
+    for raw_html_decoy in raw_html_decoys:
+        check_registry_text(status_fixture(valid, decoy=raw_html_decoy))
     unterminated_comment_decoy = "<!--\n## Registry\n\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid
     for invalid in (
         "| 085 | ready | — | BLUECAD-WORKBENCH-2 | deps | wrong |",
@@ -438,6 +456,7 @@ def self_test() -> None:
         overindented_close_decoy,
         indented_code_decoy,
         tab_indented_code_decoy,
+        *raw_html_decoys,
         unterminated_comment_decoy,
     ):
         try:
