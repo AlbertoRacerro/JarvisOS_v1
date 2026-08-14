@@ -12,6 +12,7 @@ jobs:
     timeout-minutes: 25
     env:
       RUN_BLUECAD_WORKBENCH_BROWSER_PROOF: "true"
+      TARGET_IMPLEMENTATION_SHA: "96610e68fb852d88a60877251ed58777a2c601b7"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,4 +34,11 @@ jobs:
 
       - name: Run exact-head BLUECAD workbench browser proof
         working-directory: backend
-        run: python -m pytest -q tests/test_bluecad_workbench_browser_verification.py -s
+        run: |
+          sed -i "s/^TARGET_SHA = .*/TARGET_SHA = \"${TARGET_IMPLEMENTATION_SHA}\"/" tests/test_bluecad_workbench_browser_verification.py
+          set +e
+          python -m pytest -q tests/test_bluecad_workbench_browser_verification.py -s
+          status=$?
+          echo "--- BLUECAD browser proof server logs ---"
+          find /tmp/pytest-of-runner -name fastapi.log -type f -print -exec cat {} \; 2>/dev/null || true
+          exit "$status"
