@@ -258,7 +258,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   useEffect(() => {
     const nextId = revalidateSelection(visibleCandidates, selectedId, true);
     if (nextId === selectedId) return;
-    focusAfterSelectionChange.current = document.activeElement !== filterRef.current;
+    focusAfterSelectionChange.current = Boolean(selectedId && document.activeElement === candidateRefs.current[selectedId]);
     chooseCandidate(nextId);
   }, [chooseCandidate, selectedId, visibleCandidates]);
 
@@ -414,7 +414,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     const attempts = activeAggregate?.candidate.attempts ?? [];
     const evidence = activeAggregate?.evidence ?? [];
     const runs = activeAggregate?.runs ?? [];
-    return <div className="bluecad-workbench__dock"><h3>Attempt history</h3>{attempts.length === 0 ? <p>No attempts recorded yet.</p> : <div className="table-wrap"><table className="smoke-table bluecad-table"><thead><tr><th>#</th><th>Route</th><th>Proposal</th><th>Build</th><th>Validation</th><th>Error detail</th></tr></thead><tbody>{attempts.map((attempt) => <tr key={attempt.id}><td>{attempt.attempt_no}</td><td>{attempt.route_class}</td><td>{attempt.proposal_outcome}</td><td>{attempt.build_outcome ?? "—"}</td><td>{attempt.validation_verdict ?? "—"}</td><td>{formatAttemptDetail(attempt.error_detail_json)}</td></tr>)}</tbody></table></div>}<h3>Evidence references</h3>{evidence.length === 0 ? <p>No aggregate-linked evidence.</p> : <ul>{evidence.map((item) => <li key={item.ref}><strong>{item.kind}</strong> · {item.ref} · {item.status}{item.summary ? ` · ${item.summary}` : ""}</li>)}</ul>}<h3>Run references</h3>{runs.length === 0 ? <p>No aggregate-linked runs.</p> : <ul>{runs.map((run) => <li key={run.ref}><strong>{run.kind}</strong> · {run.ref}{run.status ? ` · ${run.status}` : ""}{run.stale === true ? " · stale" : ""}</li>)}</ul>}</div>;
+    return <div className="bluecad-workbench__dock"><h3>Attempt history</h3>{attempts.length === 0 ? <p>No attempts recorded yet.</p> : <div className="table-wrap"><table className="smoke-table bluecad-table"><thead><tr><th>#</th><th>Route</th><th>Proposal</th><th>Build</th><th>Validation</th><th>Error detail</th></tr></thead><tbody>{attempts.map((attempt) => <tr key={attempt.id}><td>{attempt.attempt_no}</td><td>{attempt.route_class}</td><td>{attempt.proposal_outcome}</td><td>{attempt.build_outcome ?? "—"}</td><td>{attempt.validation_verdict ?? "—"}</td><td>{formatAttemptDetail(attempt.error_detail_json)}</td></tr>)}</tbody></table></div>}<h3>Evidence references</h3>{evidence.length === 0 ? <p>No aggregate-linked evidence.</p> : <ul>{evidence.map((item) => <li key={`${item.subject_ref}-${item.ref}`}><strong>{item.kind}</strong> · {item.ref} · subject {item.subject_ref} · {item.status}{item.summary ? ` · ${item.summary}` : ""}</li>)}</ul>}<h3>Run references</h3>{runs.length === 0 ? <p>No aggregate-linked runs.</p> : <ul>{runs.map((run) => <li key={run.ref}><strong>{run.kind}</strong> · {run.ref}{run.status ? ` · ${run.status}` : ""}{run.stale === true ? " · stale" : ""}</li>)}</ul>}</div>;
   }, [aggregate, selectedId]);
 
   useEffect(() => { onShellRegionsChange({ navigator, sidecar, dock }); }, [dock, navigator, onShellRegionsChange, sidecar]);
