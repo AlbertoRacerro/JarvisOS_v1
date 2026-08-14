@@ -324,6 +324,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
 
   const reconcileAfterMutationError = useCallback(async (mutation: MutationContext, failureMessage: string) => {
     if (!acceptsMutation({ generation: mutationGeneration.current, workspaceId: workspaceRef.current, candidateId: selectedRef.current }, mutation)) return;
+    if (mutation.kind === "archive") focusAfterArchive.current = true;
     const preferredId = selectedRef.current;
     currentDetail.current = null;
     currentValidation.current = null;
