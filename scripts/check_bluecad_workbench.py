@@ -134,14 +134,26 @@ def strip_html_comments(text: str) -> str:
     return "".join(result)
 
 
+def markdown_indent(line: str) -> tuple[int, int]:
+    columns = 0
+    index = 0
+    while index < len(line) and line[index] in (" ", "\t"):
+        if line[index] == "\t":
+            columns += 4 - (columns % 4)
+        else:
+            columns += 1
+        index += 1
+    return columns, index
+
+
 def registry_lines(text: str) -> list[str]:
     cleaned = strip_html_comments(text)
     result: list[str] = []
     fence_char: str | None = None
     fence_len = 0
     for line in cleaned.splitlines():
-        indent = len(line) - len(line.lstrip(" "))
-        candidate = line[indent:]
+        indent, prefix_len = markdown_indent(line)
+        candidate = line[prefix_len:]
         if fence_char is not None:
             if indent <= 3 and len(candidate) >= fence_len and candidate == fence_char * len(candidate):
                 fence_char = None
@@ -383,6 +395,13 @@ def self_test() -> None:
         + "    " + valid
     )
     check_registry_text(status_fixture(valid, decoy=indented_code_decoy))
+    tab_indented_code_decoy = (
+        "\t## Registry\n\n"
+        + "\t" + REGISTRY_HEADER + "\n"
+        + "\t" + REGISTRY_SEPARATOR + "\n"
+        + "\t" + valid
+    )
+    check_registry_text(status_fixture(valid, decoy=tab_indented_code_decoy))
     unterminated_comment_decoy = "<!--\n## Registry\n\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid
     for invalid in (
         "| 085 | ready | — | BLUECAD-WORKBENCH-2 | deps | wrong |",
@@ -399,6 +418,7 @@ def self_test() -> None:
         malformed_close_decoy,
         overindented_close_decoy,
         indented_code_decoy,
+        tab_indented_code_decoy,
         unterminated_comment_decoy,
     ):
         try:
