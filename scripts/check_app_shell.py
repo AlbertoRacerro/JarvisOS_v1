@@ -19,6 +19,8 @@ PACKAGE = ROOT / "frontend/package.json"
 STATUS = ROOT / "docs/specs/STATUS.md"
 IMPLEMENTATION_BASE = "994b40009f5bf898aac7f9ba978c4925c610e505"
 IMPLEMENTATION_PR_LINK = "[#231](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/231)"
+REGISTRY_HEADER = "| Spec | Status | Implementation PR | Name | Depends on | Description |"
+REGISTRY_SEPARATOR = "| --- | --- | --- | --- | --- | --- |"
 
 AUTHORIZED_ADDED = frozenset({
     "backend/app/core/spa_static.py",
@@ -62,6 +64,7 @@ PRIMARY_ITEMS = (
 )
 ROUTE_PATH = re.compile(r'path\s*:\s*"(/[^"]+)"')
 TS_COMMENT = re.compile(r"//[^\n]*|/\*.*?\*/", re.DOTALL)
+HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 RAW_COLOR = re.compile(
     r"(?<![\w-])(?:#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|\b(?:black|white|red|blue|green|yellow|purple|orange|cyan|magenta)\b)",
     re.IGNORECASE,
@@ -97,10 +100,29 @@ def shell_files() -> list[Path]:
 
 
 def registry_state(text: str) -> str:
-    rows = [line for line in text.splitlines() if line.startswith("| 083 |")]
-    if len(rows) != 1:
-        fail(f"STATUS.md must contain exactly one canonical spec 083 row; found {len(rows)}")
-    cells = [cell.strip() for cell in rows[0].strip().strip("|").split("|")]
+    lines = HTML_COMMENT.sub("", text).splitlines()
+    registry_headers = [index for index, line in enumerate(lines) if line.strip() == "## Registry"]
+    if len(registry_headers) != 1:
+        fail("STATUS.md must contain exactly one canonical Registry section")
+    start = registry_headers[0] + 1
+    end = next((index for index in range(start, len(lines)) if lines[index].strip().startswith("## ")), len(lines))
+    section = lines[start:end]
+    table_headers = [index for index, line in enumerate(section) if line.strip() == REGISTRY_HEADER]
+    if len(table_headers) != 1:
+        fail("STATUS.md canonical Registry must contain exactly one exact table header")
+    header = table_headers[0]
+    if header + 1 >= len(section) or section[header + 1].strip() != REGISTRY_SEPARATOR:
+        fail("STATUS.md canonical Registry separator is missing or malformed")
+    rows: list[str] = []
+    for line in section[header + 2:]:
+        stripped = line.strip()
+        if not stripped or not stripped.startswith("|"):
+            break
+        rows.append(stripped)
+    matches = [row for row in rows if row.startswith("| 083 |")]
+    if len(matches) != 1:
+        fail(f"STATUS.md canonical Registry must contain exactly one spec 083 row; found {len(matches)}")
+    cells = [cell.strip() for cell in matches[0].strip().strip("|").split("|")]
     if len(cells) != 6 or cells[2] != IMPLEMENTATION_PR_LINK or cells[1] not in {"in_review", "merged"}:
         fail("spec 083 registry row must be in_review/merged with exact implementation PR #231")
     return cells[1]
@@ -246,21 +268,34 @@ def check_dependencies() -> None:
         fail("stylesheet import order regressed")
 
 
+def status_fixture(row: str, *, decoy: str = "") -> str:
+    return "\n".join((decoy, "## Registry", "", REGISTRY_HEADER, REGISTRY_SEPARATOR, row, "", "## Next"))
+
+
 def self_test() -> None:
     valid_merged = f"| 083 | merged | {IMPLEMENTATION_PR_LINK} | APP-SHELL-1 | 006, 070 | done |"
     valid_active = f"| 083 | in_review | {IMPLEMENTATION_PR_LINK} | APP-SHELL-1 | 006, 070 | active |"
-    if registry_state(valid_merged) != "merged" or registry_state(valid_active) != "in_review":
+    if registry_state(status_fixture(valid_merged)) != "merged" or registry_state(status_fixture(valid_active)) != "in_review":
         fail("registry lifecycle self-test failed")
     for invalid in (
         "| 083 | merged | — | APP-SHELL-1 | 006, 070 | wrong |",
         f"| 083 | ready | {IMPLEMENTATION_PR_LINK} | APP-SHELL-1 | 006, 070 | wrong |",
     ):
         try:
-            registry_state(invalid)
+            registry_state(status_fixture(invalid))
         except SystemExit:
             pass
         else:
             fail("registry parser accepted invalid lifecycle evidence")
+    decoy = f"<!--\n{valid_merged}\n-->"
+    if registry_state(status_fixture(valid_active, decoy=decoy)) != "in_review":
+        fail("registry parser accepted an HTML-comment decoy over canonical evidence")
+    try:
+        registry_state(status_fixture("| 084 | merged | — | OTHER | — | no 083 |", decoy=decoy))
+    except SystemExit:
+        pass
+    else:
+        fail("registry parser accepted a decoy when canonical 083 evidence was absent")
     parsed = parse_name_status("A\tnew.ts\nM\texisting.ts\n")
     if parsed != {"new.ts": "A", "existing.ts": "M"}:
         fail("name-status parser self-test failed")
