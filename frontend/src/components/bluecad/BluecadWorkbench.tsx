@@ -113,6 +113,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     currentValidation.current = null;
     suppressNextDetailEffect.current = null;
     clearVisibleDetail(candidateId ? "loading" : "idle");
+    setMessage(null);
     setSelectedId(candidateId);
     publishSelection(workspaceRef.current, candidateId);
   }, [clearVisibleDetail, publishSelection]);
@@ -134,12 +135,21 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       currentDetail.current = null;
       currentValidation.current = null;
       clearVisibleDetail(nextId ? "loading" : "idle");
+      setMessage(null);
       setSelectedId(nextId);
       publishSelection(targetWorkspaceId, nextId);
       setCandidateState("ready");
       return items;
     } catch (error) {
       if (currentList.current && acceptsRequest(currentList.current, request)) {
+        currentList.current = null;
+        currentDetail.current = null;
+        currentValidation.current = null;
+        setCandidates([]);
+        selectedRef.current = null;
+        clearVisibleDetail("idle");
+        setSelectedId(null);
+        publishSelection(targetWorkspaceId, null);
         setCandidateState("error");
         setMessage(error instanceof Error ? error.message : "Candidate discovery failed.");
       }
@@ -285,6 +295,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     try {
       const created = await createBluecadCandidate(mutation.workspaceId, brief);
       if (!acceptsMutation({ generation: mutationGeneration.current, workspaceId: workspaceRef.current, candidateId: selectedRef.current }, mutation)) return;
+      setFilterText("");
       suppressNextDetailEffect.current = created.id;
       const items = await loadCandidates(mutation.workspaceId, created.id);
       if (!items || !items.some((item) => item.id === created.id)) {
@@ -363,6 +374,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
         currentValidation.current = null;
         suppressNextDetailEffect.current = null;
         clearVisibleDetail("idle");
+        setMessage(null);
         setWorkspaceId(nextWorkspaceId);
       }} disabled={workspaceState !== "ready" || workspaces.length === 0}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
       <label>Filter candidates<input value={filterText} onChange={(event) => setFilterText(event.target.value)} /></label>
@@ -418,7 +430,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const canPromote = candidate?.status === "valid" && !candidate.promoted_decision_id;
   const viewportFallback = selectedId && aggregateState === "error" ? "Candidate detail unavailable. Use Refresh to retry." : aggregateState === "loading" ? "Loading candidate geometry…" : "Select a candidate from the navigator.";
 
-  return <section className="bluecad-workbench" aria-labelledby="bluecad-workbench-title"><header className="bluecad-workbench__chrome"><div><p className="eyebrow">BLUECAD</p><h1 id="bluecad-workbench-title">Model workbench</h1>{candidate && <p className="panel-subtitle"><strong>{candidate.id}</strong> · {candidate.brief_text}</p>}</div>{candidate && <div className="button-row"><span className={`status-pill status-${candidate.status}`}>{candidate.status}</span><button type="button" className="secondary-button" onClick={duplicateSelectedBrief}>Duplicate brief</button>{candidate.status !== "archived" && <button type="button" className="secondary-button" onClick={() => void onArchive()} disabled={pendingAction !== null}>Archive</button>}{canPromote && <button type="button" onClick={() => void onPromote()} disabled={pendingAction !== null}>Promote to Decision</button>}</div>}</header>{message && <div className="panel-subtitle" role="status">{message}</div>}<div className="bluecad-workbench__viewport">{candidate?.glb_artifact_id ? <BluecadGlbViewer artifactUrl={bluecadArtifactContentUrl(candidate.workspace_id, candidate.glb_artifact_id)} /> : candidate ? <div className="bluecad-workbench__empty-viewer"><h2>Geometry unavailable</h2><p>{candidate.parked_reason ? `Candidate is parked: ${candidate.parked_reason}` : "No GLB artifact is available for this candidate yet."}</p></div> : <div className="bluecad-workbench__empty-viewer"><p>{viewportFallback}</p></div>}</div></section>;
+  return <section className="bluecad-workbench" aria-labelledby="bluecad-workbench-title"><header className="bluecad-workbench__chrome"><div><p className="eyebrow">BLUECAD</p><h1 id="bluecad-workbench-title">Model workbench</h1>{candidate && <p className="panel-subtitle" style={{ overflowWrap: "anywhere", minWidth: 0 }}><strong>{candidate.id}</strong> · {candidate.brief_text}</p>}</div>{candidate && <div className="button-row"><span className={`status-pill status-${candidate.status}`}>{candidate.status}</span><button type="button" className="secondary-button" onClick={duplicateSelectedBrief}>Duplicate brief</button>{candidate.status !== "archived" && <button type="button" className="secondary-button" onClick={() => void onArchive()} disabled={pendingAction !== null}>Archive</button>}{canPromote && <button type="button" onClick={() => void onPromote()} disabled={pendingAction !== null}>Promote to Decision</button>}</div>}</header>{message && <div className="panel-subtitle" role="status">{message}</div>}<div className="bluecad-workbench__viewport">{candidate?.glb_artifact_id ? <BluecadGlbViewer artifactUrl={bluecadArtifactContentUrl(candidate.workspace_id, candidate.glb_artifact_id)} /> : candidate ? <div className="bluecad-workbench__empty-viewer"><h2>Geometry unavailable</h2><p>{candidate.parked_reason ? `Candidate is parked: ${candidate.parked_reason}` : "No GLB artifact is available for this candidate yet."}</p></div> : <div className="bluecad-workbench__empty-viewer"><p>{viewportFallback}</p></div>}</div></section>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
