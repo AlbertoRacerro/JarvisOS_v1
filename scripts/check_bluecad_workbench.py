@@ -153,6 +153,8 @@ def registry_lines(text: str) -> list[str]:
             fence_char = token[0]
             fence_len = len(token)
             continue
+        if indent >= 4:
+            continue
         result.append(line)
     return result
 
@@ -374,6 +376,13 @@ def self_test() -> None:
         + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid + "\n```"
     )
     check_registry_text(status_fixture(valid, decoy=overindented_close_decoy))
+    indented_code_decoy = (
+        "    ## Registry\n\n"
+        + "    " + REGISTRY_HEADER + "\n"
+        + "    " + REGISTRY_SEPARATOR + "\n"
+        + "    " + valid
+    )
+    check_registry_text(status_fixture(valid, decoy=indented_code_decoy))
     unterminated_comment_decoy = "<!--\n## Registry\n\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid
     for invalid in (
         "| 085 | ready | — | BLUECAD-WORKBENCH-2 | deps | wrong |",
@@ -385,7 +394,13 @@ def self_test() -> None:
             pass
         else:
             fail("registry self-test accepted non-canonical or invalid 085 lifecycle evidence")
-    for hidden_only in (fenced_decoy, malformed_close_decoy, overindented_close_decoy, unterminated_comment_decoy):
+    for hidden_only in (
+        fenced_decoy,
+        malformed_close_decoy,
+        overindented_close_decoy,
+        indented_code_decoy,
+        unterminated_comment_decoy,
+    ):
         try:
             check_registry_text(hidden_only)
         except SystemExit:
