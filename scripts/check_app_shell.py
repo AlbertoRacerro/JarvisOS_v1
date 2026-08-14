@@ -64,8 +64,9 @@ PRIMARY_ITEMS = (
 )
 ROUTE_PATH = re.compile(r'path\s*:\s*"(/[^"]+)"')
 TS_COMMENT = re.compile(r"//[^\n]*|/\*.*?\*/", re.DOTALL)
-HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
-FENCE_START = re.compile(r"^\s*(`{3,}|~{3,})")
+FENCE_START = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+RAW_HTML_START = re.compile(r"^ {0,3}<(?P<tag>pre|script|style|textarea)(?:\s|>|$)", re.IGNORECASE)
+GENERIC_HTML_TAG = re.compile(r"^ {0,3}</?[A-Za-z][A-Za-z0-9-]*(?:\s|/?>|$)")
 RAW_COLOR = re.compile(
     r"(?<![\w-])(?:#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|\b(?:black|white|red|blue|green|yellow|purple|orange|cyan|magenta)\b)",
     re.IGNORECASE,
@@ -100,18 +101,61 @@ def shell_files() -> list[Path]:
     return files
 
 
+def strip_html_comments(text: str) -> str:
+    result: list[str] = []
+    cursor = 0
+    while cursor < len(text):
+        start = text.find("<!--", cursor)
+        if start < 0:
+            result.append(text[cursor:])
+            break
+        result.append(text[cursor:start])
+        end = text.find("-->", start + 4)
+        if end < 0:
+            break
+        comment = text[start:end + 3]
+        result.append("\n" * comment.count("\n"))
+        cursor = end + 3
+    return "".join(result)
+
+
+def markdown_indent(line: str) -> tuple[int, int]:
+    columns = 0
+    index = 0
+    while index < len(line) and line[index] in (" ", "\t"):
+        if line[index] == "\t":
+            columns += 4 - (columns % 4)
+        else:
+            columns += 1
+        index += 1
+    return columns, index
+
+
 def registry_lines(text: str) -> list[str]:
-    cleaned = HTML_COMMENT.sub("", text)
+    cleaned = strip_html_comments(text)
     result: list[str] = []
     fence_char: str | None = None
     fence_len = 0
+    html_block: str | None = None
+    raw_block_end: str | None = None
+    blank_terminated_html = False
     for line in cleaned.splitlines():
-        stripped = line.strip()
+        indent, prefix_len = markdown_indent(line)
+        candidate = line[prefix_len:]
+        if html_block is not None:
+            if re.search(rf"</{re.escape(html_block)}\s*>", candidate, re.IGNORECASE):
+                html_block = None
+            continue
+        if raw_block_end is not None:
+            if raw_block_end in candidate:
+                raw_block_end = None
+            continue
+        if blank_terminated_html:
+            if not candidate.strip():
+                blank_terminated_html = False
+            continue
         if fence_char is not None:
-            closer = line.rstrip()
-            indent = len(closer) - len(closer.lstrip(" "))
-            token = closer[indent:]
-            if indent <= 3 and len(token) >= fence_len and token == fence_char * len(token):
+            if indent <= 3 and len(candidate) >= fence_len and candidate == fence_char * len(candidate):
                 fence_char = None
                 fence_len = 0
             continue
@@ -120,6 +164,29 @@ def registry_lines(text: str) -> list[str]:
             token = marker.group(1)
             fence_char = token[0]
             fence_len = len(token)
+            continue
+        html_marker = RAW_HTML_START.match(line)
+        if html_marker:
+            tag = html_marker.group("tag").lower()
+            if re.search(rf"</{re.escape(tag)}\s*>", candidate[html_marker.end():], re.IGNORECASE) is None:
+                html_block = tag
+            continue
+        if indent <= 3 and candidate.startswith("<![CDATA["):
+            if "]] >".replace(" ", "") not in candidate[len("<![CDATA["):]:
+                raw_block_end = "]] >".replace(" ", "")
+            continue
+        if indent <= 3 and candidate.startswith("<?"):
+            if "?>" not in candidate[2:]:
+                raw_block_end = "?>"
+            continue
+        if indent <= 3 and re.match(r"<![A-Z]", candidate):
+            if ">" not in candidate[2:]:
+                raw_block_end = ">"
+            continue
+        if indent <= 3 and GENERIC_HTML_TAG.match(line):
+            blank_terminated_html = bool(candidate.strip())
+            continue
+        if indent >= 4:
             continue
         result.append(line)
     return result
@@ -321,25 +388,26 @@ def self_test() -> None:
     fenced_decoy = "```markdown\n" + status_fixture(valid_merged) + "\n```"
     if registry_state(status_fixture(valid_active, decoy=fenced_decoy)) != "in_review":
         fail("registry parser accepted a fenced Registry decoy over canonical evidence")
-    overindented_closer_decoy = "```markdown\n    ```\n" + status_fixture(valid_merged) + "\n```"
-    try:
-        registry_state(overindented_closer_decoy)
-    except SystemExit:
-        pass
-    else:
-        fail("registry parser accepted lifecycle evidence after an over-indented fence closer")
+    hidden_only = (
+        fenced_decoy,
+        "```markdown\n    ```\n" + status_fixture(valid_merged) + "\n```",
+        "\n".join(("<pre>", "## Registry", REGISTRY_HEADER, REGISTRY_SEPARATOR, valid_merged, "</pre>")),
+        "\n".join(("    ## Registry", "    " + REGISTRY_HEADER, "    " + REGISTRY_SEPARATOR, "    " + valid_merged)),
+        "\n".join(("<!--", "## Registry", REGISTRY_HEADER, REGISTRY_SEPARATOR, valid_merged)),
+    )
+    for hidden in hidden_only:
+        try:
+            registry_state(hidden)
+        except SystemExit:
+            pass
+        else:
+            fail("registry parser accepted hidden Markdown lifecycle evidence")
     try:
         registry_state(status_fixture("| 084 | merged | — | OTHER | — | no 083 |", decoy=decoy))
     except SystemExit:
         pass
     else:
         fail("registry parser accepted a decoy when canonical 083 evidence was absent")
-    try:
-        registry_state(fenced_decoy)
-    except SystemExit:
-        pass
-    else:
-        fail("registry parser accepted fenced-only lifecycle evidence")
     parsed = parse_name_status("A\tnew.ts\nM\texisting.ts\n")
     if parsed != {"new.ts": "A", "existing.ts": "M"}:
         fail("name-status parser self-test failed")
