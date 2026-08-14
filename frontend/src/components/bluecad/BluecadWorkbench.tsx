@@ -111,6 +111,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   }, []);
 
   const chooseCandidate = useCallback((candidateId: string | null) => {
+    if (candidateId === selectedRef.current) return;
     mutationGeneration.current += 1;
     selectedRef.current = candidateId;
     if (currentList.current) setCandidateState("ready");
@@ -401,19 +402,10 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       if (!acceptsMutation({ generation: mutationGeneration.current, workspaceId: workspaceRef.current, candidateId: selectedRef.current }, mutation)) return;
       const refreshed = await refresh();
       if (!refreshed || workspaceRef.current !== mutation.workspaceId || selectedRef.current !== mutation.candidateId) {
-        if (workspaceRef.current === mutation.workspaceId) {
-          window.requestAnimationFrame(() => {
-            const currentId = selectedRef.current;
-            const candidateNode = currentId ? candidateRefs.current[currentId] : null;
-            (candidateNode ?? workbenchTitleRef.current)?.focus();
-          });
-        }
+        if (workspaceRef.current === mutation.workspaceId) window.requestAnimationFrame(() => workbenchTitleRef.current?.focus());
         return;
       }
-      window.requestAnimationFrame(() => {
-        const candidateNode = candidateRefs.current[mutation.candidateId!];
-        (candidateNode ?? workbenchTitleRef.current)?.focus();
-      });
+      window.requestAnimationFrame(() => workbenchTitleRef.current?.focus());
       setMessage(`Promoted to Decision ${promoted.promoted_decision_id ?? "(pending id)"}.`);
     } catch (error) {
       await reconcileAfterMutationError(mutation, error instanceof Error ? error.message : "Promotion failed.");
