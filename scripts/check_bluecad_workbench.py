@@ -55,7 +55,10 @@ FAKE_TELEMETRY = re.compile(
     r"(?:AI\s+confidence|system\s+health|CPU\s*%|GPU\s*%|memory\s*%|stress\s*[:=]|186\.4\s*MPa|87%\s*validation)",
     re.IGNORECASE,
 )
-FORBIDDEN_AUTHORITY = re.compile(r"(?:stored_path|JARVISOS_DATA_ROOT|filesystem|api[_-]?key|run_ai_task)", re.IGNORECASE)
+FORBIDDEN_AUTHORITY = re.compile(
+    r"(?:stored_path|JARVISOS_DATA_ROOT|filesystem|api[_-]?key|run_ai_task|\bfetch\s*\(|\bnew\s+(?:XMLHttpRequest|WebSocket|EventSource)\s*\()",
+    re.IGNORECASE,
+)
 
 
 def fail(message: str) -> None:
@@ -359,8 +362,13 @@ def self_test() -> None:
         fail("negative scope self-test accepted backend change")
     if FAKE_TELEMETRY.search("AI confidence 92%") is None:
         fail("fake telemetry detector self-test failed")
-    if FORBIDDEN_AUTHORITY.search("stored_path") is None:
-        fail("forbidden authority detector self-test failed")
+    for forbidden_example in (
+        "stored_path",
+        'fetch("http://localhost:11434/api/generate")',
+        'new WebSocket("ws://localhost:11434")',
+    ):
+        if FORBIDDEN_AUTHORITY.search(forbidden_example) is None:
+            fail(f"forbidden authority detector self-test failed: {forbidden_example}")
     required_scanned_ui = {
         FRONTEND / "components/bluecad/BluecadNavigator.tsx",
         FRONTEND / "components/bluecad/BluecadSidecar.tsx",
