@@ -28,11 +28,6 @@ import {
   type RequestContext
 } from "./workbenchState";
 
-type ValidationReport = {
-  checks?: BluecadValidationCheck[];
-  validation?: { checks?: BluecadValidationCheck[] };
-};
-
 type Props = Readonly<{
   onSelectionChange(next: StageSelection | null): void;
   onShellRegionsChange(next: ShellRegionContributions): void;
@@ -76,6 +71,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const filterRef = useRef<HTMLInputElement | null>(null);
   const candidateRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const emptyCandidatesRef = useRef<HTMLParagraphElement | null>(null);
+  const workbenchTitleRef = useRef<HTMLHeadingElement | null>(null);
   const focusAfterSelectionChange = useRef(false);
 
   const handleBriefRef = useCallback((node: HTMLTextAreaElement | null) => {
@@ -213,9 +209,15 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     }
     setValidationState("loading");
     try {
-      const report = await getBluecadArtifactJson<ValidationReport>(candidate.workspace_id, candidate.report_artifact_id);
+      const report = await getBluecadArtifactJson<unknown>(candidate.workspace_id, candidate.report_artifact_id);
       if (!currentValidation.current || !acceptsRequest(currentValidation.current, request)) return;
-      setChecks(report.checks ?? report.validation?.checks ?? []);
+      if (!isRecord(report)) throw new Error("Validation report has an invalid shape.");
+      const nestedValidation = isRecord(report.validation) ? report.validation : null;
+      const reportChecks = report.checks ?? nestedValidation?.checks;
+      if (reportChecks !== undefined && (!Array.isArray(reportChecks) || !reportChecks.every(isRecord))) {
+        throw new Error("Validation report checks have an invalid shape.");
+      }
+      setChecks((reportChecks ?? []) as BluecadValidationCheck[]);
       setValidationState("ready");
     } catch (error) {
       if (!currentValidation.current || !acceptsRequest(currentValidation.current, request)) return;
@@ -341,8 +343,8 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       if (!items || workspaceRef.current !== mutation.workspaceId) return;
       window.requestAnimationFrame(() => {
         const nextId = selectedRef.current;
-        if (nextId) candidateRefs.current[nextId]?.focus();
-        else emptyCandidatesRef.current?.focus();
+        const candidateNode = nextId ? candidateRefs.current[nextId] : null;
+        (candidateNode ?? emptyCandidatesRef.current ?? workbenchTitleRef.current)?.focus();
       });
       if (selectedRef.current === mutation.candidateId) void loadAggregate(mutation.workspaceId, mutation.candidateId!);
       setMessage("Candidate archived.");
@@ -452,7 +454,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const canPromote = candidate?.status === "valid" && !candidate.promoted_decision_id;
   const viewportFallback = selectedId && aggregateState === "error" ? "Candidate detail unavailable. Use Refresh to retry." : aggregateState === "loading" ? "Loading candidate geometry…" : "Select a candidate from the navigator.";
 
-  return <section className="bluecad-workbench" aria-labelledby="bluecad-workbench-title"><header className="bluecad-workbench__chrome"><div><p className="eyebrow">BLUECAD</p><h1 id="bluecad-workbench-title">Model workbench</h1>{candidate && <p className="panel-subtitle" style={{ overflowWrap: "anywhere", minWidth: 0 }}><strong>{candidate.id}</strong> · {candidate.brief_text}</p>}</div>{candidate && <div className="button-row"><span className={`status-pill status-${candidate.status}`}>{candidate.status}</span><button type="button" className="secondary-button" onClick={duplicateSelectedBrief}>Duplicate brief</button>{candidate.status !== "archived" && <button type="button" className="secondary-button" onClick={() => void onArchive()} disabled={pendingAction !== null}>Archive</button>}{canPromote && <button type="button" onClick={() => void onPromote()} disabled={pendingAction !== null}>Promote to Decision</button>}</div>}</header>{message && <div className="panel-subtitle" role="status">{message}</div>}<div className="bluecad-workbench__viewport">{candidate?.glb_artifact_id ? <BluecadGlbViewer artifactUrl={bluecadArtifactContentUrl(candidate.workspace_id, candidate.glb_artifact_id)} /> : candidate ? <div className="bluecad-workbench__empty-viewer"><h2>Geometry unavailable</h2><p>{candidate.parked_reason ? `Candidate is parked: ${candidate.parked_reason}` : "No GLB artifact is available for this candidate yet."}</p></div> : <div className="bluecad-workbench__empty-viewer"><p>{viewportFallback}</p></div>}</div></section>;
+  return <section className="bluecad-workbench" aria-labelledby="bluecad-workbench-title"><header className="bluecad-workbench__chrome"><div><p className="eyebrow">BLUECAD</p><h1 id="bluecad-workbench-title" ref={workbenchTitleRef} tabIndex={-1}>Model workbench</h1>{candidate && <p className="panel-subtitle" style={{ overflowWrap: "anywhere", minWidth: 0 }}><strong>{candidate.id}</strong> · {candidate.brief_text}</p>}</div>{candidate && <div className="button-row"><span className={`status-pill status-${candidate.status}`}>{candidate.status}</span><button type="button" className="secondary-button" onClick={duplicateSelectedBrief}>Duplicate brief</button>{candidate.status !== "archived" && <button type="button" className="secondary-button" onClick={() => void onArchive()} disabled={pendingAction !== null}>Archive</button>}{canPromote && <button type="button" onClick={() => void onPromote()} disabled={pendingAction !== null}>Promote to Decision</button>}</div>}</header>{message && <div className="panel-subtitle" role="status">{message}</div>}<div className="bluecad-workbench__viewport">{candidate?.glb_artifact_id ? <BluecadGlbViewer artifactUrl={bluecadArtifactContentUrl(candidate.workspace_id, candidate.glb_artifact_id)} /> : candidate ? <div className="bluecad-workbench__empty-viewer"><h2>Geometry unavailable</h2><p>{candidate.parked_reason ? `Candidate is parked: ${candidate.parked_reason}` : "No GLB artifact is available for this candidate yet."}</p></div> : <div className="bluecad-workbench__empty-viewer"><p>{viewportFallback}</p></div>}</div></section>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
