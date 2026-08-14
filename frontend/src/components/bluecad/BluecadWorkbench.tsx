@@ -72,10 +72,19 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const currentValidation = useRef<RequestContext | null>(null);
   const suppressNextDetailEffect = useRef<string | null>(null);
   const briefRef = useRef<HTMLTextAreaElement | null>(null);
+  const focusBriefOnMount = useRef(false);
   const filterRef = useRef<HTMLInputElement | null>(null);
   const candidateRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const emptyCandidatesRef = useRef<HTMLParagraphElement | null>(null);
   const focusAfterSelectionChange = useRef(false);
+
+  const handleBriefRef = useCallback((node: HTMLTextAreaElement | null) => {
+    briefRef.current = node;
+    if (!node || !focusBriefOnMount.current) return;
+    focusBriefOnMount.current = false;
+    node.scrollIntoView({ block: "nearest" });
+    node.focus();
+  }, []);
 
   const visibleCandidates = useMemo(() => {
     const query = filterText.trim().toLowerCase();
@@ -365,11 +374,14 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const duplicateSelectedBrief = () => {
     if (!selected) return;
     setBriefText(duplicateBrief(selected.brief_text).briefText);
+    const briefNode = briefRef.current;
+    if (briefNode) {
+      briefNode.scrollIntoView({ block: "nearest" });
+      briefNode.focus();
+      return;
+    }
+    focusBriefOnMount.current = true;
     requestShellRegionOpen("navigator");
-    window.requestAnimationFrame(() => {
-      briefRef.current?.scrollIntoView({ block: "nearest" });
-      briefRef.current?.focus();
-    });
   };
 
   const navigator = useMemo<ReactNode>(() => (
@@ -390,7 +402,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       <label>Filter candidates<input ref={filterRef} value={filterText} onChange={(event) => setFilterText(event.target.value)} /></label>
       <label className="checkbox-line"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />Show archived</label>
       <button type="button" className="secondary-button" onClick={() => void refresh()} disabled={!workspaceId || candidateState === "loading" || pendingAction !== null}>Refresh</button>
-      <form className="bluecad-new-form" onSubmit={onCreate}><label>New candidate brief<textarea ref={briefRef} value={briefText} onChange={(event) => setBriefText(event.target.value)} required /></label><button type="submit" disabled={!workspaceId || !briefText.trim() || pendingAction !== null}>{pendingAction === "create" ? "Creating…" : "New candidate"}</button></form>
+      <form className="bluecad-new-form" onSubmit={onCreate}><label>New candidate brief<textarea ref={handleBriefRef} value={briefText} onChange={(event) => setBriefText(event.target.value)} required /></label><button type="submit" disabled={!workspaceId || !briefText.trim() || pendingAction !== null}>{pendingAction === "create" ? "Creating…" : "New candidate"}</button></form>
       {workspaceState === "loading" && <p>Loading workspaces…</p>}
       {workspaceState === "error" && <p className="error-banner">Workspace discovery failed.</p>}
       {workspaceState === "ready" && workspaces.length === 0 && <p>No workspaces are available.</p>}
@@ -400,7 +412,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       {candidateState === "ready" && candidates.length === 0 && <p ref={emptyCandidatesRef} tabIndex={-1}>No BLUECAD candidates exist in this workspace.</p>}
       {candidateState === "ready" && candidates.length > 0 && visibleCandidates.length === 0 && <p ref={emptyCandidatesRef} tabIndex={-1}>No candidates match the current filter. Archived candidates may be hidden.</p>}
     </div>
-  ), [briefText, candidateState, candidates.length, clearVisibleDetail, filterText, pendingAction, refresh, selectedId, showArchived, visibleCandidates, workspaceId, workspaceState, workspaces]);
+  ), [briefText, candidateState, candidates.length, clearVisibleDetail, filterText, handleBriefRef, pendingAction, refresh, selectedId, showArchived, visibleCandidates, workspaceId, workspaceState, workspaces]);
 
   const sidecar = useMemo<ReactNode>(() => {
     const candidate = aggregate?.candidate;
