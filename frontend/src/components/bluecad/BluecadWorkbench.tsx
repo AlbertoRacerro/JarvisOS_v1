@@ -63,6 +63,8 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const mutationGeneration = useRef(0);
   const workspaceRef = useRef("");
   const selectedRef = useRef<string | null>(null);
+  const showArchivedRef = useRef(showArchived);
+  showArchivedRef.current = showArchived;
   const currentList = useRef<RequestContext | null>(null);
   const currentDetail = useRef<RequestContext | null>(null);
   const currentValidation = useRef<RequestContext | null>(null);
@@ -122,7 +124,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       const items = await listBluecadCandidates(targetWorkspaceId);
       if (!currentList.current || !acceptsRequest(currentList.current, request)) return null;
       setCandidates(items);
-      const nextId = revalidateSelection(items, preferredId, showArchived);
+      const nextId = revalidateSelection(items, preferredId, showArchivedRef.current);
       selectedRef.current = nextId;
       currentDetail.current = null;
       currentValidation.current = null;
@@ -138,7 +140,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       }
       return null;
     }
-  }, [clearVisibleDetail, publishSelection, showArchived]);
+  }, [clearVisibleDetail, publishSelection]);
 
   const loadAggregate = useCallback(async (targetWorkspaceId: string, candidateId: string) => {
     const request: RequestContext = {
@@ -244,12 +246,14 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   }, [selectedId]);
 
   const refresh = useCallback(async () => {
-    if (!workspaceId) return;
+    if (!workspaceId) return false;
     const items = await loadCandidates(workspaceId, selectedId);
-    if (!items) return;
-    const nextId = revalidateSelection(items, selectedId, showArchived);
-    if (nextId) await loadAggregate(workspaceId, nextId);
-  }, [loadAggregate, loadCandidates, selectedId, showArchived, workspaceId]);
+    if (!items) return false;
+    const nextId = revalidateSelection(items, selectedId, showArchivedRef.current);
+    if (!nextId) return false;
+    const detail = await loadAggregate(workspaceId, nextId);
+    return detail !== null;
+  }, [loadAggregate, loadCandidates, selectedId, workspaceId]);
 
   const onCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -307,8 +311,8 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     try {
       const promoted = await promoteBluecadCandidate(mutation.workspaceId, mutation.candidateId!);
       if (!acceptsMutation({ generation: mutationGeneration.current, workspaceId: workspaceRef.current, candidateId: selectedRef.current }, mutation)) return;
-      await refresh();
-      if (workspaceRef.current !== mutation.workspaceId || selectedRef.current !== mutation.candidateId) return;
+      const refreshed = await refresh();
+      if (!refreshed || workspaceRef.current !== mutation.workspaceId || selectedRef.current !== mutation.candidateId) return;
       setMessage(`Promoted to Decision ${promoted.promoted_decision_id ?? "(pending id)"}.`);
     } catch (error) {
       if (acceptsMutation({ generation: mutationGeneration.current, workspaceId: workspaceRef.current, candidateId: selectedRef.current }, mutation)) setMessage(error instanceof Error ? error.message : "Promotion failed.");
