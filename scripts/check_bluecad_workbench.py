@@ -15,6 +15,10 @@ STATE = FRONTEND / "components/bluecad/workbenchState.ts"
 HARNESS = FRONTEND / "components/bluecad/workbenchStateHarness.ts"
 VIEWER = FRONTEND / "components/BluecadGlbViewer.tsx"
 STATUS = ROOT / "docs/specs/STATUS.md"
+EXPECTED_PR = "[#239](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/239)"
+REGISTRY_HEADER = "| Spec | Status | Implementation PR | Name | Depends on | Description |"
+REGISTRY_SEPARATOR = "| --- | --- | --- | --- | --- | --- |"
+HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 
 ALLOWED = {
     "frontend/src/App.tsx",
@@ -105,14 +109,41 @@ def validate_scope(paths: set[str]) -> None:
         fail(f"forbidden backend/dependency/workflow/schema surface changed: {', '.join(forbidden)}")
 
 
-def check_registry() -> None:
-    status = read(STATUS)
-    row = next((line for line in status.splitlines() if line.startswith("| 085 |")), None)
-    if row is None:
-        fail("spec 085 registry row is missing")
-    expected_pr = "[#239](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/239)"
-    if "| in_review |" not in row or expected_pr not in row:
+def registry_row(text: str) -> str:
+    lines = HTML_COMMENT.sub("", text).splitlines()
+    registry_headers = [index for index, line in enumerate(lines) if line.strip() == "## Registry"]
+    if len(registry_headers) != 1:
+        fail("STATUS.md must contain exactly one canonical Registry section")
+    start = registry_headers[0] + 1
+    end = next((index for index in range(start, len(lines)) if lines[index].strip().startswith("## ")), len(lines))
+    section = lines[start:end]
+    table_headers = [index for index, line in enumerate(section) if line.strip() == REGISTRY_HEADER]
+    if len(table_headers) != 1:
+        fail("canonical Registry must contain exactly one exact table header")
+    header = table_headers[0]
+    if header + 1 >= len(section) or section[header + 1].strip() != REGISTRY_SEPARATOR:
+        fail("canonical Registry separator is missing or malformed")
+    rows: list[str] = []
+    for line in section[header + 2:]:
+        stripped = line.strip()
+        if not stripped or not stripped.startswith("|"):
+            break
+        rows.append(stripped)
+    matches = [row for row in rows if row.startswith("| 085 |")]
+    if len(matches) != 1:
+        fail(f"canonical Registry must contain exactly one spec 085 row; found {len(matches)}")
+    return matches[0]
+
+
+def check_registry_text(status: str) -> None:
+    row = registry_row(status)
+    cells = [cell.strip() for cell in row.strip("|").split("|")]
+    if len(cells) != 6 or cells[1] != "in_review" or cells[2] != EXPECTED_PR:
         fail("spec 085 must be in_review with implementation PR #239")
+
+
+def check_registry() -> None:
+    check_registry_text(read(STATUS))
 
 
 def check_primary_composition() -> None:
@@ -173,6 +204,10 @@ def check_no_fake_authority() -> None:
         fail("forbidden filesystem/provider/private-path authority appears in 085 UI")
 
 
+def status_fixture(row: str, *, decoy: str = "") -> str:
+    return "\n".join((decoy, "## Registry", "", REGISTRY_HEADER, REGISTRY_SEPARATOR, row, "", "## Next"))
+
+
 def self_test() -> None:
     validate_scope(set())
     validate_scope({"frontend/src/components/bluecad/BluecadWorkbench.tsx", "scripts/check_bluecad_workbench.py"})
@@ -186,6 +221,21 @@ def self_test() -> None:
         fail("fake telemetry detector self-test failed")
     if FORBIDDEN_AUTHORITY.search("stored_path") is None:
         fail("forbidden authority detector self-test failed")
+
+    valid = f"| 085 | in_review | {EXPECTED_PR} | BLUECAD-WORKBENCH-2 | 006, 006c, 083, 084 | active |"
+    check_registry_text(status_fixture(valid))
+    decoy = f"<!--\n{valid}\n-->"
+    check_registry_text(status_fixture(valid, decoy=decoy))
+    for invalid in (
+        "| 085 | ready | — | BLUECAD-WORKBENCH-2 | deps | wrong |",
+        "| 084 | merged | — | OTHER | deps | no 085 |",
+    ):
+        try:
+            check_registry_text(status_fixture(invalid, decoy=decoy))
+        except SystemExit:
+            pass
+        else:
+            fail("registry self-test accepted non-canonical or invalid 085 lifecycle evidence")
 
 
 def main() -> None:
