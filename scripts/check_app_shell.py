@@ -65,6 +65,7 @@ PRIMARY_ITEMS = (
 ROUTE_PATH = re.compile(r'path\s*:\s*"(/[^"]+)"')
 TS_COMMENT = re.compile(r"//[^\n]*|/\*.*?\*/", re.DOTALL)
 HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+FENCE_START = re.compile(r"^\s*(`{3,}|~{3,})")
 RAW_COLOR = re.compile(
     r"(?<![\w-])(?:#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(|\b(?:black|white|red|blue|green|yellow|purple|orange|cyan|magenta)\b)",
     re.IGNORECASE,
@@ -99,8 +100,30 @@ def shell_files() -> list[Path]:
     return files
 
 
+def registry_lines(text: str) -> list[str]:
+    cleaned = HTML_COMMENT.sub("", text)
+    result: list[str] = []
+    fence_char: str | None = None
+    fence_len = 0
+    for line in cleaned.splitlines():
+        stripped = line.strip()
+        if fence_char is not None:
+            if len(stripped) >= fence_len and stripped == fence_char * len(stripped):
+                fence_char = None
+                fence_len = 0
+            continue
+        marker = FENCE_START.match(line)
+        if marker:
+            token = marker.group(1)
+            fence_char = token[0]
+            fence_len = len(token)
+            continue
+        result.append(line)
+    return result
+
+
 def registry_state(text: str) -> str:
-    lines = HTML_COMMENT.sub("", text).splitlines()
+    lines = registry_lines(text)
     registry_headers = [index for index, line in enumerate(lines) if line.strip() == "## Registry"]
     if len(registry_headers) != 1:
         fail("STATUS.md must contain exactly one canonical Registry section")
@@ -170,6 +193,8 @@ def check_routes() -> None:
         fail("root canonicalization contract regressed")
     if 'pathOnly.startsWith("//")' not in raw or "replace(/\\/+$/g" not in body or "replace(/^\\/+|\\/+$/g" in body:
         fail("route normalizer contract regressed")
+    if "import.meta.env.DEV" not in body or "devOnly: true" not in body:
+        fail("development-only local-chat route gating regressed")
     start = body.find("export const PRIMARY_NAV_ITEMS")
     end = body.find("] as const", start)
     if start < 0 or end < 0:
@@ -290,12 +315,21 @@ def self_test() -> None:
     decoy = f"<!--\n{valid_merged}\n-->"
     if registry_state(status_fixture(valid_active, decoy=decoy)) != "in_review":
         fail("registry parser accepted an HTML-comment decoy over canonical evidence")
+    fenced_decoy = "```markdown\n" + status_fixture(valid_merged) + "\n```"
+    if registry_state(status_fixture(valid_active, decoy=fenced_decoy)) != "in_review":
+        fail("registry parser accepted a fenced Registry decoy over canonical evidence")
     try:
         registry_state(status_fixture("| 084 | merged | — | OTHER | — | no 083 |", decoy=decoy))
     except SystemExit:
         pass
     else:
         fail("registry parser accepted a decoy when canonical 083 evidence was absent")
+    try:
+        registry_state(fenced_decoy)
+    except SystemExit:
+        pass
+    else:
+        fail("registry parser accepted fenced-only lifecycle evidence")
     parsed = parse_name_status("A\tnew.ts\nM\texisting.ts\n")
     if parsed != {"new.ts": "A", "existing.ts": "M"}:
         fail("name-status parser self-test failed")
