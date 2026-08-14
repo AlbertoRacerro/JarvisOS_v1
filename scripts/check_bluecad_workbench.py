@@ -18,7 +18,6 @@ STATUS = ROOT / "docs/specs/STATUS.md"
 EXPECTED_PR = "[#239](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/239)"
 REGISTRY_HEADER = "| Spec | Status | Implementation PR | Name | Depends on | Description |"
 REGISTRY_SEPARATOR = "| --- | --- | --- | --- | --- | --- |"
-HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 FENCE_START = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 
 ALLOWED = {
@@ -110,8 +109,26 @@ def validate_scope(paths: set[str]) -> None:
         fail(f"forbidden backend/dependency/workflow/schema surface changed: {', '.join(forbidden)}")
 
 
+def strip_html_comments(text: str) -> str:
+    result: list[str] = []
+    cursor = 0
+    while cursor < len(text):
+        start = text.find("<!--", cursor)
+        if start < 0:
+            result.append(text[cursor:])
+            break
+        result.append(text[cursor:start])
+        end = text.find("-->", start + 4)
+        if end < 0:
+            break
+        comment = text[start:end + 3]
+        result.append("\n" * comment.count("\n"))
+        cursor = end + 3
+    return "".join(result)
+
+
 def registry_lines(text: str) -> list[str]:
-    cleaned = HTML_COMMENT.sub("", text)
+    cleaned = strip_html_comments(text)
     result: list[str] = []
     fence_char: str | None = None
     fence_len = 0
@@ -238,10 +255,6 @@ def check_async_addendum_contracts() -> None:
         "structured validation actual/declared labels": '"actual" in value && "declared" in value',
         "replacement candidate focus": "candidateRefs.current[selectedId]?.focus()",
         "empty candidate focus fallback": "emptyCandidatesRef.current?.focus()",
-        "duplicate brief region reveal": 'requestShellRegionOpen("navigator")',
-        "duplicate brief deferred focus intent": "focusBriefOnMount.current = true",
-        "duplicate brief focus after mount": "node.focus()",
-        "duplicate brief callback ref": "ref={handleBriefRef}",
         "workspace empty state": "No workspaces are available.",
         "workspace discovery failure state": "Workspace discovery failed.",
         "candidate loading state": "Loading candidates…",
@@ -253,6 +266,21 @@ def check_async_addendum_contracts() -> None:
     for label, marker in required_workbench.items():
         if marker not in workbench:
             fail(f"async addendum contract missing: {label}")
+
+    handle_brief_ref_body = between(workbench, "const handleBriefRef =", "const visibleCandidates =")
+    duplicate_body = between(workbench, "const duplicateSelectedBrief =", "const navigator =")
+    navigator_body = between(workbench, "const navigator =", "const sidecar =")
+    duplicate_focus_requirements = {
+        "duplicate brief arms deferred focus": (duplicate_body, "focusBriefOnMount.current = true"),
+        "duplicate brief reveals navigator": (duplicate_body, 'requestShellRegionOpen("navigator")'),
+        "brief ref consumes deferred focus intent": (handle_brief_ref_body, "focusBriefOnMount.current"),
+        "brief ref clears deferred focus intent": (handle_brief_ref_body, "focusBriefOnMount.current = false"),
+        "brief ref transfers focus after mount": (handle_brief_ref_body, "node.focus()"),
+        "navigator textarea uses semantic callback ref": (navigator_body, "ref={handleBriefRef}"),
+    }
+    for label, (body, marker) in duplicate_focus_requirements.items():
+        if marker not in body:
+            fail(f"duplicate-brief focus control flow regressed: {label}")
 
     refresh_body = between(workbench, "const refresh =", "const onCreate =")
     create_body = between(workbench, "const onCreate =", "const onArchive =")
@@ -325,6 +353,7 @@ def self_test() -> None:
         + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid + "\n```"
     )
     check_registry_text(status_fixture(valid, decoy=overindented_close_decoy))
+    unterminated_comment_decoy = "<!--\n## Registry\n\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid
     for invalid in (
         "| 085 | ready | — | BLUECAD-WORKBENCH-2 | deps | wrong |",
         "| 084 | merged | — | OTHER | deps | no 085 |",
@@ -335,13 +364,13 @@ def self_test() -> None:
             pass
         else:
             fail("registry self-test accepted non-canonical or invalid 085 lifecycle evidence")
-    for fenced_only in (fenced_decoy, malformed_close_decoy, overindented_close_decoy):
+    for hidden_only in (fenced_decoy, malformed_close_decoy, overindented_close_decoy, unterminated_comment_decoy):
         try:
-            check_registry_text(fenced_only)
+            check_registry_text(hidden_only)
         except SystemExit:
             pass
         else:
-            fail("registry self-test accepted fenced lifecycle evidence as canonical")
+            fail("registry self-test accepted hidden lifecycle evidence as canonical")
 
 
 def main() -> None:
