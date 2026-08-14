@@ -42,8 +42,8 @@ jobs:
           from pathlib import Path
           path = Path("tests/test_bluecad_workbench_browser_verification.py")
           body = path.read_text(encoding="utf-8")
-          old = r'await page.getByText(/values: \\[1,2\\]/).waitFor();'
-          new = r'await page.getByText(/values: \\[2 items\\]/).waitFor();'
+          old = r'await page.getByText(/values: \[1,2\]/).waitFor();'
+          new = r'await page.getByText(/values: \[2 items\]/).waitFor();'
           if old not in body:
               raise SystemExit("expected validation browser assertion was not found")
           path.write_text(body.replace(old, new, 1), encoding="utf-8")
