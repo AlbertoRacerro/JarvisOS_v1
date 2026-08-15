@@ -16,6 +16,10 @@ function formatNumber(value: number): string {
   return String(value);
 }
 
+function boundedRunLabel(run: SimulationRunSummary): string {
+  return Array.from(run.run_label?.trim() || run.id).slice(0, 160).join("");
+}
+
 function AnalyticsDockContent({ workspaceId }: Props) {
   const [runs, setRuns] = useState<SimulationRunSummary[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -75,7 +79,7 @@ function AnalyticsDockContent({ workspaceId }: Props) {
         <p className="analytics-help">Direct comparison requires the same exact model version and exact persisted unit strings.</p>
         <div className="analytics-run-list">{runs.map((run) => {
           const checked = selectedIds.includes(run.id);
-          return <label key={run.id} className="analytics-run-row"><input type="checkbox" checked={checked} disabled={!checked && capReached} onChange={() => setSelectedIds((current) => toggleRunSelection(current, run.id))} /><span><strong>{run.run_label || run.id}</strong><small className="technical-token">{run.id}</small></span><span className="analytics-run-meta"><span>{run.status}</span><small>{run.model_version_id ?? "model version unavailable"}</small></span></label>;
+          return <label key={run.id} className="analytics-run-row"><input type="checkbox" checked={checked} disabled={!checked && capReached} onChange={() => setSelectedIds((current) => toggleRunSelection(current, run.id))} /><span><strong>{boundedRunLabel(run)}</strong><small className="technical-token">{run.id}</small></span><span className="analytics-run-meta"><span>{run.status}</span><small>{run.model_version_id ?? "model version unavailable"}</small></span></label>;
         })}</div>
         {capReached && <p className="analytics-help">Six-run comparison limit reached. Remove a selected run to choose another.</p>}
       </section>}
