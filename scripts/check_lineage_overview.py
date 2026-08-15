@@ -96,8 +96,8 @@ def check() -> None:
         ("getLineageNode", "typed node client"),
         ("getLineageFreshness", "typed freshness client"),
         ('topological_order: string[] | null', "nullable backend topological order"),
-        ('edge_class: \"dependency\" | \"provenance\"', "edge-class union"),
-        ('state: \"fresh\" | \"stale\"', "freshness union"),
+        ('edge_class: "dependency" | "provenance"', "edge-class union"),
+        ('state: "fresh" | "stale"', "freshness union"),
     ):
         require(api, needle, label)
 
