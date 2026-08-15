@@ -157,8 +157,13 @@ def check() -> None:
         if forbidden in selection:
             fail(f"087 expanded global RecordResource taxonomy with {forbidden}")
 
-    if "| 087 | in_review |" not in status and "| 087 | ready | — |" not in status:
-        fail("registry lifecycle for 087 is neither readiness nor implementation state")
+    lifecycle_ok = (
+        "| 087 | in_review |" in status
+        or "| 087 | ready | — |" in status
+        or "| 087 | merged | [#250](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/250) |" in status
+    )
+    if not lifecycle_ok:
+        fail("registry lifecycle for 087 is not a canonical readiness, implementation, or merged state")
 
     self_test()
     print("LINEAGE-OVERVIEW-1 check passed")

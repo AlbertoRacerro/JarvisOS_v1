@@ -9,6 +9,7 @@ import MigrationPendingSurface from "./components/shell/MigrationPendingSurface"
 import AIDraft from "./pages/AIDraft";
 import Dashboard from "./pages/Dashboard";
 import DomainFoundation from "./pages/DomainFoundation";
+import RunsWorkbench from "./pages/RunsWorkbench";
 import SystemStatus from "./pages/SystemStatus";
 import { PRIMARY_STAGES, type ShellRegion, type ShellRegionContributions } from "./stages/registry";
 
@@ -43,7 +44,7 @@ function App() {
         content = <section className="shell-home" aria-labelledby="shell-home-title"><header className="shell-home__header"><p className="eyebrow">Application shell</p><h1 id="shell-home-title">Home</h1></header><div className="shell-home__content"><Dashboard /></div></section>;
         break;
       case "runs":
-        content = <MigrationPendingSurface title="Runs" description="The dedicated run list and detail workbench belongs to spec 088. Existing scenario and run controls remain available on the legacy diagnostic route." navigate={navigate} links={[{ href: "/legacy/domain-foundation", label: "Open legacy Domain Foundation" }]} />;
+        content = <RunsWorkbench workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} />;
         break;
       case "engineering-data":
         content = <MigrationPendingSurface title="Engineering Data" description="Searchable engineering-record navigation belongs to re-derived spec 035. Current records remain available on the legacy diagnostic route." navigate={navigate} links={[{ href: "/legacy/domain-foundation", label: "Open legacy Domain Foundation" }]} />;
