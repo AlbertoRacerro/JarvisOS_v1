@@ -7,6 +7,7 @@ import "./styles/tokens.css";
 import "./styles/global.css";
 import "./styles/foundation.css";
 import "./styles/shell.css";
+import "./styles/runs.css";
 import "./styles/responsive.css";
 
 applyStoredAppearance();
