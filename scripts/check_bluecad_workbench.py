@@ -238,15 +238,16 @@ def registry_row(text: str) -> str:
     return matches[0]
 
 
-def check_registry_text(status: str) -> None:
+def registry_state(status: str) -> str:
     row = registry_row(status)
     cells = [cell.strip() for cell in row.strip("|").split("|")]
-    if len(cells) != 6 or cells[1] != "in_review" or cells[2] != EXPECTED_PR:
-        fail("spec 085 must be in_review with implementation PR #239")
+    if len(cells) != 6 or cells[2] != EXPECTED_PR or cells[1] not in {"in_review", "merged"}:
+        fail("spec 085 must be in_review/merged with implementation PR #239")
+    return cells[1]
 
 
-def check_registry() -> None:
-    check_registry_text(read(STATUS))
+def check_registry() -> str:
+    return registry_state(read(STATUS))
 
 
 def check_primary_composition() -> None:
@@ -429,55 +430,64 @@ def self_test() -> None:
     if not required_scanned_ui.issubset(set(UI_AUTHORITY_PATHS)):
         fail("authority scanner coverage self-test failed")
 
-    valid = f"| 085 | in_review | {EXPECTED_PR} | BLUECAD-WORKBENCH-2 | 006, 006c, 083, 084 | active |"
-    check_registry_text(status_fixture(valid))
-    decoy = f"<!--\n{valid}\n-->"
-    check_registry_text(status_fixture(valid, decoy=decoy))
-    fenced_decoy = "```markdown\n## Registry\n\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid + "\n```"
-    check_registry_text(status_fixture(valid, decoy=fenced_decoy))
+    active = f"| 085 | in_review | {EXPECTED_PR} | BLUECAD-WORKBENCH-2 | 006, 006c, 083, 084 | active |"
+    merged = f"| 085 | merged | {EXPECTED_PR} | BLUECAD-WORKBENCH-2 | 006, 006c, 083, 084 | done |"
+    if registry_state(status_fixture(active)) != "in_review" or registry_state(status_fixture(merged)) != "merged":
+        fail("registry lifecycle self-test failed")
+    decoy = f"<!--\n{active}\n-->"
+    if registry_state(status_fixture(active, decoy=decoy)) != "in_review":
+        fail("registry parser accepted an HTML-comment decoy over canonical evidence")
+    fenced_decoy = "```markdown\n## Registry\n\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + active + "\n```"
+    if registry_state(status_fixture(active, decoy=fenced_decoy)) != "in_review":
+        fail("registry parser accepted a fenced Registry decoy over canonical evidence")
     malformed_close_decoy = (
         "```markdown\n```not-a-close\n## Registry\n\n"
-        + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid + "\n```"
+        + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + active + "\n```"
     )
-    check_registry_text(status_fixture(valid, decoy=malformed_close_decoy))
+    if registry_state(status_fixture(active, decoy=malformed_close_decoy)) != "in_review":
+        fail("registry parser accepted malformed fenced lifecycle evidence")
     overindented_close_decoy = (
         "```markdown\n    ```\n## Registry\n\n"
-        + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid + "\n```"
+        + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + active + "\n```"
     )
-    check_registry_text(status_fixture(valid, decoy=overindented_close_decoy))
+    if registry_state(status_fixture(active, decoy=overindented_close_decoy)) != "in_review":
+        fail("registry parser accepted overindented fenced lifecycle evidence")
     indented_code_decoy = (
         "    ## Registry\n\n"
         + "    " + REGISTRY_HEADER + "\n"
         + "    " + REGISTRY_SEPARATOR + "\n"
-        + "    " + valid
+        + "    " + active
     )
-    check_registry_text(status_fixture(valid, decoy=indented_code_decoy))
+    if registry_state(status_fixture(active, decoy=indented_code_decoy)) != "in_review":
+        fail("registry parser accepted indented lifecycle evidence")
     tab_indented_code_decoy = (
         "\t## Registry\n\n"
         + "\t" + REGISTRY_HEADER + "\n"
         + "\t" + REGISTRY_SEPARATOR + "\n"
-        + "\t" + valid
+        + "\t" + active
     )
-    check_registry_text(status_fixture(valid, decoy=tab_indented_code_decoy))
+    if registry_state(status_fixture(active, decoy=tab_indented_code_decoy)) != "in_review":
+        fail("registry parser accepted tab-indented lifecycle evidence")
     raw_html_decoys = tuple(
-        f"<{tag}>\n## Registry\n\n{REGISTRY_HEADER}\n{REGISTRY_SEPARATOR}\n{valid}\n</{tag}>"
+        f"<{tag}>\n## Registry\n\n{REGISTRY_HEADER}\n{REGISTRY_SEPARATOR}\n{active}\n</{tag}>"
         for tag in ("pre", "script", "style", "textarea")
     )
     raw_html_decoys += (
-        "<![CDATA[\n## Registry\n\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid + "\n]]>",
-        "<?hidden\n## Registry\n\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid + "\n?>",
-        "<!DOCTYPE hidden\n## Registry\n\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid + "\n>",
-        "<div>\n## Registry\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid + "\n</div>\n",
+        "<![CDATA[\n## Registry\n\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + active + "\n]]>",
+        "<?hidden\n## Registry\n\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + active + "\n?>",
+        "<!DOCTYPE hidden\n## Registry\n\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + active + "\n>",
+        "<div>\n## Registry\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + active + "\n</div>\n",
     )
     for raw_html_decoy in raw_html_decoys:
-        check_registry_text(status_fixture(valid, decoy=raw_html_decoy))
-    unterminated_comment_decoy = "<!--\n## Registry\n\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + valid
+        if registry_state(status_fixture(active, decoy=raw_html_decoy)) != "in_review":
+            fail("registry parser accepted raw-HTML lifecycle evidence")
+    unterminated_comment_decoy = "<!--\n## Registry\n\n" + REGISTRY_HEADER + "\n" + REGISTRY_SEPARATOR + "\n" + active
     for invalid in (
         "| 085 | ready | — | BLUECAD-WORKBENCH-2 | deps | wrong |",
         "| 084 | merged | — | OTHER | deps | no 085 |",
     ):
         try:
-            check_registry_text(status_fixture(invalid, decoy=decoy))
+            registry_state(status_fixture(invalid, decoy=decoy))
         except SystemExit:
             pass
         else:
@@ -492,7 +502,7 @@ def self_test() -> None:
         unterminated_comment_decoy,
     ):
         try:
-            check_registry_text(hidden_only)
+            registry_state(hidden_only)
         except SystemExit:
             pass
         else:
@@ -507,8 +517,9 @@ def main() -> None:
     if args.self_test:
         print("BLUECAD workbench checker self-test passed")
         return
-    validate_scope(changed_paths())
-    check_registry()
+    state = check_registry()
+    if state == "in_review":
+        validate_scope(changed_paths())
     check_primary_composition()
     check_state_authority()
     check_viewer_cleanup()

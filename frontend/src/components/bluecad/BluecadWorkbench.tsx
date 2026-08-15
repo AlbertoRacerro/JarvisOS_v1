@@ -17,7 +17,10 @@ import {
   type Workspace
 } from "../../api/client";
 import type { ShellRegion, ShellRegionContributions } from "../../stages/registry";
-import BluecadGlbViewer from "../BluecadGlbViewer";
+import BluecadGlbViewer, {
+  type GeometryInspectionCommand,
+  type GeometryInspectionSnapshot
+} from "../BluecadGlbViewer";
 import {
   acceptsMutation,
   acceptsRequest,
@@ -36,6 +39,13 @@ type Props = Readonly<{
 
 type LoadState = "idle" | "loading" | "ready" | "error";
 
+const EMPTY_INSPECTION: GeometryInspectionSnapshot = {
+  sessionKey: null,
+  status: "idle",
+  meshes: [],
+  selected: null
+};
+
 function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShellRegionOpen }: Props) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState("");
@@ -53,11 +63,14 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const [briefText, setBriefText] = useState("");
   const [pendingAction, setPendingAction] = useState<"create" | "archive" | "promote" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [inspection, setInspection] = useState<GeometryInspectionSnapshot>(EMPTY_INSPECTION);
+  const [inspectionCommand, setInspectionCommand] = useState<GeometryInspectionCommand | null>(null);
 
   const listGeneration = useRef(0);
   const detailGeneration = useRef(0);
   const validationGeneration = useRef(0);
   const mutationGeneration = useRef(0);
+  const inspectionNonce = useRef(0);
   const workspaceRef = useRef("");
   const selectedRef = useRef<string | null>(null);
   const showArchivedRef = useRef(showArchived);
@@ -84,6 +97,21 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     node.scrollIntoView({ block: "nearest" });
     node.focus();
   }, []);
+
+  const handleInspectionChange = useCallback((snapshot: GeometryInspectionSnapshot) => {
+    setInspection(snapshot);
+    if (!snapshot.sessionKey) setInspectionCommand(null);
+  }, []);
+
+  const requestInspection = useCallback((meshKey: string | null) => {
+    if (!inspection.sessionKey) return;
+    inspectionNonce.current += 1;
+    setInspectionCommand({
+      sessionKey: inspection.sessionKey,
+      meshKey,
+      nonce: inspectionNonce.current
+    });
+  }, [inspection.sessionKey]);
 
   const visibleCandidates = useMemo(
     () => filterCandidates(candidates, filterText, showArchived),
@@ -284,6 +312,11 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   }, [aggregate, loadValidation, selectedId]);
 
   useEffect(() => {
+    setInspection(EMPTY_INSPECTION);
+    setInspectionCommand(null);
+  }, [selectedId, aggregate?.candidate.glb_artifact_id]);
+
+  useEffect(() => {
     const nextId = revalidateSelection(visibleCandidates, selectedId, true);
     if (nextId === selectedId) return;
     focusAfterSelectionChange.current = Boolean(selectedId && document.activeElement === candidateRefs.current[selectedId]);
@@ -470,8 +503,8 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
         : validationState === "error" || validationMessage
           ? <p className="error-banner">Validation report unavailable: {validationMessage ?? "Request failed."}</p>
           : <ReportTable checks={checks} />;
-    return <div className="bluecad-workbench__sidecar"><h3>Candidate</h3><dl className="details"><div><dt>Lifecycle</dt><dd>{candidate.status}</dd></div><div><dt>Freshness</dt><dd>{aggregate.freshness}</dd></div><div><dt>Promotion</dt><dd>{candidate.promoted_decision_id ?? "Not promoted"}</dd></div></dl>{candidate.parked_reason && <p className="warning-banner">Parked reason: {candidate.parked_reason}</p>}<h3>Validation</h3>{validation}<h3>Artifacts</h3>{aggregate.artifacts.length === 0 ? <p>No aggregate-linked artifacts.</p> : <ul>{aggregate.artifacts.map((artifact) => <li key={artifact.id}><a href={`${API_BASE_URL}${artifact.content_url}`}>{artifact.filename}</a> · {artifact.roles.join(", ")} · {artifact.status}</li>)}</ul>}<h3>Canonical references</h3><p>{aggregate.evidence.length} evidence refs · {aggregate.runs.length} run refs</p>{aggregate.diagnostics.map((diagnostic, index) => <p className="warning-banner" key={`${diagnostic.code}-${index}`}>{diagnostic.message}</p>)}</div>;
-  }, [aggregate, aggregateState, checks, selectedId, validationMessage, validationState]);
+    return <div className="bluecad-workbench__sidecar"><h3>Candidate</h3><dl className="details"><div><dt>Lifecycle</dt><dd>{candidate.status}</dd></div><div><dt>Freshness</dt><dd>{aggregate.freshness}</dd></div><div><dt>Promotion</dt><dd>{candidate.promoted_decision_id ?? "Not promoted"}</dd></div></dl>{candidate.parked_reason && <p className="warning-banner">Parked reason: {candidate.parked_reason}</p>}<GeometryInspectionPanel snapshot={inspection} onSelect={requestInspection} /><h3>Validation</h3>{validation}<h3>Artifacts</h3>{aggregate.artifacts.length === 0 ? <p>No aggregate-linked artifacts.</p> : <ul>{aggregate.artifacts.map((artifact) => <li key={artifact.id}><a href={`${API_BASE_URL}${artifact.content_url}`}>{artifact.filename}</a> · {artifact.roles.join(", ")} · {artifact.status}</li>)}</ul>}<h3>Canonical references</h3><p>{aggregate.evidence.length} evidence refs · {aggregate.runs.length} run refs</p>{aggregate.diagnostics.map((diagnostic, index) => <p className="warning-banner" key={`${diagnostic.code}-${index}`}>{diagnostic.message}</p>)}</div>;
+  }, [aggregate, aggregateState, checks, inspection, requestInspection, selectedId, validationMessage, validationState]);
 
   const dock = useMemo<ReactNode>(() => {
     const activeAggregate = aggregate?.candidate.id === selectedId ? aggregate : null;
@@ -495,7 +528,18 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const canPromote = candidate?.status === "valid" && !candidate.promoted_decision_id;
   const viewportFallback = selectedId && aggregateState === "error" ? "Candidate detail unavailable. Use Refresh to retry." : aggregateState === "loading" ? "Loading candidate geometry…" : "Select a candidate from the navigator.";
 
-  return <section className="bluecad-workbench" aria-labelledby="bluecad-workbench-title"><header className="bluecad-workbench__chrome"><div><p className="eyebrow">BLUECAD</p><h1 id="bluecad-workbench-title" ref={workbenchTitleRef} tabIndex={-1}>Model workbench</h1>{candidate && <p className="panel-subtitle" style={{ overflowWrap: "anywhere", minWidth: 0 }}><strong>{candidate.id}</strong> · {candidate.brief_text}</p>}</div>{candidate && <div className="button-row"><span className={`status-pill status-${candidate.status}`}>{candidate.status}</span><button type="button" className="secondary-button" onClick={duplicateSelectedBrief}>Duplicate brief</button>{candidate.status !== "archived" && <button type="button" className="secondary-button" onClick={() => void onArchive()} disabled={candidateState === "loading" || pendingAction !== null}>Archive</button>}{canPromote && <button type="button" onClick={() => void onPromote()} disabled={candidateState === "loading" || pendingAction !== null}>Promote to Decision</button>}</div>}</header>{message && <div className="panel-subtitle" role="status">{message}</div>}<div className="bluecad-workbench__viewport" style={{ minHeight: "min(26rem, 55vh)" }}>{candidate?.glb_artifact_id ? <BluecadGlbViewer artifactUrl={bluecadArtifactContentUrl(candidate.workspace_id, candidate.glb_artifact_id)} /> : candidate ? <div className="bluecad-workbench__empty-viewer"><h2>Geometry unavailable</h2><p>{candidate.parked_reason ? `Candidate is parked: ${candidate.parked_reason}` : "No GLB artifact is available for this candidate yet."}</p></div> : <div className="bluecad-workbench__empty-viewer"><p>{viewportFallback}</p></div>}</div></section>;
+  return <section className="bluecad-workbench" aria-labelledby="bluecad-workbench-title"><header className="bluecad-workbench__chrome"><div><p className="eyebrow">BLUECAD</p><h1 id="bluecad-workbench-title" ref={workbenchTitleRef} tabIndex={-1}>Model workbench</h1>{candidate && <p className="panel-subtitle" style={{ overflowWrap: "anywhere", minWidth: 0 }}><strong>{candidate.id}</strong> · {candidate.brief_text}</p>}</div>{candidate && <div className="button-row"><span className={`status-pill status-${candidate.status}`}>{candidate.status}</span><button type="button" className="secondary-button" onClick={duplicateSelectedBrief}>Duplicate brief</button>{candidate.status !== "archived" && <button type="button" className="secondary-button" onClick={() => void onArchive()} disabled={candidateState === "loading" || pendingAction !== null}>Archive</button>}{canPromote && <button type="button" onClick={() => void onPromote()} disabled={candidateState === "loading" || pendingAction !== null}>Promote to Decision</button>}</div>}</header>{message && <div className="panel-subtitle" role="status">{message}</div>}<div className="bluecad-workbench__viewport" style={{ minHeight: "min(26rem, 55vh)" }}>{candidate?.glb_artifact_id ? <BluecadGlbViewer artifactUrl={bluecadArtifactContentUrl(candidate.workspace_id, candidate.glb_artifact_id)} inspectionCommand={inspectionCommand} onInspectionChange={handleInspectionChange} /> : candidate ? <div className="bluecad-workbench__empty-viewer"><h2>Geometry unavailable</h2><p>{candidate.parked_reason ? `Candidate is parked: ${candidate.parked_reason}` : "No GLB artifact is available for this candidate yet."}</p></div> : <div className="bluecad-workbench__empty-viewer"><p>{viewportFallback}</p></div>}</div></section>;
+}
+
+function GeometryInspectionPanel({ snapshot, onSelect }: { snapshot: GeometryInspectionSnapshot; onSelect(meshKey: string | null): void }) {
+  const selected = snapshot.selected;
+  return <section aria-labelledby="geometry-inspection-title"><h3 id="geometry-inspection-title">Geometry inspection</h3><p className="panel-subtitle">Geometry-only · current viewer session · no semantic component identity</p>{snapshot.status === "loading" && <p>Loading inspectable geometry…</p>}{snapshot.status === "error" && <p className="error-banner">Geometry inspection is unavailable for this artifact.</p>}{snapshot.status === "ready" && snapshot.meshes.length === 0 && <p>No inspectable artifact meshes.</p>}{snapshot.status === "ready" && snapshot.meshes.length > 0 && <><label>Inspectable mesh<select value={selected?.meshKey ?? ""} onChange={(event) => onSelect(event.target.value || null)} style={{ width: "100%", minWidth: 0, maxWidth: "100%" }}><option value="">No mesh selected</option>{snapshot.meshes.map((mesh) => <option key={mesh.meshKey} value={mesh.meshKey}>{mesh.displayName}</option>)}</select></label><button type="button" className="secondary-button" onClick={() => onSelect(null)} disabled={!selected}>Clear inspection</button>{selected && <dl className="details"><div><dt>Mesh</dt><dd>{selected.displayName}</dd></div><div><dt>Session key</dt><dd>{selected.meshKey}</dd></div><div><dt>Artifact material names</dt><dd>{selected.materialNames.length ? selected.materialNames.join(", ") : "Not named"}</dd></div><div><dt>Rendered triangles</dt><dd>{selected.triangleCount ?? "Unavailable"}</dd></div><div><dt>World bounds</dt><dd>{formatBounds(selected.worldBounds)}</dd></div></dl>}</>}</section>;
+}
+
+function formatBounds(bounds: GeometryInspectionSnapshot["selected"] extends infer T ? T extends { worldBounds: infer B } ? B : never : never): string {
+  if (!bounds) return "Unavailable";
+  const format = (value: number) => Number.isFinite(value) ? Number(value.toPrecision(6)).toString() : "?";
+  return `min (${bounds.min.map(format).join(", ")}) · max (${bounds.max.map(format).join(", ")}) · unitless`;
 }
 
 function filterCandidates(items: BluecadCandidate[], filterText: string, showArchived: boolean): BluecadCandidate[] {
