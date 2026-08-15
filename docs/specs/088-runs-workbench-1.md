@@ -2,9 +2,9 @@
 
 Status: definition-complete; `docs/specs/STATUS.md` is authoritative.
 
-Depends on: 038, 044, 083
+Depends on: 043, 071, 083
 
-Related merged foundations: 001, 040, 042, 047, 048, 049, 050, 051, 070, 075, 076, 077, 079, 087
+Related merged foundations: 001, 038, 040, 042, 044, 047, 048, 049, 050, 051, 070, 075, 076, 077, 079, 087
 
 ## Goal
 
