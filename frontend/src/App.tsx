@@ -18,6 +18,7 @@ type ShellRegionRequest = Readonly<{ region: ShellRegion; nonce: number }>;
 function App() {
   const { resolved, navigate } = useAppRouter();
   const { route } = resolved;
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [selection, setSelection] = useState<StageSelection | null>(null);
   const [shellRegions, setShellRegions] = useState<ShellRegionContributions>({});
   const [shellRegionRequest, setShellRegionRequest] = useState<ShellRegionRequest | null>(null);
@@ -35,7 +36,7 @@ function App() {
   let content: ReactNode;
   if (route.stageKind) {
     const Stage = PRIMARY_STAGES[route.stageKind].render;
-    content = <Stage workspaceId={null} selection={selection} onSelectionChange={setSelection} onShellRegionsChange={setShellRegions} requestShellRegionOpen={requestShellRegionOpen} navigate={navigate} />;
+    content = <Stage workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} selection={selection} onSelectionChange={setSelection} onShellRegionsChange={setShellRegions} requestShellRegionOpen={requestShellRegionOpen} navigate={navigate} />;
   } else {
     switch (route.id) {
       case "home":
