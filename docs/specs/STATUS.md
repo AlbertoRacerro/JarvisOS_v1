@@ -4,8 +4,7 @@ This file is the single live source of truth for JarvisOS spec state and near-te
 roadmap. Individual spec files define scope, acceptance criteria, tests, and
 non-goals; their legacy `Status:` lines are not authoritative.
 
-Update this table whenever work starts, a PR opens, a dependency changes, a PR
-merges, or a spec is cancelled. GitHub PR diffs are the authoritative list of
+Update this table whenever work starts, a PR opens, a dependency changes, or a spec is cancelled. GitHub PR diffs are the authoritative list of
 files created or modified by a spec; this registry intentionally does not copy
 those file lists into a second place.
 
@@ -126,7 +125,7 @@ abandonment or substitution is not authorized.
 | 012 | planned | — | L2 ephemeral free-script proposals | 010, 016 | Trigger-gated only: reopen after non-loopback access, a second user, remote-agent/Hermes/MCP runner reachability, or a demonstrated need for non-bundled execution, and only behind a separate proven OS-isolation specification. |
 | 013 | planned | — | Tier 2 domain-validator plugin interface | 005, 010 | Define a narrow plugin boundary for BlueRev-specific engineering checks that emit deterministic validation evidence without letting plugins own routing, memory, or promotion. |
 | 014 | planned | — | OpenFOAM CFD case-bundle adapter v0 | 007, 008, 049 | Produce inspectable OpenFOAM case bundles and evidence only when process/light proxies leave a concrete decision unresolved; no generic CFD platform or automatic solver authority. |
-| 015 | merged | [#33](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/33), [#43](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/43) | PROVIDER-GW-1 | 003 | Replace hardcoded bindings with a validated provider registry and generic OpenAI-compatible adapter while preserving safe defaults. |
+| 015 | merged | [#33](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/33) | PROVIDER-GW-1 | 003 | Replace hardcoded bindings with a validated provider registry and generic OpenAI-compatible adapter while preserving safe defaults. |
 | 016 | merged | [#39](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/39) | RUNNER-EXT-1: BLUECAD L2 | 005, 007 | Historical hashed/AST-checked `bluecad_l2_v0` contract; normal instantiation is disabled by the bundled-only runner cleanup, and hostile-code execution was never proven. |
 | 017 | merged | [#37](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/37) | Autonomous three-tier review | 004 | Historical automatic chain; Cheap, Senior, and Expert reviews are now explicit maintainer actions with no automatic Codex or label actuation. |
 | 018 | merged | [#33](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/33), [#43](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/43) | PROVIDER-GW-2 | 015 | Complete provider-cap/fallback enforcement and correct provider usage accounting while preserving explicit routing and audit controls. |
