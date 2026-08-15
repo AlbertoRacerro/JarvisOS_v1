@@ -1,0 +1,25 @@
+name: RUNS Workbench Browser Proof
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  verify-runs-workbench:
+    if: github.head_ref == 'verify-088-browser-95a9603' || github.ref == 'refs/heads/verify-088-browser-95a9603'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RUN_RUNS_BROWSER_PROOF: "true"
+      TARGET_IMPLEMENTATION_SHA: "95a96030994d509b20e0c144681c32d2175a8668"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run exact-head RUNS browser proof
+        run: |
+          RUN_RUNS_BROWSER_PROOF=true TARGET_IMPLEMENTATION_SHA="$TARGET_IMPLEMENTATION_SHA" python -m pytest -q backend/tests/test_runs_workbench_browser_verification.py -s
