@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import {
   listMemoryProposals,
@@ -126,7 +126,7 @@ function ReviewStage({ workspaceId, onShellRegionsChange }: PrimaryStageProps) {
     }
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     currentRequest.current = null;
     currentMutation.current = null;
     requestGeneration.current += 1;
@@ -153,6 +153,18 @@ function ReviewStage({ workspaceId, onShellRegionsChange }: PrimaryStageProps) {
 
   const changeFilter = useCallback((next: MemoryStatusFilter) => {
     if (next === filterRef.current) return;
+    currentRequest.current = null;
+    currentMutation.current = null;
+    requestGeneration.current += 1;
+    mutationGeneration.current += 1;
+    recordsRef.current = [];
+    setRecords([]);
+    selectedRef.current = null;
+    setSelectedId(null);
+    setMessage(null);
+    setTransitionNotice(null);
+    setBusyRecordId(null);
+    setLoadState(workspaceRef.current ? "loading" : "idle");
     filterRef.current = next;
     setStatusFilter(next);
   }, []);
