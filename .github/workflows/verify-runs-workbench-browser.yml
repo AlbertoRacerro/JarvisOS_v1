@@ -20,6 +20,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Install proof test dependency
+        run: python -m pip install pytest
       - name: Run exact-head RUNS browser proof
         run: |
           RUN_RUNS_BROWSER_PROOF=true TARGET_IMPLEMENTATION_SHA="$TARGET_IMPLEMENTATION_SHA" python -m pytest -q backend/tests/test_runs_workbench_browser_verification.py -s
