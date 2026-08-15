@@ -18,6 +18,7 @@ export type ShellRegionContributions = Readonly<{
 
 export type PrimaryStageProps = Readonly<{
   workspaceId: string | null;
+  onWorkspaceChange(next: string | null): void;
   selection: StageSelection | null;
   onSelectionChange(next: StageSelection | null): void;
   onShellRegionsChange(next: ShellRegionContributions): void;
