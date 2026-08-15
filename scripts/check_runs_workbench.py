@@ -71,6 +71,8 @@ def check() -> None:
         ("acceptsResponse", "generation+identity response guard"),
         ("chooseSelection", "deterministic selection helper"),
         ("projectPayload", "bounded payload projection"),
+        ("Payload unavailable / malformed", "malformed payload state"),
+        ("No persisted", "null payload state"),
         ("MAX_DEPTH = 4", "payload nesting limit"),
         ("MAX_ITEMS = 50", "payload item limit"),
         ("MAX_STRING = 2_000", "payload string limit"),
@@ -81,7 +83,6 @@ def check() -> None:
     for needle, label in (
         ("Selected run hidden by current filter", "hidden-selection explanation"),
         ("Selected run is no longer available", "disappeared-detail state"),
-        ("Payload unavailable / malformed", "malformed payload state"),
         ("No persisted logs", "empty logs state"),
         ("No persisted artifacts", "empty artifacts state"),
         ("under_data_root", "storage-boundary evidence"),
