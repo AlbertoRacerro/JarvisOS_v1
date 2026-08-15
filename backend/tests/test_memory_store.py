@@ -335,6 +335,80 @@ def test_manual_modeling_path_defaults_to_user_origin(client: TestClient) -> Non
     assert _row("decisions", decision.json()["id"])["origin"] == "user"
 
 
+def test_proposal_read_model_exposes_existing_decision_fields(client: TestClient) -> None:
+    ai_job_id = _insert_ai_job("review-read-model")
+    assumption = client.post(
+        "/memory/proposals",
+        json={
+            "record_kind": "assumption",
+            "workspace_id": "bluerev",
+            "source_ai_job_id": ai_job_id,
+            "statement": "Assume seawater density",
+            "scope": "hydraulics",
+            "confidence": "medium",
+            "source_ref": "paper:1",
+        },
+    )
+    parameter = client.post(
+        "/memory/proposals",
+        json={
+            "record_kind": "parameter",
+            "workspace_id": "bluerev",
+            "source_ai_job_id": ai_job_id,
+            "name": "Tube diameter",
+            "symbol": "D",
+            "value": "0.25",
+            "unit": "m",
+            "value_status": "literature",
+            "value_min": 0.2,
+            "value_max": 0.3,
+            "confidence": 0.8,
+            "source_ref": "paper:2",
+        },
+    )
+    decision = client.post(
+        "/memory/proposals",
+        json={
+            "record_kind": "decision",
+            "workspace_id": "bluerev",
+            "source_ai_job_id": ai_job_id,
+            "title": "Select tube",
+            "decision_text": "Use candidate A",
+            "rationale": "Lowest verified pressure drop",
+            "linked_run_id": None,
+        },
+    )
+    assert assumption.status_code == 201
+    assert parameter.status_code == 201
+    assert decision.status_code == 201
+
+    listed = client.get("/memory/proposals", params={"workspace_id": "bluerev", "status": "proposed"})
+    assert listed.status_code == 200
+    by_id = {item["id"]: item for item in listed.json()}
+
+    assumption_read = by_id[assumption.json()["id"]]
+    assert assumption_read["scope"] == "hydraulics"
+    assert assumption_read["confidence"] == "medium"
+    assert assumption_read["symbol"] is None
+    assert assumption_read["rationale"] is None
+
+    parameter_read = by_id[parameter.json()["id"]]
+    assert parameter_read["symbol"] == "D"
+    assert parameter_read["value"] == "0.25"
+    assert parameter_read["unit"] == "m"
+    assert parameter_read["value_status"] == "literature"
+    assert parameter_read["value_min"] == 0.2
+    assert parameter_read["value_max"] == 0.3
+    assert parameter_read["confidence"] == 0.8
+    assert parameter_read["scope"] is None
+
+    decision_read = by_id[decision.json()["id"]]
+    assert decision_read["rationale"] == "Lowest verified pressure drop"
+    assert decision_read["linked_run_id"] is None
+    assert decision_read["value"] is None
+    assert decision_read["scope"] is None
+
+
 def test_memory_module_does_not_import_ai_execution() -> None:
     service_source = (Path(__file__).resolve().parents[1] / "app/modules/memory/service.py").read_text()
     assert "app.modules.ai" not in service_source
