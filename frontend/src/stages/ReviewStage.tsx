@@ -65,12 +65,14 @@ function ReviewStage({ workspaceId, onShellRegionsChange }: PrimaryStageProps) {
   const workspaceRef = useRef(workspaceId);
   const filterRef = useRef(statusFilter);
   const selectedRef = useRef(selectedId);
+  const recordsRef = useRef(records);
   const itemRefs = useRef(new Map<string, HTMLButtonElement>());
   const filterControlRef = useRef<HTMLSelectElement>(null);
 
   workspaceRef.current = workspaceId;
   filterRef.current = statusFilter;
   selectedRef.current = selectedId;
+  recordsRef.current = records;
 
   const selected = useMemo(
     () => records.find((record) => record.id === selectedId) ?? null,
@@ -81,8 +83,10 @@ function ReviewStage({ workspaceId, onShellRegionsChange }: PrimaryStageProps) {
     targetWorkspaceId: string,
     targetFilter: MemoryStatusFilter,
     preferredSelection: string | null = selectedRef.current,
-    removedId: string | null = null
+    removedId: string | null = null,
+    focusAfterLoad = false
   ) => {
+    const previousRecords = recordsRef.current;
     const request: ReviewRequestContext = {
       generation: ++requestGeneration.current,
       workspaceId: targetWorkspaceId,
@@ -95,35 +99,39 @@ function ReviewStage({ workspaceId, onShellRegionsChange }: PrimaryStageProps) {
       const response = orderedRecords(await listMemoryProposals(targetWorkspaceId, targetFilter));
       if (!acceptsReviewRequest(currentRequest.current, request)) return;
       if (workspaceRef.current !== targetWorkspaceId || filterRef.current !== targetFilter) return;
-      const nextSelected = removedId
-        ? nextAfterRemoval(records, removedId) && response.some((record) => record.id === nextAfterRemoval(records, removedId))
-          ? nextAfterRemoval(records, removedId)
-          : retainedSelection(response, preferredSelection)
+      const removalTarget = removedId ? nextAfterRemoval(previousRecords, removedId) : null;
+      const nextSelected = removalTarget && response.some((record) => record.id === removalTarget)
+        ? removalTarget
         : retainedSelection(response, preferredSelection);
+      recordsRef.current = response;
       setRecords(response);
       selectedRef.current = nextSelected;
       setSelectedId(nextSelected);
       setLoadState("ready");
-      requestAnimationFrame(() => {
-        if (nextSelected) itemRefs.current.get(nextSelected)?.focus();
-        else filterControlRef.current?.focus();
-      });
+      if (focusAfterLoad) {
+        requestAnimationFrame(() => {
+          if (nextSelected) itemRefs.current.get(nextSelected)?.focus();
+          else filterControlRef.current?.focus();
+        });
+      }
     } catch (error) {
       if (!acceptsReviewRequest(currentRequest.current, request)) return;
       if (workspaceRef.current !== targetWorkspaceId || filterRef.current !== targetFilter) return;
+      recordsRef.current = [];
       setRecords([]);
       selectedRef.current = null;
       setSelectedId(null);
       setLoadState("error");
       setMessage(error instanceof Error ? error.message : "Proposal list unavailable.");
     }
-  }, [records]);
+  }, []);
 
   useEffect(() => {
     currentRequest.current = null;
     currentMutation.current = null;
     requestGeneration.current += 1;
     mutationGeneration.current += 1;
+    recordsRef.current = [];
     setRecords([]);
     setSelectedId(null);
     selectedRef.current = null;
@@ -175,7 +183,7 @@ function ReviewStage({ workspaceId, onShellRegionsChange }: PrimaryStageProps) {
       if (!acceptsReviewMutation(currentMutation.current, request)) return;
       if (workspaceRef.current !== request.workspaceId || selectedRef.current !== request.recordId) return;
       setTransitionNotice(notice);
-      await loadRecords(request.workspaceId, filterRef.current, request.recordId, request.recordId);
+      await loadRecords(request.workspaceId, filterRef.current, request.recordId, request.recordId, true);
     } catch (error) {
       if (!acceptsReviewMutation(currentMutation.current, request)) return;
       if (workspaceRef.current !== request.workspaceId || selectedRef.current !== request.recordId) return;
