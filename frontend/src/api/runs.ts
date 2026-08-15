@@ -44,9 +44,19 @@ export type RunArtifact = {
   under_data_root: boolean;
 };
 
+export class RunsRequestError extends Error {
+  readonly status: number;
+
+  constructor(status: number) {
+    super(`Request failed with ${status}`);
+    this.name = "RunsRequestError";
+    this.status = status;
+  }
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`);
-  if (!response.ok) throw new Error(`Request failed with ${response.status}`);
+  if (!response.ok) throw new RunsRequestError(response.status);
   return response.json() as Promise<T>;
 }
 
