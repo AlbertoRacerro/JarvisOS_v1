@@ -1,4 +1,4 @@
-import type { StageSelection } from "../../app/selection";
+import type { RecordResource, StageSelection } from "../../app/selection";
 import type { LineageGraph, LineageNode, LineageNodeKind } from "./api";
 
 export type LineageRequestContext = Readonly<{
@@ -36,14 +36,14 @@ export function orderedLineageNodes(graph: LineageGraph): LineageNode[] {
   return ordered;
 }
 
-const RESOURCE_BY_KIND = {
+const RESOURCE_BY_KIND: Partial<Record<LineageNodeKind, RecordResource>> = {
   model_spec: "model-spec",
   assumption: "assumption",
   parameter: "parameter",
   simulation_run: "simulation-run",
   decision: "decision",
   bluecad_candidate: "bluecad-candidate"
-} as const satisfies Partial<Record<LineageNodeKind, string>>;
+};
 
 export function stageSelectionForLineageNode(workspaceId: string, node: LineageNode): StageSelection | null {
   const resource = RESOURCE_BY_KIND[node.kind];
