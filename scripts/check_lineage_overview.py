@@ -5,7 +5,10 @@ import argparse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+APP = ROOT / "frontend/src/App.tsx"
+REGISTRY = ROOT / "frontend/src/stages/registry.ts"
 STAGE = ROOT / "frontend/src/stages/FlowsheetStage.tsx"
+CLIENT = ROOT / "frontend/src/api/client.ts"
 API = ROOT / "frontend/src/components/lineage/api.ts"
 STATE = ROOT / "frontend/src/components/lineage/state.ts"
 SELECTION = ROOT / "frontend/src/app/selection.ts"
@@ -71,11 +74,14 @@ def self_test() -> None:
 
 
 def check() -> None:
-    for path in (STAGE, API, STATE, SELECTION, STATUS):
+    for path in (APP, REGISTRY, STAGE, CLIENT, API, STATE, SELECTION, STATUS):
         if not path.exists():
             fail(f"missing required file {path.relative_to(ROOT)}")
 
+    app = APP.read_text(encoding="utf-8")
+    registry = REGISTRY.read_text(encoding="utf-8")
     stage = STAGE.read_text(encoding="utf-8")
+    client = CLIENT.read_text(encoding="utf-8")
     api = API.read_text(encoding="utf-8")
     state = STATE.read_text(encoding="utf-8")
     selection = SELECTION.read_text(encoding="utf-8")
@@ -114,8 +120,21 @@ def check() -> None:
         ("aria-pressed", "selected-node semantics"),
         ("hidden by the current filter", "hidden-selection explanation"),
         ("LineageRequestError", "404 drift handling"),
+        ("listWorkspaces", "workspace discovery"),
+        ("workspaceDiscoveryGeneration", "stale workspace-discovery guard"),
+        ("requestWorkspaceChange", "shell workspace change path"),
+        ("No workspaces are available.", "workspace empty state"),
+        ("Workspace discovery failed", "workspace failure state"),
     ):
         require(stage, needle, label)
+
+    require(client, "export function listWorkspaces()", "existing shared workspace client")
+    require(registry, "onWorkspaceChange(next: string | null): void", "typed primary-stage workspace callback")
+    require(app, "const [workspaceId, setWorkspaceId] = useState<string | null>(null)", "transient App workspace owner")
+    require(app, "workspaceId={workspaceId}", "primary-stage workspace binding")
+    require(app, "onWorkspaceChange={setWorkspaceId}", "primary-stage workspace callback binding")
+    if "workspaceId={null}" in app:
+        fail("primary stages remain permanently bound to null workspace")
 
     forbidden_controls = ("recompute", "rerun", "clear stale", "promote to decision")
     lowered = stage.lower()
