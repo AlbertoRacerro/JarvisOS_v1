@@ -51,6 +51,10 @@ jobs:
                   'graphMode = "normal"; freshnessMode = "error";\nawait page.reload({ waitUntil: "domcontentloaded" });\nawait page.getByText(/Freshness is unavailable for this node/).waitFor();\nfreshnessMode = "normal"; nodeMode = "404";\nawait page.reload({ waitUntil: "domcontentloaded" });\nawait page.getByText(/no longer resolvable/).waitFor();',
                   'graphMode = "normal"; freshnessMode = "error";\nawait page.reload({ waitUntil: "domcontentloaded" });\nawait page.getByText("Long parameter A", { exact: true }).first().waitFor({ timeout: 10000 });\nawait page.getByRole("button", { name: "Show context", exact: true }).click();\nawait page.getByText("Freshness", { exact: true }).locator("..").getByText("Unavailable", { exact: true }).waitFor();\nfreshnessMode = "normal"; nodeMode = "404";\nawait page.reload({ waitUntil: "domcontentloaded" });\nawait page.getByText("Long parameter A", { exact: true }).first().waitFor({ timeout: 10000 });\nawait page.getByRole("button", { name: "Show context", exact: true }).click();\nawait page.getByText(/no longer resolvable/).waitFor();',
               ),
+              (
+                  'for (const [url, heading] of [["/design/model", "Model workbench"], ["/design/results", "Results"], ["/design/review", "Review"]]) {',
+                  'for (const [url, heading] of [["/design/model", "Model workbench"], ["/design/results", "Results"], ["/review", "Review"]]) {',
+              ),
           ]
           for old, new in replacements:
               if old not in text:
