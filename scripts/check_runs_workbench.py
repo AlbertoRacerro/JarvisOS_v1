@@ -57,6 +57,7 @@ def check() -> None:
         ("SimulationRunDetail", "typed run detail"),
         ("RunLog", "typed log read"),
         ("RunArtifact", "typed artifact read"),
+        ("RunsRequestError", "HTTP identity for disappeared detail"),
         ("listRuns", "run list client"),
         ("getRun", "run detail client"),
         ("listRunLogs", "run logs client"),
@@ -79,6 +80,7 @@ def check() -> None:
 
     for needle, label in (
         ("Selected run hidden by current filter", "hidden-selection explanation"),
+        ("Selected run is no longer available", "disappeared-detail state"),
         ("Payload unavailable / malformed", "malformed payload state"),
         ("No persisted logs", "empty logs state"),
         ("No persisted artifacts", "empty artifacts state"),
@@ -88,6 +90,9 @@ def check() -> None:
         ("detailGeneration", "detail request generation"),
         ("logsGeneration", "logs request generation"),
         ("artifactsGeneration", "artifact request generation"),
+        ("pendingRefreshFocus", "refresh focus recovery"),
+        ("data-run-id", "focused run identity"),
+        ("searchRef", "stable focus fallback"),
         ("aria-pressed", "keyboard-native selected run state"),
     ):
         require(page, needle, label)
