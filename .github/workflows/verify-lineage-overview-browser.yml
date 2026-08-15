@@ -43,6 +43,10 @@ jobs:
                   'await page.getByText("Workspace B parameter", { exact: true }).waitFor({ timeout: 10000 });',
                   'await page.getByRole("button", { name: "Workspace B parameter", exact: true }).waitFor({ timeout: 10000 });',
               ),
+              (
+                  'workspaceMode = "empty";\nawait page.reload({ waitUntil: "domcontentloaded" });\nawait page.getByText("No workspaces are available.", { exact: true }).first().waitFor();\nworkspaceMode = "error";\nawait page.reload({ waitUntil: "domcontentloaded" });\nawait page.getByText(/Workspace discovery failed/).first().waitFor();',
+                  'workspaceMode = "empty";\nawait page.reload({ waitUntil: "domcontentloaded" });\nawait openNavigator();\nawait page.getByText("No workspaces are available.", { exact: true }).first().waitFor();\nworkspaceMode = "error";\nawait page.reload({ waitUntil: "domcontentloaded" });\nawait openNavigator();\nawait page.getByText(/Workspace discovery failed/).first().waitFor();',
+              ),
           ]
           for old, new in replacements:
               if old not in text:
