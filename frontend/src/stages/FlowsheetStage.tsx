@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import { listWorkspaces, type Workspace } from "../api/client";
 import InlineNotice from "../components/ui/InlineNotice";
 import Surface from "../components/ui/Surface";
 import {
@@ -42,7 +43,10 @@ const EMPTY_DETAIL: DetailState = {
   message: null
 };
 
-function FlowsheetStage({ workspaceId, onSelectionChange, onShellRegionsChange }: PrimaryStageProps) {
+function FlowsheetStage({ workspaceId, onWorkspaceChange, onSelectionChange, onShellRegionsChange }: PrimaryStageProps) {
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [workspaceState, setWorkspaceState] = useState<LoadState>("loading");
+  const [workspaceMessage, setWorkspaceMessage] = useState<string | null>(null);
   const [graph, setGraph] = useState<LineageGraph | null>(null);
   const [graphState, setGraphState] = useState<LoadState>(workspaceId ? "loading" : "idle");
   const [graphMessage, setGraphMessage] = useState<string | null>(null);
@@ -52,6 +56,7 @@ function FlowsheetStage({ workspaceId, onSelectionChange, onShellRegionsChange }
   const [kindFilter, setKindFilter] = useState<LineageNodeKind | "all">("all");
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
 
+  const workspaceDiscoveryGeneration = useRef(0);
   const graphGeneration = useRef(0);
   const detailGeneration = useRef(0);
   const freshnessGeneration = useRef(0);
@@ -86,6 +91,30 @@ function FlowsheetStage({ workspaceId, onSelectionChange, onShellRegionsChange }
     publishSelection(node);
   }, [publishSelection]);
 
+  const clearGraphDerivedState = useCallback((nextGraphState: LoadState) => {
+    currentGraphRequest.current = null;
+    graphGeneration.current += 1;
+    detailGeneration.current += 1;
+    freshnessGeneration.current += 1;
+    setGraph(null);
+    setGraphState(nextGraphState);
+    setGraphMessage(null);
+    setSelectedRef(null);
+    selectedRefRef.current = null;
+    clearNodeState();
+    onSelectionChange(null);
+    setQuery("");
+    setKindFilter("all");
+    setDiagnosticsOpen(false);
+  }, [clearNodeState, onSelectionChange]);
+
+  const requestWorkspaceChange = useCallback((nextWorkspaceId: string | null) => {
+    if (nextWorkspaceId === workspaceRef.current) return;
+    clearGraphDerivedState(nextWorkspaceId ? "loading" : "idle");
+    workspaceRef.current = nextWorkspaceId;
+    onWorkspaceChange(nextWorkspaceId);
+  }, [clearGraphDerivedState, onWorkspaceChange]);
+
   const loadGraph = useCallback(async (targetWorkspaceId: string) => {
     const request: LineageRequestContext = {
       generation: ++graphGeneration.current,
@@ -114,25 +143,31 @@ function FlowsheetStage({ workspaceId, onSelectionChange, onShellRegionsChange }
   }, [selectNode]);
 
   useEffect(() => {
-    currentGraphRequest.current = null;
-    graphGeneration.current += 1;
-    detailGeneration.current += 1;
-    freshnessGeneration.current += 1;
-    setGraph(null);
-    setGraphMessage(null);
-    setSelectedRef(null);
-    selectedRefRef.current = null;
-    clearNodeState();
-    onSelectionChange(null);
-    setQuery("");
-    setKindFilter("all");
-    setDiagnosticsOpen(false);
-    if (!workspaceId) {
-      setGraphState("idle");
-      return;
-    }
-    void loadGraph(workspaceId);
-  }, [clearNodeState, loadGraph, onSelectionChange, workspaceId]);
+    const generation = ++workspaceDiscoveryGeneration.current;
+    setWorkspaceState("loading");
+    setWorkspaceMessage(null);
+    void listWorkspaces().then((items) => {
+      if (workspaceDiscoveryGeneration.current !== generation) return;
+      setWorkspaces(items);
+      setWorkspaceState("ready");
+      if (!workspaceRef.current && items.length > 0) {
+        requestWorkspaceChange(items[0].id);
+      }
+    }).catch((error: unknown) => {
+      if (workspaceDiscoveryGeneration.current !== generation) return;
+      setWorkspaces([]);
+      setWorkspaceState("error");
+      setWorkspaceMessage(error instanceof Error ? error.message : "Workspace discovery failed.");
+    });
+    return () => {
+      workspaceDiscoveryGeneration.current += 1;
+    };
+  }, [requestWorkspaceChange]);
+
+  useEffect(() => {
+    clearGraphDerivedState(workspaceId ? "loading" : "idle");
+    if (workspaceId) void loadGraph(workspaceId);
+  }, [clearGraphDerivedState, loadGraph, workspaceId]);
 
   useEffect(() => {
     if (!workspaceId || !selectedRef) {
@@ -211,12 +246,26 @@ function FlowsheetStage({ workspaceId, onSelectionChange, onShellRegionsChange }
   const navigator = useMemo<ReactNode>(() => (
     <div className="lineage-navigator">
       <label>
+        Workspace
+        <select
+          value={workspaceId ?? ""}
+          onChange={(event) => requestWorkspaceChange(event.target.value || null)}
+          disabled={workspaceState === "loading" || workspaces.length === 0}
+        >
+          <option value="">Select workspace</option>
+          {workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}
+        </select>
+      </label>
+      {workspaceState === "loading" && <p>Loading workspaces…</p>}
+      {workspaceState === "error" && <p className="error-banner">Workspace discovery failed: {workspaceMessage ?? "Request failed."}</p>}
+      {workspaceState === "ready" && workspaces.length === 0 && <p>No workspaces are available.</p>}
+      <label>
         Search lineage
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Label or canonical ref" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Label or canonical ref" disabled={!workspaceId} />
       </label>
       <label>
         Record kind
-        <select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as LineageNodeKind | "all")}>
+        <select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as LineageNodeKind | "all")} disabled={!workspaceId}>
           <option value="all">All kinds</option>
           {kinds.map((kind) => <option key={kind} value={kind}>{humanize(kind)}</option>)}
         </select>
@@ -238,7 +287,7 @@ function FlowsheetStage({ workspaceId, onSelectionChange, onShellRegionsChange }
       </div>
       {graphState === "ready" && orderedNodes.length > 0 && visibleNodes.length === 0 && <p>No nodes match the current filter.</p>}
     </div>
-  ), [graphState, kindFilter, kinds, orderedNodes.length, query, selectNode, selectedHidden, selectedRef, visibleNodes]);
+  ), [graphState, kindFilter, kinds, orderedNodes.length, query, requestWorkspaceChange, selectNode, selectedHidden, selectedRef, visibleNodes, workspaceId, workspaceMessage, workspaceState, workspaces]);
 
   const sidecar = useMemo<ReactNode>(() => (
     <LineageInspector
@@ -254,6 +303,7 @@ function FlowsheetStage({ workspaceId, onSelectionChange, onShellRegionsChange }
   }, [navigator, onShellRegionsChange, sidecar]);
 
   useEffect(() => () => {
+    workspaceDiscoveryGeneration.current += 1;
     currentGraphRequest.current = null;
     currentDetailRequest.current = null;
     currentFreshnessRequest.current = null;
@@ -261,10 +311,17 @@ function FlowsheetStage({ workspaceId, onSelectionChange, onShellRegionsChange }
   }, [onShellRegionsChange]);
 
   if (!workspaceId) {
+    const emptyNotice = workspaceState === "loading"
+      ? <InlineNotice tone="neutral">Loading workspaces…</InlineNotice>
+      : workspaceState === "error"
+        ? <InlineNotice tone="danger">Workspace discovery failed: {workspaceMessage ?? "Request failed."}</InlineNotice>
+        : workspaces.length === 0
+          ? <InlineNotice tone="neutral">No workspaces are available.</InlineNotice>
+          : <InlineNotice tone="neutral">Select a workspace to inspect lineage.</InlineNotice>;
     return (
       <section className="shell-placeholder" aria-labelledby="flowsheet-stage-title">
         <div className="page-header"><p className="eyebrow">Lineage</p><h1 id="flowsheet-stage-title">Dependency & provenance</h1></div>
-        <InlineNotice tone="neutral">Select a workspace to inspect lineage.</InlineNotice>
+        {emptyNotice}
       </section>
     );
   }
