@@ -1,0 +1,43 @@
+name: MODEL-INSPECTION Browser Proof
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  verify-model-inspection:
+    if: github.head_ref == 'verify-086-browser-dca39f2' || github.ref == 'refs/heads/verify-086-browser-dca39f2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      RUN_MODEL_INSPECTION_BROWSER_PROOF: "true"
+      TARGET_IMPLEMENTATION_SHA: "dca39f2c905df14303eee1ef09ec91188d7497b4"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install backend test dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run exact-head MODEL-INSPECTION browser proof
+        working-directory: backend
+        run: |
+          set +e
+          python -m pytest -q tests/test_model_inspection_browser_verification.py -s
+          status=$?
+          echo "--- MODEL-INSPECTION browser proof server logs ---"
+          find /tmp/pytest-of-runner -name fastapi.log -type f -print -exec cat {} \; 2>/dev/null || true
+          exit "$status"
