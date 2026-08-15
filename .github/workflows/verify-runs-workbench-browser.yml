@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 20
     env:
       RUN_RUNS_BROWSER_PROOF: "true"
-      TARGET_IMPLEMENTATION_SHA: "6faa247651654e111e4a18ca423238111b0cbdb7"
+      TARGET_IMPLEMENTATION_SHA: "f26c5589dd667db6004f45831e34aa3630928fdb"
     steps:
       - uses: actions/checkout@v4
         with:
