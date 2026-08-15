@@ -112,8 +112,13 @@ def check() -> None:
         fail("filesystem-oriented artifact path rendered by 088")
 
     require(main, 'import "./styles/runs.css";', "independently removable runs styles")
-    if "| 088 | in_review | [#256]" not in status and "| 088 | ready | — |" not in status:
-        fail("registry lifecycle for 088 is neither readiness nor implementation state")
+    lifecycle_ok = (
+        "| 088 | in_review | [#256]" in status
+        or "| 088 | ready | — |" in status
+        or "| 088 | merged | [#256](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/256) |" in status
+    )
+    if not lifecycle_ok:
+        fail("registry lifecycle for 088 is not a canonical readiness, implementation, or merged state")
 
     self_test()
     print("RUNS-WORKBENCH-1 check passed")
