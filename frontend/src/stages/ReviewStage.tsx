@@ -99,10 +99,15 @@ function ReviewStage({ workspaceId, onShellRegionsChange }: PrimaryStageProps) {
       const response = orderedRecords(await listMemoryProposals(targetWorkspaceId, targetFilter));
       if (!acceptsReviewRequest(currentRequest.current, request)) return;
       if (workspaceRef.current !== targetWorkspaceId || filterRef.current !== targetFilter) return;
+      const preferredStillVisible = preferredSelection
+        ? response.some((record) => record.id === preferredSelection)
+        : false;
       const removalTarget = removedId ? nextAfterRemoval(previousRecords, removedId) : null;
-      const nextSelected = removalTarget && response.some((record) => record.id === removalTarget)
-        ? removalTarget
-        : retainedSelection(response, preferredSelection);
+      const nextSelected = preferredStillVisible
+        ? preferredSelection
+        : removalTarget && response.some((record) => record.id === removalTarget)
+          ? removalTarget
+          : retainedSelection(response, preferredSelection);
       recordsRef.current = response;
       setRecords(response);
       selectedRef.current = nextSelected;
