@@ -1,0 +1,32 @@
+name: PROPOSAL-REVIEW Browser Proof
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  verify-proposal-review:
+    if: github.head_ref == 'verify-054-browser-2ae935f' || github.ref == 'refs/heads/verify-054-browser-2ae935f'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RUN_PROPOSAL_REVIEW_BROWSER_PROOF: "true"
+      TARGET_IMPLEMENTATION_SHA: "2ae935f561ed89cd0ea73f06e0a888638ed9953f"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - name: Install proof dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      - name: Run exact-head PROPOSAL-REVIEW browser proof
+        run: RUN_PROPOSAL_REVIEW_BROWSER_PROOF=true TARGET_IMPLEMENTATION_SHA="$TARGET_IMPLEMENTATION_SHA" python -m pytest -q backend/tests/test_proposal_review_browser_verification.py -s
