@@ -4,7 +4,7 @@ This file is the single live source of truth for JarvisOS spec state and near-te
 roadmap. Individual spec files define scope, acceptance criteria, tests, and
 non-goals; their legacy `Status:` lines are not authoritative.
 
-Update this table whenever work starts, a PR opens, a dependency changes, or a PR
+Update this table whenever work starts, a PR opens, a dependency changes, a PR
 merges, or a spec is cancelled. GitHub PR diffs are the authoritative list of
 files created or modified by a spec; this registry intentionally does not copy
 those file lists into a second place.
