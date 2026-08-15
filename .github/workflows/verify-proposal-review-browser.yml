@@ -28,17 +28,22 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt -r backend/requirements-dev.txt
-      - name: Correct evidence-only historical-action assertion
+      - name: Correct evidence-only browser assertions
         run: |
           python - <<'PY'
           from pathlib import Path
           path = Path("backend/tests/test_proposal_review_browser_verification.py")
           text = path.read_text(encoding="utf-8")
-          old = 'await filter.selectOption("superseded"); await nav.getByText(/1 record/).waitFor(); ok((await nav.innerText()).includes("Tube diameter"),"superseded filter did not show canonical superseded record"); await filter.selectOption("all"); await nav.getByText(/6 records/).waitFor(); ok((await page.getByRole("button",{name:"Accept",exact:true}).count())===0,"historical selected record exposed transition action");'
-          new = 'await filter.selectOption("superseded"); await nav.getByText(/1 record/).waitFor(); ok((await nav.innerText()).includes("Tube diameter"),"superseded filter did not show canonical superseded record"); ok((await page.getByRole("button",{name:"Accept",exact:true}).count())===0,"historical selected record exposed transition action"); await filter.selectOption("all"); await nav.getByText(/6 records/).waitFor();'
-          if old not in text:
-              raise SystemExit("expected evidence assertion sequence not found")
-          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          old_history = 'await filter.selectOption("superseded"); await nav.getByText(/1 record/).waitFor(); ok((await nav.innerText()).includes("Tube diameter"),"superseded filter did not show canonical superseded record"); await filter.selectOption("all"); await nav.getByText(/6 records/).waitFor(); ok((await page.getByRole("button",{name:"Accept",exact:true}).count())===0,"historical selected record exposed transition action");'
+          new_history = 'await filter.selectOption("superseded"); await nav.getByText(/1 record/).waitFor(); ok((await nav.innerText()).includes("Tube diameter"),"superseded filter did not show canonical superseded record"); ok((await page.getByRole("button",{name:"Accept",exact:true}).count())===0,"historical selected record exposed transition action"); await filter.selectOption("all"); await nav.getByText(/6 records/).waitFor();'
+          old_reach = 'for(const href of ["/design/model","/design/results","/design/flowsheet","/runs","/engineering-data"]){ok((await page.locator(`a[href="${href}"]`).count())>0,`legacy/canonical reachability missing ${href}`)}'
+          new_reach = 'for(const href of ["/design/model","/design/results","/design/flowsheet","/runs","/engineering-data"]){await page.goto(`${app}${href}`,{waitUntil:"domcontentloaded"}); ok(new URL(page.url()).pathname===href,`legacy/canonical route unreachable ${href}`)}'
+          if old_history not in text:
+              raise SystemExit("expected historical assertion sequence not found")
+          text = text.replace(old_history, new_history, 1)
+          if old_reach not in text:
+              raise SystemExit("expected reachability assertion sequence not found")
+          path.write_text(text.replace(old_reach, new_reach, 1), encoding="utf-8")
           PY
       - name: Run exact-head PROPOSAL-REVIEW browser proof
         run: RUN_PROPOSAL_REVIEW_BROWSER_PROOF=true TARGET_IMPLEMENTATION_SHA="$TARGET_IMPLEMENTATION_SHA" python -m pytest -q backend/tests/test_proposal_review_browser_verification.py -s
