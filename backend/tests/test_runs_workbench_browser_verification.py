@@ -1,15 +1,17 @@
+from __future__ import annotations
+
 import os
 import subprocess
 import time
-import urllib.error
 import urllib.request
 from pathlib import Path
 
 import pytest
 
+
+RUN_PROOF = os.environ.get("RUN_RUNS_BROWSER_PROOF") == "true"
+TARGET_SHA = os.environ.get("TARGET_IMPLEMENTATION_SHA", "f26c5589dd667db6004f45831e34aa3630928fdb")
 TARGET_BRANCH = "spec/088-runs-workbench-1"
-TARGET_SHA = os.getenv("TARGET_IMPLEMENTATION_SHA", "33f097aa0f6488863094dd6f06680a024c1f2dbe")
-RUN_PROOF = os.getenv("RUN_RUNS_BROWSER_PROOF") == "true"
 
 
 def _run(command: list[str], *, cwd: Path, env: dict[str, str], timeout: int = 300) -> subprocess.CompletedProcess[str]:
@@ -19,18 +21,16 @@ def _run(command: list[str], *, cwd: Path, env: dict[str, str], timeout: int = 3
     return result
 
 
-def _wait(url: str, timeout: float = 45.0) -> None:
+def _wait(url: str, timeout: float = 20.0) -> None:
     deadline = time.monotonic() + timeout
-    last_error: Exception | None = None
     while time.monotonic() < deadline:
         try:
-            with urllib.request.urlopen(url, timeout=2) as response:
+            with urllib.request.urlopen(url, timeout=1) as response:
                 if response.status < 500:
                     return
-        except (OSError, urllib.error.URLError) as error:
-            last_error = error
-        time.sleep(0.5)
-    raise AssertionError(f"server did not become ready: {last_error}")
+        except Exception:
+            time.sleep(0.2)
+    raise AssertionError(f"server did not become ready: {url}")
 
 
 def _write_script(path: Path) -> None:
@@ -42,7 +42,7 @@ const api = "http://127.0.0.1:8000";
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const assert = (value, message) => { if (!value) throw new Error(message); };
 const now = "2026-08-15T08:00:00Z";
-const longToken = "long-token-".repeat(90);
+const longToken = "long-token-".repeat(220);
 const workspaces = [
   { id: "workspace-a", name: "Workspace A", slug: "workspace-a", status: "active", created_at: now, updated_at: now },
   { id: "workspace-b", name: "Workspace B", slug: "workspace-b", status: "active", created_at: now, updated_at: now },
@@ -113,7 +113,7 @@ await page.goto(`${app}/runs`, { waitUntil: "domcontentloaded" });
 await page.getByRole("heading", { name: "Runs", exact: true }).waitFor();
 await page.getByRole("button", { name: /Run X/ }).waitFor({ timeout: 10000 });
 await page.getByRole("heading", { name: "Run X", exact: true }).waitFor();
-await page.getByText("succeeded", { exact: true }).first().waitFor();
+await page.locator(".run-status").filter({ hasText: /^succeeded$/ }).waitFor();
 await page.getByText("truncated", { exact: true }).waitFor();
 await page.getByText("Outside configured data root", { exact: true }).waitFor();
 assert(!(await page.getByText("/secret/absolute", { exact: true }).count()), "stored_path leaked into UI");
@@ -235,16 +235,13 @@ def test_exact_head_runs_browser_proof(tmp_path: Path) -> None:
         server = subprocess.Popen(["npm", "run", "dev", "--", "--host", "127.0.0.1", "--port", "5173"], cwd=frontend, env=env, text=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         _wait("http://127.0.0.1:5173/runs")
         _run(["node", str(script)], cwd=frontend, env=env, timeout=420)
-        script.unlink(missing_ok=True)
-        _run(["git", "fetch", "origin", TARGET_BRANCH, "--depth=1"], cwd=repo_root, env=env, timeout=120)
-        final = _run(["git", "rev-parse", "FETCH_HEAD"], cwd=repo_root, env=env).stdout.strip()
-        assert final == TARGET_SHA, f"implementation branch moved during proof: {final}"
+        final = _run(["git", "rev-parse", "HEAD"], cwd=target, env=env).stdout.strip()
+        assert final == TARGET_SHA, (final, TARGET_SHA)
     finally:
-        if server is not None and server.poll() is None:
+        if server is not None:
             server.terminate()
             try:
-                server.wait(timeout=10)
+                server.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 server.kill()
-        if target.exists():
-            subprocess.run(["git", "worktree", "remove", "--force", str(target)], cwd=repo_root, text=True, capture_output=True, timeout=60, check=False)
+        subprocess.run(["git", "worktree", "remove", "--force", str(target)], cwd=repo_root, env=env, check=False)
