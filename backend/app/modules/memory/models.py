@@ -82,6 +82,16 @@ class MemoryRecordRead(BaseModel):
     source_ref: str | None = None
     notes: str | None = None
     supersedes_parameter_id: str | None = None
+    scope: str | None = None
+    confidence: str | float | None = None
+    symbol: str | None = None
+    value: str | None = None
+    unit: str | None = None
+    value_status: str | None = None
+    value_min: float | None = None
+    value_max: float | None = None
+    rationale: str | None = None
+    linked_run_id: str | None = None
 
 
 class MemoryTransitionRead(BaseModel):
