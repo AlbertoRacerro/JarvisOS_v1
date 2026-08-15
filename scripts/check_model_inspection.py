@@ -17,6 +17,7 @@ STATUS = ROOT / "docs/specs/STATUS.md"
 ALLOWED = {
     "frontend/src/components/BluecadGlbViewer.tsx",
     "frontend/src/components/bluecad/BluecadWorkbench.tsx",
+    "scripts/check_bluecad_workbench.py",
     "scripts/check_model_inspection.py",
     "docs/specs/STATUS.md",
 }
@@ -166,6 +167,13 @@ def self_test() -> None:
         pass
     else:
         fail("self-test accepted backend scope expansion")
+    validate_scope({
+        "frontend/src/components/BluecadGlbViewer.tsx",
+        "frontend/src/components/bluecad/BluecadWorkbench.tsx",
+        "scripts/check_bluecad_workbench.py",
+        "scripts/check_model_inspection.py",
+        "docs/specs/STATUS.md",
+    })
     check_status("| 086 | ready | — | MODEL-INSPECTION-A0 | 006, 085 | geometry |")
     print("MODEL-INSPECTION-A0 self-test passed")
 
