@@ -137,7 +137,6 @@ function ReviewStage({ workspaceId, onShellRegionsChange }: PrimaryStageProps) {
     selectedRef.current = null;
     setMessage(null);
     setTransitionNotice(null);
-    setBusyRecordId(null);
     setLoadState(workspaceId ? "loading" : "idle");
     if (workspaceId) void loadRecords(workspaceId, statusFilter, null);
   }, [loadRecords, statusFilter, workspaceId]);
@@ -163,7 +162,6 @@ function ReviewStage({ workspaceId, onShellRegionsChange }: PrimaryStageProps) {
     setSelectedId(null);
     setMessage(null);
     setTransitionNotice(null);
-    setBusyRecordId(null);
     setLoadState(workspaceRef.current ? "loading" : "idle");
     filterRef.current = next;
     setStatusFilter(next);
