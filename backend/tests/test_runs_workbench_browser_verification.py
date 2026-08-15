@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 TARGET_BRANCH = "spec/088-runs-workbench-1"
-TARGET_SHA = os.getenv("TARGET_IMPLEMENTATION_SHA", "95a96030994d509b20e0c144681c32d2175a8668")
+TARGET_SHA = os.getenv("TARGET_IMPLEMENTATION_SHA", "33f097aa0f6488863094dd6f06680a024c1f2dbe")
 RUN_PROOF = os.getenv("RUN_RUNS_BROWSER_PROOF") == "true"
 
 
@@ -58,8 +58,11 @@ const x = run("run-x", "Run X", "succeeded");
 const y = { ...run("run-y", "Run Y", "historical_custom"), input_payload: null, output_payload: "{" };
 const b = run("run-b", "Workspace B Run", "failed", "workspace-b");
 let workspaceMode = "two";
+let listMode = "normal";
 let delayBList = false;
 let delayYDetail = false;
+let delayYLogs = false;
+let delayYArtifacts = false;
 let detailMode = "normal";
 let logsMode = "normal";
 let artifactsMode = "normal";
@@ -79,18 +82,21 @@ await page.route(`${api}/**`, async route => {
   if (list) {
     const ws = list[1];
     if (ws === "workspace-b" && delayBList) { delayBList = false; await sleep(900); }
-    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(ws === "workspace-a" ? [x, y] : [b]) });
+    const rows = ws === "workspace-a" ? (listMode === "without-x" ? [y] : [x, y]) : [b];
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(rows) });
   }
   const artifacts = path.match(/^\/workspaces\/([^/]+)\/simulation-runs\/([^/]+)\/artifacts$/);
   if (artifacts) {
+    if (artifacts[2] === "run-y" && delayYArtifacts) { delayYArtifacts = false; await sleep(900); }
     if (artifactsMode === "error") return route.fulfill({ status: 503, body: "artifact error" });
-    const rows = artifactsMode === "empty" ? [] : [{ artifact_id: "artifact-1", workspace_id: artifacts[1], simulation_run_id: artifacts[2], role: "result", artifact_type: "json", filename: longToken + ".json", relative_path: "secret/relative", stored_path: "/secret/absolute", size_bytes: 1234, created_at: now, source_ref: "runner:test", source_module: "fixture", mime_type: "application/json", sha256: "a".repeat(64), status: "ready", under_data_root: false }];
+    const rows = artifactsMode === "empty" ? [] : [{ artifact_id: "artifact-1", workspace_id: artifacts[1], simulation_run_id: artifacts[2], role: "result", artifact_type: "json", filename: artifacts[2] === "run-y" ? "Y-ARTIFACT" : longToken + ".json", relative_path: "secret/relative", stored_path: "/secret/absolute", size_bytes: 1234, created_at: now, source_ref: "runner:test", source_module: "fixture", mime_type: "application/json", sha256: "a".repeat(64), status: "ready", under_data_root: false }];
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(rows) });
   }
   const logs = path.match(/^\/workspaces\/([^/]+)\/simulation-runs\/([^/]+)\/logs$/);
   if (logs) {
+    if (logs[2] === "run-y" && delayYLogs) { delayYLogs = false; await sleep(900); }
     if (logsMode === "error") return route.fulfill({ status: 503, body: "log error" });
-    const rows = logsMode === "empty" ? [] : [{ id: "log-1", workspace_id: logs[1], simulation_run_id: logs[2], stream: "stderr", content: longToken, truncated: true, created_at: now }];
+    const rows = logsMode === "empty" ? [] : [{ id: "log-1", workspace_id: logs[1], simulation_run_id: logs[2], stream: "stderr", content: logs[2] === "run-y" ? "Y-LOG" : longToken, truncated: true, created_at: now }];
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(rows) });
   }
   const detail = path.match(/^\/workspaces\/([^/]+)\/simulation-runs\/([^/]+)$/);
@@ -126,12 +132,14 @@ await page.getByText(/Payload unavailable \/ malformed/).waitFor();
 await page.getByText("historical_custom", { exact: true }).first().waitFor();
 
 await search.fill("");
-delayYDetail = true;
+delayYDetail = true; delayYLogs = true; delayYArtifacts = true;
 await page.getByRole("button", { name: /Run Y/ }).click();
 await page.getByRole("button", { name: /Run X/ }).click();
 await page.getByRole("heading", { name: "Run X", exact: true }).waitFor();
 await sleep(1100);
 assert(!(await page.getByRole("heading", { name: "Run Y", exact: true }).count()), "late Y detail replaced X state");
+assert(!(await page.getByText("Y-LOG", { exact: true }).count()), "late Y logs replaced X state");
+assert(!(await page.getByText("Y-ARTIFACT", { exact: true }).count()), "late Y artifacts replaced X state");
 
 delayBList = true;
 await page.getByLabel("Workspace").selectOption("workspace-b");
@@ -141,24 +149,38 @@ await sleep(1100);
 assert(!(await page.getByRole("button", { name: /Workspace B Run/ }).count()), "late workspace B list replaced workspace A");
 
 logsMode = "error";
-await page.getByRole("button", { name: "Refresh", exact: true }).click();
+await page.getByRole("button", { name: /Run Y/ }).click();
+await page.getByRole("button", { name: /Run X/ }).click();
 await page.getByText(/Logs unavailable/).waitFor();
 await page.getByRole("heading", { name: "Run X", exact: true }).waitFor();
 logsMode = "empty";
-await page.getByText("Logs").locator("..").getByRole("button", { name: "Retry" }).click();
+await page.getByText("Logs", { exact: true }).locator("..").getByRole("button", { name: "Retry" }).click();
 await page.getByText("No persisted logs", { exact: true }).waitFor();
+logsMode = "normal";
 
 artifactsMode = "error";
-await page.getByRole("button", { name: "Refresh", exact: true }).click();
+await page.getByRole("button", { name: /Run Y/ }).click();
+await page.getByRole("button", { name: /Run X/ }).click();
 await page.getByText(/Artifacts unavailable/).waitFor();
 artifactsMode = "empty";
-await page.getByText("Artifacts").locator("..").getByRole("button", { name: "Retry" }).click();
+await page.getByText("Artifacts", { exact: true }).locator("..").getByRole("button", { name: "Retry" }).click();
 await page.getByText("No persisted artifacts", { exact: true }).waitFor();
+artifactsMode = "normal";
 
 detailMode = "404";
-await page.getByRole("button", { name: "Refresh", exact: true }).click();
+await page.getByRole("button", { name: /Run Y/ }).click();
 await page.getByText(/Selected run is no longer available/).waitFor();
 detailMode = "normal";
+await page.getByRole("button", { name: /Run X/ }).click();
+await page.getByRole("heading", { name: "Run X", exact: true }).waitFor();
+
+listMode = "without-x";
+const focusedX = page.getByRole("button", { name: /Run X/ });
+await focusedX.focus();
+await page.getByRole("button", { name: "Refresh", exact: true }).evaluate(el => el.click());
+await page.getByRole("button", { name: /Run Y/ }).waitFor();
+await page.waitForFunction(() => document.activeElement?.getAttribute("data-run-id") === "run-y");
+listMode = "normal";
 
 const overflow = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }));
 assert(overflow.scroll <= overflow.client + 1, `page-level overflow at effective 200% width: ${JSON.stringify(overflow)}`);
