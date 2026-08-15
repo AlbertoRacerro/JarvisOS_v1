@@ -1,4 +1,3 @@
-import type { MemoryRecord } from "../../api/memory";
 import {
   acceptsReviewMutation,
   acceptsReviewRequest,
@@ -7,36 +6,24 @@ import {
   orderedRecords,
   promotionRoute,
   recordLabel,
-  retainedSelection
+  retainedSelection,
+  type ReviewRecordShape
 } from "./reviewState";
 
-const base = (overrides: Partial<MemoryRecord> = {}): MemoryRecord => ({
+type HarnessRecord = ReviewRecordShape & Readonly<{
+  notes?: string | null;
+  confidence?: string | number | null;
+}>;
+
+const base = (overrides: Partial<HarnessRecord> = {}): HarnessRecord => ({
   id: "id-a",
   record_kind: "parameter",
-  workspace_id: "ws-a",
   status: "proposed",
-  origin: "ai_proposed",
-  source_ai_job_id: null,
-  promoted_at: null,
   created_at: "2026-08-15T10:00:00Z",
-  updated_at: "2026-08-15T10:00:00Z",
   title: null,
   statement: null,
-  decision_text: null,
   name: "Pressure",
-  source_ref: null,
-  notes: null,
   supersedes_parameter_id: null,
-  scope: null,
-  confidence: null,
-  symbol: "P",
-  value: "1",
-  unit: "bar",
-  value_status: "candidate",
-  value_min: null,
-  value_max: null,
-  rationale: null,
-  linked_run_id: null,
   ...overrides
 });
 
@@ -50,7 +37,7 @@ const ordered = orderedRecords([
   base({ id: "a", record_kind: "assumption", created_at: "2026-08-15T11:00:00Z" })
 ]);
 assert(ordered.map((record) => record.id).join(",") === "a,b,z", "deterministic newest-first ordering failed");
-assert(recordLabel(base({ name: "  " , id: "abcdef123456789" })).startsWith("parameter abcdef123456"), "label fallback failed");
+assert(recordLabel(base({ name: "  ", id: "abcdef123456789" })).startsWith("parameter abcdef123456"), "label fallback failed");
 
 const firstA = { generation: 1, workspaceId: "a", statusFilter: "proposed" as const };
 const secondA = { generation: 3, workspaceId: "a", statusFilter: "proposed" as const };
