@@ -1,0 +1,26 @@
+name: ENGINEERING-DATA Browser Proof
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  verify-engineering-data:
+    if: github.head_ref == 'verify-035-browser-1e779a0' || github.ref == 'refs/heads/verify-035-browser-1e779a0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RUN_ENGINEERING_DATA_BROWSER_PROOF: "true"
+      TARGET_IMPLEMENTATION_SHA: "1e779a06d9e055509061d133d523c0883f0f7adf"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install proof dependency
+        run: python -m pip install pytest
+      - name: Run exact-head ENGINEERING-DATA browser proof
+        run: RUN_ENGINEERING_DATA_BROWSER_PROOF=true TARGET_IMPLEMENTATION_SHA="$TARGET_IMPLEMENTATION_SHA" python -m pytest -q backend/tests/test_engineering_data_browser_verification.py -s
