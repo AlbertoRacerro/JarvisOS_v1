@@ -63,7 +63,9 @@ def _select_record_sql(kind: str) -> str:
                 CASE WHEN status IN ('proposed', 'accepted', 'rejected', 'superseded') THEN status ELSE 'proposed' END AS status,
                 origin, source_ai_job_id, promoted_at, created_at, updated_at,
                 NULL AS title, statement, NULL AS decision_text, NULL AS name, source_ref, notes,
-                NULL AS supersedes_parameter_id
+                NULL AS supersedes_parameter_id,
+                scope, confidence, NULL AS symbol, NULL AS value, NULL AS unit, NULL AS value_status,
+                NULL AS value_min, NULL AS value_max, NULL AS rationale, NULL AS linked_run_id
             FROM assumptions
         """
     if kind == "parameter":
@@ -72,7 +74,9 @@ def _select_record_sql(kind: str) -> str:
                 CASE WHEN status IN ('proposed', 'accepted', 'rejected', 'superseded') THEN status ELSE 'proposed' END AS status,
                 origin, source_ai_job_id, promoted_at, created_at, updated_at,
                 NULL AS title, NULL AS statement, NULL AS decision_text, name, source_ref, notes,
-                supersedes_parameter_id
+                supersedes_parameter_id,
+                NULL AS scope, confidence, symbol, value, unit, value_status,
+                value_min, value_max, NULL AS rationale, NULL AS linked_run_id
             FROM parameters
         """
     if kind == "decision":
@@ -81,7 +85,9 @@ def _select_record_sql(kind: str) -> str:
                 CASE WHEN status IN ('proposed', 'accepted', 'rejected', 'superseded') THEN status ELSE 'proposed' END AS status,
                 origin, source_ai_job_id, promoted_at, created_at, updated_at,
                 title, NULL AS statement, decision_text, NULL AS name, NULL AS source_ref, notes,
-                NULL AS supersedes_parameter_id
+                NULL AS supersedes_parameter_id,
+                NULL AS scope, NULL AS confidence, NULL AS symbol, NULL AS value, NULL AS unit, NULL AS value_status,
+                NULL AS value_min, NULL AS value_max, rationale, linked_run_id
             FROM decisions
         """
     raise ValueError("Unsupported memory record kind.")
