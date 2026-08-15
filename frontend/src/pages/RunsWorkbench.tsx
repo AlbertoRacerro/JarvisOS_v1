@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { listWorkspaces, type Workspace } from "../api/client";
-import { getRun, listRunArtifacts, listRunLogs, listRuns, type RunArtifact, type RunLog, type SimulationRunDetail, type SimulationRunSummary } from "../api/runs";
+import { RunsRequestError, getRun, listRunArtifacts, listRunLogs, listRuns, type RunArtifact, type RunLog, type SimulationRunDetail, type SimulationRunSummary } from "../api/runs";
 import { acceptsResponse, chooseSelection, projectPayload, visibleRuns } from "../components/runs/state";
 
 type Props = {
@@ -80,7 +80,8 @@ function RunsWorkbench({ workspaceId, onWorkspaceChange }: Props) {
       if (!acceptsResponse({ generation, identity: "workspaces" }, workspaceGeneration.current, "workspaces")) return;
       setWorkspaces(rows);
       setWorkspaceState("ready");
-      const valid = workspaceId && rows.some((row) => row.id === workspaceId);
+      const activeWorkspace = currentWorkspace.current;
+      const valid = activeWorkspace !== null && rows.some((row) => row.id === activeWorkspace);
       if (!valid) changeWorkspace(rows[0]?.id ?? null);
     }).catch((error: Error) => {
       if (!acceptsResponse({ generation, identity: "workspaces" }, workspaceGeneration.current, "workspaces")) return;
@@ -89,7 +90,7 @@ function RunsWorkbench({ workspaceId, onWorkspaceChange }: Props) {
     });
   };
 
-  useEffect(loadWorkspaces, []); // bounded discovery on page entry
+  useEffect(loadWorkspaces, []);
 
   const loadRuns = (targetWorkspace: string) => {
     const generation = ++listGeneration.current;
@@ -129,7 +130,7 @@ function RunsWorkbench({ workspaceId, onWorkspaceChange }: Props) {
       if (!acceptsResponse({ generation, identity }, detailGeneration.current, currentIdentity)) return;
       setDetail(null);
       setDetailState("error");
-      setDetailError(error.message);
+      setDetailError(error instanceof RunsRequestError && error.status === 404 ? "Selected run is no longer available. Refresh the run list." : error.message);
     });
   };
 
