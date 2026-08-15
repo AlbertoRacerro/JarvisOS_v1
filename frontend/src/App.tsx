@@ -4,6 +4,7 @@ import type { StageSelection } from "./app/selection";
 import { useAppRouter } from "./app/useAppRouter";
 import Layout from "./components/Layout";
 import PageErrorBoundary from "./components/PageErrorBoundary";
+import AnalyticsDockContent from "./components/analytics/AnalyticsDockContent";
 import LegacyDiagnosticSurface from "./components/shell/LegacyDiagnosticSurface";
 import MigrationPendingSurface from "./components/shell/MigrationPendingSurface";
 import AIDraft from "./pages/AIDraft";
@@ -72,7 +73,11 @@ function App() {
     }
   }
 
-  return <Layout route={route} navigate={navigate} selection={selection} shellRegions={shellRegions} shellRegionRequest={shellRegionRequest}><PageErrorBoundary key={resolved.canonicalPath}>{content}</PageErrorBoundary></Layout>;
+  const effectiveShellRegions = route.id === "runs" || route.id === "engineering-data"
+    ? { dock: <AnalyticsDockContent workspaceId={workspaceId} /> }
+    : shellRegions;
+
+  return <Layout route={route} navigate={navigate} selection={selection} shellRegions={effectiveShellRegions} shellRegionRequest={shellRegionRequest}><PageErrorBoundary key={resolved.canonicalPath}>{content}</PageErrorBoundary></Layout>;
 }
 
 export default App;

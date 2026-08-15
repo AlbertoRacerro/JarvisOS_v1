@@ -9,6 +9,7 @@ import "./styles/foundation.css";
 import "./styles/shell.css";
 import "./styles/runs.css";
 import "./styles/engineering-data.css";
+import "./styles/analytics.css";
 import "./styles/responsive.css";
 
 applyStoredAppearance();
