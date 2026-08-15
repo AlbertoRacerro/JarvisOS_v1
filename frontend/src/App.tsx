@@ -9,6 +9,7 @@ import MigrationPendingSurface from "./components/shell/MigrationPendingSurface"
 import AIDraft from "./pages/AIDraft";
 import Dashboard from "./pages/Dashboard";
 import DomainFoundation from "./pages/DomainFoundation";
+import EngineeringData from "./pages/EngineeringData";
 import RunsWorkbench from "./pages/RunsWorkbench";
 import SystemStatus from "./pages/SystemStatus";
 import { PRIMARY_STAGES, type ShellRegion, type ShellRegionContributions } from "./stages/registry";
@@ -47,7 +48,7 @@ function App() {
         content = <RunsWorkbench workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} />;
         break;
       case "engineering-data":
-        content = <MigrationPendingSurface title="Engineering Data" description="Searchable engineering-record navigation belongs to re-derived spec 035. Current records remain available on the legacy diagnostic route." navigate={navigate} links={[{ href: "/legacy/domain-foundation", label: "Open legacy Domain Foundation" }]} />;
+        content = <EngineeringData workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} navigate={navigate} />;
         break;
       case "settings":
         content = <MigrationPendingSurface title="Settings" description="The product Settings surface belongs to re-derived spec 029. Current provider, storage, budget, and AI diagnostics remain on explicit legacy routes." navigate={navigate} links={[{ href: "/legacy/system-status", label: "Open legacy System Status" }, { href: "/legacy/ai-draft", label: "Open legacy AI Draft" }]} />;
