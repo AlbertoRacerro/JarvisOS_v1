@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 RUN_PROOF = os.environ.get("RUN_ANALYTICS_DOCK_BROWSER_PROOF") == "true"
-TARGET_SHA = os.environ.get("TARGET_IMPLEMENTATION_SHA", "b56d6502389b0c5dcb7d16bed740f5e70cb45468")
+TARGET_SHA = os.environ.get("TARGET_IMPLEMENTATION_SHA", "5471cc240c91f5076ef9ddb8bd556de9567b1740")
 TARGET_BRANCH = "spec/089-analytics-dock-1"
 
 
@@ -43,7 +43,7 @@ const b=[{...mk("b1","Workspace B Run","m1",payload({pressure:{value:999,unit:"P
 let removed=false, delayA=false, delayed=false;
 const browser=await chromium.launch({headless:true}), context=await browser.newContext({viewport:{width:640,height:520}}), page=await context.newPage(), errors=[]; page.on("pageerror",e=>errors.push(e.message));
 await page.route(`${api}/**`,async route=>{const p=decodeURIComponent(new URL(route.request().url()).pathname); if(p==="/workspaces")return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify(workspaces)}); const m=p.match(/^\/workspaces\/([^/]+)\/simulation-runs$/); if(m){if(m[1]==="workspace-a"&&delayA&&!delayed){delayed=true;await sleep(900)} const rows=m[1]==="workspace-a"?(removed?all.filter(r=>r.id!=="r2"):all):b; return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify(rows)});} return route.fulfill({status:404,body:"not mocked"});});
-await page.goto(`${app}/runs`,{waitUntil:"domcontentloaded"}); await page.getByRole("heading",{name:"Runs",exact:true}).waitFor(); const toggle=page.getByRole("button",{name:"Show analysis",exact:true}); await toggle.click(); const dock=page.locator("#shell-analysis-dock"), heading=dock.getByRole("heading",{name:"Analysis dock",exact:true}); await heading.waitFor(); ok(await heading.evaluate(e=>document.activeElement===e),"dock open focus"); await dock.getByRole("heading",{name:"Run comparison",exact:true}).waitFor();
+await page.goto(`${app}/runs`,{waitUntil:"domcontentloaded"}); await page.getByRole("heading",{name:"Runs",exact:true}).waitFor(); const topbar=page.locator(".shell-topbar"); await topbar.waitFor(); console.log("TOPBAR="+JSON.stringify(await topbar.innerText())); console.log("TOPBAR_BUTTONS="+JSON.stringify(await topbar.getByRole("button").allTextContents())); const toggle=page.getByRole("button",{name:"Show analysis",exact:true}); await toggle.click(); const dock=page.locator("#shell-analysis-dock"), heading=dock.getByRole("heading",{name:"Analysis dock",exact:true}); await heading.waitFor(); ok(await heading.evaluate(e=>document.activeElement===e),"dock open focus"); await dock.getByRole("heading",{name:"Run comparison",exact:true}).waitFor();
 const box=label=>dock.locator("label.analytics-run-row").filter({hasText:label}).locator('input[type="checkbox"]'); const text=()=>dock.innerText();
 await box("Run One").check(); await box("Run Two").check(); await dock.getByRole("row",{name:/Minimum 100 Pa/}).waitFor(); let t=await text(); ok(t.includes("100 Pa")&&t.includes("150 Pa")&&t.includes("50 Pa"),"same-unit min/max/range");
 await box("Run Two").uncheck(); await box("Run kPa").check(); await dock.getByText(/exact units are incompatible/i).waitFor(); ok(!(await text()).includes("200 Pa"),"unit conversion must not occur"); await box("Run kPa").uncheck();
