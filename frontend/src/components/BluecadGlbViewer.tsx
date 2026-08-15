@@ -147,6 +147,7 @@ function BluecadGlbViewer({ artifactUrl, inspectionCommand = null, onInspectionC
     let loadedScene: THREE.Object3D | null = null;
     let meshFacts: GeometryInspectionMesh[] = [];
     const meshByKey = new Map<string, THREE.Mesh>();
+    const keyByMesh = new Map<THREE.Mesh, string>();
     const factByKey = new Map<string, GeometryInspectionMesh>();
     let selectedFact: GeometryInspectionMesh | null = null;
     let currentSessionKey: string | null = null;
@@ -165,7 +166,11 @@ function BluecadGlbViewer({ artifactUrl, inspectionCommand = null, onInspectionC
     loader.load(
       artifactUrl,
       (gltf: { scene: THREE.Object3D }) => {
-        if (disposed || generationRef.current !== generation) {
+        if (disposed) {
+          disposeOwnedScene(gltf.scene);
+          return;
+        }
+        if (generationRef.current !== generation) {
           disposeOwnedScene(gltf.scene);
           return;
         }
@@ -177,6 +182,7 @@ function BluecadGlbViewer({ artifactUrl, inspectionCommand = null, onInspectionC
         sessionKeyRef.current = currentSessionKey;
         meshFacts = [];
         meshByKey.clear();
+        keyByMesh.clear();
         factByKey.clear();
         let ordinal = 0;
         gltf.scene.traverse((object) => {
@@ -185,6 +191,7 @@ function BluecadGlbViewer({ artifactUrl, inspectionCommand = null, onInspectionC
           const fact = meshFact(object, ordinal, currentSessionKey!);
           meshFacts.push(fact);
           meshByKey.set(fact.meshKey, object);
+          keyByMesh.set(object, fact.meshKey);
           factByKey.set(fact.meshKey, fact);
         });
         selectedFact = null;
@@ -205,7 +212,8 @@ function BluecadGlbViewer({ artifactUrl, inspectionCommand = null, onInspectionC
       },
       undefined,
       (error: unknown) => {
-        if (disposed || generationRef.current !== generation) return;
+        if (disposed) return;
+        if (generationRef.current !== generation) return;
         console.error(error);
         setMessage("Unable to load this GLB artifact.");
         clearInspection("error");
@@ -234,8 +242,7 @@ function BluecadGlbViewer({ artifactUrl, inspectionCommand = null, onInspectionC
         selectMesh(null);
         return;
       }
-      const meshKey = Array.from(meshByKey.entries()).find(([, mesh]) => mesh === hit)?.[0] ?? null;
-      selectMesh(meshKey);
+      selectMesh(keyByMesh.get(hit) ?? null);
     };
     const onPointerCancel = () => { pointerDown = null; };
     renderer.domElement.addEventListener("pointerdown", onPointerDown);
@@ -274,6 +281,7 @@ function BluecadGlbViewer({ artifactUrl, inspectionCommand = null, onInspectionC
       renderer.domElement.removeEventListener("pointerup", onPointerUp);
       renderer.domElement.removeEventListener("pointercancel", onPointerCancel);
       meshByKey.clear();
+      keyByMesh.clear();
       factByKey.clear();
       meshFacts = [];
       selectedFact = null;
