@@ -44,6 +44,9 @@ function RunsWorkbench({ workspaceId, onWorkspaceChange }: Props) {
   const artifactsGeneration = useRef(0);
   const currentWorkspace = useRef(workspaceId);
   const currentRun = useRef(selectedId);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const runRefs = useRef(new Map<string, HTMLButtonElement>());
+  const pendingRefreshFocus = useRef<{ runId: string | null } | null>(null);
   currentWorkspace.current = workspaceId;
   currentRun.current = selectedId;
 
@@ -65,6 +68,7 @@ function RunsWorkbench({ workspaceId, onWorkspaceChange }: Props) {
     setDetailError(null);
     setLogsError(null);
     setArtifactsError(null);
+    pendingRefreshFocus.current = null;
   };
 
   const changeWorkspace = (next: string | null) => {
@@ -94,21 +98,35 @@ function RunsWorkbench({ workspaceId, onWorkspaceChange }: Props) {
 
   const loadRuns = (targetWorkspace: string) => {
     const generation = ++listGeneration.current;
+    const focusedRunId = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.runId ?? null : null;
     setRunsState("loading");
     setRunsError(null);
     void listRuns(targetWorkspace).then((rows) => {
       if (!acceptsResponse({ generation, identity: targetWorkspace }, listGeneration.current, currentWorkspace.current ?? "")) return;
       setRuns(rows);
       setRunsState("ready");
-      setSelectedId((current) => chooseSelection(current, rows));
+      setSelectedId((current) => {
+        const next = chooseSelection(current, rows);
+        if (focusedRunId && !rows.some((row) => row.id === focusedRunId)) pendingRefreshFocus.current = { runId: next };
+        return next;
+      });
     }).catch((error: Error) => {
       if (!acceptsResponse({ generation, identity: targetWorkspace }, listGeneration.current, currentWorkspace.current ?? "")) return;
       setRuns([]);
       setSelectedId(null);
       setRunsState("error");
       setRunsError(error.message);
+      if (focusedRunId) pendingRefreshFocus.current = { runId: null };
     });
   };
+
+  useEffect(() => {
+    const pending = pendingRefreshFocus.current;
+    if (!pending) return;
+    pendingRefreshFocus.current = null;
+    if (pending.runId) runRefs.current.get(pending.runId)?.focus();
+    else searchRef.current?.focus();
+  }, [runs, selectedId, runsState]);
 
   useEffect(() => {
     clearRunState();
@@ -205,13 +223,13 @@ function RunsWorkbench({ workspaceId, onWorkspaceChange }: Props) {
       <div className="runs-grid">
         <aside className="runs-list" aria-labelledby="run-list-title">
           <h2 id="run-list-title">Run history</h2>
-          <label>Search<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Label or id" /></label>
+          <label>Search<input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Label or id" /></label>
           <label>Status<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">All statuses</option>{statuses.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
           {runsState === "loading" && <p>Loading runs…</p>}
           {runsState === "error" && <div className="runs-inline-error"><p>Run list failed: {runsError}</p><button onClick={() => workspaceId && loadRuns(workspaceId)}>Retry</button></div>}
           {runsState === "ready" && runs.length === 0 && <p>No persisted runs</p>}
           {hiddenSelection && <p className="runs-note">Selected run hidden by current filter</p>}
-          <div className="runs-list__rows">{filtered.map((run) => <button type="button" key={run.id} className={run.id === selectedId ? "run-row is-selected" : "run-row"} aria-pressed={run.id === selectedId} onClick={() => setSelectedId(run.id)}><span><strong>{run.run_label || run.id}</strong><small>{run.id}</small></span><span className="run-row__meta"><span>{run.status}</span><time>{fmt(run.created_at)}</time></span></button>)}</div>
+          <div className="runs-list__rows">{filtered.map((run) => <button type="button" key={run.id} data-run-id={run.id} ref={(node) => { if (node) runRefs.current.set(run.id, node); else runRefs.current.delete(run.id); }} className={run.id === selectedId ? "run-row is-selected" : "run-row"} aria-pressed={run.id === selectedId} onClick={() => setSelectedId(run.id)}><span><strong>{run.run_label || run.id}</strong><small>{run.id}</small></span><span className="run-row__meta"><span>{run.status}</span><time>{fmt(run.created_at)}</time></span></button>)}</div>
         </aside>
 
         <main className="run-detail">
