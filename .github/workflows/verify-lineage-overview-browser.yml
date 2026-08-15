@@ -1,0 +1,26 @@
+name: LINEAGE Overview Browser Proof
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  verify-lineage-overview:
+    if: github.head_ref == 'verify-087-browser-2fd0330' || github.ref == 'refs/heads/verify-087-browser-2fd0330'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      RUN_LINEAGE_BROWSER_PROOF: "true"
+      TARGET_IMPLEMENTATION_SHA: "2fd0330cda6903029dfc779cab2d031196b9ef81"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run exact-head lineage browser proof
+        run: |
+          python -m pip install --upgrade pip pytest
+          RUN_LINEAGE_BROWSER_PROOF=true TARGET_IMPLEMENTATION_SHA="$TARGET_IMPLEMENTATION_SHA" python -m pytest -q backend/tests/test_lineage_overview_browser_verification.py -s
