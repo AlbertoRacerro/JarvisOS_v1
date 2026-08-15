@@ -47,6 +47,10 @@ jobs:
                   'workspaceMode = "empty";\nawait page.reload({ waitUntil: "domcontentloaded" });\nawait page.getByText("No workspaces are available.", { exact: true }).first().waitFor();\nworkspaceMode = "error";\nawait page.reload({ waitUntil: "domcontentloaded" });\nawait page.getByText(/Workspace discovery failed/).first().waitFor();',
                   'workspaceMode = "empty";\nawait page.reload({ waitUntil: "domcontentloaded" });\nawait openNavigator();\nawait page.getByText("No workspaces are available.", { exact: true }).first().waitFor();\nworkspaceMode = "error";\nawait page.reload({ waitUntil: "domcontentloaded" });\nawait openNavigator();\nawait page.getByText(/Workspace discovery failed/).first().waitFor();',
               ),
+              (
+                  'graphMode = "normal"; freshnessMode = "error";\nawait page.reload({ waitUntil: "domcontentloaded" });\nawait page.getByText(/Freshness is unavailable for this node/).waitFor();\nfreshnessMode = "normal"; nodeMode = "404";\nawait page.reload({ waitUntil: "domcontentloaded" });\nawait page.getByText(/no longer resolvable/).waitFor();',
+                  'graphMode = "normal"; freshnessMode = "error";\nawait page.reload({ waitUntil: "domcontentloaded" });\nawait page.getByRole("button", { name: "Show context", exact: true }).click();\nawait page.getByText(/Freshness is unavailable for this node/).waitFor();\nfreshnessMode = "normal"; nodeMode = "404";\nawait page.reload({ waitUntil: "domcontentloaded" });\nawait page.getByRole("button", { name: "Show context", exact: true }).click();\nawait page.getByText(/no longer resolvable/).waitFor();',
+              ),
           ]
           for old, new in replacements:
               if old not in text:
