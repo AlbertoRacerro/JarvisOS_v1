@@ -24,10 +24,16 @@ for (const [name, value] of Object.entries({ text: "10", bool: true, nil: null, 
   assert(projected.state === "ok" && projected.rejectedKeys.pressure, `${name} value was not rejected`);
 }
 assert(projectAnalyticsRun(run("bad-status", { p: metric(1, "Pa") }, { status: "failed" })).state === "rejected", "non-succeeded run was accepted");
+assert(projectAnalyticsRun(run("null-payload", {}, { output_payload: null })).state === "rejected", "null payload was accepted");
+assert(projectAnalyticsRun(run("oversized-payload", {}, { output_payload: "x".repeat(1_048_577) })).state === "rejected", "oversized payload was accepted");
 assert(projectAnalyticsRun(run("bad-json", {}, { output_payload: "{" })).state === "rejected", "malformed payload was accepted");
 assert(projectAnalyticsRun(run("bad-array", {}, { output_payload: "[]" })).state === "rejected", "array payload was accepted");
 assert(projectAnalyticsRun(run("wrong-schema", {}, { output_payload: JSON.stringify({ schema_version: 2, status: "succeeded", outputs: {} }) })).state === "rejected", "wrong schema was accepted");
+assert(projectAnalyticsRun(run("wrong-envelope-status", {}, { output_payload: JSON.stringify({ schema_version: 1, status: "failed", outputs: {} }) })).state === "rejected", "wrong envelope status was accepted");
+assert(projectAnalyticsRun(run("wrong-outputs-shape", {}, { output_payload: JSON.stringify({ schema_version: 1, status: "succeeded", outputs: [] }) })).state === "rejected", "array outputs shape was accepted");
+assert(projectAnalyticsRun(run("empty-key", { "": metric(1, "Pa") })).state === "rejected", "empty key did not fail closed");
 assert(projectAnalyticsRun(run("blank-unit", { p: metric(1, " ") })).rejectedKeys.p, "blank unit was accepted");
+assert(projectAnalyticsRun(run("oversized-unit", { p: metric(1, "u".repeat(65)) })).rejectedKeys.p, "oversized unit was accepted");
 assert(projectAnalyticsRun(run("oversized-key", { ["x".repeat(161)]: metric(1, "Pa") })).state === "rejected", "oversized key did not fail closed");
 const tooMany = Object.fromEntries(Array.from({ length: MAX_OUTPUT_KEYS + 1 }, (_, index) => [`k${index}`, metric(index, "Pa")]));
 assert(projectAnalyticsRun(run("many", tooMany)).state === "rejected", "output-key cap was not enforced");
