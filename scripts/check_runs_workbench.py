@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,9 +30,10 @@ def self_test() -> None:
     unsafe = "stored_path relative_path"
     if "stored_path" not in unsafe:
         fail("self-test path detector failed")
-    fake = "progress ETA confidence"
-    if not all(token.lower() in fake.lower() for token in ("progress", "eta", "confidence")):
-        fail("self-test fake-authority detector failed")
+    if re.search(r"\beta\b", "metadata", re.IGNORECASE):
+        fail("self-test ETA detector matched metadata")
+    if not re.search(r"\beta\b", "Progress ETA confidence", re.IGNORECASE):
+        fail("self-test ETA detector missed standalone ETA")
 
 
 def check() -> None:
@@ -99,9 +101,11 @@ def check() -> None:
         require(page, needle, label)
 
     lowered = page.lower()
-    for forbidden in ("setinterval", "polling", "live tail", "rerun", "cancel run", "delete run", "create run", "eta", "confidence score", "health score"):
+    for forbidden in ("setinterval", "polling", "live tail", "rerun", "cancel run", "delete run", "create run", "confidence score", "health score"):
         if forbidden in lowered:
             fail(f"forbidden run mutation/fake authority present: {forbidden}")
+    if re.search(r"\beta\b", page, re.IGNORECASE):
+        fail("forbidden run mutation/fake authority present: eta")
     if "dangerouslySetInnerHTML" in page or "react-markdown" in page:
         fail("unsafe payload/log rendering path present")
     if "stored_path" in page or "relative_path" in page:
