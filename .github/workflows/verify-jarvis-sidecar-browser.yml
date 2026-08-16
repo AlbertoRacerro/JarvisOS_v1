@@ -1,0 +1,60 @@
+name: JARVIS-SIDECAR Browser Proof
+
+on:
+  pull_request:
+    branches: [spec/091-jarvis-sidecar-1]
+  workflow_dispatch:
+
+jobs:
+  verify-jarvis-sidecar:
+    if: github.head_ref == 'verify-091-sidecar-3002726' || github.ref == 'refs/heads/verify-091-sidecar-3002726'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TARGET_IMPLEMENTATION_SHA: "3002726f50504b2a5532ff299d45e11736e332ed"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - name: Install proof dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      - name: Materialize exact implementation head
+        run: |
+          git fetch origin spec/091-jarvis-sidecar-1 --depth=200
+          test "$(git rev-parse FETCH_HEAD)" = "$TARGET_IMPLEMENTATION_SHA"
+          git worktree add --detach /tmp/target "$TARGET_IMPLEMENTATION_SHA"
+      - name: Run exact-head deterministic gates
+        working-directory: /tmp/target
+        run: |
+          python scripts/check_spec_status.py --self-test
+          python scripts/check_app_shell.py
+          python scripts/check_ai_threads.py
+          python scripts/check_jarvis_sidecar.py --self-test
+          python scripts/check_jarvis_sidecar.py
+          python -m pytest -q backend/tests/test_ai_threads.py
+      - name: Build exact-head frontend
+        working-directory: /tmp/target/frontend
+        run: |
+          npm ci
+          npm run build
+          npm install --no-save --package-lock=false playwright@1.54.2
+          ./node_modules/.bin/playwright install --with-deps chromium
+      - name: Stage browser proof
+        run: cp backend/tests/test_jarvis_sidecar_browser_verification.mjs /tmp/target/frontend/.jarvis-sidecar-proof.mjs
+      - name: Run browser proof
+        working-directory: /tmp/target/frontend
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 5173 >/tmp/vite.log 2>&1 &
+          VITE_PID=$!
+          trap 'kill $VITE_PID || true' EXIT
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:5173/runs >/dev/null && break; sleep 0.25; done
+          node .jarvis-sidecar-proof.mjs
