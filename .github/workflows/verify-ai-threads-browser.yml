@@ -57,7 +57,13 @@ jobs:
           spec = importlib.util.spec_from_file_location('proof', path)
           module = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(module)
-          Path('/tmp/target/frontend/.ai-threads-proof.mjs').write_text(module.SCRIPT, encoding='utf-8')
+          script = module.SCRIPT
+          old = 'await page.getByRole("button",{name:/Current A/i}).click(); await page.getByText("CURRENT-X",{exact:true}).waitFor();'
+          new = 'await page.getByRole("button",{name:/Thread Y/i}).click(); await page.getByRole("button",{name:/Current A/i}).click(); await page.getByText("CURRENT-X",{exact:true}).waitFor();'
+          if old not in script:
+              raise SystemExit('expected browser-proof sequence not found')
+          script = script.replace(old, new, 1)
+          Path('/tmp/target/frontend/.ai-threads-proof.mjs').write_text(script, encoding='utf-8')
           PY
       - name: Run browser proof
         working-directory: /tmp/target/frontend
