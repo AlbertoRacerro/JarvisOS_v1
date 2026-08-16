@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import re
 import sqlite3
@@ -18,10 +19,11 @@ from app.modules.ai.thread_models import (
     AIThreadSubmitRead,
     AIThreadSummary,
 )
-from app.modules.ai.token_flow_service import create_flow_in_transaction
 from app.modules.events.service import utc_now
 
 _SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
+_TASK_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
+_ROUTE_RE = re.compile(r"^(?:auto|[a-z][a-z0-9_]*:[a-z][a-z0-9_]*)$")
 _MAX_TITLE = 120
 _MAX_PROMPT = 12_000
 _MAX_ASSISTANT = 131_072
@@ -102,31 +104,8 @@ def get_thread(
     with open_sqlite_connection() as connection:
         thread = _require_thread(connection, workspace_id, thread_id)
         rows = connection.execute(
-            """
-            SELECT
-                interaction.id,
-                interaction.request_id,
-                interaction.interaction_index,
-                interaction.user_text,
-                interaction.assistant_text,
-                interaction.assistant_text_truncated,
-                interaction.flow_id,
-                interaction.persistence_state,
-                interaction.persistence_error,
-                interaction.created_at,
-                interaction.updated_at,
-                flow.state AS flow_state,
-                flow.terminal_reason,
-                flow.attempt_count,
-                flow.terminal_attempt_id,
-                capture.proposal_ids_json
-            FROM ai_thread_interactions AS interaction
-            JOIN ai_flows AS flow ON flow.id = interaction.flow_id
-            LEFT JOIN ai_flow_record_captures AS capture ON capture.flow_id = interaction.flow_id
-            WHERE interaction.thread_id = ?
-            ORDER BY interaction.interaction_index DESC
-            LIMIT ?
-            """,
+            _INTERACTION_SELECT + " WHERE interaction.thread_id = ? "
+            "ORDER BY interaction.interaction_index DESC LIMIT ?",
             (thread_id, interaction_limit + 1),
         ).fetchall()
     has_older = len(rows) > interaction_limit
@@ -159,7 +138,7 @@ def submit_interaction(
     )
 
     ensure_ai_settings()
-    existing = _reserve_interaction(
+    duplicate_id = _reserve_interaction(
         workspace_id=workspace_id,
         thread_id=thread_id,
         request_id=request_id,
@@ -167,12 +146,12 @@ def submit_interaction(
         prompt=prompt,
         payload=payload,
     )
-    if existing is not None:
+    if duplicate_id is not None:
         return AIThreadSubmitRead(
             interaction=_read_interaction(
                 workspace_id=workspace_id,
                 thread_id=thread_id,
-                interaction_id=existing,
+                interaction_id=duplicate_id,
             )
         )
 
@@ -183,20 +162,20 @@ def submit_interaction(
         request_digest=request_digest,
     )
 
-    try:
-        outcome = run_ai_task(
-            user_prompt=prompt,
-            task_kind=payload.task_kind,
-            route_class=payload.route_class,
-            context_blocks=None,
-            max_output_tokens=payload.max_tokens,
-            workspace_id=workspace_id,
-            existing_flow_id=flow_id,
-        )
-    except Exception:
-        # The durable interaction->flow identity is intentionally retained. At this
-        # point execution may be ambiguous, so automatic redispatch is forbidden.
-        raise
+    # Until the readiness-mandated internal seam exists, fail closed before any
+    # provider/local execution rather than allow run_ai_task to create a second flow.
+    if "existing_flow_id" not in inspect.signature(run_ai_task).parameters:
+        raise AIThreadConflictError("canonical pre-created-flow execution seam is not available")
+
+    outcome = run_ai_task(
+        user_prompt=prompt,
+        task_kind=payload.task_kind,
+        route_class=payload.route_class,
+        context_blocks=None,
+        max_output_tokens=payload.max_tokens,
+        workspace_id=workspace_id,
+        existing_flow_id=flow_id,
+    )
 
     assistant_text = outcome.response.text if outcome.response is not None else None
     bounded_assistant, truncated = _assistant_snapshot(assistant_text)
@@ -205,7 +184,7 @@ def submit_interaction(
         with open_sqlite_connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
-                row = _require_thread(connection, workspace_id, thread_id)
+                _require_thread(connection, workspace_id, thread_id)
                 updated = connection.execute(
                     """
                     UPDATE ai_thread_interactions
@@ -227,7 +206,7 @@ def submit_interaction(
                     raise AIThreadConflictError("interaction capture state changed concurrently")
                 connection.execute(
                     "UPDATE ai_threads SET last_activity_at = ? WHERE id = ? AND workspace_id = ?",
-                    (now, row["id"], workspace_id),
+                    (now, thread_id, workspace_id),
                 )
                 connection.commit()
             except Exception:
@@ -260,11 +239,7 @@ def _reserve_interaction(
         try:
             _require_thread(connection, workspace_id, thread_id)
             duplicate = connection.execute(
-                """
-                SELECT id, request_digest
-                FROM ai_thread_interactions
-                WHERE thread_id = ? AND request_id = ?
-                """,
+                "SELECT id, request_digest FROM ai_thread_interactions WHERE thread_id = ? AND request_id = ?",
                 (thread_id, request_id),
             ).fetchone()
             if duplicate is not None:
@@ -276,14 +251,11 @@ def _reserve_interaction(
                 return str(duplicate["id"])
 
             index_row = connection.execute(
-                """
-                SELECT COALESCE(MAX(interaction_index), -1) + 1 AS next_index
-                FROM ai_thread_interactions
-                WHERE thread_id = ?
-                """,
+                "SELECT COALESCE(MAX(interaction_index), -1) + 1 AS next_index "
+                "FROM ai_thread_interactions WHERE thread_id = ?",
                 (thread_id,),
             ).fetchone()
-            flow = create_flow_in_transaction(
+            flow_id = _create_flow_in_transaction(
                 connection,
                 task_kind=payload.task_kind,
                 requested_route_class=payload.route_class,
@@ -304,7 +276,7 @@ def _reserve_interaction(
                     request_digest,
                     int(index_row["next_index"]),
                     prompt,
-                    str(flow["id"]),
+                    flow_id,
                     now,
                     now,
                 ),
@@ -317,6 +289,43 @@ def _reserve_interaction(
         except Exception:
             connection.rollback()
             raise
+
+
+def _create_flow_in_transaction(
+    connection: sqlite3.Connection,
+    *,
+    task_kind: str,
+    requested_route_class: str | None,
+    workspace_id: str,
+) -> str:
+    # Temporary in-scope copy of the exact 061a insertion semantics. The terminal
+    # 090 implementation must move this helper into token_flow_service.py and use
+    # that one canonical helper from both create_flow and thread reservation.
+    if not _TASK_RE.fullmatch(task_kind):
+        raise AIThreadError("task_kind is malformed")
+    if requested_route_class is not None and not _ROUTE_RE.fullmatch(requested_route_class):
+        raise AIThreadError("route_class is malformed")
+    workspace_id = _safe_id(workspace_id, "workspace_id")
+    row = connection.execute(
+        "SELECT max_direct_continuations FROM ai_settings WHERE id = 'default'"
+    ).fetchone()
+    if row is None:
+        raise AIThreadConflictError("default ai_settings row is required")
+    snapshot = row["max_direct_continuations"]
+    if isinstance(snapshot, bool) or not isinstance(snapshot, int) or not 0 <= snapshot <= 16:
+        raise AIThreadError("continuation snapshot must be between 0 and 16")
+    flow_id = str(uuid4())
+    now = utc_now()
+    connection.execute(
+        """
+        INSERT INTO ai_flows (
+            id, workspace_id, task_kind, requested_route_class, state,
+            max_direct_continuations_snapshot, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'running', ?, ?, ?)
+        """,
+        (flow_id, workspace_id, task_kind, requested_route_class, snapshot, now, now),
+    )
+    return flow_id
 
 
 def _mark_reserved_dispatching(
@@ -359,18 +368,42 @@ def _mark_reserved_dispatching(
             raise
 
 
+_INTERACTION_SELECT = """
+SELECT
+    interaction.id,
+    interaction.request_id,
+    interaction.interaction_index,
+    interaction.user_text,
+    interaction.assistant_text,
+    interaction.assistant_text_truncated,
+    interaction.flow_id,
+    interaction.persistence_state,
+    interaction.persistence_error,
+    interaction.created_at,
+    interaction.updated_at,
+    flow.state AS flow_state,
+    flow.terminal_reason,
+    flow.attempt_count,
+    flow.terminal_attempt_id,
+    capture.proposal_ids_json
+FROM ai_thread_interactions AS interaction
+JOIN ai_flows AS flow ON flow.id = interaction.flow_id
+LEFT JOIN ai_flow_record_captures AS capture ON capture.flow_id = interaction.flow_id
+"""
+
+
 def _read_interaction(
     *, workspace_id: str, thread_id: str, interaction_id: str
 ) -> AIThreadInteractionRead:
-    detail = get_thread(
-        workspace_id=workspace_id,
-        thread_id=thread_id,
-        interaction_limit=_MAX_INTERACTION_LIMIT,
-    )
-    for interaction in detail.interactions:
-        if interaction.id == interaction_id:
-            return interaction
-    raise AIThreadNotFoundError("thread interaction is not readable")
+    with open_sqlite_connection() as connection:
+        _require_thread(connection, workspace_id, thread_id)
+        row = connection.execute(
+            _INTERACTION_SELECT + " WHERE interaction.id = ? AND interaction.thread_id = ?",
+            (interaction_id, thread_id),
+        ).fetchone()
+    if row is None:
+        raise AIThreadNotFoundError("thread interaction is not readable")
+    return _interaction_from_row(row)
 
 
 def _thread_summary(thread_id: str, workspace_id: str) -> AIThreadSummary:
@@ -380,10 +413,7 @@ def _thread_summary(thread_id: str, workspace_id: str) -> AIThreadSummary:
 
 
 def _require_workspace(connection: sqlite3.Connection, workspace_id: str) -> sqlite3.Row:
-    row = connection.execute(
-        "SELECT id FROM workspaces WHERE id = ?",
-        (workspace_id,),
-    ).fetchone()
+    row = connection.execute("SELECT id FROM workspaces WHERE id = ?", (workspace_id,)).fetchone()
     if row is None:
         raise AIThreadNotFoundError("workspace does not exist")
     return row
@@ -476,8 +506,6 @@ def _best_effort_mark_capture_failed(interaction_id: str, flow_id: str, exc: Exc
             )
             connection.commit()
     except Exception:
-        # Canonical execution evidence is authoritative even if the local marker
-        # cannot be persisted. Never retry execution from this failure path.
         return
 
 
