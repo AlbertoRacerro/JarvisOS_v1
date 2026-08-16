@@ -80,6 +80,9 @@ def open_sqlite_connection() -> Iterator[sqlite3.Connection]:
     connection = sqlite3.connect(database_path)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
+    # Wait instead of failing immediately when another writer holds the lock,
+    # and use WAL so readers and a writer do not block each other. Both reduce
+    # spurious "database is locked" errors under concurrent requests.
     connection.execute("PRAGMA busy_timeout = 5000")
     connection.execute("PRAGMA journal_mode = WAL")
     try:
