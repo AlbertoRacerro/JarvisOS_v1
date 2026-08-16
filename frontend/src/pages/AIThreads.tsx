@@ -44,6 +44,7 @@ export default function AIThreads({ workspaceId }: Props) {
     setThreads([]);
     setSelectedId(null);
     setDetail(null);
+    setSubmitting(false);
     setError(null);
     if (!workspaceId) return;
 
