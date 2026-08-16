@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import {
   createThread,
@@ -29,7 +29,7 @@ type PendingSubmit = Readonly<{
   expectedDigest: string;
 }>;
 
-export function useJarvisSidecar(workspaceId: string | null): ReactNode {
+export function useJarvisSidecar(workspaceId: string | null, contextualContent?: ReactNode): ReactNode {
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ThreadDetail | null>(null);
@@ -46,6 +46,7 @@ export function useJarvisSidecar(workspaceId: string | null): ReactNode {
     setSelectedThreadId(null);
     setDetail(null);
     setPreview(null);
+    setPending(null);
     setError(null);
     if (!workspaceId) return;
     void Promise.all([listThreads(workspaceId), previewThreadContext(workspaceId, DEFAULT_SELECTION)])
@@ -114,22 +115,21 @@ export function useJarvisSidecar(workspaceId: string | null): ReactNode {
     }
   };
 
-  return useMemo(() => (
-    <div className="jarvis-sidecar" data-testid="jarvis-sidecar">
-      <header className="jarvis-sidecar__header">
-        <div><p className="eyebrow">Jarvis advisory</p><strong>Contextual engineering assistant</strong></div>
-        <button type="button" onClick={() => void create()} disabled={!workspaceId}>New thread</button>
-      </header>
-      {!workspaceId ? <p>Select a workspace to use Jarvis.</p> : null}
-      {workspaceId ? <label>Thread<select value={selectedThreadId ?? ""} onChange={(event) => { setSelectedThreadId(event.target.value || null); setError(null); }}><option value="">Select thread</option>{threads.map((thread) => <option key={thread.id} value={thread.id}>{thread.title || "Untitled thread"}</option>)}</select></label> : null}
-      {preview ? <details className="jarvis-sidecar__context"><summary>Context pack · {preview.included_count} records · ~{preview.estimated_token_count} tokens</summary><p>Digest <code>{preview.context_digest ?? "empty"}</code></p><ul>{preview.context_sources_manifest.map((source) => <li key={`${source.type}:${source.id}`}>{source.type ?? "record"}: {source.id ?? source.source}</li>)}</ul></details> : null}
-      {detail ? <ol className="jarvis-sidecar__transcript" aria-label="Jarvis thread transcript">{detail.interactions.map((interaction) => <li key={interaction.id}><p><strong>You</strong> {interaction.user_text}</p><p><strong>Jarvis</strong> {interaction.assistant_text ?? `Execution ${interaction.flow_state}`}</p><small>Flow {interaction.flow_id} · {interaction.persistence_state}</small></li>)}</ol> : null}
-      {error ? <p role="alert">{error}</p> : null}
-      <form onSubmit={(event) => void submit(event)} className="jarvis-sidecar__composer">
-        <label htmlFor="jarvis-prompt">Message</label>
-        <textarea id="jarvis-prompt" value={prompt} onChange={(event) => { setPrompt(event.target.value); if (pending && event.target.value !== pending.prompt) setPending(null); }} maxLength={12000} rows={5} disabled={!selectedThreadId} />
-        <button type="submit" disabled={!selectedThreadId || !prompt.trim() || !preview?.context_digest}>Send with inspected context</button>
-      </form>
-    </div>
-  ), [detail, error, pending, preview, prompt, selectedThreadId, threads, workspaceId]);
+  return <div className="jarvis-sidecar" data-testid="jarvis-sidecar">
+    <header className="jarvis-sidecar__header">
+      <div><p className="eyebrow">Jarvis advisory</p><strong>Contextual engineering assistant</strong></div>
+      <button type="button" onClick={() => void create()} disabled={!workspaceId}>New thread</button>
+    </header>
+    {contextualContent ? <section className="jarvis-sidecar__stage-context" aria-label="Current stage context">{contextualContent}</section> : null}
+    {!workspaceId ? <p>Select a workspace to use Jarvis.</p> : null}
+    {workspaceId ? <label>Thread<select value={selectedThreadId ?? ""} onChange={(event) => { setSelectedThreadId(event.target.value || null); setError(null); }}><option value="">Select thread</option>{threads.map((thread) => <option key={thread.id} value={thread.id}>{thread.title || "Untitled thread"}</option>)}</select></label> : null}
+    {preview ? <details className="jarvis-sidecar__context"><summary>Context pack · {preview.included_count} records · ~{preview.estimated_token_count} tokens</summary><p>Digest <code>{preview.context_digest ?? "empty"}</code></p><ul>{preview.context_sources_manifest.map((source) => <li key={`${source.type}:${source.id}:${source.source}`}>{source.type ?? "record"}: {source.id ?? source.source}</li>)}</ul></details> : null}
+    {detail ? <ol className="jarvis-sidecar__transcript" aria-label="Jarvis thread transcript">{detail.interactions.map((interaction) => <li key={interaction.id}><p><strong>You</strong> {interaction.user_text}</p><p><strong>Jarvis</strong> {interaction.assistant_text ?? `Execution ${interaction.flow_state}`}</p><small>Flow {interaction.flow_id} · {interaction.persistence_state}</small></li>)}</ol> : null}
+    {error ? <p role="alert">{error}</p> : null}
+    <form onSubmit={(event) => void submit(event)} className="jarvis-sidecar__composer">
+      <label htmlFor="jarvis-prompt">Message</label>
+      <textarea id="jarvis-prompt" value={prompt} onChange={(event) => { setPrompt(event.target.value); if (pending && event.target.value !== pending.prompt) setPending(null); }} maxLength={12000} rows={5} disabled={!selectedThreadId} />
+      <button type="submit" disabled={!selectedThreadId || !prompt.trim() || !preview?.context_digest}>Send with inspected context</button>
+    </form>
+  </div>;
 }
