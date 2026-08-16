@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
 import sqlite3
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
 
+import app.modules.ai.thread_service as thread_service
 from app.core.database import initialize_database, open_sqlite_connection
 from app.modules.ai.execution import run_ai_task
 from app.modules.ai.settings import ensure_ai_settings
 from app.modules.ai.thread_models import AIThreadCreate, AIThreadSubmit
-import app.modules.ai.thread_service as thread_service
 from app.modules.ai.thread_service import (
     AIThreadConflictError,
     AIThreadNotFoundError,
