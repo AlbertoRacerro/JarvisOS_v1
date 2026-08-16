@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+import sqlite3
+from types import SimpleNamespace
+
 import pytest
 
 from app.core.database import initialize_database, open_sqlite_connection
 from app.modules.ai.execution import run_ai_task
 from app.modules.ai.settings import ensure_ai_settings
 from app.modules.ai.thread_models import AIThreadCreate, AIThreadSubmit
+import app.modules.ai.thread_service as thread_service
 from app.modules.ai.thread_service import (
     AIThreadConflictError,
     AIThreadNotFoundError,
@@ -118,12 +123,17 @@ def test_cross_workspace_thread_read_fails_closed() -> None:
 def test_precreated_flow_rejects_identity_drift_and_reuse() -> None:
     workspace_id = "workspace-a"
     _bootstrap_workspace(workspace_id)
-    flow = create_flow(task_kind="general", workspace_id=workspace_id)
+    flow = create_flow(
+        task_kind="general",
+        requested_route_class="local:fast",
+        workspace_id=workspace_id,
+    )
     flow_id = str(flow["id"])
 
     validated = validate_existing_flow_for_execution(
         flow_id,
         task_kind="general",
+        requested_route_class="local:fast",
         workspace_id=workspace_id,
     )
     assert validated["attempt_count"] == 0
@@ -132,12 +142,28 @@ def test_precreated_flow_rejects_identity_drift_and_reuse() -> None:
         validate_existing_flow_for_execution(
             flow_id,
             task_kind="general",
+            requested_route_class="local:fast",
             workspace_id="workspace-b",
+        )
+    with pytest.raises(TokenFlowConflictError):
+        validate_existing_flow_for_execution(
+            flow_id,
+            task_kind="review",
+            requested_route_class="local:fast",
+            workspace_id=workspace_id,
+        )
+    with pytest.raises(TokenFlowConflictError):
+        validate_existing_flow_for_execution(
+            flow_id,
+            task_kind="general",
+            requested_route_class="local:smart",
+            workspace_id=workspace_id,
         )
 
     outcome = run_ai_task(
         user_prompt="one execution only",
         task_kind="general",
+        route_class="local:fast",
         workspace_id=workspace_id,
         existing_flow_id=flow_id,
     )
@@ -147,6 +173,7 @@ def test_precreated_flow_rejects_identity_drift_and_reuse() -> None:
         validate_existing_flow_for_execution(
             flow_id,
             task_kind="general",
+            requested_route_class="local:fast",
             workspace_id=workspace_id,
         )
 
@@ -155,3 +182,78 @@ def test_precreated_flow_rejects_identity_drift_and_reuse() -> None:
             "SELECT COUNT(*) AS n FROM ai_jobs WHERE flow_id = ?",
             (flow_id,),
         ).fetchone()["n"] == 1
+
+
+def test_post_execution_snapshot_failure_never_redispatches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-a"
+    _bootstrap_workspace(workspace_id)
+    thread = create_thread(AIThreadCreate(workspace_id=workspace_id))
+    payload = AIThreadSubmit(request_id="request-1", prompt="complete once")
+    original_open = thread_service.open_sqlite_connection
+    open_count = 0
+
+    @contextmanager
+    def flaky_thread_connection():
+        nonlocal open_count
+        open_count += 1
+        if open_count == 3:
+            raise sqlite3.OperationalError("forced post-execution thread snapshot failure")
+        with original_open() as connection:
+            yield connection
+
+    monkeypatch.setattr(thread_service, "open_sqlite_connection", flaky_thread_connection)
+
+    first = submit_interaction(
+        workspace_id=workspace_id,
+        thread_id=thread.id,
+        payload=payload,
+    ).interaction
+    duplicate = submit_interaction(
+        workspace_id=workspace_id,
+        thread_id=thread.id,
+        payload=payload,
+    ).interaction
+
+    assert first.id == duplicate.id
+    assert first.flow_id == duplicate.flow_id
+    assert first.flow_state == "complete"
+    assert first.attempt_count == 1
+    assert first.persistence_state == "capture_failed"
+    assert first.assistant_text is None
+
+    with open_sqlite_connection() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) AS n FROM ai_jobs WHERE flow_id = ?",
+            (first.flow_id,),
+        ).fetchone()["n"] == 1
+
+
+def test_thread_submit_never_serializes_prior_history_as_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-a"
+    _bootstrap_workspace(workspace_id)
+    thread = create_thread(AIThreadCreate(workspace_id=workspace_id))
+    submit_interaction(
+        workspace_id=workspace_id,
+        thread_id=thread.id,
+        payload=AIThreadSubmit(request_id="request-1", prompt="historical turn"),
+    )
+    captured: dict[str, object] = {}
+
+    def fake_run_ai_task(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(response=SimpleNamespace(text="bounded mock"))
+
+    monkeypatch.setattr(thread_service, "run_ai_task", fake_run_ai_task)
+    submit_interaction(
+        workspace_id=workspace_id,
+        thread_id=thread.id,
+        payload=AIThreadSubmit(request_id="request-2", prompt="current turn only"),
+    )
+
+    assert captured["user_prompt"] == "current turn only"
+    assert captured["context_blocks"] is None
+    assert "historical turn" not in str(captured)
