@@ -1,0 +1,32 @@
+name: AI-THREADS Browser Proof
+
+on:
+  pull_request:
+    branches: [spec/090-ai-threads-0]
+  workflow_dispatch:
+
+jobs:
+  verify-ai-threads:
+    if: github.head_ref == 'verify-090-browser-c5b68dc' || github.ref == 'refs/heads/verify-090-browser-c5b68dc'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      RUN_AI_THREADS_BROWSER_PROOF: "true"
+      TARGET_IMPLEMENTATION_SHA: "c5b68dcbfd6f96b9d10308038e6e5b1d06f83067"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+      - name: Install proof dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      - name: Run exact-head AI-THREADS browser proof
+        run: RUN_AI_THREADS_BROWSER_PROOF=true TARGET_IMPLEMENTATION_SHA="$TARGET_IMPLEMENTATION_SHA" python -m pytest -q backend/tests/test_ai_threads_browser_verification.py -s
