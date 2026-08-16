@@ -94,6 +94,7 @@ export default function AIThreads({ workspaceId }: Props) {
   const selectThread = (threadId: string) => {
     stateRef.current = withThread(stateRef.current, threadId);
     pendingSubmitRef.current = null;
+    setSubmitting(false);
     setSelectedId(threadId);
     setDetail(null);
     setError(null);
@@ -111,6 +112,7 @@ export default function AIThreads({ workspaceId }: Props) {
       setThreads(nextThreads);
       stateRef.current = withThread(stateRef.current, created.id);
       pendingSubmitRef.current = null;
+      setSubmitting(false);
       setSelectedId(created.id);
       requestAnimationFrame(() => promptRef.current?.focus());
     } catch {
