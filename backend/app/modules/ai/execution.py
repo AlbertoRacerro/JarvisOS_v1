@@ -65,6 +65,7 @@ from app.modules.ai.token_flow_service import (
     create_flow,
     get_flow,
     transition_flow_state,
+    validate_existing_flow_for_execution,
 )
 from app.modules.ai.token_flow_terminalization import (
     terminalize_assembled_output,
@@ -79,7 +80,7 @@ ROUTE_CLASS_RE = re.compile(r"^[a-z][a-z0-9_]*:[a-z][a-z0-9_]*$")
 
 @dataclass
 class AiTaskOutcome:
-    status: str  # success | provider_error | route_unavailable | validation_error | config_error
+    status: str
     ledger_id: str
     selected_route_class: str | None
     decision: RoutingDecision
@@ -98,8 +99,6 @@ class AiTaskOutcome:
     flow_id: str | None = None
 
 
-# task_kind -> default route. Cloud calls must be opted into explicitly through
-# route_class so task selection cannot silently spend tokens.
 TASK_KIND_DEFAULT_ROUTE: dict[str, str] = {
     "general": "local:fake",
     "test": "local:fake",
@@ -127,7 +126,6 @@ def _local_model(default: str, *env_names: str) -> str:
 
 
 def _default_bindings() -> dict[str, ProviderBinding]:
-    """Load default route bindings from the provider registry config."""
     from app.modules.ai.provider_registry import registry_bindings
 
     return registry_bindings()
@@ -445,6 +443,7 @@ def _run_external_network_task(
     external_blocked_reason: str | None,
     context_build_error: str | None,
     workspace_id: str | None,
+    existing_flow_id: str | None = None,
 ) -> AiTaskOutcome:
     from app.modules.ai.egress_runtime import run_external_task
 
@@ -462,6 +461,7 @@ def _run_external_network_task(
         external_blocked_reason=external_blocked_reason,
         task_type_for=_ai_task_type_for,
         task_prompt_for=_prompt_for_task,
+        existing_flow_id=existing_flow_id,
     )
     outcome = AiTaskOutcome(
         status=external.status,
@@ -521,7 +521,17 @@ def _create_local_flow(
     task_kind: str,
     requested_route_class: str | None,
     workspace_id: str | None,
+    existing_flow_id: str | None = None,
 ) -> str:
+    if existing_flow_id is not None:
+        validate_existing_flow_for_execution(
+            existing_flow_id,
+            task_kind=task_kind,
+            requested_route_class=requested_route_class,
+            workspace_id=workspace_id,
+        )
+        return existing_flow_id
+
     from app.modules.ai.settings import ensure_ai_settings
 
     ensure_ai_settings()
@@ -569,9 +579,7 @@ _LOCAL_CONTINUATION_SENSITIVITY = "S4"
 
 
 def _assembled_local_response(response: AIResponse, body_text: str) -> AIResponse:
-    return response.model_copy(
-        update={"text": body_text, "content": body_text}
-    )
+    return response.model_copy(update={"text": body_text, "content": body_text})
 
 
 def _run_local_continuations(
@@ -592,9 +600,7 @@ def _run_local_continuations(
     bindings: dict[str, ProviderBinding] | None,
     workspace_id: str | None,
 ) -> AiTaskOutcome:
-    from app.modules.ai.token_flow_local_continuation import (
-        plan_local_continuation,
-    )
+    from app.modules.ai.token_flow_local_continuation import plan_local_continuation
 
     current_attempt_id = initial_attempt_id
     current_response = initial_response
@@ -616,9 +622,7 @@ def _run_local_continuations(
                 workspace_id=flow_workspace_id,
                 expected_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
             )
-            current_outcome.response = _assembled_local_response(
-                current_response, assembled.body_text
-            )
+            current_outcome.response = _assembled_local_response(current_response, assembled.body_text)
             return current_outcome
 
         if requested_output_tokens is None or requested_output_tokens <= 0:
@@ -630,9 +634,7 @@ def _run_local_continuations(
                 workspace_id=flow_workspace_id,
                 expected_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
             )
-            current_outcome.response = _assembled_local_response(
-                current_response, assembled.body_text
-            )
+            current_outcome.response = _assembled_local_response(current_response, assembled.body_text)
             return current_outcome
 
         plan = plan_local_continuation(
@@ -654,9 +656,7 @@ def _run_local_continuations(
                 workspace_id=flow_workspace_id,
                 expected_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
             )
-            current_outcome.response = _assembled_local_response(
-                current_response, assembled.body_text
-            )
+            current_outcome.response = _assembled_local_response(current_response, assembled.body_text)
             return current_outcome
 
         binding = plan.binding
@@ -671,9 +671,7 @@ def _run_local_continuations(
             "continuation_flow_id": flow_id,
             "continuation_parent_attempt_id": continuation.parent_attempt_id,
             "continuation_index": continuation.next_continuation_index,
-            "continuation_segment_count": request.metadata.get(
-                "continuation_segment_count"
-            ),
+            "continuation_segment_count": request.metadata.get("continuation_segment_count"),
         }
         if adapter is None:
             evidence = apply_continuation_lineage(
@@ -693,9 +691,7 @@ def _run_local_continuations(
                 requested_route_class=requested_route_class,
                 selected_route_class=binding.route_class,
                 decision=route_decision,
-                prompt_digest=canonical_digest(
-                    {"prompt": request.prompt or ""}
-                ),
+                prompt_digest=canonical_digest({"prompt": request.prompt or ""}),
                 context_digest=context_digest,
                 context_sources=context_sources,
                 response=None,
@@ -717,15 +713,9 @@ def _run_local_continuations(
             )
             return _outcome_with_flow(
                 AiTaskOutcome(
-                    "config_error",
-                    ledger_id,
-                    binding.route_class,
-                    route_decision,
-                    response=_assembled_local_response(
-                        current_response, assembled.body_text
-                    ),
-                    error_type="config_error",
-                    context_digest=context_digest,
+                    "config_error", ledger_id, binding.route_class, route_decision,
+                    response=_assembled_local_response(current_response, assembled.body_text),
+                    error_type="config_error", context_digest=context_digest,
                     context_sources_count=context_sources_count,
                 ),
                 flow_id,
@@ -745,30 +735,20 @@ def _run_local_continuations(
             )
             evidence = apply_continuation_lineage(evidence, continuation)
             ledger_id = _write_ai_job(
-                status="provider_error",
-                task_kind=task_kind,
+                status="provider_error", task_kind=task_kind,
                 requested_route_class=requested_route_class,
-                selected_route_class=binding.route_class,
-                decision=route_decision,
-                prompt_digest=canonical_digest(
-                    {"prompt": request.prompt or ""}
-                ),
-                context_digest=context_digest,
-                context_sources=context_sources,
-                response=None,
-                latency_ms=_elapsed_ms(attempt_started),
-                error_type=type(exc).__name__,
-                route_metadata=route_metadata,
-                fallback_index=0,
-                flow_id=flow_id,
-                evidence=evidence,
+                selected_route_class=binding.route_class, decision=route_decision,
+                prompt_digest=canonical_digest({"prompt": request.prompt or ""}),
+                context_digest=context_digest, context_sources=context_sources,
+                response=None, latency_ms=_elapsed_ms(attempt_started),
+                error_type=type(exc).__name__, route_metadata=route_metadata,
+                fallback_index=0, flow_id=flow_id, evidence=evidence,
                 continuation_decision=continuation,
                 input_tokens_override=usage.input_tokens,
                 output_tokens_override=usage.output_tokens,
             )
             _, assembled = terminalize_assembled_output(
-                flow_id=flow_id,
-                terminal_attempt_id=ledger_id,
+                flow_id=flow_id, terminal_attempt_id=ledger_id,
                 new_state="partial_terminal",
                 terminal_reason="continuation_adapter_exception",
                 workspace_id=flow_workspace_id,
@@ -776,15 +756,9 @@ def _run_local_continuations(
             )
             return _outcome_with_flow(
                 AiTaskOutcome(
-                    "provider_error",
-                    ledger_id,
-                    binding.route_class,
-                    route_decision,
-                    response=_assembled_local_response(
-                        current_response, assembled.body_text
-                    ),
-                    error_type=type(exc).__name__,
-                    context_digest=context_digest,
+                    "provider_error", ledger_id, binding.route_class, route_decision,
+                    response=_assembled_local_response(current_response, assembled.body_text),
+                    error_type=type(exc).__name__, context_digest=context_digest,
                     context_sources_count=context_sources_count,
                 ),
                 flow_id,
@@ -793,8 +767,7 @@ def _run_local_continuations(
         status, error_type = _response_status(response)
         evidence = apply_continuation_lineage(
             local_response_evidence(
-                binding=binding,
-                response=response,
+                binding=binding, response=response,
                 selected_route_class=binding.route_class,
                 outcome_reason=error_type or status,
                 requested_output_ceiling=requested_output_tokens,
@@ -804,29 +777,19 @@ def _run_local_continuations(
             continuation,
         )
         ledger_id = _write_ai_job(
-            status=status,
-            task_kind=task_kind,
+            status=status, task_kind=task_kind,
             requested_route_class=requested_route_class,
-            selected_route_class=binding.route_class,
-            decision=route_decision,
-            prompt_digest=canonical_digest(
-                {"prompt": request.prompt or ""}
-            ),
-            context_digest=context_digest,
-            context_sources=context_sources,
-            response=response,
-            latency_ms=_elapsed_ms(attempt_started),
-            error_type=error_type,
-            route_metadata=route_metadata,
-            fallback_index=0,
-            flow_id=flow_id,
-            evidence=evidence,
+            selected_route_class=binding.route_class, decision=route_decision,
+            prompt_digest=canonical_digest({"prompt": request.prompt or ""}),
+            context_digest=context_digest, context_sources=context_sources,
+            response=response, latency_ms=_elapsed_ms(attempt_started),
+            error_type=error_type, route_metadata=route_metadata,
+            fallback_index=0, flow_id=flow_id, evidence=evidence,
             continuation_decision=continuation,
         )
         if status != "success" or response.text is None:
             _, assembled = terminalize_assembled_output(
-                flow_id=flow_id,
-                terminal_attempt_id=ledger_id,
+                flow_id=flow_id, terminal_attempt_id=ledger_id,
                 new_state="partial_terminal",
                 terminal_reason=f"continuation_{normalize_outcome_reason(error_type or status)}",
                 workspace_id=flow_workspace_id,
@@ -834,15 +797,9 @@ def _run_local_continuations(
             )
             return _outcome_with_flow(
                 AiTaskOutcome(
-                    status,
-                    ledger_id,
-                    binding.route_class,
-                    route_decision,
-                    response=_assembled_local_response(
-                        current_response, assembled.body_text
-                    ),
-                    error_type=error_type,
-                    context_digest=context_digest,
+                    status, ledger_id, binding.route_class, route_decision,
+                    response=_assembled_local_response(current_response, assembled.body_text),
+                    error_type=error_type, context_digest=context_digest,
                     context_sources_count=context_sources_count,
                 ),
                 flow_id,
@@ -855,20 +812,13 @@ def _run_local_continuations(
             effective_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
             workspace_id=flow_workspace_id,
         )
-        normalized_finish = normalize_finish_reason(
-            response.finish_reason,
-            failed=False,
-        )
+        normalized_finish = normalize_finish_reason(response.finish_reason, failed=False)
         current_attempt_id = ledger_id
         current_response = response
         current_outcome = _outcome_with_flow(
             AiTaskOutcome(
-                "success",
-                ledger_id,
-                binding.route_class,
-                route_decision,
-                response=response,
-                context_digest=context_digest,
+                "success", ledger_id, binding.route_class, route_decision,
+                response=response, context_digest=context_digest,
                 context_sources_count=context_sources_count,
             ),
             flow_id,
@@ -876,32 +826,20 @@ def _run_local_continuations(
         if normalized_finish == "length":
             continue
 
-        final_state = (
-            "complete" if normalized_finish == "stop" else "partial_terminal"
-        )
-        terminal_reason = (
-            "completed"
-            if normalized_finish == "stop"
-            else f"continuation_finish_{normalized_finish}"
-        )
+        final_state = "complete" if normalized_finish == "stop" else "partial_terminal"
+        terminal_reason = "completed" if normalized_finish == "stop" else f"continuation_finish_{normalized_finish}"
         _, assembled = terminalize_assembled_output(
-            flow_id=flow_id,
-            terminal_attempt_id=ledger_id,
-            new_state=final_state,
-            terminal_reason=terminal_reason,
+            flow_id=flow_id, terminal_attempt_id=ledger_id,
+            new_state=final_state, terminal_reason=terminal_reason,
             workspace_id=flow_workspace_id,
             expected_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
         )
-        assembled_response = _assembled_local_response(
-            response, assembled.body_text
-        )
+        assembled_response = _assembled_local_response(response, assembled.body_text)
         current_outcome.response = assembled_response
         if normalized_finish == "stop":
             proposed_ids, parse_error = _create_proposed_records_from_response(
-                task_kind=task_kind,
-                response=assembled_response,
-                ledger_id=ledger_id,
-                workspace_id=workspace_id,
+                task_kind=task_kind, response=assembled_response,
+                ledger_id=ledger_id, workspace_id=workspace_id,
             )
             current_outcome.proposed_record_ids = proposed_ids
             current_outcome.records_parse_error = parse_error
@@ -925,6 +863,7 @@ def run_ai_task(
     external_blocked_reason: str | None = None,
     context_build_error: str | None = None,
     workspace_id: str | None = None,
+    existing_flow_id: str | None = None,
 ) -> AiTaskOutcome:
     started = time.perf_counter()
     adapters = adapters if adapters is not None else _default_adapters()
@@ -946,62 +885,40 @@ def run_ai_task(
             external_blocked_reason=external_blocked_reason,
             context_build_error=context_build_error,
             workspace_id=workspace_id,
+            existing_flow_id=existing_flow_id,
         )
 
     flow_id = _create_local_flow(
         task_kind=task_kind,
         requested_route_class=requested_route_class,
         workspace_id=workspace_id,
+        existing_flow_id=existing_flow_id,
     )
 
     if context_build_error is not None:
         bad = RoutingDecision(
             provider_id=early_binding.provider_id if early_binding is not None else None,
             model_id=early_binding.model_id if early_binding is not None else None,
-            blocked=True,
-            blocked_reason="context_build_error",
-            decision_reason=context_build_error,
+            blocked=True, blocked_reason="context_build_error", decision_reason=context_build_error,
         )
         fallback_index = 0 if early_binding is not None else None
         persisted_route = selected_route_class if ROUTE_CLASS_RE.fullmatch(selected_route_class) else None
         evidence = no_execution_evidence(
-            selected_route_class=persisted_route,
-            binding=early_binding,
-            outcome_reason="context_build_error",
-            requested_output_ceiling=max_output_tokens,
-            effective_output_ceiling=None,
-            fallback_index=fallback_index,
+            selected_route_class=persisted_route, binding=early_binding,
+            outcome_reason="context_build_error", requested_output_ceiling=max_output_tokens,
+            effective_output_ceiling=None, fallback_index=fallback_index,
         )
         ledger_id = _write_ai_job(
-            status="config_error",
-            task_kind=task_kind,
+            status="config_error", task_kind=task_kind,
             requested_route_class=requested_route_class,
-            selected_route_class=persisted_route,
-            decision=bad,
-            prompt_digest=prompt_digest,
-            context_digest=None,
-            context_sources=None,
-            response=None,
-            latency_ms=_elapsed_ms(started),
-            error_type="context_build_error",
-            fallback_index=fallback_index,
-            flow_id=flow_id,
-            evidence=evidence,
+            selected_route_class=persisted_route, decision=bad,
+            prompt_digest=prompt_digest, context_digest=None, context_sources=None,
+            response=None, latency_ms=_elapsed_ms(started), error_type="context_build_error",
+            fallback_index=fallback_index, flow_id=flow_id, evidence=evidence,
         )
-        _terminalize_local_flow(
-            flow_id=flow_id,
-            status="config_error",
-            attempt_id=ledger_id,
-            reason="context_build_error",
-        )
+        _terminalize_local_flow(flow_id=flow_id, status="config_error", attempt_id=ledger_id, reason="context_build_error")
         return _outcome_with_flow(
-            AiTaskOutcome(
-                "config_error",
-                ledger_id,
-                selected_route_class,
-                bad,
-                error_type="context_build_error",
-            ),
+            AiTaskOutcome("config_error", ledger_id, selected_route_class, bad, error_type="context_build_error"),
             flow_id,
         )
 
@@ -1011,104 +928,55 @@ def run_ai_task(
         bad = RoutingDecision(
             provider_id=early_binding.provider_id if early_binding is not None else None,
             model_id=early_binding.model_id if early_binding is not None else None,
-            blocked=True,
-            blocked_reason="context_malformed",
-            decision_reason=str(exc),
+            blocked=True, blocked_reason="context_malformed", decision_reason=str(exc),
         )
         fallback_index = 0 if early_binding is not None else None
         persisted_route = selected_route_class if ROUTE_CLASS_RE.fullmatch(selected_route_class) else None
         evidence = no_execution_evidence(
-            selected_route_class=persisted_route,
-            binding=early_binding,
-            outcome_reason="context_malformed",
-            requested_output_ceiling=max_output_tokens,
-            effective_output_ceiling=None,
-            fallback_index=fallback_index,
+            selected_route_class=persisted_route, binding=early_binding,
+            outcome_reason="context_malformed", requested_output_ceiling=max_output_tokens,
+            effective_output_ceiling=None, fallback_index=fallback_index,
         )
         ledger_id = _write_ai_job(
-            status="validation_error",
-            task_kind=task_kind,
-            requested_route_class=requested_route_class,
-            selected_route_class=persisted_route,
-            decision=bad,
-            prompt_digest=prompt_digest,
-            context_digest=None,
-            context_sources=None,
-            response=None,
-            latency_ms=_elapsed_ms(started),
-            error_type="context_malformed",
-            fallback_index=fallback_index,
-            flow_id=flow_id,
-            evidence=evidence,
+            status="validation_error", task_kind=task_kind,
+            requested_route_class=requested_route_class, selected_route_class=persisted_route,
+            decision=bad, prompt_digest=prompt_digest, context_digest=None,
+            context_sources=None, response=None, latency_ms=_elapsed_ms(started),
+            error_type="context_malformed", fallback_index=fallback_index,
+            flow_id=flow_id, evidence=evidence,
         )
-        _terminalize_local_flow(
-            flow_id=flow_id,
-            status="validation_error",
-            attempt_id=ledger_id,
-            reason="context_malformed",
-        )
+        _terminalize_local_flow(flow_id=flow_id, status="validation_error", attempt_id=ledger_id, reason="context_malformed")
         return _outcome_with_flow(
-            AiTaskOutcome(
-                "validation_error",
-                ledger_id,
-                selected_route_class,
-                bad,
-                error_type="context_malformed",
-            ),
+            AiTaskOutcome("validation_error", ledger_id, selected_route_class, bad, error_type="context_malformed"),
             flow_id,
         )
 
-    serialized_context_len = (
-        len(json.dumps(blocks, sort_keys=True, separators=(",", ":"), ensure_ascii=False)) if blocks else 0
-    )
+    serialized_context_len = len(json.dumps(blocks, sort_keys=True, separators=(",", ":"), ensure_ascii=False)) if blocks else 0
     if serialized_context_len > DEFAULT_CONTEXT_BUDGET_CHARS:
         bad = RoutingDecision(
             provider_id=early_binding.provider_id if early_binding is not None else None,
             model_id=early_binding.model_id if early_binding is not None else None,
-            blocked=True,
-            blocked_reason="context_budget_exceeded",
+            blocked=True, blocked_reason="context_budget_exceeded",
             decision_reason=f"context {serialized_context_len} chars exceeds budget {DEFAULT_CONTEXT_BUDGET_CHARS}",
         )
         fallback_index = 0 if early_binding is not None else None
         persisted_route = _flow_requested_route(selected_route_class)
         evidence = no_execution_evidence(
-            selected_route_class=persisted_route,
-            binding=early_binding,
-            outcome_reason="context_budget_exceeded",
-            requested_output_ceiling=max_output_tokens,
-            effective_output_ceiling=None,
-            fallback_index=fallback_index,
+            selected_route_class=persisted_route, binding=early_binding,
+            outcome_reason="context_budget_exceeded", requested_output_ceiling=max_output_tokens,
+            effective_output_ceiling=None, fallback_index=fallback_index,
         )
         ledger_id = _write_ai_job(
-            status="validation_error",
-            task_kind=task_kind,
-            requested_route_class=requested_route_class,
-            selected_route_class=persisted_route,
-            decision=bad,
-            prompt_digest=prompt_digest,
-            context_digest=None,
-            context_sources=None,
-            response=None,
-            latency_ms=_elapsed_ms(started),
-            error_type="context_budget_exceeded",
-            fallback_index=fallback_index,
-            flow_id=flow_id,
-            evidence=evidence,
+            status="validation_error", task_kind=task_kind,
+            requested_route_class=requested_route_class, selected_route_class=persisted_route,
+            decision=bad, prompt_digest=prompt_digest, context_digest=None,
+            context_sources=None, response=None, latency_ms=_elapsed_ms(started),
+            error_type="context_budget_exceeded", fallback_index=fallback_index,
+            flow_id=flow_id, evidence=evidence,
         )
-        _terminalize_local_flow(
-            flow_id=flow_id,
-            status="validation_error",
-            attempt_id=ledger_id,
-            reason="context_budget_exceeded",
-        )
+        _terminalize_local_flow(flow_id=flow_id, status="validation_error", attempt_id=ledger_id, reason="context_budget_exceeded")
         return _outcome_with_flow(
-            AiTaskOutcome(
-                "validation_error",
-                ledger_id,
-                selected_route_class,
-                bad,
-                error_type="context_budget_exceeded",
-            ),
+            AiTaskOutcome("validation_error", ledger_id, selected_route_class, bad, error_type="context_budget_exceeded"),
             flow_id,
         )
 
@@ -1121,38 +989,19 @@ def run_ai_task(
         status = "validation_error" if decision.blocked_reason == "route_class_malformed" else "route_unavailable"
         persisted_route = selected_route_class if ROUTE_CLASS_RE.fullmatch(selected_route_class) else None
         evidence = no_execution_evidence(
-            selected_route_class=persisted_route,
-            binding=None,
-            outcome_reason=status,
-            requested_output_ceiling=max_output_tokens,
-            effective_output_ceiling=None,
+            selected_route_class=persisted_route, binding=None, outcome_reason=status,
+            requested_output_ceiling=max_output_tokens, effective_output_ceiling=None,
         )
         ledger_id = _write_ai_job(
-            status=status,
-            task_kind=task_kind,
-            requested_route_class=requested_route_class,
-            selected_route_class=persisted_route,
-            decision=decision,
-            prompt_digest=prompt_digest,
-            context_digest=context_digest,
-            context_sources=context_sources,
-            response=None,
-            latency_ms=_elapsed_ms(started),
-            error_type=status,
-            flow_id=flow_id,
-            evidence=evidence,
+            status=status, task_kind=task_kind, requested_route_class=requested_route_class,
+            selected_route_class=persisted_route, decision=decision, prompt_digest=prompt_digest,
+            context_digest=context_digest, context_sources=context_sources, response=None,
+            latency_ms=_elapsed_ms(started), error_type=status, flow_id=flow_id, evidence=evidence,
         )
         _terminalize_local_flow(flow_id=flow_id, status=status, attempt_id=ledger_id, reason=status)
         return _outcome_with_flow(
-            AiTaskOutcome(
-                status,
-                ledger_id,
-                selected_route_class,
-                decision,
-                error_type=status,
-                context_digest=context_digest,
-                context_sources_count=context_sources_count,
-            ),
+            AiTaskOutcome(status, ledger_id, selected_route_class, decision, error_type=status,
+                          context_digest=context_digest, context_sources_count=context_sources_count),
             flow_id,
         )
 
@@ -1165,115 +1014,59 @@ def run_ai_task(
         gate_reason = _provider_gate_blocking_reason(attempt_binding)
         if gate_reason is not None:
             config_decision = RoutingDecision(
-                provider_id=attempt_binding.provider_id,
-                model_id=attempt_binding.model_id,
-                blocked=True,
-                blocked_reason="config_error",
+                provider_id=attempt_binding.provider_id, model_id=attempt_binding.model_id,
+                blocked=True, blocked_reason="config_error",
                 decision_reason=f"external provider execution disabled by settings/gate: {gate_reason}",
             )
             evidence = no_execution_evidence(
-                selected_route_class=selected_route_class,
-                binding=attempt_binding,
-                outcome_reason="config_error",
-                requested_output_ceiling=max_output_tokens,
-                effective_output_ceiling=attempt_max,
-                fallback_index=attempt_index,
+                selected_route_class=selected_route_class, binding=attempt_binding,
+                outcome_reason="config_error", requested_output_ceiling=max_output_tokens,
+                effective_output_ceiling=attempt_max, fallback_index=attempt_index,
             )
             ledger_id = _write_ai_job(
-                status="config_error",
-                task_kind=task_kind,
-                requested_route_class=requested_route_class,
-                selected_route_class=selected_route_class,
-                decision=config_decision,
-                prompt_digest=prompt_digest,
-                context_digest=context_digest,
-                context_sources=context_sources,
-                response=None,
-                latency_ms=_elapsed_ms(started),
+                status="config_error", task_kind=task_kind,
+                requested_route_class=requested_route_class, selected_route_class=selected_route_class,
+                decision=config_decision, prompt_digest=prompt_digest, context_digest=context_digest,
+                context_sources=context_sources, response=None, latency_ms=_elapsed_ms(started),
                 error_type="config_error",
-                route_metadata=_chain_metadata(
-                    route_class=selected_route_class,
-                    attempt_index=attempt_index,
-                    binding=attempt_binding,
-                    prior_retryable_error_code=prior_retryable_error_code,
-                ),
-                fallback_index=attempt_index,
-                flow_id=flow_id,
-                evidence=evidence,
+                route_metadata=_chain_metadata(route_class=selected_route_class, attempt_index=attempt_index,
+                                               binding=attempt_binding, prior_retryable_error_code=prior_retryable_error_code),
+                fallback_index=attempt_index, flow_id=flow_id, evidence=evidence,
             )
-            _terminalize_local_flow(
-                flow_id=flow_id,
-                status="config_error",
-                attempt_id=ledger_id,
-                reason="config_error",
-            )
+            _terminalize_local_flow(flow_id=flow_id, status="config_error", attempt_id=ledger_id, reason="config_error")
             return _outcome_with_flow(
-                AiTaskOutcome(
-                    "config_error",
-                    ledger_id,
-                    selected_route_class,
-                    config_decision,
-                    error_type="config_error",
-                    context_digest=context_digest,
-                    context_sources_count=context_sources_count,
-                ),
+                AiTaskOutcome("config_error", ledger_id, selected_route_class, config_decision,
+                              error_type="config_error", context_digest=context_digest,
+                              context_sources_count=context_sources_count),
                 flow_id,
             )
 
         if adapter is None:
             config_decision = RoutingDecision(
-                provider_id=attempt_binding.provider_id,
-                model_id=attempt_binding.model_id,
-                blocked=True,
-                blocked_reason="config_error",
+                provider_id=attempt_binding.provider_id, model_id=attempt_binding.model_id,
+                blocked=True, blocked_reason="config_error",
                 decision_reason=_config_reason(adapter, attempt_binding, attempt_max),
             )
             evidence = no_execution_evidence(
-                selected_route_class=selected_route_class,
-                binding=attempt_binding,
-                outcome_reason="adapter_unavailable",
-                requested_output_ceiling=max_output_tokens,
-                effective_output_ceiling=attempt_max,
-                fallback_index=attempt_index,
+                selected_route_class=selected_route_class, binding=attempt_binding,
+                outcome_reason="adapter_unavailable", requested_output_ceiling=max_output_tokens,
+                effective_output_ceiling=attempt_max, fallback_index=attempt_index,
             )
             ledger_id = _write_ai_job(
-                status="config_error",
-                task_kind=task_kind,
-                requested_route_class=requested_route_class,
-                selected_route_class=selected_route_class,
-                decision=config_decision,
-                prompt_digest=prompt_digest,
-                context_digest=context_digest,
-                context_sources=context_sources,
-                response=None,
-                latency_ms=_elapsed_ms(started),
+                status="config_error", task_kind=task_kind,
+                requested_route_class=requested_route_class, selected_route_class=selected_route_class,
+                decision=config_decision, prompt_digest=prompt_digest, context_digest=context_digest,
+                context_sources=context_sources, response=None, latency_ms=_elapsed_ms(started),
                 error_type="config_error",
-                route_metadata=_chain_metadata(
-                    route_class=selected_route_class,
-                    attempt_index=attempt_index,
-                    binding=attempt_binding,
-                    prior_retryable_error_code=prior_retryable_error_code,
-                ),
-                fallback_index=attempt_index,
-                flow_id=flow_id,
-                evidence=evidence,
+                route_metadata=_chain_metadata(route_class=selected_route_class, attempt_index=attempt_index,
+                                               binding=attempt_binding, prior_retryable_error_code=prior_retryable_error_code),
+                fallback_index=attempt_index, flow_id=flow_id, evidence=evidence,
             )
-            _terminalize_local_flow(
-                flow_id=flow_id,
-                status="config_error",
-                attempt_id=ledger_id,
-                reason="adapter_unavailable",
-            )
+            _terminalize_local_flow(flow_id=flow_id, status="config_error", attempt_id=ledger_id, reason="adapter_unavailable")
             return _outcome_with_flow(
-                AiTaskOutcome(
-                    "config_error",
-                    ledger_id,
-                    selected_route_class,
-                    config_decision,
-                    error_type="config_error",
-                    context_digest=context_digest,
-                    context_sources_count=context_sources_count,
-                ),
+                AiTaskOutcome("config_error", ledger_id, selected_route_class, config_decision,
+                              error_type="config_error", context_digest=context_digest,
+                              context_sources_count=context_sources_count),
                 flow_id,
             )
 
@@ -1293,99 +1086,48 @@ def run_ai_task(
             response = adapter.complete(request)
         except Exception as exc:
             evidence, usage = local_exception_evidence(
-                binding=attempt_binding,
-                prompt=request.prompt or "",
-                selected_route_class=selected_route_class,
-                requested_output_ceiling=max_output_tokens,
-                effective_output_ceiling=attempt_max,
-                fallback_index=attempt_index,
+                binding=attempt_binding, prompt=request.prompt or "",
+                selected_route_class=selected_route_class, requested_output_ceiling=max_output_tokens,
+                effective_output_ceiling=attempt_max, fallback_index=attempt_index,
             )
             ledger_id = _write_ai_job(
-                status="provider_error",
-                task_kind=task_kind,
-                requested_route_class=requested_route_class,
-                selected_route_class=selected_route_class,
-                decision=attempt_decision,
-                prompt_digest=prompt_digest,
-                context_digest=context_digest,
-                context_sources=context_sources,
-                response=None,
-                latency_ms=_elapsed_ms(started),
+                status="provider_error", task_kind=task_kind,
+                requested_route_class=requested_route_class, selected_route_class=selected_route_class,
+                decision=attempt_decision, prompt_digest=prompt_digest, context_digest=context_digest,
+                context_sources=context_sources, response=None, latency_ms=_elapsed_ms(started),
                 error_type=type(exc).__name__,
-                route_metadata=_chain_metadata(
-                    route_class=selected_route_class,
-                    attempt_index=attempt_index,
-                    binding=attempt_binding,
-                    prior_retryable_error_code=prior_retryable_error_code,
-                ),
-                fallback_index=attempt_index,
-                flow_id=flow_id,
-                evidence=evidence,
-                input_tokens_override=usage.input_tokens,
-                output_tokens_override=usage.output_tokens,
+                route_metadata=_chain_metadata(route_class=selected_route_class, attempt_index=attempt_index,
+                                               binding=attempt_binding, prior_retryable_error_code=prior_retryable_error_code),
+                fallback_index=attempt_index, flow_id=flow_id, evidence=evidence,
+                input_tokens_override=usage.input_tokens, output_tokens_override=usage.output_tokens,
             )
-            _terminalize_local_flow(
-                flow_id=flow_id,
-                status="provider_error",
-                attempt_id=ledger_id,
-                reason=type(exc).__name__,
-            )
+            _terminalize_local_flow(flow_id=flow_id, status="provider_error", attempt_id=ledger_id, reason=type(exc).__name__)
             return _outcome_with_flow(
-                AiTaskOutcome(
-                    "provider_error",
-                    ledger_id,
-                    selected_route_class,
-                    attempt_decision,
-                    error_type=type(exc).__name__,
-                    context_digest=context_digest,
-                    context_sources_count=context_sources_count,
-                ),
+                AiTaskOutcome("provider_error", ledger_id, selected_route_class, attempt_decision,
+                              error_type=type(exc).__name__, context_digest=context_digest,
+                              context_sources_count=context_sources_count),
                 flow_id,
             )
 
         status, error_type = _response_status(response)
         evidence = local_response_evidence(
-            binding=attempt_binding,
-            response=response,
-            selected_route_class=selected_route_class,
-            outcome_reason=error_type or status,
-            requested_output_ceiling=max_output_tokens,
-            effective_output_ceiling=attempt_max,
-            fallback_index=attempt_index,
+            binding=attempt_binding, response=response, selected_route_class=selected_route_class,
+            outcome_reason=error_type or status, requested_output_ceiling=max_output_tokens,
+            effective_output_ceiling=attempt_max, fallback_index=attempt_index,
         )
         ledger_id = _write_ai_job(
-            status=status,
-            task_kind=task_kind,
-            requested_route_class=requested_route_class,
-            selected_route_class=selected_route_class,
-            decision=attempt_decision,
-            prompt_digest=prompt_digest,
-            context_digest=context_digest,
-            context_sources=context_sources,
-            response=response,
-            latency_ms=_elapsed_ms(started),
-            error_type=error_type,
-            route_metadata=_chain_metadata(
-                route_class=selected_route_class,
-                attempt_index=attempt_index,
-                binding=attempt_binding,
-                prior_retryable_error_code=prior_retryable_error_code,
-            ),
-            fallback_index=attempt_index,
-            flow_id=flow_id,
-            evidence=evidence,
+            status=status, task_kind=task_kind, requested_route_class=requested_route_class,
+            selected_route_class=selected_route_class, decision=attempt_decision,
+            prompt_digest=prompt_digest, context_digest=context_digest, context_sources=context_sources,
+            response=response, latency_ms=_elapsed_ms(started), error_type=error_type,
+            route_metadata=_chain_metadata(route_class=selected_route_class, attempt_index=attempt_index,
+                                           binding=attempt_binding, prior_retryable_error_code=prior_retryable_error_code),
+            fallback_index=attempt_index, flow_id=flow_id, evidence=evidence,
         )
         last_outcome = _outcome_with_flow(
-            AiTaskOutcome(
-                status,
-                ledger_id,
-                selected_route_class,
-                attempt_decision,
-                response,
-                error_type=error_type,
-                context_digest=context_digest,
-                context_sources_count=context_sources_count,
-            ),
+            AiTaskOutcome(status, ledger_id, selected_route_class, attempt_decision, response,
+                          error_type=error_type, context_digest=context_digest,
+                          context_sources_count=context_sources_count),
             flow_id,
         )
         retryable_error_code = _retryable_error_code(response)
@@ -1393,53 +1135,30 @@ def run_ai_task(
             prior_retryable_error_code = retryable_error_code
             continue
 
-        normalized_finish = normalize_finish_reason(
-            response.finish_reason, failed=False
-        )
-        if (
-            status == "success"
-            and normalized_finish == "length"
-            and bool(response.text)
-        ):
+        normalized_finish = normalize_finish_reason(response.finish_reason, failed=False)
+        if status == "success" and normalized_finish == "length" and bool(response.text):
             store_protected_segment(
-                flow_id=flow_id,
-                originating_attempt_id=ledger_id,
-                body_text=str(response.text),
+                flow_id=flow_id, originating_attempt_id=ledger_id, body_text=str(response.text),
                 effective_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
                 workspace_id=get_flow(flow_id)["workspace_id"],
             )
             return _run_local_continuations(
-                flow_id=flow_id,
-                initial_attempt_id=ledger_id,
-                initial_response=response,
-                initial_outcome=last_outcome,
-                original_prompt=request.prompt or "",
-                task_kind=task_kind,
-                requested_route_class=requested_route_class,
-                selected_route_class=selected_route_class,
-                context_digest=context_digest,
-                context_sources=context_sources,
-                context_sources_count=context_sources_count,
-                requested_output_tokens=attempt_max,
-                adapters=adapters,
-                bindings=bindings,
+                flow_id=flow_id, initial_attempt_id=ledger_id, initial_response=response,
+                initial_outcome=last_outcome, original_prompt=request.prompt or "",
+                task_kind=task_kind, requested_route_class=requested_route_class,
+                selected_route_class=selected_route_class, context_digest=context_digest,
+                context_sources=context_sources, context_sources_count=context_sources_count,
+                requested_output_tokens=attempt_max, adapters=adapters, bindings=bindings,
                 workspace_id=workspace_id,
             )
 
         _terminalize_local_flow(
-            flow_id=flow_id,
-            status=status,
-            attempt_id=ledger_id,
-            reason=error_type,
-            finish_reason=response.finish_reason,
-            response_text=response.text,
+            flow_id=flow_id, status=status, attempt_id=ledger_id, reason=error_type,
+            finish_reason=response.finish_reason, response_text=response.text,
         )
         if status == "success" and normalized_finish == "stop":
             proposed_record_ids, records_parse_error = _create_proposed_records_from_response(
-                task_kind=task_kind,
-                response=response,
-                ledger_id=ledger_id,
-                workspace_id=workspace_id,
+                task_kind=task_kind, response=response, ledger_id=ledger_id, workspace_id=workspace_id,
             )
             last_outcome.proposed_record_ids = proposed_record_ids
             last_outcome.records_parse_error = records_parse_error
@@ -1448,4 +1167,3 @@ def run_ai_task(
     if last_outcome is not None:
         return last_outcome
     raise RuntimeError("provider execution reached unreachable empty chain")
-
