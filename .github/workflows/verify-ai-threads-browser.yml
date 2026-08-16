@@ -43,8 +43,8 @@ jobs:
         working-directory: /tmp/target/frontend
         run: |
           npm ci
-          ./node_modules/.bin/tsc src/components/threads/threadState.ts src/components/threads/threadStateHarness.ts --target ES2022 --module commonjs --moduleResolution node --skipLibCheck --outDir /tmp/harness
-          node /tmp/harness/threadStateHarness.js
+          ./node_modules/.bin/esbuild src/components/threads/threadStateHarness.ts --bundle --platform=node --format=cjs --outfile=/tmp/threadStateHarness.cjs
+          node /tmp/threadStateHarness.cjs
           npm run build
           npm install --no-save --package-lock=false playwright@1.54.2
           ./node_modules/.bin/playwright install --with-deps chromium
