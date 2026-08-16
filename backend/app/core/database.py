@@ -4,6 +4,11 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.core.ai_thread_schema import (
+    AI_THREAD_SCHEMA_INDEX_STATEMENTS,
+    AI_THREAD_SCHEMA_MIGRATION_RECORD,
+    AI_THREAD_SCHEMA_STATEMENTS,
+)
 from app.core.cad_link_schema import (
     CAD_LINK_SCHEMA_INDEX_STATEMENTS,
     CAD_LINK_SCHEMA_MIGRATION_RECORD,
@@ -75,9 +80,6 @@ def open_sqlite_connection() -> Iterator[sqlite3.Connection]:
     connection = sqlite3.connect(database_path)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
-    # Wait instead of failing immediately when another writer holds the lock,
-    # and use WAL so readers and a writer do not block each other. Both reduce
-    # spurious "database is locked" errors under concurrent requests.
     connection.execute("PRAGMA busy_timeout = 5000")
     connection.execute("PRAGMA journal_mode = WAL")
     try:
@@ -100,6 +102,8 @@ def initialize_database() -> DatabaseInfo:
             connection.execute(statement)
         for statement in GRADE_SCHEMA_STATEMENTS:
             connection.execute(statement)
+        for statement in AI_THREAD_SCHEMA_STATEMENTS:
+            connection.execute(statement)
         for statement in [
             *SCHEMA_MIGRATION_STATEMENTS,
             *EGRESS_SCHEMA_MIGRATION_STATEMENTS,
@@ -121,6 +125,8 @@ def initialize_database() -> DatabaseInfo:
         for statement in TOKEN_FLOW_SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         for statement in GRADE_SCHEMA_INDEX_STATEMENTS:
+            connection.execute(statement)
+        for statement in AI_THREAD_SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         if _sqlite_fts5_available(connection):
             for statement in SCHEMA_FTS_STATEMENTS:
@@ -160,6 +166,8 @@ def is_database_initialized() -> bool:
         "ai_flow_record_captures",
         "ai_flow_grade_subjects",
         "ai_flow_grade_events",
+        "ai_threads",
+        "ai_thread_interactions",
         "sensitivity_labels",
         "sanitized_derivatives",
         "egress_prompt_derivatives",
@@ -246,6 +254,7 @@ def _record_schema_migrations(connection: sqlite3.Connection) -> None:
         EGRESS_SCHEMA_MIGRATION_RECORD,
         TOKEN_FLOW_SCHEMA_MIGRATION_RECORD,
         GRADE_SCHEMA_MIGRATION_RECORD,
+        AI_THREAD_SCHEMA_MIGRATION_RECORD,
     ]
     for record in records:
         connection.execute(
