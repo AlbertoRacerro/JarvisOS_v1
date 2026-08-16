@@ -156,7 +156,29 @@ def submit_interaction(
             )
         )
 
-    context_blocks = _context_blocks_for_new_submit(workspace_id, payload)
+    try:
+        context_blocks = _context_blocks_for_new_submit(workspace_id, payload)
+    except AIThreadConflictError:
+        # A concurrent request with the same immutable request semantics may have
+        # reserved while this request rebuilt its context pack. Re-read that
+        # durable identity before reporting context drift so retries never spend
+        # twice merely because records changed after the first dispatch began.
+        duplicate_id = _find_existing_interaction(
+            workspace_id=workspace_id,
+            thread_id=thread_id,
+            request_id=request_id,
+            request_digest=request_digest,
+        )
+        if duplicate_id is not None:
+            return AIThreadSubmitRead(
+                interaction=_read_interaction(
+                    workspace_id=workspace_id,
+                    thread_id=thread_id,
+                    interaction_id=duplicate_id,
+                )
+            )
+        raise
+
     ensure_ai_settings()
     duplicate_id = _reserve_interaction(
         workspace_id=workspace_id,
