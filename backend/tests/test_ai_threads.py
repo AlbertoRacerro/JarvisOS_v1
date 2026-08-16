@@ -208,7 +208,9 @@ def test_post_execution_snapshot_failure_never_redispatches(
     def flaky_thread_connection():
         nonlocal open_count
         open_count += 1
-        if open_count == 3:
+        # 091 adds an idempotency lookup before reservation. The fourth open is
+        # still the semantic target: post-execution assistant snapshot capture.
+        if open_count == 4:
             raise sqlite3.OperationalError("forced post-execution thread snapshot failure")
         with original_open() as connection:
             yield connection
