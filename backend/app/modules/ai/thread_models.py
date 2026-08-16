@@ -14,7 +14,7 @@ class AIThreadSubmit(BaseModel):
     request_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
     prompt: str = Field(min_length=1, max_length=12000)
     task_kind: str = Field(default="general", pattern=r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
-    route_class: str | None = Field(default=None, pattern=r"^(?:auto|[a-z][a-z0-9_]*:[a-z][a-z0-9_]*)$")
+    route_class: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*:[a-z][a-z0-9_]*$")
     max_tokens: int | None = Field(default=None, gt=0)
 
 
