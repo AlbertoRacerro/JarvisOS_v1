@@ -36,11 +36,25 @@ jobs:
         working-directory: /tmp/target
         run: |
           python scripts/check_spec_status.py --self-test
-          python scripts/check_app_shell.py
-          python scripts/check_ai_threads.py
+          python scripts/check_ai_threads.py --self-test
           python scripts/check_jarvis_sidecar.py --self-test
           python scripts/check_jarvis_sidecar.py
           python -m pytest -q backend/tests/test_ai_threads.py
+          python - <<'PY'
+          from pathlib import Path
+          app = Path('frontend/src/App.tsx').read_text(encoding='utf-8')
+          layout = Path('frontend/src/components/Layout.tsx').read_text(encoding='utf-8')
+          sidecar = Path('frontend/src/components/shell/ContextualSidecar.tsx').read_text(encoding='utf-8')
+          required = {
+              'App sidecar composition': 'sidecar: jarvisSidecar' in app and 'AnalyticsDockContent' in app,
+              'Layout sidecar toggle': 'aria-controls="shell-sidecar"' in layout and 'closeSidecar' in layout,
+              'Escape close': 'event.key === "Escape"' in sidecar,
+              'sidecar focus target': 'headingRef.current?.focus()' in sidecar,
+          }
+          missing = [name for name, ok in required.items() if not ok]
+          if missing:
+              raise SystemExit('preservation invariant failed: ' + ', '.join(missing))
+          PY
       - name: Build exact-head frontend
         working-directory: /tmp/target/frontend
         run: |
