@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      TARGET_IMPLEMENTATION_SHA: "543342595e0453423c3d2712fe1cca1e5f158c0a"
+      TARGET_IMPLEMENTATION_SHA: "5db682c9ab340b7a8ee4a71a5bb6a1e5bfec8a19"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,6 +39,17 @@ jobs:
           python scripts/check_ai_threads.py --self-test
           python scripts/check_ai_threads.py
           python -m pytest -q backend/tests/test_ai_threads.py backend/tests/test_ai_egress_schema.py backend/tests/test_flow_grade_schema_registry.py
+          PYTHONPATH=backend python - <<'PY'
+          from pydantic import ValidationError
+          from app.modules.ai.thread_models import AIThreadSubmit
+          try:
+              AIThreadSubmit(request_id="route-grammar", prompt="x", route_class="auto")
+          except ValidationError:
+              pass
+          else:
+              raise SystemExit("AIThreadSubmit incorrectly accepts non-canonical route 'auto'")
+          AIThreadSubmit(request_id="route-grammar-ok", prompt="x", route_class="local:fake")
+          PY
       - name: Run external 059b thread evidence
         run: |
           PYTHONPATH=/tmp/target/backend:/tmp/target/backend/tests python -m pytest -q backend/tests/test_ai_threads_external_verification.py
