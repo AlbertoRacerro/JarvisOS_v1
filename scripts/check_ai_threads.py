@@ -118,7 +118,7 @@ def check_sources(reader=_read, *, changed_paths: set[str] | None = None) -> Non
     threads = reader("backend/app/modules/ai/thread_service.py")
     schema = reader("backend/app/core/ai_thread_schema.py")
     task_models = reader("backend/app/modules/ai/models.py")
-    memory_api = reader("backend/app/modules/memory/api.py")
+    memory_api = reader("backend/app/modules/memory/routes.py")
     client = reader("frontend/src/api/threads.ts")
     stage = reader("frontend/src/pages/AIThreads.tsx")
     routes = reader("frontend/src/app/routes.ts")
@@ -234,7 +234,7 @@ def _self_test() -> None:
             "workspace_id flow_id request_id UNIQUE(thread_id, request_id) UNIQUE(flow_id)\n"
         ),
         "backend/app/modules/ai/models.py": "class AITaskRunRequest: pass\n",
-        "backend/app/modules/memory/api.py": "proposal\n",
+        "backend/app/modules/memory/routes.py": "proposal\n",
         "frontend/src/api/threads.ts": "/ai/threads\n",
         "frontend/src/pages/AIThreads.tsx": "workspaceId\n",
         "frontend/src/app/routes.ts": '{ id: "ai-threads", path: "/ai-threads", title: "AI Threads" }\n',
