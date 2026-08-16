@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Conformance checks for spec 090 AI-THREADS-0.
 
-This checker is intentionally source-level and dependency-free. Runtime/browser tests
-remain authoritative for behaviour; these checks freeze the minimum cross-file seams
-and reject known scope regressions that are easy to reintroduce accidentally.
+Source-level checks freeze the minimum cross-file seams; runtime/browser tests remain
+authoritative for behavior.
 """
 
 from __future__ import annotations
@@ -38,24 +37,21 @@ def check_sources(reader=_read) -> None:
     execution = reader("backend/app/modules/ai/execution.py")
     egress = reader("backend/app/modules/ai/egress_runtime.py")
     threads = reader("backend/app/modules/ai/thread_service.py")
-    schema = reader("backend/app/modules/ai/thread_schema.py")
+    schema = reader("backend/app/core/ai_thread_schema.py")
     task_models = reader("backend/app/modules/ai/models.py")
     memory_api = reader("backend/app/modules/memory/api.py")
-    client = reader("frontend/src/api/client.ts")
-    stage = reader("frontend/src/workbenches/AiThreadsStage.tsx")
+    client = reader("frontend/src/api/threads.ts")
+    stage = reader("frontend/src/pages/AIThreads.tsx")
 
-    # Readiness-mandated single token-flow creation authority.
     _require(token_flow, "def create_flow_in_transaction", "shared transactional flow helper")
     _require(threads, "create_flow_in_transaction", "thread reuse of shared flow helper")
     _forbid(threads, "INSERT INTO ai_flows", "duplicate token-flow insert in thread service")
 
-    # Pre-created flow seam must reach the shared egress path; public task input must not expose it.
     _require(execution, "existing_flow_id", "run_ai_task pre-created flow seam")
     _require(egress, "existing_flow_id", "egress pre-created flow seam")
     _require(token_flow, "validate_existing_flow_for_execution", "pre-created flow validation")
     _forbid(task_models, "existing_flow_id", "public task request pre-created-flow control")
 
-    # Thread durability and idempotency stay explicit and workspace scoped.
     for needle, label in (
         ("workspace_id", "workspace scope"),
         ("flow_id", "durable flow identity"),
@@ -66,8 +62,7 @@ def check_sources(reader=_read) -> None:
         _require(schema + threads, needle, label)
     _require(memory_api, "proposal", "proposal API continuity")
 
-    # UI must remain a dedicated non-primary workbench over typed API calls, not fabricated provider state.
-    _require(client, "ai/threads", "AI thread client route")
+    _require(client, "/ai/threads", "AI thread client route")
     _require(stage, "workspaceId", "App-owned workspace consumption")
     _forbid(stage, "fetch(\"https://", "direct external-provider fetch from UI")
 
@@ -78,17 +73,14 @@ def _self_test() -> None:
         "backend/app/modules/ai/execution.py": "def run_ai_task(existing_flow_id=None): pass\n",
         "backend/app/modules/ai/egress_runtime.py": "def run_external_task(existing_flow_id=None): pass\n",
         "backend/app/modules/ai/thread_service.py": "create_flow_in_transaction()\nworkspace_id flow_id request_id\n",
-        "backend/app/modules/ai/thread_schema.py": "workspace_id flow_id request_id UNIQUE(thread_id, request_id) UNIQUE(flow_id)\n",
+        "backend/app/core/ai_thread_schema.py": "workspace_id flow_id request_id UNIQUE(thread_id, request_id) UNIQUE(flow_id)\n",
         "backend/app/modules/ai/models.py": "class AITaskRunRequest: pass\n",
         "backend/app/modules/memory/api.py": "proposal\n",
-        "frontend/src/api/client.ts": "ai/threads\n",
-        "frontend/src/workbenches/AiThreadsStage.tsx": "workspaceId\n",
+        "frontend/src/api/threads.ts": "/ai/threads\n",
+        "frontend/src/pages/AIThreads.tsx": "workspaceId\n",
     }
 
-    def reader(path: str) -> str:
-        return base[path]
-
-    check_sources(reader)
+    check_sources(lambda path: base[path])
 
     bad = dict(base)
     bad["backend/app/modules/ai/thread_service.py"] += "INSERT INTO ai_flows\n"
@@ -122,7 +114,6 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
-
     try:
         if args.self_test:
             _self_test()
