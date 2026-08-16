@@ -66,43 +66,113 @@ class TokenFlowConflictError(TokenFlowError):
     pass
 
 
+def create_flow_in_transaction(
+    connection: sqlite3.Connection,
+    *,
+    task_kind: str,
+    requested_route_class: str | None = None,
+    workspace_id: str | None = None,
+) -> str:
+    """Create one canonical running flow inside the caller-owned transaction."""
+
+    task_kind = _safe(task_kind, TASK_RE, "task_kind")
+    if requested_route_class is not None:
+        requested_route_class = _safe(requested_route_class, ROUTE_RE, "route")
+    if workspace_id is not None:
+        workspace_id = _safe(workspace_id, ID_RE, "workspace_id")
+    row = connection.execute(
+        "SELECT max_direct_continuations FROM ai_settings WHERE id = 'default'"
+    ).fetchone()
+    if row is None:
+        raise TokenFlowConflictError("default ai_settings row is required")
+    snapshot = _nonnegative_int(row["max_direct_continuations"], "snapshot")
+    if snapshot > 16:
+        raise TokenFlowError("continuation snapshot must be between 0 and 16")
+    flow_id, now = str(uuid4()), utc_now()
+    connection.execute(
+        """
+        INSERT INTO ai_flows (
+            id, workspace_id, task_kind, requested_route_class, state,
+            max_direct_continuations_snapshot, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'running', ?, ?, ?)
+        """,
+        (flow_id, workspace_id, task_kind, requested_route_class, snapshot, now, now),
+    )
+    return flow_id
+
+
 def create_flow(
     *,
     task_kind: str,
     requested_route_class: str | None = None,
     workspace_id: str | None = None,
 ) -> Flow:
-    task_kind = _safe(task_kind, TASK_RE, "task_kind")
-    if requested_route_class is not None:
-        requested_route_class = _safe(requested_route_class, ROUTE_RE, "route")
-    if workspace_id is not None:
-        workspace_id = _safe(workspace_id, ID_RE, "workspace_id")
-    flow_id, now = str(uuid4()), utc_now()
     with open_sqlite_connection() as connection:
         connection.execute("BEGIN IMMEDIATE")
         try:
-            row = connection.execute(
-                "SELECT max_direct_continuations FROM ai_settings WHERE id = 'default'"
-            ).fetchone()
-            if row is None:
-                raise TokenFlowConflictError("default ai_settings row is required")
-            snapshot = _nonnegative_int(row["max_direct_continuations"], "snapshot")
-            if snapshot > 16:
-                raise TokenFlowError("continuation snapshot must be between 0 and 16")
-            connection.execute(
-                """
-                INSERT INTO ai_flows (
-                    id, workspace_id, task_kind, requested_route_class, state,
-                    max_direct_continuations_snapshot, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, 'running', ?, ?, ?)
-                """,
-                (flow_id, workspace_id, task_kind, requested_route_class, snapshot, now, now),
+            flow_id = create_flow_in_transaction(
+                connection,
+                task_kind=task_kind,
+                requested_route_class=requested_route_class,
+                workspace_id=workspace_id,
             )
             connection.commit()
         except Exception:
             connection.rollback()
             raise
     return get_flow(flow_id)
+
+
+def validate_existing_flow_for_execution(
+    flow_id: str,
+    *,
+    task_kind: str,
+    requested_route_class: str | None = None,
+    workspace_id: str | None = None,
+) -> Flow:
+    """Fail closed unless a pre-created flow is pristine and exactly request-bound."""
+
+    flow_id = _safe(flow_id, ID_RE, "flow_id")
+    task_kind = _safe(task_kind, TASK_RE, "task_kind")
+    if requested_route_class is not None:
+        requested_route_class = _safe(requested_route_class, ROUTE_RE, "route")
+    if workspace_id is not None:
+        workspace_id = _safe(workspace_id, ID_RE, "workspace_id")
+    with open_sqlite_connection() as connection:
+        row = _require_flow(connection, flow_id)
+        if row["state"] != "running":
+            raise TokenFlowConflictError("pre-created flow must still be running")
+        if row["task_kind"] != task_kind:
+            raise TokenFlowConflictError("pre-created flow task kind does not match request")
+        if row["workspace_id"] != workspace_id:
+            raise TokenFlowConflictError("pre-created flow workspace does not match request")
+        if row["requested_route_class"] != requested_route_class:
+            raise TokenFlowConflictError("pre-created flow requested route does not match request")
+        if _nonnegative_int(row["attempt_count"], "attempt_count") != 0:
+            raise TokenFlowConflictError("pre-created flow already owns an attempt")
+        attempts = connection.execute(
+            "SELECT COUNT(*) AS n FROM ai_jobs WHERE flow_id = ?", (flow_id,)
+        ).fetchone()
+        if attempts is None or int(attempts["n"]) != 0:
+            raise TokenFlowConflictError("pre-created flow already owns an ai_job")
+        if any(
+            row[field] is not None
+            for field in (
+                "terminal_reason",
+                "terminal_attempt_id",
+                "completed_at",
+                "cancelled_at",
+                "final_accounting_digest",
+                "final_output_digest",
+            )
+        ):
+            raise TokenFlowConflictError("pre-created flow already carries terminal metadata")
+        owners = connection.execute(
+            "SELECT COUNT(*) AS n FROM ai_thread_interactions WHERE flow_id = ?", (flow_id,)
+        ).fetchone()
+        if owners is not None and int(owners["n"]) > 1:
+            raise TokenFlowConflictError("pre-created flow has conflicting thread ownership")
+        return _decode_flow(row)
 
 
 def get_flow(flow_id: str) -> Flow:
@@ -952,4 +1022,3 @@ def _output_digest(value: object) -> str:
 
 def _json(value: object) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-
