@@ -22,12 +22,14 @@ import {
 } from "../components/threads/threadState";
 
 type Props = Readonly<{ workspaceId: string | null }>;
+type PendingSubmit = Readonly<{ threadId: string; prompt: string; requestId: string }>;
 
 const makeRequestId = () => crypto.randomUUID();
 
 export default function AIThreads({ workspaceId }: Props) {
   const stateRef = useRef<ThreadState>(initialThreadState());
   const promptRef = useRef<HTMLTextAreaElement>(null);
+  const pendingSubmitRef = useRef<PendingSubmit | null>(null);
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ThreadDetail | null>(null);
@@ -38,6 +40,7 @@ export default function AIThreads({ workspaceId }: Props) {
 
   useEffect(() => {
     stateRef.current = withWorkspace(stateRef.current, workspaceId);
+    pendingSubmitRef.current = null;
     setThreads([]);
     setSelectedId(null);
     setDetail(null);
@@ -89,6 +92,7 @@ export default function AIThreads({ workspaceId }: Props) {
 
   const selectThread = (threadId: string) => {
     stateRef.current = withThread(stateRef.current, threadId);
+    pendingSubmitRef.current = null;
     setSelectedId(threadId);
     setDetail(null);
     setError(null);
@@ -105,6 +109,7 @@ export default function AIThreads({ workspaceId }: Props) {
       const nextThreads = orderThreads([created, ...threads.filter((thread) => thread.id !== created.id)]);
       setThreads(nextThreads);
       stateRef.current = withThread(stateRef.current, created.id);
+      pendingSubmitRef.current = null;
       setSelectedId(created.id);
       requestAnimationFrame(() => promptRef.current?.focus());
     } catch {
@@ -116,7 +121,11 @@ export default function AIThreads({ workspaceId }: Props) {
 
   const onSubmit = async () => {
     if (!workspaceId || !selectedId || submitting || !prompt.trim()) return;
-    const requestId = makeRequestId();
+    const pending = pendingSubmitRef.current;
+    const requestId = pending && pending.threadId === selectedId && pending.prompt === prompt
+      ? pending.requestId
+      : makeRequestId();
+    pendingSubmitRef.current = { threadId: selectedId, prompt, requestId };
     const captured = submitContext(stateRef.current);
     const text = prompt;
     setSubmitting(true);
@@ -127,11 +136,12 @@ export default function AIThreads({ workspaceId }: Props) {
       const refreshed = await getThread(workspaceId, selectedId);
       if (!contextMatches(submitContext(stateRef.current), captured)) return;
       setDetail(refreshed);
+      pendingSubmitRef.current = null;
       setPrompt("");
       requestAnimationFrame(() => promptRef.current?.focus());
     } catch {
       if (contextMatches(submitContext(stateRef.current), captured)) {
-        setError("Interaction was not submitted or its durable result could not be confirmed.");
+        setError("Interaction was not submitted or its durable result could not be confirmed. Retrying the unchanged prompt reuses the same request id.");
         requestAnimationFrame(() => promptRef.current?.focus());
       }
     } finally {
