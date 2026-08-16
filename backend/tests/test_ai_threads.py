@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
+from pydantic import ValidationError
 
 import app.modules.ai.thread_service as thread_service
 from app.core.database import initialize_database, open_sqlite_connection
@@ -282,15 +283,11 @@ def test_schema_initialization_is_idempotent_and_thread_bounds_are_enforced() ->
     assert names == {"ai_threads", "ai_thread_interactions"}
 
     create_thread(AIThreadCreate(workspace_id=workspace_id, title="x" * 120))
-    with pytest.raises(AIThreadError):
-        create_thread(AIThreadCreate(workspace_id=workspace_id, title="x" * 121))
+    with pytest.raises(ValidationError):
+        AIThreadCreate(workspace_id=workspace_id, title="x" * 121)
     thread = create_thread(AIThreadCreate(workspace_id=workspace_id))
-    with pytest.raises(AIThreadError):
-        submit_interaction(
-            workspace_id=workspace_id,
-            thread_id=thread.id,
-            payload=AIThreadSubmit(request_id="request-long", prompt="x" * 12_001),
-        )
+    with pytest.raises(ValidationError):
+        AIThreadSubmit(request_id="request-long", prompt="x" * 12_001)
     with pytest.raises(AIThreadError):
         list_threads(workspace_id=workspace_id, limit=51)
     with pytest.raises(AIThreadError):
