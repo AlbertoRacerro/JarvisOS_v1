@@ -186,14 +186,17 @@ def check_sources(reader=_read, *, changed_paths: set[str] | None = None) -> Non
     for forbidden in ("react-markdown", "ReactMarkdown", "marked("):
         _forbid(stage, forbidden, "Markdown execution")
 
-    # Generation/identity guards must cover the readiness race matrix and harness.
+    # Generation/identity guards cover workspace/thread/submit stale ownership.
+    # Request-id reuse is intentionally owned by the page-level pending-submit
+    # record, not the generic generation state helper.
     for needle, label in (
         ("workspace", "workspace generation/identity state"),
         ("thread", "thread generation/identity state"),
         ("submit", "submit generation/identity state"),
-        ("request", "request identity state"),
     ):
         _require(state + harness, needle, label)
+    _require(stage, "requestId", "request-id ownership")
+    _require(stage, "pendingSubmitRef", "stable retry request-id record")
     _require_any(harness, ("A", "workspace-a"), "workspace race harness fixture")
     _require_any(harness, ("X", "thread-x"), "thread race harness fixture")
 
@@ -236,11 +239,11 @@ def _self_test() -> None:
         "backend/app/modules/ai/models.py": "class AITaskRunRequest: pass\n",
         "backend/app/modules/memory/routes.py": "proposal\n",
         "frontend/src/api/threads.ts": "/ai/threads\n",
-        "frontend/src/pages/AIThreads.tsx": "workspaceId\n",
+        "frontend/src/pages/AIThreads.tsx": "workspaceId requestId pendingSubmitRef\n",
         "frontend/src/app/routes.ts": '{ id: "ai-threads", path: "/ai-threads", title: "AI Threads" }\n',
         "frontend/src/App.tsx": "workspaceId\n",
-        "frontend/src/components/threads/threadState.ts": "workspace thread submit request\n",
-        "frontend/src/components/threads/threadStateHarness.ts": "workspace thread submit request A X\n",
+        "frontend/src/components/threads/threadState.ts": "workspace thread submit\n",
+        "frontend/src/components/threads/threadStateHarness.ts": "workspace thread submit A X\n",
         "docs/specs/STATUS.md": "| 090 | in_review | [#276](https://github.com/x/pull/276) |\n",
     }
 
