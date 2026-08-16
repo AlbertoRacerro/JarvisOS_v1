@@ -473,3 +473,282 @@ def test_thread_schema_rollback_does_not_delete_canonical_flow_or_job() -> None:
     assert job_count_before == 1
     assert flow_count_after == 1
     assert job_count_after == 1
+
+
+def test_context_binding_fields_must_be_supplied_as_a_pair() -> None:
+    digest = "sha256:" + "a" * 64
+    selection = {"kinds": ["Assumption"]}
+
+    with pytest.raises(ValidationError):
+        AIThreadSubmit(
+            request_id="context-selection-only",
+            prompt="blocked",
+            context_selection=selection,
+        )
+    with pytest.raises(ValidationError):
+        AIThreadSubmit(
+            request_id="context-digest-only",
+            prompt="blocked",
+            expected_context_digest=digest,
+        )
+
+
+def test_context_digest_mismatch_fails_before_reservation_or_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-a"
+    _bootstrap_workspace(workspace_id)
+    thread = create_thread(AIThreadCreate(workspace_id=workspace_id))
+    expected = "sha256:" + "a" * 64
+    observed_dispatch = False
+
+    def fake_bundle(_workspace_id, *, selection):
+        assert _workspace_id == workspace_id
+        assert selection.kinds == ["Assumption"]
+        return SimpleNamespace(context_digest="sha256:" + "b" * 64, blocks=[{"text": "changed"}])
+
+    def fake_run_ai_task(**_kwargs):
+        nonlocal observed_dispatch
+        observed_dispatch = True
+        raise AssertionError("context mismatch must not dispatch")
+
+    monkeypatch.setattr(thread_service, "build_workspace_context_bundle", fake_bundle)
+    monkeypatch.setattr(thread_service, "run_ai_task", fake_run_ai_task)
+
+    with pytest.raises(AIThreadConflictError, match="context pack changed since preview"):
+        submit_interaction(
+            workspace_id=workspace_id,
+            thread_id=thread.id,
+            payload=AIThreadSubmit(
+                request_id="context-mismatch",
+                prompt="do not dispatch",
+                context_selection={"kinds": ["Assumption"]},
+                expected_context_digest=expected,
+            ),
+        )
+
+    assert observed_dispatch is False
+    with open_sqlite_connection() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) AS n FROM ai_thread_interactions WHERE thread_id = ?",
+            (thread.id,),
+        ).fetchone()["n"] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) AS n FROM ai_flows WHERE workspace_id = ?",
+            (workspace_id,),
+        ).fetchone()["n"] == 0
+
+
+def test_matching_context_digest_forwards_exact_server_rebuilt_blocks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-a"
+    _bootstrap_workspace(workspace_id)
+    thread = create_thread(AIThreadCreate(workspace_id=workspace_id))
+    digest = "sha256:" + "c" * 64
+    blocks = [{"kind": "Assumption", "text": "bounded server block"}]
+    captured: dict[str, object] = {}
+
+    def fake_bundle(_workspace_id, *, selection):
+        assert _workspace_id == workspace_id
+        assert selection.kinds == ["Assumption"]
+        return SimpleNamespace(context_digest=digest, blocks=blocks)
+
+    def fake_run_ai_task(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(response=SimpleNamespace(text="context accepted"))
+
+    monkeypatch.setattr(thread_service, "build_workspace_context_bundle", fake_bundle)
+    monkeypatch.setattr(thread_service, "run_ai_task", fake_run_ai_task)
+
+    interaction = submit_interaction(
+        workspace_id=workspace_id,
+        thread_id=thread.id,
+        payload=AIThreadSubmit(
+            request_id="context-match",
+            prompt="use inspected context",
+            context_selection={"kinds": ["Assumption"]},
+            expected_context_digest=digest,
+        ),
+    ).interaction
+
+    assert captured["context_blocks"] is blocks
+    assert captured["existing_flow_id"] == interaction.flow_id
+    assert captured["workspace_id"] == workspace_id
+
+
+def test_no_context_legacy_path_does_not_build_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-a"
+    _bootstrap_workspace(workspace_id)
+    thread = create_thread(AIThreadCreate(workspace_id=workspace_id))
+    captured: dict[str, object] = {}
+
+    def unexpected_bundle(*_args, **_kwargs):
+        raise AssertionError("legacy no-context submit must not rebuild a context pack")
+
+    def fake_run_ai_task(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(response=SimpleNamespace(text="legacy"))
+
+    monkeypatch.setattr(thread_service, "build_workspace_context_bundle", unexpected_bundle)
+    monkeypatch.setattr(thread_service, "run_ai_task", fake_run_ai_task)
+
+    submit_interaction(
+        workspace_id=workspace_id,
+        thread_id=thread.id,
+        payload=AIThreadSubmit(request_id="legacy-no-context", prompt="legacy"),
+    )
+    assert captured["context_blocks"] is None
+
+
+def test_context_duplicate_is_read_before_rebuild_after_record_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-a"
+    _bootstrap_workspace(workspace_id)
+    thread = create_thread(AIThreadCreate(workspace_id=workspace_id))
+    digest = "sha256:" + "d" * 64
+    payload = AIThreadSubmit(
+        request_id="context-duplicate",
+        prompt="one execution",
+        context_selection={"kinds": ["Assumption"]},
+        expected_context_digest=digest,
+    )
+    build_calls = 0
+    dispatch_calls = 0
+
+    def initial_bundle(_workspace_id, *, selection):
+        nonlocal build_calls
+        build_calls += 1
+        return SimpleNamespace(context_digest=digest, blocks=[{"text": "initial"}])
+
+    def fake_run_ai_task(**_kwargs):
+        nonlocal dispatch_calls
+        dispatch_calls += 1
+        return SimpleNamespace(response=SimpleNamespace(text="once"))
+
+    monkeypatch.setattr(thread_service, "build_workspace_context_bundle", initial_bundle)
+    monkeypatch.setattr(thread_service, "run_ai_task", fake_run_ai_task)
+    first = submit_interaction(
+        workspace_id=workspace_id,
+        thread_id=thread.id,
+        payload=payload,
+    ).interaction
+
+    def drifted_bundle(*_args, **_kwargs):
+        raise AssertionError("durable duplicate must be returned before fresh context rebuild")
+
+    monkeypatch.setattr(thread_service, "build_workspace_context_bundle", drifted_bundle)
+    duplicate = submit_interaction(
+        workspace_id=workspace_id,
+        thread_id=thread.id,
+        payload=payload,
+    ).interaction
+
+    assert duplicate.id == first.id
+    assert duplicate.flow_id == first.flow_id
+    assert build_calls == 1
+    assert dispatch_calls == 1
+
+
+def test_context_cross_workspace_submit_fails_before_context_rebuild(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _bootstrap_workspace("workspace-a")
+    now = utc_now()
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO workspaces (id, name, slug, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            ("workspace-b", "workspace-b", "workspace-b", now, now),
+        )
+        connection.commit()
+    thread = create_thread(AIThreadCreate(workspace_id="workspace-a"))
+
+    def unexpected_bundle(*_args, **_kwargs):
+        raise AssertionError("foreign-workspace thread must fail before context rebuild")
+
+    monkeypatch.setattr(thread_service, "build_workspace_context_bundle", unexpected_bundle)
+    with pytest.raises(AIThreadNotFoundError):
+        submit_interaction(
+            workspace_id="workspace-b",
+            thread_id=thread.id,
+            payload=AIThreadSubmit(
+                request_id="cross-workspace-context",
+                prompt="blocked",
+                context_selection={"kinds": ["Assumption"]},
+                expected_context_digest="sha256:" + "e" * 64,
+            ),
+        )
+
+
+def test_context_drift_race_returns_concurrently_reserved_duplicate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-a"
+    _bootstrap_workspace(workspace_id)
+    thread = create_thread(AIThreadCreate(workspace_id=workspace_id))
+    expected_digest = "sha256:" + "f" * 64
+    payload = AIThreadSubmit(
+        request_id="context-race",
+        prompt="race safe",
+        context_selection={"kinds": ["Assumption"]},
+        expected_context_digest=expected_digest,
+    )
+    request_digest = thread_service.canonical_digest(
+        {
+            "prompt": payload.prompt,
+            "task_kind": payload.task_kind,
+            "route_class": payload.route_class,
+            "max_tokens": payload.max_tokens,
+            "context_selection": payload.context_selection.model_dump(),
+            "expected_context_digest": payload.expected_context_digest,
+        }
+    )
+    builder_calls = 0
+
+    def racing_bundle(_workspace_id, *, selection):
+        nonlocal builder_calls
+        builder_calls += 1
+        duplicate = thread_service._reserve_interaction(
+            workspace_id=workspace_id,
+            thread_id=thread.id,
+            request_id=payload.request_id,
+            request_digest=request_digest,
+            prompt=payload.prompt,
+            payload=payload,
+        )
+        assert duplicate is None
+        return SimpleNamespace(
+            context_digest="sha256:" + "0" * 64,
+            blocks=[{"text": "drifted"}],
+        )
+
+    def unexpected_dispatch(**_kwargs):
+        raise AssertionError("losing race must reread durable reservation, not dispatch")
+
+    monkeypatch.setattr(thread_service, "build_workspace_context_bundle", racing_bundle)
+    monkeypatch.setattr(thread_service, "run_ai_task", unexpected_dispatch)
+
+    result = submit_interaction(
+        workspace_id=workspace_id,
+        thread_id=thread.id,
+        payload=payload,
+    ).interaction
+
+    assert result.request_id == payload.request_id
+    assert result.persistence_state == "reserved"
+    assert builder_calls == 1
+    with open_sqlite_connection() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) AS n FROM ai_thread_interactions WHERE thread_id = ?",
+            (thread.id,),
+        ).fetchone()["n"] == 1
+        assert connection.execute(
+            "SELECT COUNT(*) AS n FROM ai_jobs WHERE flow_id = ?",
+            (result.flow_id,),
+        ).fetchone()["n"] == 0
