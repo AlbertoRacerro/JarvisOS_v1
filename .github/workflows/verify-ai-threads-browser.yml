@@ -11,7 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      RUN_AI_THREADS_BROWSER_PROOF: "true"
       TARGET_IMPLEMENTATION_SHA: "c5b68dcbfd6f96b9d10308038e6e5b1d06f83067"
     steps:
       - uses: actions/checkout@v4
@@ -28,5 +27,43 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt -r backend/requirements-dev.txt
-      - name: Run exact-head AI-THREADS browser proof
-        run: RUN_AI_THREADS_BROWSER_PROOF=true TARGET_IMPLEMENTATION_SHA="$TARGET_IMPLEMENTATION_SHA" python -m pytest -q backend/tests/test_ai_threads_browser_verification.py -s
+      - name: Materialize exact implementation head
+        run: |
+          git fetch origin spec/090-ai-threads-0 --depth=200
+          test "$(git rev-parse FETCH_HEAD)" = "$TARGET_IMPLEMENTATION_SHA"
+          git worktree add --detach /tmp/target "$TARGET_IMPLEMENTATION_SHA"
+      - name: Run exact-head deterministic gates
+        working-directory: /tmp/target
+        run: |
+          python scripts/check_spec_status.py --self-test
+          python scripts/check_ai_threads.py --self-test
+          python scripts/check_ai_threads.py
+          python -m pytest -q backend/tests/test_ai_threads.py backend/tests/test_ai_egress_schema.py backend/tests/test_flow_grade_schema_registry.py
+      - name: Build exact-head frontend and harness
+        working-directory: /tmp/target/frontend
+        run: |
+          npm ci
+          ./node_modules/.bin/tsc src/components/threads/threadState.ts src/components/threads/threadStateHarness.ts --target ES2022 --module commonjs --moduleResolution node --skipLibCheck --outDir /tmp/harness
+          node /tmp/harness/threadStateHarness.js
+          npm run build
+          npm install --no-save --package-lock=false playwright@1.54.2
+          ./node_modules/.bin/playwright install --with-deps chromium
+      - name: Extract browser scenario
+        run: |
+          python - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          path = Path('backend/tests/test_ai_threads_browser_verification.py')
+          spec = importlib.util.spec_from_file_location('proof', path)
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          Path('/tmp/target/frontend/.ai-threads-proof.mjs').write_text(module.SCRIPT, encoding='utf-8')
+          PY
+      - name: Run browser proof
+        working-directory: /tmp/target/frontend
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 5173 >/tmp/vite.log 2>&1 &
+          VITE_PID=$!
+          trap 'kill $VITE_PID || true' EXIT
+          for i in $(seq 1 40); do curl -fsS http://127.0.0.1:5173/ai-threads >/dev/null && break; sleep 0.25; done
+          node .ai-threads-proof.mjs
