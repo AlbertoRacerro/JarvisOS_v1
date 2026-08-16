@@ -11,6 +11,7 @@ export type RouteId =
   | "engineering-data"
   | "review"
   | "settings"
+  | "ai-threads"
   | "legacy-domain-foundation"
   | "legacy-ai-draft"
   | "legacy-system-status"
@@ -36,6 +37,7 @@ export const PRODUCTION_ROUTES: readonly AppRouteDefinition[] = [
   { id: "engineering-data", path: "/engineering-data", title: "Engineering Data", primaryNav: "engineering-data" },
   { id: "review", path: "/review", title: "Review", primaryNav: "review", stageKind: "review" },
   { id: "settings", path: "/settings", title: "Settings", primaryNav: "settings" },
+  { id: "ai-threads", path: "/ai-threads", title: "AI Threads" },
   {
     id: "legacy-domain-foundation",
     path: "/legacy/domain-foundation",
