@@ -38,46 +38,50 @@ def check_sources(reader=_read) -> None:
     execution = reader("backend/app/modules/ai/execution.py")
     egress = reader("backend/app/modules/ai/egress_runtime.py")
     threads = reader("backend/app/modules/ai/thread_service.py")
-    thread_store = reader("backend/app/modules/ai/thread_store.py")
+    schema = reader("backend/app/modules/ai/thread_schema.py")
+    task_models = reader("backend/app/modules/ai/models.py")
     memory_api = reader("backend/app/modules/memory/api.py")
     client = reader("frontend/src/api/client.ts")
     stage = reader("frontend/src/workbenches/AiThreadsStage.tsx")
 
     # Readiness-mandated single token-flow creation authority.
-    _require(token_flow, "create_flow_in_transaction", "shared transactional flow helper")
+    _require(token_flow, "def create_flow_in_transaction", "shared transactional flow helper")
     _require(threads, "create_flow_in_transaction", "thread reuse of shared flow helper")
-    _forbid(threads, "INSERT INTO ai_core_token_flows", "duplicate token-flow insert in thread service")
+    _forbid(threads, "INSERT INTO ai_flows", "duplicate token-flow insert in thread service")
 
-    # Pre-created flow seam must reach the shared egress path; omitted seam keeps legacy callers valid.
+    # Pre-created flow seam must reach the shared egress path; public task input must not expose it.
     _require(execution, "existing_flow_id", "run_ai_task pre-created flow seam")
     _require(egress, "existing_flow_id", "egress pre-created flow seam")
-    _require(execution, "run_ai_task", "shared execution entry point")
-    _require(egress, "run_external_task", "shared external execution entry point")
+    _require(token_flow, "validate_existing_flow_for_execution", "pre-created flow validation")
+    _forbid(task_models, "existing_flow_id", "public task request pre-created-flow control")
 
-    # Thread durability and MemoryStore proposal reference surface stay explicit and workspace scoped.
+    # Thread durability and idempotency stay explicit and workspace scoped.
     for needle, label in (
         ("workspace_id", "workspace scope"),
         ("flow_id", "durable flow identity"),
-        ("client_request_id", "idempotency key"),
+        ("request_id", "idempotency key"),
+        ("UNIQUE(thread_id, request_id)", "request id uniqueness"),
+        ("UNIQUE(flow_id)", "flow ownership uniqueness"),
     ):
-        _require(thread_store + threads, needle, label)
+        _require(schema + threads, needle, label)
     _require(memory_api, "proposal", "proposal API continuity")
 
     # UI must remain a dedicated non-primary workbench over typed API calls, not fabricated provider state.
-    _require(client, "ai-thread", "AI thread client route")
+    _require(client, "ai/threads", "AI thread client route")
     _require(stage, "workspaceId", "App-owned workspace consumption")
     _forbid(stage, "fetch(\"https://", "direct external-provider fetch from UI")
 
 
 def _self_test() -> None:
     base = {
-        "backend/app/modules/ai/token_flow_service.py": "def create_flow_in_transaction(): pass\n",
+        "backend/app/modules/ai/token_flow_service.py": "def create_flow_in_transaction(): pass\nvalidate_existing_flow_for_execution\n",
         "backend/app/modules/ai/execution.py": "def run_ai_task(existing_flow_id=None): pass\n",
         "backend/app/modules/ai/egress_runtime.py": "def run_external_task(existing_flow_id=None): pass\n",
-        "backend/app/modules/ai/thread_service.py": "create_flow_in_transaction()\nworkspace_id flow_id client_request_id\n",
-        "backend/app/modules/ai/thread_store.py": "workspace_id flow_id client_request_id\n",
+        "backend/app/modules/ai/thread_service.py": "create_flow_in_transaction()\nworkspace_id flow_id request_id\n",
+        "backend/app/modules/ai/thread_schema.py": "workspace_id flow_id request_id UNIQUE(thread_id, request_id) UNIQUE(flow_id)\n",
+        "backend/app/modules/ai/models.py": "class AITaskRunRequest: pass\n",
         "backend/app/modules/memory/api.py": "proposal\n",
-        "frontend/src/api/client.ts": "ai-thread\n",
+        "frontend/src/api/client.ts": "ai/threads\n",
         "frontend/src/workbenches/AiThreadsStage.tsx": "workspaceId\n",
     }
 
@@ -87,7 +91,7 @@ def _self_test() -> None:
     check_sources(reader)
 
     bad = dict(base)
-    bad["backend/app/modules/ai/thread_service.py"] += "INSERT INTO ai_core_token_flows\n"
+    bad["backend/app/modules/ai/thread_service.py"] += "INSERT INTO ai_flows\n"
     try:
         check_sources(lambda path: bad[path])
     except CheckFailure:
@@ -103,6 +107,15 @@ def _self_test() -> None:
         pass
     else:
         raise AssertionError("self-test failed to reject missing egress pre-created-flow seam")
+
+    bad = dict(base)
+    bad["backend/app/modules/ai/models.py"] += "existing_flow_id: str | None = None\n"
+    try:
+        check_sources(lambda path: bad[path])
+    except CheckFailure:
+        pass
+    else:
+        raise AssertionError("self-test failed to reject public existing_flow_id")
 
 
 def main() -> int:
