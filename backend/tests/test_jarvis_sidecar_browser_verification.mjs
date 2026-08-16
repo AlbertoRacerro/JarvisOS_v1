@@ -152,12 +152,10 @@ await openContextDetails();
 await page.getByText(/Digest/).waitFor();
 assert.ok(await page.getByText(digestA).isVisible(), "initial inspected digest must be visible after explicit inspection");
 
-// Analytics contribution survives the global Jarvis sidecar composition.
 await page.getByRole("button", { name: "Show analysis" }).click();
 await page.getByRole("heading", { name: "Run comparison" }).waitFor();
 await page.getByText("No persisted runs are available for analytics.").waitFor();
 
-// Context-off submit must omit context fields.
 await page.getByLabel("Use inspected project context").uncheck();
 const prompt = page.getByLabel("Message");
 await prompt.fill("without context");
@@ -168,7 +166,6 @@ assert.ok(!("context_selection" in noContextBody));
 assert.ok(!("expected_context_digest" in noContextBody));
 await page.getByText("ok").last().waitFor();
 
-// Context-on submit must bind the server-previewed digest.
 await page.getByLabel("Use inspected project context").check();
 await openContextDetails();
 await page.getByText(digestA).waitFor();
@@ -180,7 +177,6 @@ assert.equal(contextBody.expected_context_digest, digestA);
 assert.deepEqual(contextBody.context_selection, {});
 await page.getByText("ok").last().waitFor();
 
-// Uncertain failure retains request id + original inspected digest even after preview drift.
 await prompt.fill("uncertain retry");
 await page.getByRole("button", { name: "Send with inspected context" }).click();
 await page.getByText(/durable result is uncertain/i).waitFor();
@@ -192,7 +188,6 @@ assert.ok(await page.getByText(/retains its inspected digest/i).isVisible());
 await page.getByRole("button", { name: "Retry with original context" }).click();
 await page.getByText("retry-safe").waitFor();
 
-// Close/reopen during in-flight submit preserves App-owned operation state and does not redispatch.
 previewDigest = digestB;
 await prompt.fill("held submit");
 await page.getByRole("button", { name: "Send with inspected context" }).click();
@@ -206,14 +201,12 @@ assert.equal(heldSubmitBody.expected_context_digest, digestB);
 heldSubmitResolve();
 await page.getByText("held-complete").waitFor();
 
-// Workspace change invalidates old ownership and installs the new workspace preview/thread.
 await page.getByLabel("Workspace").selectOption("workspace-b");
 await openContextDetails();
 await page.getByText(digestB).waitFor();
 await page.getByTestId("jarvis-sidecar").locator("select").selectOption("thread-b");
 await page.getByText(/Route: runs/).waitFor();
 
-// Keyboard behavior: Shift+Enter inserts a newline; Enter submits.
 await page.getByLabel("Use inspected project context").uncheck();
 await prompt.fill("line one");
 await prompt.press("Shift+Enter");
@@ -224,13 +217,13 @@ await prompt.press("Enter");
 await enterRequest;
 await page.getByText("ok").last().waitFor();
 
-// Escape closes the sidecar and restores focus to the toggle.
 await page.getByRole("heading", { name: "Context", level: 2 }).focus();
 await page.keyboard.press("Escape");
-await page.getByRole("button", { name: "Show context" }).waitFor();
-assert.equal(await page.getByRole("button", { name: "Show context" }).evaluate((el) => el === document.activeElement), true);
+const showContext = page.getByRole("button", { name: "Show context" });
+await showContext.waitFor();
+await page.waitForFunction(() => document.activeElement?.textContent?.trim() === "Show context");
+assert.equal(await showContext.evaluate((el) => el === document.activeElement), true);
 
-// Effective-200%-width proof: no global horizontal overflow at a compact viewport.
 const overflow = await page.evaluate(() => ({ root: document.documentElement.scrollWidth - document.documentElement.clientWidth, body: document.body.scrollWidth - document.body.clientWidth }));
 assert.ok(overflow.root <= 1 && overflow.body <= 1, `global overflow detected: ${JSON.stringify(overflow)}`);
 
