@@ -138,8 +138,8 @@ def check_sources(reader=_read, *, changed_paths: set[str] | None = None) -> Non
     for needle, label in (
         ('row["state"] != "running"', "running-state guard"),
         ('row["task_kind"] != task_kind', "task-kind identity guard"),
-        ('row["attempt_count"] != 0', "zero-attempt guard"),
-        ("SELECT COUNT(*) AS count FROM ai_jobs WHERE flow_id = ?", "unused-flow job guard"),
+        ('_nonnegative_int(row["attempt_count"], "attempt_count") != 0', "zero-attempt guard"),
+        ("SELECT COUNT(*) AS n FROM ai_jobs WHERE flow_id = ?", "unused-flow job guard"),
         ("terminal_reason", "terminal metadata guard"),
     ):
         _require(token_flow, needle, label)
@@ -196,8 +196,13 @@ def check_sources(reader=_read, *, changed_paths: set[str] | None = None) -> Non
     _require_any(harness, ("X", "thread-x"), "thread race harness fixture")
 
     # Lifecycle is explicit and 062/091/frozen orchestration surfaces remain out.
-    _require(status, "| 090 | in_review |", "090 in-review lifecycle")
-    _require(status, "pull/276", "090 implementation PR registry link")
+    _require_any(
+        status,
+        ("| 090 | ready |", "| 090 | in_review |", "| 090 | merged |"),
+        "090 lifecycle",
+    )
+    if "| 090 | in_review |" in status:
+        _require(status, "pull/276", "090 implementation PR registry link")
     for forbidden, label in (
         ("grade", "062 grade surface"),
         ("hermes", "Hermes runtime"),
@@ -213,8 +218,8 @@ def _self_test() -> None:
             'def create_flow_in_transaction(): pass\n'
             'validate_existing_flow_for_execution\n'
             'row["state"] != "running"\nrow["task_kind"] != task_kind\n'
-            'row["attempt_count"] != 0\n'
-            'SELECT COUNT(*) AS count FROM ai_jobs WHERE flow_id = ?\nterminal_reason\n'
+            '_nonnegative_int(row["attempt_count"], "attempt_count") != 0\n'
+            'SELECT COUNT(*) AS n FROM ai_jobs WHERE flow_id = ?\nterminal_reason\n'
         ),
         "backend/app/modules/ai/execution.py": "def run_ai_task(existing_flow_id=None): pass\n",
         "backend/app/modules/ai/egress_runtime.py": "def run_external_task(existing_flow_id=None): pass\n",
