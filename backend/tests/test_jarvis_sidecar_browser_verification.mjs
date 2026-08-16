@@ -210,7 +210,7 @@ await page.getByText("held-complete").waitFor();
 await page.getByLabel("Workspace").selectOption("workspace-b");
 await openContextDetails();
 await page.getByText(digestB).waitFor();
-await page.getByLabel("Thread").selectOption("thread-b");
+await page.getByTestId("jarvis-sidecar").locator("select").selectOption("thread-b");
 await page.getByText(/Route: runs/).waitFor();
 
 // Keyboard behavior: Shift+Enter inserts a newline; Enter submits.
