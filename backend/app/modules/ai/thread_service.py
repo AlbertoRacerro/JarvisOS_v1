@@ -19,11 +19,10 @@ from app.modules.ai.thread_models import (
     AIThreadSubmitRead,
     AIThreadSummary,
 )
+from app.modules.ai.token_flow_service import create_flow_in_transaction
 from app.modules.events.service import utc_now
 
 _SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
-_TASK_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
-_ROUTE_RE = re.compile(r"^(?:auto|[a-z][a-z0-9_]*:[a-z][a-z0-9_]*)$")
 _MAX_TITLE = 120
 _MAX_PROMPT = 12_000
 _MAX_ASSISTANT = 131_072
@@ -162,8 +161,8 @@ def submit_interaction(
         request_digest=request_digest,
     )
 
-    # Until the readiness-mandated internal seam exists, fail closed before any
-    # provider/local execution rather than allow run_ai_task to create a second flow.
+    # Fail closed until the execution layer advertises the readiness-mandated
+    # internal pre-created-flow seam. This guard disappears with that seam.
     if "existing_flow_id" not in inspect.signature(run_ai_task).parameters:
         raise AIThreadConflictError("canonical pre-created-flow execution seam is not available")
 
@@ -255,7 +254,7 @@ def _reserve_interaction(
                 "FROM ai_thread_interactions WHERE thread_id = ?",
                 (thread_id,),
             ).fetchone()
-            flow_id = _create_flow_in_transaction(
+            flow_id = create_flow_in_transaction(
                 connection,
                 task_kind=payload.task_kind,
                 requested_route_class=payload.route_class,
@@ -289,43 +288,6 @@ def _reserve_interaction(
         except Exception:
             connection.rollback()
             raise
-
-
-def _create_flow_in_transaction(
-    connection: sqlite3.Connection,
-    *,
-    task_kind: str,
-    requested_route_class: str | None,
-    workspace_id: str,
-) -> str:
-    # Temporary in-scope copy of the exact 061a insertion semantics. The terminal
-    # 090 implementation must move this helper into token_flow_service.py and use
-    # that one canonical helper from both create_flow and thread reservation.
-    if not _TASK_RE.fullmatch(task_kind):
-        raise AIThreadError("task_kind is malformed")
-    if requested_route_class is not None and not _ROUTE_RE.fullmatch(requested_route_class):
-        raise AIThreadError("route_class is malformed")
-    workspace_id = _safe_id(workspace_id, "workspace_id")
-    row = connection.execute(
-        "SELECT max_direct_continuations FROM ai_settings WHERE id = 'default'"
-    ).fetchone()
-    if row is None:
-        raise AIThreadConflictError("default ai_settings row is required")
-    snapshot = row["max_direct_continuations"]
-    if isinstance(snapshot, bool) or not isinstance(snapshot, int) or not 0 <= snapshot <= 16:
-        raise AIThreadError("continuation snapshot must be between 0 and 16")
-    flow_id = str(uuid4())
-    now = utc_now()
-    connection.execute(
-        """
-        INSERT INTO ai_flows (
-            id, workspace_id, task_kind, requested_route_class, state,
-            max_direct_continuations_snapshot, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, 'running', ?, ?, ?)
-        """,
-        (flow_id, workspace_id, task_kind, requested_route_class, snapshot, now, now),
-    )
-    return flow_id
 
 
 def _mark_reserved_dispatching(
