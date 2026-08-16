@@ -95,7 +95,6 @@ await page.route(`${api}/**`, async (route) => {
     submitCount += 1;
     const threadId = decodeURIComponent(submitMatch[1]);
     const body = req.postDataJSON();
-    const workspaceId = url.searchParams.get("workspace_id");
 
     if (body.prompt === "uncertain retry") {
       if (!firstUncertainBody) {
@@ -137,14 +136,21 @@ await page.route(`${api}/**`, async (route) => {
   return json(404, { detail: `unmocked ${method} ${path}` });
 });
 
+async function openContextDetails() {
+  const detailsElement = page.locator(".jarvis-sidecar__context details").first();
+  await detailsElement.waitFor();
+  if (!(await detailsElement.evaluate((element) => element.open))) await detailsElement.locator("summary").click();
+}
+
 await page.goto(`${app}/runs`);
 await page.getByRole("heading", { name: "Runs", level: 1 }).waitFor();
 await page.getByRole("button", { name: "Show context" }).click();
 await page.getByTestId("jarvis-sidecar").waitFor();
 await page.getByText("Contextual engineering assistant").waitFor();
 await page.getByText(/Route: runs/).waitFor();
+await openContextDetails();
 await page.getByText(/Digest/).waitFor();
-assert.ok(await page.getByText(digestA).isVisible(), "initial inspected digest must be visible");
+assert.ok(await page.getByText(digestA).isVisible(), "initial inspected digest must be visible after explicit inspection");
 
 // Analytics contribution survives the global Jarvis sidecar composition.
 await page.getByRole("button", { name: "Show analysis" }).click();
@@ -160,10 +166,11 @@ await page.getByRole("button", { name: "Send without project context" }).click()
 const noContextBody = (await noContextRequest).postDataJSON();
 assert.ok(!("context_selection" in noContextBody));
 assert.ok(!("expected_context_digest" in noContextBody));
-await page.getByText("ok").waitFor();
+await page.getByText("ok").last().waitFor();
 
 // Context-on submit must bind the server-previewed digest.
 await page.getByLabel("Use inspected project context").check();
+await openContextDetails();
 await page.getByText(digestA).waitFor();
 await prompt.fill("with context");
 const contextRequest = page.waitForRequest((r) => r.url().includes("/interactions") && r.method() === "POST");
@@ -171,7 +178,7 @@ await page.getByRole("button", { name: "Send with inspected context" }).click();
 const contextBody = (await contextRequest).postDataJSON();
 assert.equal(contextBody.expected_context_digest, digestA);
 assert.deepEqual(contextBody.context_selection, {});
-await page.getByText("ok").waitFor();
+await page.getByText("ok").last().waitFor();
 
 // Uncertain failure retains request id + original inspected digest even after preview drift.
 await prompt.fill("uncertain retry");
@@ -179,6 +186,7 @@ await page.getByRole("button", { name: "Send with inspected context" }).click();
 await page.getByText(/durable result is uncertain/i).waitFor();
 previewDigest = digestB;
 await page.getByRole("button", { name: "Refresh context preview" }).click();
+await openContextDetails();
 await page.getByText(digestB).waitFor();
 assert.ok(await page.getByText(/retains its inspected digest/i).isVisible());
 await page.getByRole("button", { name: "Retry with original context" }).click();
@@ -200,6 +208,7 @@ await page.getByText("held-complete").waitFor();
 
 // Workspace change invalidates old ownership and installs the new workspace preview/thread.
 await page.getByLabel("Workspace").selectOption("workspace-b");
+await openContextDetails();
 await page.getByText(digestB).waitFor();
 await page.getByLabel("Thread").selectOption("thread-b");
 await page.getByText(/Route: runs/).waitFor();
@@ -213,7 +222,7 @@ assert.equal(await prompt.inputValue(), "line one\nline two");
 const enterRequest = page.waitForRequest((r) => r.url().includes("/interactions") && r.method() === "POST");
 await prompt.press("Enter");
 await enterRequest;
-await page.getByText("ok").waitFor();
+await page.getByText("ok").last().waitFor();
 
 // Escape closes the sidecar and restores focus to the toggle.
 await page.getByRole("heading", { name: "Context", level: 2 }).focus();
