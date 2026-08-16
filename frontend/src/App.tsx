@@ -78,7 +78,7 @@ function App() {
     }
   }
 
-  const jarvisSidecar = useJarvisSidecar(workspaceId, shellRegions.sidecar);
+  const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection, shellRegions.sidecar);
   const effectiveShellRegions: ShellRegionContributions = {
     ...shellRegions,
     sidecar: jarvisSidecar,
