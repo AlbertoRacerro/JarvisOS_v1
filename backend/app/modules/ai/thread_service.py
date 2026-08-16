@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import inspect
 import json
 import re
 import sqlite3
@@ -160,11 +159,6 @@ def submit_interaction(
         request_id=request_id,
         request_digest=request_digest,
     )
-
-    # Fail closed until the execution layer advertises the readiness-mandated
-    # internal pre-created-flow seam. This guard disappears with that seam.
-    if "existing_flow_id" not in inspect.signature(run_ai_task).parameters:
-        raise AIThreadConflictError("canonical pre-created-flow execution seam is not available")
 
     outcome = run_ai_task(
         user_prompt=prompt,
