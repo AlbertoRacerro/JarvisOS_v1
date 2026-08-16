@@ -65,6 +65,7 @@ from app.modules.ai.token_flow_service import (
     create_flow,
     get_flow,
     transition_flow_state,
+    validate_existing_flow_for_execution,
 )
 from app.modules.ai.token_flow_terminalization import (
     terminalize_assembled_output,
@@ -445,6 +446,7 @@ def _run_external_network_task(
     external_blocked_reason: str | None,
     context_build_error: str | None,
     workspace_id: str | None,
+    existing_flow_id: str | None = None,
 ) -> AiTaskOutcome:
     from app.modules.ai.egress_runtime import run_external_task
 
@@ -462,6 +464,7 @@ def _run_external_network_task(
         external_blocked_reason=external_blocked_reason,
         task_type_for=_ai_task_type_for,
         task_prompt_for=_prompt_for_task,
+        existing_flow_id=existing_flow_id,
     )
     outcome = AiTaskOutcome(
         status=external.status,
@@ -521,7 +524,17 @@ def _create_local_flow(
     task_kind: str,
     requested_route_class: str | None,
     workspace_id: str | None,
+    existing_flow_id: str | None = None,
 ) -> str:
+    if existing_flow_id is not None:
+        validate_existing_flow_for_execution(
+            existing_flow_id,
+            task_kind=task_kind,
+            requested_route_class=requested_route_class,
+            workspace_id=workspace_id,
+        )
+        return existing_flow_id
+
     from app.modules.ai.settings import ensure_ai_settings
 
     ensure_ai_settings()
@@ -925,6 +938,7 @@ def run_ai_task(
     external_blocked_reason: str | None = None,
     context_build_error: str | None = None,
     workspace_id: str | None = None,
+    existing_flow_id: str | None = None,
 ) -> AiTaskOutcome:
     started = time.perf_counter()
     adapters = adapters if adapters is not None else _default_adapters()
@@ -946,12 +960,14 @@ def run_ai_task(
             external_blocked_reason=external_blocked_reason,
             context_build_error=context_build_error,
             workspace_id=workspace_id,
+            existing_flow_id=existing_flow_id,
         )
 
     flow_id = _create_local_flow(
         task_kind=task_kind,
         requested_route_class=requested_route_class,
         workspace_id=workspace_id,
+        existing_flow_id=existing_flow_id,
     )
 
     if context_build_error is not None:
@@ -1448,4 +1464,3 @@ def run_ai_task(
     if last_outcome is not None:
         return last_outcome
     raise RuntimeError("provider execution reached unreachable empty chain")
-

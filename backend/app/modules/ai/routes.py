@@ -35,10 +35,12 @@ from app.modules.ai.models import (
     SupervisorPublicTestResponse,
 )
 from app.modules.ai.settings import ensure_ai_settings, update_ai_settings
+from app.modules.ai.thread_routes import router as thread_router
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 router.include_router(flow_grade_router)
 router.include_router(flow_grade_cohort_router)
+router.include_router(thread_router)
 
 
 @router.get("/settings", response_model=AISettingsRead)

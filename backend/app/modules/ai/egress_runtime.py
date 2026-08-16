@@ -56,7 +56,11 @@ from app.modules.ai.settings import ensure_ai_settings, get_ai_settings
 from app.modules.ai.token_flow_continuation import ContinuationDecision
 from app.modules.ai.token_flow_external_transaction import finalize_external_attempt
 from app.modules.ai.token_flow_runtime import normalize_finish_reason, normalize_outcome_reason
-from app.modules.ai.token_flow_service import create_flow, transition_flow_state
+from app.modules.ai.token_flow_service import (
+    create_flow,
+    transition_flow_state,
+    validate_existing_flow_for_execution,
+)
 
 _LOCAL_SANITIZER_ROUTE = "local:fast"
 _LEVEL_RANK = {"S0": 0, "S1": 1}
@@ -149,7 +153,16 @@ def _create_external_flow(
     task_kind: str,
     requested_route_class: str | None,
     workspace_id: str | None,
+    existing_flow_id: str | None = None,
 ) -> str:
+    if existing_flow_id is not None:
+        validate_existing_flow_for_execution(
+            existing_flow_id,
+            task_kind=task_kind,
+            requested_route_class=requested_route_class,
+            workspace_id=workspace_id,
+        )
+        return existing_flow_id
     ensure_ai_settings()
     flow = create_flow(
         task_kind=task_kind,
@@ -220,6 +233,7 @@ def run_external_task(
     task_prompt_for: Callable[[str, list[dict], str], str] | None = None,
     registry: ProviderRegistry | None = None,
     policy: EgressPolicyConfig | None = None,
+    existing_flow_id: str | None = None,
 ) -> ExternalTaskOutcome:
     """Execute an external route through the mandatory per-binding 059b boundary."""
 
@@ -235,6 +249,7 @@ def run_external_task(
         task_kind=task_kind,
         requested_route_class=requested_route_class,
         workspace_id=workspace_id,
+        existing_flow_id=existing_flow_id,
     )
     chain = _binding_chain(
         route_class=selected_route_class,
