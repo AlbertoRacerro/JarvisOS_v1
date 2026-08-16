@@ -201,19 +201,23 @@ export function useJarvisSidecar(
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const text = prompt.trim();
-    const currentDigest = contextEnabled ? preview?.context_digest ?? null : null;
     if (!workspaceId || !selectedThreadId || !text || submitting) return;
-    if (contextEnabled && !currentDigest) {
-      setError("Project context is empty or stale. Refresh it or turn project context off.");
-      return;
-    }
 
     const reusable = pending
       && pending.workspaceId === workspaceId
       && pending.threadId === selectedThreadId
       && pending.prompt === text
-      && pending.contextEnabled === contextEnabled
-      && pending.expectedDigest === currentDigest;
+      && pending.contextEnabled === contextEnabled;
+    const currentDigest = contextEnabled
+      ? reusable
+        ? pending.expectedDigest
+        : preview?.context_digest ?? null
+      : null;
+    if (contextEnabled && !currentDigest) {
+      setError("Project context is empty or stale. Refresh it or turn project context off.");
+      return;
+    }
+
     const captured: PendingSubmit = reusable
       ? pending
       : {
@@ -249,7 +253,8 @@ export function useJarvisSidecar(
     } catch (caught) {
       if (submitOwner.current !== token || workspaceOwner.current !== workspaceToken) return;
       if (caught instanceof ThreadsRequestError && caught.status === 409 && captured.contextEnabled) {
-        setError("Project context or request identity changed. Refresh the preview before a new submit; retrying unchanged text keeps the same request id.");
+        setPending(null);
+        setError("Project context changed before dispatch. Refresh the preview, inspect the new digest, then submit again.");
         setPreviewNonce((current) => current + 1);
       } else {
         setError("Submit failed or its durable result is uncertain. Retrying unchanged text reuses the same request id.");
@@ -259,7 +264,15 @@ export function useJarvisSidecar(
     }
   };
 
-  const contextReady = !contextEnabled || Boolean(preview?.context_digest);
+  const pendingRetryReady = Boolean(
+    pending
+      && pending.workspaceId === workspaceId
+      && pending.threadId === selectedThreadId
+      && pending.prompt === prompt.trim()
+      && pending.contextEnabled === contextEnabled
+      && (!contextEnabled || pending.expectedDigest)
+  );
+  const contextReady = !contextEnabled || pendingRetryReady || Boolean(preview?.context_digest);
 
   return <div className="jarvis-sidecar" data-testid="jarvis-sidecar">
     <header className="jarvis-sidecar__header">
@@ -284,6 +297,7 @@ export function useJarvisSidecar(
       {contextEnabled && previewLoading ? <p className="jarvis-sidecar__status">Building context preview…</p> : null}
       {contextEnabled && preview ? <details><summary>Context pack · {preview.included_count} records · ~{preview.estimated_token_count} tokens</summary><p>Digest <code>{preview.context_digest ?? "empty"}</code></p><p>{preview.char_count} characters · {preview.dropped_count} dropped</p><ul>{preview.context_sources_manifest.map((source) => <li key={`${source.type}:${source.id}:${source.source}`}>{source.type ?? "record"}: {source.id ?? source.source}</li>)}</ul></details> : null}
       {contextEnabled ? <button type="button" onClick={() => setPreviewNonce((current) => current + 1)} disabled={!workspaceId || previewLoading}>Refresh context preview</button> : <p className="jarvis-sidecar__status">Project context is off. Only the current message is submitted.</p>}
+      {pendingRetryReady && contextEnabled ? <p className="jarvis-sidecar__status">An uncertain prior submit retains its inspected digest for a safe idempotent retry.</p> : null}
     </section>
 
     {detail ? <ol className="jarvis-sidecar__transcript" aria-label="Jarvis thread transcript">{detail.interactions.map((interaction) => <li key={interaction.id}><p><strong>You</strong> {interaction.user_text}</p><p><strong>Jarvis advisory</strong> {interaction.assistant_text ?? "No durable assistant snapshot."}</p><dl><div><dt>Flow</dt><dd>{interaction.flow_id}</dd></div><div><dt>Canonical state</dt><dd>{interaction.flow_state}</dd></div><div><dt>Persistence</dt><dd>{interaction.persistence_state}</dd></div><div><dt>Attempts</dt><dd>{interaction.attempt_count}</dd></div><div><dt>Proposals</dt><dd>{interaction.proposal_count}{interaction.proposals_truncated ? "+" : ""}</dd></div></dl>{interaction.terminal_reason ? <small>Terminal reason: {interaction.terminal_reason}</small> : null}{interaction.persistence_error ? <small>Persistence diagnostic: {interaction.persistence_error}</small> : null}{interaction.proposal_ids.length ? <small>Proposal refs: {interaction.proposal_ids.join(", ")}</small> : null}</li>)}</ol> : null}
@@ -292,7 +306,7 @@ export function useJarvisSidecar(
     <form onSubmit={(event) => void submit(event)} className="jarvis-sidecar__composer">
       <label htmlFor="jarvis-prompt">Message</label>
       <textarea id="jarvis-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} maxLength={12000} rows={5} disabled={!selectedThreadId || submitting} />
-      <button type="submit" disabled={!selectedThreadId || !prompt.trim() || submitting || !contextReady}>{submitting ? "Submitting…" : contextEnabled ? "Send with inspected context" : "Send without project context"}</button>
+      <button type="submit" disabled={!selectedThreadId || !prompt.trim() || submitting || !contextReady}>{submitting ? "Submitting…" : contextEnabled ? pendingRetryReady ? "Retry with original context" : "Send with inspected context" : "Send without project context"}</button>
       <small>Enter submits. Shift+Enter adds a line. Closing the sidecar does not cancel canonical execution.</small>
     </form>
   </div>;
