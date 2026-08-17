@@ -193,6 +193,15 @@ await prompt.fill("held submit");
 await page.getByRole("button", { name: "Send with inspected context" }).click();
 await page.getByRole("button", { name: "Submitting…" }).waitFor();
 const beforeHeldCount = submitCount;
+const contextToggle = page.getByLabel("Use inspected project context");
+const refreshContext = page.getByRole("button", { name: "Refresh context preview" });
+assert.equal(await contextToggle.isDisabled(), true, "context semantics must be locked while submit is in flight");
+assert.equal(await refreshContext.isDisabled(), true, "context refresh must be locked while submit is in flight");
+assert.equal(await contextToggle.isChecked(), true, "in-flight request must retain its context mode");
+assert.equal(await prompt.isDisabled(), true, "composer must remain locked while submit is in flight");
+await page.locator(".jarvis-sidecar__composer").evaluate((form) => form.requestSubmit());
+await page.waitForTimeout(50);
+assert.equal(submitCount, beforeHeldCount, "programmatic duplicate submit must not create a second request while busy");
 await page.getByRole("button", { name: "Close sidecar" }).click();
 await page.getByRole("button", { name: "Show context" }).click();
 await page.getByRole("button", { name: "Submitting…" }).waitFor();
@@ -200,6 +209,7 @@ assert.equal(submitCount, beforeHeldCount, "visual close/reopen must not redispa
 assert.equal(heldSubmitBody.expected_context_digest, digestB);
 heldSubmitResolve();
 await page.getByText("held-complete").waitFor();
+assert.equal(await contextToggle.isEnabled(), true, "context may change only after the prior submit settles");
 
 await page.getByLabel("Workspace").selectOption("workspace-b");
 await openContextDetails();
