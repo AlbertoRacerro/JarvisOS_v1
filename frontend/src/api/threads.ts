@@ -34,6 +34,24 @@ export type ThreadDetail = ThreadSummary & {
   has_older: boolean;
 };
 
+export type ContextSelection = {
+  kinds?: string[];
+  statuses?: Record<string, string[]> | string[] | null;
+  ids?: string[] | null;
+  query?: string | null;
+  max_items_per_kind?: number;
+};
+
+export type ContextPackPreview = {
+  context_digest: string | null;
+  context_sources_manifest: Array<{ source: string; type?: string | null; id?: string | null }>;
+  char_count: number;
+  estimated_token_count: number;
+  included_count: number;
+  dropped_count: number;
+  budget_chars: number;
+};
+
 export class ThreadsRequestError extends Error {
   readonly status: number;
   constructor(status: number) {
@@ -72,15 +90,35 @@ export function createThread(workspaceId: string, title?: string): Promise<Threa
   });
 }
 
+export function previewThreadContext(
+  workspaceId: string,
+  selection: ContextSelection
+): Promise<ContextPackPreview> {
+  return requestJson("/ai/context/packs/preview", {
+    method: "POST",
+    body: JSON.stringify({ workspace_id: workspaceId, selection })
+  });
+}
+
 export async function submitThreadInteraction(
   workspaceId: string,
   threadId: string,
   requestId: string,
-  prompt: string
+  prompt: string,
+  context?: { selection: ContextSelection; expectedDigest: string }
 ): Promise<ThreadInteraction> {
   const result = await requestJson<{ interaction: ThreadInteraction }>(
     `/ai/threads/${encodeURIComponent(threadId)}/interactions?workspace_id=${encodeURIComponent(workspaceId)}`,
-    { method: "POST", body: JSON.stringify({ request_id: requestId, prompt }) }
+    {
+      method: "POST",
+      body: JSON.stringify({
+        request_id: requestId,
+        prompt,
+        ...(context
+          ? { context_selection: context.selection, expected_context_digest: context.expectedDigest }
+          : {})
+      })
+    }
   );
   return result.interaction;
 }

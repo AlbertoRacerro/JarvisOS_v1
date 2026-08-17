@@ -1,6 +1,8 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from app.modules.ai.models import ContextPackSelectionRequest
 
 PersistenceState = Literal["reserved", "dispatching", "captured", "capture_failed"]
 
@@ -16,6 +18,14 @@ class AIThreadSubmit(BaseModel):
     task_kind: str = Field(default="general", pattern=r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
     route_class: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*:[a-z][a-z0-9_]*$")
     max_tokens: int | None = Field(default=None, gt=0)
+    context_selection: ContextPackSelectionRequest | None = None
+    expected_context_digest: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def validate_context_binding(self) -> "AIThreadSubmit":
+        if (self.context_selection is None) != (self.expected_context_digest is None):
+            raise ValueError("context_selection and expected_context_digest must be supplied together")
+        return self
 
 
 class AIThreadSummary(BaseModel):

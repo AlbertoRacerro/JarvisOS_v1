@@ -92,6 +92,7 @@ export default function AIThreads({ workspaceId }: Props) {
   }, [workspaceId, selectedId]);
 
   const selectThread = (threadId: string) => {
+    if (stateRef.current.selectedThreadId === threadId) return;
     stateRef.current = withThread(stateRef.current, threadId);
     pendingSubmitRef.current = null;
     setSubmitting(false);

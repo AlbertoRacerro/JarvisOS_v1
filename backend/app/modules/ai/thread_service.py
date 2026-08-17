@@ -6,7 +6,11 @@ import sqlite3
 from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
-from app.modules.ai.context_builder import canonical_digest
+from app.modules.ai.context_builder import (
+    ContextSelectionSpec,
+    build_workspace_context_bundle,
+    canonical_digest,
+)
 from app.modules.ai.execution import run_ai_task
 from app.modules.ai.settings import ensure_ai_settings
 from app.modules.ai.thread_models import (
@@ -126,14 +130,54 @@ def submit_interaction(
     thread_id = _safe_id(thread_id, "thread_id")
     request_id = _safe_id(payload.request_id, "request_id")
     prompt = _bounded_required_text(payload.prompt, _MAX_PROMPT, "prompt")
-    request_digest = canonical_digest(
-        {
-            "prompt": prompt,
-            "task_kind": payload.task_kind,
-            "route_class": payload.route_class,
-            "max_tokens": payload.max_tokens,
-        }
+    digest_payload: dict[str, object] = {
+        "prompt": prompt,
+        "task_kind": payload.task_kind,
+        "route_class": payload.route_class,
+        "max_tokens": payload.max_tokens,
+    }
+    if payload.context_selection is not None:
+        digest_payload["context_selection"] = payload.context_selection.model_dump()
+        digest_payload["expected_context_digest"] = payload.expected_context_digest
+    request_digest = canonical_digest(digest_payload)
+
+    duplicate_id = _find_existing_interaction(
+        workspace_id=workspace_id,
+        thread_id=thread_id,
+        request_id=request_id,
+        request_digest=request_digest,
     )
+    if duplicate_id is not None:
+        return AIThreadSubmitRead(
+            interaction=_read_interaction(
+                workspace_id=workspace_id,
+                thread_id=thread_id,
+                interaction_id=duplicate_id,
+            )
+        )
+
+    try:
+        context_blocks = _context_blocks_for_new_submit(workspace_id, payload)
+    except AIThreadConflictError:
+        # A concurrent request with the same immutable request semantics may have
+        # reserved while this request rebuilt its context pack. Re-read that
+        # durable identity before reporting context drift so retries never spend
+        # twice merely because records changed after the first dispatch began.
+        duplicate_id = _find_existing_interaction(
+            workspace_id=workspace_id,
+            thread_id=thread_id,
+            request_id=request_id,
+            request_digest=request_digest,
+        )
+        if duplicate_id is not None:
+            return AIThreadSubmitRead(
+                interaction=_read_interaction(
+                    workspace_id=workspace_id,
+                    thread_id=thread_id,
+                    interaction_id=duplicate_id,
+                )
+            )
+        raise
 
     ensure_ai_settings()
     duplicate_id = _reserve_interaction(
@@ -164,7 +208,7 @@ def submit_interaction(
         user_prompt=prompt,
         task_kind=payload.task_kind,
         route_class=payload.route_class,
-        context_blocks=None,
+        context_blocks=context_blocks,
         max_output_tokens=payload.max_tokens,
         workspace_id=workspace_id,
         existing_flow_id=flow_id,
@@ -215,6 +259,35 @@ def submit_interaction(
             interaction_id=interaction_id,
         )
     )
+
+
+def _find_existing_interaction(
+    *, workspace_id: str, thread_id: str, request_id: str, request_digest: str
+) -> str | None:
+    with open_sqlite_connection() as connection:
+        _require_thread(connection, workspace_id, thread_id)
+        row = connection.execute(
+            "SELECT id, request_digest FROM ai_thread_interactions WHERE thread_id = ? AND request_id = ?",
+            (thread_id, request_id),
+        ).fetchone()
+    if row is None:
+        return None
+    if row["request_digest"] != request_digest:
+        raise AIThreadConflictError("request_id is already bound to different submit semantics")
+    return str(row["id"])
+
+
+def _context_blocks_for_new_submit(workspace_id: str, payload: AIThreadSubmit) -> list[dict] | None:
+    if payload.context_selection is None:
+        return None
+    selection = ContextSelectionSpec(**payload.context_selection.model_dump())
+    try:
+        bundle = build_workspace_context_bundle(workspace_id, selection=selection)
+    except ValueError as exc:
+        raise AIThreadError(str(exc)) from exc
+    if bundle.context_digest != payload.expected_context_digest:
+        raise AIThreadConflictError("context pack changed since preview")
+    return bundle.blocks
 
 
 def _reserve_interaction(

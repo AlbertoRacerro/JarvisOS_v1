@@ -1,0 +1,112 @@
+.jarvis-sidecar {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  font-size: var(--font-size-body);
+}
+
+.jarvis-sidecar__header,
+.jarvis-sidecar__local-context,
+.jarvis-sidecar__context,
+.jarvis-sidecar__composer,
+.jarvis-sidecar__stage-context {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.jarvis-sidecar__header {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.jarvis-sidecar__field,
+.jarvis-sidecar__toggle {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.jarvis-sidecar__toggle {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.jarvis-sidecar select,
+.jarvis-sidecar textarea,
+.jarvis-sidecar button {
+  max-width: 100%;
+}
+
+.jarvis-sidecar textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.jarvis-sidecar__local-context,
+.jarvis-sidecar__context,
+.jarvis-sidecar__stage-context {
+  padding-block: var(--space-2);
+  border-block-start: 1px solid var(--color-border-default);
+}
+
+.jarvis-sidecar__local-context span,
+.jarvis-sidecar__local-context small,
+.jarvis-sidecar__status,
+.jarvis-sidecar code,
+.jarvis-sidecar dd,
+.jarvis-sidecar li,
+.jarvis-sidecar p {
+  overflow-wrap: anywhere;
+}
+
+.jarvis-sidecar__transcript {
+  display: grid;
+  gap: var(--space-2);
+  max-height: min(42vh, 28rem);
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.jarvis-sidecar__transcript > li {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+}
+
+.jarvis-sidecar__transcript dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+}
+
+.jarvis-sidecar__transcript dl > div {
+  min-width: 0;
+}
+
+.jarvis-sidecar__transcript dt {
+  font-size: var(--font-size-caption);
+  color: var(--color-text-muted);
+}
+
+.jarvis-sidecar__transcript dd {
+  margin: 0;
+}
+
+.jarvis-sidecar__context ul {
+  margin: 0;
+  padding-inline-start: var(--space-4);
+}
+
+@media (max-width: 48rem) {
+  .jarvis-sidecar__header,
+  .jarvis-sidecar__transcript dl {
+    grid-template-columns: 1fr;
+  }
+}
