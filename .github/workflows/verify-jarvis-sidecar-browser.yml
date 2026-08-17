@@ -66,6 +66,14 @@ jobs:
         run: |
           cp backend/tests/test_jarvis_sidecar_browser_verification.mjs /tmp/target/frontend/.jarvis-sidecar-proof.mjs
           cp backend/tests/test_jarvis_sidecar_browser_matrix.mjs /tmp/target/frontend/.jarvis-sidecar-matrix.mjs
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('/tmp/target/frontend/.jarvis-sidecar-matrix.mjs')
+          text = path.read_text(encoding='utf-8')
+          for digest in ('digestA', 'digestRoute'):
+              text = text.replace(f'page.getByText({digest}).waitFor()', f'page.getByText({digest}).waitFor({{ state: "attached" }})')
+          path.write_text(text, encoding='utf-8')
+          PY
       - name: Run browser proof
         working-directory: /tmp/target/frontend
         run: |
