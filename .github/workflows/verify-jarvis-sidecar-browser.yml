@@ -63,7 +63,9 @@ jobs:
           npm install --no-save --package-lock=false playwright@1.54.2
           ./node_modules/.bin/playwright install --with-deps chromium
       - name: Stage browser proof
-        run: cp backend/tests/test_jarvis_sidecar_browser_verification.mjs /tmp/target/frontend/.jarvis-sidecar-proof.mjs
+        run: |
+          cp backend/tests/test_jarvis_sidecar_browser_verification.mjs /tmp/target/frontend/.jarvis-sidecar-proof.mjs
+          cp backend/tests/test_jarvis_sidecar_browser_matrix.mjs /tmp/target/frontend/.jarvis-sidecar-matrix.mjs
       - name: Run browser proof
         working-directory: /tmp/target/frontend
         run: |
@@ -72,3 +74,4 @@ jobs:
           trap 'kill $VITE_PID || true' EXIT
           for i in $(seq 1 60); do curl -fsS http://127.0.0.1:5173/runs >/dev/null && break; sleep 0.25; done
           node .jarvis-sidecar-proof.mjs
+          node .jarvis-sidecar-matrix.mjs
