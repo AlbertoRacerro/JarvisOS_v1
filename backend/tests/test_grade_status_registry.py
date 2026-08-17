@@ -9,6 +9,7 @@ def test_grade_status_registry_lists_backend_slices() -> None:
     cells = [cell.strip() for cell in row.strip().strip("|").split("|")]
     assert cells[1] == "blocked"
     assert cells[2] == "—"
-    assert "Backend PRs #166 and #167 are merged" in row
-    assert "joint operator design" in row
-    assert "autonomous frontend implementation" in row
+    assert "Backend PRs #166 and #167 remain merged evidence" in row
+    assert "rejected permanent per-response grading in normal Jarvis chat" in row
+    assert "separately re-derived as secondary Evaluation/Audit UI" in row
+    assert "does not block the operator-workstation queue" in row
