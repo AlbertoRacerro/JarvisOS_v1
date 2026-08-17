@@ -293,10 +293,10 @@ export function useJarvisSidecar(
     {loadingDetail ? <p className="jarvis-sidecar__status">Loading thread…</p> : null}
 
     <section className="jarvis-sidecar__context" aria-label="Project context controls">
-      <label className="jarvis-sidecar__toggle"><input type="checkbox" checked={contextEnabled} onChange={(event) => { submitOwner.current += 1; setSubmitting(false); setContextEnabled(event.target.checked); setError(null); }} />Use inspected project context</label>
+      <label className="jarvis-sidecar__toggle"><input type="checkbox" checked={contextEnabled} disabled={submitting} onChange={(event) => { setContextEnabled(event.target.checked); setError(null); }} />Use inspected project context</label>
       {contextEnabled && previewLoading ? <p className="jarvis-sidecar__status">Building context preview…</p> : null}
       {contextEnabled && preview ? <details><summary>Context pack · {preview.included_count} records · ~{preview.estimated_token_count} tokens</summary><p>Digest <code>{preview.context_digest ?? "empty"}</code></p><p>{preview.char_count} characters · {preview.dropped_count} dropped</p><ul>{preview.context_sources_manifest.map((source) => <li key={`${source.type}:${source.id}:${source.source}`}>{source.type ?? "record"}: {source.id ?? source.source}</li>)}</ul></details> : null}
-      {contextEnabled ? <button type="button" onClick={() => setPreviewNonce((current) => current + 1)} disabled={!workspaceId || previewLoading}>Refresh context preview</button> : <p className="jarvis-sidecar__status">Project context is off. Only the current message is submitted.</p>}
+      {contextEnabled ? <button type="button" onClick={() => setPreviewNonce((current) => current + 1)} disabled={!workspaceId || previewLoading || submitting}>Refresh context preview</button> : <p className="jarvis-sidecar__status">Project context is off. Only the current message is submitted.</p>}
       {pendingRetryReady && contextEnabled ? <p className="jarvis-sidecar__status">An uncertain prior submit retains its inspected digest for a safe idempotent retry.</p> : null}
     </section>
 
