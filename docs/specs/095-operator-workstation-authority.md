@@ -10,6 +10,8 @@ Freeze the maintainer-approved operator-first workstation contract before any fu
 
 The product is an engineering workstation, not a database/debug viewer. Normal UI must expose physical meaning, effective values and units, active model choices, real blockers and operator actions. JarvisOS may retain opaque identity, lineage and audit precision behind progressive disclosure without making those implementation details the primary operator experience.
 
+This is a later definition-only authority under the controlled re-derivation clause of spec 081. It preserves every already-merged frontend slice, the 066–068 and 080 freezes, the backend/provider/egress/promotion boundaries, and the separately removable visual-identity lane.
+
 ## 2. Information hierarchy
 
 Three explicit levels apply across BLUECAD, Runs, Review, Engineering Data, Jarvis and Properties.
@@ -162,7 +164,7 @@ This corrective slice must not invent backend engineering contracts that do not 
 
 ## 11. 062 and Notes decisions
 
-The normal Jarvis conversation surface must **not** add a permanent `Was this useful?` grading control under every response. Existing 062 backend/evaluation evidence remains valid; routine frontend grading is deferred and may later become a secondary Evaluation/Audit surface. It does not block Phase 5/6 operator work.
+The normal Jarvis conversation surface must **not** add a permanent `Was this useful?` grading control under every response. Existing 062 backend/evaluation evidence remains valid; routine frontend grading is deferred and may later become a secondary Evaluation/Audit surface. It does not block the operator-first frontend queue.
 
 An engineering Notes/scratchpad concept is approved as future direction but deliberately deferred from the first rework. A future Note is not a Parameter, Assumption or Decision; is not a calculation input; and is not automatically sent to AI providers. Inclusion in Jarvis context must be explicit.
 
@@ -170,20 +172,37 @@ An engineering Notes/scratchpad concept is approved as future direction but deli
 
 The first corrective/property slices do not need spreadsheet editing, but contracts must not preclude later Tab/Shift+Tab/focus navigation, copy/paste from Excel, bulk edit or `apply to selected similar objects`. These are operator-efficiency capabilities, not justification for duplicated engineering authority.
 
-## 13. Re-derived ordered queue
+## 13. Re-derived ordered queue and canonical IDs
 
-The remaining frontend-beta queue is re-derived in this order. Exact implementation authorization remains one slice at a time through readiness/reconciliation discipline.
+The remaining frontend-beta queue is re-derived in this exact order. This authority assigns the previously unnumbered new slices only now, after verifying that 095–098 are unused and that the registry already permits the existing `b` suffix form. Exact implementation authorization remains one slice at a time through definition/readiness/reconciliation discipline.
 
-1. **Corrective Operator Workbench** — new slice: containment, Runs/Review corrections, fixed Jarvis/Properties sidecar. No new engineering backend semantics.
-2. **071 re-derivation** — contract-driven Properties + working configuration + deterministic preflight/run-start semantics, reusing existing binding/DOF authority rather than creating a second store.
-3. **092 re-derivation** — scene selection resolves stable real engineering object/property context; mesh/exporter order is not engineering identity.
-4. **058c re-derivation** — engineering object semantics, property groups, mutually exclusive model choice, formula/dependency Inspect semantics.
-5. **Jarvis Engineering Actions** — new slice only after working-state/property mutation authority exists; structured stale-safe actions and blocker assistance.
-6. **Engineering Record Lifecycle** — new explicit server-owned mutation authority for Edit / Active-Inactive / Archive / Supersede / Delete and project-centric Engineering Data actions.
-7. **006b re-derivation** — variants as working configurations/run snapshots; load prior run without implicit project promotion.
-8. **058b re-derivation** — unit-aware engineering comparison/history, not raw JSON/UUID comparison.
+1. **096 OPERATOR-WORKBENCH-CORRECTION-0** — containment, Runs/Review corrections, fixed Jarvis/Properties sidecar. No new engineering backend semantics.
+2. **071b ENGINEERING-PROPERTIES-1** — additive re-derivation of the already-merged 071 authority: contract-driven Properties, working configuration, dirty/undo/revert state and deterministic preflight/run-start semantics. The merged 071 row remains historical authority and is not reopened or relabelled.
+3. **092 SCENE-BINDING-0, re-derived** — scene selection resolves stable real engineering object/property context; mesh/exporter order is not engineering identity.
+4. **058c SCENE-SEMANTICS-A1, re-derived** — engineering object semantics, property groups, mutually exclusive model choice, formula/dependency Inspect semantics.
+5. **097 JARVIS-ENGINEERING-ACTIONS-0** — only after working-state/property mutation authority exists; structured stale-safe actions, blocker assistance and safe fixes.
+6. **098 ENGINEERING-RECORD-LIFECYCLE-0** — explicit server-owned mutation authority for Edit / Active-Inactive / Archive / Supersede / Delete and project-centric Engineering Data actions.
+7. **006b PARAMETRIC-VARIANTS-1, re-derived** — variants as working configurations/run snapshots; load prior run without implicit project promotion.
+8. **058b VARIANT-COMPARISON-1, re-derived** — unit-aware engineering comparison/history, not raw JSON/UUID comparison.
 
-The old 092 wording remains historical/planned until its re-derived definition is merged. 062 stays pending/deferred. Global visual-identity lane C stays separate and independently removable.
+The old 092 wording remains historical/planned until its re-derived definition is merged. 062 remains blocked/deferred as its own evaluation surface but does not block these operator-workstation slices. Global visual-identity lane C stays separate and independently removable.
+
+### 13.1 Dependency discipline
+
+Spec 095 is definition-only and must not become a hard `Depends on` value for runtime rows because its registry status remains `planned`, exactly like 081. The downstream rows instead depend mechanically on the already-merged runtime foundations and, where needed, on preceding runtime slices in the ordered queue.
+
+The planned mechanical shape to be verified again in each full definition is:
+
+- 096: existing shell/Runs/Review/Jarvis surfaces only;
+- 071b: merged 071 plus merged 096;
+- 092: existing BLUECAD binding foundations plus merged 071b;
+- 058c: merged 092 plus 071b and existing evidence/workbench authority;
+- 097: merged 091 plus 071b/058c;
+- 098: existing MemoryStore/Engineering Data/lineage authority plus 071b;
+- 006b: 071b/092/058c plus existing BLUECAD shell/workbench;
+- 058b: 006b plus existing analytics/workbench and 071b.
+
+A downstream full definition may reduce a dependency proven unnecessary, but may not create a circular dependency back into 095 or silently reorder the queue.
 
 ## 14. Required completeness of each downstream spec
 
@@ -212,8 +231,10 @@ Functional slices preserve the approved engineering-workstation direction: deskt
 
 This authority is complete when:
 
-1. 029 is reconciled as merged;
-2. STATUS records 095 and no longer identifies old 092 as the immediate implementation front;
-3. the ordered queue above is canonical;
-4. downstream implementation remains unauthorized until the next slice receives its own definition/readiness authority;
-5. all maintainer-confirmed 2026-08-17 decisions listed here are represented as testable contracts or explicit deferrals.
+1. 029 is reconciled as merged in STATUS;
+2. STATUS records 095 as definition-only and replaces the old 092-next path with the eight canonical downstream IDs above;
+3. 071 remains merged while 071b owns the new additive Properties/working-state implementation, avoiding false reopening of historical implementation evidence;
+4. downstream implementation remains unauthorized until the next slice receives its own complete definition/readiness authority;
+5. all maintainer-confirmed 2026-08-17 decisions listed here are represented as testable contracts or explicit deferrals;
+6. 062 is recorded as frontend-grading deferred/non-blocking for this operator queue, without altering its backend evidence;
+7. 066–068 and 080 remain frozen and no global visual-identity work is absorbed.
