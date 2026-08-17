@@ -14,6 +14,7 @@ import Dashboard from "./pages/Dashboard";
 import DomainFoundation from "./pages/DomainFoundation";
 import EngineeringData from "./pages/EngineeringData";
 import RunsWorkbench from "./pages/RunsWorkbench";
+import Settings from "./pages/Settings";
 import SystemStatus from "./pages/SystemStatus";
 import { PRIMARY_STAGES, type ShellRegion, type ShellRegionContributions } from "./stages/registry";
 
@@ -57,7 +58,7 @@ function App() {
         content = <AIThreads workspaceId={workspaceId} />;
         break;
       case "settings":
-        content = <MigrationPendingSurface title="Settings" description="The product Settings surface belongs to re-derived spec 029. Current provider, storage, budget, and AI diagnostics remain on explicit legacy routes." navigate={navigate} links={[{ href: "/legacy/system-status", label: "Open legacy System Status" }, { href: "/legacy/ai-draft", label: "Open legacy AI Draft" }]} />;
+        content = <Settings />;
         break;
       case "legacy-domain-foundation":
         content = <LegacyDiagnosticSurface title="Domain Foundation"><DomainFoundation /></LegacyDiagnosticSurface>;

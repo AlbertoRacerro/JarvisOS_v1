@@ -12,6 +12,7 @@ import "./styles/engineering-data.css";
 import "./styles/analytics.css";
 import "./styles/review.css";
 import "./styles/ai-threads.css";
+import "./styles/settings.css";
 import "./styles/responsive.css";
 
 applyStoredAppearance();
