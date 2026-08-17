@@ -1,18 +1,6 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  deleteScalewayApiKey,
-  getAISettings,
-  getAIStatus,
-  getScalewaySecretStatus,
-  getSystemInfo,
-  setScalewayApiKey,
-  updateAISettings,
-  type AISettings,
-  type AIStatus,
-  type ScalewaySecretStatus,
-  type SystemInfoResponse
-} from "../api/client";
+import { deleteScalewayApiKey, getAISettings, getAIStatus, getScalewaySecretStatus, getSystemInfo, setScalewayApiKey, updateAISettings, type AISettings, type AIStatus, type ScalewaySecretStatus, type SystemInfoResponse } from "../api/client";
 import InlineNotice from "../components/ui/InlineNotice";
 import Surface from "../components/ui/Surface";
 
@@ -20,135 +8,35 @@ type NumericKey = "monthly_api_budget_usd" | "scaleway_monthly_token_cap" | "sca
 type BooleanKey = "paid_ai_enabled" | "scaleway_enabled";
 type EditableKey = NumericKey | BooleanKey;
 type Draft = Record<NumericKey, string> & Record<BooleanKey, boolean>;
-
+type SecretView = ScalewaySecretStatus & { effective_source?: string; persisted_state?: string; reason_code?: string | null };
 const numericKeys: NumericKey[] = ["monthly_api_budget_usd", "scaleway_monthly_token_cap", "scaleway_hard_stop_token_cap", "max_direct_continuations"];
 
-function draftFrom(settings: AISettings): Draft {
-  return {
-    monthly_api_budget_usd: String(settings.monthly_api_budget_usd),
-    scaleway_monthly_token_cap: String(settings.scaleway_monthly_token_cap),
-    scaleway_hard_stop_token_cap: String(settings.scaleway_hard_stop_token_cap),
-    max_direct_continuations: String(settings.max_direct_continuations),
-    paid_ai_enabled: settings.paid_ai_enabled,
-    scaleway_enabled: settings.scaleway_enabled
-  };
-}
+function draftFrom(settings: AISettings): Draft { return { monthly_api_budget_usd:String(settings.monthly_api_budget_usd), scaleway_monthly_token_cap:String(settings.scaleway_monthly_token_cap), scaleway_hard_stop_token_cap:String(settings.scaleway_hard_stop_token_cap), max_direct_continuations:String(settings.max_direct_continuations), paid_ai_enabled:settings.paid_ai_enabled, scaleway_enabled:settings.scaleway_enabled }; }
 
 function Settings() {
-  const mounted = useRef(true);
-  const generation = useRef(0);
-  const [settings, setSettings] = useState<AISettings | null>(null);
-  const [status, setStatus] = useState<AIStatus | null>(null);
-  const [secret, setSecret] = useState<ScalewaySecretStatus | null>(null);
-  const [system, setSystem] = useState<SystemInfoResponse | null>(null);
-  const [draft, setDraft] = useState<Draft | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [settingsBusy, setSettingsBusy] = useState(false);
-  const [credentialBusy, setCredentialBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [apiKey, setApiKey] = useState("");
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const mounted = useRef(true); const generation = useRef(0);
+  const [settings,setSettings]=useState<AISettings|null>(null); const [status,setStatus]=useState<AIStatus|null>(null); const [secret,setSecret]=useState<SecretView|null>(null); const [system,setSystem]=useState<SystemInfoResponse|null>(null); const [draft,setDraft]=useState<Draft|null>(null);
+  const [loading,setLoading]=useState(true); const [settingsBusy,setSettingsBusy]=useState(false); const [credentialBusy,setCredentialBusy]=useState(false); const [message,setMessage]=useState<string|null>(null); const [error,setError]=useState<string|null>(null); const [apiKey,setApiKey]=useState(""); const [confirmDelete,setConfirmDelete]=useState(false);
 
-  const load = useCallback(async (preserveDraft = false) => {
-    const owner = ++generation.current;
-    setLoading(true);
-    setError(null);
-    try {
-      const [nextSettings, nextStatus, nextSecret, nextSystem] = await Promise.all([
-        getAISettings(), getAIStatus(), getScalewaySecretStatus(), getSystemInfo()
-      ]);
-      if (!mounted.current || owner !== generation.current) return;
-      setSettings(nextSettings);
-      setStatus(nextStatus);
-      setSecret(nextSecret);
-      setSystem(nextSystem);
-      if (!preserveDraft) setDraft(draftFrom(nextSettings));
-    } catch (caught) {
-      if (mounted.current && owner === generation.current) setError(caught instanceof Error ? caught.message : "Settings could not be loaded.");
-    } finally {
-      if (mounted.current && owner === generation.current) setLoading(false);
-    }
-  }, []);
+  const load=useCallback(async(preserveDraft=false)=>{ const owner=++generation.current; setLoading(true); setError(null); try { const [a,b,c,d]=await Promise.all([getAISettings(),getAIStatus(),getScalewaySecretStatus(),getSystemInfo()]); if(!mounted.current||owner!==generation.current)return; setSettings(a);setStatus(b);setSecret(c as SecretView);setSystem(d);if(!preserveDraft)setDraft(draftFrom(a)); } catch(caught){if(mounted.current&&owner===generation.current)setError(caught instanceof Error?caught.message:"Settings could not be loaded.");} finally{if(mounted.current&&owner===generation.current)setLoading(false);} },[]);
+  useEffect(()=>{mounted.current=true;void load();return()=>{mounted.current=false;generation.current+=1;};},[load]);
 
-  useEffect(() => {
-    mounted.current = true;
-    void load();
-    return () => { mounted.current = false; generation.current += 1; };
-  }, [load]);
+  const save=async(key:EditableKey)=>{if(!draft||settingsBusy)return;let value:number|boolean=draft[key];if(numericKeys.includes(key as NumericKey)){const raw=draft[key as NumericKey].trim();const parsed=Number(raw);const valid=raw!==""&&Number.isFinite(parsed)&&parsed>=0&&(key!=="max_direct_continuations"||(Number.isInteger(parsed)&&parsed<=16));if(!valid){setError(key==="max_direct_continuations"?"Direct continuations must be an integer from 0 to 16.":"Enter a finite value greater than or equal to zero.");return;}value=parsed;}setSettingsBusy(true);setError(null);setMessage(null);try{await updateAISettings({[key]:value});await load(true);setDraft(current=>current?{...current,[key]:typeof value==="number"?String(value):value}:current);setMessage("Saved from canonical settings.");}catch(caught){setError(`${caught instanceof Error?caught.message:"Write failed."} State may be uncertain; reload before another implicit action.`);}finally{if(mounted.current)setSettingsBusy(false);}};
+  const replaceCredential=async(event:FormEvent)=>{event.preventDefault();if(credentialBusy||!apiKey.trim())return;setCredentialBusy(true);setError(null);setMessage(null);try{await setScalewayApiKey(apiKey);setApiKey("");await load(true);setMessage("Credential state reloaded from the secure backend.");}catch(caught){setApiKey("");setError(caught instanceof Error?caught.message:"Credential write failed.");}finally{if(mounted.current)setCredentialBusy(false);}};
+  const removeCredential=async()=>{if(credentialBusy)return;setCredentialBusy(true);setError(null);setMessage(null);try{await deleteScalewayApiKey();setConfirmDelete(false);await load(true);setMessage("Credential state reloaded from the secure backend.");}catch(caught){setError(caught instanceof Error?caught.message:"Credential delete failed.");}finally{if(mounted.current)setCredentialBusy(false);}};
 
-  const save = async (key: EditableKey) => {
-    if (!draft || settingsBusy) return;
-    let value: number | boolean = draft[key];
-    if (numericKeys.includes(key as NumericKey)) {
-      const raw = draft[key as NumericKey].trim();
-      const parsed = Number(raw);
-      const valid = raw !== "" && Number.isFinite(parsed) && parsed >= 0 && (key !== "max_direct_continuations" || (Number.isInteger(parsed) && parsed <= 16));
-      if (!valid) { setError(key === "max_direct_continuations" ? "Direct continuations must be an integer from 0 to 16." : "Enter a finite value greater than or equal to zero."); return; }
-      value = parsed;
-    }
-    setSettingsBusy(true); setError(null); setMessage(null);
-    try {
-      await updateAISettings({ [key]: value });
-      await load(true);
-      setDraft((current) => current ? { ...current, [key]: typeof value === "number" ? String(value) : value } : current);
-      setMessage("Saved from canonical settings.");
-    } catch (caught) {
-      setError(`${caught instanceof Error ? caught.message : "Write failed."} State may be uncertain; reload before another implicit action.`);
-    } finally { if (mounted.current) setSettingsBusy(false); }
-  };
-
-  const replaceCredential = async (event: FormEvent) => {
-    event.preventDefault();
-    if (credentialBusy || !apiKey.trim()) return;
-    setCredentialBusy(true); setError(null); setMessage(null);
-    try {
-      await setScalewayApiKey(apiKey);
-      setApiKey("");
-      await load(true);
-      setMessage("Credential state reloaded from the secure backend.");
-    } catch (caught) { setApiKey(""); setError(caught instanceof Error ? caught.message : "Credential write failed."); }
-    finally { if (mounted.current) setCredentialBusy(false); }
-  };
-
-  const removeCredential = async () => {
-    if (credentialBusy) return;
-    setCredentialBusy(true); setError(null); setMessage(null);
-    try { await deleteScalewayApiKey(); setConfirmDelete(false); await load(true); setMessage("Credential state reloaded from the secure backend."); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : "Credential delete failed."); }
-    finally { if (mounted.current) setCredentialBusy(false); }
-  };
-
-  return <section className="settings-page" aria-labelledby="settings-title">
-    <header className="page-header"><p className="eyebrow">Operator controls</p><h1 id="settings-title">Settings</h1><p>Budget, provider permission and secure credential controls. Internal routing and diagnostics stay read-only.</p></header>
-    {loading && <InlineNotice tone="info">Loading canonical settings.</InlineNotice>}
-    {error && <InlineNotice tone="danger">{error}</InlineNotice>}
-    {message && <InlineNotice tone="success">{message}</InlineNotice>}
-
-    <div className="settings-grid">
-      <Surface className="settings-card"><h2>AI permission & budget</h2><p className="settings-card__summary">External calls: <strong>{status?.external_calls_allowed ? "Allowed" : "Blocked"}</strong>{status?.blocking_reason ? ` — ${status.blocking_reason}` : ""}</p>
-        {draft && <div className="settings-fields">
-          <label><span>Monthly API budget <small>USD</small></span><span className="settings-field"><input inputMode="decimal" value={draft.monthly_api_budget_usd} disabled={settingsBusy} onChange={e => setDraft({...draft, monthly_api_budget_usd:e.target.value})}/><button disabled={settingsBusy} onClick={() => void save("monthly_api_budget_usd")}>Save</button></span></label>
-          <label className="settings-toggle"><span>Paid AI enabled</span><input type="checkbox" checked={draft.paid_ai_enabled} disabled={settingsBusy} onChange={e => setDraft({...draft, paid_ai_enabled:e.target.checked})}/><button disabled={settingsBusy} onClick={() => void save("paid_ai_enabled")}>Save</button></label>
-          <label className="settings-toggle"><span>Scaleway enabled</span><input type="checkbox" checked={draft.scaleway_enabled} disabled={settingsBusy} onChange={e => setDraft({...draft, scaleway_enabled:e.target.checked})}/><button disabled={settingsBusy} onClick={() => void save("scaleway_enabled")}>Save</button></label>
-          <label><span>Monthly token cap</span><span className="settings-field"><input inputMode="numeric" value={draft.scaleway_monthly_token_cap} disabled={settingsBusy} onChange={e => setDraft({...draft, scaleway_monthly_token_cap:e.target.value})}/><button disabled={settingsBusy} onClick={() => void save("scaleway_monthly_token_cap")}>Save</button></span></label>
-          <label><span>Hard-stop token cap</span><span className="settings-field"><input inputMode="numeric" value={draft.scaleway_hard_stop_token_cap} disabled={settingsBusy} onChange={e => setDraft({...draft, scaleway_hard_stop_token_cap:e.target.value})}/><button disabled={settingsBusy} onClick={() => void save("scaleway_hard_stop_token_cap")}>Save</button></span></label>
-          <label><span>Direct continuations <small>0–16</small></span><span className="settings-field"><input inputMode="numeric" value={draft.max_direct_continuations} disabled={settingsBusy} onChange={e => setDraft({...draft, max_direct_continuations:e.target.value})}/><button disabled={settingsBusy} onClick={() => void save("max_direct_continuations")}>Save</button></span></label>
-        </div>}
-      </Surface>
-
-      <Surface className="settings-card"><h2>Scaleway credential</h2><dl className="settings-facts"><div><dt>Effective source</dt><dd>{secret?.effective_source ?? "checking"}</dd></div><div><dt>Persisted state</dt><dd>{secret?.persisted_state ?? "checking"}</dd></div><div><dt>Storage mode</dt><dd>{secret?.storage_mode ?? "checking"}</dd></div></dl>
-        <form className="settings-secret" onSubmit={replaceCredential}><label>Replace API key<input type="password" autoComplete="new-password" value={apiKey} disabled={credentialBusy || secret?.effective_source === "environment"} onChange={e => setApiKey(e.target.value)}/></label><button disabled={credentialBusy || !apiKey.trim() || secret?.effective_source === "environment"}>Store securely</button></form>
-        {secret?.effective_source === "environment" && <p className="settings-muted">Environment credentials override persisted credentials and cannot be replaced here.</p>}
-        {!confirmDelete ? <button className="button-secondary" disabled={credentialBusy || !secret?.key_present} onClick={() => setConfirmDelete(true)}>Delete persisted credential</button> : <div className="settings-confirm" role="group" aria-label="Confirm credential deletion"><span>Delete the persisted credential?</span><button disabled={credentialBusy} onClick={() => void removeCredential()}>Delete</button><button className="button-secondary" disabled={credentialBusy} onClick={() => setConfirmDelete(false)}>Cancel</button></div>}
-      </Surface>
-
-      <Surface className="settings-card"><h2>Current usage</h2><dl className="settings-facts"><div><dt>Spend this month</dt><dd>${status?.spend_month_to_date_usd ?? 0}</dd></div><div><dt>Token usage</dt><dd>{status?.usage_total_tokens ?? 0}</dd></div><div><dt>Budget status</dt><dd>{status?.budget_status ?? "checking"}</dd></div><div><dt>Provider</dt><dd>{status?.provider_id ?? "checking"}</dd></div></dl></Surface>
-
-      <Surface className="settings-card"><h2>System</h2><dl className="settings-facts"><div><dt>Environment</dt><dd>{system?.environment ?? "checking"}</dd></div><div><dt>Data root</dt><dd>{system ? (system.data_root_exists ? "Available" : "Missing") : "checking"}</dd></div><div><dt>Database</dt><dd>{system ? (system.database.ready ? "Ready" : "Not ready") : "checking"}</dd></div><div><dt>Provider configured</dt><dd>{system ? (system.ai.provider_configured ? "Yes" : "No") : "checking"}</dd></div></dl><details><summary>Advanced diagnostics</summary><p>Policy: {settings?.policy_mode ?? "checking"}</p><p>Provider mode: {status?.provider_mode ?? "checking"}</p><p>Credential reason: {secret?.reason_code ?? "none"}</p></details></Surface>
-    </div>
-    <nav className="settings-legacy" aria-label="Legacy diagnostics"><a href="/legacy/system-status">Legacy System Status</a><a href="/legacy/ai-draft">Legacy AI Draft</a></nav>
-  </section>;
+  return <section className="settings-page" aria-labelledby="settings-title"><header className="page-header"><p className="eyebrow">Operator controls</p><h1 id="settings-title">Settings</h1><p>Budget, provider permission and secure credential controls. Internal routing and diagnostics stay read-only.</p></header>
+    {loading&&<InlineNotice tone="info">Loading canonical settings.</InlineNotice>}{error&&<InlineNotice tone="danger">{error}</InlineNotice>}{message&&<InlineNotice tone="success">{message}</InlineNotice>}
+    <div className="settings-grid"><Surface className="settings-card"><h2>AI permission & budget</h2><p className="settings-card__summary">External calls: <strong>{status?.external_calls_allowed?"Allowed":"Blocked"}</strong>{status?.blocking_reason?` — ${status.blocking_reason}`:""}</p>{draft&&<div className="settings-fields">
+      <label><span>Monthly API budget <small>USD</small></span><span className="settings-field"><input inputMode="decimal" value={draft.monthly_api_budget_usd} disabled={settingsBusy} onChange={e=>setDraft({...draft,monthly_api_budget_usd:e.target.value})}/><button disabled={settingsBusy} onClick={()=>void save("monthly_api_budget_usd")}>Save</button></span></label>
+      <label className="settings-toggle"><span>Paid AI enabled</span><input type="checkbox" checked={draft.paid_ai_enabled} disabled={settingsBusy} onChange={e=>setDraft({...draft,paid_ai_enabled:e.target.checked})}/><button disabled={settingsBusy} onClick={()=>void save("paid_ai_enabled")}>Save</button></label>
+      <label className="settings-toggle"><span>Scaleway enabled</span><input type="checkbox" checked={draft.scaleway_enabled} disabled={settingsBusy} onChange={e=>setDraft({...draft,scaleway_enabled:e.target.checked})}/><button disabled={settingsBusy} onClick={()=>void save("scaleway_enabled")}>Save</button></label>
+      <label><span>Monthly token cap</span><span className="settings-field"><input inputMode="numeric" value={draft.scaleway_monthly_token_cap} disabled={settingsBusy} onChange={e=>setDraft({...draft,scaleway_monthly_token_cap:e.target.value})}/><button disabled={settingsBusy} onClick={()=>void save("scaleway_monthly_token_cap")}>Save</button></span></label>
+      <label><span>Hard-stop token cap</span><span className="settings-field"><input inputMode="numeric" value={draft.scaleway_hard_stop_token_cap} disabled={settingsBusy} onChange={e=>setDraft({...draft,scaleway_hard_stop_token_cap:e.target.value})}/><button disabled={settingsBusy} onClick={()=>void save("scaleway_hard_stop_token_cap")}>Save</button></span></label>
+      <label><span>Direct continuations <small>0–16</small></span><span className="settings-field"><input inputMode="numeric" value={draft.max_direct_continuations} disabled={settingsBusy} onChange={e=>setDraft({...draft,max_direct_continuations:e.target.value})}/><button disabled={settingsBusy} onClick={()=>void save("max_direct_continuations")}>Save</button></span></label></div>}</Surface>
+      <Surface className="settings-card"><h2>Scaleway credential</h2><dl className="settings-facts"><div><dt>Effective source</dt><dd>{secret?.effective_source??"checking"}</dd></div><div><dt>Persisted state</dt><dd>{secret?.persisted_state??"checking"}</dd></div><div><dt>Storage mode</dt><dd>{secret?.storage_mode??"checking"}</dd></div></dl><form className="settings-secret" onSubmit={replaceCredential}><label>Replace API key<input type="password" autoComplete="new-password" value={apiKey} disabled={credentialBusy||secret?.effective_source==="environment"} onChange={e=>setApiKey(e.target.value)}/></label><button disabled={credentialBusy||!apiKey.trim()||secret?.effective_source==="environment"}>Store securely</button></form>{secret?.effective_source==="environment"&&<p className="settings-muted">Environment credentials override persisted credentials and cannot be replaced here.</p>}{!confirmDelete?<button className="button-secondary" disabled={credentialBusy||!secret?.key_present} onClick={()=>setConfirmDelete(true)}>Delete persisted credential</button>:<div className="settings-confirm" role="group" aria-label="Confirm credential deletion"><span>Delete the persisted credential?</span><button disabled={credentialBusy} onClick={()=>void removeCredential()}>Delete</button><button className="button-secondary" disabled={credentialBusy} onClick={()=>setConfirmDelete(false)}>Cancel</button></div>}</Surface>
+      <Surface className="settings-card"><h2>Current usage</h2><dl className="settings-facts"><div><dt>Spend this month</dt><dd>${status?.spend_month_to_date_usd??0}</dd></div><div><dt>Token usage</dt><dd>{status?.usage_total_tokens??0}</dd></div><div><dt>Budget status</dt><dd>{status?.budget_status??"checking"}</dd></div><div><dt>Provider</dt><dd>{status?.provider_id??"checking"}</dd></div></dl></Surface>
+      <Surface className="settings-card"><h2>System</h2><dl className="settings-facts"><div><dt>Environment</dt><dd>{system?.environment??"checking"}</dd></div><div><dt>Data root</dt><dd>{system?(system.data_root_exists?"Available":"Missing"):"checking"}</dd></div><div><dt>Database</dt><dd>{system?(system.database.ready?"Ready":"Not ready"):"checking"}</dd></div><div><dt>Provider configured</dt><dd>{system?(system.ai.provider_configured?"Yes":"No"):"checking"}</dd></div></dl><details><summary>Advanced diagnostics</summary><p>Policy: {settings?.policy_mode??"checking"}</p><p>Provider mode: {status?.provider_mode??"checking"}</p><p>Credential reason: {secret?.reason_code??"none"}</p></details></Surface></div>
+    <nav className="settings-legacy" aria-label="Legacy diagnostics"><a href="/legacy/system-status">Legacy System Status</a><a href="/legacy/ai-draft">Legacy AI Draft</a></nav></section>;
 }
-
 export default Settings;
