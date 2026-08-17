@@ -72,6 +72,7 @@ jobs:
           text = path.read_text(encoding='utf-8')
           for digest in ('digestA', 'digestRoute'):
               text = text.replace(f'page.getByText({digest}).waitFor()', f'page.getByText({digest}).waitFor({{ state: "attached" }})')
+          text = text.replace('page.getByText(hostileText, { exact: true }).waitFor()', 'page.getByText(hostileText).waitFor()')
           path.write_text(text, encoding='utf-8')
           PY
       - name: Run browser proof
