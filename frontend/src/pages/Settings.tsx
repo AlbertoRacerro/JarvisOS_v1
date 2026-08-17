@@ -148,7 +148,7 @@ function Settings() {
   const save = async (key: EditableKey) => {
     if (!draft || settingsBusy || uncertain) return;
 
-    let value: number | boolean = draft[key];
+    let value: number | boolean;
     if (numericKeys.includes(key as NumericKey)) {
       const raw = draft[key as NumericKey].trim();
       const parsed = Number(raw);
@@ -161,6 +161,8 @@ function Settings() {
         return;
       }
       value = parsed;
+    } else {
+      value = draft[key as BooleanKey];
     }
 
     setSettingsBusy(true);
