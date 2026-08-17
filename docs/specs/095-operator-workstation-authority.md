@@ -2,7 +2,7 @@
 
 Status: **definition / queue re-derivation authority**  
 Date: 2026-08-17  
-Depends on: 029, 035, 054, 071, 083, 085, 088, 089, 090, 091, 092, 058b, 058c, 006b
+Depends on: 029, 035, 054, 071, 081, 083, 085, 088, 089, 090, 091
 
 ## 1. Purpose
 
