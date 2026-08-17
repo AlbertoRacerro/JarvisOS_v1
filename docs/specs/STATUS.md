@@ -108,7 +108,7 @@ abandonment or substitution is not authorized.
 
 1. Preserve merged 059a/059b, 061a/061b, 075, 076, 077, and 079 authority boundaries.
 2. Treat the merged 082/094 checkpoint as complete and use [the 2026-08-04 Windows evidence](082-094-windows-checkpoint-2026-08-04.md) as the transition record.
-3. Specs 070 UI-FOUNDATION-1, 083 APP-SHELL-1, 084 BLUECAD-READ-MODEL-1, 085 BLUECAD-WORKBENCH-2, 086 MODEL-INSPECTION-A0, 087 LINEAGE-OVERVIEW-1, 088 RUNS-WORKBENCH-1, 035 ENGINEERING-DATA-1, 089 ANALYTICS-DOCK-1, 054 PROPOSAL-REVIEW-1, 090 AI-THREADS-0, 091 JARVIS-SIDECAR-1, and 029 SETTINGS-1 are merged. The active documentation front is definition-only 095 OPERATOR-WORKSTATION-AUTHORITY-1 under PR #288; no old 092 runtime implementation is authorized before 095 merges and 096 receives its own complete definition/readiness authority.
+3. Specs 070 UI-FOUNDATION-1, 083 APP-SHELL-1, 084 BLUECAD-READ-MODEL-1, 085 BLUECAD-WORKBENCH-2, 086 MODEL-INSPECTION-A0, 087 LINEAGE-OVERVIEW-1, 088 RUNS-WORKBENCH-1, 035 ENGINEERING-DATA-1, 089 ANALYTICS-DOCK-1, 054 PROPOSAL-REVIEW-1, 090 AI-THREADS-0, 091 JARVIS-SIDECAR-1, and 029 SETTINGS-1 are merged. Definition-only 095 OPERATOR-WORKSTATION-AUTHORITY-1 is merged under PR #288; the active documentation front is 096 OPERATOR-WORKBENCH-CORRECTION-0 definition under PR #290, and no 096 runtime implementation or old 092 work is authorized until 096 receives separate merged definition/readiness authority.
 4. Preserve the merged documentation contract for 078 without treating it as implementation authorization.
 5. Keep 066–068 and 080 frozen; keep 062 itself blocked/deferred while allowing the operator-workstation queue to proceed without routine grading UI.
 
