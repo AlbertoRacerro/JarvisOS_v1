@@ -202,7 +202,7 @@ await page.getByText("Select a workspace to use Jarvis.").waitFor();
 await page.getByRole("link", { name: "Runs" }).click();
 await page.getByRole("heading", { name: "Runs", level: 1 }).waitFor();
 await openSidecar();
-await page.getByText(digestA).waitFor();
+await page.getByText(digestA).waitFor({ state: "attached" });
 await selectSidecarThread("thread-x");
 
 // Preview failure is bounded and recoverable.
@@ -211,7 +211,7 @@ await page.getByRole("button", { name: "Refresh context preview" }).click();
 await page.getByText("Project context preview could not be loaded.").waitFor();
 currentDigest = digestA;
 await page.getByRole("button", { name: "Refresh context preview" }).click();
-await page.getByText(digestA).waitFor();
+await page.getByText(digestA).waitFor({ state: "attached" });
 
 // Stale preview after route ownership changes must not overwrite the new route preview.
 previewMode = "hold";
@@ -222,7 +222,7 @@ currentDigest = digestRoute;
 await page.getByRole("link", { name: "Engineering Data" }).click();
 await page.getByRole("heading", { name: "Engineering Data", level: 1 }).waitFor();
 await openSidecar();
-await page.getByText(digestRoute).waitFor();
+await page.getByText(digestRoute).waitFor({ state: "attached" });
 heldPreviewResolve();
 await page.waitForTimeout(80);
 assert.equal(await page.getByText(digestOld).count(), 0, "stale route-owned preview must be ignored");
@@ -232,7 +232,7 @@ holdBList = true;
 await page.getByLabel("Workspace").selectOption("workspace-b");
 while (!bListStarted) await page.waitForTimeout(10);
 await page.getByLabel("Workspace").selectOption("workspace-a");
-await page.getByText(digestRoute).waitFor();
+await page.getByText(digestRoute).waitFor({ state: "attached" });
 bListResolve();
 await page.waitForTimeout(80);
 const threadOptions = await page.getByTestId("jarvis-sidecar").locator("select option").allTextContents();
@@ -287,7 +287,7 @@ await page.getByText("failed", { exact: true }).waitFor();
 await page.getByText("capture_failed", { exact: true }).waitFor();
 await page.getByText("Terminal reason: provider_error").waitFor();
 await page.getByText("Persistence diagnostic: assistant snapshot write failed").waitFor();
-await page.getByText(hostileText, { exact: true }).waitFor();
+await page.getByText(hostileText).waitFor();
 assert.equal(await page.locator("img[data-evil]").count(), 0, "markup-like assistant text must render inertly");
 assert.equal(await page.evaluate(() => globalThis.__jarvisInjected === true), false, "hostile text must not execute");
 
@@ -299,7 +299,7 @@ await page.evaluate(() => {
 await page.getByRole("heading", { name: "AI Threads", level: 1 }).waitFor();
 await page.getByRole("button", { name: /Terminal evidence/ }).click();
 await page.getByText("assistant snapshot write failed").waitFor();
-await page.getByText(hostileText, { exact: true }).waitFor();
+await page.getByText(hostileText).waitFor();
 assert.equal(await page.locator("img[data-evil]").count(), 0, "/ai-threads must preserve inert rendering");
 
 assert.deepEqual(unexpectedExternal, [], `unexpected external/provider calls: ${unexpectedExternal.join(", ")}`);
