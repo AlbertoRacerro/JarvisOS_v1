@@ -79,7 +79,8 @@ function App() {
     }
   }
 
-  const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection, shellRegions.sidecar);
+  const stageSidecar = shellRegions.sidecar;
+  const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection);
   const effectiveShellRegions: ShellRegionContributions = {
     ...shellRegions,
     sidecar: jarvisSidecar,
@@ -88,7 +89,7 @@ function App() {
       : {})
   };
 
-  return <Layout route={route} navigate={navigate} selection={selection} shellRegions={effectiveShellRegions} shellRegionRequest={shellRegionRequest}><PageErrorBoundary key={resolved.canonicalPath}>{content}</PageErrorBoundary></Layout>;
+  return <Layout route={route} navigate={navigate} selection={selection} propertiesContent={stageSidecar} shellRegions={effectiveShellRegions} shellRegionRequest={shellRegionRequest}><PageErrorBoundary key={resolved.canonicalPath}>{content}</PageErrorBoundary></Layout>;
 }
 
 export default App;

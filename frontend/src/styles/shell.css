@@ -180,6 +180,11 @@
   grid-column: 3;
   border-inline-end: 0;
   border-radius: var(--radius-md) 0 0 var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  height: min(72rem, calc(100vh - 8rem));
+  max-height: calc(100vh - 8rem);
+  overflow: hidden;
 }
 
 .shell-panel__header,
@@ -199,6 +204,72 @@
 .shell-legacy__header h1,
 .shell-stage__header h1 {
   margin: 0;
+}
+
+.shell-sidecar__tabs {
+  display: none;
+  gap: var(--space-2);
+  margin-block-end: var(--space-2);
+}
+
+.shell-sidecar__tabs button {
+  flex: 1;
+}
+
+.shell-sidecar__tabs button[aria-selected="true"] {
+  font-weight: 700;
+  border-color: var(--color-border-strong);
+}
+
+.shell-sidecar__workbench {
+  display: grid;
+  grid-template-rows: minmax(0, 42fr) minmax(0, 58fr);
+  min-height: 0;
+  flex: 1;
+  gap: var(--space-3);
+}
+
+.shell-sidecar__pane {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-inline-end: var(--space-1);
+}
+
+.shell-sidecar__pane--jarvis {
+  padding-block-end: var(--space-3);
+  border-block-end: var(--border-width-default) solid var(--color-border-default);
+}
+
+.shell-properties__header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  padding-block-end: var(--space-2);
+  background: var(--color-bg-surface-raised);
+}
+
+.shell-properties__header h3,
+.shell-properties__header p,
+.shell-properties__selection p {
+  margin-block: 0;
+}
+
+.shell-properties__selection,
+.shell-properties__inspect {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.shell-properties__selection details,
+.shell-properties__inspect {
+  margin-block-start: var(--space-3);
+}
+
+.shell-properties__selection .details,
+.shell-properties__inspect .details {
+  min-width: 0;
 }
 
 .shell-analysis-dock {
@@ -269,4 +340,32 @@
   background: var(--color-bg-subtle);
   border: var(--border-width-default) solid var(--color-border-default);
   border-radius: var(--radius-md);
+}
+
+@media (max-width: 58rem) {
+  .shell-sidecar {
+    height: min(56rem, calc(100vh - 6rem));
+    max-height: calc(100vh - 6rem);
+  }
+
+  .shell-sidecar__tabs {
+    display: flex;
+  }
+
+  .shell-sidecar__workbench {
+    display: block;
+  }
+
+  .shell-sidecar__pane {
+    height: 100%;
+  }
+
+  .shell-sidecar__pane--jarvis {
+    border-block-end: 0;
+    padding-block-end: 0;
+  }
+
+  .shell-sidecar__pane[data-compact-hidden="true"] {
+    display: none;
+  }
 }
