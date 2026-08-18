@@ -88,7 +88,7 @@ test('096 readiness browser matrix', async ({ page }) => {
   expect(ratio).toBeGreaterThan(0.35); expect(ratio).toBeLessThan(0.5);
   const paneStyles = await Promise.all([jarvisPane, propertiesPane].map(p => p.evaluate(el => ({ overflowY:getComputedStyle(el).overflowY, clientHeight:el.clientHeight, scrollHeight:el.scrollHeight }))));
   expect(paneStyles[0].overflowY).toMatch(/auto|scroll/); expect(paneStyles[1].overflowY).toMatch(/auto|scroll/);
-  await expect(sidecar.getByText('Evidence thread')).toBeVisible();
+  await expect(sidecar.getByLabel('Thread')).toHaveValue('thread-1');
   await expect(sidecar.locator('#jarvis-prompt')).toBeVisible();
 
   // 3: truthful no-selection properties + locally bounded technical disclosure.
