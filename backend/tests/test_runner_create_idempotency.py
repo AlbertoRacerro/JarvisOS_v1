@@ -91,6 +91,42 @@ def test_same_request_key_and_payload_returns_same_run_without_duplicate(client:
     assert run_count == 1
 
 
+def test_create_replay_after_execution_returns_terminal_job_without_duplicate(client: TestClient) -> None:
+    implementation_id = _create_implementation(client)
+    payload = _create_payload(implementation_id, "run-create-test-terminal-0001")
+
+    created = client.post("/workspaces/bluerev/runner-jobs", json=payload)
+    assert created.status_code == 201
+    runner_job_id = created.json()["runner_job"]["id"]
+    simulation_run_id = created.json()["simulation_run"]["id"]
+
+    executed = client.post(f"/runner-jobs/{runner_job_id}/run")
+    assert executed.status_code == 200
+    assert executed.json()["runner_job"]["status"] == "succeeded"
+
+    replay = client.post("/workspaces/bluerev/runner-jobs", json=payload)
+    assert replay.status_code == 201
+    assert replay.json()["runner_job"]["id"] == runner_job_id
+    assert replay.json()["runner_job"]["status"] == "succeeded"
+    assert replay.json()["simulation_run"]["id"] == simulation_run_id
+    assert replay.json()["simulation_run"]["status"] == "succeeded"
+
+    from app.core.database import open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        job_count = connection.execute(
+            "SELECT COUNT(*) AS count FROM runner_jobs WHERE workspace_id = ? AND request_key = ?",
+            ("bluerev", payload["request_key"]),
+        ).fetchone()["count"]
+        run_count = connection.execute(
+            "SELECT COUNT(*) AS count FROM simulation_runs WHERE workspace_id = ? AND run_label = ?",
+            ("bluerev", payload["run_label"]),
+        ).fetchone()["count"]
+
+    assert job_count == 1
+    assert run_count == 1
+
+
 def test_same_request_key_with_different_payload_fails_closed(client: TestClient) -> None:
     implementation_id = _create_implementation(client)
     request_key = "run-create-test-0002"
