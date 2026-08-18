@@ -6,6 +6,10 @@ import Layout from "./components/Layout";
 import PageErrorBoundary from "./components/PageErrorBoundary";
 import { useJarvisSidecar } from "./components/ai/useJarvisSidecar";
 import AnalyticsDockContent from "./components/analytics/AnalyticsDockContent";
+import {
+  EngineeringPropertiesPanel,
+  useEngineeringProperties
+} from "./components/engineering/EngineeringProperties";
 import LegacyDiagnosticSurface from "./components/shell/LegacyDiagnosticSurface";
 import MigrationPendingSurface from "./components/shell/MigrationPendingSurface";
 import AIDraft from "./pages/AIDraft";
@@ -28,12 +32,19 @@ function App() {
   const [selection, setSelection] = useState<StageSelection | null>(null);
   const [shellRegions, setShellRegions] = useState<ShellRegionContributions>({});
   const [shellRegionRequest, setShellRegionRequest] = useState<ShellRegionRequest | null>(null);
+  const engineeringProperties = useEngineeringProperties(workspaceId, setWorkspaceId);
 
   useEffect(() => {
     setSelection(null);
     setShellRegions({});
     setShellRegionRequest(null);
   }, [route.id]);
+
+  useEffect(() => {
+    if (selection?.kind === "record" && selection.ref.workspaceId !== workspaceId) {
+      setWorkspaceId(selection.ref.workspaceId);
+    }
+  }, [selection, workspaceId]);
 
   const requestShellRegionOpen = (region: ShellRegion) => {
     setShellRegionRequest((current) => ({ region, nonce: (current?.nonce ?? 0) + 1 }));
@@ -81,6 +92,7 @@ function App() {
 
   const stageSidecar = shellRegions.sidecar;
   const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection);
+  const propertiesContent = <EngineeringPropertiesPanel controller={engineeringProperties} stageContext={stageSidecar} />;
   const effectiveShellRegions: ShellRegionContributions = {
     ...shellRegions,
     sidecar: jarvisSidecar,
@@ -89,7 +101,7 @@ function App() {
       : {})
   };
 
-  return <Layout route={route} navigate={navigate} selection={selection} propertiesContent={stageSidecar} shellRegions={effectiveShellRegions} shellRegionRequest={shellRegionRequest}><PageErrorBoundary key={resolved.canonicalPath}>{content}</PageErrorBoundary></Layout>;
+  return <Layout route={route} navigate={navigate} selection={selection} propertiesContent={propertiesContent} shellRegions={effectiveShellRegions} shellRegionRequest={shellRegionRequest}><PageErrorBoundary key={resolved.canonicalPath}>{content}</PageErrorBoundary></Layout>;
 }
 
 export default App;
