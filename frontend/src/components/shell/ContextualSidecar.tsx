@@ -16,7 +16,7 @@ function PropertiesFallback({ selection }: { selection: StageSelection | null })
   if (selection === null) {
     return <InlineNotice tone="neutral">No object selected. Select a current engineering or viewer object to inspect available properties.</InlineNotice>;
   }
-  if (selection.kind === "geometry") {
+  if (selection.kind === "geometry-hit") {
     return <div className="shell-properties__selection"><strong>Viewer geometry selection</strong><p>This hit is ephemeral viewer-session data and is not yet an engineering record.</p><details><summary>Technical details</summary><dl className="details"><div><dt>Viewer session</dt><dd>{selection.viewerSessionId}</dd></div><div><dt>Ephemeral object</dt><dd>{selection.ephemeralObjectId}</dd></div></dl></details></div>;
   }
   return <div className="shell-properties__selection"><strong>Engineering record selection</strong><p>Semantic engineering properties are introduced by the later 071b/092 authority. Current machine identity remains inspectable below.</p><details><summary>Technical details</summary><dl className="details"><div><dt>Resource</dt><dd>{selection.ref.resource}</dd></div><div><dt>Workspace</dt><dd>{selection.ref.workspaceId}</dd></div><div><dt>Record</dt><dd>{selection.ref.recordId}</dd></div></dl></details></div>;
