@@ -277,6 +277,36 @@ export function useEngineeringProperties(
     setRunMessage(null);
     try {
       const created = await createRunnerJob(workspaceId!, snapshot.payload);
+      if (created.runner_job.status !== "queued") {
+        const reconciled: RunnerJobRunResponse = {
+          runner_job: created.runner_job,
+          simulation_run: created.simulation_run,
+          output: null,
+          error: null
+        };
+        setRunResult(reconciled);
+
+        if (created.runner_job.status === "succeeded") {
+          setPendingRun(null);
+          if (revisionRef.current === snapshot.revision && selectedIdRef.current === selected?.id) {
+            setBaseline(cloneBindings(snapshot.bindings));
+            setUndoStack([]);
+          }
+          setRunMessage("Run already completed successfully. Canonical project records were not changed.");
+          return;
+        }
+
+        if (["failed", "cancelled", "timed_out"].includes(created.runner_job.status)) {
+          setPendingRun(null);
+          setRunMessage(`Execution already finished with status ${created.runner_job.status}. Working edits were preserved.`);
+          return;
+        }
+
+        setPendingRun(snapshot);
+        setRunMessage(`Run is already ${created.runner_job.status}. Retry reconciliation uses the same request identity and will not redispatch execution.`);
+        return;
+      }
+
       const result = await runRunnerJob(created.runner_job.id);
       setRunResult(result);
       setPendingRun(null);
