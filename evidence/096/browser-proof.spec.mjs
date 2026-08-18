@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 
+const APP = 'http://127.0.0.1:4173';
 const API = 'http://127.0.0.1:8000';
 const workspace = { id: 'ws-1', name: 'Evidence workspace', slug: 'evidence', description: null, status: 'active', created_at: '2026-08-18T00:00:00Z', updated_at: '2026-08-18T00:00:00Z' };
 const hostile = '<img src=x onerror="window.__pwned=1">' + 'X'.repeat(1400);
@@ -59,7 +60,7 @@ async function installMocks(page, counters) {
 }
 
 async function openRuns(page) {
-  await page.goto('/runs');
+  await page.goto(`${APP}/runs`);
   await expect(page.getByRole('heading', {name:'Runs', level:1})).toBeVisible();
   await expect(page.getByText('Hostile bounded run').first()).toBeVisible();
 }
