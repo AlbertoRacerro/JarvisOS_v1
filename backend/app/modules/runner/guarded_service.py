@@ -62,6 +62,10 @@ def create_runner_job(
     workspace_id: str,
     payload: RunnerJobCreate,
 ) -> RunnerJobCreateResponse:
+    replay = _replay_existing_runner_job(workspace_id, payload)
+    if replay is not None:
+        return replay
+
     model_version = _load_model_version(workspace_id, payload.model_version_id)
     _require_exact_bundled(model_version)
     stored_sha = str(model_version["script_sha256"])
@@ -75,6 +79,67 @@ def create_runner_job(
         if translated is exc:
             raise
         raise translated from exc
+
+
+def _replay_existing_runner_job(
+    workspace_id: str,
+    payload: RunnerJobCreate,
+) -> RunnerJobCreateResponse | None:
+    if payload.request_key is None:
+        return None
+
+    with open_sqlite_connection() as connection:
+        existing = connection.execute(
+            """
+            SELECT
+                rj.id AS runner_job_id,
+                rj.simulation_run_id,
+                rj.timeout_seconds,
+                rj.implementation_kind,
+                sr.model_version_id,
+                sr.run_label,
+                sr.input_payload,
+                sr.parameter_payload
+            FROM runner_jobs rj
+            JOIN simulation_runs sr ON sr.id = rj.simulation_run_id
+            WHERE rj.workspace_id = ? AND rj.request_key = ?
+            """,
+            (workspace_id, payload.request_key),
+        ).fetchone()
+    if existing is None:
+        return None
+
+    try:
+        if existing["implementation_kind"] == _base.IMPLEMENTATION_KIND:
+            input_payload, parameter_payload = _base.validate_batch_growth_input(payload.input_set)
+        elif existing["implementation_kind"] == _base.BLUECAD_L2_IMPLEMENTATION_KIND:
+            input_payload, parameter_payload = _base.validate_bluecad_l2_input(payload.input_set)
+        elif existing["implementation_kind"] == _base.CALC_V0_IMPLEMENTATION_KIND:
+            input_payload, parameter_payload = _base.validate_calc_v0_input(payload.input_set)
+        else:
+            raise RunnerSafetyError("runner_implementation_kind_unsupported", "Unsupported implementation kind.")
+    except RunnerSafetyError as exc:
+        raise RunnerSafetyError(
+            "runner_request_key_conflict",
+            "Runner request key is already bound to a different create payload.",
+        ) from exc
+
+    same_payload = (
+        existing["model_version_id"] == payload.model_version_id
+        and existing["run_label"] == payload.run_label
+        and existing["input_payload"] == input_payload
+        and existing["parameter_payload"] == parameter_payload
+        and int(existing["timeout_seconds"]) == min(payload.timeout_seconds or _base.DEFAULT_TIMEOUT_SECONDS, 60)
+    )
+    if not same_payload:
+        raise RunnerSafetyError(
+            "runner_request_key_conflict",
+            "Runner request key is already bound to a different create payload.",
+        )
+    return RunnerJobCreateResponse(
+        runner_job=_base.get_runner_job(str(existing["runner_job_id"])),
+        simulation_run=_base.get_simulation_run_detail(workspace_id, str(existing["simulation_run_id"])),
+    )
 
 
 def _create_runner_job_idempotent(
