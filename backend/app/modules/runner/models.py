@@ -69,6 +69,12 @@ class RunnerJobCreate(BaseModel):
     run_label: str | None = None
     input_set: dict[str, Any]
     timeout_seconds: int = Field(default=10, ge=1, le=60)
+    request_key: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9._:-]+$",
+    )
 
 
 class RunnerJobRead(BaseModel):

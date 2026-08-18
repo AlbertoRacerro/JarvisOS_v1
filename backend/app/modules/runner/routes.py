@@ -46,7 +46,7 @@ def _runner_error(exc: RunnerSafetyError) -> HTTPException:
         "runner_job_not_found",
         "runner_simulation_run_not_found",
     }
-    conflicts = {"runner_job_not_queued"}
+    conflicts = {"runner_job_not_queued", "runner_request_key_conflict"}
     status_code = 404 if exc.code in not_found else 409 if exc.code in conflicts else 400
     return HTTPException(status_code=status_code, detail={"code": exc.code, "message": exc.message})
 
