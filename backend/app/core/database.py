@@ -46,6 +46,14 @@ from app.core.token_flow_schema import (
 )
 from app.modules.events.service import utc_now
 
+RUNNER_CREATE_REQUEST_MIGRATION_STATEMENTS = (
+    "ALTER TABLE runner_jobs ADD COLUMN request_key TEXT",
+)
+RUNNER_CREATE_REQUEST_INDEX_STATEMENTS = (
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_runner_jobs_workspace_request_key "
+    "ON runner_jobs(workspace_id, request_key) WHERE request_key IS NOT NULL",
+)
+
 
 @dataclass(frozen=True)
 class SchemaMigrationInfo:
@@ -111,6 +119,7 @@ def initialize_database() -> DatabaseInfo:
             *SCHEMA_MIGRATION_STATEMENTS,
             *EGRESS_SCHEMA_MIGRATION_STATEMENTS,
             *TOKEN_FLOW_SCHEMA_MIGRATION_STATEMENTS,
+            *RUNNER_CREATE_REQUEST_MIGRATION_STATEMENTS,
         ]:
             try:
                 connection.execute(statement)
@@ -130,6 +139,8 @@ def initialize_database() -> DatabaseInfo:
         for statement in GRADE_SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         for statement in AI_THREAD_SCHEMA_INDEX_STATEMENTS:
+            connection.execute(statement)
+        for statement in RUNNER_CREATE_REQUEST_INDEX_STATEMENTS:
             connection.execute(statement)
         if _sqlite_fts5_available(connection):
             for statement in SCHEMA_FTS_STATEMENTS:
