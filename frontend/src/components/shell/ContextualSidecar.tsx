@@ -1,14 +1,52 @@
-import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { StageSelection } from "../../app/selection";
 import Button from "../ui/Button";
 import InlineNotice from "../ui/InlineNotice";
 
-type ContextualSidecarProps = Readonly<{ open: boolean; selection: StageSelection | null; onClose(): void; content?: ReactNode }>;
-function ContextualSidecar({ open, selection, onClose, content }: ContextualSidecarProps) {
+type Pane = "jarvis" | "properties";
+type ContextualSidecarProps = Readonly<{
+  open: boolean;
+  selection: StageSelection | null;
+  onClose(): void;
+  content?: ReactNode;
+  propertiesContent?: ReactNode;
+}>;
+
+function PropertiesFallback({ selection }: { selection: StageSelection | null }) {
+  if (selection === null) {
+    return <InlineNotice tone="neutral">No object selected. Select a current engineering or viewer object to inspect available properties.</InlineNotice>;
+  }
+  if (selection.kind === "geometry") {
+    return <div className="shell-properties__selection"><strong>Viewer geometry selection</strong><p>This hit is ephemeral viewer-session data and is not yet an engineering record.</p><details><summary>Technical details</summary><dl className="details"><div><dt>Viewer session</dt><dd>{selection.viewerSessionId}</dd></div><div><dt>Ephemeral object</dt><dd>{selection.ephemeralObjectId}</dd></div></dl></details></div>;
+  }
+  return <div className="shell-properties__selection"><strong>Engineering record selection</strong><p>Semantic engineering properties are introduced by the later 071b/092 authority. Current machine identity remains inspectable below.</p><details><summary>Technical details</summary><dl className="details"><div><dt>Resource</dt><dd>{selection.ref.resource}</dd></div><div><dt>Workspace</dt><dd>{selection.ref.workspaceId}</dd></div><div><dt>Record</dt><dd>{selection.ref.recordId}</dd></div></dl></details></div>;
+}
+
+function ContextualSidecar({ open, selection, onClose, content, propertiesContent }: ContextualSidecarProps) {
   const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const [activePane, setActivePane] = useState<Pane>("jarvis");
   useEffect(() => { if (open) headingRef.current?.focus(); }, [open]);
   const onPanelKeyDown = (event: KeyboardEvent<HTMLElement>) => { if (event.key === "Escape") { event.stopPropagation(); onClose(); } };
+  const onTabsKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    setActivePane((current) => current === "jarvis" ? "properties" : "jarvis");
+  };
   if (!open) return null;
-  return <aside id="shell-sidecar" className="shell-panel shell-sidecar" aria-labelledby="shell-sidecar-title" onKeyDown={onPanelKeyDown}><div className="shell-panel__header"><h2 id="shell-sidecar-title" ref={headingRef} tabIndex={-1}>Context</h2><Button variant="ghost" onClick={onClose}>Close sidecar</Button></div>{content ?? (selection === null ? <InlineNotice tone="neutral">No record selected. APP-SHELL-1 does not infer identity from page or viewer state.</InlineNotice> : selection.kind === "record" ? <dl className="details"><div><dt>Resource</dt><dd>{selection.ref.resource}</dd></div><div><dt>Workspace</dt><dd>{selection.ref.workspaceId}</dd></div><div><dt>Record</dt><dd>{selection.ref.recordId}</dd></div></dl> : <InlineNotice tone="neutral">Geometry hits are ephemeral viewer-session data and are not engineering records.</InlineNotice>)}</aside>;
+  return <aside id="shell-sidecar" className="shell-panel shell-sidecar" aria-labelledby="shell-sidecar-title" onKeyDown={onPanelKeyDown}>
+    <div className="shell-panel__header"><h2 id="shell-sidecar-title" ref={headingRef} tabIndex={-1}>Jarvis &amp; Properties</h2><Button variant="ghost" onClick={onClose}>Close sidecar</Button></div>
+    <div className="shell-sidecar__tabs" role="tablist" aria-label="Sidecar views" onKeyDown={onTabsKeyDown}>
+      <button id="shell-sidecar-tab-jarvis" type="button" role="tab" aria-selected={activePane === "jarvis"} aria-controls="shell-sidecar-pane-jarvis" tabIndex={activePane === "jarvis" ? 0 : -1} onClick={() => setActivePane("jarvis")}>Jarvis</button>
+      <button id="shell-sidecar-tab-properties" type="button" role="tab" aria-selected={activePane === "properties"} aria-controls="shell-sidecar-pane-properties" tabIndex={activePane === "properties" ? 0 : -1} onClick={() => setActivePane("properties")}>Properties</button>
+    </div>
+    <div className="shell-sidecar__workbench">
+      <section id="shell-sidecar-pane-jarvis" className="shell-sidecar__pane shell-sidecar__pane--jarvis" role="tabpanel" aria-labelledby="shell-sidecar-tab-jarvis" data-compact-hidden={activePane !== "jarvis"}>{content ?? <InlineNotice tone="neutral">Jarvis is unavailable for this route.</InlineNotice>}</section>
+      <section id="shell-sidecar-pane-properties" className="shell-sidecar__pane shell-sidecar__pane--properties" role="tabpanel" aria-labelledby="shell-sidecar-tab-properties" data-compact-hidden={activePane !== "properties"}>
+        <header className="shell-properties__header"><p className="eyebrow">Engineering object</p><h3>Properties</h3></header>
+        <PropertiesFallback selection={selection} />
+        {propertiesContent ? <details className="shell-properties__inspect"><summary>Current stage context</summary>{propertiesContent}</details> : null}
+      </section>
+    </div>
+  </aside>;
 }
 export default ContextualSidecar;
