@@ -2,7 +2,8 @@
 .review-card,
 .review-nav,
 .review-nav__list,
-.review-facts {
+.review-facts,
+.review-technical {
   min-width: 0;
 }
 
@@ -81,7 +82,8 @@
 .review-nav__item span,
 .review-fact dd,
 .review-card__header > *,
-.review-actions > * {
+.review-actions > *,
+.review-technical summary {
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -104,6 +106,7 @@
 }
 
 .review-facts--meta {
+  margin-block-start: var(--space-3);
   padding-block-start: var(--space-3);
   border-block-start: var(--border-width-default) solid var(--color-border-default);
 }
@@ -127,6 +130,11 @@
   justify-content: flex-start;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.review-technical {
+  padding-block-start: var(--space-2);
+  border-block-start: var(--border-width-default) solid var(--color-border-default);
 }
 
 @media (max-width: 48rem) {
