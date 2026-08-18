@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - evidence/096-browser-proof-20260818
+  pull_request:
+    branches:
+      - impl/096-operator-workbench-correction
 
 permissions:
   contents: read
