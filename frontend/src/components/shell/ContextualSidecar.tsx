@@ -24,20 +24,26 @@ function PropertiesFallback({ selection }: { selection: StageSelection | null })
 
 function ContextualSidecar({ open, selection, onClose, content, propertiesContent }: ContextualSidecarProps) {
   const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const jarvisTabRef = useRef<HTMLButtonElement | null>(null);
+  const propertiesTabRef = useRef<HTMLButtonElement | null>(null);
   const [activePane, setActivePane] = useState<Pane>("jarvis");
   useEffect(() => { if (open) headingRef.current?.focus(); }, [open]);
   const onPanelKeyDown = (event: KeyboardEvent<HTMLElement>) => { if (event.key === "Escape") { event.stopPropagation(); onClose(); } };
+  const activatePane = (pane: Pane, moveFocus = false) => {
+    setActivePane(pane);
+    if (moveFocus) window.requestAnimationFrame(() => (pane === "jarvis" ? jarvisTabRef.current : propertiesTabRef.current)?.focus());
+  };
   const onTabsKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
-    setActivePane((current) => current === "jarvis" ? "properties" : "jarvis");
+    activatePane(activePane === "jarvis" ? "properties" : "jarvis", true);
   };
   if (!open) return null;
   return <aside id="shell-sidecar" className="shell-panel shell-sidecar" aria-labelledby="shell-sidecar-title" onKeyDown={onPanelKeyDown}>
     <div className="shell-panel__header"><h2 id="shell-sidecar-title" ref={headingRef} tabIndex={-1}>Jarvis &amp; Properties</h2><Button variant="ghost" onClick={onClose}>Close sidecar</Button></div>
     <div className="shell-sidecar__tabs" role="tablist" aria-label="Sidecar views" onKeyDown={onTabsKeyDown}>
-      <button id="shell-sidecar-tab-jarvis" type="button" role="tab" aria-selected={activePane === "jarvis"} aria-controls="shell-sidecar-pane-jarvis" tabIndex={activePane === "jarvis" ? 0 : -1} onClick={() => setActivePane("jarvis")}>Jarvis</button>
-      <button id="shell-sidecar-tab-properties" type="button" role="tab" aria-selected={activePane === "properties"} aria-controls="shell-sidecar-pane-properties" tabIndex={activePane === "properties" ? 0 : -1} onClick={() => setActivePane("properties")}>Properties</button>
+      <button ref={jarvisTabRef} id="shell-sidecar-tab-jarvis" type="button" role="tab" aria-selected={activePane === "jarvis"} aria-controls="shell-sidecar-pane-jarvis" tabIndex={activePane === "jarvis" ? 0 : -1} onClick={() => activatePane("jarvis")}>Jarvis</button>
+      <button ref={propertiesTabRef} id="shell-sidecar-tab-properties" type="button" role="tab" aria-selected={activePane === "properties"} aria-controls="shell-sidecar-pane-properties" tabIndex={activePane === "properties" ? 0 : -1} onClick={() => activatePane("properties")}>Properties</button>
     </div>
     <div className="shell-sidecar__workbench">
       <section id="shell-sidecar-pane-jarvis" className="shell-sidecar__pane shell-sidecar__pane--jarvis" role="tabpanel" aria-labelledby="shell-sidecar-tab-jarvis" data-compact-hidden={activePane !== "jarvis"}>{content ?? <InlineNotice tone="neutral">Jarvis is unavailable for this route.</InlineNotice>}</section>
