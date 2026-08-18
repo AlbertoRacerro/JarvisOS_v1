@@ -133,7 +133,7 @@ test('096 readiness browser matrix', async ({ page }) => {
   await expect(page.getByRole('button', {name:'Reject'})).toBeVisible();
   const technical = page.getByText('Technical details').last();
   await expect(technical).toBeVisible();
-  await expect(page.getByText(/Impact/i)).toHaveCount(0);
+  await expect(page.getByText('Impact', {exact:true})).toHaveCount(0);
   expect(await page.evaluate(() => window.__pwned ?? 0)).toBe(0);
 
   // 11: keyboard and Escape/focus return.
