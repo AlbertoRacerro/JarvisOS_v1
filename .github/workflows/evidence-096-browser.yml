@@ -1,0 +1,59 @@
+name: Evidence 096 Browser Proof
+
+on:
+  push:
+    branches:
+      - evidence/096-browser-proof-20260818
+
+permissions:
+  contents: read
+
+jobs:
+  browser-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend
+        working-directory: frontend
+        run: npm ci
+      - name: Build exact product source
+        working-directory: frontend
+        run: npm run build
+      - name: Install browser harness ephemerally
+        run: npm install --no-save @playwright/test@1.48.2
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Start Vite preview
+        working-directory: frontend
+        run: |
+          npm run preview -- --port 4173 > /tmp/jarvis-vite.log 2>&1 &
+          echo $! > /tmp/jarvis-vite.pid
+          for i in {1..30}; do
+            curl -fsS http://127.0.0.1:4173/runs >/dev/null && exit 0
+            sleep 1
+          done
+          cat /tmp/jarvis-vite.log
+          exit 1
+      - name: Run 096 browser matrix
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
+        run: npx playwright test evidence/096/browser-proof.spec.mjs --browser=chromium --reporter=line
+      - name: Freeze evidence manifest
+        if: always()
+        run: |
+          mkdir -p evidence/096/out
+          printf 'product_head=%s\nevidence_head=%s\n' '1db486d4e8c5c2042a77c20df1ddc64883074a09' "$GITHUB_SHA" > evidence/096/out/manifest.txt
+          cp /tmp/jarvis-vite.log evidence/096/out/vite.log || true
+          cp evidence/096/096-final.png evidence/096/out/096-final.png || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evidence-096-browser-${{ github.sha }}
+          path: evidence/096/out
+          if-no-files-found: warn
