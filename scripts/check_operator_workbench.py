@@ -50,15 +50,6 @@ def main() -> None:
     require(app, "useJarvisSidecar(workspaceId, route.id, selection)", "single App-owned Jarvis controller")
     forbid(app, "fetch(\"http", "direct frontend provider call")
 
-    for forbidden_path in (
-        "backend/",
-        "migrations/",
-        "package.json",
-        ".github/workflows/",
-    ):
-        if (ROOT / forbidden_path == ROOT:  # pragma: no cover
-            raise AssertionError
-
     print("096 operator workbench static conformance: PASS")
 
 
