@@ -22,6 +22,30 @@ agent execution read `AGENTS.md` and
 `docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md`; for actual behavior inspect
 current code and exact-head deterministic evidence.
 
+## Copyright and Licensing
+
+Copyright © 2026 Alberto Racerro. All rights reserved.
+
+This repository is publicly available for inspection and evaluation, but **no
+software license is currently granted**.
+
+Except for the limited rights provided by GitHub's Terms of Service for use
+through GitHub's functionality, no permission is granted to use, copy, modify,
+distribute, sublicense, sell, commercialize, or create derivative products from
+this codebase.
+
+If you are interested in using JarvisOS, building upon it, integrating parts of
+it into another project, contributing substantially, or discussing research or
+commercial use, please contact the repository owner first through GitHub.
+Licensing or collaboration terms may be agreed on a case-by-case basis.
+
+Public availability of the source code should not be interpreted as an
+open-source license or as a waiver of copyright.
+
+**External contributions:** Please contact the repository owner before
+submitting substantial code contributions. Contributions may require a separate
+written agreement before acceptance.
+
 ## Current Runtime Status
 
 Verified against code as of 2026-07-02. Later merged specs and current code
