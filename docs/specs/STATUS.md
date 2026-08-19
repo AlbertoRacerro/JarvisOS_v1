@@ -114,7 +114,7 @@ abandonment or substitution is not authorized.
 
 ## Current priority and drafting order
 
-1. 099 REVIEW-SECRET-BOUNDARY-0 is the sole active priority security interrupt once this definition/readiness change merges. Implement and reconcile 099 before adding new functional commits to 092.
+1. 099 REVIEW-SECRET-BOUNDARY-0 implementation is in review under PR #306. Close and reconcile 099 before adding new functional commits to 092.
 2. Preserve 092 implementation PR #303 exactly as the paused product front. After 099 merges/reconciles, resume #303 from its then-current exact head under the existing 092 definition/readiness; 058c remains unauthorized until 092 merges and is reconciled.
 3. Preserve merged 059a/059b, 061a/061b, 075, 076, 077, 079, 082, 094, 070, 083, 084, 085, 086, 087, 088, 035, 089, 054, 090, 091, 029, 096, and 071b authority boundaries; definition-only 095 remains non-implementation authority.
 4. Preserve the merged documentation contract for 078 without treating it as implementation authorization.
@@ -233,7 +233,7 @@ abandonment or substitution is not authorized.
 | 096 | merged | [#293](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/293) | OPERATOR-WORKBENCH-CORRECTION-0 | 054, 083, 088, 089, 091 | Definition PR #290 and readiness PR #291 are merged; runtime implementation PR #293 is merged with the bounded frontend-only sidecar/scroll/overflow and operator-first Runs/Review/Jarvis presentation correction using existing authority only, with no new engineering backend semantics. |
 | 097 | planned | — | JARVIS-ENGINEERING-ACTIONS-0 | 071b, 091, 058c | Structured stale-safe Jarvis actions over working configuration, deterministic blocker assistance, safe-fix provenance and explicit confirmation boundaries; never mutate canonical project data silently. |
 | 098 | planned | — | ENGINEERING-RECORD-LIFECYCLE-0 | 035, 040, 050, 051, 071b | Add explicit server-owned Edit / Active-Inactive / Archive / Supersede / Delete semantics and project-centric Engineering Data actions without destroying lineage or hiding deletion only in frontend state. |
-| 099 | ready | — | REVIEW-SECRET-BOUNDARY-0 | 017, 019 | Emergency security interrupt under [the 2026-08-19 readiness decision](099-readiness-2026-08-19.md): remove PR-controlled code from the provider-secret Cheap/Senior review process, keep PR content inert via GitHub API, prove the boundary deterministically, then resume paused 092/#303. |
+| 099 | in_review | [#306](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/306) | REVIEW-SECRET-BOUNDARY-0 | 017, 019 | Emergency security implementation under [the 2026-08-19 readiness decision](099-readiness-2026-08-19.md): remove PR-controlled code from the provider-secret Cheap/Senior review process, keep PR content inert via GitHub API, prove the boundary deterministically, then resume paused 092/#303. |
 ## Superseded planning aliases and resolved collisions
 
 - Historical `045 = AGENT-ORCH` references are superseded by `060`; `045` is
