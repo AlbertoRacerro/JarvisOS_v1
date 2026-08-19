@@ -111,11 +111,24 @@ Grades are reference/integration value, not implementation priority:
 | REF-035 | NousResearch/neural-steering + smc-inference-server + DisTrO | model steering / inference-time search / distributed training | CODE-FIRST | B | PARKED | research options for local-model steering, inference-time quality and distributed training; never substitutes for authority policy |
 | REF-036 | microsoft/agent-governance-toolkit | agent policy / governance / trust | CODE-FIRST | S | CANDIDATE | MIT; schema-versioned policy, fail-closed evaluation, additive-only inheritance, context-aware enforcement; evaluate official narrow dependency before vendoring/rewrite |
 | REF-037 | NVIDIA/OpenShell + NVIDIA/NemoClaw | sandboxed autonomous execution | CODE-FIRST | S | CANDIDATE | Apache-2.0; real filesystem/network/process sandbox, seccomp/Landlock, provider routing and Hermes packaging; evaluate direct runtime integration |
+| REF-038 | CoolProp + ChEDL thermo/chemicals/fluids/ht + ThermoSTEAM | thermodynamics / chemical properties | CODE-FIRST | S | CANDIDATE | permissive provider stack for fluid/chemical properties, flash, transport, hydraulics and heat-transfer correlations; prefer typed backend adapters over a home-grown property database |
+| REF-039 | BioSTEAM + Bioindustrial-Park + QSDsan | process simulation / TEA / bio-domain models | CODE-FIRST | S | CANDIDATE | permissive sequential-modular process engine, mature TEA/UQ and dynamic bio/wastewater domain models; strong BlueRev and benchmark value |
+| REF-040 | IDAES + Pyomo + WaterTAP | equation-oriented process modeling / optimization | CODE-FIRST | S | CANDIDATE | permissive flowsheet/state/property-package contracts, dynamics and optimization; strong Aspen-like backend with reusable domain-pack architecture |
+| REF-041 | DWSIM + DTL + CAPE-OPEN | Aspen-like simulation / interoperability | CODE-FIRST | S | CANDIDATE | full DWSIM remains GPL external engine; LGPL DTL is a possible linked property backend; CAPE-OPEN should be a first-class UnitOperation/PropertyPackage interoperability target |
+| REF-042 | FMI/FMPy + OpenModelica/OMSimulator + do-mpc + open62541 | digital twins / co-simulation / control / telemetry | CODE-FIRST | S | CANDIDATE | BSD FMPy for FMU execution, external Modelica engines, MHE/MPC, and OPC UA connectors; model/telemetry/estimator/controller must remain separate canonical objects |
+| REF-043 | Cantera + TESPy + pycalphad + Reaktoro | specialized engineering solvers | CODE-FIRST | A+ | CANDIDATE | reusable reaction/kinetics, thermal-network, materials-phase and reactive-chemistry backends with per-license adapter boundaries |
+| REF-044 | LEAP71 PicoGK + ShapeKernel + LatticeLibrary + HelixHeatX | computational geometry / CEM | CODE-FIRST | S | CANDIDATE | Apache-2.0 implicit/voxel geometry and semantic engineering shape libraries; strong direct-reuse path for generative/additive BLUECAD geometry |
+| REF-045 | CadQuery + OCCT | precise B-Rep CAD / assemblies | CODE-FIRST | S | CANDIDATE | Apache CadQuery plus LGPL OCCT provide parametric B-Rep, named assemblies, constraints, metadata and STEP; complement rather than replace PicoGK |
+| REF-046 | Gmsh + Netgen + OpenFOAM + SU2 + FEniCSx + CalculiX/Code_Aster | mesh / CFD / FEM backends | CODE-FIRST | A+ | CANDIDATE | solver/mesher portfolio behind explicit external or linked boundaries; BLUECAD owns semantic domains, run manifests and verified result ingestion rather than solver kernels |
+| REF-047 | OpenMDAO + CasADi + SUNDIALS + PETSc | coupling / optimization / scalable numerics | CODE-FIRST | A+ | CANDIDATE | derivative-aware multidisciplinary coupling, optimal control/AD, ODE/DAE and scalable linear/nonlinear infrastructure; keep numerical objects behind canonical engineering IR |
+| REF-048 | VTK + PyVista + ParaView + meshio | mesh/field results / scientific visualization | CODE-FIRST | S | CANDIDATE | permissive result/field representation, filters, mesh interchange and independent inspection; make scientific data the artifact, not screenshots/frontend scene state |
 
 Supporting detailed audits:
 
 - `docs/audits/NOUS_RESEARCH_REPO_AUDIT_2026-08-19.md`
 - `docs/audits/NOUS_FORK_UPSTREAM_EXPANSION_2026-08-19.md`
+- `docs/audits/ENGINEERING_SOFTWARE_ECOSYSTEM_AUDIT_2026-08-19.md`
+- `docs/audits/ENGINEERING_SOFTWARE_ECOSYSTEM_AUDIT_CONTINUATION_2026-08-19.md`
 
 ---
 
