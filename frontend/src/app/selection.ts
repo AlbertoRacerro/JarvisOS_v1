@@ -27,6 +27,7 @@ export type StageSelection =
       candidateId: string;
       artifactId: string;
       viewerSessionId: string;
+      ephemeralObjectId: string;
       meshKey: string;
       semanticKey: string;
       partId: string;
