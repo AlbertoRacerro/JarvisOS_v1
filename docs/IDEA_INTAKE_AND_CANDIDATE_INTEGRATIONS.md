@@ -21,7 +21,8 @@ When a maintainer conversation proposes, links, uploads, or discusses something 
 4. preserve source/provenance, the concrete reusable mechanism, major caveats, and current disposition;
 5. avoid converting the entry into implementation authority; if later promoted, link the governing spec/ADR rather than duplicating its live state here;
 6. keep rejected and superseded entries when they carry useful negative evidence, so weak patterns are not repeatedly rediscovered;
-7. re-check current source version and licensing before copying code or substantial implementation detail.
+7. re-check current source version and licensing before copying code or substantial implementation detail;
+8. when auditing a GitHub organization, check repository `fork`, `parent`, and `source` metadata before attributing an idea to that organization.
 
 This rule applies to, for example, a newly discovered GitHub project, Rizzo-PI/Rizzo-pii-like system, research paper, engineering software, CAD/CFD/FEM workflow, local-AI runtime, agent framework, hardware module, sensor, photobioreactor component, or BlueRev process idea.
 
@@ -88,14 +89,18 @@ Grades are reference value, not implementation priority:
 | REF-029 | arpitrajjj/OnyxBridge + OnyxDashboard | edge-device / fleet telemetry | CODE-FIRST | A- | CANDIDATE | persistent device identity, idempotent registration, periodic heartbeat, bounded offline queue/backoff, SSE live dashboard + polling fallback |
 | REF-030 | arpitrajjj/Mishri | utility behavior selection | CODE-FIRST | C+ | PARKED | utility-scored action selection with drives/state, anti-repeat penalty and pacing; relevant only to low-stakes ambient behavior |
 | REF-031 | arpitrajjj/rich-editor-bot + rippercasted | messaging UX / C++ scaffold | CODE-FIRST | C | PARKED | Telegram rich-editor/mini-app UX and clean CMake packaging are valid but add little unique JarvisOS/BlueRev architecture value |
+| REF-032 | NousResearch/hermes-toolperf-evals + hermes-compression-eval | runtime improvement / context survival | CODE-FIRST | S | CANDIDATE | mine real tool failures/waste; baseline-vs-fix evaluation; grade compression by ability to resume exact work, not summary similarity |
+| REF-033 | NousResearch/autoreason + hermes-agent-self-evolution | refinement / controlled self-improvement | CODE-FIRST | A | CANDIDATE | explicit incumbent, blinded challenger comparison, offline candidate evolution; promotion requires deterministic gates and review |
+| REF-034 | NousResearch/Nomos + Atropos/tinker-atropos | adaptive reasoning / specialist training environments | CODE-FIRST | A- | PARKED | allocate compute to under-verified tasks; separate environment/reward truth from replaceable trainer/inference backend |
+| REF-035 | NousResearch/neural-steering + smc-inference-server + DisTrO | model steering / inference-time search / distributed training | CODE-FIRST | B | PARKED | research options for local-model steering, inference-time quality and distributed training; never substitutes for authority policy |
+
+Supporting detailed Nous audit: `docs/audits/NOUS_RESEARCH_REPO_AUDIT_2026-08-19.md`.
 
 ---
 
 # Detailed reusable patterns
 
 ## REF-001 — PHENOMVALENCE/JARVIS-OS
-
-Keep/adapt:
 
 - Models propose **typed actions**, not unrestricted shell commands.
 - Action contracts carry explicit risk, permissions, reversibility, local/network posture and parameter schema.
@@ -128,11 +133,11 @@ Keep transient execution state separate from durable user/domain memory. Candida
 
 `goal, current_step, confirmed_facts, artifacts, blockers, next_step, plan, assumptions, completion_criteria`.
 
-Also retain the idea of session operation budgets and explicit pending-action lifecycle.
+Also retain session operation budgets and explicit pending-action lifecycle.
 
 ## REF-004 — IRIS-Mini
 
-Useful mainly for UI/runtime comparison: realtime multimodal interaction, React/Tailwind/Framer/Three-style presentation, websocket-style transport and Windows setup flows. Do not adopt frameworks merely because this reference uses them.
+Useful mainly for UI/runtime comparison: realtime multimodal interaction, polished presentation, realtime transport and Windows setup flows. Do not adopt frameworks merely because this reference uses them.
 
 ## REF-005 — JARVIS-AGI
 
@@ -144,11 +149,9 @@ Strong pattern:
 
 `preprocess -> feature extraction -> scoring -> recommendation -> explanation`.
 
-Supporting practices: validated configuration round trips, deterministic `--dry-run`, machine-readable JSON, benchmark/evaluation harnesses, offline tests and ADRs. Do not copy simplistic local-vs-cloud or complexity-only routing where JarvisOS has richer provider/authority policy.
+Supporting practices: validated configuration round trips, deterministic dry-run, machine-readable JSON, benchmark/evaluation harnesses, offline tests and ADRs. Do not copy simplistic local-vs-cloud or complexity-only routing where JarvisOS has richer provider/authority policy.
 
 ## REF-007 — Cavemem/Caveman memory patterns
-
-Candidate principles:
 
 - local-first write authority;
 - progressive retrieval rather than indiscriminate context loading;
@@ -158,14 +161,7 @@ Candidate principles:
 
 ## REF-008 — BlueRev Obsidian vault bridge
 
-Preferred hybrid model:
-
-- Obsidian can remain a human-readable source-of-truth vault;
-- start with read-only indexing/retrieval;
-- a Context Pack Builder selects bounded source material per task;
-- only stable summaries/decisions are candidates for canonical JarvisOS memory;
-- papers/protocols/source cards remain retrievable evidence instead of being copied wholesale;
-- explicit statuses such as `canonical`, `candidate`, `measured`, `to_measure`, `future`, `archive` prevent uncertain engineering knowledge becoming fact accidentally.
+Preferred hybrid model: Obsidian may remain human-readable source of truth; start with read-only indexing/retrieval; construct bounded Context Packs; promote only stable summaries/decisions to canonical memory; retain papers/protocols/source cards as evidence; use explicit `canonical/candidate/measured/to_measure/future/archive` states.
 
 ## REF-009 — Solnest coding agent
 
@@ -175,10 +171,7 @@ Do not copy observed weaknesses such as shell `eval`, regex-only secret detectio
 
 ## REF-010 — reverse-skill
 
-- Machine-readable routing is canonical; Markdown is a human view.
-- Maintain an inventory of tools/capabilities that actually exist locally.
-- Store successful/failing task patterns in a field journal.
-- Never let one observed case automatically become a canonical routing rule; promotion needs deterministic evidence or explicit review.
+Machine-readable routing is canonical; Markdown is a human view. Maintain an inventory of tools/capabilities that actually exist. Store successful/failing task patterns in a field journal. Never let one observed case automatically become a canonical routing rule.
 
 ## REF-011 — HyperClaw
 
@@ -204,17 +197,7 @@ Codex, Claude Code, Qwen/Hermes/local CLIs and future runners should be describe
 
 ## REF-013 — bug-hunter
 
-Strong autonomous-repository patterns:
-
-- canonical machine-readable run state; Markdown is a render;
-- single-writer lock;
-- baseline before modifications;
-- first-class dry-run and resume;
-- chunking and content-hash cache;
-- payload/schema validation before subagent launch;
-- canary-first autonomous modifications;
-- retry/backoff + execution journal;
-- exact branch/PR/file scope.
+Strong patterns: canonical machine-readable run state; single-writer lock; baseline before modifications; first-class dry-run/resume; chunking/hash cache; payload validation; canary-first modifications; retry/backoff + journal; exact branch/PR/file scope.
 
 Candidate run record:
 
@@ -226,81 +209,37 @@ Negative evidence: components described as real/runnable contained simulated MCP
 
 ## REF-015 — AutoBot-AI
 
-### Persistent approval lifecycle
-
-Approval is a durable object, not a transient yes/no modal:
+Approval is a durable lifecycle:
 
 `pending -> approved / rejected / revision_requested -> resubmitted`.
 
-Record requester, workflow/step, resource, before/after intent, evidence/reason, decision maker, comments, linked task, timestamps and risk.
-
-### Approval memory
-
-Remembered approvals must be structurally scoped by project/user/capability/resource/risk/expiry. Do not copy broad shell wildcarding.
-
-### Dependency semantics
-
-Distinguish:
-
-- `DATA`: B consumes A output;
-- `RESOURCE`: calls contend on mutable state;
-- `ORDER`: ordering only;
-- `TRANSACTIONAL`: one commit/rollback unit;
-- `NONE`: independent and safe to parallelize.
-
-Directly relevant to BLUECAD geometry -> mesh -> solver -> analysis/report graphs.
+Remembered approvals must be structurally scoped. Dependency semantics should distinguish `DATA`, `RESOURCE`, `ORDER`, `TRANSACTIONAL`, and `NONE`; directly relevant to BLUECAD geometry -> mesh -> solver -> analysis/report graphs.
 
 ## REF-016 — NexusAI
 
-### Worker readiness / capability attestation
-
 A configured worker is not automatically dispatchable. Check enabled/online state, model/provider availability, required tools, runtime probe/attestation, authentication readiness, model catalog and credential-reference existence.
 
-This is a strong basis for a future JarvisOS worker registry spanning workstation, secondary PC, Raspberry Pi/edge nodes, GPU workers, sensors and BlueRev gateways.
-
-### Typed least-privilege agent blueprint
-
-Candidate fields:
+Candidate typed agent fields:
 
 `role, accepted inputs, produced outputs, capabilities, resource scope, risk ceiling, network posture, model policy, credential refs, completion contract`.
 
-Never embed raw credentials in exportable agent definitions.
-
-### One-shot payload-bound approval
-
-Bind a high-impact permit to:
-
-`actor + action key + canonical payload digest + expiry + unused state`.
-
-Changing a parameter invalidates the permit; consumption is atomic and one-shot. Keep it distinct from a standing grant such as “may create plots in this workspace”.
-
-### Scheduler
-
-Prefer:
-
-`schedule -> validated target -> dedupe -> readiness/authority guard -> run record -> bounded retry/backoff -> terminal outcome`
-
-rather than `cron -> prompt`.
+For high-impact permits bind approval to `actor + action key + canonical payload digest + expiry + unused state`. Prefer scheduling as `validated target -> dedupe -> readiness/authority guard -> run record -> bounded retry/backoff -> terminal outcome`.
 
 ## REF-017 — echo-agent
 
-Trust rule:
-
-> Untrusted content may inform model judgment, but must not automatically enter a tool-enabled authority context.
+Trust rule: untrusted content may inform judgment but must not automatically enter a tool-enabled authority context.
 
 Candidate flow:
 
 `email/web/PDF/document -> sealed no-tool reasoner -> strict structured output -> deterministic whitelist/validation -> separately authorized action`.
 
-Also retain deterministic lanes before model calls, bounded context, no inherited tools/settings, whitelist generated IDs against actual source IDs, deterministic fallback, idempotent dry-runs and visible read-back for state changes.
-
 ## REF-018 — LaneHub
 
-The useful abstraction is agent identity, not Telegram. Each agent should have stable authenticated `actor_id`, isolated credential, provenance-preserving messages/events and a shared feed that never loses who produced an item. “Claude said X” should be backed by authenticated run identity, not a forgeable text prefix.
+Each agent should have stable authenticated `actor_id`, isolated credentials and provenance-preserving messages/events. “Claude said X” should be backed by run identity, not a forgeable prose prefix.
 
 ## REF-019 — Lessan
 
-Tool success/failure history and similar-task retrieval can influence routing. A JarvisOS implementation should segment effectiveness by capability, environment/version, input class, latency, cost, failure mode and deterministic verifier. Historical success may guide selection but never expand authority.
+Tool success/failure history and similar-task retrieval may influence routing. Segment effectiveness by capability, environment/version, input class, latency, cost, failure mode and deterministic verifier. Historical success never expands authority.
 
 ## REF-020 — ZYRAXON browser family
 
@@ -312,202 +251,155 @@ Rejected as primary reference because useful concepts are better studied in actu
 
 ## REF-022 — NousResearch/Hermes Agent
 
-The focused audit upgrades Hermes from captured to a top-tier code-first reference. Current upstream license inspected on 2026-08-19: MIT; nevertheless integration should adapt concepts rather than create a parallel authority system.
+The focused audit inspected **upstream `NousResearch/hermes-agent` itself**, not only downstream forks. Current upstream license checked on 2026-08-19: MIT.
 
 ### Tiered progressive tool disclosure
 
-For large plugin/MCP catalogs, Hermes keeps core/session-surface tools direct and defers non-core plugin/MCP schemas behind:
+For large plugin/MCP catalogs, Hermes keeps core/session-surface tools direct and defers non-core schemas behind:
 
 `tool_search -> tool_describe -> tool_call`.
 
-Disclosure is tiered:
-
-- no deferred tools: normal passthrough;
-- catalog fits context budget: names + short descriptions;
-- larger catalog: names-only;
-- extreme catalog: only per-server summary/tool counts, with individual discovery by search.
-
-Important JarvisOS requirements derived from the pattern:
-
-- core control tools stay directly visible;
-- deferred catalog is rebuilt from the **current live authorized registry**, not a stale session cache;
-- an unknown/unclassifiable tool stays visible rather than being silently dropped;
-- tool search discovers only capabilities in the current session scope;
-- the bridge invokes the underlying tool through the exact same guardrail/approval/hook/result-truncation path as a direct call;
-- UI/audit should expose the real underlying tool, not hide it behind `tool_call`.
+Disclosure degrades from names + short descriptions to names-only and, for extreme catalogs, per-server summaries. The catalog is rebuilt from the current live registry. Unknown tools remain visible rather than disappearing. Deferred discovery stays within current session scope, and bridge calls traverse the same guardrail/approval/hook/result path as direct calls.
 
 ### Conflict-aware parallel execution
 
-Hermes does not equate “multiple tool calls emitted together” with “safe to parallelize”. It partitions an ordered batch into sequential/parallel segments and treats interactive or unsafe operations as barriers.
+Hermes does not equate multiple emitted calls with safe parallelism. It partitions ordered batches into sequential/parallel segments. Filesystem operations reserve canonical paths with reader/writer roles: reader-reader overlap may commute; any writer conflict is ordered. Malformed/non-object JSON becomes a barrier and later fails rather than being guessed/repaired.
 
-For filesystem operations it reserves canonical paths with reader/writer roles:
+This maps directly to BLUECAD resource reservations and coding-agent file ownership.
 
-- reader/read overlap may run concurrently;
-- any overlap involving a writer is ordered;
-- a search root overlapping a write is also ordered;
-- malformed/non-object JSON arguments become a sequential barrier and later fail execution rather than being guessed/repaired.
+### Execution integrity and spillover
 
-This maps well to BLUECAD resource locking and coding-agent file ownership.
+Other strong patterns: exact-path checkpoints, bounded approval serialization, incremental durable session flush after side effects, bounded worker/timeouts, current-scope recheck on tool-search unwrap, and persistent spillover for large individual/aggregate tool output.
 
-### Execution integrity
-
-Other concrete patterns:
-
-- malformed tool arguments do not get “helpfully” repaired before execution;
-- file mutations receive a checkpoint tied to the exact resolved workspace path;
-- concurrent approval prompts are serialized/bounded;
-- tool progress is flushed to durable session state before actions that could restart/terminate the process;
-- concurrent batches have bounded worker counts/timeouts;
-- session-scoped tool-search unwrap rechecks the actual authorized registry scope.
-
-### Large tool-result spillover
-
-Oversized tool output is preserved outside the active model context instead of being destructively truncated:
-
-1. tools may cap their own output;
-2. larger individual results spill to a persistent cache with preview + readable reference;
-3. an aggregate per-turn budget spills the largest remaining results until context is safe.
-
-Direct JarvisOS/BLUECAD uses include build logs, test output, CFD/FEM solver logs, repository searches and large data/report tools.
+Direct uses include compiler output, test logs, CFD/FEM solver traces, repository searches and engineering reports.
 
 ## REF-023 — Rizzo-PI / Rizzo-pii family
 
-This is an intake trigger, not an assumed implementation. The useful hypothesis is that European/local AI independence and engineering performance can improve through inference software, specialization, compression, routing and task-specific execution rather than only larger hardware.
-
-When a new exact version is proposed, reopen the repository/version and extract only verified engineering mechanisms; do not infer features from social posts.
+Intake trigger, not assumed implementation. The useful hypothesis is that European/local AI independence and engineering performance can improve through inference software, specialization, compression, routing and task-specific execution rather than only larger hardware. Re-open exact current repository/version before extracting requirements.
 
 ## REF-024 — Seeker.Bot
 
 ### Capability dependency graph
 
-Code implements capability -> provider mapping with recursive dependency resolution, missing-capability errors, cycle detection and topological ordering. The abstraction is useful, but JarvisOS should fold it into the richer capability/workflow registry rather than create another graph store.
+Code implements capability -> provider mapping with recursive dependency resolution, missing-capability errors, cycle detection and topological ordering. Fold the useful concept into the richer JarvisOS capability/workflow registry rather than creating another graph store.
 
-### Evidence arbitrage
+### Evidence arbitrage and decay
 
-The stronger idea is claim-level evidence handling rather than model voting. Seeker represents:
+Represent atomic claims with sources, support/contradiction, agreement state, verification depth and effective confidence. For BLUECAD, actual engineering provenance must outrank “model confidence”. Show conflict zones explicitly.
 
-- atomic claim;
-- source model/provider;
-- base confidence;
-- supporting/contradicting models;
-- agreement level such as consensus/majority/split/contradiction;
-- verification depth from unverified through corroborated/primary-source/empirically tested;
-- effective confidence discounted by verification depth.
-
-For BLUECAD, replace “model confidence” as the trust source with actual engineering provenance. Candidate evidence object:
-
-`claim -> sources -> conflicts -> verification depth -> validator/primary source/experiment -> current confidence`.
-
-Useful UI consequence: show **conflict zones** explicitly instead of averaging contradictory answers into one confident sentence.
-
-### Domain-sensitive confidence decay
-
-Seeker also applies temporal half-life by information domain. The principle is good: market/API/news facts age much faster than durable engineering/history facts.
-
-A JarvisOS version should use explicit domain/provenance metadata and deterministic policy, not keyword classification. Reflexive/user rules and immutable evidence need separate policies. Stale facts should become candidates for re-verification rather than silently being treated as equally current forever.
+Information age should matter: API/news facts decay faster than durable engineering/history facts. Use explicit domain/provenance metadata and deterministic policy rather than keyword-only classification. Stale facts become candidates for re-verification.
 
 ## REF-025 — ZYRAXON-AI
 
-The code audit demystifies “self evolution”: the inspected implementation mainly lets the agent write new local MCP configuration with command/args/environment after a broad permission request.
-
-Useful concept to redesign safely:
-
-`CapabilityInstallProposal` containing source/package identity, pinned version/hash, requested permissions, network/resource needs, install plan, validation/attestation and explicit activation approval.
-
-Capability installation is a **supply-chain and authority event**, not an ordinary tool call. Never copy broad wildcard permission such as `patterns:["*"]`, and do not let the agent install arbitrary commands merely because a needed tool is missing.
-
-Its JSON memory store adds a small ranking idea: relevance + importance + recency + access frequency. Access frequency can create feedback loops, and “latest N memories” auto-injection is weaker than the progressive retrieval patterns already captured in REF-007/008.
+The inspected “self evolution” mainly writes local MCP configuration with command/args/env after broad permission. Redesign safely as `CapabilityInstallProposal` containing source/package, pinned version/hash, permissions, network/resources, validation/attestation and explicit activation approval. Capability installation is a supply-chain/authority event, not an ordinary tool call.
 
 ## REF-026 — solnest-jarvis
 
-### Fast lane
-
-A small direct native-tool lane handles common low-latency operations; expensive specialist work is delegated separately. This can inform JarvisOS latency/cost design, but policy/routing must remain server-owned and deterministic rather than persona-driven.
-
-### Background specialist lifecycle
-
-The job manager contains several strong patterns:
-
-- only read-only specialists run in background; mutating ones remain foreground;
-- concurrency cap;
-- per-job timeout;
-- epoch tagging so results from a superseded/restarted conversation are discarded;
-- persisted worker PIDs and orphan reaping on startup;
-- kill switch for all running workers/process groups;
-- completed-but-undelivered results are retained for next-turn delivery.
-
-The **epoch/stale-result rule** is especially valuable: an old research/coding result must not silently land into a new task state after the user has moved on.
-
-### Guardrail corpus
-
-The central guardrail file has a useful corpus of destructive shell/outbound/financial/sensitive-path cases. Treat it as test data/fallback heuristics only; regex classification must not replace typed capability policy.
+Useful fast native-tool lane for common low-latency operations, plus background specialist lifecycle: read-only background jobs only, concurrency cap, timeout, epoch tagging, persisted PIDs/orphan reaping, kill switch and undelivered-result retention. Old results from superseded task epochs must not silently land into a new state.
 
 ## REF-027 — MAYA-AIt
 
-Code inspection found a conventional mostly single-turn LangGraph router with prompt-based specialist nodes, several explicitly placeholder. It does not add a strong authority or execution primitive.
-
-One minor pattern is valid: retrieve real DB records deterministically, ask the LLM only to rank/explain them, then map output back through existing record IDs with fallback. This is already covered more strongly by REF-017 and JarvisOS's backend-led design, so the repo is rejected as a primary architecture reference.
+Mostly single-turn LangGraph prompt specialists with placeholders. Minor valid pattern: retrieve real DB records deterministically, let the LLM rank/explain, then map back to existing IDs with fallback. Already covered better elsewhere, so rejected as a primary architecture reference.
 
 ## REF-028 — IRIS-GO
 
-Negative evidence. The README describes a working local multi-agent Browser/File/OS/Coder/Research team, while the inspected repository has each corresponding agent source file at 0 bytes and the roadmap itself marks those agents unfinished.
-
-Keep this as another explicit reminder: architecture diagrams and “working system” claims are not evidence until the execution path exists in code/tests.
+Negative evidence: README describes Browser/File/OS/Coder/Research agents while inspected corresponding source files are empty and roadmap marks them unfinished. Diagrams are not implementation evidence.
 
 ## REF-029 — arpitrajjj/OnyxBridge + OnyxDashboard
 
-Audited after the public GitHub account began following the maintainer. A follow is not evidence of malicious intent; this entry records only reusable public technical patterns.
+A follow by the public GitHub account is not evidence of malicious intent; this entry records only public technical patterns. No public JarvisOS fork/name match was visible during the audit.
 
-The six public repositories visible in the audit did not include a JarvisOS fork/name match. The public profile describes the author as a penetration tester/web-security analyst, which is context, not a threat finding.
+Useful subsystem: persistent device UUID/config, idempotent registration, periodic network-constrained heartbeat, exponential backoff, bounded file-backed offline queue, queue drain on reconnect, missing-device re-registration, SQLite WAL backend, SSE live updates and polling fallback.
 
-### Edge-device registration and heartbeat
+Candidate pattern:
 
-The useful Onyx subsystem is not its SMS/native-bridge purpose but its device-to-dashboard reliability model:
+`EdgeNode -> authenticated register/attest -> heartbeat/telemetry queue -> backend state -> SSE -> operator UI`.
 
-- persistent device UUID/config;
-- idempotent registration/upsert;
-- periodic WorkManager heartbeat with network constraint;
-- exponential retry/backoff;
-- bounded file-backed offline queue (100 entries, oldest dropped at bound);
-- successful connectivity drains pending telemetry;
-- missing-device heartbeat can trigger re-registration;
-- dashboard derives online/offline from `last_seen` timeout.
-
-This is directly relevant to future BlueRev sensor/edge gateways and to a distributed Jarvis worker fleet.
-
-### Live fleet UI
-
-OnyxDashboard uses:
-
-- SQLite WAL for a tiny self-hosted state store;
-- Server-Sent Events for registration/update/heartbeat/delete events;
-- client live/connecting/polling/disconnected state;
-- polling fallback when the stream is unavailable;
-- health endpoint and container smoke tests.
-
-Candidate BlueRev/Jarvis pattern:
-
-`EdgeNode -> register/attest -> heartbeat/telemetry queue -> backend state -> SSE event stream -> operator UI`, with polling fallback.
-
-### Important security caveat
-
-The inspected dashboard endpoints do not establish the authentication/attestation boundary JarvisOS would require. Registration/heartbeat/device mutation therefore must be redesigned around authenticated node identity, replay resistance, scoped credentials and authority checks. Use Onyx as resilience/UX reference, not a security reference.
+Security caveat: inspected Onyx dashboard did not provide the authenticated node/attestation boundary JarvisOS requires. Copy resilience/UX, not security.
 
 ## REF-030 — arpitrajjj/Mishri
 
-Mishri implements a low-stakes utility-AI behavior loop: each behavior gets a score from state/drives, random noise is added, recent repeated behaviors are penalized, and the maximum is executed after variable pacing.
+Low-stakes utility behavior loop: behaviors receive state/drive scores, random noise and anti-repeat penalty before max-score selection. Potential use only for ambient/persona behavior or non-critical proactive suggestions; never engineering actions or permissions.
 
-Potential use is narrow: ambient/persona behavior, UI animation or non-critical proactive suggestions where perfect determinism is undesirable. It should **not** control engineering actions, permissions or system authority because deliberately injected randomness and imperfection conflict with those domains.
+## REF-031 — arpitrajjj miscellaneous
 
-## REF-031 — arpitrajjj miscellaneous repositories
+`rich-editor-bot` is a substantial Telegram bot + mini-app editor and may inform remote rich-message UX. `rippercasted` is a clean generic C++17/CMake scaffold. Neither adds unique core architecture.
 
-### rich-editor-bot
+## REF-032 — Nous Research runtime-evaluation laboratory
 
-A substantial Telegram bot + built-in mini-app rich editor. Potentially useful only as UX reference for remote rich-message composition, local drafts/live preview, owner panel, channel selector and bot/web-app cohosting. It does not currently justify a JarvisOS architecture candidate beyond existing remote/mobile UI ideas.
+Detailed evidence: `docs/audits/NOUS_RESEARCH_REPO_AUDIT_2026-08-19.md`.
 
-### rippercasted
+### `hermes-toolperf-evals`
 
-A clean but generic C++17/CMake library scaffold with public-header/source split, tests/examples, install targets and `find_package` config. Good packaging hygiene, but no unique BlueRev/Jarvis capability worth promoting.
+One of the strongest Nous-specific references. It mines real Hermes session traces, normalizes tool failure classes, measures retries/duplicates/fallbacks/result sizes/context waste and turns observed pain points into isolated baseline-vs-fix experiments.
+
+Candidate Jarvis telemetry:
+
+`tool_call_id, run_id, task_id, capability, model/provider, normalized_error_class, retry_of, duplicate_of, fallback_tool, result_bytes, context_bytes, latency_ms, authorization_outcome, verifier_outcome, terminal_state`.
+
+Tool ergonomics should improve from measured traces, not intuition; a strong model must not hide a weak tool interface by repeatedly recovering.
+
+### `hermes-compression-eval`
+
+Contains fixtures, compressor driver, probe suites, grader, reports and tests. Compression quality is assessed via downstream ability to recover exact current state, artifact trail, completeness and continuation ability.
+
+A future `ContextSurvivalEval` should compress realistic coding/engineering sessions, give only the compressed handoff to a fresh agent, then probe exact component IDs, units, paths, decisions, last known-good state, blockers and next action. Token reduction is not success if continuity is lost.
+
+## REF-033 — Nous Research refinement / controlled self-improvement
+
+### `autoreason`
+
+The real runner keeps A = incumbent, generates B = revision and AB = synthesis, randomizes presentation order independently per judge, aggregates rankings, gives ties to incumbent A and converges after repeated incumbent wins.
+
+Candidate rule for prompts/specs/design reports:
+
+`promote challenger only if it beats an explicit incumbent under a stable rubric`.
+
+Never use LLM voting instead of deterministic engineering truth.
+
+### `hermes-agent-self-evolution`
+
+Useful experimental separation of candidate generation, structural constraints and holdout fitness, but implementation maturity is lower than the name implies. The audited skill-evolution path does not invoke the full Hermes test-suite runner even though such a helper exists/configuration mentions tests; output is written for review rather than automatically applied, and inspected code-self-evolution area was not implemented.
+
+Safe Jarvis pattern:
+
+`offline candidate -> immutable baseline -> hard constraints -> mandatory deterministic tests/verifiers -> holdout benchmark -> evidence/diff -> explicit review -> normal spec/PR promotion`.
+
+Never permit live authority-bearing code/policy to rewrite itself directly.
+
+## REF-034 — Nous reasoning / training environments
+
+### `Nomos`
+
+Many candidate reasoning workers are allocated preferentially to problems with weaker current evidence/scores, followed by consolidation and pairwise selection. The useful principle is **adaptive compute allocation**: difficult/contradictory/under-verified work gets extra reasoning or verification budget; easy verified work does not.
+
+### `Atropos` + `tinker-atropos`
+
+Atropos separates RL environments/trajectory evaluation from trainer and inference engine. The repository is now archived and explicitly unmaintained, so treat it as architecture reference only. `tinker-atropos` demonstrates that environment/reward definitions can remain portable while the training backend changes.
+
+Future engineering-specialist pattern:
+
+`EngineeringEnvironment = task generator + allowed observations/actions + deterministic/primary-source verifier + reward + trajectory record`.
+
+Possible environments include tool selection, units, flowsheet reasoning, CAD operations, equation solving, solver setup, convergence diagnosis and evidence attribution. Training infrastructure remains replaceable.
+
+## REF-035 — Nous model / inference research
+
+### `neural-steering`
+
+Contrastive Neuron Attribution for finding sparse behavioral/factual MLP circuits and steering them at inference. Relevant to local-model interpretability/research, but model steering never replaces typed authority, sandboxing, approvals or deterministic verification.
+
+### `smc-inference-server`
+
+Sequential Monte Carlo steering behind an API, oriented to vLLM and optional multi-GPU workers. Useful lesson: quality can improve through inference-time search/steering, not only larger base models. Current implementation is not a ready consumer-laptop solution.
+
+### `DisTrO`
+
+Original Nous distributed-training-over-Internet project. Potential long-term relevance to decentralized/local-AI sovereignty, not current JarvisOS execution architecture.
+
+### Provenance caveat for the Nous organization
+
+Several attractive-looking repositories in `NousResearch` are direct forks, including Microsoft/NVIDIA/vLLM/HLC projects. Their innovations must be attributed and audited at upstream rather than treated as Nous-authored. This audit explicitly confirmed direct forks for `agent-governance-toolkit`, `OpenShell`, `NemoClaw`, `Gym`, `Automodel`, `RL`, `pico`, and `speculators`.
 
 ---
 
@@ -562,6 +454,9 @@ Domain State / Live Artifact
        |
        v
 Audit + AgentRun + Experience Journal
+       |
+       +---- tool-performance telemetry
+       +---- context-survival evaluation
 ```
 
 Additional cross-cutting principles now supported by multiple audits:
@@ -573,7 +468,13 @@ Additional cross-cutting principles now supported by multiple audits:
 - **large tool output should spill, not destroy context**;
 - **confidence is provenance-dependent and time-sensitive**, not a permanent scalar emitted by a model;
 - **edge workers need identity/readiness/heartbeat/attestation**, not just an IP address;
-- **Markdown is usually a view**, while canonical state should be machine-readable where automation depends on it.
+- **Markdown is usually a view**, while canonical state should be machine-readable where automation depends on it;
+- **runtime improvement should be empirical**: measure failure/retry/waste, change one boundary, compare baseline vs candidate;
+- **compression is successful only if work survives it**;
+- **unchanged incumbent is a valid candidate** during subjective refinement; rewrites are not automatically improvements;
+- **reasoning budget should follow uncertainty/evidence deficit**, not be spent uniformly;
+- **self-improvement must remain offline, gated and reviewable**;
+- **training environment/reward truth should be portable across trainer/provider backends**.
 
 ---
 
