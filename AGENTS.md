@@ -98,6 +98,22 @@ This never weakens the product execution spine or safe defaults.
 - `STATUS.md` is the sole live status and priority authority.
 - Do not infer state from legacy `Status:` prose, strategy documents, or chat handoffs.
 
+## Cross-chat idea intake and external-reference register
+
+`docs/IDEA_INTAKE_AND_CANDIDATE_INTEGRATIONS.md` is the canonical cross-chat intake register for external projects, papers, products, engineering methods, hardware concepts, and other ideas that may be useful to JarvisOS, BLUECAD, or BlueRev. It is a reference/candidate register only and never overrides `docs/specs/STATUS.md`, an accepted specification, or an ADR.
+
+Whenever the maintainer proposes, links, uploads, or discusses something that could materially improve JarvisOS, BLUECAD, or BlueRev, the coordinating agent must:
+
+1. read `docs/IDEA_INTAKE_AND_CANDIDATE_INTEGRATIONS.md` before claiming novelty, overlap, or implementation value;
+2. audit the exact source deeply enough to distinguish verified implementation from README/marketing claims when source access permits;
+3. update that register in the repository during the same work session, either by adding a new entry or extending the closest existing entry;
+4. record provenance, concrete reusable mechanisms, caveats/negative evidence, and disposition rather than leaving the useful result only in chat context;
+5. preserve rejected/superseded findings when they prevent repeated weak audits;
+6. re-check current version and licensing before copying code or substantial implementation detail;
+7. promote a candidate into implementation only through the normal backlog/spec/readiness/ADR process. The register itself grants no implementation authority.
+
+This trigger-specific register read/update is mandatory even when the proposed item is not part of the currently active product queue. Do not copy the register into `STATUS.md` or use it as a parallel roadmap.
+
 ## Conduct when encountering an obstacle
 
 A technical obstacle opens work; it does not close it.
