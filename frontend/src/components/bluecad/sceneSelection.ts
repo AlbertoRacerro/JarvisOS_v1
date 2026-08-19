@@ -1,6 +1,7 @@
 import { resolveScenePart, type ResolvedScenePart } from "./sceneBinding";
 
 const MANIFEST_ROLE = "attempt.manifest_artifact_id";
+const SHA256 = /^[0-9a-f]{64}$/;
 
 export type SceneArtifactRef = Readonly<{
   id: string;
@@ -35,6 +36,19 @@ export function candidateManifestArtifactIds(artifacts: readonly SceneArtifactRe
 }
 
 /**
+ * Resolve the current GLB artifact by the candidate-owned artifact id, never by
+ * filename, array position or any other presentation detail.
+ */
+export function currentGlbArtifact(
+  artifacts: readonly SceneArtifactRef[],
+  artifactId: string | null
+): SceneArtifactRef | null {
+  if (!artifactId) return null;
+  const matches = artifacts.filter((artifact) => artifact.id === artifactId && SHA256.test(artifact.sha256));
+  return matches.length === 1 ? matches[0] : null;
+}
+
+/**
  * Resolve one current viewer semantic hit against all candidate-owned accessible
  * manifests. Exactly one valid current binding is required. No renderer-order,
  * name, material, colour or bounds fallback is permitted.
@@ -51,6 +65,29 @@ export function resolveCandidateSceneHit(
   if (matches.length === 0) return { state: "unresolved" };
   if (matches.length !== 1) return { state: "ambiguous" };
   return { state: "resolved", part: matches[0] };
+}
+
+/**
+ * Load only manifest artifacts identified by their explicit candidate role. A
+ * failed/missing artifact read is fail-closed: the hit stays inspectable but is
+ * not promoted to semantic engineering identity.
+ */
+export async function resolveCandidateSceneHitFromArtifacts(
+  artifacts: readonly SceneArtifactRef[],
+  semanticKey: string | null,
+  currentGlbSha256: string,
+  loadManifest: (artifactId: string) => Promise<unknown>
+): Promise<SceneSelectionResolution> {
+  const manifestIds = candidateManifestArtifactIds(artifacts);
+  if (!semanticKey || manifestIds.length === 0 || !SHA256.test(currentGlbSha256)) {
+    return { state: "unresolved" };
+  }
+  try {
+    const manifests = await Promise.all(manifestIds.map((artifactId) => loadManifest(artifactId)));
+    return resolveCandidateSceneHit(manifests, semanticKey, currentGlbSha256);
+  } catch {
+    return { state: "unresolved" };
+  }
 }
 
 /**
