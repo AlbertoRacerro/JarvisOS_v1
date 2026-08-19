@@ -26,6 +26,7 @@ function validBindingObjects(
   parts: Record<string, unknown>
 ): objects is Record<string, { part_id: string }> {
   if (!isRecord(objects) || Object.keys(objects).length === 0) return false;
+  if (Object.keys(objects).length !== Object.keys(parts).length) return false;
   const seenPartIds = new Set<string>();
   for (const [key, value] of Object.entries(objects)) {
     if (!SEMANTIC_KEY.test(key) || !isRecord(value) || Object.keys(value).length !== 1) return false;
@@ -33,7 +34,7 @@ function validBindingObjects(
     if (seenPartIds.has(value.part_id)) return false;
     seenPartIds.add(value.part_id);
   }
-  return true;
+  return seenPartIds.size === Object.keys(parts).length;
 }
 
 /**
@@ -52,8 +53,14 @@ export function resolveScenePart(
 
   const binding = manifestValue.scene_binding;
   const parts = manifestValue.parts;
+  const manifestSpecId = manifestValue.spec_id;
   if (!isRecord(binding) || !isRecord(parts)) return null;
-  if (binding.version !== SCENE_BINDING_VERSION || binding.artifact !== SCENE_BINDING_ARTIFACT) return null;
+  if (typeof manifestSpecId !== "string" || !manifestSpecId) return null;
+  if (
+    binding.version !== SCENE_BINDING_VERSION ||
+    binding.artifact !== SCENE_BINDING_ARTIFACT ||
+    binding.spec_id !== manifestSpecId
+  ) return null;
   if (artifactDigest(manifestValue) !== currentGlbSha256) return null;
 
   const objects = binding.objects;
