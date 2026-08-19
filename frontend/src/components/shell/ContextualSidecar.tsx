@@ -19,6 +19,9 @@ function PropertiesFallback({ selection }: { selection: StageSelection | null })
   if (selection.kind === "geometry-hit") {
     return <div className="shell-properties__selection"><strong>Viewer geometry selection</strong><p>This hit is ephemeral viewer-session data and is not yet an engineering record.</p><details><summary>Technical details</summary><dl className="details"><div><dt>Viewer session</dt><dd>{selection.viewerSessionId}</dd></div><div><dt>Ephemeral object</dt><dd>{selection.ephemeralObjectId}</dd></div></dl></details></div>;
   }
+  if (selection.kind === "bluecad-part") {
+    return <div className="shell-properties__selection"><strong>{selection.partId}</strong><p>{selection.partKind ? `${selection.partKind} · selected BLUECAD part` : "Selected BLUECAD part"}</p><details><summary>Technical details</summary><dl className="details"><div><dt>Workspace</dt><dd>{selection.workspaceId}</dd></div><div><dt>Candidate</dt><dd>{selection.candidateId}</dd></div><div><dt>Artifact</dt><dd>{selection.artifactId}</dd></div><div><dt>Viewer session</dt><dd>{selection.viewerSessionId}</dd></div><div><dt>Mesh inspection key</dt><dd>{selection.meshKey}</dd></div><div><dt>Semantic key</dt><dd>{selection.semanticKey}</dd></div></dl></details></div>;
+  }
   return <div className="shell-properties__selection"><strong>Engineering record selection</strong><p>No editable model-contract Properties are available for this context yet. Current machine identity remains inspectable below.</p><details><summary>Technical details</summary><dl className="details"><div><dt>Resource</dt><dd>{selection.ref.resource}</dd></div><div><dt>Workspace</dt><dd>{selection.ref.workspaceId}</dd></div><div><dt>Record</dt><dd>{selection.ref.recordId}</dd></div></dl></details></div>;
 }
 
@@ -38,6 +41,9 @@ function ContextualSidecar({ open, selection, onClose, content, propertiesConten
     event.preventDefault();
     activatePane(activePane === "jarvis" ? "properties" : "jarvis", true);
   };
+  const semanticTarget = selection?.kind === "bluecad-part"
+    ? <div className="shell-properties__selection"><strong>{selection.partId}</strong><p>{selection.partKind ? `${selection.partKind} · selected BLUECAD part` : "Selected BLUECAD part"}</p><details><summary>Technical details</summary><dl className="details"><div><dt>Workspace</dt><dd>{selection.workspaceId}</dd></div><div><dt>Candidate</dt><dd>{selection.candidateId}</dd></div><div><dt>Artifact</dt><dd>{selection.artifactId}</dd></div><div><dt>Viewer session</dt><dd>{selection.viewerSessionId}</dd></div><div><dt>Mesh inspection key</dt><dd>{selection.meshKey}</dd></div><div><dt>Semantic key</dt><dd>{selection.semanticKey}</dd></div></dl></details></div>
+    : null;
   if (!open) return null;
   return <aside id="shell-sidecar" className="shell-panel shell-sidecar" aria-labelledby="shell-sidecar-title" onKeyDown={onPanelKeyDown}>
     <div className="shell-panel__header"><h2 id="shell-sidecar-title" ref={headingRef} tabIndex={-1}>Jarvis &amp; Properties</h2><Button variant="ghost" onClick={onClose}>Close sidecar</Button></div>
@@ -49,6 +55,7 @@ function ContextualSidecar({ open, selection, onClose, content, propertiesConten
       <section id="shell-sidecar-pane-jarvis" className="shell-sidecar__pane shell-sidecar__pane--jarvis" role="tabpanel" aria-labelledby="shell-sidecar-tab-jarvis" data-compact-hidden={activePane !== "jarvis"}>{content ?? <InlineNotice tone="neutral">Jarvis is unavailable for this route.</InlineNotice>}</section>
       <section id="shell-sidecar-pane-properties" className="shell-sidecar__pane shell-sidecar__pane--properties" role="tabpanel" aria-labelledby="shell-sidecar-tab-properties" data-compact-hidden={activePane !== "properties"}>
         <header className="shell-properties__header"><p className="eyebrow">Engineering model</p><h3>Properties</h3></header>
+        {semanticTarget}
         {propertiesContent ?? <PropertiesFallback selection={selection} />}
       </section>
     </div>
