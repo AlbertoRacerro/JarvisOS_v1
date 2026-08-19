@@ -71,9 +71,16 @@ function worldBounds(mesh: THREE.Mesh): GeometryInspectionMesh["worldBounds"] {
   };
 }
 
-function semanticKeyCandidate(mesh: THREE.Mesh): string | null {
-  const name = mesh.name.trim();
-  return BLUECAD_SEMANTIC_KEY.test(name) ? name : null;
+export function semanticKeyCandidate(object: THREE.Object3D): string | null {
+  const keys = new Set<string>();
+  let current: THREE.Object3D | null = object;
+  while (current) {
+    const name = current.name.trim();
+    if (BLUECAD_SEMANTIC_KEY.test(name)) keys.add(name);
+    current = current.parent;
+  }
+  if (keys.size !== 1) return null;
+  return keys.values().next().value ?? null;
 }
 
 function meshFact(mesh: THREE.Mesh, ordinal: number, sessionKey: string): GeometryInspectionMesh {
