@@ -20,4 +20,15 @@ export type StageSelection =
       viewerSessionId: string;
       ephemeralObjectId: string;
       point?: readonly [number, number, number];
+    }>
+  | Readonly<{
+      kind: "bluecad-part";
+      workspaceId: string;
+      candidateId: string;
+      artifactId: string;
+      viewerSessionId: string;
+      meshKey: string;
+      semanticKey: string;
+      partId: string;
+      partKind?: string | null;
     }>;
