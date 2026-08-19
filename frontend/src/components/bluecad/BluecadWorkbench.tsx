@@ -22,6 +22,12 @@ import BluecadGlbViewer, {
   type GeometryInspectionSnapshot
 } from "../BluecadGlbViewer";
 import {
+  acceptsSceneSelectionResolution,
+  currentGlbArtifact,
+  resolveCandidateSceneHitFromArtifacts,
+  type SceneSelectionPreconditions
+} from "./sceneSelection";
+import {
   acceptsMutation,
   acceptsRequest,
   duplicateBrief,
@@ -73,6 +79,9 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const inspectionNonce = useRef(0);
   const workspaceRef = useRef("");
   const selectedRef = useRef<string | null>(null);
+  const aggregateRef = useRef<BluecadCandidateAggregateRead | null>(aggregate);
+  aggregateRef.current = aggregate;
+  const currentSceneSelection = useRef<SceneSelectionPreconditions | null>(null);
   const showArchivedRef = useRef(showArchived);
   showArchivedRef.current = showArchived;
   const filterTextRef = useRef(filterText);
@@ -98,21 +107,6 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     node.focus();
   }, []);
 
-  const handleInspectionChange = useCallback((snapshot: GeometryInspectionSnapshot) => {
-    setInspection(snapshot);
-    if (!snapshot.sessionKey) setInspectionCommand(null);
-  }, []);
-
-  const requestInspection = useCallback((meshKey: string | null) => {
-    if (!inspection.sessionKey) return;
-    inspectionNonce.current += 1;
-    setInspectionCommand({
-      sessionKey: inspection.sessionKey,
-      meshKey,
-      nonce: inspectionNonce.current
-    });
-  }, [inspection.sessionKey]);
-
   const visibleCandidates = useMemo(
     () => filterCandidates(candidates, filterText, showArchived),
     [candidates, filterText, showArchived]
@@ -130,6 +124,76 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     } : null);
   }, [onSelectionChange]);
 
+  const handleInspectionChange = useCallback((snapshot: GeometryInspectionSnapshot) => {
+    setInspection(snapshot);
+    if (!snapshot.sessionKey) setInspectionCommand(null);
+
+    currentSceneSelection.current = null;
+    const targetWorkspaceId = workspaceRef.current;
+    const targetCandidateId = selectedRef.current;
+    publishSelection(targetWorkspaceId, targetCandidateId);
+
+    const currentAggregate = aggregateRef.current;
+    const candidate = currentAggregate?.candidate;
+    const hit = snapshot.selected;
+    if (
+      !targetWorkspaceId
+      || !targetCandidateId
+      || !candidate
+      || candidate.workspace_id !== targetWorkspaceId
+      || candidate.id !== targetCandidateId
+      || !candidate.glb_artifact_id
+      || !snapshot.sessionKey
+      || !hit
+      || !hit.semanticKey
+    ) return;
+
+    const glbArtifact = currentGlbArtifact(currentAggregate.artifacts, candidate.glb_artifact_id);
+    if (!glbArtifact) return;
+
+    const captured: SceneSelectionPreconditions = {
+      workspaceId: targetWorkspaceId,
+      candidateId: targetCandidateId,
+      artifactId: glbArtifact.id,
+      viewerSessionId: snapshot.sessionKey,
+      meshKey: hit.meshKey,
+      semanticKey: hit.semanticKey
+    };
+    currentSceneSelection.current = captured;
+
+    void resolveCandidateSceneHitFromArtifacts(
+      currentAggregate.artifacts,
+      hit.semanticKey,
+      glbArtifact.sha256,
+      (artifactId) => getBluecadArtifactJson<unknown>(targetWorkspaceId, artifactId)
+    ).then((resolution) => {
+      if (!acceptsSceneSelectionResolution(currentSceneSelection.current, captured)) return;
+      if (resolution.state !== "resolved") return;
+      onSelectionChange({
+        kind: "bluecad-part",
+        workspaceId: captured.workspaceId,
+        candidateId: captured.candidateId,
+        artifactId: captured.artifactId,
+        viewerSessionId: captured.viewerSessionId,
+        ephemeralObjectId: captured.meshKey,
+        meshKey: captured.meshKey,
+        semanticKey: captured.semanticKey,
+        partId: resolution.part.partId,
+        partKind: resolution.part.partKind
+      });
+    });
+  }, [onSelectionChange, publishSelection]);
+
+  const requestInspection = useCallback((meshKey: string | null) => {
+    if (!inspection.sessionKey) return;
+    inspectionNonce.current += 1;
+    setInspectionCommand({
+      sessionKey: inspection.sessionKey,
+      meshKey,
+      nonce: inspectionNonce.current
+    });
+  }, [inspection.sessionKey]);
+
   const clearVisibleDetail = useCallback((nextState: LoadState) => {
     setAggregate(null);
     setAggregateState(nextState);
@@ -141,6 +205,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   const chooseCandidate = useCallback((candidateId: string | null) => {
     if (candidateId === selectedRef.current) return;
     mutationGeneration.current += 1;
+    currentSceneSelection.current = null;
     selectedRef.current = candidateId;
     if (currentList.current) setCandidateState("ready");
     currentList.current = null;
@@ -171,6 +236,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       setCandidates(items);
       const selectableItems = filterCandidates(items, filterTextRef.current, showArchivedRef.current);
       const nextId = revalidateSelection(selectableItems, preferredId, true);
+      currentSceneSelection.current = null;
       selectedRef.current = nextId;
       currentDetail.current = null;
       currentValidation.current = null;
@@ -183,6 +249,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       return items;
     } catch (error) {
       if (currentList.current && acceptsRequest(currentList.current, request)) {
+        currentSceneSelection.current = null;
         currentList.current = null;
         currentDetail.current = null;
         currentValidation.current = null;
@@ -210,11 +277,15 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     try {
       const next = await getBluecadCandidateAggregate(targetWorkspaceId, candidateId);
       if (!currentDetail.current || !acceptsRequest(currentDetail.current, request)) return null;
+      currentSceneSelection.current = null;
+      publishSelection(targetWorkspaceId, candidateId);
       setAggregate(next);
       setAggregateState("ready");
       return next;
     } catch (error) {
       if (currentDetail.current && acceptsRequest(currentDetail.current, request)) {
+        currentSceneSelection.current = null;
+        publishSelection(targetWorkspaceId, candidateId);
         if (error instanceof Error && error.message === "Request failed with 404") {
           currentDetail.current = null;
           const items = await loadCandidates(targetWorkspaceId, candidateId);
@@ -231,7 +302,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       }
       return null;
     }
-  }, [loadCandidates]);
+  }, [loadCandidates, publishSelection]);
 
   const loadValidation = useCallback(async (candidate: BluecadCandidate) => {
     const request: RequestContext = {
@@ -312,9 +383,11 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
   }, [aggregate, loadValidation, selectedId]);
 
   useEffect(() => {
+    currentSceneSelection.current = null;
+    publishSelection(workspaceRef.current, selectedRef.current);
     setInspection(EMPTY_INSPECTION);
     setInspectionCommand(null);
-  }, [selectedId, aggregate?.candidate.glb_artifact_id]);
+  }, [aggregate?.candidate.glb_artifact_id, publishSelection, selectedId]);
 
   useEffect(() => {
     const nextId = revalidateSelection(visibleCandidates, selectedId, true);
@@ -345,6 +418,8 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
 
   const refresh = useCallback(async () => {
     if (!workspaceId) return false;
+    currentSceneSelection.current = null;
+    publishSelection(workspaceId, selectedId);
     currentDetail.current = null;
     currentValidation.current = null;
     clearVisibleDetail("loading");
@@ -354,10 +429,12 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
     if (!nextId) return false;
     const detail = await loadAggregate(workspaceId, nextId);
     return detail !== null;
-  }, [clearVisibleDetail, loadAggregate, loadCandidates, selectedId, workspaceId]);
+  }, [clearVisibleDetail, loadAggregate, loadCandidates, publishSelection, selectedId, workspaceId]);
 
   const reconcileAfterMutationError = useCallback(async (mutation: MutationContext, failureMessage: string) => {
     if (!acceptsMutation({ generation: mutationGeneration.current, workspaceId: workspaceRef.current, candidateId: selectedRef.current }, mutation)) return;
+    currentSceneSelection.current = null;
+    publishSelection(mutation.workspaceId, selectedRef.current);
     if (mutation.kind === "archive") focusAfterArchive.current = true;
     const preferredId = selectedRef.current;
     currentDetail.current = null;
@@ -368,7 +445,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       if (nextId) await loadAggregate(mutation.workspaceId, nextId);
     }
     if (workspaceRef.current === mutation.workspaceId) setMessage(failureMessage);
-  }, [loadAggregate, loadCandidates]);
+  }, [loadAggregate, loadCandidates, publishSelection]);
 
   const onCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -465,6 +542,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       <label>Workspace<select value={workspaceId} onChange={(event) => {
         const nextWorkspaceId = event.target.value;
         mutationGeneration.current += 1;
+        currentSceneSelection.current = null;
         workspaceRef.current = nextWorkspaceId;
         selectedRef.current = null;
         currentList.current = null;
@@ -473,6 +551,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
         suppressNextDetailEffect.current = null;
         clearVisibleDetail("idle");
         setMessage(null);
+        publishSelection(nextWorkspaceId, null);
         setWorkspaceId(nextWorkspaceId);
       }} disabled={workspaceState !== "ready" || workspaces.length === 0 || pendingAction !== null} style={{ width: "100%", minWidth: 0, maxWidth: "100%" }}>{workspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label>
       <label>Filter candidates<input ref={filterRef} value={filterText} onChange={(event) => { filterTextRef.current = event.target.value; setFilterText(event.target.value); }} disabled={candidateState === "loading" || pendingAction !== null} /></label>
@@ -488,7 +567,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       {candidateState === "ready" && candidates.length === 0 && <p ref={emptyCandidatesRef} tabIndex={-1}>No BLUECAD candidates exist in this workspace.</p>}
       {candidateState === "ready" && candidates.length > 0 && visibleCandidates.length === 0 && <p ref={emptyCandidatesRef} tabIndex={-1}>No candidates match the current filter. Archived candidates may be hidden.</p>}
     </div>
-  ), [briefText, candidateState, candidates.length, clearVisibleDetail, filterText, handleBriefRef, pendingAction, refresh, selectedId, showArchived, visibleCandidates, workspaceId, workspaceState, workspaces]);
+  ), [briefText, candidateState, candidates.length, clearVisibleDetail, filterText, handleBriefRef, pendingAction, publishSelection, refresh, selectedId, showArchived, visibleCandidates, workspaceId, workspaceState, workspaces]);
 
   const sidecar = useMemo<ReactNode>(() => {
     const candidate = aggregate?.candidate;
@@ -516,13 +595,15 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
 
   useEffect(() => { onShellRegionsChange({ navigator, sidecar, dock }); }, [dock, navigator, onShellRegionsChange, sidecar]);
   useEffect(() => () => {
+    currentSceneSelection.current = null;
     currentList.current = null;
     currentDetail.current = null;
     currentValidation.current = null;
     suppressNextDetailEffect.current = null;
     mutationGeneration.current += 1;
+    onSelectionChange(null);
     onShellRegionsChange({});
-  }, [onShellRegionsChange]);
+  }, [onSelectionChange, onShellRegionsChange]);
 
   const candidate = aggregate?.candidate.id === selectedId ? aggregate.candidate : null;
   const canPromote = candidate?.status === "valid" && !candidate.promoted_decision_id;
@@ -533,7 +614,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
 
 function GeometryInspectionPanel({ snapshot, onSelect }: { snapshot: GeometryInspectionSnapshot; onSelect(meshKey: string | null): void }) {
   const selected = snapshot.selected;
-  return <section aria-labelledby="geometry-inspection-title"><h3 id="geometry-inspection-title">Geometry inspection</h3><p className="panel-subtitle">Geometry-only · current viewer session · no semantic component identity</p>{snapshot.status === "loading" && <p>Loading inspectable geometry…</p>}{snapshot.status === "error" && <p className="error-banner">Geometry inspection is unavailable for this artifact.</p>}{snapshot.status === "ready" && snapshot.meshes.length === 0 && <p>No inspectable artifact meshes.</p>}{snapshot.status === "ready" && snapshot.meshes.length > 0 && <><label>Inspectable mesh<select value={selected?.meshKey ?? ""} onChange={(event) => onSelect(event.target.value || null)} style={{ width: "100%", minWidth: 0, maxWidth: "100%" }}><option value="">No mesh selected</option>{snapshot.meshes.map((mesh) => <option key={mesh.meshKey} value={mesh.meshKey}>{mesh.displayName}</option>)}</select></label><button type="button" className="secondary-button" onClick={() => onSelect(null)} disabled={!selected}>Clear inspection</button>{selected && <dl className="details"><div><dt>Mesh</dt><dd>{selected.displayName}</dd></div><div><dt>Session key</dt><dd>{selected.meshKey}</dd></div><div><dt>Artifact material names</dt><dd>{selected.materialNames.length ? selected.materialNames.join(", ") : "Not named"}</dd></div><div><dt>Rendered triangles</dt><dd>{selected.triangleCount ?? "Unavailable"}</dd></div><div><dt>World bounds</dt><dd>{formatBounds(selected.worldBounds)}</dd></div></dl>}</>}</section>;
+  return <section aria-labelledby="geometry-inspection-title"><h3 id="geometry-inspection-title">Geometry inspection</h3><p className="panel-subtitle">Geometry-only · current viewer session · semantic identity resolves only through current manifest evidence</p>{snapshot.status === "loading" && <p>Loading inspectable geometry…</p>}{snapshot.status === "error" && <p className="error-banner">Geometry inspection is unavailable for this artifact.</p>}{snapshot.status === "ready" && snapshot.meshes.length === 0 && <p>No inspectable artifact meshes.</p>}{snapshot.status === "ready" && snapshot.meshes.length > 0 && <><label>Inspectable mesh<select value={selected?.meshKey ?? ""} onChange={(event) => onSelect(event.target.value || null)} style={{ width: "100%", minWidth: 0, maxWidth: "100%" }}><option value="">No mesh selected</option>{snapshot.meshes.map((mesh) => <option key={mesh.meshKey} value={mesh.meshKey}>{mesh.displayName}</option>)}</select></label><button type="button" className="secondary-button" onClick={() => onSelect(null)} disabled={!selected}>Clear inspection</button>{selected && <dl className="details"><div><dt>Mesh</dt><dd>{selected.displayName}</dd></div><div><dt>Session key</dt><dd>{selected.meshKey}</dd></div><div><dt>Artifact material names</dt><dd>{selected.materialNames.length ? selected.materialNames.join(", ") : "Not named"}</dd></div><div><dt>Rendered triangles</dt><dd>{selected.triangleCount ?? "Unavailable"}</dd></div><div><dt>World bounds</dt><dd>{formatBounds(selected.worldBounds)}</dd></div></dl>}</>}</section>;
 }
 
 function formatBounds(bounds: GeometryInspectionSnapshot["selected"] extends infer T ? T extends { worldBounds: infer B } ? B : never : never): string {
