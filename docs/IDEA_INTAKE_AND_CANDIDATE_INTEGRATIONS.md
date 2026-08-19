@@ -21,19 +21,35 @@ When a maintainer conversation proposes, links, uploads, or discusses something 
 4. preserve source/provenance, the concrete reusable mechanism, major caveats, and current disposition;
 5. avoid converting the entry into implementation authority; if later promoted, link the governing spec/ADR rather than duplicating its live state here;
 6. keep rejected and superseded entries when they carry useful negative evidence, so weak patterns are not repeatedly rediscovered;
-7. re-check current source version and licensing before copying code or substantial implementation detail;
+7. re-check the exact current upstream source, direct license, material transitive licenses and required notices before code integration, vendoring or substantial reuse;
 8. when auditing a GitHub organization, check repository `fork`, `parent`, and `source` metadata before attributing an idea to that organization.
 
 This rule applies to, for example, a newly discovered GitHub project, Rizzo-PI/Rizzo-pii-like system, research paper, engineering software, CAD/CFD/FEM workflow, local-AI runtime, agent framework, hardware module, sensor, photobioreactor component, or BlueRev process idea.
+
+## Software reuse and integration policy
+
+JarvisOS is not required to reimplement useful third-party software merely to make the implementation internally authored. The preferred engineering choice depends on the exact current license and integration fit.
+
+### Preferred modes
+
+- `DIRECT_DEPENDENCY`: prefer the maintained upstream package, binary, service or API when its license is commercially compatible and the dependency boundary is acceptable. Pin/version it where reproducibility or supply-chain control requires that, and preserve required copyright/license/NOTICE attribution.
+- `VENDORED_COMPONENT`: include a permissively licensed upstream component in the JarvisOS tree when vendoring materially improves offline operation, patch control, reproducibility or deployment. Preserve upstream provenance, copyright/license/NOTICE files, version/commit identity and an update path.
+- `REFERENCE_ONLY`: inspect concepts/interfaces without copying or integrating code when the source has no license, an unclear license, incompatible reciprocal/source-available terms, unacceptable dependency/security cost, or obsolete/unmaintained implementation.
+
+MIT, Apache-2.0, BSD, ISC, zlib and other genuinely permissive terms are therefore **candidates for direct reuse**, subject to exact-version and transitive-license review. Do not rewrite a working permissively licensed component from scratch merely to avoid using upstream code.
+
+A permissive license is not automatic adoption. Before promotion evaluate architecture fit, authority boundaries, platform support, attack surface, maintenance health, supply-chain footprint, transitive licenses, performance, offline/local requirements, update strategy and deterministic testability. Components with mixed/community/enterprise licensing must be classified at the actual package/file boundary used by JarvisOS.
+
+Any third-party source incorporated into JarvisOS must remain identifiable in dependency/SBOM/provenance records so future commercial distribution can reproduce the applicable attribution and license obligations. Final shipping/legal compatibility remains a release gate, not an assumption made by this intake register.
 
 ## Entry states
 
 - `CAPTURED`: relevant source/idea recorded but not deeply audited.
 - `AUDITED`: code/docs inspected and reusable patterns identified.
-- `CANDIDATE`: materially worth adapting when an authorized product need reaches it.
+- `CANDIDATE`: materially worth adapting/integrating when an authorized product need reaches it.
 - `PARKED`: useful but premature or lacking a current trigger.
 - `REJECTED`: not worth importing/adapting in its current form; retain why.
-- `PROMOTED`: one or more ideas entered a governing spec/ADR; that record now owns implementation state.
+- `PROMOTED`: one or more ideas/components entered a governing spec/ADR; that record now owns implementation state.
 - `SUPERSEDED`: a stronger reference replaced this entry's role.
 
 ## Evidence labels
@@ -44,10 +60,10 @@ This rule applies to, for example, a newly discovered GitHub project, Rizzo-PI/R
 
 ## Value grade
 
-Grades are reference value, not implementation priority:
+Grades are reference/integration value, not implementation priority:
 
-- `S`: unusually strong direct reference.
-- `A`: strong reusable patterns.
+- `S`: unusually strong direct reference/component.
+- `A`: strong reusable patterns/components.
 - `B`: selected useful ideas, substantial adaptation required.
 - `C`: limited or mostly overlapping value.
 - `D`: weak/misleading reference or clearly better upstream exists.
@@ -79,7 +95,7 @@ Grades are reference value, not implementation priority:
 | REF-019 | Lessan / linux-autonomos-agent | learning / tool effectiveness | CODE-FIRST | B- | PARKED | empirical tool effectiveness and prior-task retrieval; needs contextual metrics and no authority promotion |
 | REF-020 | ZYRAXON browser family | browser/computer use | CODE-FIRST | C | SUPERSEDED | isolated observations only; AIRI/Hermes/Nexus references are stronger |
 | REF-021 | zyraxon-code | coding editor | CODE-FIRST | D | REJECTED | insufficient unique value over studying actual upstream editor/agent projects |
-| REF-022 | NousResearch/Hermes Agent | large tool catalogs / execution | CODE-FIRST | S | CANDIDATE | tiered progressive tool disclosure, scope-safe bridge, conflict-aware parallelism, strict JSON, checkpoints/persistence, large-result spillover |
+| REF-022 | NousResearch/Hermes Agent | large tool catalogs / execution | CODE-FIRST | S | CANDIDATE | MIT upstream; progressive tool disclosure, scope-safe bridge, conflict-aware parallelism, strict JSON, checkpoints/persistence, large-result spillover; direct integration is allowed to compete with recreation |
 | REF-023 | Rizzo-PI / Rizzo-pii family | engineering AI efficiency | CAPTURED | — | CAPTURED | software-side inference/specialization may matter as much as hardware; exact version must be re-audited before requirements |
 | REF-024 | Seeker.Bot | evidence / capability dependencies | CODE-FIRST | A | CANDIDATE | claim-level evidence arbitration, verification depth, domain-sensitive confidence decay, capability dependency graph |
 | REF-025 | ZYRAXON-AI | dynamic capability installation / memory | CODE-FIRST | B- | PARKED | typed capability-install concept and simple memory ranking; broad self-evolve authority is unsuitable |
@@ -93,8 +109,13 @@ Grades are reference value, not implementation priority:
 | REF-033 | NousResearch/autoreason + hermes-agent-self-evolution | refinement / controlled self-improvement | CODE-FIRST | A | CANDIDATE | explicit incumbent, blinded challenger comparison, offline candidate evolution; promotion requires deterministic gates and review |
 | REF-034 | NousResearch/Nomos + Atropos/tinker-atropos | adaptive reasoning / specialist training environments | CODE-FIRST | A- | PARKED | allocate compute to under-verified tasks; separate environment/reward truth from replaceable trainer/inference backend |
 | REF-035 | NousResearch/neural-steering + smc-inference-server + DisTrO | model steering / inference-time search / distributed training | CODE-FIRST | B | PARKED | research options for local-model steering, inference-time quality and distributed training; never substitutes for authority policy |
+| REF-036 | microsoft/agent-governance-toolkit | agent policy / governance / trust | CODE-FIRST | S | CANDIDATE | MIT; schema-versioned policy, fail-closed evaluation, additive-only inheritance, context-aware enforcement; evaluate official narrow dependency before vendoring/rewrite |
+| REF-037 | NVIDIA/OpenShell + NVIDIA/NemoClaw | sandboxed autonomous execution | CODE-FIRST | S | CANDIDATE | Apache-2.0; real filesystem/network/process sandbox, seccomp/Landlock, provider routing and Hermes packaging; evaluate direct runtime integration |
 
-Supporting detailed Nous audit: `docs/audits/NOUS_RESEARCH_REPO_AUDIT_2026-08-19.md`.
+Supporting detailed audits:
+
+- `docs/audits/NOUS_RESEARCH_REPO_AUDIT_2026-08-19.md`
+- `docs/audits/NOUS_FORK_UPSTREAM_EXPANSION_2026-08-19.md`
 
 ---
 
@@ -179,7 +200,7 @@ Adopt monotonic restriction:
 
 `global policy -> provider/runtime -> agent -> sandbox -> subagent`.
 
-A lower layer may remove authority but must never restore a capability denied above it. Useful resource scopes include workspace `none/read-only/read-write`, network posture, per-agent credentials and CPU/RAM limits.
+A lower layer may remove authority but must never restore a capability denied above it. Useful resource scopes include workspace `none/read-only/read-write`, network posture, per-agent credentials and CPU/RAM limits. Where a mature permissively licensed component implements this boundary, evaluate integrating it rather than recreating the mechanism.
 
 ## REF-012 — open-design
 
@@ -251,7 +272,7 @@ Rejected as primary reference because useful concepts are better studied in actu
 
 ## REF-022 — NousResearch/Hermes Agent
 
-The focused audit inspected **upstream `NousResearch/hermes-agent` itself**, not only downstream forks. Current upstream license checked on 2026-08-19: MIT.
+The focused audit inspected **upstream `NousResearch/hermes-agent` itself**, not only downstream forks. Current upstream license checked on 2026-08-19: MIT. Under the reuse policy above, JarvisOS may therefore integrate Hermes or selected maintained modules directly if the eventual dependency boundary is cleaner than duplicating them.
 
 ### Tiered progressive tool disclosure
 
@@ -399,7 +420,59 @@ Original Nous distributed-training-over-Internet project. Potential long-term re
 
 ### Provenance caveat for the Nous organization
 
-Several attractive-looking repositories in `NousResearch` are direct forks, including Microsoft/NVIDIA/vLLM/HLC projects. Their innovations must be attributed and audited at upstream rather than treated as Nous-authored. This audit explicitly confirmed direct forks for `agent-governance-toolkit`, `OpenShell`, `NemoClaw`, `Gym`, `Automodel`, `RL`, `pico`, and `speculators`.
+A current `org:NousResearch fork:only` audit found 49 fork results. Their innovations must be attributed and audited at upstream rather than treated as Nous-authored. The exhaustive resumable queue and verified upstreams live in `docs/audits/NOUS_FORK_UPSTREAM_EXPANSION_2026-08-19.md`.
+
+## REF-036 — Microsoft Agent Governance Toolkit
+
+Upstream `microsoft/agent-governance-toolkit` is MIT and is now a **direct-reuse candidate**, not merely a conceptual policy reference.
+
+Code-first findings include:
+
+- schema-versioned YAML/JSON policies;
+- lifecycle stages `pre_input`, `pre_tool`, `post_tool`, `pre_output`;
+- `allow`, `deny`, `warn`, `require_approval`, `log` outcomes;
+- validated rate limits and bounded expression evaluation;
+- fail-closed policy-rule handling on evaluation errors;
+- hierarchical `extends` with cycle and path-traversal checks;
+- additive-only inheritance: a child cannot weaken an inherited deny;
+- `inner_loop`, `ci_cd`, and `autonomous` enforcement contexts with different severity behavior.
+
+Packaging caveat: the current `agent-governance-toolkit-core` 5.0.0 distribution consolidates policy, runtime, hypervisor and mesh source trees and has a meaningful dependency surface. Prefer a supported narrow official package/module if available; do not import the full bundle just because it is permissively licensed.
+
+Security caveat: one inspected trust evaluator returns allow if no policies are loaded. JarvisOS must retain a fail-closed bootstrap invariant even if this component is integrated.
+
+Candidate reuse mode: **`DIRECT_DEPENDENCY` first; `VENDORED_COMPONENT` only if a narrow stable API cannot otherwise be consumed.**
+
+## REF-037 — NVIDIA OpenShell + NemoClaw
+
+Both current upstreams are Apache-2.0. They should be evaluated as usable software layers rather than reconstructed from their ideas.
+
+### OpenShell
+
+The inspected Rust implementation exposes a real sandbox policy:
+
+- filesystem `read_only` and `read_write` allowlists;
+- network default `Block`, explicit `Proxy` / `Allow` modes;
+- Landlock `BestEffort` or `HardRequirement`;
+- separate run-as user/group;
+- seccomp filtering for fileless execution, ptrace, BPF, cross-process memory access, mount APIs, user-namespace creation and other escape primitives;
+- provider inference profiles separating credential discovery from request-time credential/header injection;
+- proxy-based network/inference routing rather than giving the agent unrestricted host networking.
+
+This is currently the strongest candidate for sandboxing autonomous coding/Hermes execution. Remaining integration questions: Windows/WSL deployment, policy-control API, overhead, local GPU/inference routes, credential boundary, upgrade strategy and whether JarvisOS can use OpenShell independently of the broader NVIDIA stack.
+
+Candidate reuse mode: **`DIRECT_DEPENDENCY` / external runtime** if those checks pass.
+
+### NemoClaw
+
+NemoClaw packages agents including Hermes over OpenShell and adds policy preset management, sandbox-policy validation, endpoint previews, agent-specific policy additions, baseline/policy ownership handling and guards against some network-policy bypass shapes.
+
+The likely architectural choice is not to make NemoClaw JarvisOS's authority system. Audit whether JarvisOS should:
+
+1. use OpenShell directly and keep Jarvis orchestration above it; or
+2. use selected NemoClaw agent packaging/adapters where they remove real integration work.
+
+Candidate reuse mode: **direct component only where it reduces adapter/orchestration duplication without moving canonical JarvisOS authority into a second control plane.**
 
 ---
 
@@ -426,6 +499,8 @@ Capability Registry
        v
 Monotonic Authority Chain
        |
+       +---- reusable policy engine when fit/licensed
+       |
        v
 Workflow Graph / Resource Reservations
 (DATA / RESOURCE / ORDER / TRANSACTIONAL)
@@ -438,6 +513,9 @@ Worker Readiness / Capability Attestation
        |
        v
 Checkpoint / Baseline / Exact Scope / Epoch
+       |
+       v
+Sandbox Runtime (e.g. evaluated OpenShell boundary)
        |
        v
 EXECUTION
@@ -461,6 +539,7 @@ Audit + AgentRun + Experience Journal
 
 Additional cross-cutting principles now supported by multiple audits:
 
+- **reuse beats recreation when the upstream code is permissively licensed, maintained and fits the boundary**;
 - **visibility is not authority**: a model may know a capability exists without receiving permission to invoke it;
 - **untrusted information is not instruction authority**;
 - **stale execution state is dangerous**: bind GUI actions to perception snapshots and background results to task epochs;
@@ -474,7 +553,8 @@ Additional cross-cutting principles now supported by multiple audits:
 - **unchanged incumbent is a valid candidate** during subjective refinement; rewrites are not automatically improvements;
 - **reasoning budget should follow uncertainty/evidence deficit**, not be spent uniformly;
 - **self-improvement must remain offline, gated and reviewable**;
-- **training environment/reward truth should be portable across trainer/provider backends**.
+- **training environment/reward truth should be portable across trainer/provider backends**;
+- **license provenance is part of software provenance**: direct dependency, vendored code and reference-only sources must remain distinguishable.
 
 ---
 
@@ -497,14 +577,15 @@ Record the engineering claim separately from marketing language, and mark uncert
 
 When a candidate becomes relevant to current product work:
 
-1. revalidate the source against its current version when recency matters;
-2. check licensing before copying code or substantial implementation detail;
-3. state the concrete JarvisOS/BLUECAD/BlueRev problem it solves;
-4. run the minimum-necessary test;
+1. revalidate the exact upstream source/version against current state when recency matters;
+2. classify reuse mode (`DIRECT_DEPENDENCY`, `VENDORED_COMPONENT`, `REFERENCE_ONLY`) and verify direct/transitive license compatibility plus required notices/attribution;
+3. state the concrete JarvisOS/BLUECAD/BlueRev problem it solves and why upstream reuse is preferable or not;
+4. run the minimum-necessary integration/security/performance test;
 5. create/update the appropriate backlog/spec/ADR through the normal repository process;
-6. change this entry to `PROMOTED` and link the authoritative record;
-7. keep implementation status exclusively in `docs/specs/STATUS.md`.
+6. if code is reused, record upstream repository, exact version/commit, license/NOTICE handling, dependency/SBOM entry and update strategy;
+7. change this entry to `PROMOTED` and link the authoritative record;
+8. keep implementation status exclusively in `docs/specs/STATUS.md`.
 
 # Maintenance rule
 
-Prefer updating an existing entry over creating synonyms. Preserve negative findings. When a later audit changes an earlier conclusion, append the new evidence and mark the old conclusion superseded rather than silently erasing provenance.
+Prefer updating an existing entry over creating synonyms. Preserve negative findings. When a later audit changes an earlier conclusion, append the new evidence and mark the old conclusion superseded rather than silently erasing provenance. For fork networks, update the upstream-expansion audit rather than repeatedly rediscovering parent/source ownership.
