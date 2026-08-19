@@ -59,6 +59,14 @@ backlog row → kernel or definition → full spec → readiness → implementat
 gates → review → merge → registry-reconciliation lifecycle. A `planned` row is not
 implementation authority.
 
+**Emergency security interrupt — 2026-08-19:** 099 REVIEW-SECRET-BOUNDARY-0 temporarily
+preempts the active 092 implementation because it closes a confirmed provider-secret execution
+boundary in the manually dispatched review workflows. PR #303 remains preserved but paused:
+no new functional 092 commits while 099 is active. After 099 implementation merges and is
+registry-reconciled, the queue resumes at the preserved 092/#303 front and then continues with
+058c and the existing downstream order. This interrupt does not re-derive 092 or any product
+architecture.
+
 The binding order is:
 
 1. 081 FRONTEND-BETA-AUTHORITY-0 definition and registry reconciliation;
@@ -106,9 +114,9 @@ abandonment or substitution is not authorized.
 
 ## Current priority and drafting order
 
-1. Preserve merged 059a/059b, 061a/061b, 075, 076, 077, and 079 authority boundaries.
-2. Treat the merged 082/094 checkpoint as complete and use [the 2026-08-04 Windows evidence](082-094-windows-checkpoint-2026-08-04.md) as the transition record.
-3. Specs 070 UI-FOUNDATION-1, 083 APP-SHELL-1, 084 BLUECAD-READ-MODEL-1, 085 BLUECAD-WORKBENCH-2, 086 MODEL-INSPECTION-A0, 087 LINEAGE-OVERVIEW-1, 088 RUNS-WORKBENCH-1, 035 ENGINEERING-DATA-1, 089 ANALYTICS-DOCK-1, 054 PROPOSAL-REVIEW-1, 090 AI-THREADS-0, 091 JARVIS-SIDECAR-1, 029 SETTINGS-1, and 096 OPERATOR-WORKBENCH-CORRECTION-0 are merged. Definition-only 095 OPERATOR-WORKSTATION-AUTHORITY-1 is merged under PR #288; 096 definition/readiness/implementation are merged under PRs #290, #291, and #293. 071b ENGINEERING-PROPERTIES-1 definition/readiness/implementation are merged under PRs #295, #296, and #298. Freshly re-derived 092 SCENE-BINDING-0 definition/readiness are merged under PRs #300 and #301; 092 is ready for exactly one bounded runtime implementation front under the pinned real-kernel semantic-key proof, and 058c remains unauthorized until 092 implementation merges and is reconciled.
+1. 099 REVIEW-SECRET-BOUNDARY-0 is the sole active priority security interrupt once this definition/readiness change merges. Implement and reconcile 099 before adding new functional commits to 092.
+2. Preserve 092 implementation PR #303 exactly as the paused product front. After 099 merges/reconciles, resume #303 from its then-current exact head under the existing 092 definition/readiness; 058c remains unauthorized until 092 merges and is reconciled.
+3. Preserve merged 059a/059b, 061a/061b, 075, 076, 077, 079, 082, 094, 070, 083, 084, 085, 086, 087, 088, 035, 089, 054, 090, 091, 029, 096, and 071b authority boundaries; definition-only 095 remains non-implementation authority.
 4. Preserve the merged documentation contract for 078 without treating it as implementation authorization.
 5. Keep 066–068 and 080 frozen; keep 062 itself blocked/deferred while allowing the operator-workstation queue to proceed without routine grading UI.
 
@@ -219,12 +227,13 @@ abandonment or substitution is not authorized.
 | 089 | merged | [#266](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/266) | ANALYTICS-DOCK-1 | 035, 083, 087, 088 | Add closed-by-default, real-data analytics with declared units and comparability contracts; reject incompatible comparisons instead of normalizing them silently. |
 | 090 | merged | [#276](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/276) | AI-THREADS-0 | 040, 041, 042, 059b, 061a, 061b, 083 | Add local episodic thread persistence and thread-to-attempt provenance while preserving distinct provider/fallback, token-flow, BLUECAD workflow, proposal, cost and latency evidence. Raw complete-thread external egress remains forbidden. |
 | 091 | merged | [#281](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/281) | JARVIS-SIDECAR-1 | 042, 059b, 061a, 061b, 083, 090 | Add contextual Jarvis interaction and advisory role profiles inside the shared sidecar, reusing the existing execution, context, proposal, budget and egress boundaries; no Hermes runtime or fake autonomous presence. |
-| 092 | ready | — | SCENE-BINDING-0 | 005, 006, 056, 071b, 085 | Definition PR #300 and [the 2026-08-19 readiness decision](092-readiness-2026-08-19.md) under PR #301 are merged. Authorize one bounded runtime implementation of exporter-owned canonical `part_id` semantic keys, versioned manifest binding, stale-safe frontend resolution, and the pinned real-kernel GLB parse proof; mesh/name/order/color/bounds heuristics remain forbidden. |
+| 092 | in_review | [#303](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/303) | SCENE-BINDING-0 | 005, 006, 056, 071b, 085 | Definition PR #300 and [the 2026-08-19 readiness decision](092-readiness-2026-08-19.md) under PR #301 are merged. Implementation PR #303 is preserved but temporarily paused by the 099 security interrupt; after 099 merge/reconciliation it resumes unchanged under the pinned exporter-owned semantic-key proof. |
 | 093 | planned | — | BLUEREV-SERIAL-TOPOLOGY-0 | 043, 047, 048, 049, 050, 051, 071, 075 | Future implementation authority for the canonical serial Smart-Joint/tubular-section BlueRev topology and side-stream harvest arrangement. It is outside the frontend-beta binding queue. |
 | 095 | planned | — | OPERATOR-WORKSTATION-AUTHORITY-1 | — | Definition-only re-derivation authority under PR #288; freezes the Operate/Inspect/Audit hierarchy, Jarvis-over-Properties sidecar, engineering Properties/working-state/preflight/Jarvis-action semantics and ordered downstream queue. It must never receive an implementation PR. |
 | 096 | merged | [#293](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/293) | OPERATOR-WORKBENCH-CORRECTION-0 | 054, 083, 088, 089, 091 | Definition PR #290 and readiness PR #291 are merged; runtime implementation PR #293 is merged with the bounded frontend-only sidecar/scroll/overflow and operator-first Runs/Review/Jarvis presentation correction using existing authority only, with no new engineering backend semantics. |
 | 097 | planned | — | JARVIS-ENGINEERING-ACTIONS-0 | 071b, 091, 058c | Structured stale-safe Jarvis actions over working configuration, deterministic blocker assistance, safe-fix provenance and explicit confirmation boundaries; never mutate canonical project data silently. |
 | 098 | planned | — | ENGINEERING-RECORD-LIFECYCLE-0 | 035, 040, 050, 051, 071b | Add explicit server-owned Edit / Active-Inactive / Archive / Supersede / Delete semantics and project-centric Engineering Data actions without destroying lineage or hiding deletion only in frontend state. |
+| 099 | ready | — | REVIEW-SECRET-BOUNDARY-0 | 017, 019 | Emergency security interrupt under [the 2026-08-19 readiness decision](099-readiness-2026-08-19.md): remove PR-controlled code from the provider-secret Cheap/Senior review process, keep PR content inert via GitHub API, prove the boundary deterministically, then resume paused 092/#303. |
 ## Superseded planning aliases and resolved collisions
 
 - Historical `045 = AGENT-ORCH` references are superseded by `060`; `045` is
@@ -239,5 +248,5 @@ abandonment or substitution is not authorized.
 - Specs 031, 034, and 036 retain only bounded JarvisOS-side vocabulary, persona-policy,
   and authority-display contracts. They do not authorize a second conversation or
   orchestration engine and do not reopen frozen 066–068.
-- IDs 081–098 are reserved by FRONTEND-BETA-AUTHORITY-0 plus the 094 normal-spine re-derivation and 095 operator-workstation re-derivation as recorded in the registry;
+- IDs 081–099 are reserved by FRONTEND-BETA-AUTHORITY-0 plus the 094 normal-spine re-derivation, 095 operator-workstation re-derivation, and the 099 emergency security interrupt as recorded in the registry;
   all references use the canonical three-digit form required by the registry gate, with existing suffix form reused only where explicitly registered (such as 071b).
