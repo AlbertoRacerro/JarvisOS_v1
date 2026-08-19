@@ -64,8 +64,11 @@ def test_canonical_manifest_excludes_runtime_timing_and_preserves_artifact_integ
         (tmp_path / name).write_bytes(f"stable-{index}-{name}\n".encode())
 
     spec = {"spec_id": "sha256:" + "1" * 64}
-    first = _manifest(spec, _parts(), tmp_path)
-    second = _manifest(spec, _parts(), tmp_path)
+    scene_bindings = {
+        "bluecad-part-sha256-652fe1e95f0abd1ae61af688f09a0909778f121c9383a9e290523dd9ca304e3e": "tube1"
+    }
+    first = _manifest(spec, _parts(), tmp_path, scene_bindings=scene_bindings)
+    second = _manifest(spec, _parts(), tmp_path, scene_bindings=scene_bindings)
 
     assert first == second
     assert "timing" not in first
