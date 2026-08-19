@@ -21,6 +21,21 @@ function artifactDigest(manifest: Record<string, unknown>): string | null {
   return glb.sha256;
 }
 
+function validBindingObjects(
+  objects: unknown,
+  parts: Record<string, unknown>
+): objects is Record<string, { part_id: string }> {
+  if (!isRecord(objects) || Object.keys(objects).length === 0) return false;
+  const seenPartIds = new Set<string>();
+  for (const [key, value] of Object.entries(objects)) {
+    if (!SEMANTIC_KEY.test(key) || !isRecord(value) || Object.keys(value).length !== 1) return false;
+    if (typeof value.part_id !== "string" || !isRecord(parts[value.part_id])) return false;
+    if (seenPartIds.has(value.part_id)) return false;
+    seenPartIds.add(value.part_id);
+  }
+  return true;
+}
+
 /**
  * Resolve one exporter-owned GLTF semantic key against the exact current manifest.
  *
@@ -42,9 +57,9 @@ export function resolveScenePart(
   if (artifactDigest(manifestValue) !== currentGlbSha256) return null;
 
   const objects = binding.objects;
-  if (!isRecord(objects)) return null;
+  if (!validBindingObjects(objects, parts)) return null;
   const target = objects[semanticKey];
-  if (!isRecord(target) || Object.keys(target).length !== 1 || typeof target.part_id !== "string") return null;
+  if (!target) return null;
 
   const part = parts[target.part_id];
   if (!isRecord(part)) return null;
