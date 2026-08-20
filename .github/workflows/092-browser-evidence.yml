@@ -1,0 +1,73 @@
+name: 092 Browser Evidence
+
+on:
+  push:
+    branches:
+      - evidence/092-browser-858b4977
+
+permissions:
+  contents: read
+
+jobs:
+  browser-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout evidence branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Prove product tree matches frozen PR head
+        shell: bash
+        run: |
+          git diff --exit-code 858b49777500d3137435321a85a63ed863691c1c -- \
+            frontend backend schemas
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend and transient browser harness
+        shell: bash
+        run: |
+          cd frontend
+          npm ci
+          npm install --no-save --no-package-lock playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Build frozen frontend
+        shell: bash
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Start preview
+        shell: bash
+        run: |
+          cd frontend
+          nohup npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/jarvisos-vite.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4173/design/model >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/jarvisos-vite.log
+          exit 1
+
+      - name: Run 092 browser matrix
+        shell: bash
+        run: node scripts/evidence/092-browser-evidence.mjs
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 092-browser-evidence-858b4977
+          path: |
+            reports/092-browser-evidence.json
+            reports/092-browser-evidence/*.png
+            /tmp/jarvisos-vite.log
+          if-no-files-found: warn
