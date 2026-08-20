@@ -52,9 +52,10 @@ The following base-definition requirements are interpreted through the availabil
 - Section 8 model-choice runtime behavior;
 - Section 12 model-choice Undo/Revert/revision behavior;
 - Section 16 cases concerning A → B → A restoration, inactive-model values, and model switching;
-- Section 19 readiness obligations concerning mutually exclusive model choice and inactive-value retention.
+- Section 19 readiness obligations concerning mutually exclusive model choice and inactive-value retention;
+- Section 20 eventual-implementation acceptance criteria concerning an explicit mutually exclusive selector, inactive-model value preservation, and semantic model-switch integration with 071b Undo/Revert/revision semantics.
 
-They remain mandatory whenever the exact runtime supplies at least two genuine same-family choices. They are not permission to fabricate a second option when only one exists.
+They remain mandatory whenever the exact runtime supplies at least two genuine same-family choices. They are not permission to fabricate a second option when only one exists. With exactly one genuine option, the Section 20 model-choice criteria are satisfied by truthful active-model identity plus absence of fabricated alternatives; the other Section 20 acceptance criteria remain unchanged and merge-blocking.
 
 All other 058c definition requirements remain unchanged and merge-blocking where applicable, including:
 
