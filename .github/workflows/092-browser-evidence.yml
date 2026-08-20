@@ -52,6 +52,10 @@ jobs:
               'await page.goto(BASE_URL);\nawait page.getByRole("heading", { name: "Model workbench" }).waitFor();\nawait page.getByRole("button", { name: "Show navigator" }).click();',
               'page.on("pageerror", (error) => console.log(`MATRIX_PAGEERROR: ${error.message}`));\nawait page.goto(BASE_URL);\nawait page.getByRole("heading", { name: "Model workbench" }).waitFor();\nawait page.waitForTimeout(500);\nconst navigatorToggle = page.getByRole("button", { name: /Show navigator|Hide navigator/ });\nif ((await navigatorToggle.first().textContent())?.includes("Show")) await navigatorToggle.first().click();'
           )
+          text = text.replace(
+              '  await page.getByRole("tab", { name: "Properties" }).click();\n  await page.getByLabel("Inspectable mesh").waitFor({ timeout: 10000 });',
+              '  const propertiesTab = page.getByRole("tab", { name: "Properties" });\n  if (await propertiesTab.count()) await propertiesTab.first().click();\n  await page.getByLabel("Inspectable mesh").waitFor({ state: "visible", timeout: 10000 });'
+          )
           p.write_text(text, encoding='utf-8')
           PY
 
