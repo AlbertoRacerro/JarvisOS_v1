@@ -69,25 +69,37 @@ jobs:
           cat /tmp/jarvisos-vite.log
           exit 1
 
-      - name: Stabilize shell-toggle harness after async workspace load
+      - name: Instrument shell-toggle harness after async workspace load
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
           path = Path('scripts/evidence/092-browser-evidence.mjs')
           text = path.read_text(encoding='utf-8')
-          old = '''await page.getByRole("heading", { name: "Model workbench" }).waitFor();
+          old = '''await page.goto(BASE_URL);
+          await page.getByRole("heading", { name: "Model workbench" }).waitFor();
           await page.getByRole("button", { name: "Show navigator" }).click();'''
-          new = '''await page.getByRole("heading", { name: "Model workbench" }).waitFor();
-          await page.waitForTimeout(500);
+          new = '''page.on("console", (message) => console.log(`MATRIX_CONSOLE ${message.type()}: ${message.text()}`));
+          page.on("pageerror", (error) => console.log(`MATRIX_PAGEERROR: ${error.message}`));
+          page.on("framenavigated", (frame) => { if (frame === page.mainFrame()) console.log(`MATRIX_NAVIGATED: ${frame.url()}`); });
+          await page.goto(BASE_URL);
+          await page.getByRole("heading", { name: "Model workbench" }).waitFor();
+          await page.waitForTimeout(1000);
+          console.log("MATRIX_URL", page.url());
+          console.log("MATRIX_BODY_START");
+          console.log(((await page.locator("body").innerText()) ?? "").slice(0, 5000));
+          console.log("MATRIX_BODY_END");
+          console.log("MATRIX_BUTTONS", await page.getByRole("button").allTextContents());
           const navigatorToggle = page.getByRole("button", { name: /Show navigator|Hide navigator/ });
-          if ((await navigatorToggle.textContent())?.includes("Show")) await navigatorToggle.click();'''
+          const navigatorToggleCount = await navigatorToggle.count();
+          if (!navigatorToggleCount) throw new Error("navigator toggle disappeared after mocked API startup");
+          if ((await navigatorToggle.first().textContent())?.includes("Show")) await navigatorToggle.first().click();'''
           if old not in text:
-              raise SystemExit('expected navigator harness block not found')
+              raise SystemExit('expected matrix startup block not found')
           path.write_text(text.replace(old, new), encoding='utf-8')
           PY
 
-      - name: Diagnose rendered shell
+      - name: Diagnose rendered shell without API mocks
         shell: bash
         run: |
           node --input-type=module <<'NODE'
