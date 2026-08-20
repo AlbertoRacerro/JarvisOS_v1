@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - evidence/092-browser-9c271994
+  pull_request:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/092-browser-evidence.yml'
 
 permissions:
   contents: read
