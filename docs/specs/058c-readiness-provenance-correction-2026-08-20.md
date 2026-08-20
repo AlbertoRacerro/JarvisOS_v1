@@ -2,11 +2,11 @@
 
 Date: 2026-08-20  
 Applies to: `docs/specs/058c-readiness-2026-08-20-fresh.md`  
-Reason: exact-head review of PR #317 proved that `partKind == "tube_run"` alone is not sufficient authority for the reviewed-047 selected-object semantics.
+Reason: exact-head review of PR #317 proved that `partKind == "tube_run"` alone is not sufficient authority for the reviewed-047 selected-object semantics, and that row status alone is not sufficient authority for linked-Parameter freshness.
 
 This correction is part of the 058c readiness decision. Where it conflicts with the fresh readiness record, this file governs. It changes no runtime code and does not promote 058c from `planned`.
 
-## 1. Failure mode closed
+## 1. Failure modes closed
 
 The fresh readiness correctly proves that the reviewed 047 CAD link creates one `tube_run` proxy from exactly `tube_length`, `tube_inner_diameter`, and `tube_outer_diameter`. However, current runtime also creates unrelated `tube_run` parts, including common and branch tubing in the 072 topology path. Ordinary BLUECAD candidates may also contain `tube_run` parts.
 
@@ -16,6 +16,8 @@ Therefore this rule is invalid and is superseded:
 
 `partKind` is necessary applicability metadata but is **not sufficient provenance**. Using it alone could present a topology segment or unrelated tube as governed by the global reviewed-047 geometry/hydraulics model and could let an operator execute that model from the wrong selected-object context.
 
+The fresh readiness also treated linked-Parameter `status == "superseded"` as the relevant stale-source guard. Current 051 runtime proves that this is insufficient: downstream nodes can remain `proposed`/`accepted` while canonical `freshness_marks` records them stale after an upstream replacement. Therefore row status is not canonical freshness authority and cannot by itself admit a linked Parameter to preview or execution.
+
 ## 2. Exact current authority
 
 Fresh runtime inspection establishes these distinct facts:
@@ -24,9 +26,10 @@ Fresh runtime inspection establishes these distinct facts:
 - that same path emits the single canonical part `part_id="illuminated_tube_proxy"`, `kind="tube_run"`;
 - `backend/app/modules/bluecad/cad_link_topology_contract.py` creates multiple unrelated `tube_run` parts for the 072 topology, so part kind cannot discriminate provenance;
 - `BluecadCandidateRead.origin == "process_linked"` is also insufficient by itself because it is a broad candidate-origin category, not the exact 047 transformation/model relationship;
-- the current read aggregate does not expose the canonical `bluecad_cad_links` transformation/source identity as structured selected-object provenance.
+- the current read aggregate does not expose the canonical `bluecad_cad_links` transformation/source identity as structured selected-object provenance;
+- `backend/app/modules/flowsheet/freshness.py` and its canonical `freshness_marks` lookup own node freshness; a linked Parameter's own row status is not a substitute for that lookup.
 
-The canonical link table, not candidate notes, labels, scene names, `origin`, mesh identity, part order, or part kind by itself, is the authoritative source for this V0 eligibility decision.
+The canonical link table, not candidate notes, labels, scene names, `origin`, mesh identity, part order, or part kind by itself, is the authoritative source for this V0 eligibility decision. Canonical flowsheet freshness, not a Parameter row-status shortcut, is the authoritative source for whether a linked Parameter may participate in preview/execution.
 
 ## 3. Correct V0 applicability gate
 
@@ -71,7 +74,21 @@ are all required before object-specific fields render.
 
 Schema metadata alone never elevates an unrelated candidate into the 047 semantic family. Conversely, canonical 047 provenance does not make the six generic reviewed-047 inputs intrinsic selected-tube properties; only the three CAD-link-proven geometry inputs remain object-specific.
 
-## 6. Frontend behavior correction
+## 6. Linked-Parameter freshness correction
+
+Every linked Parameter used by 058c must pass the existing canonical node-freshness authority in addition to any row-status and unit/type checks. Preview and the final pre-persistence execution guard must query the canonical freshness path used by the flowsheet runtime; they must not infer freshness from `status != "superseded"`.
+
+Required behavior:
+
+- explicitly superseded linked Parameter → fail closed;
+- linked Parameter marked stale in canonical `freshness_marks`, even if its row remains `proposed`, `accepted`, or another otherwise admissible status → fail closed;
+- downstream Parameter made stale by upstream replacement → fail closed until canonical freshness is restored by the owning runtime path;
+- missing/ambiguous freshness authority where freshness is required → fail closed rather than assume fresh;
+- the same freshness decision must be revalidated immediately before run persistence/execution so a preview cannot authorize a source that became stale afterward.
+
+058c must reuse the existing flowsheet freshness authority and must not create a parallel freshness store, frontend freshness heuristic, or new lifecycle status.
+
+## 7. Frontend behavior correction
 
 For a resolved 092 `bluecad-part`, `EngineeringProperties` may show the reviewed-047 object-semantic `Geometry` group only after the current candidate aggregate proves the exact source gate above.
 
@@ -85,13 +102,15 @@ Required negative behavior:
 
 The generic model configuration surface remains usable and must not be conflated with selected-object ownership.
 
-## 7. Stale safety
+## 8. Stale safety
 
 The provenance projection is part of the current selected-object context and is stale whenever candidate/workspace selection is stale. A late aggregate/provenance response for candidate A cannot authorize semantic rendering or editing after selection has moved to candidate B.
 
 The frontend must bind eligibility to the same current workspace/candidate/artifact/viewer-session/selection generation already required by 092/071b. No provider call, Jarvis mutation, run creation, canonical promotion or implicit model switch occurs merely because provenance resolves.
 
-## 8. Deterministic and browser acceptance added
+Linked-Parameter freshness is a separate server-owned execution precondition and must be rechecked at preview and immediately before persistence/execution; frontend selection freshness cannot substitute for canonical node freshness.
+
+## 9. Deterministic and browser acceptance added
 
 The implementation acceptance matrix gains these merge-blocking cases:
 
@@ -103,22 +122,25 @@ The implementation acceptance matrix gains these merge-blocking cases:
 6. wrong/missing/stale link row fails closed;
 7. candidate switch while provenance read is in flight cannot leak old semantic eligibility into the new selection;
 8. generic 071b configuration remains reachable for non-eligible objects without presenting it as object ownership;
-9. direct guarded execution of the semantic companion remains exact server-known and is not authorized merely by client-selected candidate metadata.
+9. direct guarded execution of the semantic companion remains exact server-known and is not authorized merely by client-selected candidate metadata;
+10. a linked Parameter that is canonically stale through downstream propagation but is not itself `superseded` is rejected by preview;
+11. the same downstream-stale/non-superseded Parameter becoming stale after preview is rejected by the final pre-persistence execution check.
 
-Tests must include at least one actual 072 `tube_run` negative fixture because that is the concrete collision that exposed this failure mode.
+Tests must include at least one actual 072 `tube_run` negative fixture because that is the concrete collision that exposed the provenance failure mode, and at least one actual downstream-stale/non-superseded Parameter fixture exercising the canonical freshness lookup.
 
-## 9. Allow-list amendment
+## 10. Allow-list amendment
 
 The fresh readiness Section 11 allow-list is amended only as follows:
 
 - `backend/app/modules/bluecad/read_model.py` and focused read-model/API tests may be touched if required to project exact canonical 047 CAD-link provenance through the existing aggregate;
 - `backend/app/modules/bluecad/routes.py` may change only if the existing aggregate response model requires the additive projection; no new route is authorized by default;
+- the existing flowsheet freshness query/service path and focused preview/execution tests may be touched only as necessary to reuse canonical node freshness for linked-Parameter admission; no new freshness store/status/route is authorized;
 - corresponding additive type consumption in `frontend/src/api/client.ts` is already within the existing frontend allow-list.
 
 No other BLUECAD persistence, CAD-link execution, scene-binding, topology, provider, schema-migration or state-owner change is authorized by this correction.
 
-## 10. Review consequence
+## 11. Review consequence
 
-The Codex P1 on original PR #317 head `50da32efb25382882fd90ca978965cb6b83fb5a1` is materially valid and blocks that head from merge. CI PASS on that head does not override the semantic finding.
+The Codex P1 on original PR #317 head `50da32efb25382882fd90ca978965cb6b83fb5a1` and the canonical-freshness P1 on head `6fc4d9688f570896e70f9e793e257184811c3541` are materially valid and block those heads from merge. CI PASS on either head does not override the semantic findings.
 
-After this correction is published, all prior exact-head review/gate evidence is stale for merge authority. The new exact head must pass deterministic gates and receive a fresh independent read-only verdict confirming that 047 selected-object semantics are provenance-bound and that 072/ordinary `tube_run` candidates fail closed.
+After this correction is published, all prior exact-head review/gate evidence is stale for merge authority. The new exact head must pass deterministic gates and receive a fresh independent read-only verdict confirming both that 047 selected-object semantics are provenance-bound with 072/ordinary `tube_run` candidates failing closed, and that stale linked Parameters are rejected through canonical freshness even when their own row status is not superseded.
