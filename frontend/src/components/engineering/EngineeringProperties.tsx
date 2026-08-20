@@ -262,7 +262,7 @@ export function useEngineeringProperties(
   };
 
   const undo = () => {
-    const previous = undoStack.at(-1);
+    const previous = undoStack[undoStack.length - 1];
     if (!previous) return;
     setUndoStack((stack) => stack.slice(0, -1));
     setWorking(cloneBindings(previous));
