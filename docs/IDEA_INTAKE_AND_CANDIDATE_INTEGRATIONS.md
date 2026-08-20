@@ -76,8 +76,11 @@ Grades are **reference value**, not implementation priority:
 | REF-019 | Lessan / linux-autonomos-agent | learning / tool effectiveness | CODE-FIRST | B- | PARKED | empirical tool-effectiveness journal and retrieval of past approaches; needs contextual metrics and must never expand authority automatically |
 | REF-020 | ZYRAXON browser / Jarvis browser family | browser/computer use | CODE-FIRST | C | SUPERSEDED | selected browser automation ideas only; AIRI/Hermes/Nexus-style references are stronger for the relevant boundaries |
 | REF-021 | zyraxon-code | coding UI/editor | CODE-FIRST | D | REJECTED | insufficient unique value over studying VS Code/upstream coding-agent primitives directly |
-| REF-022 | Hermes Agent family | local agent / browser / tools | CAPTURED | A? | CAPTURED | potentially strong local-agent and browser/tool infrastructure reference; requires focused code-first audit before promotion |
+| REF-022 | NousResearch/hermes-agent | agent runtime / tools / delegation | CODE-FIRST | S | CANDIDATE | replace weak Jarvis agent/tool skeletons with mature tool registry, toolsets, progressive disclosure, conversation loop, delegation and runtime plumbing while keeping Jarvis deterministic authority |
 | REF-023 | Rizzo-PI / Rizzo-pii and similar specialist inference systems | engineering AI efficiency | CAPTURED | — | CAPTURED | future intake family: software-side inference/engineering specialization may matter more than raw hardware scaling; re-audit exact version/repo before extracting JarvisOS requirements |
+| REF-024 | BlueRev PBR model reference family | photobioreactor modeling | CODE-FIRST | S | CANDIDATE | explicit M0 assumptions plus V-HAB-style simplified light zones; Pruvost MCRT, N. gaditana physiology, AED and GEMs as future oracles/fidelity layers |
+| REF-025 | SmartBioTech + Pioreactor + Phenobottle | experimental bioreactor characterization | CODE-FIRST | S | CANDIDATE | automated P-I/growth experiments, stability-gated campaigns, state estimation and low-cost photophysiology sensing for evidence-driven model calibration |
+| REF-026 | MAGNUS + pyPESTO + BoFire | calibration / uncertainty / experiment design | CODE-FIRST | S | CANDIDATE | parameter estimation, uncertainty quantification and eventual model-based/closed-loop experimental design to remove engineering assumptions systematically |
 
 ---
 
@@ -385,20 +388,83 @@ Rejected as a primary reference because most useful editor/coding-agent concepts
 
 ## REF-022 — Hermes Agent
 
-Captured for a future dedicated code-first audit because it may be valuable for:
+A focused code-first audit of `NousResearch/hermes-agent` found that Hermes is materially stronger than JarvisOS's current skeletons as an **agent runtime**. JarvisOS remains stronger as the deterministic authority and engineering-state boundary.
 
-- local/open agent operation;
-- browser/tool execution;
-- coding and shell/tool orchestration;
-- model portability.
+Candidate replacements/imports from Hermes include:
 
-Do not promote any of these as JarvisOS requirements until exact current code and licensing are audited.
+- mature tool registry with schemas, handlers, availability checks, async metadata and override/collision rules;
+- composable toolsets and MCP/plugin discovery;
+- progressive tool disclosure through `tool_search`, `tool_describe`, and `tool_call` so large scientific tool catalogs do not consume every prompt;
+- a real multi-turn tool-calling conversation loop;
+- synchronous/asynchronous subagent delegation with capacity/progress/cancellation mechanics;
+- observer/middleware extension seams;
+- memory-provider lifecycle and skill/runtime plumbing.
+
+Do **not** import Hermes's authority posture wholesale. JarvisOS should retain deterministic routing, sensitivity, egress, budget, confirmation, canonical context/provenance and engineering state. Consequential Hermes tool calls must remain inside a Jarvis-issued capability envelope, and child authority must be a monotonic subset of parent authority.
+
+The intended end state is one runtime rather than parallel `JarvisAgent + HermesAgent` frameworks. After an authorized migration and equivalence tests, superseded Jarvis `agents/` and `tools/` skeleton paths should be removed rather than kept for sunk-cost reasons.
+
+Detailed audit: `docs/audits/HERMES_AGENT_CODE_FIRST_AUDIT_2026-08-20.md`.
 
 ## REF-023 — Rizzo-PI / Rizzo-pii family
 
 This entry intentionally records the **intake trigger**, not an assumed implementation. The useful hypothesis is that European/local AI independence and engineering usefulness may improve substantially through software/inference innovations, specialization, routing, compression, and task-specific execution rather than only through larger hardware investment.
 
 When a new Rizzo-PI/Rizzo-pii version or related project is proposed, re-open the exact repository/version and extract only verified engineering-relevant mechanisms. Do not infer features from social-media descriptions.
+
+## REF-024 — BlueRev photobioreactor model references
+
+The current discovery strategy separates **reference value** from **implementation timing**. The first BlueRev model should be deliberately small and assumption-explicit rather than importing every available scientific backend.
+
+Strong references found so far include:
+
+- `V-HAB/V-HAB`: permissively licensed, real modular algae/PBR subsystem; particularly useful as an M0 architecture reference for biomass-dependent attenuation and inhibited/saturated/linear/dark light zones;
+- `JeremyPruvost/MCRT-for-tubular-photobioreactor`: high-value tubular optical MCRT reference, but no reusable license found and static audit exposed a major direct-solar input-index defect plus other implementation caveats;
+- Nikolaou/Bernardi/Meneghesso/Morosinotto/Bezzo/Chachuat N. gaditana photophysiology model family: preferred future species-specific light-response/photoacclimation reference;
+- AquaticEcoDynamics AED phytoplankton model: mature GPL external/oracle reference for nutrient/light/salinity eco-physiology;
+- N. gaditana genome-scale models: useful future metabolic-feasibility references, with noncommercial or source-specific licensing constraints.
+
+M0 should use a transparent equivalent tube, simple hydraulics, biomass-dependent exponential attenuation, homogeneous biomass and simple photoinhibition while recording nutrients, carbon, oxygen, fouling, waves, CFD/MCRT and GEM coupling as explicit future assumption replacements.
+
+Detailed audit: `docs/audits/BLUEREV_PBR_DISCOVERY_2026-08-20.md`.
+
+## REF-025 — Experimental bioreactor characterization family
+
+Three otherwise separate projects expose a coherent future evidence loop:
+
+- `SmartBioTech/PBR-ControlScripts` (MIT) contains real P-I/O2 characterization, turbidostat stability tests and parameter-sweep experiment automation;
+- `Pioreactor/pioreactor` (MIT) provides mature OD/event handling and EKF-style culture growth-rate state estimation patterns;
+- `HarveyBates/Phenobottle` provides a peer-reviewed low-cost PBR/photophysiology hardware reference including OJIP fluorescence, but its software is AGPL and should remain external/reference for proprietary BLUECAD.
+
+Together they motivate a future workflow:
+
+`uncertain model -> controlled experiment -> calibrated sensors -> filtered state -> fitted parameter + uncertainty -> evidence-bound parameter/assumption replacement`.
+
+This is potentially higher leverage than adding theoretical fidelity before measured evidence exists.
+
+Detailed audit: `docs/audits/BLUEREV_PBR_DISCOVERY_2026-08-20.md`.
+
+## REF-026 — Parameter estimation, uncertainty and experiment design
+
+A serendipitous author/lab search around N. gaditana modeling exposed a broader model-improvement stack.
+
+### OMEGA/Imperial MAGNUS
+
+`omega-icl/magnus` implements parameter estimation, feasibility analysis, model discrimination and model-based experiment design over dynamic models. Crucially, its Python examples include a full parameter-estimation case for a published *Nannochloropsis oceanica* growth/lipid photobioreactor model using biomass-dependent exponential light attenuation, Haldane photoinhibition, depth-averaged growth, internal nitrogen quota and experimental datasets.
+
+The scientific value is S-grade, but the OMEGA source family uses Eclipse Public License headers and the default build chain is heavy, currently involving MC++/CRONOS/CANON plus SUNDIALS/HSL and default SNOPT/Gurobi/GAMS settings. Treat full MAGNUS as BOUNDARY/reference until licensing and dependency deployment are resolved.
+
+### pyPESTO
+
+`ICB-DCM/pyPESTO` is BSD-3, Python-native, mature and accepts arbitrary objective/residual/sensitivity callables. It is currently the strongest low-friction candidate found for direct BLUECAD parameter calibration and uncertainty analysis.
+
+### BoFire
+
+`experimental-design/bofire` is BSD-3 and provides mature constrained DoE/Bayesian-optimization infrastructure with explicit D/A/E/G/I/K criteria and mixed experimental domains. It is a strong candidate for real closed-loop experiment/campaign optimization, although its classical DoE layer is not a drop-in replacement for MAGNUS-style nonlinear dynamic-model Fisher-information design.
+
+The long-term product opportunity is an `AssumptionReductionLoop`: identify uncertainty -> choose the most informative feasible experiment -> execute/measure -> estimate -> propose evidence-bound assumption or parameter replacement.
+
+Detailed audit: `docs/audits/MODEL_CALIBRATION_AND_OED_DISCOVERY_2026-08-20.md`.
 
 ---
 
@@ -449,7 +515,7 @@ Domain State / Live Artifact
 Audit + AgentRun + Experience Journal
 ```
 
-This synthesis currently draws primarily from REF-001, REF-006, REF-010 through REF-019.
+This synthesis currently draws primarily from REF-001, REF-006, REF-010 through REF-019 and the Hermes update in REF-022. Engineering-model discovery adds a complementary evidence loop: explicit assumptions and parameters -> calibration/experiment design -> measured evidence -> deterministic promotion.
 
 ---
 
