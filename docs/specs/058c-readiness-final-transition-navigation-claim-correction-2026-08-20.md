@@ -2,7 +2,7 @@
 
 Date: 2026-08-20  
 Applies to: `docs/specs/058c-readiness-2026-08-20-fresh.md` and all prior PR #317 readiness corrections  
-Reason: final exact-head review found three remaining authority gaps: eligible-candidate switching with dirty object-scoped working edits was undefined; linked-Parameter Inspect content lacked the required direct navigation to its real Engineering Data authority; and stale-at-claim runner failure bookkeeping was not deterministic enough for clients/tests.
+Reason: final exact-head review found three remaining authority gaps: eligible-candidate switching with dirty object-scoped working edits was undefined; linked-Parameter Inspect content lacked the required direct navigation to its real Engineering Data authority; and stale-at-claim runner failure bookkeeping was not deterministic enough for clients/tests. A later exact-head review found one contradiction in the first transition wording: retained draft ownership included ephemeral viewer-session/generation identity even though reselecting the same stable engineering target necessarily creates a new viewer session.
 
 This correction is part of the 058c readiness decision. Where it conflicts with earlier readiness wording, this file governs. It changes no runtime code and does not promote `058c` from `planned`.
 
@@ -10,7 +10,9 @@ This correction is part of the 058c readiness decision. Where it conflicts with 
 
 The three CAD-link-adopted Geometry fields are object-scoped working values tied to one exact semantic-source identity. Generic reviewed-047 inputs remain ordinary model-configuration state and are not object-scoped merely because a BLUECAD selection changes.
 
-The existing 071b controller remains the sole mutable working-state owner. Implementation must associate the adopted object baseline/draft with the exact semantic target identity needed to prevent cross-object reuse: workspace, candidate, artifact, viewer session/generation, canonical `partId`/`partKind`, and `semantic_source` source simulation/model identity.
+The existing 071b controller remains the sole mutable working-state owner. Retained-draft **ownership** must use stable engineering target/source identity only: workspace, candidate, stable artifact identity/digest, canonical `partId` / `partKind`, and the exact `semantic_source` provenance identity (including the source simulation/model/transformation identity needed to distinguish one canonical CAD-link source from another). Viewer session/generation and selection generation are intentionally **not** part of retained-draft ownership because they are ephemeral presentation-session identities and may change when the same canonical target is remounted. They remain mandatory stale-response/adoption preconditions: a response produced for an old viewer/selection generation may not adopt, rebase, or reactivate a draft in a newer context merely because the stable target key matches.
+
+A candidate/artifact/part/source change in any stable ownership component is a different target. A new viewer session over the same unchanged stable target is not, by itself, a different engineering target.
 
 ### 1.1 Clean A → B switch
 
@@ -22,12 +24,12 @@ If any object-scoped Geometry field for eligible target A is dirty when the curr
 
 1. A immediately loses active semantic edit/run authority because it is no longer the current 092 target.
 2. B does **not** adopt its snapshot over A's dirty object draft automatically.
-3. The existing controller retains A's dirty object draft only as one transient pending previous-target draft. This is not a durable per-object cache, variant store, history system, or second working-state owner.
+3. The existing controller retains A's dirty object draft only as one transient pending previous-target draft, keyed by the stable ownership identity above. This is not a durable per-object cache, variant store, history system, or second working-state owner.
 4. Properties for the new selection enters a deterministic transition-blocked state. It must not label A's values as B, expose them as B-effective values, or allow preflight/run using A's object-scoped draft while B is current.
 5. The operator is told that unsaved object changes from A must be resolved before B can become the editable semantic target. The required destructive action is explicit: **Discard previous object changes and load selected object**. Only that action clears A's object-scoped dirty draft and permits B snapshot adoption.
-6. If the operator re-selects the exact still-current/available A target before discarding, the retained A draft becomes active again with its existing dirty/Undo/Revert semantics. No server mutation is required.
-7. If A becomes unavailable because workspace/candidate/artifact authority changes, the pending draft remains non-executable and may be discarded explicitly; V0 is allowed to lose it on application teardown under the existing transient-working-state boundary, but it may not silently apply it to another object.
-8. Repeated reads/refetches for the same target/source never erase dirty edits.
+6. If the operator re-selects the same still-current/available stable A target before discarding, the retained A draft becomes active again with its existing dirty/Undo/Revert semantics after the new current 092 viewer/session/selection context passes the normal stale-adoption checks. A newly assigned viewer-session generation does not by itself prevent restoration; a changed candidate/artifact/part/source identity does.
+7. If A becomes unavailable because workspace/candidate/artifact/source authority changes, the pending draft remains non-executable and may be discarded explicitly; V0 is allowed to lose it on application teardown under the existing transient-working-state boundary, but it may not silently apply it to another object.
+8. Repeated reads/refetches for the same stable target/source never erase dirty edits. Late reads from an obsolete viewer/session/selection generation still fail stale-adoption checks even when they name that same stable target.
 
 This is the minimum safe transition contract. Do not add a multi-object draft map, durable draft persistence, variant history, hidden autosave, scene-owned state, or 006b behavior.
 
@@ -39,7 +41,9 @@ Merge-blocking cases:
 - dirty eligible A → eligible B does not discard A silently and does not expose/run A values as B;
 - while transition-blocked, preflight/run for B is unavailable until the previous object draft is explicitly discarded;
 - explicit discard then adopts B's exact canonical source snapshot and resets only the retired A object-scoped draft, not unrelated generic working configuration;
-- reselecting exact A before discard restores A's pending dirty object draft;
+- reselecting the same stable A candidate/artifact/part/source before discard restores A's pending dirty object draft even when the viewer session/generation is newly allocated, provided the new current context passes the normal 092 stale checks;
+- changing A's stable artifact/source identity does **not** restore the prior draft merely because candidate/part labels are similar;
+- a response from A's old viewer/session/selection generation cannot adopt or overwrite state after a newer context exists, including after stable-A reselection;
 - late A/B aggregate responses cannot resolve or overwrite a newer transition;
 - no transition action mutates canonical Parameters/CAD links, registers a model, creates a run, calls Jarvis/provider paths, or creates durable draft state.
 
@@ -129,6 +133,6 @@ Merge-blocking cases:
 
 ## 4. Review consequence
 
-The final current-head findings concerning dirty eligible-candidate switching, linked-source navigation, and stale-claim terminal bookkeeping are materially valid. This correction closes them without adding product authority beyond 058c: one transient previous-target draft in the existing 071b controller, one exact read-side Engineering Data deep-link, and one exact mapping onto the runner's existing failed-job machinery.
+The final current-head findings concerning dirty eligible-candidate switching, linked-source navigation, stale-claim terminal bookkeeping, and stable-vs-ephemeral retained-draft identity are materially valid. This correction closes them without adding product authority beyond 058c: one transient previous-target draft in the existing 071b controller, keyed only by stable semantic target/source identity; viewer/session generations retained only as stale-adoption guards; one exact read-side Engineering Data deep-link; and one exact mapping onto the runner's existing failed-job machinery.
 
 All gate/review evidence from earlier heads is stale for merge authority. The new exact head requires fresh deterministic CI and a new independent non-mutating peer/GLM verdict covering this file together with all earlier PR #317 corrections. No further Codex review is authorized on PR #317.
