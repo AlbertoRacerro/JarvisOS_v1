@@ -1,7 +1,6 @@
-from pathlib import Path
+import pathlib
 
-
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 VIEWER = REPO_ROOT / "frontend/src/components/BluecadGlbViewer.tsx"
 SELECTION = REPO_ROOT / "frontend/src/components/bluecad/sceneSelection.ts"
 WORKBENCH = REPO_ROOT / "frontend/src/components/bluecad/BluecadWorkbench.tsx"
@@ -9,7 +8,7 @@ APP = REPO_ROOT / "frontend/src/App.tsx"
 SIDECAR = REPO_ROOT / "frontend/src/components/shell/ContextualSidecar.tsx"
 
 
-def _source(path: Path) -> str:
+def _source(path: pathlib.Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
@@ -54,7 +53,7 @@ def test_workbench_clears_semantic_target_before_late_resolution_can_publish() -
 def test_resolved_part_has_human_context_and_machine_details_remain_secondary() -> None:
     app = _source(APP)
     sidecar = _source(SIDECAR)
-    assert 'selection.kind === "bluecad-part"' in app
+    assert 'selection?.kind === "bluecad-part"' in app
     assert "selection.partId" in app
     assert "selection.partKind" in app
     assert 'selection?.kind === "bluecad-part"' in sidecar
