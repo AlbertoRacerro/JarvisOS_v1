@@ -3,9 +3,12 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
+const BLUECAD_SEMANTIC_KEY = /^bluecad-part-sha256-[0-9a-f]{64}$/;
+
 export type GeometryInspectionMesh = Readonly<{
   sessionKey: string;
   meshKey: string;
+  semanticKey: string | null;
   displayName: string;
   materialNames: readonly string[];
   triangleCount: number | null;
@@ -68,11 +71,24 @@ function worldBounds(mesh: THREE.Mesh): GeometryInspectionMesh["worldBounds"] {
   };
 }
 
+export function semanticKeyCandidate(object: THREE.Object3D): string | null {
+  const keys = new Set<string>();
+  let current: THREE.Object3D | null = object;
+  while (current) {
+    const name = current.name.trim();
+    if (BLUECAD_SEMANTIC_KEY.test(name)) keys.add(name);
+    current = current.parent;
+  }
+  if (keys.size !== 1) return null;
+  return keys.values().next().value ?? null;
+}
+
 function meshFact(mesh: THREE.Mesh, ordinal: number, sessionKey: string): GeometryInspectionMesh {
   const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
   return {
     sessionKey,
     meshKey: `mesh-${ordinal}`,
+    semanticKey: semanticKeyCandidate(mesh),
     displayName: mesh.name.trim() || `Mesh ${ordinal}`,
     materialNames: materials.map((material) => material.name.trim()).filter(Boolean),
     triangleCount: triangleCount(mesh.geometry),
