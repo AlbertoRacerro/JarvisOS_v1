@@ -36,6 +36,7 @@ If readiness proves exactly one genuine production option for a semantic family:
 - Properties shows truthful active engineering model identity, not a fake selector;
 - no duplicate implementation, alias, unrelated model, or second label over the same executable may be introduced solely to create A/B behavior;
 - family-choice A/B, inactive-option cache, per-option baseline, and model-choice Undo/Revert browser/runtime acceptance are not merge-blocking for this V0 because there is no second real choice to exercise;
+- choice-specific legacy invalid-state acceptance is required only for invalid states the exact authoritative state shape can genuinely represent without inventing another option or synthetic state. A representable missing-required-model state still fails closed; an impossible multiple-active state is not fabricated merely to satisfy a test;
 - ordinary 071b implementation switching behavior outside the new semantic-family presentation must not regress;
 - the semantic contract shape should remain forward-compatible with a later real second option, but no speculative state machine or persistence is added now.
 
@@ -49,13 +50,14 @@ If readiness cannot prove any production-reachable semantic option for the selec
 
 The following base-definition requirements are interpreted through the availability gate above:
 
-- Section 8 model-choice runtime behavior;
+- Section 8 model-choice runtime behavior, including multiple-active and no-required-model legacy clauses;
 - Section 12 model-choice Undo/Revert/revision behavior;
-- Section 16 cases concerning A → B → A restoration, inactive-model values, and model switching;
-- Section 19 readiness obligations concerning mutually exclusive model choice and inactive-value retention;
-- Section 20 eventual-implementation acceptance criteria concerning an explicit mutually exclusive selector, inactive-model value preservation, and semantic model-switch integration with 071b Undo/Revert/revision semantics.
+- Section 14 model-choice-specific legacy handling for multiple-active or missing-required-model states, only where those invalid states are genuinely representable by current authority;
+- Section 16 cases concerning A → B → A restoration, inactive-model values, model switching, multiple-active state, and missing-required-model state;
+- Section 19 readiness obligations concerning mutually exclusive model choice, inactive-value retention, and the model-choice-specific portions of the Section 16 matrix;
+- Section 20 eventual-implementation acceptance criteria concerning an explicit mutually exclusive selector, inactive-model value preservation, semantic model-switch integration with 071b Undo/Revert/revision semantics, and choice-specific legacy invalid-state handling.
 
-They remain mandatory whenever the exact runtime supplies at least two genuine same-family choices. They are not permission to fabricate a second option when only one exists. With exactly one genuine option, the Section 20 model-choice criteria are satisfied by truthful active-model identity plus absence of fabricated alternatives; the other Section 20 acceptance criteria remain unchanged and merge-blocking.
+They remain mandatory whenever the exact runtime supplies at least two genuine same-family choices. They are not permission to fabricate a second option or an impossible invalid legacy state when only one option exists. With exactly one genuine option, the Section 20 model-choice criteria are satisfied by truthful active-model identity plus absence of fabricated alternatives; representable missing-selection/invalid-state behavior must still fail closed, while impossible multi-option invalid-state cases are not merge-blocking. The other Section 20 acceptance criteria remain unchanged and merge-blocking.
 
 All other 058c definition requirements remain unchanged and merge-blocking where applicable, including:
 
@@ -79,7 +81,8 @@ After this amendment merges, derive a fresh 058c readiness record from exact mas
 3. per-variable object applicability is exact and does not expose unrelated fields;
 4. linked superseded Parameters fail closed before preview/run persistence when existing lifecycle authority requires freshness;
 5. whether the exact runtime has zero, one, or two-plus genuine options per semantic family, then apply this amendment accordingly;
-6. no second option is fabricated to satisfy tests.
+6. which model-choice invalid legacy states are genuinely representable by current authority and test only those states without manufacturing alternatives or synthetic state;
+7. no second option is fabricated to satisfy tests.
 
 ## 5. Non-goals
 
