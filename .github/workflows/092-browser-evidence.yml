@@ -69,6 +69,24 @@ jobs:
           cat /tmp/jarvisos-vite.log
           exit 1
 
+      - name: Stabilize shell-toggle harness after async workspace load
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/evidence/092-browser-evidence.mjs')
+          text = path.read_text(encoding='utf-8')
+          old = '''await page.getByRole("heading", { name: "Model workbench" }).waitFor();
+          await page.getByRole("button", { name: "Show navigator" }).click();'''
+          new = '''await page.getByRole("heading", { name: "Model workbench" }).waitFor();
+          await page.waitForTimeout(500);
+          const navigatorToggle = page.getByRole("button", { name: /Show navigator|Hide navigator/ });
+          if ((await navigatorToggle.textContent())?.includes("Show")) await navigatorToggle.click();'''
+          if old not in text:
+              raise SystemExit('expected navigator harness block not found')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+
       - name: Diagnose rendered shell
         shell: bash
         run: |
