@@ -1,0 +1,64 @@
+name: Evidence 092 Browser Proof
+
+on:
+  push:
+    branches:
+      - evidence/092-browser-proof-20260820
+
+permissions:
+  contents: read
+
+jobs:
+  browser-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Verify frozen product parent
+        run: |
+          PRODUCT_HEAD=858b49777500d3137435321a85a63ed863691c1c
+          git merge-base --is-ancestor "$PRODUCT_HEAD" HEAD
+          test "$(git rev-parse HEAD^)" = "$PRODUCT_HEAD"
+      - name: Install frontend
+        working-directory: frontend
+        run: npm ci
+      - name: Build exact product source
+        working-directory: frontend
+        run: npm run build
+      - name: Install browser harness ephemerally
+        run: npm install --no-save @playwright/test@1.48.2
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Start Vite preview
+        working-directory: frontend
+        run: |
+          npm run preview -- --port 4173 > /tmp/jarvis-vite.log 2>&1 &
+          echo $! > /tmp/jarvis-vite.pid
+          for i in {1..30}; do
+            curl -fsS http://127.0.0.1:4173/design/model >/dev/null && exit 0
+            sleep 1
+          done
+          cat /tmp/jarvis-vite.log
+          exit 1
+      - name: Run 092 browser matrix
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
+        run: npx playwright test evidence/092/browser-proof.spec.mjs --browser=chromium --reporter=line
+      - name: Freeze evidence manifest
+        if: always()
+        run: |
+          mkdir -p evidence/092/out
+          printf 'product_head=%s\nevidence_head=%s\n' '858b49777500d3137435321a85a63ed863691c1c' "$GITHUB_SHA" > evidence/092/out/manifest.txt
+          cp /tmp/jarvis-vite.log evidence/092/out/vite.log || true
+          cp evidence/092/092-final.png evidence/092/out/092-final.png || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evidence-092-browser-${{ github.sha }}
+          path: evidence/092/out
+          if-no-files-found: warn
