@@ -162,8 +162,22 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       meshKey: hit.meshKey,
       semanticKey: hit.semanticKey
     };
+    const publishBindingStatus = (state: "resolving" | "unresolved" | "ambiguous") => {
+      onSelectionChange({
+        kind: "bluecad-binding-status",
+        state,
+        workspaceId: captured.workspaceId,
+        candidateId: captured.candidateId,
+        artifactId: captured.artifactId,
+        viewerSessionId: captured.viewerSessionId,
+        ephemeralObjectId: captured.meshKey,
+        meshKey: captured.meshKey,
+        semanticKey: captured.semanticKey
+      });
+    };
     currentSceneSelection.current = captured;
     setSceneBindingPresentation("resolving");
+    publishBindingStatus("resolving");
 
     void resolveCandidateSceneHitFromArtifacts(
       currentAggregate.artifacts,
@@ -174,6 +188,7 @@ function BluecadWorkbench({ onSelectionChange, onShellRegionsChange, requestShel
       if (!acceptsSceneSelectionResolution(currentSceneSelection.current, captured)) return;
       if (resolution.state !== "resolved") {
         setSceneBindingPresentation(resolution.state);
+        publishBindingStatus(resolution.state);
         return;
       }
       setSceneBindingPresentation("idle");
