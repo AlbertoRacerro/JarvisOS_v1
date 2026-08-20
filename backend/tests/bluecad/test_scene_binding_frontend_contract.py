@@ -44,10 +44,20 @@ def test_workbench_clears_semantic_target_before_late_resolution_can_publish() -
     assert "publishSelection(targetWorkspaceId, targetCandidateId)" in source
     assert "currentSceneSelection.current = captured" in source
     assert "if (!acceptsSceneSelectionResolution(currentSceneSelection.current, captured)) return" in source
-    assert 'if (resolution.state !== "resolved") return' in source
+    assert 'if (resolution.state !== "resolved") {' in source
+    assert "setSceneBindingPresentation(resolution.state)" in source
     assert 'kind: "bluecad-part"' in source
     assert "partId: resolution.part.partId" in source
     assert "partKind: resolution.part.partKind" in source
+
+
+def test_unresolved_and_ambiguous_bindings_are_operator_visible_without_fabricated_identity() -> None:
+    source = _source(WORKBENCH)
+    assert 'type SceneBindingPresentation = "idle" | "resolving" | "unresolved" | "ambiguous"' in source
+    assert 'setSceneBindingPresentation("resolving")' in source
+    assert "Unresolved engineering binding. Geometry remains viewable; candidate authority is unchanged." in source
+    assert "Ambiguous engineering binding. Geometry remains viewable; no engineering object was selected." in source
+    assert 'role="status"' in source
 
 
 def test_resolved_part_has_human_context_and_machine_details_remain_secondary() -> None:
