@@ -22,6 +22,17 @@ export type StageSelection =
       point?: readonly [number, number, number];
     }>
   | Readonly<{
+      kind: "bluecad-binding-status";
+      state: "resolving" | "unresolved" | "ambiguous";
+      workspaceId: string;
+      candidateId: string;
+      artifactId: string;
+      viewerSessionId: string;
+      ephemeralObjectId: string;
+      meshKey: string;
+      semanticKey: string;
+    }>
+  | Readonly<{
       kind: "bluecad-part";
       workspaceId: string;
       candidateId: string;
