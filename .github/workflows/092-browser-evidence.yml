@@ -45,6 +45,8 @@ jobs:
           npm ci
           npm install --no-save --no-package-lock playwright@1.55.0
           npx playwright install --with-deps chromium
+          cd ..
+          ln -s frontend/node_modules node_modules
 
       - name: Build frozen frontend runtime bundle
         shell: bash
