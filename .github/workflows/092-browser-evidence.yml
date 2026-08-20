@@ -69,6 +69,24 @@ jobs:
           cat /tmp/jarvisos-vite.log
           exit 1
 
+      - name: Diagnose rendered shell
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage();
+          page.on('console', (message) => console.log(`BROWSER_CONSOLE ${message.type()}: ${message.text()}`));
+          page.on('pageerror', (error) => console.log(`BROWSER_PAGEERROR: ${error.message}`));
+          await page.goto('http://127.0.0.1:4173/design/model');
+          await page.waitForTimeout(1000);
+          console.log('BODY_TEXT_START');
+          console.log((await page.locator('body').innerText()).slice(0, 5000));
+          console.log('BODY_TEXT_END');
+          console.log('BUTTONS', await page.getByRole('button').allTextContents());
+          await browser.close();
+          NODE
+
       - name: Run 092 browser matrix
         shell: bash
         run: node scripts/evidence/092-browser-evidence.mjs
