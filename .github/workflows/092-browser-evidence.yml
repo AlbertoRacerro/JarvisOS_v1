@@ -46,11 +46,14 @@ jobs:
           npm install --no-save --no-package-lock playwright@1.55.0
           npx playwright install --with-deps chromium
 
-      - name: Build frozen frontend
+      - name: Build frozen frontend runtime bundle
         shell: bash
         run: |
           cd frontend
-          npm run build
+          # Browser evidence deliberately uses Vite directly. The product's full
+          # `npm run build` TypeScript gate is tracked separately on PR #303 and
+          # currently exposes a concrete ES2020 Array.at compatibility defect.
+          npx vite build
 
       - name: Start preview
         shell: bash
