@@ -2,7 +2,7 @@
 
 Date: 2026-08-20  
 Applies to: `docs/specs/058c-readiness-2026-08-20-fresh.md` and all prior PR #317 readiness corrections  
-Reason: exact-head review proved readiness ambiguities in the candidate-aggregate provenance projection and schema-v3 semantic string contract. A later exact-head review also proved that candidate provenance and current selected-part validation must be split across their actual authority surfaces.
+Reason: exact-head review proved readiness ambiguities in the candidate-aggregate provenance projection and schema-v3 semantic string contract. Later exact-head reviews also proved that candidate provenance and current selected-part validation must be split across their actual authority surfaces and that the fail-closed semantic-source diagnostic payload must be deterministic rather than selected from approximate alternatives.
 
 This correction is part of the 058c readiness decision. Where it conflicts with earlier illustrative/alternative wording, this file governs. It changes no runtime code and does not promote 058c from `planned`.
 
@@ -73,13 +73,28 @@ No fourth geometry key is allowed in this V0 projection. Missing, duplicated, wr
 
 The projected numeric values are a typed read view of the immutable source snapshot. Tests compare them to the persisted snapshot after the same decimal-to-finite-number conversion performed by the server; hard-coded UI fixture values are not authority.
 
-### 1.4 Null and error behavior
+### 1.4 Exact null and diagnostic behavior
 
-- Candidate with no matching canonical reviewed-047 link: `semantic_source: null`; this is a normal limited-semantic state and does not by itself add a diagnostic.
-- A matching/claimed link whose row, model identity, snapshot, Parameter reference, digest or same-workspace relationship is malformed/inaccessible/conflicting: `semantic_source: null` and append a bounded existing aggregate diagnostic with `source="bluecad.semantic_source"` and the closest existing diagnostic code (`malformed_reference`, `missing_reference`, or `inaccessible_reference`).
-- More than one canonical row attempting to claim the same candidate for this exact semantic relationship is ambiguous: fail closed to `null` plus `malformed_reference`; never pick by row/order/time.
-- The frontend treats `null`, unknown `schema_version`, unknown `kind`, missing required field, extra incompatible shape, wrong unit or malformed geometry binding as ineligible/limited semantics and never falls back to `origin`, notes, part-kind-only, mesh/name/order/bounds or associated-run heuristics.
-- A late aggregate response remains subject to the frontend adoption gate in §1.2 before it may adopt the source baseline.
+The current aggregate already exposes `BluecadReadDiagnostic` with required fields `code`, `source`, `reference`, and `message`, and its existing code vocabulary includes `missing_reference`, `malformed_reference`, `inaccessible_reference`, and `unsupported_reference`. 058c does not add a diagnostic type or code.
+
+For every 058c semantic-source diagnostic the fields are frozen as follows:
+
+- `source` is exactly `bluecad.semantic_source`;
+- `reference` is exactly `bluecad_candidate:<candidate_id>` for the candidate being read; no link ID, Parameter ID, raw JSON fragment, filesystem path, hash, or guessed selected-part identity is substituted;
+- `unsupported_reference` is never emitted by this V0 semantic-source projection because unknown/non-047 candidates are a supported limited-semantic state, not an unsupported-reference error.
+
+The outcome mapping is exact:
+
+| Failure class | `semantic_source` | Diagnostic code | Exact diagnostic message |
+| --- | --- | --- | --- |
+| No canonical row for the exact reviewed-047 relationship, including ordinary/072 candidates and candidates whose only CAD link uses another transformation | `null` | none | none |
+| A row claiming the exact relationship contains an empty/missing canonical source ID, or the referenced simulation run, model version, or Parameter does not exist | `null` | `missing_reference` | `Reviewed-047 semantic source references a missing canonical record.` |
+| A referenced canonical source exists but is not accessible in the requested workspace / violates the required same-workspace relationship | `null` | `inaccessible_reference` | `Reviewed-047 semantic source references data inaccessible in this workspace.` |
+| Source-model identity JSON/digest, snapshot JSON/digest, units, numeric values, Parameter refs, transformation claim, or other required provenance content is malformed/inconsistent; the claimed source model is not the exact reviewed-047 model; or more than one canonical row claims this exact semantic relationship for the candidate | `null` | `malformed_reference` | `Reviewed-047 semantic source provenance is malformed or ambiguous.` |
+
+If one candidate triggers multiple defects while validating one claimed exact relationship, the server emits **one** semantic-source diagnostic chosen by this deterministic precedence: `inaccessible_reference` > `missing_reference` > `malformed_reference`. The aggregate's existing global diagnostic sort/dedup behavior remains unchanged. The semantic-source validator must not leak extra raw provenance in `message` or `reference` to distinguish subcases.
+
+The frontend treats `null`, unknown `schema_version`, unknown `kind`, missing required field, extra incompatible shape, wrong unit or malformed geometry binding as ineligible/limited semantics and never falls back to `origin`, notes, part-kind-only, mesh/name/order/bounds or associated-run heuristics. A late aggregate response remains subject to the frontend adoption gate in §1.2 before it may adopt the source baseline.
 
 No new route or request parameter is authorized. The existing candidate aggregate remains the candidate-provenance read surface.
 
@@ -142,16 +157,19 @@ The checked-in reviewed-047 V0 companion therefore uses the exact valid values a
 The eventual implementation gains these merge-blocking deterministic cases in addition to all earlier PR #317 corrections:
 
 1. candidate aggregate returns the exact complete `semantic_source` shape for one valid same-workspace reviewed-047 CAD-link child **without requiring or pretending to validate a selected part**;
-2. ordinary/072/non-047 candidates return `semantic_source: null` and never receive reviewed-047 selected-object groups;
-3. malformed source-model identity, bad digest, wrong transformation, wrong workspace, missing Parameter, malformed/partial snapshot and duplicate/ambiguous link all fail closed without partial projection;
-4. unknown semantic-source schema/kind or malformed response is inert in the frontend; no heuristic fallback occurs;
-5. the three projected values/units/source Parameter IDs match the persisted canonical source snapshot through the server's defined conversion;
-6. for a valid reviewed-047 candidate, selecting exact `illuminated_tube_proxy`/`tube_run` permits baseline adoption, while selecting any other resolved part identity/kind does not, even if the candidate-level `semantic_source` is non-null;
-7. a workspace/candidate/artifact/viewer-session/selection-generation change before response adoption rejects the late semantic source and does not rebase dirty/current Properties state;
-8. machine identifiers accept boundary lengths 1 and 64, reject length 65 and reject punctuation/Unicode/control characters outside the exact grammar;
-9. human labels accept valid NFC engineering punctuation through 120 code points, reject 121 code points, edge whitespace, non-NFC, multiline/tab and control/format characters;
-10. duplicate applicability values and variable applicability not contained in implementation applicability are rejected;
-11. schema-v1/v2 canonical payload/digest fixtures remain unchanged.
+2. ordinary/072/non-047 candidates return `semantic_source: null` with no semantic-source diagnostic and never receive reviewed-047 selected-object groups;
+3. missing canonical source identity/row fails closed to the exact `missing_reference` diagnostic tuple frozen in §1.4;
+4. cross-workspace/inaccessible canonical source fails closed to the exact `inaccessible_reference` diagnostic tuple frozen in §1.4;
+5. malformed source-model identity/digest, malformed/partial snapshot, wrong unit/non-finite value, wrong reviewed-model claim and duplicate/ambiguous exact links fail closed to the exact `malformed_reference` diagnostic tuple frozen in §1.4, with no partial projection;
+6. when multiple semantic-source validation defects coexist, the exact precedence in §1.4 produces one deterministic semantic-source diagnostic;
+7. unknown semantic-source schema/kind or malformed response is inert in the frontend; no heuristic fallback occurs;
+8. the three projected values/units/source Parameter IDs match the persisted canonical source snapshot through the server's defined conversion;
+9. for a valid reviewed-047 candidate, selecting exact `illuminated_tube_proxy`/`tube_run` permits baseline adoption, while selecting any other resolved part identity/kind does not, even if the candidate-level `semantic_source` is non-null;
+10. a workspace/candidate/artifact/viewer-session/selection-generation change before response adoption rejects the late semantic source and does not rebase dirty/current Properties state;
+11. machine identifiers accept boundary lengths 1 and 64, reject length 65 and reject punctuation/Unicode/control characters outside the exact grammar;
+12. human labels accept valid NFC engineering punctuation through 120 code points, reject 121 code points, edge whitespace, non-NFC, multiline/tab and control/format characters;
+13. duplicate applicability values and variable applicability not contained in implementation applicability are rejected;
+14. schema-v1/v2 canonical payload/digest fixtures remain unchanged.
 
 ## 4. Allow-list consequence
 
@@ -161,6 +179,6 @@ No new database/store, route, provider, scene identity, lifecycle status, model 
 
 ## 5. Review consequence
 
-The exact-head P1 findings on older PR #317 heads concerning provenance applicability, canonical freshness, registration reachability/refresh, CAD-link snapshot adoption, an unfrozen provenance response shape, unfrozen schema-v3 string bounds, and candidate-vs-selection authority were materially valid and block those older heads from merge.
+The exact-head P1 findings on older PR #317 heads concerning provenance applicability, canonical freshness, registration reachability/refresh, CAD-link snapshot adoption, an unfrozen provenance response shape, unfrozen schema-v3 string bounds, candidate-vs-selection authority, create-time freshness atomicity, and the semantic-source diagnostic payload were materially valid and block those older heads from merge.
 
-This correction closes the candidate-vs-selection authority ambiguity by freezing the actual split instead of forcing the candidate-only server aggregate to validate frontend-only selection state. All gate/review evidence from older heads is stale for merge authority. No further Codex review is authorized for PR #317; the final immutable head must pass fresh deterministic gates and receive an independent non-mutating peer/GLM review covering this exact contract plus all previously corrected provenance, freshness, registration, refresh, runner pre-persistence, CAD-link baseline, dirty-edit and stale-selection failure classes.
+This correction closes the candidate-vs-selection and diagnostic-payload ambiguities by freezing the actual authority split and one deterministic fail-closed aggregate contract instead of forcing the candidate-only server aggregate to validate frontend-only selection state or allowing approximate diagnostic alternatives. All gate/review evidence from older heads is stale for merge authority. No further Codex review is authorized for PR #317; the final immutable head must pass fresh deterministic gates and receive an independent non-mutating peer/GLM review covering this exact contract plus all previously corrected provenance, freshness, registration, refresh, runner pre-persistence/atomic create/queued-claim, CAD-link baseline, dirty-edit and stale-selection failure classes.
