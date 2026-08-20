@@ -27,6 +27,7 @@ jobs:
       - name: Prove product tree matches frozen PR head
         shell: bash
         run: |
+          git fetch --no-tags --depth=1 origin 858b49777500d3137435321a85a63ed863691c1c
           git diff --exit-code 858b49777500d3137435321a85a63ed863691c1c -- \
             frontend backend schemas
 
