@@ -29,5 +29,7 @@ text = text.replace(
     '''// A delayed stale candidate response must not overwrite the newer B target.\ndelayA = true;''',
     '''// A delayed stale candidate response must not overwrite the newer B target.\nawait gotoHarness();\nawait page.getByRole("button", { name: "Select B" }).click();\nawait page.waitForFunction(() => document.querySelector("#engineering-property-tube_length")?.value === "20");\ndelayA = true;'''
 )
-text = text.replace('if (url.pathname.includes("/ai/")) providerCalls += 1;', 'if (url.pathname.startsWith("/ai/")) providerCalls += 1;')
+text = text.replace('let providerCalls = 0;', 'let providerCalls = 0;\nconst providerPaths = [];')
+text = text.replace('if (url.pathname.includes("/ai/")) providerCalls += 1;', 'if (url.pathname.startsWith("/ai/")) { providerCalls += 1; providerPaths.push(`${request.method()} ${url.pathname}`); }')
+text = text.replace('assert.equal(providerCalls, 0, "semantic selection/edit/navigation causes zero AI provider calls");', 'console.log("AI_ENDPOINT_PATHS", JSON.stringify(providerPaths));\nassert.equal(providerCalls, 0, "semantic selection/edit/navigation causes zero AI provider calls");')
 path.write_text(text, encoding="utf-8")
