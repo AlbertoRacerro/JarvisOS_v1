@@ -4,13 +4,14 @@ import copy
 import json
 from pathlib import Path
 
+import pytest
+
 from app.modules.runner.input_contracts import (
     ModelInputContractV3,
     canonicalize_input_contract,
     parse_stored_input_contract,
 )
 from app.modules.runner.safety import RunnerSafetyError
-import pytest
 
 _CONTRACT_PATH = (
     Path(__file__).parents[1]
