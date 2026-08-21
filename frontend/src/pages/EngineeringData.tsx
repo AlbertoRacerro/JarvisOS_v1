@@ -23,6 +23,13 @@ function shown(value: string | number | null | undefined): string {
   return String(value);
 }
 
+function linkedParameterTarget(search: string): string | null {
+  const params = new URLSearchParams(search);
+  if (params.get("kind") !== "parameter") return null;
+  const id = params.get("id")?.trim() ?? "";
+  return id || null;
+}
+
 function EngineeringData({ workspaceId, onWorkspaceChange, navigate }: Props) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceState, setWorkspaceState] = useState<LoadState>("loading");
@@ -42,10 +49,13 @@ function EngineeringData({ workspaceId, onWorkspaceChange, navigate }: Props) {
   const [query, setQuery] = useState("");
   const [enabledKinds, setEnabledKinds] = useState<EngineeringKind[]>([...ENGINEERING_KINDS]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [sourceTargetMessage, setSourceTargetMessage] = useState<string | null>(null);
   const workspaceDiscoveryGeneration = useRef(0);
   const recordsGeneration = useRef(0);
   const currentWorkspace = useRef(workspaceId);
   currentWorkspace.current = workspaceId;
+
+  const sourceParameterId = linkedParameterTarget(window.location.search);
 
   const clearRecords = () => {
     recordsGeneration.current += 1;
@@ -62,6 +72,7 @@ function EngineeringData({ workspaceId, onWorkspaceChange, navigate }: Props) {
     setParametersError(null);
     setDecisionsError(null);
     setSelectedKey(null);
+    setSourceTargetMessage(null);
   };
 
   const requestWorkspaceChange = (next: string | null) => {
@@ -148,6 +159,22 @@ function EngineeringData({ workspaceId, onWorkspaceChange, navigate }: Props) {
     if (workspaceId) loadRecords(workspaceId);
   }, [workspaceId]);
 
+  useEffect(() => {
+    setSourceTargetMessage(null);
+    if (!sourceParameterId) return;
+    setEnabledKinds((current) => current.includes("parameter")
+      ? current
+      : ENGINEERING_KINDS.filter((kind) => current.includes(kind) || kind === "parameter"));
+    if (parametersState !== "ready" || !workspaceId) return;
+    const exact = parameters.find((parameter) => parameter.id === sourceParameterId && parameter.workspace_id === workspaceId);
+    if (!exact) {
+      setSourceTargetMessage("The linked Parameter is unavailable in the current workspace.");
+      return;
+    }
+    setQuery("");
+    setSelectedKey(recordKey({ kind: "parameter", id: exact.id, workspaceId: exact.workspace_id, primary: exact.name, secondary: exact.symbol ?? exact.unit ?? "", status: exact.status, record: exact }));
+  }, [sourceParameterId, parametersState, parameters, workspaceId]);
+
   const projected = useMemo(() => projectEngineeringData({ modelSpecs, assumptions, parameters, decisions }), [modelSpecs, assumptions, parameters, decisions]);
   const visible = useMemo(() => visibleEngineeringRecords(projected, query, enabledKinds), [projected, query, enabledKinds]);
   useEffect(() => setSelectedKey((current) => chooseEngineeringSelection(current, visible)), [visible]);
@@ -179,6 +206,7 @@ function EngineeringData({ workspaceId, onWorkspaceChange, navigate }: Props) {
         ["Parameters", parametersState, parametersError],
         ["Decisions", decisionsState, decisionsError],
       ]} />
+      {sourceTargetMessage ? <div className="engineering-data__failures" role="status"><p><strong>Linked source unavailable.</strong> {sourceTargetMessage}</p></div> : null}
 
       <div className="engineering-data__grid">
         <div className="engineering-data__list" aria-label="Engineering records">
