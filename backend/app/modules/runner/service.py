@@ -16,6 +16,13 @@ from app.modules.runner.input_contracts import (
     build_binding_preview,
     canonicalize_input_contract,
 )
+from app.modules.runner.linked_parameters import (
+    LINKED_PARAMETER_UNUSABLE_CODE,
+    LINKED_PARAMETER_UNUSABLE_MESSAGE,
+    contract_requires_canonical_linked_parameters,
+    load_usable_linked_parameter,
+    require_linked_parameters_usable,
+)
 from app.modules.runner.local_python import LocalPythonResult, execute_python_script
 from app.modules.runner.models import (
     BindingPreviewRequest,
@@ -529,7 +536,14 @@ def preview_model_bindings(
                 "Model implementation not found.",
             )
 
+        canonical_linked_parameters = contract_requires_canonical_linked_parameters(
+            model_version["input_contract_payload"],
+            model_version["input_contract_sha256"],
+        )
+
         def load_parameter(parameter_id: str) -> dict[str, object] | None:
+            if canonical_linked_parameters:
+                return load_usable_linked_parameter(connection, workspace_id, parameter_id)
             row = connection.execute(
                 "SELECT id, workspace_id, value, unit FROM parameters WHERE id = ? AND workspace_id = ?",
                 (parameter_id, workspace_id),
@@ -738,19 +752,31 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
         input_file=job["input_file"],
         output_dir=job["output_dir"],
     )
-    working_dir.mkdir(parents=True, exist_ok=True)
-    output_dir.mkdir(parents=True, exist_ok=True)
-
     if simulation_run.input_payload is None:
         raise RunnerSafetyError("runner_input_invalid", "Simulation run is missing input payload.")
-    input_file.write_text(_pretty_json(simulation_run.input_payload), encoding="utf-8")
 
     started_at = utc_now()
-    if not _claim_and_mark_running(runner_job_id, workspace_id, simulation_run_id, started_at):
+    try:
+        claimed = _claim_and_mark_running(runner_job_id, workspace_id, simulation_run_id, started_at)
+    except RunnerSafetyError as exc:
+        if exc.code != LINKED_PARAMETER_UNUSABLE_CODE:
+            raise
+        return RunnerJobRunResponse(
+            runner_job=get_runner_job(runner_job_id),
+            simulation_run=get_simulation_run_detail(workspace_id, simulation_run_id),
+            output=None,
+            error={"code": exc.code, "message": exc.message},
+        )
+    if not claimed:
         # Another concurrent /run already claimed this queued job. Only one
         # caller may transition queued -> running, so we refuse here instead of
         # executing the script a second time.
         raise RunnerSafetyError("runner_job_not_queued", "Only queued jobs can be run in V0.")
+
+    working_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    input_file.write_text(_pretty_json(simulation_run.input_payload), encoding="utf-8")
+
     result = execute_python_script(
         script_path=script_path,
         input_file=input_file,
@@ -971,14 +997,92 @@ def list_run_artifacts(workspace_id: str, simulation_run_id: str) -> list[RunArt
 
 
 def _claim_and_mark_running(runner_job_id: str, workspace_id: str, simulation_run_id: str, started_at: str) -> bool:
-    """Atomically transition a queued job to running.
-
-    The ``WHERE status = 'queued'`` clause is the concurrency guard: SQLite
-    serializes writers, so only the first caller's UPDATE affects a row. Returns
-    ``True`` if this caller won the claim, ``False`` if the job was no longer
-    queued (already claimed by a concurrent /run, or already finished).
-    """
+    """Atomically transition a queued job to running after strict linked-source revalidation."""
     with open_sqlite_connection() as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        job = connection.execute(
+            "SELECT status FROM runner_jobs WHERE id = ? AND workspace_id = ? AND simulation_run_id = ?",
+            (runner_job_id, workspace_id, simulation_run_id),
+        ).fetchone()
+        if job is None or job["status"] != "queued":
+            connection.rollback()
+            return False
+
+        run = connection.execute(
+            """
+            SELECT input_payload, model_version_id
+            FROM simulation_runs
+            WHERE id = ? AND workspace_id = ?
+            """,
+            (simulation_run_id, workspace_id),
+        ).fetchone()
+        if run is None or run["input_payload"] is None or run["model_version_id"] is None:
+            connection.rollback()
+            raise RunnerSafetyError("runner_input_invalid", "Simulation run is missing input payload.")
+
+        model_version = connection.execute(
+            """
+            SELECT input_contract_payload, input_contract_sha256
+            FROM model_versions
+            WHERE id = ? AND workspace_id = ?
+            """,
+            (run["model_version_id"], workspace_id),
+        ).fetchone()
+        if model_version is None:
+            connection.rollback()
+            raise RunnerSafetyError("runner_model_version_not_found", "Model implementation not found.")
+
+        if contract_requires_canonical_linked_parameters(
+            model_version["input_contract_payload"],
+            model_version["input_contract_sha256"],
+        ):
+            try:
+                require_linked_parameters_usable(connection, workspace_id, run["input_payload"])
+            except RunnerSafetyError as exc:
+                if exc.code != LINKED_PARAMETER_UNUSABLE_CODE:
+                    connection.rollback()
+                    raise
+                error_payload = {
+                    "status": "failed",
+                    "error": {
+                        "code": LINKED_PARAMETER_UNUSABLE_CODE,
+                        "message": LINKED_PARAMETER_UNUSABLE_MESSAGE,
+                    },
+                }
+                connection.execute(
+                    """
+                    UPDATE simulation_runs
+                    SET status = ?, output_payload = ?, completed_at = ?
+                    WHERE id = ? AND status = 'queued'
+                    """,
+                    ("failed", canonical_json(error_payload), started_at, simulation_run_id),
+                )
+                connection.execute(
+                    """
+                    UPDATE runner_jobs
+                    SET status = ?, updated_at = ?
+                    WHERE id = ? AND status = 'queued'
+                    """,
+                    ("failed", started_at, runner_job_id),
+                )
+                _log_event(
+                    connection,
+                    event_type="RunnerJobFailed",
+                    target_type="RunnerJob",
+                    target_id=runner_job_id,
+                    workspace_id=workspace_id,
+                    payload={
+                        "simulation_run_id": simulation_run_id,
+                        "status": "failed",
+                        "error_code": LINKED_PARAMETER_UNUSABLE_CODE,
+                    },
+                )
+                connection.commit()
+                raise RunnerSafetyError(
+                    LINKED_PARAMETER_UNUSABLE_CODE,
+                    LINKED_PARAMETER_UNUSABLE_MESSAGE,
+                ) from exc
+
         cursor = connection.execute(
             "UPDATE runner_jobs SET status = ?, updated_at = ? WHERE id = ? AND status = 'queued'",
             ("running", started_at, runner_job_id),
