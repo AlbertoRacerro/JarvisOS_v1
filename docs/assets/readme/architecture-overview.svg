@@ -1,82 +1,196 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
-  <title id="title">JarvisOS architecture overview</title>
-  <desc id="desc">The engineer interacts with the frontend and Jarvis authority core. AI runtimes propose work while deterministic engineering tools execute calculations. Process simulation is the first BlueRev engineering priority, followed by process design, physical CAD realization, and qualified numerical verification. Evidence returns to canonical JarvisOS state.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100" role="img" aria-labelledby="title desc">
+  <title id="title">JarvisOS system architecture and implementation status</title>
+  <desc id="desc">JarvisOS keeps deterministic policy, canonical state and engineering evidence in a central authority core. Replaceable AI runtimes such as Hermes sit below that authority and receive only bounded context and capabilities. Canonical memory and evidence feed a rebuildable derived retrieval layer. Deterministic runners and engineering backends execute work and return evidence to JarvisOS. Colors distinguish implemented, partial, planned, research and optional components.</desc>
   <defs>
     <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
       <path d="M0,0 L0,6 L9,3 z" fill="#475569"/>
     </marker>
+    <marker id="arrowLight" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#94a3b8"/>
+    </marker>
     <style>
-      .box { fill:#f8fafc; stroke:#475569; stroke-width:2; rx:16; }
-      .core { fill:#ecfdf5; stroke:#15803d; stroke-width:3; rx:18; }
-      .p1 { fill:#f0fdf4; stroke:#16a34a; stroke-width:3; rx:16; }
-      .p2 { fill:#f8fafc; stroke:#0f766e; stroke-width:2.5; rx:16; }
-      .txt { font-family:system-ui,-apple-system,"Segoe UI",sans-serif; fill:#0f172a; font-size:22px; font-weight:650; }
-      .sub { font-family:system-ui,-apple-system,"Segoe UI",sans-serif; fill:#475569; font-size:16px; font-weight:450; }
-      .label { font-family:system-ui,-apple-system,"Segoe UI",sans-serif; fill:#166534; font-size:15px; font-weight:750; letter-spacing:.4px; }
-      .line { stroke:#475569; stroke-width:2.5; fill:none; marker-end:url(#arrow); }
-      .dash { stroke:#64748b; stroke-width:2; fill:none; stroke-dasharray:8 7; marker-end:url(#arrow); }
+      .canvas{fill:#ffffff;stroke:#cbd5e1;stroke-width:2}
+      .implemented{fill:#ecfdf5;stroke:#16a34a;stroke-width:2.5}
+      .partial{fill:#fffbeb;stroke:#d97706;stroke-width:2.5}
+      .planned{fill:#fff7ed;stroke:#ea580c;stroke-width:2.5}
+      .research{fill:#fef2f2;stroke:#dc2626;stroke-width:2.5}
+      .external{fill:#f8fafc;stroke:#64748b;stroke-width:2.2}
+      .neutral{fill:#f8fafc;stroke:#94a3b8;stroke-width:2}
+      .title{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:31px;font-weight:750}
+      .subtitle{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;font-size:16px;font-weight:450}
+      .h2{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:20px;font-weight:700}
+      .body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#334155;font-size:14px;font-weight:480}
+      .tiny{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;font-size:12px;font-weight:500}
+      .chip{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:11px;font-weight:800;letter-spacing:.45px}
+      .band{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#64748b;font-size:13px;font-weight:800;letter-spacing:1px}
+      .line{stroke:#475569;stroke-width:2.2;fill:none;marker-end:url(#arrow)}
+      .dash{stroke:#94a3b8;stroke-width:2;fill:none;stroke-dasharray:7 7;marker-end:url(#arrowLight)}
+      .bus{stroke:#94a3b8;stroke-width:2.2;fill:none}
     </style>
   </defs>
 
-  <rect x="35" y="35" width="1130" height="650" rx="24" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
-  <text x="70" y="82" class="txt" font-size="28">JarvisOS — local-first AI co-engineering architecture</text>
-  <text x="70" y="110" class="sub">AI proposes; JarvisOS owns authority, canonical state and evidence; deterministic engines perform engineering work.</text>
+  <rect x="24" y="24" width="1552" height="1052" rx="26" class="canvas"/>
+  <text x="64" y="72" class="title">JarvisOS — target architecture, with today’s implementation status</text>
+  <text x="64" y="101" class="subtitle">The final direction is shown even where parts are not built yet. Jarvis owns authority and evidence; runtimes and engineering engines remain replaceable.</text>
 
-  <rect x="70" y="155" width="190" height="100" class="box"/>
-  <text x="165" y="193" text-anchor="middle" class="txt">Engineer</text>
-  <text x="165" y="220" text-anchor="middle" class="sub">goals · constraints</text>
-  <text x="165" y="242" text-anchor="middle" class="sub">review · acceptance</text>
+  <g transform="translate(64 124)">
+    <rect x="0" y="0" width="116" height="30" rx="15" class="implemented"/><text x="58" y="20" text-anchor="middle" class="chip" fill="#166534">IMPLEMENTED</text>
+    <rect x="128" y="0" width="145" height="30" rx="15" class="partial"/><text x="200" y="20" text-anchor="middle" class="chip" fill="#92400e">PARTIAL / QUALIFY</text>
+    <rect x="285" y="0" width="103" height="30" rx="15" class="planned"/><text x="337" y="20" text-anchor="middle" class="chip" fill="#9a3412">PLANNED</text>
+    <rect x="400" y="0" width="104" height="30" rx="15" class="research"/><text x="452" y="20" text-anchor="middle" class="chip" fill="#991b1b">RESEARCH</text>
+    <rect x="516" y="0" width="194" height="30" rx="15" class="external"/><text x="613" y="20" text-anchor="middle" class="chip" fill="#475569">OPTIONAL / REPLACEABLE</text>
+  </g>
 
-  <rect x="330" y="145" width="250" height="120" class="box"/>
-  <text x="455" y="187" text-anchor="middle" class="txt">Frontend</text>
-  <text x="455" y="216" text-anchor="middle" class="sub">React · TypeScript · Three.js</text>
-  <text x="455" y="240" text-anchor="middle" class="sub">workbenches · inspection</text>
+  <text x="64" y="205" class="band">HUMAN + PRODUCT SURFACE</text>
+  <rect x="64" y="224" width="210" height="92" rx="16" class="neutral"/>
+  <text x="169" y="257" text-anchor="middle" class="h2">Engineer</text>
+  <text x="169" y="282" text-anchor="middle" class="body">goals · constraints · review</text>
+  <text x="169" y="303" text-anchor="middle" class="body">final acceptance</text>
 
-  <rect x="665" y="135" width="420" height="140" class="core"/>
-  <text x="875" y="178" text-anchor="middle" class="txt">JarvisOS authority core</text>
-  <text x="875" y="208" text-anchor="middle" class="sub">state · policy · routing · egress · provenance</text>
-  <text x="875" y="232" text-anchor="middle" class="sub">evidence · budgets · grants · acceptance</text>
-  <text x="875" y="258" text-anchor="middle" class="label">CANONICAL AUTHORITY</text>
+  <rect x="318" y="224" width="270" height="92" rx="16" class="partial"/>
+  <text x="453" y="257" text-anchor="middle" class="h2">JarvisOS frontend</text>
+  <text x="453" y="282" text-anchor="middle" class="body">workbenches · 3D inspection</text>
+  <text x="453" y="303" text-anchor="middle" class="body">runs · analytics · conversation</text>
 
-  <path d="M260 205 H330" class="line"/>
-  <path d="M580 205 H665" class="line"/>
+  <rect x="646" y="196" width="870" height="150" rx="20" class="implemented"/>
+  <text x="680" y="226" class="band" fill="#166534">JARVIS AUTHORITY CORE</text>
+  <rect x="680" y="244" width="250" height="76" rx="13" fill="#ffffff" stroke="#86efac" stroke-width="1.8"/>
+  <text x="805" y="270" text-anchor="middle" class="h2">Deterministic policy</text>
+  <text x="805" y="294" text-anchor="middle" class="body">routing · privacy · egress · budget</text>
+  <text x="805" y="313" text-anchor="middle" class="body">grants · approval · fail-closed gates</text>
 
-  <rect x="70" y="330" width="260" height="125" class="box"/>
-  <text x="200" y="369" text-anchor="middle" class="txt">AI runtimes</text>
-  <text x="200" y="398" text-anchor="middle" class="sub">local models by default</text>
-  <text x="200" y="422" text-anchor="middle" class="sub">external specialists when allowed</text>
-  <text x="200" y="446" text-anchor="middle" class="label">PROPOSAL / ADVISORY</text>
+  <rect x="954" y="244" width="250" height="76" rx="13" fill="#ffffff" stroke="#86efac" stroke-width="1.8"/>
+  <text x="1079" y="270" text-anchor="middle" class="h2">Canonical state</text>
+  <text x="1079" y="294" text-anchor="middle" class="body">projects · parameters · decisions</text>
+  <text x="1079" y="313" text-anchor="middle" class="body">freshness · promotion · acceptance</text>
 
-  <rect x="385" y="320" width="300" height="145" class="p1"/>
-  <text x="535" y="353" text-anchor="middle" class="label">BLUEREV P1</text>
-  <text x="535" y="385" text-anchor="middle" class="txt">Process simulation</text>
-  <text x="535" y="414" text-anchor="middle" class="sub">biology · light · mixing · shear</text>
-  <text x="535" y="438" text-anchor="middle" class="sub">gas transfer · nutrients · energy</text>
+  <rect x="1228" y="244" width="254" height="76" rx="13" fill="#ffffff" stroke="#86efac" stroke-width="1.8"/>
+  <text x="1355" y="270" text-anchor="middle" class="h2">Evidence authority</text>
+  <text x="1355" y="294" text-anchor="middle" class="body">runs · artifacts · provenance</text>
+  <text x="1355" y="313" text-anchor="middle" class="body">criteria · accepted / rejected</text>
 
-  <rect x="760" y="320" width="300" height="145" class="p1"/>
-  <text x="910" y="353" text-anchor="middle" class="label">BLUEREV P1b</text>
-  <text x="910" y="385" text-anchor="middle" class="txt">Process design</text>
-  <text x="910" y="414" text-anchor="middle" class="sub">diameter · length · topology</text>
-  <text x="910" y="438" text-anchor="middle" class="sub">flow · aeration · constraints</text>
+  <path d="M274 270 H318" class="line"/>
+  <path d="M588 270 H646" class="line"/>
 
-  <rect x="385" y="535" width="300" height="110" class="p2"/>
-  <text x="535" y="568" text-anchor="middle" class="label">BLUEREV P2</text>
-  <text x="535" y="599" text-anchor="middle" class="txt">BLUECAD</text>
-  <text x="535" y="625" text-anchor="middle" class="sub">physical realization · manufacturability</text>
+  <text x="64" y="398" class="band">MEMORY + CONTEXT PLANE</text>
+  <rect x="64" y="416" width="315" height="110" rx="16" class="implemented"/>
+  <text x="221" y="448" text-anchor="middle" class="h2">Canonical structured memory</text>
+  <text x="221" y="474" text-anchor="middle" class="body">accepted facts · parameters · decisions</text>
+  <text x="221" y="497" text-anchor="middle" class="body">authoritative project history</text>
+  <text x="221" y="517" text-anchor="middle" class="tiny">never replaced by a vector database</text>
 
-  <rect x="760" y="535" width="300" height="110" class="box"/>
-  <text x="910" y="568" text-anchor="middle" class="label">QUALIFIED ENGINES</text>
-  <text x="910" y="599" text-anchor="middle" class="txt">Mesh / CFD / FEM</text>
-  <text x="910" y="625" text-anchor="middle" class="sub">Gmsh · CalculiX · future adapters</text>
+  <rect x="408" y="416" width="315" height="110" rx="16" class="implemented"/>
+  <text x="565" y="448" text-anchor="middle" class="h2">Run / artifact / evidence store</text>
+  <text x="565" y="474" text-anchor="middle" class="body">inputs · outputs · manifests · digests</text>
+  <text x="565" y="497" text-anchor="middle" class="body">diagnostics · solver evidence</text>
+  <text x="565" y="517" text-anchor="middle" class="tiny">canonical provenance backbone</text>
 
-  <path d="M330 392 C365 392 350 250 665 235" class="dash"/>
-  <text x="435" y="295" class="sub">proposals</text>
+  <rect x="752" y="416" width="315" height="110" rx="16" class="planned"/>
+  <text x="909" y="448" text-anchor="middle" class="h2">Derived retrieval memory</text>
+  <text x="909" y="474" text-anchor="middle" class="body">semantic / temporal index</text>
+  <text x="909" y="497" text-anchor="middle" class="body">rebuildable · stale-aware · disposable</text>
+  <text x="909" y="517" text-anchor="middle" class="tiny">candidate backends: Graphiti / Mem0 / others</text>
 
-  <path d="M875 275 C875 300 665 288 535 320" class="line"/>
-  <path d="M685 392 H760" class="line"/>
-  <path d="M910 465 C910 500 700 505 535 535" class="line"/>
-  <path d="M685 590 H760" class="line"/>
-  <path d="M1060 590 C1120 590 1120 245 1085 225" class="line"/>
+  <rect x="1096" y="416" width="420" height="110" rx="16" class="external"/>
+  <text x="1306" y="448" text-anchor="middle" class="h2">External notes / knowledge sources</text>
+  <text x="1306" y="474" text-anchor="middle" class="body">Obsidian / documents / reference material</text>
+  <text x="1306" y="497" text-anchor="middle" class="body">bounded bridge — not automatic canonical truth</text>
+  <text x="1306" y="517" text-anchor="middle" class="tiny">optional source layer</text>
 
-  <text x="1115" y="430" transform="rotate(-90 1115 430)" class="sub">results · diagnostics · evidence</text>
+  <path d="M379 470 H752" class="dash"/>
+  <path d="M723 490 H752" class="dash"/>
+  <path d="M1096 470 H1067" class="dash"/>
+
+  <text x="64" y="586" class="band">AI RUNTIME + CAPABILITY PLANE</text>
+  <rect x="64" y="604" width="310" height="122" rx="16" class="planned"/>
+  <text x="219" y="637" text-anchor="middle" class="h2">Hermes AgentRuntime</text>
+  <text x="219" y="663" text-anchor="middle" class="body">session / tool orchestration candidate</text>
+  <text x="219" y="686" text-anchor="middle" class="body">read / proposal first · replaceable</text>
+  <text x="219" y="710" text-anchor="middle" class="tiny">never owns policy or canonical state</text>
+
+  <rect x="404" y="604" width="310" height="122" rx="16" class="planned"/>
+  <text x="559" y="637" text-anchor="middle" class="h2">Capability gateway + MCP</text>
+  <text x="559" y="663" text-anchor="middle" class="body">visibility → grant → invocation</text>
+  <text x="559" y="686" text-anchor="middle" class="body">tool identity · schemas · provenance</text>
+  <text x="559" y="710" text-anchor="middle" class="tiny">Jarvis remains the permission boundary</text>
+
+  <rect x="744" y="604" width="250" height="122" rx="16" class="partial"/>
+  <text x="869" y="637" text-anchor="middle" class="h2">Local model runtime</text>
+  <text x="869" y="663" text-anchor="middle" class="body">Ollama routes work today</text>
+  <text x="869" y="686" text-anchor="middle" class="body">future engine adapter family</text>
+  <text x="869" y="710" text-anchor="middle" class="tiny">hardware/version qualification needed</text>
+
+  <rect x="1024" y="604" width="250" height="122" rx="16" class="partial"/>
+  <text x="1149" y="637" text-anchor="middle" class="h2">External AI specialists</text>
+  <text x="1149" y="663" text-anchor="middle" class="body">explicit routes only</text>
+  <text x="1149" y="686" text-anchor="middle" class="body">egress / budget / sensitivity gated</text>
+  <text x="1149" y="710" text-anchor="middle" class="tiny">never automatic authority</text>
+
+  <rect x="1304" y="604" width="212" height="122" rx="16" class="planned"/>
+  <text x="1410" y="637" text-anchor="middle" class="h2">Code intelligence</text>
+  <text x="1410" y="663" text-anchor="middle" class="body">Serena / LSP</text>
+  <text x="1410" y="686" text-anchor="middle" class="body">symbol-aware retrieval</text>
+  <text x="1410" y="710" text-anchor="middle" class="tiny">future qualified adapter</text>
+
+  <path d="M909 526 V565 H219 V604" class="dash"/>
+  <text x="530" y="558" text-anchor="middle" class="tiny">bounded context</text>
+  <path d="M805 346 V380 H738 V570 H559 V604" class="line"/>
+  <text x="682" y="560" text-anchor="middle" class="tiny">policy / capability grants</text>
+  <path d="M1079 346 V385 H221 V416" class="line"/>
+  <path d="M1355 346 V385 H565 V416" class="line"/>
+
+  <text x="64" y="788" class="band">EXECUTION + ENGINEERING BACKENDS</text>
+  <rect x="64" y="806" width="230" height="130" rx="16" class="implemented"/>
+  <text x="179" y="838" text-anchor="middle" class="h2">Deterministic runner</text>
+  <text x="179" y="864" text-anchor="middle" class="body">reviewed bounded models</text>
+  <text x="179" y="887" text-anchor="middle" class="body">run identity + artifacts</text>
+  <text x="179" y="913" text-anchor="middle" class="tiny">trusted execution path exists</text>
+
+  <rect x="318" y="806" width="250" height="130" rx="16" class="planned"/>
+  <text x="443" y="838" text-anchor="middle" class="h2">BlueRev process model</text>
+  <text x="443" y="864" text-anchor="middle" class="body">biology · light · mixing</text>
+  <text x="443" y="887" text-anchor="middle" class="body">gas transfer · energy</text>
+  <text x="443" y="913" text-anchor="middle" class="tiny">P1 target; partial foundations only</text>
+
+  <rect x="592" y="806" width="230" height="130" rx="16" class="implemented"/>
+  <text x="707" y="838" text-anchor="middle" class="h2">BLUECAD geometry</text>
+  <text x="707" y="864" text-anchor="middle" class="body">GeometrySpec</text>
+  <text x="707" y="887" text-anchor="middle" class="body">build123d / OCP</text>
+  <text x="707" y="913" text-anchor="middle" class="tiny">semantic CAD path works</text>
+
+  <rect x="846" y="806" width="230" height="130" rx="16" class="partial"/>
+  <text x="961" y="838" text-anchor="middle" class="h2">Mesh + static FEM</text>
+  <text x="961" y="864" text-anchor="middle" class="body">Gmsh · CalculiX</text>
+  <text x="961" y="887" text-anchor="middle" class="body">adapters + verification base</text>
+  <text x="961" y="913" text-anchor="middle" class="tiny">target-host qualification separate</text>
+
+  <rect x="1100" y="806" width="190" height="130" rx="16" class="research"/>
+  <text x="1195" y="838" text-anchor="middle" class="h2">High-fidelity CFD</text>
+  <text x="1195" y="864" text-anchor="middle" class="body">OpenFOAM / SU2</text>
+  <text x="1195" y="887" text-anchor="middle" class="body">only when needed</text>
+  <text x="1195" y="913" text-anchor="middle" class="tiny">demand-gated research path</text>
+
+  <rect x="1314" y="806" width="202" height="130" rx="16" class="external"/>
+  <text x="1415" y="838" text-anchor="middle" class="h2">Commercial backends</text>
+  <text x="1415" y="864" text-anchor="middle" class="body">HYSYS · ANSYS · Fusion</text>
+  <text x="1415" y="887" text-anchor="middle" class="body">specialist tools if justified</text>
+  <text x="1415" y="913" text-anchor="middle" class="tiny">optional adapters, no lock-in</text>
+
+  <path d="M559 726 V760 H179 V806" class="line"/>
+  <path d="M559 760 H443 V806" class="line"/>
+  <path d="M559 760 H707 V806" class="line"/>
+  <path d="M559 760 H961 V806" class="line"/>
+  <path d="M559 760 H1195 V806" class="dash"/>
+  <path d="M559 760 H1415 V806" class="dash"/>
+
+  <path d="M179 936 V983 H1540" class="bus"/>
+  <path d="M443 936 V983" class="bus"/>
+  <path d="M707 936 V983" class="bus"/>
+  <path d="M961 936 V983" class="bus"/>
+  <path d="M1195 936 V983" class="bus"/>
+  <path d="M1415 936 V983" class="bus"/>
+  <path d="M1540 983 V282 H1482" class="line"/>
+  <text x="790" y="1012" text-anchor="middle" class="body">results · diagnostics · artifacts · provenance → Jarvis evidence authority → accepted / rejected canonical state</text>
+
+  <text x="64" y="1053" class="tiny">Key rule: capability authority, information-flow/egress authority and state-commit authority stay distinct. Hermes and numerical engines are adapters around Jarvis, not the owner of engineering truth.</text>
 </svg>
