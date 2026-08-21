@@ -3,6 +3,8 @@
 from __future__ import annotations  # noqa: I001
 
 import collections
+from decimal import Decimal, InvalidOperation
+import json
 from pathlib import Path
 import sqlite3
 import typing
@@ -12,6 +14,13 @@ from pydantic import BaseModel, Field
 
 from app.core.database import open_sqlite_connection
 from app.core.paths import build_paths
+from app.modules.bluecad.cad_link import (
+    CadLinkError,
+    GEOMETRY_INPUTS,
+    TRANSFORMATION_VERSION,
+    _digest,
+    _verify_model_identity,
+)
 from app.modules.bluecad.evidence import EvidenceRecord, select_candidate_evidence_records
 from app.modules.bluecad.ledger import get_candidate_from_connection
 from app.modules.bluecad.models import BluecadCandidateRead
@@ -67,11 +76,31 @@ class BluecadReadDiagnostic(BaseModel):
     message: str
 
 
+class BluecadSemanticBindingRead(BaseModel):
+    name: str
+    value: str
+    unit: str
+    source_parameter_id: str
+
+
+class BluecadSemanticSourceRead(BaseModel):
+    kind: typing.Literal["cad_link_047_m0"]
+    link_id: str
+    transformation_version: str
+    source_simulation_run_id: str
+    source_runner_job_id: str
+    source_model_version_id: str
+    source_snapshot_digest: str
+    source_model_identity_digest: str
+    bindings: list[BluecadSemanticBindingRead]
+
+
 class BluecadCandidateAggregateRead(BaseModel):
     candidate: BluecadCandidateRead
     artifacts: list[BluecadArtifactRefRead] = Field(default_factory=list)
     evidence: list[BluecadEvidenceRefRead] = Field(default_factory=list)
     runs: list[BluecadRunRefRead] = Field(default_factory=list)
+    semantic_source: BluecadSemanticSourceRead | None = None
     freshness: AggregateFreshness
     diagnostics: list[BluecadReadDiagnostic] = Field(default_factory=list)
 
@@ -120,6 +149,7 @@ def _aggregate_from_connection(
         return None
 
     diagnostics: list[BluecadReadDiagnostic] = []
+    semantic_source = _load_semantic_source(connection, workspace_id, candidate.id, diagnostics)
     artifact_roles = _collect_artifact_roles(candidate)
     artifact_ids = set(artifact_roles)
     artifacts = _load_artifacts(connection, workspace_id, artifact_roles, diagnostics)
@@ -157,11 +187,251 @@ def _aggregate_from_connection(
         artifacts=artifacts,
         evidence=evidence,
         runs=runs,
+        semantic_source=semantic_source,
         freshness=_aggregate_freshness(freshness_states),
         diagnostics=sorted(
             _dedupe_diagnostics(diagnostics),
             key=lambda item: (item.source, item.reference, item.code, item.message),
         ),
+    )
+
+
+def _semantic_source_diagnostic(
+    diagnostics: list[BluecadReadDiagnostic],
+    candidate_id: str,
+    message: str,
+    *,
+    code: ReadDiagnosticCode = "malformed_reference",
+) -> None:
+    diagnostics.append(
+        BluecadReadDiagnostic(
+            code=code,
+            source="bluecad.semantic_source",
+            reference=f"bluecad_candidate:{candidate_id}",
+            message=message,
+        )
+    )
+
+
+def _decimal_snapshot_value(value: object) -> tuple[str, Decimal] | None:
+    if not isinstance(value, str) or not value or value.strip() != value:
+        return None
+    try:
+        parsed = Decimal(value)
+    except (InvalidOperation, ValueError):
+        return None
+    if not parsed.is_finite():
+        return None
+    return value, parsed
+
+
+def _load_semantic_source(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    candidate_id: str,
+    diagnostics: list[BluecadReadDiagnostic],
+) -> BluecadSemanticSourceRead | None:
+    """Project the exact canonical reviewed-047 CAD-link source without inferring object semantics."""
+    rows = connection.execute(
+        """
+        SELECT *
+        FROM bluecad_cad_links
+        WHERE workspace_id = ? AND child_candidate_id = ?
+        ORDER BY created_at, id
+        """,
+        (workspace_id, candidate_id),
+    ).fetchall()
+    if not rows:
+        return None
+    if len(rows) != 1:
+        _semantic_source_diagnostic(
+            diagnostics,
+            candidate_id,
+            "Candidate semantic provenance is ambiguous across canonical CAD-link records.",
+        )
+        return None
+
+    link = rows[0]
+    if str(link["transformation_version"]) != TRANSFORMATION_VERSION:
+        return None
+
+    source_run_id = str(link["source_simulation_run_id"] or "")
+    source_job_id = str(link["source_runner_job_id"] or "")
+    if not source_run_id or not source_job_id:
+        _semantic_source_diagnostic(
+            diagnostics,
+            candidate_id,
+            "Reviewed-047 CAD-link provenance is missing its canonical source run or runner job.",
+        )
+        return None
+
+    run = connection.execute(
+        "SELECT id, workspace_id, model_version_id, status FROM simulation_runs WHERE id = ? AND workspace_id = ?",
+        (source_run_id, workspace_id),
+    ).fetchone()
+    job = connection.execute(
+        "SELECT * FROM runner_jobs WHERE id = ? AND workspace_id = ? AND simulation_run_id = ?",
+        (source_job_id, workspace_id, source_run_id),
+    ).fetchone()
+    if run is None or job is None or str(run["status"]) != "succeeded" or str(job["status"]) != "succeeded":
+        _semantic_source_diagnostic(
+            diagnostics,
+            candidate_id,
+            "Reviewed-047 CAD-link source execution is missing or no longer a succeeded canonical source.",
+            code="inaccessible_reference",
+        )
+        return None
+
+    model_version_id = str(run["model_version_id"] or "")
+    if not model_version_id:
+        _semantic_source_diagnostic(
+            diagnostics,
+            candidate_id,
+            "Reviewed-047 CAD-link source run has no canonical model identity.",
+        )
+        return None
+    model = connection.execute(
+        """
+        SELECT mv.*, a.sha256 AS script_sha256
+        FROM model_versions mv
+        JOIN artifacts a ON a.id = mv.implementation_artifact_id
+        WHERE mv.id = ? AND mv.workspace_id = ? AND a.workspace_id = ?
+        """,
+        (model_version_id, workspace_id, workspace_id),
+    ).fetchone()
+    if model is None:
+        _semantic_source_diagnostic(
+            diagnostics,
+            candidate_id,
+            "Reviewed-047 CAD-link source model identity is inaccessible in this workspace.",
+            code="inaccessible_reference",
+        )
+        return None
+    try:
+        current_identity = _verify_model_identity(model, job)
+    except CadLinkError:
+        _semantic_source_diagnostic(
+            diagnostics,
+            candidate_id,
+            "CAD-link source model does not satisfy the exact reviewed-047 identity contract.",
+        )
+        return None
+
+    try:
+        stored_identity = json.loads(str(link["source_model_identity_json"]))
+        snapshot = json.loads(str(link["source_snapshot_json"]))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        _semantic_source_diagnostic(
+            diagnostics,
+            candidate_id,
+            "Reviewed-047 CAD-link semantic provenance payload is malformed.",
+        )
+        return None
+    if not isinstance(stored_identity, dict) or stored_identity != current_identity:
+        _semantic_source_diagnostic(
+            diagnostics,
+            candidate_id,
+            "Stored CAD-link model provenance does not match the exact reviewed-047 source identity.",
+        )
+        return None
+    if str(link["source_model_identity_digest"] or "") != _digest(stored_identity):
+        _semantic_source_diagnostic(
+            diagnostics,
+            candidate_id,
+            "Stored CAD-link model provenance digest is inconsistent.",
+        )
+        return None
+    if not isinstance(snapshot, dict) or set(snapshot) != set(GEOMETRY_INPUTS):
+        _semantic_source_diagnostic(
+            diagnostics,
+            candidate_id,
+            "Reviewed-047 CAD-link geometry source snapshot is malformed.",
+        )
+        return None
+    if str(link["source_snapshot_digest"] or "") != _digest(snapshot):
+        _semantic_source_diagnostic(
+            diagnostics,
+            candidate_id,
+            "Reviewed-047 CAD-link geometry source snapshot digest is inconsistent.",
+        )
+        return None
+
+    bindings: list[BluecadSemanticBindingRead] = []
+    parameter_ids: set[str] = set()
+    for name in GEOMETRY_INPUTS:
+        item = snapshot.get(name)
+        if not isinstance(item, dict):
+            _semantic_source_diagnostic(
+                diagnostics,
+                candidate_id,
+                "Reviewed-047 CAD-link geometry source snapshot contains a malformed binding.",
+            )
+            return None
+        parameter_ref = item.get("parameter_ref")
+        if not isinstance(parameter_ref, str) or not parameter_ref.startswith("parameter:"):
+            _semantic_source_diagnostic(
+                diagnostics,
+                candidate_id,
+                "Reviewed-047 CAD-link geometry binding has no canonical source Parameter reference.",
+            )
+            return None
+        parameter_id = parameter_ref.removeprefix("parameter:")
+        if not parameter_id or parameter_id in parameter_ids:
+            _semantic_source_diagnostic(
+                diagnostics,
+                candidate_id,
+                "Reviewed-047 CAD-link geometry bindings contain an invalid source Parameter identity.",
+            )
+            return None
+        parameter_ids.add(parameter_id)
+        expected_unit = "m" if name == "tube_length" else "mm"
+        if item.get("unit") != expected_unit or item.get("status") != "accepted" or item.get("freshness") != "fresh":
+            _semantic_source_diagnostic(
+                diagnostics,
+                candidate_id,
+                "Reviewed-047 CAD-link geometry binding metadata is inconsistent with the canonical source snapshot.",
+            )
+            return None
+        executed = _decimal_snapshot_value(item.get("executed_value"))
+        current = _decimal_snapshot_value(item.get("current_value"))
+        if executed is None or current is None or executed[1] != current[1]:
+            _semantic_source_diagnostic(
+                diagnostics,
+                candidate_id,
+                "Reviewed-047 CAD-link geometry binding contains an invalid immutable source value.",
+            )
+            return None
+        parameter = connection.execute(
+            "SELECT id, unit FROM parameters WHERE id = ? AND workspace_id = ?",
+            (parameter_id, workspace_id),
+        ).fetchone()
+        if parameter is None or str(parameter["unit"]) != expected_unit:
+            _semantic_source_diagnostic(
+                diagnostics,
+                candidate_id,
+                "A canonical CAD-link source Parameter is missing or has incompatible units.",
+                code="inaccessible_reference",
+            )
+            return None
+        bindings.append(
+            BluecadSemanticBindingRead(
+                name=name,
+                value=executed[0],
+                unit=expected_unit,
+                source_parameter_id=parameter_id,
+            )
+        )
+
+    return BluecadSemanticSourceRead(
+        kind="cad_link_047_m0",
+        link_id=str(link["id"]),
+        transformation_version=TRANSFORMATION_VERSION,
+        source_simulation_run_id=source_run_id,
+        source_runner_job_id=source_job_id,
+        source_model_version_id=model_version_id,
+        source_snapshot_digest=str(link["source_snapshot_digest"]),
+        source_model_identity_digest=str(link["source_model_identity_digest"]),
+        bindings=bindings,
     )
 
 
