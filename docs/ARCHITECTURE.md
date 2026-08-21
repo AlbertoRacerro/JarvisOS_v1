@@ -1,479 +1,556 @@
 # Architecture
 
-This is the canonical architecture source for JarvisOS. Milestone reports remain historical evidence, but this document describes the current stable shape.
+This is the canonical current architecture source for JarvisOS.
 
-## Architecture Principle
+`docs/specs/STATUS.md` remains the sole live implementation and queue authority. Historical milestone and strategy documents are evidence of prior decisions; they do not override this file when they describe runtime state that no longer exists.
 
-JarvisOS is a local-first system for building engineering model capital. The backend owns durable state and policy. The frontend is an operator interface. AI models propose; JarvisOS validates structure, records, executes, and audits.
+Last architecture reconciliation: **2026-08-21**.
 
-Corrected local intelligence principle:
+---
 
-```text
-Local models = route matrix (qwen3:8b fast, gemma4:12b general, deepseek-coder
-               16b coder, qwen3-coder 30b heavy); Gemma 12B additionally serves
-               as the advisory Auto classifier
-JarvisOS = deterministic structure, schemas, permissions, persistence, execution, audit
-External APIs = specialist reasoning providers (explicit routes only)
-Workbench = design interface
-Foundry = model-capital system
-Debate Mode = advanced critical reasoning layer
-```
+## 1. Product principle
 
-This is a form-driven local intelligence architecture. JarvisOS makes the system readable to Gemma through showcase files, indexes, forms, and source IDs. Gemma performs semantic reasoning locally inside those forms. JarvisOS validates structure only and decides what can be saved, retried, promoted, or executed.
+JarvisOS is a local-first engineering workspace. It is not a general numerical solver, not a model provider, and not an autonomous engineering authority.
 
-Structural validation is not semantic validation. JarvisOS may validate schemas, required fields, enum values, booleans, field lengths, status values, source IDs, path existence, allowed roots, permitted save locations, valid state transitions, and obvious secrets. JarvisOS must not claim to validate semantic fidelity, strategic correctness, summary quality, technical truth of a design assumption, completeness of a memory card, or subtle sensitivity classification.
-
-Memory intake follows a staged principle:
+The intended separation is:
 
 ```text
-write fast, enrich later, reason deeply only on retrieval
+Engineer = final engineering responsibility
+JarvisOS = software authority boundary, state, policy, provenance, execution identity
+AI / agents = proposals, reasoning, tool intents, explanations
+Engineering tools = replaceable numerical/mechanical backends
+Evidence = results + provenance + fidelity/qualification context
 ```
 
-Initial memory intake preserves raw text, provenance, observable flags, broad uncertain buckets, and enrichment status. Full contextual interpretation is deferred until retrieval, decision use, conflict resolution, sensitivity review, high-value promotion, or full context-pack availability.
+The core invariants are:
 
-BlueRev modeling does not start until AI infrastructure, external API escalation, and the Modeling Workbench are strong enough to support real design work.
+1. `AI/agent proposal != canonical state mutation`.
+2. `tool output != accepted engineering truth`.
+3. capability authority, information-flow/egress authority, and state-commit authority are separate concerns.
+4. canonical state changes only through JarvisOS-controlled transitions.
+5. the engineer remains responsible for the engineering decision even when a software transition is automated.
+6. **sunk cost is zero**: current JarvisOS code receives no architectural preference merely because it already exists.
 
-## Backend Spine
+If a qualified upstream project already solves a generic numerical/runtime problem better than an in-house subsystem, the default disposition is `WRAP_UPSTREAM`, `REPLACE_WITH_UPSTREAM`, or `DELETE`, not indefinite parallel maintenance.
 
-The FastAPI backend is the durable system boundary.
+---
 
-Core layers:
+## 2. High-level data flow
 
-- `app/core`: configuration, paths, database readiness, logging, and shared errors.
-- `app/api`: common HTTP entry points.
-- `app/modules`: bounded feature modules.
-- `app/schemas`: shared response and payload shapes.
-
-The backend owns:
-
-- configuration and path resolution;
-- SQLite initialization;
-- module boundaries;
-- API routes;
-- AI policy gates;
-- local runner execution boundaries;
-- event/audit records;
-- artifact records.
-
-The frontend must call backend APIs. It must not call providers, local model runtimes, filesystems, or execution tools directly.
-
-## Local-First Storage
-
-JarvisOS assumes a Windows-first local data root:
+The intended high-level flow is explicitly bidirectional where information returns:
 
 ```text
-C:\JarvisOS
+                         response / proposal
+              ┌────────────────────────────────┐
+              │                                ↓
+Engineer ⇄ JarvisOS authority boundary ⇄ AI / AgentRuntime
+              │
+              │ authorized execution request
+              ↓
+      Engineering / software capability
+              │
+              ↓
+     result + artifacts + diagnostics
+              │
+              ↓
+        evidence / run records
+              │
+              ├────────────→ JarvisOS / Engineer inspection
+              │
+              └────────────→ explicit commit/promotion decision when applicable
 ```
 
-The repository path and runtime data root are separate concepts:
+A diagram arrow is a data/request flow, not a vague association. JarvisOS policy governs transitions; policy is not itself a data store and does not “produce” canonical state.
 
-- the repository stores source code and docs;
-- the data root stores local runtime state, databases, workspaces, logs, and artifacts.
+---
 
-All data-root-derived paths must remain centralized through `app/core/paths.py`.
+## 3. Authority boundary
 
-SQLite is the initial database. The schema is intentionally small and migration-friendly. Alembic is postponed until schema churn justifies formal migration tooling.
+JarvisOS currently distributes authority responsibilities across backend modules rather than implementing one monolithic `AuthorityCore` class. The architectural boundary is still real, but the implementation is composed from services.
 
-Future durable memory writes must pass through a `MemoryStore` facade before any
-memory runtime or storage schema exists. The facade design is documented in
-`docs/MEMORYSTORE_FACADE_DESIGN.md`; this is not current runtime behavior.
+JarvisOS owns or is intended to own:
 
-Future SQLite/FTS memory schema design lives in
-`docs/SQLITE_FTS_MEMORY_SCHEMA_DESIGN.md`. It is conceptual only and does not
-add migrations, tables, runtime queries, or memory/retrieval runtime.
+- canonical project and engineering state;
+- record lifecycle and promotion semantics;
+- workspace and engineering identity;
+- units, provenance and freshness;
+- AI route, budget and egress policy;
+- capability permission and confirmation boundaries;
+- run/artifact/evidence identity;
+- sensitivity and external-packet lineage;
+- evaluator contracts and qualification metadata;
+- deterministic state-transition and audit records.
 
-Future progressive retrieval contract design lives in
-`docs/PROGRESSIVE_RETRIEVAL_CONTRACT_DESIGN.md`. It is a scoped read contract
-for compact candidates and full evidence by stable ID/source reference only; it
-does not add retrieval runtime.
+External systems may own replaceable mechanics:
 
-## Domain Foundation
+- LLM inference;
+- agent/session loops;
+- semantic code intelligence;
+- derived semantic/temporal retrieval;
+- sandbox/isolation implementation;
+- property packages;
+- process solvers;
+- CAD kernels;
+- meshers;
+- CFD/FEM solvers;
+- optimization algorithms;
+- telemetry transport.
 
-Current persistent objects include:
+No external backend should need direct authority over canonical JarvisOS state.
 
-- Workspace
-- Entity
-- EntityLink
-- Event
-- Artifact
-- ModelSpec
-- Assumption
-- Parameter
-- ModelVersion
-- SimulationRun
-- RunnerJob
-- RunLog
-- RunArtifact
-- Decision
-- AISettings
+---
 
-These records are deliberately minimal. Early records use stable IDs, timestamps, status fields, schema version fields, notes, and raw payloads where useful.
+## 4. Current write-path debt
 
-`simulation_runs` remains the canonical run record. Runner-specific operational details live in runner tables and link back to SimulationRun.
+The repository has a real proposal/promotion lifecycle through `app/modules/memory`, including AI- and calculation-originated proposals, explicit promote/reject transitions, replacement semantics and freshness invalidation.
 
-## AI Gateway
+However, older `app/modules/modeling` CRUD endpoints still create assumptions, parameters and decisions directly. This means the implementation does **not yet have one fully unified canonical-state write path**.
 
-All AI provider access must pass through the AI Gateway and provider adapter boundaries. Routes, frontend code, modeling services, runner code, and future workbench features must not call providers directly.
+That is known architecture debt, not an intentional permanent dual authority model.
 
-Defaults are safe:
-
-- paid AI disabled;
-- budget zero;
-- provider mode `fake`;
-- no external calls by default;
-- tests use mocked/fake providers.
-
-Provider calls require explicit settings, credential presence, budget approval, token/cost guard approval, local policy approval, and event/audit recording.
-
-The current AI execution paths are:
-
-- The AI execution spine: `run_ai_task` + `/ai/tasks/run`, with `ai_jobs`
-  ledger rows for every call, explicit local route bindings (fake, fast,
-  general, coder, coder_heavy), and explicit-only external bindings
-  (`external:cheap`, `external:reasoning` via Scaleway).
-- The Auto bridge: local-only, classifier-advisory, RouterPolicy-gated
-  (see README "Auto route" and `app/modules/ai/routing/`).
-- Narrow smoke/diagnostic paths: Scaleway smoke tests and console, DeepSeek
-  provider smoke, backend-only Supervisor public-test slice, dev-only
-  message-route smoke and local-chat endpoints.
-
-These do not include external Auto execution, memory runtime, semantic
-retrieval, RAG, file ingestion, tool execution from AI, or autonomous agents.
-
-## Local Policy And Gate Ordering
-
-Raw user input must be inspected locally before any external provider is considered.
-
-Future intended order:
+Target:
 
 ```text
-User input
--> deterministic local hard rules
--> Gemma form fill inside bounded schemas
--> structural validation, retry, or clarification
--> policy decision
--> external tier/provider adapter only if allowed
--> AIResponse
--> event/audit
+user / AI / calculation / import
+             ↓
+       typed write intent
+             ↓
+ canonical-state service
+ validation · provenance · lifecycle · audit
+             ↓
+        canonical store
 ```
 
-Cloud providers must not be used as the first privacy classifier. JarvisOS remains authoritative for policy and execution, but Gemma performs semantic assessment locally where deterministic hard rules are insufficient.
+Direct user creation may still be allowed to create an accepted record where policy permits. The requirement is one transition service and one set of semantics, not forcing every human entry through an artificial “AI proposal” state.
 
-Future logical gates include:
+### Parameter lifecycle versus value quality
 
-- `LOCAL_ONLY`
-- `LOCAL_GEMMA`
-- `USER_CONFIRM_REQUIRED`
-- `CHEAP_GATE`
-- `CHEAP_PLUS_GATE`
-- `SCIENTIFIC_MEDIUM_GATE`
-- `FRONTIER_GATE`
-- `BLOCKED`
-
-## Local Gemma Position
-
-Local Gemma is not approved as a general operating brain.
-
-Canonical evidence lives in:
+Parameters currently contain both lifecycle and value-quality concepts. Those concepts must remain distinct:
 
 ```text
-docs/LOCAL_AI_EVALUATION_EVIDENCE.md
+record lifecycle:
+proposed → accepted / rejected → superseded
+
+value/evidence quality:
+candidate / literature / measured / validated / ...
 ```
 
-Current conclusion:
+The same word `accepted` should not ambiguously mean both “this record is canonical” and “this value has a certain quality classification”. Authoritative AI context must require an accepted lifecycle state plus an explicitly permitted value-quality state.
 
-- `gemma4:12b-it-qat` is viable only for non-critical advisory semantic hints, such as task, project, topic, context-need, and confidence hints.
-- 12B must not own risk, next action, permission, provider selection, tool execution, memory write, retrieval, route selection, external calls, final sensitivity, or safety decisions.
-- 12B is not approved for orchestration, local gatekeeping, chat, memory runtime, retrieval runtime, Context Pack Broker runtime, provider routing, autonomous tools, frontend UI, or BlueRev modeling.
-- `gemma4:31b-it-qat` is only an occasional heavy local expert candidate.
-- FunctionGemma remains future-track until tool catalog and dataset work exists.
+The post-visual-identity queue contains the correction.
 
-Gemma may eventually propose small structured objects through forms such as non-critical classification hints, context requests, memory cards, source cards, decision cards, sensitivity assessments, tool intent, provider intent, and clarification requests. JarvisOS validates those forms structurally, applies hard policy overrides, retries with machine-readable errors, saves proposed objects, and decides what happens next.
+---
 
-For the current 12B classification utility, model output is restricted to advisory semantic hints. Fields that look safety-critical in diagnostics, including risk, next action, provider/tool intent, memory, retrieval, route, external-call, and final-sensitivity decisions, are owned by JarvisOS policy, deterministic hard overrides, user confirmation, stronger local review, or future API review gates.
+## 5. Context, retrieval and memory
 
-Canonical form-driven design lives in:
+Canonical state and retrieval memory are different systems.
 
 ```text
-docs/FORM_DRIVEN_LOCAL_INTELLIGENCE.md
+Canonical state ─────┐
+Runs / evidence ─────┤
+External documents ──┤
+Derived retrieval ───┤
+Code intelligence ───┤
+                     ↓
+               Context Broker
+                     ↓
+          bounded ContextPack + manifest
+                     ↓
+             AI / AgentRuntime
+                     ↓
+        response / proposal / ToolIntent
 ```
 
-Canonical form protocol catalog design lives in:
+Current implementation includes deterministic context-pack assembly, source manifests, digests, bounded selection and FTS/LIKE-based record search. The current implementation is not yet a semantic/temporal retrieval system.
+
+Future semantic/temporal indexes are rebuildable and non-authoritative. If an index disagrees with canonical state, canonical state wins.
+
+External notes and documents are sources. MCP may expose resources/capabilities but is not itself the conceptual owner of those documents.
+
+Code intelligence such as Serena and retrieval memory are parallel context/capability sources; one is not inherently downstream of the other.
+
+---
+
+## 6. AI and AgentRuntime model
+
+All provider execution must continue through JarvisOS-owned routing, egress, budget and ledger boundaries.
+
+The future agent/runtime shape is:
 
 ```text
-docs/FORM_PROTOCOL_CATALOG.md
+JarvisOS policy + context + capability grant
+                 ⇅
+          AgentRuntime adapter
+                 ⇅
+       Hermes / another runtime
+                 ⇅
+        capability interface
+          e.g. MCP where useful
+                 ⇅
+          JarvisOS services
 ```
 
-The catalog is documentation only. It defines conceptual forms and authority
-boundaries, not Pydantic models, runtime validators, retry loops, model calls,
-provider/tool execution, retrieval runtime, memory runtime, or BlueRev
-modeling.
+The return path is mandatory. Agent output returns to JarvisOS as a response, proposal or tool intent.
 
-Canonical structural validator and retry-loop design lives in:
+There is no valid architecture in which:
 
 ```text
-docs/STRUCTURAL_VALIDATOR_RETRY_LOOP_DESIGN.md
+Hermes → canonical state
 ```
 
-The validator design is documentation only. It defines future structural checks
-and bounded retry outcomes; it does not add validator runtime, Pydantic models,
-model calls, provider/tool execution, retrieval runtime, memory runtime, or
-BlueRev modeling.
+without a JarvisOS transition boundary in between.
 
-### Gemma-Facing Showcase Files
+Hermes, MCP and related slices remain frozen under the current live registry until explicitly re-derived after the current queue and post-visual-identity architecture correction/revalidation.
 
-Canonical showcase-file design lives in:
+---
+
+## 7. Engineering evaluator model
+
+The desired engineering architecture is evaluator-based, not “JarvisOS contains all solvers”.
+
+Target contract concept:
 
 ```text
-docs/LOCAL_MODEL_SHOWCASE_FILES.md
+EvaluationRequest
+  evaluator identity/version
+  typed inputs + units
+  model/fidelity selection
+  validity assumptions
+  execution policy
+        ↓
+EngineeringEvaluator adapter
+        ↓
+upstream/custom specialist backend
+        ↓
+EvaluationResult
+  outputs
+  diagnostics / failure taxonomy
+  artifacts
+  provenance
+  fidelity
+  validity domain
+  qualification state
+  uncertainty where available
 ```
 
-Showcase files are synthetic, non-authoritative, regenerable views over
-canonical sources. They orient local models before source/context requests.
-They are not canonical memory, source of truth, runtime retrieval, Context Pack
-Broker runtime, memory runtime, model authority, provider routing, tool
-execution, automatic memory writing, or BlueRev modeling.
+Current code does not yet implement one universal `EngineeringEvaluator` interface. Several mature bounded paths have typed contracts that should inform the future common boundary.
 
-The V0 showcase set is:
+A common abstraction must not erase solver-specific semantics or pretend incompatible analyses are interchangeable.
+
+---
+
+## 8. Evidence model
+
+Current typed `evidence_records` are strongest for BLUECAD validation, mesh quality and static FEM.
+
+That is a real evidence foundation but not yet a universal engineering evidence layer.
+
+The target common evidence envelope should be able to represent, where relevant:
+
+- exact producer/evaluator and version;
+- exact run and input digest;
+- result/artifact digest;
+- engineering quantity and units;
+- model fidelity;
+- qualification state;
+- validity domain;
+- known exclusions;
+- uncertainty/sensitivity information;
+- provenance/source references;
+- pass/fail/indeterminate or richer typed outcome;
+- freshness/staleness.
+
+**Provenance is necessary but not sufficient for scientific validity.** A deterministic, fully traceable result can still be wrong or be used outside its validity domain.
+
+---
+
+## 9. Current physical-design path
+
+A real production-shaped path already exists:
 
 ```text
-GEMMA_START_HERE.md
-CURRENT_STATE.md
-SYSTEM_MAP.md
-PROJECT_INDEX.md
-FILE_CATALOG.md
-DECISION_INDEX.md
-OPEN_CLARIFICATIONS.md
-SAFETY_POLICY.md
+operator / Jarvis proposal
+        ↓
+BLUECAD candidate + GeometrySpec
+        ↓
+build123d / OCP
+        ↓
+STEP / STL / GLB + manifest / digests
+        ↓
+registry-bound Gmsh
+        ↓
+mesh + groups + quality outcome
+        ↓
+registry-bound CalculiX
+        ↓
+static FEM result + verification report
+        ↓
+SimulationRun + artifacts + typed evidence
+        ↓
+FastAPI aggregate/read APIs
+        ↓
+BLUECAD / Runs / Analytics UI
 ```
 
-`MEMORY_INDEX.md` is deferred until MemoryStore, memory runtime, retrieval
-runtime, promotion policy, and memory indexing are designed.
-
-`TOOL_AND_PROVIDER_CATALOG.md` is deferred until provider/tool intent forms,
-provider routing, and tool execution policy are ready.
-
-Gemma should read `GEMMA_START_HERE.md` first, inspect relevant showcase files,
-request bounded source files or context packages, and tolerate moderate
-over-fetch. Under-fetch on important tasks is a serious failure mode. If a
-showcase file conflicts with canonical docs or source code, the canonical source
-wins.
-
-### Micro-Context
-
-Canonical micro-context design lives in:
+When the bounded structural-repair mode is enabled, there is also a real feedback path:
 
 ```text
-docs/MICRO_CONTEXT_DESIGN.md
+criteria failure
+      ↓
+selected evidence
+      ↓
+AI repair proposal
+      ↓
+new GeometrySpec
+      ↓
+rebuild → remesh → resolve → compare
 ```
 
-Micro-context is bounded orientation context for future fast intake and form
-filling. It is regenerated from canonical sources and accepted state. It is not
-canonical memory, runtime retrieval, Context Pack Broker runtime, memory
-runtime, provider/tool behavior, routing, safety authority, or BlueRev modeling.
+The AI repair proposal still does not own final project truth.
 
-## Context Pack Broker Future Role
+### Current CAD scope
 
-The Context Pack Broker is a future JarvisOS service, not a model-controlled runtime.
+`GeometrySpec` is a bounded semantic CAD vocabulary, not a generic CAD replacement. Current part kinds include tube runs, bends, joints, manifolds/capped manifolds, floats, anchor mounts and harvest modules.
 
-It should:
+The implemented green capability is deterministic parametric CAD construction/export and current semantic scene binding. Broader physical synthesis such as maintainability, access, cleanability and manufacturability is future engineering logic unless a specific implemented check proves otherwise.
 
-- maintain a bounded context package taxonomy;
-- assemble source-grounded context packages;
-- preserve provenance and freshness metadata;
-- detect gaps, contradictions, and stale evidence;
-- feed validated context into local or external AI paths.
+### Gmsh and CalculiX
 
-Future progressive retrieval may provide scoped candidates, source references,
-and full evidence to the Context Pack Broker after policy checks. Gemma may
-request context packages from a controlled vocabulary only after reliability
-work proves that behavior. It must not retrieve arbitrary files or database
-records directly.
+The adapters are implemented. Exact executable/host provenance and scientific qualification are separate gates.
 
-## External API Role
+The current Gmsh path includes bounded physical-group construction and retry behavior; it is not a claim of robust arbitrary industrial meshing.
 
-External APIs are future specialist reasoning providers.
+The current CalculiX path is static FEM, not a general multiphysics suite.
 
-They should be reached only after:
+---
 
-- local policy allows the request;
-- sensitivity/redaction rules pass;
-- budget and token/cost guards pass;
-- provider credentials are available through approved secret handling;
-- the request is packaged with bounded context and provenance;
-- events record the route decision and provider result without raw secrets.
+## 10. Current process-engineering reality
 
-Normal users should interact with one Supervisor/Workbench interface. Provider ids, model ids, tier assignments, fallback chains, credentials, and diagnostic smoke targets remain internal or admin/config-only.
+The repository currently contains several useful deterministic BlueRev experiments:
 
-## Modeling Workbench Future Role
+- geometry/hydraulics/pumping screening;
+- biomass/nutrient/harvest bookkeeping and bounded economic proxies;
+- buoyancy and optical-transmission proxies;
+- explicit topology experiments;
+- a typed acyclic process kernel.
 
-The Modeling Workbench is the future design interface. It should not be a generic chat UI.
+These results should remain inspectable historical/verification assets until the upstream replacement decision is complete.
 
-Expected workbench responsibilities:
+They do **not** collectively form an integrated predictive photobioreactor simulator.
 
-- structured model design input;
-- assumption and equation editing;
-- evidence/literature panel;
-- AI review panel;
-- simulation runner integration;
-- run comparison view;
-- explicit save/accept/reject decisions.
+### Specific limits that must remain public
 
-The current Domain Foundation page is a temporary verification surface and should be split before real workflows grow.
+The current biomass/nutrient/harvest model takes volumetric productivity as an input. It therefore does not yet predict productivity from coupled light, biology, gas transfer, nutrients, temperature and hydrodynamics.
 
-## BlueRev Foundry Future Role
+The current optical model is a Beer-Lambert-like screening proxy. It does not implement a full radiation field, spectral PAR, scattering or light-growth coupling.
 
-BlueRev Foundry is the future model-capital system.
+The example batch-growth model is a simple deterministic runner demonstration, not a qualified PBR biology model.
 
-Expected responsibilities:
+### Custom `process_kernel`
 
-- ModelSpec records;
-- SimulationRun tracking;
-- artifact tracking;
-- parameter and assumption library;
-- validation and decision loop.
+The current process kernel validates a directed acyclic graph and executes blocks in topological order. That makes it useful as a bounded feed-forward calculation experiment.
 
-Do not start real BlueRev modeling until local AI classification utilities, external API escalation, Context Pack Broker design, and Modeling Workbench foundations are ready.
+It is **not** the target general PBR solver because real process models may require:
 
-## R&D Debate Mode Future Role
+- recycle/algebraic loops;
+- nonlinear simultaneous equations;
+- ODE integration;
+- DAE integration;
+- controller/state coupling;
+- dynamic gas/liquid/biological inventories;
+- nonlinear optimization.
 
-R&D Debate Mode is a later critical reasoning layer.
+No new generic solver functionality should be added to `app/modules/process_kernel` before the zero-sunk-cost upstream bake-off.
 
-It should come after:
+The target is to evaluate IDAES/Pyomo, BioSTEAM/QSDsan, CasADi/OpenMDAO, DWSIM/CAPE-OPEN, CoolProp/thermo/chemicals/fluids and other relevant upstreams against the actual PBR requirements. Generic JarvisOS code duplicated by a stronger selected upstream should then be retired/deleted. Domain-specific equations, fixtures or adapters are retained only when they remain the stronger boundary.
 
-- provider abstraction hardening;
-- context packaging;
-- provenance and redaction policy;
-- Modeling Workbench surfaces;
-- model/run/artifact tracking.
+---
 
-It must not be implemented as an ungated multi-agent loop over sensitive BlueRev content.
+## 11. Lineage graph is not a process flowsheet
 
-## Python Runner V0
+`app/modules/flowsheet` currently models dependency/provenance/freshness relationships between records such as model specs, runs, artifacts, assumptions, parameters, decisions, AI jobs, BLUECAD attempts and evidence.
 
-The current Python Runner is a minimal local runner for reviewed deterministic scripts only.
+That is useful, but the name collides with the engineering meaning of “process flowsheet”.
 
-It provides:
+Future cleanup should rename that boundary toward `lineage`, `dependency_graph` or `provenance_graph` while preserving compatibility as needed.
 
-- explicit queued job creation;
-- explicit synchronous run call;
-- no shell invocation;
-- no inherited API keys or secrets;
-- controlled working directory under the data root;
-- script SHA-256 recording and validation;
-- timeout;
-- bounded stdout/stderr;
-- bounded output and artifact registration;
-- SimulationRun integration.
+`app/modules/process_kernel/flowsheet.py` is the separate process-topology concept.
 
-It is not a hostile-code sandbox, notebook executor, general Python execution platform, or AI-generated code runner.
+---
 
-## Secrets
+## 12. Obsolete engineering placeholder module
 
-Current secret handling is intentionally narrow.
+`app/modules/engineering` predates much of the current domain implementation and still contains placeholder-era concepts while real engineering behavior now lives in modeling, memory, runner, process, BLUECAD and lineage modules.
 
-- Scaleway app-entered key storage is runtime memory only.
-- Environment variables can provide provider keys.
-- Raw keys must not be returned to the frontend, written to events, stored in AI settings, logged, or copied into docs.
+It should not be preserved for historical reasons. Post-visual-identity cleanup will either:
 
-A persistent Windows credential store or DPAPI-backed store requires a separate design/review milestone.
+- delete it if it has no current consumers; or
+- replace it with a deliberately designed common engineering contract only if that abstraction is required by the evaluator architecture.
 
-## Memory Staging
+A directory name is not a reason to keep an abstraction.
 
-Future memory should move through explicit stages:
+---
+
+## 13. Photobioreactor architecture
+
+The PBR workflow is an iterative design study, not a one-way process-to-CAD pipeline.
+
+### Outer loop: engineer and Jarvis
+
+Jarvis belongs in the outer decision/interpretation loop:
 
 ```text
-raw_input
-fast_intake
-proposed_memory
-enriched_memory
-accepted_memory
-canonical_state
-superseded
+Engineer ⇄ Jarvis
+ goals · constraints · model choice · interpretation · intervention
 ```
 
-Fast intake is intentionally cheap. `FastIntakeSignalForm` is not a final memory object; it is a source-linked signal envelope used to preserve potentially useful input without forcing fine-grained semantic interpretation at write time.
+### Inner loop: reproducible study controller
 
-Gemma may propose broad intake signals or, during later enrichment, candidate memory cards. JarvisOS validates structure and source links, preserves raw input, and controls promotion through explicit policy such as deterministic validation, sampling review, stronger local 31B or API review, direct user decision, repeated use without contradiction, or source-grounded verification. The user should not be required to personally review every routine mechanical memory card once reliability evidence supports more autonomy.
-
-Canonical staged memory intake design lives in:
+The numerical inner loop should be deterministic/reproducible:
 
 ```text
-docs/STAGED_MEMORY_INTAKE.md
+DesignStudy
+  variables + bounds
+  objectives
+  constraints
+  evaluator/fidelity policy
+        ↓
+StudyController
+        ⇅
+DOE / optimizer / search
+        ⇅
+EngineeringEvaluator(s)
+        ⇅
+EvaluationResult + failure/evidence
+        ↓
+Study store / Pareto / feasibility state
 ```
 
-Future `MemoryStore` facade design lives in:
+The optimizer receives evaluation results directly. An LLM should not need to choose the next point for every candidate evaluation.
+
+### Failure taxonomy
+
+At minimum the study layer must distinguish:
+
+- invalid design / constraint violation;
+- invalid geometry;
+- solver/numerical failure;
+- execution/infrastructure failure;
+- successful but infeasible result;
+- feasible result;
+- dominated design;
+- qualified/verified result where an explicit qualification rule applies.
+
+A failed solver is not equivalent to an infeasible physical design.
+
+### Multi-fidelity evaluation
+
+The cheapest adequate evaluator should be used first.
 
 ```text
-docs/MEMORYSTORE_FACADE_DESIGN.md
+analytical / correlation / reduced-order
+              ↓ when unresolved
+higher-fidelity deterministic model
+              ↓ when unresolved
+CFD / specialist high-fidelity backend
 ```
 
-External memory implementation references were audited before 1D:
+CFD is therefore not inherently “after CAD”. It can enter the study as a selected high-fidelity evaluator when mixing, shear, gas transfer, baffle behavior or another field quantity changes the process-design decision.
+
+---
+
+## 14. Process geometry versus detailed CAD
+
+Process design can contain geometric variables before a detailed CAD object exists.
+
+Examples:
+
+- tube diameter;
+- total active length;
+- loop/path count;
+- topology choice;
+- target flow and velocity;
+- gas-injection arrangement at an abstract level;
+- footprint/envelope constraints.
+
+Target handoff:
 
 ```text
-docs/CAVEMEM_CAVEMAN_REFERENCE_AUDIT.md
+ProcessDesignEnvelope
+  process-driving dimensions
+  flows / operating ranges
+  pressure/shear/transfer constraints
+  energy constraints
+  qualification/uncertainty
+        ↓
+DetailedGeometrySpec / physical synthesis
+        ↓
+CAD artifacts
+        ↓
+structural / CFD / manufacturing checks as required
+        ↓
+feedback to DesignStudy when physical checks invalidate assumptions
 ```
 
-Cavemem/Caveman inform future MemoryStore, progressive retrieval, compression
-policy, hook, worker, and viewer design only as patterns. JarvisOS has not
-vendored their code and has not added runtime memory, retrieval, compression,
-MCP, hooks, worker, or viewer behavior from that audit.
+The CAD layer should realize a process design, not silently become the authority that chooses process physics.
 
-Internal compression policy test design lives in:
+---
+
+## 15. Storage and persistence
+
+The FastAPI backend is the durable application boundary.
+
+Current durable state is SQLite-backed. The frontend must use backend APIs and must not directly call providers, local model runtimes, filesystem paths or engineering executables.
+
+Runtime data and repository source remain separate. Current deployment remains Windows-first and local-first.
+
+Events are audit/history records. JarvisOS does not currently claim to be fully event-sourced.
+
+---
+
+## 16. Runner and execution safety
+
+The bounded Python runner is suitable for reviewed deterministic scripts under its current policy. It is not a hostile-code sandbox.
+
+Host-process restrictions, AST checks, bounded working directories, output limits and secret stripping do not create a strong OS isolation boundary.
+
+If future Hermes/MCP/remote-agent behavior can reach executable tools, a fresh sandbox/isolation design and qualification is mandatory before general untrusted code execution is exposed.
+
+---
+
+## 17. Documentation authority
+
+Documentation precedence:
+
+1. current source code + deterministic tests for what is actually implemented;
+2. `docs/specs/STATUS.md` for live queue/state authority;
+3. this file for canonical architecture and known debt;
+4. current full specs/readiness decisions for authorized slice boundaries;
+5. strategy/audit documents for planning evidence;
+6. historical milestone documents for history only.
+
+A README or old strategy statement must not override current source/tests when claiming implementation status.
+
+---
+
+## 18. Post-visual-identity architecture correction
+
+The current functional beta queue remains ahead of the architecture-remediation implementation work. The architecture reconciliation itself is documentation-only and can be merged without opening a second runtime front.
+
+After the current functional queue and global visual identity, the intended correction sequence is:
 
 ```text
-docs/INTERNAL_COMPRESSION_POLICY_TESTS.md
+1. unify canonical-state write semantics and Parameter lifecycle/value-quality semantics
+2. generalize engineering evaluator/evidence contracts
+3. perform zero-sunk-cost process upstream bake-off
+4. replace/delete duplicated custom generic process-solver infrastructure
+5. remove dead placeholder engineering code and resolve flowsheet/lineage naming
+6. implement the selected PBR evaluator architecture
+7. add deterministic StudyController / DOE / optimization inner loop
+8. add explicit ProcessDesignEnvelope → detailed CAD handoff
+9. add multi-fidelity escalation/qualification driven by real PBR decisions
 ```
 
-Compression is optional and later. Compressed text must not replace raw/original
-evidence.
+The exact rows and authorization state live only in `docs/specs/STATUS.md`.
 
-Future SQLite/FTS memory schema design lives in:
-
-```text
-docs/SQLITE_FTS_MEMORY_SCHEMA_DESIGN.md
-```
-
-Future progressive retrieval contract design lives in:
-
-```text
-docs/PROGRESSIVE_RETRIEVAL_CONTRACT_DESIGN.md
-```
-
-## Current Roadmap
-
-The live roadmap is `docs/specs/README.md`. Work items are individual specs
-under `docs/specs/`, executed one per branch/PR.
-
-Current strategic sequence (from the 2026-07 strategy review, see
-`docs/strategy/`):
-
-1. Parameter/assumption schema freeze + Requirement record (spec 001).
-2. Local route smoke matrix + routing eval set (spec 002).
-3. External escalation proposal + user-confirmed execution (spec 003).
-4. Workspace ergonomics and real pilot data entry.
-5. Deterministic source selection, then FTS retrieval (eval set first).
-6. Tool contract + read-only tools; first read-only critic agent role.
-
-The earlier phase-numbered roadmap (`1A–6C`) and milestone names (`0E-*`,
-`1G-*`, `POS-*`, `BRIDGE-*`) are superseded; they remain in historical
-milestone docs as evidence only.
-
-## Canonical References
-
-- Decisions: `docs/DECISIONS.md`
-- Runbooks: `docs/RUNBOOKS.md`
-- Local AI evidence: `docs/LOCAL_AI_EVALUATION_EVIDENCE.md`
-- Form-driven local intelligence: `docs/FORM_DRIVEN_LOCAL_INTELLIGENCE.md`
-- Form protocol catalog: `docs/FORM_PROTOCOL_CATALOG.md`
-- Structural validator retry loop design: `docs/STRUCTURAL_VALIDATOR_RETRY_LOOP_DESIGN.md`
-- Cavemem/Caveman reference audit: `docs/CAVEMEM_CAVEMAN_REFERENCE_AUDIT.md`
-- Local-model-facing showcase files: `docs/LOCAL_MODEL_SHOWCASE_FILES.md`
-- Micro-context design: `docs/MICRO_CONTEXT_DESIGN.md`
-- MemoryStore facade design: `docs/MEMORYSTORE_FACADE_DESIGN.md`
-- Internal compression policy tests: `docs/INTERNAL_COMPRESSION_POLICY_TESTS.md`
-- SQLite/FTS memory schema design: `docs/SQLITE_FTS_MEMORY_SCHEMA_DESIGN.md`
-- Progressive retrieval contract design: `docs/PROGRESSIVE_RETRIEVAL_CONTRACT_DESIGN.md`
-- UI startup: `docs/UI_START.md`
-
-Milestone documents remain historical evidence. If a milestone document conflicts with this file or `DECISIONS.md`, prefer the canonical docs.
+See `docs/strategy/JARVISOS_ARCHITECTURE_RECONCILIATION_2026-08-21.md` for the audit rationale and zero-sunk-cost disposition rules.

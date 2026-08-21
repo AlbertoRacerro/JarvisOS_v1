@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" role="img" aria-labelledby="title desc">
+  <title id="title">JarvisOS high-level architecture</title>
+  <desc id="desc">The engineer and JarvisOS interact bidirectionally. AI and agent runtimes return proposals and responses. Engineering tools return results and evidence. Canonical state changes only through the JarvisOS authority boundary.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#475569"/></marker>
+    <style>.frame{fill:#fff;stroke:#cbd5e1;stroke-width:2}.implemented{fill:#ecfdf5;stroke:#16a34a;stroke-width:2.5}.partial{fill:#fffbeb;stroke:#d97706;stroke-width:2.5}.planned{fill:#eff6ff;stroke:#0284c7;stroke-width:2.5}.optional{fill:#f8fafc;stroke:#64748b;stroke-width:2}.title{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:27px;font-weight:750}.boxTitle{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:19px;font-weight:700}.sub{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;font-size:13px}.tag{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:11px;font-weight:800}.line{stroke:#475569;stroke-width:2.3;fill:none;marker-end:url(#arrow)}</style>
+  </defs>
+  <rect x="30" y="30" width="1140" height="540" rx="22" class="frame"/>
+  <text x="65" y="74" class="title">JarvisOS — authority and data flow</text>
+  <text x="65" y="101" class="sub">Arrows are requests or information flows. Return paths are explicit; external runtimes never write canonical state directly.</text>
+
+  <rect x="65" y="210" width="180" height="120" rx="16" class="implemented"/>
+  <text x="155" y="250" text-anchor="middle" class="boxTitle">Engineer</text>
+  <text x="155" y="279" text-anchor="middle" class="sub">goals · constraints</text>
+  <text x="155" y="302" text-anchor="middle" class="sub">review · final responsibility</text>
+
+  <rect x="355" y="165" width="390" height="210" rx="18" class="implemented"/>
+  <text x="550" y="207" text-anchor="middle" class="boxTitle">JarvisOS authority boundary</text>
+  <text x="550" y="239" text-anchor="middle" class="sub">canonical state · provenance · freshness</text>
+  <text x="550" y="264" text-anchor="middle" class="sub">routing · privacy/egress · budgets · capability gates</text>
+  <text x="550" y="289" text-anchor="middle" class="sub">runs · artifacts · evidence identity</text>
+  <text x="550" y="314" text-anchor="middle" class="sub">commit / promotion transitions</text>
+  <text x="550" y="344" text-anchor="middle" class="tag" fill="#15803d">IMPLEMENTED FOUNDATION · KNOWN WRITE-PATH CLEANUP QUEUED</text>
+
+  <rect x="850" y="120" width="280" height="135" rx="16" class="planned"/>
+  <text x="990" y="160" text-anchor="middle" class="boxTitle">AI / AgentRuntime</text>
+  <text x="990" y="190" text-anchor="middle" class="sub">models · agent sessions · code intelligence</text>
+  <text x="990" y="216" text-anchor="middle" class="sub">current AI routes + future runtime adapters</text>
+  <text x="990" y="238" text-anchor="middle" class="tag" fill="#0369a1">CURRENT + PLANNED</text>
+
+  <rect x="850" y="345" width="280" height="135" rx="16" class="partial"/>
+  <text x="990" y="385" text-anchor="middle" class="boxTitle">Engineering evaluators</text>
+  <text x="990" y="414" text-anchor="middle" class="sub">CAD · mesh · FEM · process · CFD · commercial</text>
+  <text x="990" y="440" text-anchor="middle" class="sub">replaceable numerical/mechanical backends</text>
+  <text x="990" y="462" text-anchor="middle" class="tag" fill="#b45309">MIXED MATURITY</text>
+
+  <path d="M245 245 H355" class="line"/><text x="275" y="231" class="sub">request</text>
+  <path d="M355 303 H245" class="line"/><text x="270" y="325" class="sub">result / explanation</text>
+
+  <path d="M745 210 C790 210 805 185 850 185" class="line"/><text x="770" y="175" class="sub">bounded task + context</text>
+  <path d="M850 225 C805 245 790 255 745 255" class="line"/><text x="770" y="272" class="sub">response / proposal</text>
+
+  <path d="M745 315 C790 315 805 412 850 412" class="line"/><text x="770" y="352" class="sub">authorized execution request</text>
+  <path d="M850 454 C800 505 685 505 650 375" class="line"/><text x="690" y="505" class="sub">results · artifacts · diagnostics · evidence</text>
+
+  <rect x="355" y="455" width="390" height="72" rx="14" class="optional"/>
+  <text x="550" y="483" text-anchor="middle" class="boxTitle">No bypass path</text>
+  <text x="550" y="507" text-anchor="middle" class="sub">AI/agent/tool output returns to JarvisOS before any canonical-state transition.</text>
+</svg>

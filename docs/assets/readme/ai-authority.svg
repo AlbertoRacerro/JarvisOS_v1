@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" role="img" aria-labelledby="title desc">
+  <title id="title">JarvisOS AI authority flow</title>
+  <desc id="desc">AI receives bounded context and returns a response, proposal, or tool intent. JarvisOS policy authorizes execution. Tool results become run and evidence records. Canonical state changes only through an explicit commit or promotion gate, with the human retaining final engineering responsibility.</desc>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#475569"/></marker>
+  <style>.frame{fill:#fff;stroke:#cbd5e1;stroke-width:2}.implemented{fill:#ecfdf5;stroke:#16a34a;stroke-width:2.5}.partial{fill:#fffbeb;stroke:#d97706;stroke-width:2.5}.optional{fill:#f8fafc;stroke:#64748b;stroke-width:2}.title{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:26px;font-weight:750}.boxTitle{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:17px;font-weight:700}.sub{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;font-size:12px}.tag{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:11px;font-weight:800}.line{stroke:#475569;stroke-width:2.2;fill:none;marker-end:url(#arrow)}.dash{stroke:#64748b;stroke-width:2;fill:none;stroke-dasharray:7 6;marker-end:url(#arrow)}</style></defs>
+  <rect x="30" y="30" width="1140" height="500" rx="22" class="frame"/>
+  <text x="65" y="73" class="title">AI is useful without owning project truth</text>
+  <text x="65" y="100" class="sub">The return path matters: every response, proposal and tool result comes back through JarvisOS before canonical state can change.</text>
+
+  <rect x="55" y="155" width="165" height="105" rx="15" class="optional"/>
+  <text x="138" y="188" text-anchor="middle" class="boxTitle">Human / UI</text><text x="138" y="214" text-anchor="middle" class="sub">request · review</text><text x="138" y="237" text-anchor="middle" class="sub">final responsibility</text>
+
+  <rect x="275" y="140" width="190" height="135" rx="15" class="partial"/>
+  <text x="370" y="175" text-anchor="middle" class="boxTitle">AI / agent</text><text x="370" y="202" text-anchor="middle" class="sub">bounded context in</text><text x="370" y="225" text-anchor="middle" class="sub">response / proposal / ToolIntent out</text><text x="370" y="250" text-anchor="middle" class="tag" fill="#b45309">ADVISORY</text>
+
+  <rect x="520" y="130" width="210" height="155" rx="15" class="implemented"/>
+  <text x="625" y="166" text-anchor="middle" class="boxTitle">JarvisOS policy</text><text x="625" y="193" text-anchor="middle" class="sub">capability · privacy/egress</text><text x="625" y="216" text-anchor="middle" class="sub">budget · validation · confirmation</text><text x="625" y="239" text-anchor="middle" class="sub">fail closed</text><text x="625" y="263" text-anchor="middle" class="tag" fill="#15803d">AUTHORIZES EXECUTION</text>
+
+  <rect x="785" y="155" width="160" height="105" rx="15" class="optional"/>
+  <text x="865" y="188" text-anchor="middle" class="boxTitle">Tool / solver</text><text x="865" y="214" text-anchor="middle" class="sub">bounded execution</text><text x="865" y="237" text-anchor="middle" class="sub">may fail or be partial</text>
+
+  <rect x="995" y="155" width="145" height="105" rx="15" class="implemented"/>
+  <text x="1068" y="188" text-anchor="middle" class="boxTitle">Run / evidence</text><text x="1068" y="214" text-anchor="middle" class="sub">result · provenance</text><text x="1068" y="237" text-anchor="middle" class="sub">diagnostics</text>
+
+  <path d="M220 205 H275" class="line"/><path d="M465 205 H520" class="line"/><path d="M730 205 H785" class="line"/><path d="M945 205 H995" class="line"/>
+  <path d="M465 245 C490 315 520 325 560 285" class="line"/><text x="480" y="326" class="sub">proposal returns to JarvisOS</text>
+  <path d="M1068 260 C1068 325 790 340 700 285" class="line"/><text x="850" y="337" class="sub">result/evidence returns</text>
+
+  <rect x="420" y="390" width="250" height="105" rx="15" class="implemented"/>
+  <text x="545" y="425" text-anchor="middle" class="boxTitle">Commit / promotion gate</text><text x="545" y="452" text-anchor="middle" class="sub">explicit transition · provenance · audit</text><text x="545" y="476" text-anchor="middle" class="sub">human-owned in many current flows</text>
+
+  <rect x="760" y="390" width="250" height="105" rx="15" class="implemented"/>
+  <text x="885" y="425" text-anchor="middle" class="boxTitle">Canonical state</text><text x="885" y="452" text-anchor="middle" class="sub">accepted records · project truth</text><text x="885" y="476" text-anchor="middle" class="sub">never a raw AI/tool output</text>
+
+  <path d="M625 285 C625 340 545 340 545 390" class="line"/><path d="M670 443 H760" class="line"/>
+  <path d="M885 390 C885 350 320 350 320 275" class="dash"/><text x="535" y="368" class="sub">accepted context can be supplied back to future AI work</text>
+</svg>
