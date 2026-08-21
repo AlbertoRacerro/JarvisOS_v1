@@ -6,12 +6,18 @@ from pathlib import Path
 
 import pytest
 
+from app.modules.runner import service as runner_service
+from app.modules.runner.guarded_service import (
+    BUNDLED_BLUEREV_PROCESS0_SEMANTIC_LABEL,
+    _bluerev_process0_semantic_contract_path,
+    _is_exact_bundled,
+)
 from app.modules.runner.input_contracts import (
     ModelInputContractV3,
     canonicalize_input_contract,
     parse_stored_input_contract,
 )
-from app.modules.runner.safety import RunnerSafetyError
+from app.modules.runner.safety import RunnerSafetyError, sha256_file
 
 _CONTRACT_PATH = (
     Path(__file__).parents[1]
@@ -51,6 +57,32 @@ def test_schema_v3_semantic_companion_round_trips_canonically() -> None:
         "tube_inner_diameter",
         "tube_outer_diameter",
     }
+
+
+def test_schema_v3_semantic_companion_has_exact_bundled_admission_only() -> None:
+    script_path = runner_service._bluerev_process0_script_path()
+    script_sha = sha256_file(script_path)
+    contract = json.loads(_bluerev_process0_semantic_contract_path().read_text(encoding="utf-8"))
+    _, contract_sha, _ = canonicalize_input_contract(contract)
+    exact = {
+        "script_path": str(script_path),
+        "script_sha256": script_sha,
+        "implementation_kind": runner_service.CALC_V0_IMPLEMENTATION_KIND,
+        "version_label": BUNDLED_BLUEREV_PROCESS0_SEMANTIC_LABEL,
+        "input_contract_sha256": contract_sha,
+    }
+
+    assert _is_exact_bundled(exact) is True
+
+    wrong_label = dict(exact, version_label=runner_service.BUNDLED_BLUEREV_PROCESS0_LABEL)
+    assert _is_exact_bundled(wrong_label) is False
+
+    legacy_contract = json.loads(
+        runner_service._bluerev_process0_contract_path().read_text(encoding="utf-8")
+    )
+    _, legacy_contract_sha, _ = canonicalize_input_contract(legacy_contract)
+    wrong_contract = dict(exact, input_contract_sha256=legacy_contract_sha)
+    assert _is_exact_bundled(wrong_contract) is False
 
 
 @pytest.mark.parametrize(
