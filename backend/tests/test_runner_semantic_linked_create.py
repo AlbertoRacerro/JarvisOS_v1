@@ -249,7 +249,6 @@ def test_schema_v3_run_claim_fails_closed_if_source_becomes_unusable(client: Tes
     )
     assert create.status_code == 201, create.text
     runner_job = create.json()["runner_job"]
-    simulation_run = create.json()["simulation_run"]
     working_dir = Path(str(runner_job["working_dir"]))
     input_file = Path(str(runner_job["input_file"]))
     assert working_dir.exists() is False
