@@ -1,54 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="520" viewBox="0 0 1500 520" role="img" aria-labelledby="title desc">
-  <title id="title">Current BLUECAD to FEM engineering chain</title>
-  <desc id="desc">A current implemented JarvisOS path goes from semantic GeometrySpec through build123d and OpenCascade to STEP, STL and GLB artifacts, then through registry-bound Gmsh and CalculiX adapters into simulation runs, evidence and frontend inspection. Gmsh and CalculiX adapters exist but exact target-host qualification remains a separate gate.</desc>
-  <defs>
-    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#475569"/></marker>
-    <style>
-      .canvas{fill:#ffffff;stroke:#cbd5e1;stroke-width:2}.implemented{fill:#ecfdf5;stroke:#16a34a;stroke-width:2.5}.partial{fill:#fffbeb;stroke:#d97706;stroke-width:2.5}.title{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:29px;font-weight:750}.subtitle{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;font-size:15px}.h2{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:18px;font-weight:700}.body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#334155;font-size:13px}.tiny{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;font-size:11px}.chip{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:10px;font-weight:800;letter-spacing:.35px}.line{stroke:#475569;stroke-width:2.3;fill:none;marker-end:url(#arrow)}
-    </style>
-  </defs>
-  <rect x="24" y="24" width="1452" height="472" rx="26" class="canvas"/>
-  <text x="62" y="70" class="title">One engineering chain that already exists today</text>
-  <text x="62" y="99" class="subtitle">This is a real P2 physical-design path. It is not the whole JarvisOS architecture and it does not make CAD the first BlueRev priority.</text>
-
-  <rect x="54" y="158" width="190" height="112" rx="16" class="implemented"/>
-  <text x="149" y="191" text-anchor="middle" class="h2">GeometrySpec</text>
-  <text x="149" y="217" text-anchor="middle" class="body">semantic CAD input</text>
-  <text x="149" y="245" text-anchor="middle" class="chip" fill="#166534">IMPLEMENTED</text>
-
-  <rect x="276" y="158" width="190" height="112" rx="16" class="implemented"/>
-  <text x="371" y="191" text-anchor="middle" class="h2">build123d / OCP</text>
-  <text x="371" y="217" text-anchor="middle" class="body">B-Rep construction</text>
-  <text x="371" y="245" text-anchor="middle" class="chip" fill="#166534">IMPLEMENTED</text>
-
-  <rect x="498" y="158" width="190" height="112" rx="16" class="implemented"/>
-  <text x="593" y="191" text-anchor="middle" class="h2">Artifacts</text>
-  <text x="593" y="217" text-anchor="middle" class="body">STEP · STL · GLB</text>
-  <text x="593" y="245" text-anchor="middle" class="chip" fill="#166534">IMPLEMENTED</text>
-
-  <rect x="720" y="158" width="190" height="112" rx="16" class="partial"/>
-  <text x="815" y="191" text-anchor="middle" class="h2">Gmsh adapter</text>
-  <text x="815" y="217" text-anchor="middle" class="body">mesh · groups · quality</text>
-  <text x="815" y="245" text-anchor="middle" class="chip" fill="#92400e">BUILT / QUALIFY</text>
-
-  <rect x="942" y="158" width="190" height="112" rx="16" class="partial"/>
-  <text x="1037" y="191" text-anchor="middle" class="h2">CalculiX adapter</text>
-  <text x="1037" y="217" text-anchor="middle" class="body">static FEM · result parse</text>
-  <text x="1037" y="245" text-anchor="middle" class="chip" fill="#92400e">BUILT / QUALIFY</text>
-
-  <rect x="1164" y="158" width="280" height="112" rx="16" class="implemented"/>
-  <text x="1304" y="191" text-anchor="middle" class="h2">Runs + evidence + UI</text>
-  <text x="1304" y="217" text-anchor="middle" class="body">artifacts · provenance · criteria</text>
-  <text x="1304" y="245" text-anchor="middle" class="chip" fill="#166534">IMPLEMENTED SPINE</text>
-
-  <path d="M244 214 H276" class="line"/>
-  <path d="M466 214 H498" class="line"/>
-  <path d="M688 214 H720" class="line"/>
-  <path d="M910 214 H942" class="line"/>
-  <path d="M1132 214 H1164" class="line"/>
-
-  <rect x="284" y="334" width="932" height="104" rx="18" class="partial"/>
-  <text x="750" y="366" text-anchor="middle" class="h2">Qualification is intentionally separate from implementation</text>
-  <text x="750" y="393" text-anchor="middle" class="body">External numerical tools stay disabled by safe default until an operator binds exact executable, version, provenance and hash.</text>
-  <text x="750" y="418" text-anchor="middle" class="body">A working adapter proves integration. Real BlueRev cases and independent benchmarks still have to prove engineering usefulness.</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="430" viewBox="0 0 1200 430" role="img" aria-labelledby="title desc">
+  <title id="title">Current CAD to FEM engineering chain</title>
+  <desc id="desc">Current implemented physical-design path from GeometrySpec through build123d and OpenCascade to artifacts, Gmsh, CalculiX, runs and evidence.</desc>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#475569"/></marker>
+  <style>.frame{fill:#fff;stroke:#cbd5e1;stroke-width:2}.implemented{fill:#ecfdf5;stroke:#16a34a;stroke-width:2.4}.partial{fill:#fffbeb;stroke:#d97706;stroke-width:2.4}.title{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:26px;font-weight:750}.boxTitle{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:17px;font-weight:700}.sub{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;font-size:12px}.tag{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:11px;font-weight:800}.line{stroke:#475569;stroke-width:2.3;fill:none;marker-end:url(#arrow)}</style></defs>
+  <rect x="30" y="30" width="1140" height="370" rx="22" class="frame"/>
+  <text x="65" y="73" class="title">A physical-design path that already exists</text>
+  <text x="65" y="100" class="sub">Useful current infrastructure — not a claim that every engineering workflow should begin with CAD.</text>
+  <rect x="55" y="155" width="145" height="100" rx="14" class="implemented"/><text x="128" y="188" text-anchor="middle" class="boxTitle">GeometrySpec</text><text x="128" y="214" text-anchor="middle" class="sub">semantic CAD input</text><text x="128" y="239" text-anchor="middle" class="tag" fill="#15803d">WORKING</text>
+  <rect x="235" y="155" width="155" height="100" rx="14" class="implemented"/><text x="313" y="188" text-anchor="middle" class="boxTitle">build123d / OCCT</text><text x="313" y="214" text-anchor="middle" class="sub">B-Rep geometry</text><text x="313" y="239" text-anchor="middle" class="tag" fill="#15803d">WORKING</text>
+  <rect x="425" y="155" width="145" height="100" rx="14" class="implemented"/><text x="498" y="188" text-anchor="middle" class="boxTitle">Artifacts</text><text x="498" y="214" text-anchor="middle" class="sub">STEP · STL · GLB</text><text x="498" y="239" text-anchor="middle" class="tag" fill="#15803d">WORKING</text>
+  <rect x="605" y="155" width="135" height="100" rx="14" class="partial"/><text x="673" y="188" text-anchor="middle" class="boxTitle">Gmsh</text><text x="673" y="214" text-anchor="middle" class="sub">mesh · groups</text><text x="673" y="239" text-anchor="middle" class="tag" fill="#b45309">QUALIFY</text>
+  <rect x="775" y="155" width="135" height="100" rx="14" class="partial"/><text x="843" y="188" text-anchor="middle" class="boxTitle">CalculiX</text><text x="843" y="214" text-anchor="middle" class="sub">static FEM</text><text x="843" y="239" text-anchor="middle" class="tag" fill="#b45309">QUALIFY</text>
+  <rect x="945" y="155" width="190" height="100" rx="14" class="implemented"/><text x="1040" y="188" text-anchor="middle" class="boxTitle">Runs + evidence</text><text x="1040" y="214" text-anchor="middle" class="sub">results · provenance · UI</text><text x="1040" y="239" text-anchor="middle" class="tag" fill="#15803d">WORKING SPINE</text>
+  <path d="M200 205 H235" class="line"/><path d="M390 205 H425" class="line"/><path d="M570 205 H605" class="line"/><path d="M740 205 H775" class="line"/><path d="M910 205 H945" class="line"/>
+  <rect x="300" y="305" width="600" height="55" rx="14" class="partial"/>
+  <text x="600" y="329" text-anchor="middle" class="sub">Gmsh and CalculiX adapters exist; exact executable/host qualification and scientific validation remain separate gates.</text>
+  <text x="600" y="350" text-anchor="middle" class="sub">The point is to keep this path and harden it, not rebuild it from scratch.</text>
 </svg>
