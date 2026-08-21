@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import unicodedata
 from collections.abc import Callable
 from math import isfinite
 from typing import Any, Literal, TypeAlias
@@ -18,7 +19,7 @@ from app.modules.runner.models import (
 from app.modules.runner.safety import RunnerSafetyError, canonical_json
 
 _VARIABLE_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
-_SEMANTIC_KEY = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
+_SEMANTIC_KEY = _VARIABLE_NAME
 _CATEGORIES = Literal["design", "operating", "property", "model_parameter", "equipment"]
 
 
@@ -119,10 +120,8 @@ class SemanticContextV3(BaseModel):
 
     @field_validator("model_family_label", "model_option_label")
     @classmethod
-    def no_edge_whitespace(cls, value: str) -> str:
-        if value != value.strip():
-            raise ValueError("semantic labels cannot have leading or trailing whitespace")
-        return value
+    def valid_semantic_label(cls, value: str) -> str:
+        return _validate_semantic_label(value, field_name="semantic label")
 
 
 class InputVariableV3(InputVariableV2):
@@ -133,10 +132,8 @@ class InputVariableV3(InputVariableV2):
 
     @field_validator("property_group")
     @classmethod
-    def property_group_no_edge_whitespace(cls, value: str) -> str:
-        if value != value.strip():
-            raise ValueError("property_group cannot have leading or trailing whitespace")
-        return value
+    def valid_property_group(cls, value: str) -> str:
+        return _validate_semantic_label(value, field_name="property_group")
 
     @field_validator("applicable_part_kinds")
     @classmethod
@@ -395,6 +392,18 @@ def _require_unique_semantic_keys(values: list[str], *, field_name: str) -> None
         raise ValueError(f"{field_name} values must be unique")
     if any(not _SEMANTIC_KEY.fullmatch(value) for value in values):
         raise ValueError(f"{field_name} values must be stable identifiers")
+
+
+def _validate_semantic_label(value: str, *, field_name: str) -> str:
+    if unicodedata.normalize("NFC", value) != value:
+        raise ValueError(f"{field_name} must already be NFC-normalized")
+    if value != value.strip():
+        raise ValueError(f"{field_name} cannot have leading or trailing whitespace")
+    if any(character in "\r\n\t" for character in value):
+        raise ValueError(f"{field_name} must be single-line")
+    if any(unicodedata.category(character) in {"Cc", "Cf"} for character in value):
+        raise ValueError(f"{field_name} cannot contain control or format characters")
+    return value
 
 
 def _validate_v1_binding(
