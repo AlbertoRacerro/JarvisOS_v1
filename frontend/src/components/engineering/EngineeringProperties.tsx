@@ -339,7 +339,6 @@ export function useEngineeringProperties(
   );
   const selected = useMemo(() => eligible.find((item) => item.id === selectedId) ?? null, [eligible, selectedId]);
   const variables = selected?.input_contract?.variables ?? [];
-  const selectedSemanticContract = useMemo(() => semanticContractOf(selected), [selected]);
   const semanticContract = useMemo(() => reviewedContractForTarget(selected, semanticTarget), [selected, semanticTarget]);
 
   useEffect(() => {
@@ -510,11 +509,7 @@ export function useEngineeringProperties(
       setPreviewMessage("Resolve the previous object's unsaved changes before preflight or Run for the selected object.");
       return;
     }
-    if (
-      selectedSemanticContract?.semantic_context.model_family_key === REVIEWED_FAMILY_KEY &&
-      semanticTarget &&
-      semanticAdoptedContextKey !== currentSemanticTargetKey
-    ) {
+    if (semanticContract && semanticTarget && semanticAdoptedContextKey !== currentSemanticTargetKey) {
       previewGeneration.current += 1;
       setPreview(null);
       setPreviewPhase("unavailable");
@@ -683,7 +678,7 @@ export function useEngineeringProperties(
       !selected ||
       runBusy ||
       semanticPhase === "conflict" ||
-      (selectedSemanticContract?.semantic_context.model_family_key === REVIEWED_FAMILY_KEY && semanticTarget && semanticAdoptedContextKey !== currentSemanticTargetKey) ||
+      (semanticContract && semanticTarget && semanticAdoptedContextKey !== currentSemanticTargetKey) ||
       previewPhase !== "ready" ||
       preview?.state !== "ready" ||
       !preview.normalized_input_set ||
@@ -889,7 +884,6 @@ export function EngineeringPropertiesPanel({
             <dl className="details">
               <div><dt>Parameter</dt><dd>{linkedParameter?.name ?? "Unavailable source record"}</dd></div>
               <div><dt>Status</dt><dd>{linkedParameter?.status ?? "unavailable"}</dd></div>
-              <div><dt>Record ID</dt><dd>{binding.parameterId}</dd></div>
             </dl>
             {navigate ? (
               <button
