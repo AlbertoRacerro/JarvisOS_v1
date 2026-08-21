@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="430" viewBox="0 0 1200 430" role="img" aria-labelledby="title desc">
+  <title id="title">Current BLUECAD to FEM engineering chain</title>
+  <desc id="desc">The current implemented path goes from GeometrySpec through build123d and OpenCascade to engineering artifacts, Gmsh mesh generation, CalculiX static FEM, simulation runs and typed evidence, then back to frontend inspection.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#475569"/></marker>
+    <style>
+      .box{fill:#f8fafc;stroke:#475569;stroke-width:2;rx:14}.keep{fill:#ecfdf5;stroke:#15803d;stroke-width:2.5;rx:14}.txt{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:18px;font-weight:650}.sub{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;font-size:13px}.label{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#166534;font-size:13px;font-weight:800}.line{stroke:#475569;stroke-width:2.4;fill:none;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect x="30" y="30" width="1140" height="370" rx="22" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="65" y="73" class="txt" font-size="26">Current engineering path already present in JarvisOS</text>
+  <text x="65" y="100" class="sub">This is an incumbent to keep, qualify and extend — not the reason CAD outranks process simulation for BlueRev.</text>
+
+  <rect x="55" y="155" width="140" height="100" class="keep"/><text x="125" y="188" text-anchor="middle" class="txt">GeometrySpec</text><text x="125" y="215" text-anchor="middle" class="sub">semantic CAD input</text><text x="125" y="240" text-anchor="middle" class="label">WORKING</text>
+  <rect x="230" y="155" width="150" height="100" class="keep"/><text x="305" y="188" text-anchor="middle" class="txt">build123d</text><text x="305" y="213" text-anchor="middle" class="sub">OCP / OpenCascade</text><text x="305" y="240" text-anchor="middle" class="label">WORKING</text>
+  <rect x="415" y="155" width="140" height="100" class="keep"/><text x="485" y="188" text-anchor="middle" class="txt">Artifacts</text><text x="485" y="213" text-anchor="middle" class="sub">STEP · STL · GLB</text><text x="485" y="240" text-anchor="middle" class="label">WORKING</text>
+  <rect x="590" y="155" width="140" height="100" class="box"/><text x="660" y="188" text-anchor="middle" class="txt">Gmsh</text><text x="660" y="213" text-anchor="middle" class="sub">mesh · groups</text><text x="660" y="240" text-anchor="middle" class="label">ADAPTER BUILT</text>
+  <rect x="765" y="155" width="140" height="100" class="box"/><text x="835" y="188" text-anchor="middle" class="txt">CalculiX</text><text x="835" y="213" text-anchor="middle" class="sub">static FEM</text><text x="835" y="240" text-anchor="middle" class="label">ADAPTER BUILT</text>
+  <rect x="940" y="155" width="195" height="100" class="keep"/><text x="1037" y="188" text-anchor="middle" class="txt">Runs + evidence</text><text x="1037" y="213" text-anchor="middle" class="sub">results · provenance · UI</text><text x="1037" y="240" text-anchor="middle" class="label">WORKING SPINE</text>
+
+  <path d="M195 205 H230" class="line"/><path d="M380 205 H415" class="line"/><path d="M555 205 H590" class="line"/><path d="M730 205 H765" class="line"/><path d="M905 205 H940" class="line"/>
+
+  <rect x="330" y="305" width="540" height="55" class="box"/>
+  <text x="600" y="329" text-anchor="middle" class="sub">External numerical tools stay disabled by safe default until exact executable/version/hash qualification.</text>
+  <text x="600" y="350" text-anchor="middle" class="sub">Implementation exists; target-host qualification and real BlueRev validation are separate gates.</text>
+</svg>
