@@ -172,7 +172,7 @@ function EngineeringData({ workspaceId, onWorkspaceChange, navigate }: Props) {
       return;
     }
     setQuery("");
-    setSelectedKey(recordKey({ kind: "parameter", id: exact.id, workspaceId: exact.workspace_id, primary: exact.name, secondary: exact.symbol ?? exact.unit ?? "", status: exact.status, record: exact }));
+    setSelectedKey(recordKey({ kind: "parameter", id: exact.id }));
   }, [sourceParameterId, parametersState, parameters, workspaceId]);
 
   const projected = useMemo(() => projectEngineeringData({ modelSpecs, assumptions, parameters, decisions }), [modelSpecs, assumptions, parameters, decisions]);
