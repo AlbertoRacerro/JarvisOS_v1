@@ -311,7 +311,7 @@ The following merged work remains historical evidence and can continue to suppor
 - 072 explicit topology experiment;
 - 075 custom process kernel.
 
-Spec 078 PBR-MODELING-0 remains planning evidence only. Before implementation, it must be freshly re-derived against the 103 upstream bake-off and 106 evaluator contract rather than assuming that the current custom process kernel is the target runtime.
+Spec 078 PBR-MODELING-0 is **cancelled as a standalone implementation identity**. Its merged planning and scientific-evidence material remains historical/incumbent input to the 103 bake-off and the future PBR work, but it cannot become `ready`, `in_progress` or `in_review`. **107 PBR-EVALUATOR-1 is the sole future integrated PBR evaluator implementation identity after 103/106.**
 
 Spec 093 BLUEREV-SERIAL-TOPOLOGY-0 should also be re-evaluated after the process-design abstraction is established; topology must not become detailed-CAD authority prematurely.
 
