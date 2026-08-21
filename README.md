@@ -1,18 +1,14 @@
-<div align="center">
+<h1 align="center">JarvisOS</h1>
 
-# JarvisOS
+<h3 align="center">A personal, local-first AI engineering workspace</h3>
 
-### A personal, local-first AI engineering workspace
+<p align="center"><strong>Can a chemical engineering student with almost no traditional software background use AI to build a genuinely useful engineering environment?</strong></p>
 
-**Can a chemical engineering student with almost no traditional software background use AI to build a genuinely useful engineering environment?**
+<p align="center">That is the experiment.</p>
 
-That is the experiment.
+<p align="center"><code>local-first</code> · <code>process-first</code> · <code>evidence-first</code> · <code>tool-independent</code> · <code>source-available</code></p>
 
-`local-first` · `process-first` · `evidence-first` · `tool-independent` · `source-available`
-
-[Why](#why-im-building-it) · [BlueRev](#bluerev-the-first-real-engineering-target) · [What works](#what-works-today) · [Architecture](#how-jarvisos-is-supposed-to-work) · [Roadmap](#roadmap) · [Technical details](#for-technical-readers) · [License](#source-availability-and-licensing)
-
-</div>
+<p align="center"><a href="#why-im-building-it">Why</a> · <a href="#bluerev-the-first-real-engineering-target">BlueRev</a> · <a href="#what-works-today">What works</a> · <a href="#how-jarvisos-is-supposed-to-work">Architecture</a> · <a href="#roadmap">Roadmap</a> · <a href="#for-technical-readers">Technical details</a> · <a href="#source-availability-and-licensing">License</a></p>
 
 > **Short version:** JarvisOS is my attempt to connect AI, engineering models, CAD, numerical solvers, project memory and evidence into one controlled workspace. I am not trying to rebuild Fusion, Aspen HYSYS, ANSYS or every professional tool from scratch. I am trying to make the pieces work together, keep control of the data and workflow, and use the best backend for each problem.
 
