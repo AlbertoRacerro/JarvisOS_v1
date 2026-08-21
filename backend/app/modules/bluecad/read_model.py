@@ -5,6 +5,7 @@ from __future__ import annotations  # noqa: I001
 import collections
 from decimal import Decimal, InvalidOperation
 import json
+import math
 from pathlib import Path
 import sqlite3
 import typing
@@ -77,22 +78,18 @@ class BluecadReadDiagnostic(BaseModel):
 
 
 class BluecadSemanticBindingRead(BaseModel):
-    name: str
-    value: str
-    unit: str
+    value: float
+    unit: typing.Literal["m", "mm"]
     source_parameter_id: str
 
 
 class BluecadSemanticSourceRead(BaseModel):
+    schema_version: typing.Literal[1] = 1
     kind: typing.Literal["cad_link_047_m0"]
-    link_id: str
-    transformation_version: str
+    transformation_version: typing.Literal["bluerev_047_m0_tube_proxy_v0_1"]
     source_simulation_run_id: str
-    source_runner_job_id: str
     source_model_version_id: str
-    source_snapshot_digest: str
-    source_model_identity_digest: str
-    bindings: list[BluecadSemanticBindingRead]
+    geometry_bindings: dict[str, BluecadSemanticBindingRead]
 
 
 class BluecadCandidateAggregateRead(BaseModel):
@@ -123,6 +120,17 @@ _GRAPH_DIAGNOSTIC_MAP: dict[str, ReadDiagnosticCode] = {
     "payload_reference_invalid": "malformed_reference",
     "context_manifest_invalid": "malformed_reference",
 }
+_SEMANTIC_SOURCE_MESSAGES: dict[ReadDiagnosticCode, str] = {
+    "missing_reference": "Reviewed-047 semantic source references a missing canonical record.",
+    "inaccessible_reference": "Reviewed-047 semantic source references data inaccessible in this workspace.",
+    "malformed_reference": "Reviewed-047 semantic source provenance is malformed or ambiguous.",
+    "unsupported_reference": "",
+}
+_SEMANTIC_SOURCE_PRECEDENCE: tuple[ReadDiagnosticCode, ...] = (
+    "inaccessible_reference",
+    "missing_reference",
+    "malformed_reference",
+)
 
 
 def get_bluecad_candidate_aggregate(
@@ -199,21 +207,23 @@ def _aggregate_from_connection(
 def _semantic_source_diagnostic(
     diagnostics: list[BluecadReadDiagnostic],
     candidate_id: str,
-    message: str,
-    *,
-    code: ReadDiagnosticCode = "malformed_reference",
+    defects: set[ReadDiagnosticCode],
 ) -> None:
-    diagnostics.append(
-        BluecadReadDiagnostic(
-            code=code,
-            source="bluecad.semantic_source",
-            reference=f"bluecad_candidate:{candidate_id}",
-            message=message,
+    for code in _SEMANTIC_SOURCE_PRECEDENCE:
+        if code not in defects:
+            continue
+        diagnostics.append(
+            BluecadReadDiagnostic(
+                code=code,
+                source="bluecad.semantic_source",
+                reference=f"bluecad_candidate:{candidate_id}",
+                message=_SEMANTIC_SOURCE_MESSAGES[code],
+            )
         )
-    )
+        return
 
 
-def _decimal_snapshot_value(value: object) -> tuple[str, Decimal] | None:
+def _decimal_snapshot_value(value: object) -> tuple[float, Decimal] | None:
     if not isinstance(value, str) or not value or value.strip() != value:
         return None
     try:
@@ -222,7 +232,10 @@ def _decimal_snapshot_value(value: object) -> tuple[str, Decimal] | None:
         return None
     if not parsed.is_finite():
         return None
-    return value, parsed
+    number = float(parsed)
+    if not math.isfinite(number) or (parsed != 0 and number == 0.0):
+        return None
+    return number, parsed
 
 
 def _load_semantic_source(
@@ -231,207 +244,188 @@ def _load_semantic_source(
     candidate_id: str,
     diagnostics: list[BluecadReadDiagnostic],
 ) -> BluecadSemanticSourceRead | None:
-    """Project the exact canonical reviewed-047 CAD-link source without inferring object semantics."""
+    """Project exact candidate-level reviewed-047 provenance; selected-part eligibility remains frontend-owned."""
     rows = connection.execute(
         """
         SELECT *
         FROM bluecad_cad_links
-        WHERE workspace_id = ? AND child_candidate_id = ?
+        WHERE workspace_id = ?
+          AND child_candidate_id = ?
+          AND transformation_version = ?
         ORDER BY created_at, id
         """,
-        (workspace_id, candidate_id),
+        (workspace_id, candidate_id, TRANSFORMATION_VERSION),
     ).fetchall()
     if not rows:
         return None
     if len(rows) != 1:
-        _semantic_source_diagnostic(
-            diagnostics,
-            candidate_id,
-            "Candidate semantic provenance is ambiguous across canonical CAD-link records.",
-        )
+        _semantic_source_diagnostic(diagnostics, candidate_id, {"malformed_reference"})
         return None
 
     link = rows[0]
-    if str(link["transformation_version"]) != TRANSFORMATION_VERSION:
-        return None
+    defects: set[ReadDiagnosticCode] = set()
 
     source_run_id = str(link["source_simulation_run_id"] or "")
     source_job_id = str(link["source_runner_job_id"] or "")
     if not source_run_id or not source_job_id:
-        _semantic_source_diagnostic(
-            diagnostics,
-            candidate_id,
-            "Reviewed-047 CAD-link provenance is missing its canonical source run or runner job.",
-        )
-        return None
+        defects.add("missing_reference")
 
-    run = connection.execute(
-        "SELECT id, workspace_id, model_version_id, status FROM simulation_runs WHERE id = ? AND workspace_id = ?",
-        (source_run_id, workspace_id),
-    ).fetchone()
-    job = connection.execute(
-        "SELECT * FROM runner_jobs WHERE id = ? AND workspace_id = ? AND simulation_run_id = ?",
-        (source_job_id, workspace_id, source_run_id),
-    ).fetchone()
-    if run is None or job is None or str(run["status"]) != "succeeded" or str(job["status"]) != "succeeded":
-        _semantic_source_diagnostic(
-            diagnostics,
-            candidate_id,
-            "Reviewed-047 CAD-link source execution is missing or no longer a succeeded canonical source.",
-            code="inaccessible_reference",
-        )
-        return None
+    run = None
+    if source_run_id:
+        run = connection.execute(
+            "SELECT * FROM simulation_runs WHERE id = ?",
+            (source_run_id,),
+        ).fetchone()
+        if run is None:
+            defects.add("missing_reference")
+        elif str(run["workspace_id"]) != workspace_id:
+            defects.add("inaccessible_reference")
+        elif str(run["status"]) != "succeeded":
+            defects.add("malformed_reference")
 
-    model_version_id = str(run["model_version_id"] or "")
-    if not model_version_id:
-        _semantic_source_diagnostic(
-            diagnostics,
-            candidate_id,
-            "Reviewed-047 CAD-link source run has no canonical model identity.",
-        )
-        return None
-    model = connection.execute(
-        """
-        SELECT mv.*, a.sha256 AS script_sha256
-        FROM model_versions mv
-        JOIN artifacts a ON a.id = mv.implementation_artifact_id
-        WHERE mv.id = ? AND mv.workspace_id = ? AND a.workspace_id = ?
-        """,
-        (model_version_id, workspace_id, workspace_id),
-    ).fetchone()
-    if model is None:
-        _semantic_source_diagnostic(
-            diagnostics,
-            candidate_id,
-            "Reviewed-047 CAD-link source model identity is inaccessible in this workspace.",
-            code="inaccessible_reference",
-        )
-        return None
-    try:
-        current_identity = _verify_model_identity(model, job)
-    except CadLinkError:
-        _semantic_source_diagnostic(
-            diagnostics,
-            candidate_id,
-            "CAD-link source model does not satisfy the exact reviewed-047 identity contract.",
-        )
-        return None
+    job = None
+    if source_job_id:
+        job = connection.execute(
+            "SELECT * FROM runner_jobs WHERE id = ?",
+            (source_job_id,),
+        ).fetchone()
+        if job is None:
+            defects.add("missing_reference")
+        elif str(job["workspace_id"]) != workspace_id:
+            defects.add("inaccessible_reference")
+        else:
+            if source_run_id and str(job["simulation_run_id"]) != source_run_id:
+                defects.add("malformed_reference")
+            if str(job["status"]) != "succeeded":
+                defects.add("malformed_reference")
 
+    model_version_id = ""
+    if run is not None:
+        model_version_id = str(run["model_version_id"] or "")
+        if not model_version_id:
+            defects.add("missing_reference")
+
+    model = None
+    model_with_digest = None
+    if model_version_id:
+        model = connection.execute(
+            "SELECT * FROM model_versions WHERE id = ?",
+            (model_version_id,),
+        ).fetchone()
+        if model is None:
+            defects.add("missing_reference")
+        elif str(model["workspace_id"]) != workspace_id:
+            defects.add("inaccessible_reference")
+        else:
+            implementation_artifact_id = str(model["implementation_artifact_id"] or "")
+            if not implementation_artifact_id:
+                defects.add("missing_reference")
+            else:
+                artifact = connection.execute(
+                    "SELECT id, workspace_id, sha256 FROM artifacts WHERE id = ?",
+                    (implementation_artifact_id,),
+                ).fetchone()
+                if artifact is None:
+                    defects.add("missing_reference")
+                elif str(artifact["workspace_id"]) != workspace_id:
+                    defects.add("inaccessible_reference")
+                else:
+                    model_with_digest = connection.execute(
+                        """
+                        SELECT mv.*, a.sha256 AS script_sha256
+                        FROM model_versions mv
+                        JOIN artifacts a ON a.id = mv.implementation_artifact_id
+                        WHERE mv.id = ? AND mv.workspace_id = ? AND a.workspace_id = ?
+                        """,
+                        (model_version_id, workspace_id, workspace_id),
+                    ).fetchone()
+
+    current_identity: dict[str, typing.Any] | None = None
+    if model_with_digest is not None and job is not None and str(job["workspace_id"]) == workspace_id:
+        try:
+            current_identity = _verify_model_identity(model_with_digest, job)
+        except CadLinkError:
+            defects.add("malformed_reference")
+
+    stored_identity: object = None
+    snapshot: object = None
     try:
         stored_identity = json.loads(str(link["source_model_identity_json"]))
         snapshot = json.loads(str(link["source_snapshot_json"]))
     except (json.JSONDecodeError, TypeError, ValueError):
-        _semantic_source_diagnostic(
-            diagnostics,
-            candidate_id,
-            "Reviewed-047 CAD-link semantic provenance payload is malformed.",
-        )
-        return None
-    if not isinstance(stored_identity, dict) or stored_identity != current_identity:
-        _semantic_source_diagnostic(
-            diagnostics,
-            candidate_id,
-            "Stored CAD-link model provenance does not match the exact reviewed-047 source identity.",
-        )
-        return None
-    if str(link["source_model_identity_digest"] or "") != _digest(stored_identity):
-        _semantic_source_diagnostic(
-            diagnostics,
-            candidate_id,
-            "Stored CAD-link model provenance digest is inconsistent.",
-        )
-        return None
-    if not isinstance(snapshot, dict) or set(snapshot) != set(GEOMETRY_INPUTS):
-        _semantic_source_diagnostic(
-            diagnostics,
-            candidate_id,
-            "Reviewed-047 CAD-link geometry source snapshot is malformed.",
-        )
-        return None
-    if str(link["source_snapshot_digest"] or "") != _digest(snapshot):
-        _semantic_source_diagnostic(
-            diagnostics,
-            candidate_id,
-            "Reviewed-047 CAD-link geometry source snapshot digest is inconsistent.",
-        )
-        return None
+        defects.add("malformed_reference")
 
-    bindings: list[BluecadSemanticBindingRead] = []
-    parameter_ids: set[str] = set()
-    for name in GEOMETRY_INPUTS:
-        item = snapshot.get(name)
-        if not isinstance(item, dict):
-            _semantic_source_diagnostic(
-                diagnostics,
-                candidate_id,
-                "Reviewed-047 CAD-link geometry source snapshot contains a malformed binding.",
-            )
-            return None
-        parameter_ref = item.get("parameter_ref")
-        if not isinstance(parameter_ref, str) or not parameter_ref.startswith("parameter:"):
-            _semantic_source_diagnostic(
-                diagnostics,
-                candidate_id,
-                "Reviewed-047 CAD-link geometry binding has no canonical source Parameter reference.",
-            )
-            return None
-        parameter_id = parameter_ref.removeprefix("parameter:")
-        if not parameter_id or parameter_id in parameter_ids:
-            _semantic_source_diagnostic(
-                diagnostics,
-                candidate_id,
-                "Reviewed-047 CAD-link geometry bindings contain an invalid source Parameter identity.",
-            )
-            return None
-        parameter_ids.add(parameter_id)
-        expected_unit = "m" if name == "tube_length" else "mm"
-        if item.get("unit") != expected_unit or item.get("status") != "accepted" or item.get("freshness") != "fresh":
-            _semantic_source_diagnostic(
-                diagnostics,
-                candidate_id,
-                "Reviewed-047 CAD-link geometry binding metadata is inconsistent with the canonical source snapshot.",
-            )
-            return None
-        executed = _decimal_snapshot_value(item.get("executed_value"))
-        current = _decimal_snapshot_value(item.get("current_value"))
-        if executed is None or current is None or executed[1] != current[1]:
-            _semantic_source_diagnostic(
-                diagnostics,
-                candidate_id,
-                "Reviewed-047 CAD-link geometry binding contains an invalid immutable source value.",
-            )
-            return None
-        parameter = connection.execute(
-            "SELECT id, unit FROM parameters WHERE id = ? AND workspace_id = ?",
-            (parameter_id, workspace_id),
-        ).fetchone()
-        if parameter is None or str(parameter["unit"]) != expected_unit:
-            _semantic_source_diagnostic(
-                diagnostics,
-                candidate_id,
-                "A canonical CAD-link source Parameter is missing or has incompatible units.",
-                code="inaccessible_reference",
-            )
-            return None
-        bindings.append(
-            BluecadSemanticBindingRead(
-                name=name,
-                value=executed[0],
-                unit=expected_unit,
-                source_parameter_id=parameter_id,
-            )
-        )
+    if not isinstance(stored_identity, dict):
+        defects.add("malformed_reference")
+    else:
+        if current_identity is not None and stored_identity != current_identity:
+            defects.add("malformed_reference")
+        if str(link["source_model_identity_digest"] or "") != _digest(stored_identity):
+            defects.add("malformed_reference")
+
+    geometry_bindings: dict[str, BluecadSemanticBindingRead] = {}
+    if not isinstance(snapshot, dict) or set(snapshot) != set(GEOMETRY_INPUTS):
+        defects.add("malformed_reference")
+    else:
+        if str(link["source_snapshot_digest"] or "") != _digest(snapshot):
+            defects.add("malformed_reference")
+        parameter_ids: set[str] = set()
+        for name in GEOMETRY_INPUTS:
+            item = snapshot.get(name)
+            if not isinstance(item, dict):
+                defects.add("malformed_reference")
+                continue
+            parameter_ref = item.get("parameter_ref")
+            if not isinstance(parameter_ref, str) or not parameter_ref.startswith("parameter:"):
+                defects.add("malformed_reference")
+                continue
+            parameter_id = parameter_ref.removeprefix("parameter:")
+            if not parameter_id or parameter_id in parameter_ids:
+                defects.add("malformed_reference")
+                continue
+            parameter_ids.add(parameter_id)
+
+            expected_unit = "m" if name == "tube_length" else "mm"
+            if item.get("unit") != expected_unit or item.get("status") != "accepted" or item.get("freshness") != "fresh":
+                defects.add("malformed_reference")
+
+            executed = _decimal_snapshot_value(item.get("executed_value"))
+            current = _decimal_snapshot_value(item.get("current_value"))
+            if executed is None or current is None or executed[1] != current[1]:
+                defects.add("malformed_reference")
+
+            parameter = connection.execute(
+                "SELECT id, workspace_id, unit FROM parameters WHERE id = ?",
+                (parameter_id,),
+            ).fetchone()
+            if parameter is None:
+                defects.add("missing_reference")
+            elif str(parameter["workspace_id"]) != workspace_id:
+                defects.add("inaccessible_reference")
+            elif str(parameter["unit"]) != expected_unit:
+                defects.add("malformed_reference")
+
+            if executed is not None:
+                geometry_bindings[name] = BluecadSemanticBindingRead(
+                    value=executed[0],
+                    unit=expected_unit,
+                    source_parameter_id=parameter_id,
+                )
+
+    if defects:
+        _semantic_source_diagnostic(diagnostics, candidate_id, defects)
+        return None
+    if run is None or model is None or len(geometry_bindings) != len(GEOMETRY_INPUTS):
+        _semantic_source_diagnostic(diagnostics, candidate_id, {"malformed_reference"})
+        return None
 
     return BluecadSemanticSourceRead(
+        schema_version=1,
         kind="cad_link_047_m0",
-        link_id=str(link["id"]),
         transformation_version=TRANSFORMATION_VERSION,
         source_simulation_run_id=source_run_id,
-        source_runner_job_id=source_job_id,
         source_model_version_id=model_version_id,
-        source_snapshot_digest=str(link["source_snapshot_digest"]),
-        source_model_identity_digest=str(link["source_model_identity_digest"]),
-        bindings=bindings,
+        geometry_bindings=geometry_bindings,
     )
 
 
