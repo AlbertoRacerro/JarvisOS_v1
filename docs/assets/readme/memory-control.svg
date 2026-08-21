@@ -1,66 +1,49 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="650" viewBox="0 0 1200 650" role="img" aria-labelledby="title desc">
-  <title id="title">JarvisOS control and memory layers</title>
-  <desc id="desc">Jarvis authority owns deterministic policy, canonical state and evidence. Derived retrieval memory and external knowledge remain non-authoritative. Hermes and MCP are planned below the authority layer.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="690" viewBox="0 0 1200 690" role="img" aria-labelledby="title desc">
+  <title id="title">JarvisOS control, context and memory architecture</title>
+  <desc id="desc">Canonical state, evidence, external documents, derived retrieval and code intelligence feed a bounded Context Broker. AI and AgentRuntime outputs return through JarvisOS policy and commit boundaries rather than writing canonical state directly.</desc>
   <defs>
     <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#475569"/></marker>
-    <style>
-      .frame{fill:#fff;stroke:#cbd5e1;stroke-width:2}.implemented{fill:#ecfdf5;stroke:#16a34a;stroke-width:2.5}.planned{fill:#eff6ff;stroke:#0284c7;stroke-width:2.5}.optional{fill:#f8fafc;stroke:#64748b;stroke-width:2}.title{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:27px;font-weight:750}.boxTitle{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:18px;font-weight:700}.sub{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;font-size:13px}.tag{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:12px;font-weight:800}.line{stroke:#475569;stroke-width:2.2;fill:none;marker-end:url(#arrow)}.dash{stroke:#64748b;stroke-width:2;fill:none;stroke-dasharray:7 6;marker-end:url(#arrow)}
-    </style>
+    <style>.frame{fill:#fff;stroke:#cbd5e1;stroke-width:2}.implemented{fill:#ecfdf5;stroke:#16a34a;stroke-width:2.5}.partial{fill:#fffbeb;stroke:#d97706;stroke-width:2.5}.planned{fill:#eff6ff;stroke:#0284c7;stroke-width:2.5}.optional{fill:#f8fafc;stroke:#64748b;stroke-width:2}.title{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:27px;font-weight:750}.boxTitle{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:17px;font-weight:700}.sub{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;font-size:12px}.tag{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:11px;font-weight:800}.line{stroke:#475569;stroke-width:2.2;fill:none;marker-end:url(#arrow)}.dash{stroke:#64748b;stroke-width:2;fill:none;stroke-dasharray:7 6;marker-end:url(#arrow)}</style>
   </defs>
-  <rect x="30" y="30" width="1140" height="590" rx="22" class="frame"/>
-  <text x="65" y="74" class="title">Control, memory and agent runtime</text>
-  <text x="65" y="101" class="sub">Memory is split by authority. Agent runtimes sit below Jarvis policy rather than becoming the source of truth.</text>
+  <rect x="30" y="30" width="1140" height="630" rx="22" class="frame"/>
+  <text x="65" y="74" class="title">Control, context and memory are different layers</text>
+  <text x="65" y="101" class="sub">Context sources are parallel. The Context Broker assembles bounded inputs; proposals return through policy and commit gates.</text>
 
-  <rect x="70" y="150" width="250" height="130" rx="16" class="implemented"/>
-  <text x="195" y="188" text-anchor="middle" class="boxTitle">Deterministic policy</text>
-  <text x="195" y="218" text-anchor="middle" class="sub">permissions · egress · budgets</text>
-  <text x="195" y="241" text-anchor="middle" class="sub">validation · promotion rules</text>
-  <text x="195" y="264" text-anchor="middle" class="tag" fill="#15803d">IMPLEMENTED</text>
+  <rect x="60" y="145" width="205" height="120" rx="16" class="implemented"/>
+  <text x="163" y="181" text-anchor="middle" class="boxTitle">Canonical state</text><text x="163" y="209" text-anchor="middle" class="sub">accepted engineering records</text><text x="163" y="232" text-anchor="middle" class="sub">provenance · freshness</text><text x="163" y="252" text-anchor="middle" class="tag" fill="#15803d">AUTHORITATIVE</text>
 
-  <rect x="365" y="150" width="250" height="130" rx="16" class="implemented"/>
-  <text x="490" y="188" text-anchor="middle" class="boxTitle">Canonical state</text>
-  <text x="490" y="218" text-anchor="middle" class="sub">accepted facts · parameters</text>
-  <text x="490" y="241" text-anchor="middle" class="sub">typed engineering records</text>
-  <text x="490" y="264" text-anchor="middle" class="tag" fill="#15803d">IMPLEMENTED</text>
+  <rect x="290" y="145" width="205" height="120" rx="16" class="implemented"/>
+  <text x="393" y="181" text-anchor="middle" class="boxTitle">Runs + evidence</text><text x="393" y="209" text-anchor="middle" class="sub">inputs · outputs · artifacts</text><text x="393" y="232" text-anchor="middle" class="sub">diagnostics · provenance</text><text x="393" y="252" text-anchor="middle" class="tag" fill="#15803d">CURRENT FOUNDATION</text>
 
-  <rect x="660" y="150" width="250" height="130" rx="16" class="implemented"/>
-  <text x="785" y="188" text-anchor="middle" class="boxTitle">Runs + evidence</text>
-  <text x="785" y="218" text-anchor="middle" class="sub">inputs · outputs · provenance</text>
-  <text x="785" y="241" text-anchor="middle" class="sub">artifacts · diagnostics · criteria</text>
-  <text x="785" y="264" text-anchor="middle" class="tag" fill="#15803d">IMPLEMENTED</text>
+  <rect x="520" y="145" width="205" height="120" rx="16" class="planned"/>
+  <text x="623" y="181" text-anchor="middle" class="boxTitle">Derived retrieval</text><text x="623" y="209" text-anchor="middle" class="sub">semantic / temporal index</text><text x="623" y="232" text-anchor="middle" class="sub">rebuildable · non-authoritative</text><text x="623" y="252" text-anchor="middle" class="tag" fill="#0369a1">PLANNED</text>
 
-  <rect x="955" y="150" width="170" height="130" rx="16" class="planned"/>
-  <text x="1040" y="188" text-anchor="middle" class="boxTitle">Retrieval memory</text>
-  <text x="1040" y="218" text-anchor="middle" class="sub">semantic / temporal</text>
-  <text x="1040" y="241" text-anchor="middle" class="sub">rebuildable index</text>
-  <text x="1040" y="264" text-anchor="middle" class="tag" fill="#0369a1">PLANNED</text>
+  <rect x="750" y="145" width="180" height="120" rx="16" class="optional"/>
+  <text x="840" y="181" text-anchor="middle" class="boxTitle">External sources</text><text x="840" y="209" text-anchor="middle" class="sub">notes · documents</text><text x="840" y="232" text-anchor="middle" class="sub">literature · imports</text><text x="840" y="252" text-anchor="middle" class="tag" fill="#475569">SOURCE MATERIAL</text>
 
-  <rect x="180" y="365" width="260" height="120" rx="16" class="planned"/>
-  <text x="310" y="401" text-anchor="middle" class="boxTitle">Hermes / AgentRuntime</text>
-  <text x="310" y="430" text-anchor="middle" class="sub">sessions · tool orchestration</text>
-  <text x="310" y="453" text-anchor="middle" class="sub">progressive tool disclosure</text>
-  <text x="310" y="474" text-anchor="middle" class="tag" fill="#0369a1">PLANNED / QUALIFY FIRST</text>
+  <rect x="955" y="145" width="180" height="120" rx="16" class="planned"/>
+  <text x="1045" y="181" text-anchor="middle" class="boxTitle">Code intelligence</text><text x="1045" y="209" text-anchor="middle" class="sub">Serena / LSP-style</text><text x="1045" y="232" text-anchor="middle" class="sub">parallel context source</text><text x="1045" y="252" text-anchor="middle" class="tag" fill="#0369a1">PLANNED</text>
 
-  <rect x="500" y="365" width="220" height="120" rx="16" class="planned"/>
-  <text x="610" y="401" text-anchor="middle" class="boxTitle">MCP / capability gateway</text>
-  <text x="610" y="430" text-anchor="middle" class="sub">tool visibility ≠ permission</text>
-  <text x="610" y="453" text-anchor="middle" class="sub">bounded capability surface</text>
-  <text x="610" y="474" text-anchor="middle" class="tag" fill="#0369a1">PLANNED</text>
+  <rect x="365" y="335" width="470" height="105" rx="17" class="partial"/>
+  <text x="600" y="371" text-anchor="middle" class="boxTitle">Context Broker</text><text x="600" y="399" text-anchor="middle" class="sub">selection · budget · digest · source manifest · policy filtering</text><text x="600" y="423" text-anchor="middle" class="tag" fill="#b45309">DETERMINISTIC PACKS EXIST · SEMANTIC RETRIEVAL FUTURE</text>
 
-  <rect x="780" y="365" width="190" height="120" rx="16" class="planned"/>
-  <text x="875" y="401" text-anchor="middle" class="boxTitle">Code intelligence</text>
-  <text x="875" y="430" text-anchor="middle" class="sub">Serena / LSP-style</text>
-  <text x="875" y="453" text-anchor="middle" class="sub">semantic project access</text>
-  <text x="875" y="474" text-anchor="middle" class="tag" fill="#0369a1">PLANNED</text>
+  <path d="M163 265 C163 310 430 305 470 335" class="line"/>
+  <path d="M393 265 C393 305 500 310 525 335" class="line"/>
+  <path d="M623 265 V335" class="dash"/>
+  <path d="M840 265 C840 305 700 310 675 335" class="dash"/>
+  <path d="M1045 265 C1045 315 770 305 730 335" class="dash"/>
 
-  <rect x="385" y="535" width="430" height="55" rx="14" class="optional"/>
-  <text x="600" y="558" text-anchor="middle" class="boxTitle">External notes / documents / knowledge sources</text>
-  <text x="600" y="579" text-anchor="middle" class="sub">context source only — explicit promotion required</text>
+  <rect x="120" y="510" width="240" height="115" rx="16" class="planned"/>
+  <text x="240" y="547" text-anchor="middle" class="boxTitle">AI / AgentRuntime</text><text x="240" y="575" text-anchor="middle" class="sub">Hermes or another runtime</text><text x="240" y="598" text-anchor="middle" class="sub">response · proposal · ToolIntent</text>
 
-  <path d="M320 215 H365" class="line"/><path d="M615 215 H660" class="line"/><path d="M910 215 H955" class="dash"/>
-  <path d="M195 280 C195 325 310 320 310 365" class="line"/>
-  <path d="M310 365 C400 330 490 330 490 280" class="line"/>
-  <path d="M440 425 H500" class="line"/><path d="M720 425 H780" class="line"/>
-  <path d="M1040 280 C1040 330 875 325 875 365" class="dash"/>
-  <path d="M600 535 C600 510 610 510 610 485" class="dash"/>
+  <rect x="480" y="500" width="240" height="135" rx="16" class="implemented"/>
+  <text x="600" y="537" text-anchor="middle" class="boxTitle">JarvisOS policy + commit gate</text><text x="600" y="565" text-anchor="middle" class="sub">capability · egress · validation</text><text x="600" y="588" text-anchor="middle" class="sub">promotion · audit · fail closed</text><text x="600" y="613" text-anchor="middle" class="tag" fill="#15803d">NO DIRECT AGENT → STATE PATH</text>
+
+  <rect x="840" y="510" width="240" height="115" rx="16" class="planned"/>
+  <text x="960" y="547" text-anchor="middle" class="boxTitle">Capability interface</text><text x="960" y="575" text-anchor="middle" class="sub">MCP where useful</text><text x="960" y="598" text-anchor="middle" class="sub">tool visibility ≠ permission</text>
+
+  <path d="M520 440 C500 470 310 475 270 510" class="line"/><text x="340" y="476" class="sub">bounded context</text>
+  <path d="M360 566 H480" class="line"/><text x="390" y="552" class="sub">proposal / intent</text>
+  <path d="M720 566 H840" class="line"/><text x="750" y="552" class="sub">authorized capability</text>
+  <path d="M600 500 C600 470 230 475 205 265" class="line"/><text x="425" y="472" class="sub">accepted transitions update canonical state</text>
 </svg>
