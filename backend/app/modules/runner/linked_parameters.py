@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from math import isfinite
 from typing import Any
 
+from app.modules.runner.input_contracts import parse_stored_input_contract
 from app.modules.runner.safety import RunnerSafetyError
 
 LINKED_PARAMETER_UNUSABLE_CODE = "runner_linked_parameter_unusable"
@@ -17,6 +18,21 @@ class LinkedParameterUsability:
     usable: bool
     parameter: dict[str, object] | None
     reason: str | None
+
+
+def contract_requires_canonical_linked_parameters(
+    contract_payload: str | None,
+    contract_sha256: str | None,
+) -> bool:
+    """Return whether the stored contract gives source_parameter_id canonical-FK authority.
+
+    Schema-v1/raw runner payloads historically permit provenance-like source tokens.
+    058c freshness enforcement therefore applies only to the authoritative schema-v2/v3
+    contract path, never by inspecting payload shape or guessing identifier semantics.
+    """
+
+    contract, _ = parse_stored_input_contract(contract_payload, contract_sha256)
+    return contract.schema_version in {2, 3}
 
 
 def inspect_linked_parameter_usability(
