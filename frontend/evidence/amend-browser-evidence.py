@@ -1,0 +1,26 @@
+from pathlib import Path
+
+path = Path("evidence/058c-browser.mjs")
+text = path.read_text(encoding="utf-8")
+old = '''await page.getByRole("button", { name: "Select B" }).click();
+await page.getByText(/Unsaved object changes belong to the previous engineering target/).waitFor();
+assert.equal(await page.locator("#engineering-property-tube_length").inputValue(), "13", "dirty A draft is not rebased onto B");
+await page.getByRole("button", { name: "Discard previous object changes and load selected object" }).click();
+await page.waitForFunction(() => document.querySelector("#engineering-property-tube_length")?.value === "20");
+assert.equal(await page.locator("#engineering-property-tube_length").inputValue(), "20", "explicit discard adopts B baseline");
+'''
+new = '''await page.getByRole("button", { name: "Select B" }).click();
+await page.getByText(/Unsaved object changes belong to the previous engineering target/).waitFor();
+assert.equal(await page.locator("#engineering-property-tube_length").count(), 0, "conflicted B target exposes no editable object geometry before operator resolution");
+await page.getByRole("button", { name: "Select A" }).click();
+await page.waitForFunction(() => document.querySelector("#engineering-property-tube_length")?.value === "13");
+assert.equal(await page.locator("#engineering-property-tube_length").inputValue(), "13", "reselecting previous A target restores its dirty draft");
+await page.getByRole("button", { name: "Select B" }).click();
+await page.getByText(/Unsaved object changes belong to the previous engineering target/).waitFor();
+await page.getByRole("button", { name: "Discard previous object changes and load selected object" }).click();
+await page.waitForFunction(() => document.querySelector("#engineering-property-tube_length")?.value === "20");
+assert.equal(await page.locator("#engineering-property-tube_length").inputValue(), "20", "explicit discard adopts B baseline");
+'''
+if old not in text:
+    raise SystemExit("expected evidence block not found")
+path.write_text(text.replace(old, new), encoding="utf-8")
