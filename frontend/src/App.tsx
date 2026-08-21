@@ -32,7 +32,7 @@ function App() {
   const [selection, setSelection] = useState<StageSelection | null>(null);
   const [shellRegions, setShellRegions] = useState<ShellRegionContributions>({});
   const [shellRegionRequest, setShellRegionRequest] = useState<ShellRegionRequest | null>(null);
-  const engineeringProperties = useEngineeringProperties(workspaceId, setWorkspaceId);
+  const engineeringProperties = useEngineeringProperties(workspaceId, setWorkspaceId, selection);
 
   useEffect(() => {
     setSelection(null);
@@ -95,7 +95,7 @@ function App() {
     ? <div className="shell-properties__selection"><strong>{selection.partId}</strong><p>{selection.partKind ? `${selection.partKind} · selected BLUECAD part` : "Selected BLUECAD part"}</p></div>
     : undefined;
   const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection, semanticSelectionContext);
-  const propertiesContent = <EngineeringPropertiesPanel controller={engineeringProperties} stageContext={stageSidecar} />;
+  const propertiesContent = <EngineeringPropertiesPanel controller={engineeringProperties} stageContext={stageSidecar} navigate={navigate} />;
   const effectiveShellRegions: ShellRegionContributions = {
     ...shellRegions,
     sidecar: jarvisSidecar,

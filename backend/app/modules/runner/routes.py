@@ -10,6 +10,7 @@ from app.modules.runner.guarded_service import (
     list_run_logs,
     preview_model_bindings,
     register_bundled_bluerev_process0,
+    register_bundled_bluerev_process0_semantic,
     register_bundled_bluerev_process1,
     register_bundled_bluerev_process2,
     register_bundled_bluerev_topology_m1,
@@ -77,6 +78,20 @@ def register_bundled_bluerev_process0_endpoint(
 ) -> ModelImplementationRead:
     try:
         return register_bundled_bluerev_process0(workspace_id)
+    except RunnerSafetyError as exc:
+        raise _runner_error(exc) from exc
+
+
+@router.post(
+    "/workspaces/{workspace_id}/bundled-models/bluerev-geometry-hydraulics-semantic-v0/register",
+    response_model=ModelImplementationRead,
+    dependencies=[Depends(require_runner_origin)],
+)
+def register_bundled_bluerev_process0_semantic_endpoint(
+    workspace_id: str,
+) -> ModelImplementationRead:
+    try:
+        return register_bundled_bluerev_process0_semantic(workspace_id)
     except RunnerSafetyError as exc:
         raise _runner_error(exc) from exc
 

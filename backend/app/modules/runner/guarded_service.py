@@ -7,7 +7,13 @@ from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
 from app.modules.runner import service as _base
-from app.modules.runner.input_contracts import canonicalize_input_contract
+from app.modules.runner.input_contracts import (
+    ModelInputContractV2,
+    ModelInputContractV3,
+    canonicalize_input_contract,
+    parse_stored_input_contract,
+)
+from app.modules.runner.linked_parameters import require_linked_parameters_usable
 from app.modules.runner.models import (
     ModelImplementationCreate,
     ModelImplementationRead,
@@ -29,6 +35,11 @@ from app.modules.runner.safety import RunnerSafetyError, sha256_file
 
 RUNNER_SCRIPT_POLICY_VIOLATION = "RUNNER_SCRIPT_POLICY_VIOLATION"
 _LEGACY_SANDBOX_VIOLATION = "SANDBOX_VIOLATION"
+BUNDLED_BLUEREV_PROCESS0_SEMANTIC_LABEL = "bluerev-geometry-hydraulics-semantic-v0-bundled"
+
+
+def _bluerev_process0_semantic_contract_path() -> Path:
+    return Path(__file__).parent / "examples" / "bluerev_geometry_hydraulics_semantic_v0.contract.json"
 
 
 def create_model_implementation(
@@ -54,6 +65,83 @@ def create_model_implementation(
             implementation_kind=_base.IMPLEMENTATION_KIND,
             notes=payload.notes,
             input_contract=payload.input_contract,
+        ),
+    )
+
+
+def register_bundled_bluerev_process0_semantic(workspace_id: str) -> ModelImplementationRead:
+    """Register the reviewed 047 executable with the exact 058c semantic companion contract."""
+
+    script_path = _base._bluerev_process0_script_path()
+    contract_path = _bluerev_process0_semantic_contract_path()
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    _, contract_sha256, _ = canonicalize_input_contract(contract)
+    script_sha256 = sha256_file(script_path)
+
+    with open_sqlite_connection() as connection:
+        _base._require_workspace(connection, workspace_id)
+        existing = connection.execute(
+            """
+            SELECT mv.*, a.sha256 AS script_sha256, a.stored_path AS script_path
+            FROM model_versions mv
+            JOIN artifacts a ON a.id = mv.implementation_artifact_id
+            WHERE mv.workspace_id = ?
+              AND mv.version_label = ?
+              AND mv.input_contract_sha256 = ?
+              AND a.sha256 = ?
+            ORDER BY mv.created_at ASC
+            LIMIT 1
+            """,
+            (
+                workspace_id,
+                BUNDLED_BLUEREV_PROCESS0_SEMANTIC_LABEL,
+                contract_sha256,
+                script_sha256,
+            ),
+        ).fetchone()
+        if existing is not None:
+            return _base._model_implementation_from_row(existing)
+        model_spec = connection.execute(
+            """
+            SELECT id FROM model_specs
+            WHERE workspace_id = ? AND title = ?
+            ORDER BY created_at ASC
+            LIMIT 1
+            """,
+            (workspace_id, _base.BUNDLED_BLUEREV_PROCESS0_TITLE),
+        ).fetchone()
+
+    if model_spec is None:
+        created_spec = _base.create_model_spec(
+            workspace_id,
+            _base.ModelSpecCreate(
+                title=_base.BUNDLED_BLUEREV_PROCESS0_TITLE,
+                engineering_question=(
+                    "Evaluate caller-selected tubular-loop geometry, hydraulics, "
+                    "turnover, and pump power without product defaults."
+                ),
+                scope=(
+                    "Reviewed 047 forward model; all nine project and operating values "
+                    "are supplied per scenario."
+                ),
+            ),
+        )
+        model_spec_id = created_spec.id
+    else:
+        model_spec_id = str(model_spec["id"])
+
+    return _base.create_model_implementation(
+        workspace_id,
+        ModelImplementationCreate(
+            model_spec_id=model_spec_id,
+            version_label=BUNDLED_BLUEREV_PROCESS0_SEMANTIC_LABEL,
+            implementation_kind=_base.CALC_V0_IMPLEMENTATION_KIND,
+            notes=(
+                "Bundled reviewed 047 forward model with the exact 058c semantic "
+                "companion input contract."
+            ),
+            script_text=script_path.read_text(encoding="utf-8"),
+            input_contract=contract,
         ),
     )
 
@@ -189,10 +277,11 @@ def _create_runner_job_idempotent(
                 ),
             )
 
+        # Every genuinely new create serializes its final linked-source decision
+        # with run/job persistence. A same-key committed replay remains
+        # reconciliation and is returned before current freshness is consulted.
+        connection.execute("BEGIN IMMEDIATE")
         if payload.request_key is not None:
-            # Serialize request-key owners so concurrent retries cannot both create
-            # a run before the unique workspace/key row becomes visible.
-            connection.execute("BEGIN IMMEDIATE")
             existing = connection.execute(
                 """
                 SELECT
@@ -229,6 +318,9 @@ def _create_runner_job_idempotent(
                     runner_job=_base.get_runner_job(runner_job_id),
                     simulation_run=_base.get_simulation_run_detail(workspace_id, simulation_run_id),
                 )
+
+        if _uses_canonical_linked_parameter_contract(model_version):
+            require_linked_parameters_usable(connection, workspace_id, input_payload)
 
         simulation_run_id = str(uuid4())
         runner_job_id = str(uuid4())
@@ -336,6 +428,15 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
     return response
 
 
+def _uses_canonical_linked_parameter_contract(model_version: Any) -> bool:
+    contract_payload = model_version["input_contract_payload"]
+    contract_sha256 = model_version["input_contract_sha256"]
+    if not contract_payload or not contract_sha256:
+        return False
+    contract, _ = parse_stored_input_contract(contract_payload, contract_sha256)
+    return isinstance(contract, (ModelInputContractV2, ModelInputContractV3))
+
+
 def _translate_policy_error(exc: RunnerSafetyError) -> RunnerSafetyError:
     if exc.code == _LEGACY_SANDBOX_VIOLATION:
         return RunnerSafetyError(RUNNER_SCRIPT_POLICY_VIOLATION, exc.message)
@@ -379,6 +480,11 @@ def _is_exact_bundled(model_version: dict[str, Any]) -> bool:
             _base.BUNDLED_BLUEREV_PROCESS0_LABEL,
             _base._bluerev_process0_script_path(),
             _base._bluerev_process0_contract_path(),
+        ),
+        (
+            BUNDLED_BLUEREV_PROCESS0_SEMANTIC_LABEL,
+            _base._bluerev_process0_script_path(),
+            _bluerev_process0_semantic_contract_path(),
         ),
         (
             _base.BUNDLED_BLUEREV_PROCESS1_LABEL,
