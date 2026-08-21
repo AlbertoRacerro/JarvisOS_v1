@@ -8,7 +8,6 @@ from uuid import uuid4
 from app.core.database import open_sqlite_connection
 from app.modules.runner import service as _base
 from app.modules.runner.input_contracts import canonicalize_input_contract
-from app.modules.runner.linked_parameters import require_linked_parameters_usable
 from app.modules.runner.models import (
     ModelImplementationCreate,
     ModelImplementationRead,
@@ -272,8 +271,10 @@ def _create_runner_job_idempotent(
                 ),
             )
 
-        connection.execute("BEGIN IMMEDIATE")
         if payload.request_key is not None:
+            # Serialize request-key owners so concurrent retries cannot both create
+            # a run before the unique workspace/key row becomes visible.
+            connection.execute("BEGIN IMMEDIATE")
             existing = connection.execute(
                 """
                 SELECT
@@ -310,12 +311,6 @@ def _create_runner_job_idempotent(
                     runner_job=_base.get_runner_job(runner_job_id),
                     simulation_run=_base.get_simulation_run_detail(workspace_id, simulation_run_id),
                 )
-
-        try:
-            require_linked_parameters_usable(connection, workspace_id, input_payload)
-        except RunnerSafetyError:
-            connection.rollback()
-            raise
 
         simulation_run_id = str(uuid4())
         runner_job_id = str(uuid4())
