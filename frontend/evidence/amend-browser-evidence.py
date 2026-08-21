@@ -23,4 +23,6 @@ assert.equal(await page.locator("#engineering-property-tube_length").inputValue(
 '''
 if old not in text:
     raise SystemExit("expected evidence block not found")
-path.write_text(text.replace(old, new), encoding="utf-8")
+text = text.replace(old, new)
+text = text.replace('for (const [name] of variables)', 'for (const { name } of variables)')
+path.write_text(text, encoding="utf-8")
