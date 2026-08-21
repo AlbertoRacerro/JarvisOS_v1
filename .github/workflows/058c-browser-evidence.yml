@@ -24,6 +24,9 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      - name: Apply evidence-only expectation amendment
+        working-directory: frontend
+        run: python evidence/amend-browser-evidence.py
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
