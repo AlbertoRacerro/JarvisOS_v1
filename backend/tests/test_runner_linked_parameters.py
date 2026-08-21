@@ -5,6 +5,7 @@ import pytest
 from app.modules.runner.linked_parameters import (
     LINKED_PARAMETER_UNUSABLE_CODE,
     LINKED_PARAMETER_UNUSABLE_MESSAGE,
+    contract_requires_canonical_linked_parameters,
     inspect_linked_parameter_usability,
     linked_parameter_ids,
     load_usable_linked_parameter,
@@ -48,6 +49,25 @@ def _insert_parameter(
         "INSERT INTO parameters (id, workspace_id, value, unit, status) VALUES (?, ?, ?, ?, ?)",
         (parameter_id, workspace_id, value, unit, status),
     )
+
+
+def test_contract_authority_preserves_historical_no_contract_runner_path() -> None:
+    assert contract_requires_canonical_linked_parameters(None, None) is False
+
+
+@pytest.mark.parametrize(
+    ("contract_payload", "contract_sha256"),
+    [
+        (None, "0" * 64),
+        ("{}", None),
+    ],
+)
+def test_contract_authority_fails_closed_for_partial_contract_evidence(
+    contract_payload: str | None,
+    contract_sha256: str | None,
+) -> None:
+    with pytest.raises(RunnerSafetyError):
+        contract_requires_canonical_linked_parameters(contract_payload, contract_sha256)
 
 
 def test_linked_parameter_usability_accepts_fresh_same_workspace_source() -> None:
