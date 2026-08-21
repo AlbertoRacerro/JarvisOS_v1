@@ -95,7 +95,7 @@ function App() {
     ? <div className="shell-properties__selection"><strong>{selection.partId}</strong><p>{selection.partKind ? `${selection.partKind} · selected BLUECAD part` : "Selected BLUECAD part"}</p></div>
     : undefined;
   const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection, semanticSelectionContext);
-  const propertiesContent = <EngineeringPropertiesPanel controller={engineeringProperties} stageContext={stageSidecar} />;
+  const propertiesContent = <EngineeringPropertiesPanel controller={engineeringProperties} stageContext={stageSidecar} navigate={navigate} />;
   const effectiveShellRegions: ShellRegionContributions = {
     ...shellRegions,
     sidecar: jarvisSidecar,
