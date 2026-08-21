@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="610" viewBox="0 0 1200 610" role="img" aria-labelledby="title desc">
+  <title id="title">JarvisOS engineering backend architecture</title>
+  <desc id="desc">Jarvis engineering contracts connect replaceable process, geometry, meshing, FEM, CFD and optional commercial backends. Results return as evidence.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#475569"/></marker>
+    <style>
+      .frame{fill:#fff;stroke:#cbd5e1;stroke-width:2}.implemented{fill:#ecfdf5;stroke:#16a34a;stroke-width:2.5}.partial{fill:#fffbeb;stroke:#d97706;stroke-width:2.5}.planned{fill:#eff6ff;stroke:#0284c7;stroke-width:2.5}.research{fill:#fef2f2;stroke:#dc2626;stroke-width:2.5}.optional{fill:#f8fafc;stroke:#64748b;stroke-width:2}.title{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:27px;font-weight:750}.boxTitle{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:18px;font-weight:700}.sub{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;font-size:13px}.tag{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:12px;font-weight:800}.line{stroke:#475569;stroke-width:2.2;fill:none;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect x="30" y="30" width="1140" height="550" rx="22" class="frame"/>
+  <text x="65" y="74" class="title">Engineering tools stay replaceable</text>
+  <text x="65" y="101" class="sub">JarvisOS owns the contracts, run identity and evidence boundary; numerical kernels can change.</text>
+
+  <rect x="410" y="135" width="380" height="105" rx="17" class="implemented"/>
+  <text x="600" y="174" text-anchor="middle" class="boxTitle">Jarvis engineering contracts</text>
+  <text x="600" y="203" text-anchor="middle" class="sub">typed inputs · units · provenance · run/evidence identity</text>
+  <text x="600" y="226" text-anchor="middle" class="tag" fill="#15803d">IMPLEMENTED FOUNDATION</text>
+
+  <rect x="65" y="310" width="200" height="125" rx="16" class="planned"/>
+  <text x="165" y="347" text-anchor="middle" class="boxTitle">Process / biology</text>
+  <text x="165" y="375" text-anchor="middle" class="sub">properties · kinetics</text>
+  <text x="165" y="397" text-anchor="middle" class="sub">flowsheet / dynamic models</text>
+  <text x="165" y="420" text-anchor="middle" class="tag" fill="#0369a1">PLANNED / PARTIAL BASE</text>
+
+  <rect x="285" y="310" width="180" height="125" rx="16" class="implemented"/>
+  <text x="375" y="347" text-anchor="middle" class="boxTitle">CAD layer</text>
+  <text x="375" y="375" text-anchor="middle" class="sub">build123d + OCCT</text>
+  <text x="375" y="397" text-anchor="middle" class="sub">STEP · STL · GLB</text>
+  <text x="375" y="420" text-anchor="middle" class="tag" fill="#15803d">IMPLEMENTED</text>
+
+  <rect x="485" y="310" width="160" height="125" rx="16" class="partial"/>
+  <text x="565" y="347" text-anchor="middle" class="boxTitle">Meshing</text>
+  <text x="565" y="375" text-anchor="middle" class="sub">Gmsh adapter</text>
+  <text x="565" y="397" text-anchor="middle" class="sub">host qualification</text>
+  <text x="565" y="420" text-anchor="middle" class="tag" fill="#b45309">BUILT / QUALIFY</text>
+
+  <rect x="665" y="310" width="160" height="125" rx="16" class="partial"/>
+  <text x="745" y="347" text-anchor="middle" class="boxTitle">Static FEM</text>
+  <text x="745" y="375" text-anchor="middle" class="sub">CalculiX adapter</text>
+  <text x="745" y="397" text-anchor="middle" class="sub">case qualification</text>
+  <text x="745" y="420" text-anchor="middle" class="tag" fill="#b45309">BUILT / QUALIFY</text>
+
+  <rect x="845" y="310" width="140" height="125" rx="16" class="research"/>
+  <text x="915" y="347" text-anchor="middle" class="boxTitle">CFD</text>
+  <text x="915" y="375" text-anchor="middle" class="sub">OpenFOAM / others</text>
+  <text x="915" y="397" text-anchor="middle" class="sub">only when needed</text>
+  <text x="915" y="420" text-anchor="middle" class="tag" fill="#b91c1c">DEMAND-GATED</text>
+
+  <rect x="1005" y="310" width="130" height="125" rx="16" class="optional"/>
+  <text x="1070" y="347" text-anchor="middle" class="boxTitle">Commercial</text>
+  <text x="1070" y="375" text-anchor="middle" class="sub">specialist tools</text>
+  <text x="1070" y="397" text-anchor="middle" class="sub">when stronger</text>
+  <text x="1070" y="420" text-anchor="middle" class="tag" fill="#475569">OPTIONAL</text>
+
+  <rect x="350" y="500" width="500" height="55" rx="14" class="implemented"/>
+  <text x="600" y="523" text-anchor="middle" class="boxTitle">Results → artifacts → evidence → Jarvis acceptance</text>
+  <text x="600" y="545" text-anchor="middle" class="sub">backend output does not bypass the authority boundary</text>
+
+  <path d="M600 240 V270 H165 V310" class="line"/><path d="M600 270 H375 V310" class="line"/><path d="M600 270 H565 V310" class="line"/><path d="M600 270 H745 V310" class="line"/><path d="M600 270 H915 V310" class="line"/><path d="M600 270 H1070 V310" class="line"/>
+  <path d="M165 435 V470 H600 V500" class="line"/><path d="M375 435 V470" class="line"/><path d="M565 435 V470" class="line"/><path d="M745 435 V470" class="line"/><path d="M915 435 V470" class="line"/><path d="M1070 435 V470" class="line"/>
+</svg>
