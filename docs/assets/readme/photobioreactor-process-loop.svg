@@ -1,60 +1,52 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
-  <title id="title">Microalgae photobioreactor design loop</title>
-  <desc id="desc">Jarvis iterates with process models and search or optimization until a promising process design envelope is found. Only then does the CAD layer create a physical design, which can be verified and fed back if needed.</desc>
-  <defs>
-    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#475569"/></marker>
-    <style>
-      .frame{fill:#fff;stroke:#cbd5e1;stroke-width:2}.implemented{fill:#ecfdf5;stroke:#16a34a;stroke-width:2.5}.partial{fill:#fffbeb;stroke:#d97706;stroke-width:2.5}.planned{fill:#eff6ff;stroke:#0284c7;stroke-width:2.5}.title{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:27px;font-weight:750}.boxTitle{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:18px;font-weight:700}.sub{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;font-size:13px}.tag{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:12px;font-weight:800}.line{stroke:#475569;stroke-width:2.3;fill:none;marker-end:url(#arrow)}.loop{stroke:#0284c7;stroke-width:2.8;fill:none;marker-end:url(#arrow)}
-    </style>
-  </defs>
-  <rect x="30" y="30" width="1140" height="700" rx="22" class="frame"/>
-  <text x="65" y="74" class="title">Microalgae photobioreactor: process loop before physical design</text>
-  <text x="65" y="101" class="sub">Jarvis sees every evaluation and can iterate before committing to a geometry.</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="790" viewBox="0 0 1200 790" role="img" aria-labelledby="title desc">
+  <title id="title">Microalgae photobioreactor design-study architecture</title>
+  <desc id="desc">The engineer and Jarvis operate in the outer loop. A deterministic StudyController coordinates DOE or optimization and receives every EngineeringEvaluator result directly. A selected process-design envelope is handed to detailed CAD, and higher-fidelity verification can feed back into the study.</desc>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#475569"/></marker>
+  <style>.frame{fill:#fff;stroke:#cbd5e1;stroke-width:2}.implemented{fill:#ecfdf5;stroke:#16a34a;stroke-width:2.5}.partial{fill:#fffbeb;stroke:#d97706;stroke-width:2.5}.planned{fill:#eff6ff;stroke:#0284c7;stroke-width:2.5}.research{fill:#fef2f2;stroke:#dc2626;stroke-width:2.5}.title{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:27px;font-weight:750}.boxTitle{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:17px;font-weight:700}.sub{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;font-size:12px}.tag{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:11px;font-weight:800}.line{stroke:#475569;stroke-width:2.3;fill:none;marker-end:url(#arrow)}.loop{stroke:#0284c7;stroke-width:2.8;fill:none;marker-end:url(#arrow)}</style></defs>
+  <rect x="30" y="30" width="1140" height="730" rx="22" class="frame"/>
+  <text x="65" y="74" class="title">Photobioreactor design: Jarvis outside the tight numerical loop</text>
+  <text x="65" y="101" class="sub">The optimizer gets every evaluation directly. Jarvis interprets, changes goals or strategy, and intervenes without choosing every numerical candidate.</text>
 
-  <rect x="70" y="145" width="250" height="110" rx="16" class="implemented"/>
-  <text x="195" y="182" text-anchor="middle" class="boxTitle">Goals + constraints</text>
-  <text x="195" y="210" text-anchor="middle" class="sub">productivity · viability · footprint</text>
-  <text x="195" y="232" text-anchor="middle" class="sub">energy · operating limits</text>
+  <rect x="65" y="145" width="205" height="115" rx="16" class="implemented"/>
+  <text x="168" y="181" text-anchor="middle" class="boxTitle">Engineer</text><text x="168" y="209" text-anchor="middle" class="sub">goals · constraints · review</text><text x="168" y="232" text-anchor="middle" class="sub">final engineering responsibility</text>
 
-  <rect x="390" y="145" width="270" height="110" rx="16" class="implemented"/>
-  <text x="525" y="182" text-anchor="middle" class="boxTitle">Jarvis orchestration</text>
-  <text x="525" y="210" text-anchor="middle" class="sub">choose next candidate · inspect evidence</text>
-  <text x="525" y="232" text-anchor="middle" class="sub">accept / reject / refine</text>
+  <rect x="325" y="145" width="245" height="115" rx="16" class="implemented"/>
+  <text x="448" y="181" text-anchor="middle" class="boxTitle">Jarvis outer loop</text><text x="448" y="209" text-anchor="middle" class="sub">context · interpretation · model choice</text><text x="448" y="232" text-anchor="middle" class="sub">change study · explain · intervene</text>
 
-  <rect x="730" y="145" width="390" height="110" rx="16" class="planned"/>
-  <text x="925" y="182" text-anchor="middle" class="boxTitle">Search / DOE / optimization</text>
-  <text x="925" y="210" text-anchor="middle" class="sub">initially human-guided; increasingly automated later</text>
-  <text x="925" y="232" text-anchor="middle" class="tag" fill="#0369a1">PLANNED</text>
+  <rect x="650" y="145" width="230" height="115" rx="16" class="planned"/>
+  <text x="765" y="181" text-anchor="middle" class="boxTitle">Typed DesignStudy</text><text x="765" y="209" text-anchor="middle" class="sub">variables · bounds · objectives</text><text x="765" y="232" text-anchor="middle" class="sub">constraints · fidelity policy</text>
 
-  <rect x="115" y="330" width="930" height="160" rx="18" class="planned"/>
-  <text x="580" y="367" text-anchor="middle" class="boxTitle">Integrated photobioreactor process evaluation</text>
-  <text x="580" y="398" text-anchor="middle" class="sub">biology / growth · light / attenuation / photoinhibition · mixing / circulation / shear</text>
-  <text x="580" y="425" text-anchor="middle" class="sub">CO₂ / O₂ transfer · aeration · nutrients / pH / temperature · pressure drop · pump/compressor energy</text>
-  <text x="580" y="454" text-anchor="middle" class="sub">outputs: productivity · viability · transfer limits · ΔP · energy · constraint violations · evidence</text>
-  <text x="580" y="477" text-anchor="middle" class="tag" fill="#0369a1">TARGET MODEL — PARTIAL FOUNDATIONS TODAY</text>
+  <rect x="930" y="145" width="205" height="115" rx="16" class="planned"/>
+  <text x="1033" y="181" text-anchor="middle" class="boxTitle">StudyController</text><text x="1033" y="209" text-anchor="middle" class="sub">state · failures · feasibility</text><text x="1033" y="232" text-anchor="middle" class="sub">reproducible study history</text>
 
-  <path d="M320 200 H390" class="line"/><path d="M660 200 H730" class="line"/>
-  <path d="M925 255 C925 300 820 307 760 330" class="line"/>
-  <path d="M525 255 C525 290 510 305 500 330" class="line"/>
-  <path d="M115 410 C70 410 70 205 390 205" class="loop"/>
-  <text x="75" y="320" class="sub" fill="#0369a1">results return to Jarvis</text>
+  <path d="M270 188 H325" class="line"/><path d="M325 228 H270" class="line"/>
+  <path d="M570 202 H650" class="line"/><path d="M650 238 H570" class="line"/>
+  <path d="M880 202 H930" class="line"/><path d="M930 238 H880" class="line"/>
 
-  <rect x="95" y="565" width="310" height="105" rx="16" class="planned"/>
-  <text x="250" y="600" text-anchor="middle" class="boxTitle">Promising process-design envelope</text>
-  <text x="250" y="628" text-anchor="middle" class="sub">dimensions · flows · gas transfer · shear</text>
-  <text x="250" y="650" text-anchor="middle" class="sub">pressure drop · energy · operating range</text>
+  <rect x="770" y="335" width="230" height="115" rx="16" class="planned"/>
+  <text x="885" y="371" text-anchor="middle" class="boxTitle">DOE / optimizer / search</text><text x="885" y="399" text-anchor="middle" class="sub">chooses next candidate</text><text x="885" y="422" text-anchor="middle" class="sub">without an LLM per point</text>
 
-  <rect x="445" y="565" width="285" height="105" rx="16" class="implemented"/>
-  <text x="588" y="600" text-anchor="middle" class="boxTitle">CAD / physical design layer</text>
-  <text x="588" y="628" text-anchor="middle" class="sub">layout · manifolds · supports · footprint</text>
-  <text x="588" y="650" text-anchor="middle" class="sub">buildability · inspection · maintenance</text>
+  <rect x="310" y="320" width="380" height="145" rx="18" class="planned"/>
+  <text x="500" y="356" text-anchor="middle" class="boxTitle">PBR EngineeringEvaluator(s)</text>
+  <text x="500" y="385" text-anchor="middle" class="sub">biology · light · mixing/shear · gas transfer</text>
+  <text x="500" y="408" text-anchor="middle" class="sub">nutrients/control · hydraulics · energy</text>
+  <text x="500" y="431" text-anchor="middle" class="sub">cheap model first; higher fidelity only when required</text>
+  <text x="500" y="452" text-anchor="middle" class="tag" fill="#0369a1">TARGET · CURRENT M0/M1 SCREENS ARE PARTIAL INPUTS ONLY</text>
 
-  <rect x="770" y="565" width="335" height="105" rx="16" class="partial"/>
-  <text x="938" y="600" text-anchor="middle" class="boxTitle">Verification when needed</text>
-  <text x="938" y="628" text-anchor="middle" class="sub">mesh · FEM · CFD · manufacturability</text>
-  <text x="938" y="650" text-anchor="middle" class="sub">feed failures or constraints back to Jarvis</text>
+  <path d="M1033 260 C1033 305 940 305 920 335" class="line"/><text x="960" y="300" class="sub">study state</text>
+  <path d="M770 392 H690" class="line"/><text x="704" y="377" class="sub">candidate</text>
+  <path d="M500 465 C500 510 885 510 885 450" class="loop"/><text x="655" y="505" class="sub" fill="#0369a1">EvaluationResult + evidence + failure state</text>
+  <path d="M1000 392 C1080 392 1090 280 1033 260" class="loop"/><text x="1050" y="335" class="sub" fill="#0369a1">next state</text>
 
-  <path d="M580 490 C580 530 330 530 250 565" class="line"/>
-  <path d="M405 617 H445" class="line"/><path d="M730 617 H770" class="line"/>
-  <path d="M1105 617 C1150 617 1145 210 660 210" class="loop"/>
+  <rect x="70" y="555" width="285" height="115" rx="16" class="planned"/>
+  <text x="213" y="591" text-anchor="middle" class="boxTitle">ProcessDesignEnvelope</text><text x="213" y="619" text-anchor="middle" class="sub">process-driving geometry · flows</text><text x="213" y="642" text-anchor="middle" class="sub">pressure/shear/transfer/energy limits</text>
+
+  <rect x="415" y="555" width="260" height="115" rx="16" class="implemented"/>
+  <text x="545" y="591" text-anchor="middle" class="boxTitle">Detailed CAD layer</text><text x="545" y="619" text-anchor="middle" class="sub">current parametric CAD foundation</text><text x="545" y="642" text-anchor="middle" class="sub">physical realization · layout</text>
+
+  <rect x="735" y="555" width="390" height="115" rx="16" class="partial"/>
+  <text x="930" y="591" text-anchor="middle" class="boxTitle">Selected higher-fidelity verification</text><text x="930" y="619" text-anchor="middle" class="sub">mesh · FEM · CFD · manufacturing checks when needed</text><text x="930" y="642" text-anchor="middle" class="sub">CFD may also be invoked earlier as a study evaluator</text>
+
+  <path d="M420 465 C380 520 265 515 213 555" class="line"/><path d="M355 612 H415" class="line"/><path d="M675 612 H735" class="line"/>
+  <path d="M930 555 C930 520 110 520 110 392 C110 350 240 350 310 370" class="loop"/><text x="118" y="511" class="sub" fill="#0369a1">physical verification can reopen the study</text>
 </svg>
