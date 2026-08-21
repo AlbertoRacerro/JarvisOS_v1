@@ -116,13 +116,13 @@ evidence remains valid; a future frontend grade surface is deferred to a separat
 Evaluation/Audit interaction and does not block the operator-workstation queue.
 
 Specs 066, 067, 068, and 080 remain frozen for the duration of the current functional queue and
-are not reopened by the architecture reconciliation. Spec 078 remains planned without
-implementation authority and must be freshly re-derived after the process upstream/evaluator
-work rather than assuming the custom process kernel is the target solver. Spec 093 and any
-Aspen-like editable flowsheet remain outside the current functional queue. Global visual
-identity is now registered as 100: it remains independently removable from functional slices,
-but by maintainer decision it is ordered after 058b and before architecture-remediation runtime
-work.
+are not reopened by the architecture reconciliation. Spec 078 is cancelled as a standalone
+implementation identity; its merged planning/scientific evidence remains historical/incumbent
+reference for the zero-sunk-cost bake-off and future PBR work. Spec 107 is the sole future
+integrated PBR evaluator implementation authority after 103/106. Spec 093 and any Aspen-like
+editable flowsheet remain outside the current functional queue. Global visual identity is now
+registered as 100: it remains independently removable from functional slices, but by maintainer
+decision it is ordered after 058b and before architecture-remediation runtime work.
 
 The queue is binding but not immutable. If a slice proves non-implementable within its
 accepted boundary, or a prerequisite proves insufficient, the active front stops and a later
@@ -136,7 +136,7 @@ it changes. Silent abandonment or substitution is not authorized.
 1. 058c SCENE-SEMANTICS-A1 is the sole active runtime implementation front in PR #319; 097 remains unauthorized until 058c implementation merges and is reconciled.
 2. 099 REVIEW-SECRET-BOUNDARY-0 is merged through PR #306 and reconciled; the emergency security interrupt is closed.
 3. Preserve merged 059a/059b, 061a/061b, 075, 076, 077, 079, 082, 094, 070, 083, 084, 085, 086, 087, 088, 035, 089, 054, 090, 091, 029, 096, 071b, and 092 authority boundaries; definition-only 095 remains non-implementation authority.
-4. Preserve the merged documentation/evidence from 047–049, 072, 075 and 078 as incumbent/reference evidence, but give it zero sunk-cost privilege during 103; 078 must be re-derived before implementation.
+4. Preserve the merged documentation/evidence from 047–049, 072, 075 and cancelled 078 as incumbent/reference evidence with zero sunk-cost privilege during 103; 107 is the sole future integrated PBR evaluator implementation authority after 103/106.
 5. Keep 066–068 and 080 frozen; keep 062 itself blocked/deferred while allowing the operator-workstation queue to proceed without routine grading UI.
 6. After 058b, execute 100 visual identity before any 101–110 runtime work. Then follow 101→110 unless a future definition-only re-derivation records a concrete reason to change the order.
 
@@ -232,7 +232,7 @@ it changes. Silent abandonment or substitution is not authorized.
 | 075 | merged | [#191](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/191) | PROCESS-KERNEL-1: streams, components, units, and unit operations | 043, 047, 048, 071 | Historical acyclic typed process-kernel experiment with exact 047 identity. No further generic solver expansion is authorized before 103; the kernel receives zero sunk-cost privilege and may be wrapped, reduced to fixtures/domain equations, or deleted by 104 after the upstream bake-off. |
 | 076 | merged | [#195](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/195) | EVIDENCE-SIGHT-0: bounded evidence-guided structural repair | 010, 038, 044, 059b, 061a, 061b | Add an opt-in, separately budgeted structural-repair cycle using deterministic attempt-scoped evidence; preserve valid candidate state and artifact pointers on every unsuccessful path; no new states, migration, promotion, or egress authority. |
 | 077 | merged | [#198](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/198) | EVIDENCE-EGRESS-0: canonical evidence provenance and classification | 044, 059a, 059b, 076 | Bind canonical evidence rows and rendered evidence derivatives to workspace-scoped provenance, sensitivity, staleness, and exact-packet lineage before external model use; reuse 059a/059b authority and add no alternate egress path. Readiness sequencing, prompt authority, and no-migration packet lineage are frozen in [the 2026-07-28 readiness decision](077-readiness-2026-07-28.md). |
-| 078 | planned | — | PBR-MODELING-0: bounded photobioreactor modeling kernel | 043, 047, 048, 049, 071, 075, 103, 106 | Existing planning/evidence through PR #211 remains useful, but implementation is not authorized. The spec must be freshly re-derived after 103/106 so it does not assume the custom acyclic process kernel is the target PBR solver. |
+| 078 | cancelled | — | PBR-MODELING-0: bounded photobioreactor modeling kernel | — | Cancelled/superseded as a standalone runtime implementation identity. Planning and scientific evidence through PR #211 remain historical/incumbent reference; 107 is the sole future integrated PBR evaluator implementation authority after 103/106. |
 | 079 | merged | [#210](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/210) | AUTONOMOUS-DEVELOPMENT-LOOP-0: minimal scheduled continuation | 022 | Merged through PR #210. Resume exactly one existing in-review implementation PR once daily by reading the registry from exact PR heads, reusing Claude Code Action in OFF/SHADOW/EXECUTE_NO_MERGE modes, validating an untrusted patch with deterministic gates, and permitting only a non-forced same-branch push; no merge or review/repair authority. |
 | 080 | planned | — | AUTONOMOUS-REVIEW-REPAIR-0 | 004, 017, 019, 022, 079 | Frozen for the duration of the frontend-beta queue. It remains separate from 079 and receives no implementation authority until a later explicit queue reopens it. |
 | 081 | planned | — | FRONTEND-BETA-AUTHORITY-0 | — | Definition-only umbrella derived from `master` at `2183b2282d239ed570c59d0982e227e54c62dad7`; freezes product direction, queue, phase evidence, transition continuity, and re-derivation rules. It must never receive an implementation PR. |
@@ -280,6 +280,9 @@ it changes. Silent abandonment or substitution is not authorized.
 - Specs 031, 034, and 036 retain only bounded JarvisOS-side vocabulary, persona-policy,
   and authority-display contracts. They do not authorize a second conversation or
   orchestration engine and do not reopen frozen 066–068.
+- Historical 078 PBR-MODELING-0 is cancelled as a standalone implementation identity;
+  its merged planning/scientific evidence remains reference material, while 107 is the
+  sole future integrated PBR evaluator implementation authority after 103/106.
 - IDs 081–099 are reserved by FRONTEND-BETA-AUTHORITY-0 plus the 094 normal-spine re-derivation, 095 operator-workstation re-derivation, and the 099 emergency security interrupt as recorded in the registry;
   all references use the canonical three-digit form required by the registry gate, with existing suffix form reused only where explicitly registered (such as 071b).
 - IDs 100–110 are reserved by the 2026-08-21 architecture reconciliation for the post-functional-beta visual-identity and zero-sunk-cost architecture/process replatforming sequence. They are planning rows only until individually re-derived and made ready.
