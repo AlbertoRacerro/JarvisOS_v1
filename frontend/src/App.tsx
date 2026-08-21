@@ -32,7 +32,7 @@ function App() {
   const [selection, setSelection] = useState<StageSelection | null>(null);
   const [shellRegions, setShellRegions] = useState<ShellRegionContributions>({});
   const [shellRegionRequest, setShellRegionRequest] = useState<ShellRegionRequest | null>(null);
-  const engineeringProperties = useEngineeringProperties(workspaceId, setWorkspaceId);
+  const engineeringProperties = useEngineeringProperties(workspaceId, setWorkspaceId, selection);
 
   useEffect(() => {
     setSelection(null);
