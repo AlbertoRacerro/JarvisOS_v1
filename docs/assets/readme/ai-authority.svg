@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="560" viewBox="0 0 1500 560" role="img" aria-labelledby="title desc">
+  <title id="title">JarvisOS AI authority model</title>
+  <desc id="desc">An engineer asks for work. An AI or runtime may propose an action, but JarvisOS deterministic policy decides whether the capability is visible and granted. A deterministic tool or solver executes. Results return as evidence and only JarvisOS acceptance rules can commit accepted engineering state.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#475569"/></marker>
+    <style>
+      .canvas{fill:#ffffff;stroke:#cbd5e1;stroke-width:2}.implemented{fill:#ecfdf5;stroke:#16a34a;stroke-width:2.6}.partial{fill:#fffbeb;stroke:#d97706;stroke-width:2.5}.external{fill:#f8fafc;stroke:#64748b;stroke-width:2.2}.neutral{fill:#f8fafc;stroke:#94a3b8;stroke-width:2}.title{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:29px;font-weight:750}.subtitle{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;font-size:15px}.h2{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:20px;font-weight:700}.body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#334155;font-size:14px}.tiny{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;font-size:12px}.chip{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:11px;font-weight:800;letter-spacing:.4px}.line{stroke:#475569;stroke-width:2.4;fill:none;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect x="24" y="24" width="1452" height="512" rx="26" class="canvas"/>
+  <text x="62" y="70" class="title">AI can collaborate. It does not get to become engineering truth.</text>
+  <text x="62" y="99" class="subtitle">Capability, information-flow and state-commit authority stay separate.</text>
+
+  <rect x="62" y="154" width="190" height="114" rx="16" class="neutral"/>
+  <text x="157" y="190" text-anchor="middle" class="h2">Engineer</text>
+  <text x="157" y="218" text-anchor="middle" class="body">goal / request</text>
+  <text x="157" y="243" text-anchor="middle" class="tiny">explicit human acceptance</text>
+
+  <rect x="292" y="154" width="218" height="114" rx="16" class="external"/>
+  <text x="401" y="190" text-anchor="middle" class="h2">AI / runtime</text>
+  <text x="401" y="218" text-anchor="middle" class="body">reason · explain · propose</text>
+  <text x="401" y="243" text-anchor="middle" class="chip" fill="#475569">NO AMBIENT AUTHORITY</text>
+
+  <rect x="550" y="130" width="330" height="162" rx="18" class="implemented"/>
+  <text x="715" y="166" text-anchor="middle" class="h2">Jarvis deterministic gates</text>
+  <text x="715" y="195" text-anchor="middle" class="body">route · sensitivity · privacy / egress · budget</text>
+  <text x="715" y="219" text-anchor="middle" class="body">tool visibility · capability grant · validation</text>
+  <text x="715" y="243" text-anchor="middle" class="body">approval · execution policy · commit rules</text>
+  <text x="715" y="272" text-anchor="middle" class="chip" fill="#166534">FAIL CLOSED</text>
+
+  <rect x="920" y="154" width="218" height="114" rx="16" class="partial"/>
+  <text x="1029" y="190" text-anchor="middle" class="h2">Tool / solver</text>
+  <text x="1029" y="218" text-anchor="middle" class="body">bounded execution</text>
+  <text x="1029" y="243" text-anchor="middle" class="tiny">exact tool / model identity</text>
+
+  <rect x="1178" y="154" width="260" height="114" rx="16" class="implemented"/>
+  <text x="1308" y="190" text-anchor="middle" class="h2">Evidence returned</text>
+  <text x="1308" y="218" text-anchor="middle" class="body">result · diagnostics · provenance</text>
+  <text x="1308" y="243" text-anchor="middle" class="tiny">not yet an accepted state mutation</text>
+
+  <path d="M252 211 H292" class="line"/>
+  <path d="M510 211 H550" class="line"/>
+  <path d="M880 211 H920" class="line"/>
+  <path d="M1138 211 H1178" class="line"/>
+
+  <rect x="500" y="365" width="500" height="116" rx="18" class="implemented"/>
+  <text x="750" y="399" text-anchor="middle" class="h2">Jarvis acceptance / commit boundary</text>
+  <text x="750" y="427" text-anchor="middle" class="body">accept · reject · supersede · request another run</text>
+  <text x="750" y="451" text-anchor="middle" class="body">only accepted evidence can update canonical engineering state</text>
+  <text x="750" y="474" text-anchor="middle" class="chip" fill="#166534">CANONICAL STATE AUTHORITY</text>
+
+  <path d="M1308 268 V330 H750 V365" class="line"/>
+  <path d="M500 423 H310 V268" class="line"/>
+  <text x="386" y="411" text-anchor="middle" class="tiny">result can trigger another human/AI iteration</text>
+</svg>
