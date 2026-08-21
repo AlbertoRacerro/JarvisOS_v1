@@ -24,13 +24,16 @@ def contract_requires_canonical_linked_parameters(
     contract_payload: str | None,
     contract_sha256: str | None,
 ) -> bool:
-    """Return whether the stored contract gives source_parameter_id canonical-FK authority.
+    """Return whether stored contract authority makes source_parameter_id a canonical FK.
 
-    Schema-v1/raw runner payloads historically permit provenance-like source tokens.
-    058c freshness enforcement therefore applies only to the authoritative schema-v2/v3
-    contract path, never by inspecting payload shape or guessing identifier semantics.
+    Historical no-contract and schema-v1 runner payloads permit provenance-like source
+    tokens. 058c freshness enforcement therefore applies only to authoritative schema-v2/v3
+    contracts, never by inspecting payload shape or guessing identifier semantics. Partial or
+    malformed stored-contract evidence remains fail-closed through the canonical parser.
     """
 
+    if contract_payload is None and contract_sha256 is None:
+        return False
     contract, _ = parse_stored_input_contract(contract_payload, contract_sha256)
     return contract.schema_version in {2, 3}
 
