@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="690" viewBox="0 0 1200 690" role="img" aria-labelledby="title desc">
   <title id="title">JarvisOS control, context and memory architecture</title>
-  <desc id="desc">Canonical state, evidence, external documents, derived retrieval and code intelligence feed a bounded Context Broker. AI and AgentRuntime outputs return through JarvisOS policy and commit boundaries rather than writing canonical state directly.</desc>
+  <desc id="desc">Canonical state, evidence, external documents, derived retrieval and code intelligence feed a bounded Context Broker. The resulting context crosses the JarvisOS policy and egress gate before reaching an AI or AgentRuntime. Agent proposals and capability results return through the same policy boundary; accepted transitions update canonical state and execution results are recorded as runs and evidence.</desc>
   <defs>
     <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#475569"/></marker>
     <style>.frame{fill:#fff;stroke:#cbd5e1;stroke-width:2}.implemented{fill:#ecfdf5;stroke:#16a34a;stroke-width:2.5}.partial{fill:#fffbeb;stroke:#d97706;stroke-width:2.5}.planned{fill:#eff6ff;stroke:#0284c7;stroke-width:2.5}.optional{fill:#f8fafc;stroke:#64748b;stroke-width:2}.title{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:27px;font-weight:750}.boxTitle{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:17px;font-weight:700}.sub{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;font-size:12px}.tag{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:11px;font-weight:800}.line{stroke:#475569;stroke-width:2.2;fill:none;marker-end:url(#arrow)}.dash{stroke:#64748b;stroke-width:2;fill:none;stroke-dasharray:7 6;marker-end:url(#arrow)}</style>
   </defs>
   <rect x="30" y="30" width="1140" height="630" rx="22" class="frame"/>
   <text x="65" y="74" class="title">Control, context and memory are different layers</text>
-  <text x="65" y="101" class="sub">Context sources are parallel. The Context Broker assembles bounded inputs; proposals return through policy and commit gates.</text>
+  <text x="65" y="101" class="sub">Context sources are parallel. The broker assembles a candidate pack; policy controls delivery, capability use, return results and state transitions.</text>
 
   <rect x="60" y="145" width="205" height="120" rx="16" class="implemented"/>
   <text x="163" y="181" text-anchor="middle" class="boxTitle">Canonical state</text><text x="163" y="209" text-anchor="middle" class="sub">accepted engineering records</text><text x="163" y="232" text-anchor="middle" class="sub">provenance · freshness</text><text x="163" y="252" text-anchor="middle" class="tag" fill="#15803d">AUTHORITATIVE</text>
@@ -25,7 +25,7 @@
   <text x="1045" y="181" text-anchor="middle" class="boxTitle">Code intelligence</text><text x="1045" y="209" text-anchor="middle" class="sub">Serena / LSP-style</text><text x="1045" y="232" text-anchor="middle" class="sub">parallel context source</text><text x="1045" y="252" text-anchor="middle" class="tag" fill="#0369a1">PLANNED</text>
 
   <rect x="365" y="335" width="470" height="105" rx="17" class="partial"/>
-  <text x="600" y="371" text-anchor="middle" class="boxTitle">Context Broker</text><text x="600" y="399" text-anchor="middle" class="sub">selection · budget · digest · source manifest · policy filtering</text><text x="600" y="423" text-anchor="middle" class="tag" fill="#b45309">DETERMINISTIC PACKS EXIST · SEMANTIC RETRIEVAL FUTURE</text>
+  <text x="600" y="371" text-anchor="middle" class="boxTitle">Context Broker</text><text x="600" y="399" text-anchor="middle" class="sub">selection · budget · digest · source manifest</text><text x="600" y="423" text-anchor="middle" class="tag" fill="#b45309">DETERMINISTIC PACKS EXIST · SEMANTIC RETRIEVAL FUTURE</text>
 
   <path d="M163 265 C163 310 430 305 470 335" class="line"/>
   <path d="M393 265 C393 305 500 310 525 335" class="line"/>
@@ -37,13 +37,16 @@
   <text x="240" y="547" text-anchor="middle" class="boxTitle">AI / AgentRuntime</text><text x="240" y="575" text-anchor="middle" class="sub">Hermes or another runtime</text><text x="240" y="598" text-anchor="middle" class="sub">response · proposal · ToolIntent</text>
 
   <rect x="480" y="500" width="240" height="135" rx="16" class="implemented"/>
-  <text x="600" y="537" text-anchor="middle" class="boxTitle">JarvisOS policy + commit gate</text><text x="600" y="565" text-anchor="middle" class="sub">capability · egress · validation</text><text x="600" y="588" text-anchor="middle" class="sub">promotion · audit · fail closed</text><text x="600" y="613" text-anchor="middle" class="tag" fill="#15803d">NO DIRECT AGENT → STATE PATH</text>
+  <text x="600" y="537" text-anchor="middle" class="boxTitle">JarvisOS policy + commit gate</text><text x="600" y="565" text-anchor="middle" class="sub">context/egress · capability · validation</text><text x="600" y="588" text-anchor="middle" class="sub">promotion · audit · fail closed</text><text x="600" y="613" text-anchor="middle" class="tag" fill="#15803d">NO DIRECT AGENT → STATE PATH</text>
 
   <rect x="840" y="510" width="240" height="115" rx="16" class="planned"/>
-  <text x="960" y="547" text-anchor="middle" class="boxTitle">Capability interface</text><text x="960" y="575" text-anchor="middle" class="sub">MCP where useful</text><text x="960" y="598" text-anchor="middle" class="sub">tool visibility ≠ permission</text>
+  <text x="960" y="547" text-anchor="middle" class="boxTitle">Capability interface</text><text x="960" y="575" text-anchor="middle" class="sub">MCP where useful</text><text x="960" y="598" text-anchor="middle" class="sub">tools / resources · not authority</text>
 
-  <path d="M520 440 C500 470 310 475 270 510" class="line"/><text x="340" y="476" class="sub">bounded context</text>
-  <path d="M360 566 H480" class="line"/><text x="390" y="552" class="sub">proposal / intent</text>
-  <path d="M720 566 H840" class="line"/><text x="750" y="552" class="sub">authorized capability</text>
-  <path d="M600 500 C600 470 230 475 205 265" class="line"/><text x="425" y="472" class="sub">accepted transitions update canonical state</text>
+  <path d="M600 440 V500" class="line"/><text x="612" y="476" class="sub">candidate context pack</text>
+  <path d="M480 540 H360" class="line"/><text x="365" y="526" class="sub">authorized task + context</text>
+  <path d="M360 590 H480" class="line"/><text x="382" y="608" class="sub">response / proposal / intent</text>
+  <path d="M720 540 H840" class="line"/><text x="744" y="526" class="sub">authorized request</text>
+  <path d="M840 590 H720" class="line"/><text x="735" y="608" class="sub">result / error / artifact</text>
+  <path d="M555 500 C555 455 405 450 393 265" class="line"/><text x="408" y="458" class="sub">record run / evidence</text>
+  <path d="M520 500 C470 455 235 455 205 265" class="line"/><text x="238" y="446" class="sub">accepted transition</text>
 </svg>
