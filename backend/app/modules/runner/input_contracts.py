@@ -18,6 +18,7 @@ from app.modules.runner.models import (
 from app.modules.runner.safety import RunnerSafetyError, canonical_json
 
 _VARIABLE_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
+_SEMANTIC_KEY = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 _CATEGORIES = Literal["design", "operating", "property", "model_parameter", "equipment"]
 
 
@@ -95,6 +96,55 @@ class InputVariableV2(InputVariable):
         return value
 
 
+class SemanticContextV3(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    applicable_part_kinds: list[str] = Field(min_length=1, max_length=16)
+    model_family_key: str = Field(min_length=1, max_length=64)
+    model_family_label: str = Field(min_length=1, max_length=120)
+    model_option_label: str = Field(min_length=1, max_length=120)
+
+    @field_validator("applicable_part_kinds")
+    @classmethod
+    def valid_part_kinds(cls, values: list[str]) -> list[str]:
+        _require_unique_semantic_keys(values, field_name="applicable_part_kinds")
+        return values
+
+    @field_validator("model_family_key")
+    @classmethod
+    def valid_family_key(cls, value: str) -> str:
+        if not _SEMANTIC_KEY.fullmatch(value):
+            raise ValueError("model_family_key must be a stable identifier")
+        return value
+
+    @field_validator("model_family_label", "model_option_label")
+    @classmethod
+    def no_edge_whitespace(cls, value: str) -> str:
+        if value != value.strip():
+            raise ValueError("semantic labels cannot have leading or trailing whitespace")
+        return value
+
+
+class InputVariableV3(InputVariableV2):
+    model_config = ConfigDict(extra="forbid")
+
+    property_group: str = Field(min_length=1, max_length=120)
+    applicable_part_kinds: list[str] = Field(max_length=16)
+
+    @field_validator("property_group")
+    @classmethod
+    def property_group_no_edge_whitespace(cls, value: str) -> str:
+        if value != value.strip():
+            raise ValueError("property_group cannot have leading or trailing whitespace")
+        return value
+
+    @field_validator("applicable_part_kinds")
+    @classmethod
+    def valid_part_kinds(cls, values: list[str]) -> list[str]:
+        _require_unique_semantic_keys(values, field_name="applicable_part_kinds")
+        return values
+
+
 class ModelInputContract(BaseModel):
     """Schema-v1 contract retained as the public legacy model."""
 
@@ -123,7 +173,25 @@ class ModelInputContractV2(BaseModel):
         return self
 
 
-StoredInputContract: TypeAlias = ModelInputContract | ModelInputContractV2
+class ModelInputContractV3(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal[3]
+    evaluation_mode: Literal["forward"]
+    semantic_context: SemanticContextV3
+    variables: list[InputVariableV3] = Field(min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def validate_semantics(self) -> ModelInputContractV3:
+        _require_unique_variable_names(self.variables)
+        implementation_kinds = set(self.semantic_context.applicable_part_kinds)
+        for variable in self.variables:
+            if not set(variable.applicable_part_kinds).issubset(implementation_kinds):
+                raise ValueError("variable applicable_part_kinds must be implementation-applicable")
+        return self
+
+
+StoredInputContract: TypeAlias = ModelInputContract | ModelInputContractV2 | ModelInputContractV3
 ParameterLoader = Callable[[str], dict[str, object] | None]
 
 
@@ -200,7 +268,7 @@ def build_binding_preview(
             )
             continue
 
-        if isinstance(contract, ModelInputContractV2):
+        if isinstance(contract, (ModelInputContractV2, ModelInputContractV3)):
             value, source_parameter_id, errors = _validate_v2_binding(
                 variable,
                 item,
@@ -268,13 +336,13 @@ def build_binding_preview(
 
 
 def normalize_input_set_v2(
-    contract: ModelInputContractV2,
+    contract: ModelInputContractV2 | ModelInputContractV3,
     input_set: dict[str, Any],
     *,
     load_parameter: ParameterLoader | None = None,
 ) -> dict[str, dict[str, object]]:
     if set(input_set) != {variable.name for variable in contract.variables}:
-        raise RunnerSafetyError("runner_input_invalid", "Input set does not match the schema-v2 contract.")
+        raise RunnerSafetyError("runner_input_invalid", "Input set does not match the schema-v2/v3 contract.")
     normalized: dict[str, dict[str, object]] = {}
     for variable in contract.variables:
         value, source_parameter_id, errors = _validate_v2_binding(
@@ -285,7 +353,7 @@ def normalize_input_set_v2(
         if errors or value is None:
             raise RunnerSafetyError(
                 "runner_input_invalid",
-                f"Invalid schema-v2 input: {variable.name}.",
+                f"Invalid schema-v2/v3 input: {variable.name}.",
             )
         normalized_item: dict[str, object] = {"value": value, "unit": variable.unit}
         if source_parameter_id:
@@ -301,6 +369,8 @@ def _validate_contract(payload: dict[str, Any]) -> StoredInputContract:
             return ModelInputContract.model_validate(payload)
         if schema_version == 2:
             return ModelInputContractV2.model_validate(payload)
+        if schema_version == 3:
+            return ModelInputContractV3.model_validate(payload)
     except ValidationError as exc:
         raise RunnerSafetyError(
             "runner_input_contract_invalid",
@@ -312,10 +382,19 @@ def _validate_contract(payload: dict[str, Any]) -> StoredInputContract:
     )
 
 
-def _require_unique_variable_names(variables: list[InputVariable] | list[InputVariableV2]) -> None:
+def _require_unique_variable_names(
+    variables: list[InputVariable] | list[InputVariableV2] | list[InputVariableV3],
+) -> None:
     names = [variable.name for variable in variables]
     if len(names) != len(set(names)):
         raise ValueError("variable names must be unique")
+
+
+def _require_unique_semantic_keys(values: list[str], *, field_name: str) -> None:
+    if len(values) != len(set(values)):
+        raise ValueError(f"{field_name} values must be unique")
+    if any(not _SEMANTIC_KEY.fullmatch(value) for value in values):
+        raise ValueError(f"{field_name} values must be stable identifiers")
 
 
 def _validate_v1_binding(
