@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="430" viewBox="0 0 1200 430" role="img" aria-labelledby="title desc">
+  <title id="title">JarvisOS AI authority model</title>
+  <desc id="desc">An AI model creates a proposal. JarvisOS applies deterministic policy, privacy, budget and capability gates before any execution. Tools and solvers produce evidence. Canonical state changes only through JarvisOS acceptance rules.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#475569"/></marker>
+    <style>
+      .box{fill:#f8fafc;stroke:#475569;stroke-width:2;rx:14}.gate{fill:#ecfdf5;stroke:#15803d;stroke-width:3;rx:16}.state{fill:#f0fdf4;stroke:#166534;stroke-width:3;rx:16}.txt{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:20px;font-weight:650}.sub{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;font-size:15px}.label{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#166534;font-size:14px;font-weight:750}.line{stroke:#475569;stroke-width:2.5;fill:none;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect x="30" y="30" width="1140" height="370" rx="22" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="65" y="72" class="txt" font-size="26">AI is a collaborator, not the authority</text>
+  <text x="65" y="98" class="sub">A plausible AI answer is not automatically an accepted engineering result or state change.</text>
+
+  <rect x="60" y="150" width="170" height="100" class="box"/>
+  <text x="145" y="187" text-anchor="middle" class="txt">Engineer</text>
+  <text x="145" y="216" text-anchor="middle" class="sub">goal / request</text>
+
+  <rect x="280" y="150" width="180" height="100" class="box"/>
+  <text x="370" y="187" text-anchor="middle" class="txt">AI model</text>
+  <text x="370" y="216" text-anchor="middle" class="label">PROPOSAL</text>
+
+  <rect x="510" y="125" width="250" height="150" class="gate"/>
+  <text x="635" y="162" text-anchor="middle" class="txt">Jarvis policy gates</text>
+  <text x="635" y="192" text-anchor="middle" class="sub">route · privacy / egress</text>
+  <text x="635" y="216" text-anchor="middle" class="sub">budget · capability grant</text>
+  <text x="635" y="240" text-anchor="middle" class="sub">validation · execution rules</text>
+  <text x="635" y="262" text-anchor="middle" class="label">FAIL CLOSED</text>
+
+  <rect x="810" y="150" width="170" height="100" class="box"/>
+  <text x="895" y="187" text-anchor="middle" class="txt">Tool / solver</text>
+  <text x="895" y="216" text-anchor="middle" class="sub">deterministic work</text>
+
+  <rect x="1015" y="135" width="130" height="130" class="state"/>
+  <text x="1080" y="174" text-anchor="middle" class="txt">Evidence</text>
+  <text x="1080" y="201" text-anchor="middle" class="sub">result</text>
+  <text x="1080" y="224" text-anchor="middle" class="sub">provenance</text>
+  <text x="1080" y="247" text-anchor="middle" class="sub">acceptance</text>
+
+  <path d="M230 200 H280" class="line"/><path d="M460 200 H510" class="line"/><path d="M760 200 H810" class="line"/><path d="M980 200 H1015" class="line"/>
+  <path d="M1080 265 C1080 335 635 345 635 275" class="line"/>
+  <text x="790" y="335" class="sub">only accepted evidence can affect canonical engineering state</text>
+</svg>
