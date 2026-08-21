@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">BlueRev process-first engineering flow</title>
+  <desc id="desc">Biology, light, hydrodynamics and mixing, gas transfer, nutrients and control, and hydraulics and energy feed an integrated photobioreactor process model. Process design and optimization then determine a feasible design envelope. BLUECAD creates the physical realization, followed by mesh, CFD or FEM when required.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#475569"/></marker>
+    <style>
+      .box{fill:#f8fafc;stroke:#64748b;stroke-width:2;rx:14}.p1{fill:#f0fdf4;stroke:#16a34a;stroke-width:3;rx:18}.p2{fill:#ecfeff;stroke:#0f766e;stroke-width:2.5;rx:16}.txt{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#0f172a;font-size:19px;font-weight:650}.sub{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#475569;font-size:14px}.label{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:#166534;font-size:14px;font-weight:800;letter-spacing:.5px}.line{stroke:#475569;stroke-width:2.5;fill:none;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect x="30" y="30" width="1140" height="640" rx="22" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="65" y="75" class="txt" font-size="27">BlueRev engineering priority: process first, CAD second</text>
+  <text x="65" y="103" class="sub">Geometry is important, but tube diameter, length, flow and topology are first process-design variables.</text>
+
+  <rect x="65" y="155" width="165" height="88" class="box"/><text x="147" y="188" text-anchor="middle" class="txt">Biology</text><text x="147" y="214" text-anchor="middle" class="sub">growth · inhibition</text>
+  <rect x="255" y="155" width="165" height="88" class="box"/><text x="337" y="188" text-anchor="middle" class="txt">Light</text><text x="337" y="214" text-anchor="middle" class="sub">attenuation · photoresponse</text>
+  <rect x="445" y="155" width="165" height="88" class="box"/><text x="527" y="188" text-anchor="middle" class="txt">Mixing</text><text x="527" y="214" text-anchor="middle" class="sub">circulation · shear</text>
+  <rect x="635" y="155" width="165" height="88" class="box"/><text x="717" y="188" text-anchor="middle" class="txt">Gas transfer</text><text x="717" y="214" text-anchor="middle" class="sub">CO₂ · O₂ · kLa</text>
+  <rect x="825" y="155" width="165" height="88" class="box"/><text x="907" y="188" text-anchor="middle" class="txt">Control</text><text x="907" y="214" text-anchor="middle" class="sub">nutrients · pH · T</text>
+  <rect x="1015" y="155" width="120" height="88" class="box"/><text x="1075" y="188" text-anchor="middle" class="txt">Energy</text><text x="1075" y="214" text-anchor="middle" class="sub">ΔP · pumps</text>
+
+  <rect x="335" y="305" width="530" height="115" class="p1"/>
+  <text x="600" y="338" text-anchor="middle" class="label">P1 — PRIMARY BLUEREV CAPABILITY</text>
+  <text x="600" y="372" text-anchor="middle" class="txt" font-size="23">Integrated photobioreactor process model</text>
+  <text x="600" y="400" text-anchor="middle" class="sub">productivity · viability · transfer limits · hydraulic and energy trade-offs · evidence</text>
+
+  <path d="M147 243 V280 H480 V305" class="line"/><path d="M337 243 V270 H520 V305" class="line"/><path d="M527 243 V305" class="line"/><path d="M717 243 V270 H680 V305" class="line"/><path d="M907 243 V280 H720 V305" class="line"/><path d="M1075 243 V290 H760 V305" class="line"/>
+
+  <rect x="335" y="475" width="530" height="100" class="p1"/>
+  <text x="600" y="508" text-anchor="middle" class="label">P1b — PROCESS DESIGN / OPTIMIZATION</text>
+  <text x="600" y="540" text-anchor="middle" class="txt">D · L · topology · flow · aeration · baffles · operating conditions</text>
+  <path d="M600 420 V475" class="line"/>
+
+  <rect x="75" y="600" width="300" height="55" class="box"/>
+  <text x="225" y="633" text-anchor="middle" class="txt">Feasible design envelope</text>
+  <rect x="450" y="600" width="300" height="55" class="p2"/>
+  <text x="600" y="633" text-anchor="middle" class="txt">P2 — BLUECAD realization</text>
+  <rect x="825" y="600" width="300" height="55" class="box"/>
+  <text x="975" y="633" text-anchor="middle" class="txt">Mesh / CFD / FEM if needed</text>
+  <path d="M500 575 C470 600 390 615 375 627" class="line"/><path d="M375 627 H450" class="line"/><path d="M750 627 H825" class="line"/>
+</svg>
