@@ -90,32 +90,55 @@ The binding order is:
 22. 097 JARVIS-ENGINEERING-ACTIONS-0;
 23. 098 ENGINEERING-RECORD-LIFECYCLE-0;
 24. 006b PARAMETRIC-VARIANTS-1, freshly re-derived;
-25. 058b VARIANT-COMPARISON-1, freshly re-derived.
+25. 058b VARIANT-COMPARISON-1, freshly re-derived;
+26. 100 VISUAL-IDENTITY-1;
+27. 101 CANONICAL-STATE-WRITE-1;
+28. 102 ENGINEERING-EVIDENCE-CONTRACT-1;
+29. 103 PROCESS-UPSTREAM-BAKEOFF-1;
+30. 104 PROCESS-STACK-STRANGLER-1;
+31. 105 ENGINEERING-DOMAIN-CLEANUP-1;
+32. 106 ENGINEERING-EVALUATOR-1;
+33. 107 PBR-EVALUATOR-1;
+34. 108 DESIGN-STUDY-CONTROLLER-1;
+35. 109 PROCESS-CAD-HANDOFF-1;
+36. 110 MULTIFIDELITY-ENGINEERING-1.
+
+Items 26–36 are the maintainer-approved post-functional-beta extension registered on
+2026-08-21 after the public/canonical architecture reconciliation. They remain `planned`
+until the normal definition/full-spec/readiness lifecycle authorizes each slice. Their order
+encodes the zero-sunk-cost rule: fix authority/evidence semantics, evaluate upstreams from
+scratch, retire duplicated generic infrastructure, then build PBR/design-study capability on
+the selected boundaries.
 
 The maintainer completed the 062 frontend design decision on 2026-08-17: no permanent
 `Was this useful?` grading control belongs in normal Jarvis chat. Existing 062 backend/evaluation
 evidence remains valid; a future frontend grade surface is deferred to a separately re-derived
 Evaluation/Audit interaction and does not block the operator-workstation queue.
 
-Specs 066, 067, 068, and 080 remain frozen for the duration of this queue. Spec 078 remains
-planned without implementation authority. Spec 093 and any Aspen-like editable flowsheet are
-outside the binding queue. Global visual identity remains independently removable from the
-functional operator-workstation slices.
+Specs 066, 067, 068, and 080 remain frozen for the duration of the current functional queue and
+are not reopened by the architecture reconciliation. Spec 078 remains planned without
+implementation authority and must be freshly re-derived after the process upstream/evaluator
+work rather than assuming the custom process kernel is the target solver. Spec 093 and any
+Aspen-like editable flowsheet remain outside the current functional queue. Global visual
+identity is now registered as 100: it remains independently removable from functional slices,
+but by maintainer decision it is ordered after 058b and before architecture-remediation runtime
+work.
 
 The queue is binding but not immutable. If a slice proves non-implementable within its
 accepted boundary, or a prerequisite proves insufficient, the active front stops and a later
 definition-only authority spec may re-derive the remaining queue. Re-derivation must preserve
-already merged slices, record the stop reason and reached state, retain the 066–068 freeze,
-and explicitly identify any product decision from spec 081 or 095 that it changes. Silent
-abandonment or substitution is not authorized.
+already merged slices, record the stop reason and reached state, retain the 066–068 freeze
+until explicitly lifted, and explicitly identify any product decision from spec 081 or 095 that
+it changes. Silent abandonment or substitution is not authorized.
 
 ## Current priority and drafting order
 
-1. 058c SCENE-SEMANTICS-A1 definition PR #314, model-choice amendment PR #316, and fresh readiness PR #317 are merged. After this registry reconciliation, 058c is the sole authorized runtime implementation front; 097 remains unauthorized until 058c implementation merges and is reconciled.
+1. 058c SCENE-SEMANTICS-A1 is the sole active runtime implementation front in PR #319; 097 remains unauthorized until 058c implementation merges and is reconciled.
 2. 099 REVIEW-SECRET-BOUNDARY-0 is merged through PR #306 and reconciled; the emergency security interrupt is closed.
 3. Preserve merged 059a/059b, 061a/061b, 075, 076, 077, 079, 082, 094, 070, 083, 084, 085, 086, 087, 088, 035, 089, 054, 090, 091, 029, 096, 071b, and 092 authority boundaries; definition-only 095 remains non-implementation authority.
-4. Preserve the merged documentation contract for 078 without treating it as implementation authorization.
+4. Preserve the merged documentation/evidence from 047–049, 072, 075 and 078 as incumbent/reference evidence, but give it zero sunk-cost privilege during 103; 078 must be re-derived before implementation.
 5. Keep 066–068 and 080 frozen; keep 062 itself blocked/deferred while allowing the operator-workstation queue to proceed without routine grading UI.
+6. After 058b, execute 100 visual identity before any 101–110 runtime work. Then follow 101→110 unless a future definition-only re-derivation records a concrete reason to change the order.
 
 ## Registry
 
@@ -184,7 +207,7 @@ abandonment or substitution is not authorized.
 | 057 | cancelled | — | SPEC-LEDGER-0 | — | Cancelled after [planning PR #64](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/64): a generated ledger script and parallel handoff file are unnecessary while this canonical registry is sufficient. |
 | 058 | cancelled | — | Unified workspace home layout | — | Cancelled as a monolithic implementation slice. Its product objective is redistributed across 070 UI foundation, 083 application shell, 091 Jarvis sidecar, and 029 Settings. |
 | 058b | planned | — | Workbench UX pass 2: variant comparison and design history | 006b, 071b, 083, 085, 089 | Re-derive as VARIANT-COMPARISON-1 after 095: compare effective engineering values/model choices/results with declared units and warnings, not raw JSON/UUID history. |
-| 058c | ready | — | Report-to-3D linking | 044, 071b, 085, 092 | Re-derived as SCENE-SEMANTICS-A1 under definition PR #314, model-choice amendment PR #316, and [the 2026-08-20 fresh readiness decision](058c-readiness-2026-08-20-fresh.md) under PR #317. Authorize one bounded implementation of schema-v3 semantic metadata, the reviewed-047 semantic companion, exact guarded execution/freshness, selected-object Geometry semantics, stable dirty-target transitions and exact source navigation, without fabricated model alternatives or formulas. |
+| 058c | in_review | [#319](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/319) | Report-to-3D linking | 044, 071b, 085, 092 | SCENE-SEMANTICS-A1 is the sole active runtime front under definition PR #314, model-choice amendment PR #316 and fresh readiness PR #317. PR #319 implements the bounded schema-v3 semantic companion/execution/freshness/selected-object/source-navigation scope; later queue items remain unauthorized until merge/reconciliation. |
 | 059 | planned | — | IP-EGRESS-1 umbrella definition | 003, 015, 018, 021, 040, 042 | Definition amended through PR #95 and reconciled with ADR-059 for external policy autopilot, automatic sanitization, sampled audit, and explicit maintainer residual-risk acceptance; this row remains definition-only. |
 | 059a | merged | [#90](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/90) | IP-EGRESS-1A: sensitivity and context foundation | 003, 015, 018, 021, 040, 042 | Digest-bound labels/derivatives, deterministic floors, stale handling, coherent read-snapshot selection, and S0/S1-only external preview merged in #90. |
 | 059b | merged | [#119](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/119) | IP-EGRESS-1B: policy autopilot and execution enforcement | 059a | Prompt/manual-context authority, automatic sanitizer provenance, exact per-binding packets and decisions, ticket-ID confirmation, atomic projected-budget reservation, sampled audit, fallback enforcement, and usage-source-bound accounting are merged. |
@@ -196,20 +219,20 @@ abandonment or substitution is not authorized.
 | 063 | planned | — | CAPTURE-VAULT-0 | 040, 042 | Add a local markdown vault and rebuildable local vector working layer, merged with canonical SQLite retrieval under explicit authority/conflict tags; no vectors over canonical records. |
 | 064 | planned | — | LIT-RAG-0 | 042, 063 | Add corpus-tagged public-literature retrieval to the local working layer with source locators and canonical-over-literature authority; boundary consolidation remains a separately unnumbered planning gap. |
 | 065 | planned | — | Provider-family diversification policy hook | 059b | After policy autopilot is proven, add a configurable hook that may separate families of S2/S3-derived content across provider accounts without weakening exact-packet, budget, sensitivity, or audit gates. |
-| 066 | planned | — | HERMES-PASSTHROUGH-0 | 015, 018, 021, 059b, 061a, 061b, 062 | Frozen by maintainer decision on 2026-07-29 and not reopened by 081 or 095. The prior definition branch is retained; restart requires explicit maintainer approval and fresh re-derivation from current `master`. |
-| 067 | planned | — | JARVIS-MCP-0 | 005, 010, 040, 042, 043, 044, 059a | Frozen by maintainer decision on 2026-07-29 and not reopened by 081 or 095. The prior definition branch is retained; restart requires explicit maintainer approval and fresh re-derivation from current `master`. |
-| 068 | planned | — | HERMES-CONFIG-0 | 066, 067 | Frozen by maintainer decision on 2026-07-29 and not reopened by 081 or 095. The prior definition branch is retained; restart requires explicit maintainer approval and fresh re-derivation from current `master`. |
+| 066 | planned | — | HERMES-PASSTHROUGH-0 | 015, 018, 021, 059b, 061a, 061b, 062 | Frozen by maintainer decision on 2026-07-29 and not reopened by 081, 095 or the 2026-08-21 architecture reconciliation. Restart requires explicit maintainer approval and fresh re-derivation from then-current `master`. |
+| 067 | planned | — | JARVIS-MCP-0 | 005, 010, 040, 042, 043, 044, 059a | Frozen by maintainer decision on 2026-07-29 and not reopened by 081, 095 or the 2026-08-21 architecture reconciliation. Restart requires explicit maintainer approval and fresh re-derivation from then-current `master`. |
+| 068 | planned | — | HERMES-CONFIG-0 | 066, 067 | Frozen by maintainer decision on 2026-07-29 and not reopened by 081, 095 or the 2026-08-21 architecture reconciliation. Restart requires explicit maintainer approval and fresh re-derivation from then-current `master`. |
 | 069 | planned | — | MEMORY-CONSOLIDATE-0 | 040, 042, 061a, 061b, 062, 066, 067, 068 | First Hermes dogfood: consolidate bounded accepted records/evidence into MemoryStore proposals with conflict preservation, provenance, grading, and cost evidence; never promote, overwrite, delete, or lower sensitivity. |
 | 070 | merged | [#225](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/225) | UI-FOUNDATION-1 | 006, 082, 094 | Ready under [the 2026-08-04 readiness decision](070-readiness-2026-08-04.md) for one bounded implementation of semantic tokens, system/light/dark appearance, five shared primitives, limited migration, accessibility evidence, and the dependency-free UI foundation checker; no 083 shell work. |
 | 071 | merged | [#147](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/147) | MODEL-SCENARIO-DOF-0: editable bindings, scenario runs, and degree-of-freedom inspection | 040, 043, 047 | Preserve the merged immutable input-contract, side-effect-free binding/DOF preview and scenario-run authority. New operator-first Properties/working configuration work is additive under 071b; this historical implementation is not reopened. |
 | 071b | merged | [#298](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/298) | ENGINEERING-PROPERTIES-1 | 071, 096 | Definition PR #295 and [the 2026-08-18 readiness decision](071b-readiness-2026-08-18.md) under PR #296 are merged. Authorize the bounded operator-first implementation of contract-driven Properties, transient working configuration, effective values/provenance, dirty/Undo/Revert state, deterministic preflight/run-start semantics, and the narrow server-owned run-create idempotency seam frozen by readiness; no second engineering store. |
-| 072 | merged | [#172](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/172) | BLUEREV-PROCESS-3: explicit symmetric hydraulic topology M1 | 043, 047, 050, 051, 052, 071 | Preserve the validated deterministic parallel M1 topology as an inspectable experiment and alternative architecture. It is not the canonical BlueRev v1 serial Smart-Joint/tube topology and receives no new work in the frontend-beta queue. |
+| 072 | merged | [#172](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/172) | BLUEREV-PROCESS-3: explicit symmetric hydraulic topology M1 | 043, 047, 050, 051, 052, 071 | Preserve the validated deterministic parallel M1 topology as an inspectable experiment and incumbent/reference fixture. It is not the canonical BlueRev v1 default and receives zero sunk-cost privilege in the post-visual-identity process revalidation. |
 | 073 | merged | [#174](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/174) | BLUECAD-PRIMITIVE-1: fluid-open capped branch manifold | 005, 005b, 056 | Add one deterministic capped branch-header primitive with exactly one common port and 1–12 branch ports, explicit branch bores through the header wall, closed-end geometry, kernel-volume reconciliation, and property/conformance tests; no process link, layout solver, project defaults, or UI. |
-| 074 | merged | [#183](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/183) | CAD-LINK-1: 072 M1 topology to deterministic multi-part BLUECAD | 038, 050, 051, 052, 071, 072, 073 | Preserve the deterministic multi-part CAD link for the 072 parallel-topology experiment. It remains inspectable and supported but is not the canonical BlueRev v1 default. |
-| 075 | merged | [#191](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/191) | PROCESS-KERNEL-1: streams, components, units, and unit operations | 043, 047, 048, 071 | Re-express validated 047 as an acyclic flowsheet of typed material/scalar ports and reusable blocks, add additive unit-contract v2 and component/stream foundations, and require exact canonical 047 result identity before broader solver work. Readiness evidence and implementation ownership are frozen in [the 2026-07-27 readiness decision](075-readiness-2026-07-27.md). |
+| 074 | merged | [#183](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/183) | CAD-LINK-1: 072 M1 topology to deterministic multi-part BLUECAD | 038, 050, 051, 052, 071, 072, 073 | Preserve the deterministic multi-part CAD link for the 072 parallel-topology experiment. It remains inspectable but is not process-design authority and may be adapted/retired after the future process-design handoff is re-derived. |
+| 075 | merged | [#191](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/191) | PROCESS-KERNEL-1: streams, components, units, and unit operations | 043, 047, 048, 071 | Historical acyclic typed process-kernel experiment with exact 047 identity. No further generic solver expansion is authorized before 103; the kernel receives zero sunk-cost privilege and may be wrapped, reduced to fixtures/domain equations, or deleted by 104 after the upstream bake-off. |
 | 076 | merged | [#195](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/195) | EVIDENCE-SIGHT-0: bounded evidence-guided structural repair | 010, 038, 044, 059b, 061a, 061b | Add an opt-in, separately budgeted structural-repair cycle using deterministic attempt-scoped evidence; preserve valid candidate state and artifact pointers on every unsuccessful path; no new states, migration, promotion, or egress authority. |
 | 077 | merged | [#198](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/198) | EVIDENCE-EGRESS-0: canonical evidence provenance and classification | 044, 059a, 059b, 076 | Bind canonical evidence rows and rendered evidence derivatives to workspace-scoped provenance, sensitivity, staleness, and exact-packet lineage before external model use; reuse 059a/059b authority and add no alternate egress path. Readiness sequencing, prompt authority, and no-migration packet lineage are frozen in [the 2026-07-28 readiness decision](077-readiness-2026-07-28.md). |
-| 078 | planned | — | PBR-MODELING-0: bounded photobioreactor modeling kernel | 043, 047, 048, 049, 071, 075 | The planning kernel and complete documentation-only full specification with verified scientific-evidence companions are merged through PR #211. 078 remains `planned` with no readiness decision, implementation PR, migration, dependency, or runtime authorization. |
+| 078 | planned | — | PBR-MODELING-0: bounded photobioreactor modeling kernel | 043, 047, 048, 049, 071, 075 | Existing planning/evidence through PR #211 remains useful, but implementation is not authorized. The spec must be freshly re-derived after 103/106 so it does not assume the custom acyclic process kernel is the target PBR solver. |
 | 079 | merged | [#210](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/210) | AUTONOMOUS-DEVELOPMENT-LOOP-0: minimal scheduled continuation | 022 | Merged through PR #210. Resume exactly one existing in-review implementation PR once daily by reading the registry from exact PR heads, reusing Claude Code Action in OFF/SHADOW/EXECUTE_NO_MERGE modes, validating an untrusted patch with deterministic gates, and permitting only a non-forced same-branch push; no merge or review/repair authority. |
 | 080 | planned | — | AUTONOMOUS-REVIEW-REPAIR-0 | 004, 017, 019, 022, 079 | Frozen for the duration of the frontend-beta queue. It remains separate from 079 and receives no implementation authority until a later explicit queue reopens it. |
 | 081 | planned | — | FRONTEND-BETA-AUTHORITY-0 | — | Definition-only umbrella derived from `master` at `2183b2282d239ed570c59d0982e227e54c62dad7`; freezes product direction, queue, phase evidence, transition continuity, and re-derivation rules. It must never receive an implementation PR. |
@@ -225,12 +248,24 @@ abandonment or substitution is not authorized.
 | 090 | merged | [#276](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/276) | AI-THREADS-0 | 040, 041, 042, 059b, 061a, 061b, 083 | Add local episodic thread persistence and thread-to-attempt provenance while preserving distinct provider/fallback, token-flow, BLUECAD workflow, proposal, cost and latency evidence. Raw complete-thread external egress remains forbidden. |
 | 091 | merged | [#281](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/281) | JARVIS-SIDECAR-1 | 042, 059b, 061a, 061b, 083, 090 | Add contextual Jarvis interaction and advisory role profiles inside the shared sidecar, reusing the existing execution, context, proposal, budget and egress boundaries; no Hermes runtime or fake autonomous presence. |
 | 092 | merged | [#303](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/303) | SCENE-BINDING-0 | 005, 006, 056, 071b, 085 | Definition PR #300, [the 2026-08-19 readiness decision](092-readiness-2026-08-19.md) under PR #301, and implementation PR #303 are merged. Stable scene hit → canonical `part_id` binding now uses exporter-owned semantic keys, current manifest/spec/GLB evidence, stale-safe fail-closed resolution, and bounded human Properties/Jarvis target context without adding downstream 058c model semantics or a second working-state owner. |
-| 093 | planned | — | BLUEREV-SERIAL-TOPOLOGY-0 | 043, 047, 048, 049, 050, 051, 071, 075 | Future implementation authority for the canonical serial Smart-Joint/tubular-section BlueRev topology and side-stream harvest arrangement. It is outside the frontend-beta binding queue. |
+| 093 | planned | — | BLUEREV-SERIAL-TOPOLOGY-0 | 043, 047, 048, 049, 050, 051, 071, 103, 109 | Future serial Smart-Joint/tubular-section topology work must wait for the zero-sunk-cost process bake-off and typed process-design→CAD handoff; topology must not become detailed-CAD authority before process design is re-derived. |
 | 095 | planned | — | OPERATOR-WORKSTATION-AUTHORITY-1 | — | Definition-only re-derivation authority under PR #288; freezes the Operate/Inspect/Audit hierarchy, Jarvis-over-Properties sidecar, engineering Properties/working-state/preflight/Jarvis-action semantics and ordered downstream queue. It must never receive an implementation PR. |
 | 096 | merged | [#293](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/293) | OPERATOR-WORKBENCH-CORRECTION-0 | 054, 083, 088, 089, 091 | Definition PR #290 and readiness PR #291 are merged; runtime implementation PR #293 is merged with the bounded frontend-only sidecar/scroll/overflow and operator-first Runs/Review/Jarvis presentation correction using existing authority only, with no new engineering backend semantics. |
 | 097 | planned | — | JARVIS-ENGINEERING-ACTIONS-0 | 071b, 091, 058c | Structured stale-safe Jarvis actions over working configuration, deterministic blocker assistance, safe-fix provenance and explicit confirmation boundaries; never mutate canonical project data silently. |
 | 098 | planned | — | ENGINEERING-RECORD-LIFECYCLE-0 | 035, 040, 050, 051, 071b | Add explicit server-owned Edit / Active-Inactive / Archive / Supersede / Delete semantics and project-centric Engineering Data actions without destroying lineage or hiding deletion only in frontend state. |
 | 099 | merged | [#306](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/306) | REVIEW-SECRET-BOUNDARY-0 | 017, 019 | Emergency security implementation under [the 2026-08-19 readiness decision](099-readiness-2026-08-19.md) merged through PR #306: provider-secret Cheap/Senior jobs execute only trusted master code while reviewed PR content remains inert GitHub API data; the interrupt is closed; resumed 092/#303 subsequently completed and merged on 2026-08-20. |
+| 100 | planned | — | VISUAL-IDENTITY-1 | 058b | Apply the independently removable global visual identity only after the functional operator-workstation queue completes; visual design must not redefine backend authority, engineering semantics or canonical data. |
+| 101 | planned | — | CANONICAL-STATE-WRITE-1 | 040, 042, 071b, 098, 100 | Unify legacy modeling CRUD and MemoryStore/canonical record transitions behind one server-owned write-intent/lifecycle/audit boundary; separate Parameter record lifecycle from value/evidence quality and prevent proposed records from entering authoritative context by value-quality alone. |
+| 102 | planned | — | ENGINEERING-EVIDENCE-CONTRACT-1 | 044, 077, 101 | Generalize evaluator/evidence metadata for producer/version, digests, units, fidelity, validity domain, qualification, known exclusions, uncertainty and typed outcomes while preserving current solver-specific evidence and egress lineage. |
+| 103 | planned | — | PROCESS-UPSTREAM-BAKEOFF-1 | 047, 048, 049, 075, 100, 102 | Re-evaluate the custom process stack from zero against current upstreams such as IDAES/Pyomo/WaterTAP, BioSTEAM/QSDsan, CasADi/OpenMDAO, DWSIM/CAPE-OPEN and property libraries; produce explicit KEEP/WRAP/REPLACE/DELETE decisions with license, dynamics/recycle, optimization, diagnostics, Windows/local and qualification evidence. |
+| 104 | planned | — | PROCESS-STACK-STRANGLER-1 | 103 | Execute the 103 decision: migrate only still-useful domain equations/tests/adapters, switch callers to selected upstream boundaries, and delete duplicated generic custom process-solver infrastructure rather than maintaining parallel engines for sunk-cost reasons. |
+| 105 | planned | — | ENGINEERING-DOMAIN-CLEANUP-1 | 104 | Delete or deliberately rebuild the obsolete `app/modules/engineering` placeholder boundary and resolve the dependency/provenance `app/modules/flowsheet` naming collision with real process flowsheets, preserving compatibility only where demonstrably required. |
+| 106 | planned | — | ENGINEERING-EVALUATOR-1 | 102, 105 | Define the minimum common typed EvaluationRequest/EvaluationResult boundary for replaceable process/CAD/CAE/CFD/commercial adapters, including failure taxonomy and qualification metadata without flattening solver-specific semantics. |
+| 107 | planned | — | PBR-EVALUATOR-1 | 103, 106 | Freshly derive and implement the integrated photobioreactor evaluator on the selected process/dynamic upstream stack plus only necessary BlueRev-specific equations for biology, light, mixing/shear, gas transfer, controls, hydraulics and energy. |
+| 108 | planned | — | DESIGN-STUDY-CONTROLLER-1 | 107 | Add a deterministic/reproducible DesignStudy/StudyController inner loop where DOE/optimizer/search receives every evaluator result directly, with persisted feasibility/failure/Pareto state while Jarvis remains in the outer interpretation/intervention loop. |
+| 109 | planned | — | PROCESS-CAD-HANDOFF-1 | 005, 071b, 108 | Introduce a typed ProcessDesignEnvelope for process-driving geometry/flows/constraints and an explicit handoff to detailed GeometrySpec/CAD, with physical verification able to reopen the study instead of making CAD hidden process authority. |
+| 110 | planned | — | MULTIFIDELITY-ENGINEERING-1 | 108, 109 | Add decision-driven fidelity escalation from analytical/reduced-order evaluators to CFD/FEM/specialist tools only when needed, carrying exact qualification/validity evidence and allowing high-fidelity results to feed back into the same study. |
+
 ## Superseded planning aliases and resolved collisions
 
 - Historical `045 = AGENT-ORCH` references are superseded by `060`; `045` is
@@ -247,3 +282,4 @@ abandonment or substitution is not authorized.
   orchestration engine and do not reopen frozen 066–068.
 - IDs 081–099 are reserved by FRONTEND-BETA-AUTHORITY-0 plus the 094 normal-spine re-derivation, 095 operator-workstation re-derivation, and the 099 emergency security interrupt as recorded in the registry;
   all references use the canonical three-digit form required by the registry gate, with existing suffix form reused only where explicitly registered (such as 071b).
+- IDs 100–110 are reserved by the 2026-08-21 architecture reconciliation for the post-functional-beta visual-identity and zero-sunk-cost architecture/process replatforming sequence. They are planning rows only until individually re-derived and made ready.
