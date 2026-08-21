@@ -7,7 +7,13 @@ from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
 from app.modules.runner import service as _base
-from app.modules.runner.input_contracts import canonicalize_input_contract
+from app.modules.runner.input_contracts import (
+    ModelInputContractV2,
+    ModelInputContractV3,
+    canonicalize_input_contract,
+    parse_stored_input_contract,
+)
+from app.modules.runner.linked_parameters import require_linked_parameters_usable
 from app.modules.runner.models import (
     ModelImplementationCreate,
     ModelImplementationRead,
@@ -271,10 +277,11 @@ def _create_runner_job_idempotent(
                 ),
             )
 
+        # Every genuinely new create serializes its final linked-source decision
+        # with run/job persistence. A same-key committed replay remains
+        # reconciliation and is returned before current freshness is consulted.
+        connection.execute("BEGIN IMMEDIATE")
         if payload.request_key is not None:
-            # Serialize request-key owners so concurrent retries cannot both create
-            # a run before the unique workspace/key row becomes visible.
-            connection.execute("BEGIN IMMEDIATE")
             existing = connection.execute(
                 """
                 SELECT
@@ -311,6 +318,9 @@ def _create_runner_job_idempotent(
                     runner_job=_base.get_runner_job(runner_job_id),
                     simulation_run=_base.get_simulation_run_detail(workspace_id, simulation_run_id),
                 )
+
+        if _uses_canonical_linked_parameter_contract(model_version):
+            require_linked_parameters_usable(connection, workspace_id, input_payload)
 
         simulation_run_id = str(uuid4())
         runner_job_id = str(uuid4())
@@ -416,6 +426,15 @@ def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
         error["code"] = RUNNER_SCRIPT_POLICY_VIOLATION
         return response.model_copy(update={"error": error})
     return response
+
+
+def _uses_canonical_linked_parameter_contract(model_version: Any) -> bool:
+    contract_payload = model_version["input_contract_payload"]
+    contract_sha256 = model_version["input_contract_sha256"]
+    if not contract_payload or not contract_sha256:
+        return False
+    contract, _ = parse_stored_input_contract(contract_payload, contract_sha256)
+    return isinstance(contract, (ModelInputContractV2, ModelInputContractV3))
 
 
 def _translate_policy_error(exc: RunnerSafetyError) -> RunnerSafetyError:
