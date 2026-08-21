@@ -25,4 +25,8 @@ if old not in text:
     raise SystemExit("expected evidence block not found")
 text = text.replace(old, new)
 text = text.replace('for (const [name] of variables)', 'for (const { name } of variables)')
+text = text.replace(
+    '''// A delayed stale candidate response must not overwrite the newer B target.\ndelayA = true;''',
+    '''// A delayed stale candidate response must not overwrite the newer B target.\nawait gotoHarness();\nawait page.getByRole("button", { name: "Select B" }).click();\nawait page.waitForFunction(() => document.querySelector("#engineering-property-tube_length")?.value === "20");\ndelayA = true;'''
+)
 path.write_text(text, encoding="utf-8")
