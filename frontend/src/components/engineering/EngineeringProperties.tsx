@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import type { Navigate } from "../../app/AppLink";
 import type { StageSelection } from "../../app/selection";
 import {
   createRunnerJob,
@@ -86,6 +87,7 @@ export type EngineeringPropertiesController = Readonly<{
   undo(): void;
   revertField(name: string): void;
   revertAll(): void;
+  discardPreviousObjectChanges(): void;
   startRun(): void;
   retryRunStart(): void;
 }>;
@@ -97,7 +99,6 @@ const REVIEWED_PART_KIND = "tube_run";
 const REVIEWED_FAMILY_KEY = "geometry_hydraulics";
 const REVIEWED_OPTION_LABEL = "Reviewed 047 tubular-loop V0";
 const GEOMETRY_NAMES = ["tube_length", "tube_inner_diameter", "tube_outer_diameter"] as const;
-const GEOMETRY_NAME_SET = new Set<string>(GEOMETRY_NAMES);
 const CATEGORY_LABELS: Record<ModelInputVariable["category"], string> = {
   design: "Design",
   operating: "Operating",
@@ -266,6 +267,28 @@ function semanticTargetKey(target: BluecadPartSelection | null): string {
   ].join("\u001f");
 }
 
+function semanticStableTargetKey(target: BluecadPartSelection, source: SemanticSource): string {
+  return [
+    target.workspaceId,
+    target.candidateId,
+    target.artifactId,
+    target.partId,
+    target.partKind ?? "",
+    source.transformation_version,
+    source.source_simulation_run_id,
+    source.source_model_version_id
+  ].join("\u001f");
+}
+
+function withSemanticGeometry(bindings: BindingMap, source: SemanticSource): BindingMap {
+  const next = cloneBindings(bindings);
+  for (const name of GEOMETRY_NAMES) {
+    const item = source.geometry_bindings[name];
+    next[name] = { value: String(item.value), parameterId: item.source_parameter_id };
+  }
+  return next;
+}
+
 export function useEngineeringProperties(
   workspaceId: string | null,
   onWorkspaceChange: (workspaceId: string | null) => void,
@@ -289,11 +312,14 @@ export function useEngineeringProperties(
   const [semanticSource, setSemanticSource] = useState<SemanticSource | null>(null);
   const [semanticPhase, setSemanticPhase] = useState<SemanticPhase>("none");
   const [semanticMessage, setSemanticMessage] = useState<string | null>(null);
+  const [semanticAdoptedContextKey, setSemanticAdoptedContextKey] = useState("");
 
   const loadGeneration = useRef(0);
   const previewGeneration = useRef(0);
   const semanticGeneration = useRef(0);
   const semanticAdoptionKeyRef = useRef<string | null>(null);
+  const activeSemanticStableKeyRef = useRef<string | null>(null);
+  const pendingPreviousTargetKeyRef = useRef<string | null>(null);
   const revisionRef = useRef(revision);
   const selectedIdRef = useRef(selectedId);
   const selectionKeyRef = useRef("");
@@ -313,6 +339,7 @@ export function useEngineeringProperties(
   );
   const selected = useMemo(() => eligible.find((item) => item.id === selectedId) ?? null, [eligible, selectedId]);
   const variables = selected?.input_contract?.variables ?? [];
+  const selectedSemanticContract = useMemo(() => semanticContractOf(selected), [selected]);
   const semanticContract = useMemo(() => reviewedContractForTarget(selected, semanticTarget), [selected, semanticTarget]);
 
   useEffect(() => {
@@ -365,6 +392,9 @@ export function useEngineeringProperties(
     setRevision((current) => current + 1);
     previewGeneration.current += 1;
     semanticAdoptionKeyRef.current = null;
+    activeSemanticStableKeyRef.current = null;
+    pendingPreviousTargetKeyRef.current = null;
+    setSemanticAdoptedContextKey("");
   }, [selected?.id]);
 
   useEffect(() => {
@@ -415,11 +445,11 @@ export function useEngineeringProperties(
   useEffect(() => {
     if (!semanticSource || !semanticContract || !semanticTarget || semanticPhase !== "ready") return;
     const objectVariables = semanticContract.variables.filter((variable) => variable.applicable_part_kinds?.includes(REVIEWED_PART_KIND));
+    const stableKey = semanticStableTargetKey(semanticTarget, semanticSource);
     const adoptionKey = [
       currentSemanticTargetKey,
       selected?.id ?? "",
-      semanticSource.source_simulation_run_id,
-      semanticSource.source_model_version_id,
+      stableKey,
       ...GEOMETRY_NAMES.map((name) => {
         const item = semanticSource.geometry_bindings[name];
         return `${name}:${item.value}:${item.unit}:${item.source_parameter_id}`;
@@ -427,25 +457,37 @@ export function useEngineeringProperties(
     ].join("\u001e");
     if (semanticAdoptionKeyRef.current === adoptionKey) return;
 
-    const dirtyObjectNames = objectVariables.filter((variable) => !sameBinding(working[variable.name], baseline[variable.name]));
-    if (dirtyObjectNames.length > 0) {
-      setSemanticPhase("conflict");
-      setSemanticMessage("Unsaved object edits are preserved. Revert those edits before adopting semantic values for the current selected object.");
+    if (activeSemanticStableKeyRef.current === stableKey) {
+      semanticAdoptionKeyRef.current = adoptionKey;
+      setSemanticAdoptedContextKey(currentSemanticTargetKey);
+      if (pendingPreviousTargetKeyRef.current === stableKey) {
+        pendingPreviousTargetKeyRef.current = null;
+        setSemanticMessage(null);
+      }
       return;
     }
 
-    const nextBaseline = cloneBindings(baseline);
-    const nextWorking = cloneBindings(working);
-    for (const name of GEOMETRY_NAMES) {
-      const source = semanticSource.geometry_bindings[name];
-      const nextBinding = { value: String(source.value), parameterId: source.source_parameter_id };
-      nextBaseline[name] = nextBinding;
-      nextWorking[name] = nextBinding;
+    const dirtyObjectNames = objectVariables.filter((variable) => !sameBinding(working[variable.name], baseline[variable.name]));
+    if (activeSemanticStableKeyRef.current && dirtyObjectNames.length > 0) {
+      pendingPreviousTargetKeyRef.current = activeSemanticStableKeyRef.current;
+      setSemanticPhase("conflict");
+      setSemanticMessage("Unsaved object changes belong to the previous engineering target. Discard them explicitly before loading the selected object, or reselect the previous object to continue editing.");
+      previewGeneration.current += 1;
+      setPreview(null);
+      setPreviewPhase("unavailable");
+      setPreviewMessage("Resolve the previous object's unsaved changes before preflight or Run for the selected object.");
+      return;
     }
+
+    const nextBaseline = withSemanticGeometry(baseline, semanticSource);
+    const nextWorking = withSemanticGeometry(working, semanticSource);
     semanticAdoptionKeyRef.current = adoptionKey;
+    activeSemanticStableKeyRef.current = stableKey;
+    pendingPreviousTargetKeyRef.current = null;
+    setSemanticAdoptedContextKey(currentSemanticTargetKey);
     setBaseline(nextBaseline);
     setWorking(nextWorking);
-    setUndoStack([]);
+    setUndoStack((stack) => stack.map((snapshot) => withSemanticGeometry(snapshot, semanticSource)));
     setRevision((current) => current + 1);
     setPreview(null);
     setPreviewPhase("checking");
@@ -459,6 +501,24 @@ export function useEngineeringProperties(
     if (!workspaceId || !selected) {
       setPreview(null);
       setPreviewPhase("idle");
+      return;
+    }
+    if (semanticPhase === "conflict") {
+      previewGeneration.current += 1;
+      setPreview(null);
+      setPreviewPhase("unavailable");
+      setPreviewMessage("Resolve the previous object's unsaved changes before preflight or Run for the selected object.");
+      return;
+    }
+    if (
+      selectedSemanticContract?.semantic_context.model_family_key === REVIEWED_FAMILY_KEY &&
+      semanticTarget &&
+      semanticAdoptedContextKey !== currentSemanticTargetKey
+    ) {
+      previewGeneration.current += 1;
+      setPreview(null);
+      setPreviewPhase("unavailable");
+      setPreviewMessage("The selected engineering object is still resolving its authoritative semantic source.");
       return;
     }
     const built = buildPayload(variables, working);
@@ -501,7 +561,7 @@ export function useEngineeringProperties(
         });
     }, 120);
     return () => window.clearTimeout(timer);
-  }, [workspaceId, selected?.id, selected?.input_contract_sha256, revision]);
+  }, [workspaceId, selected?.id, selected?.input_contract_sha256, revision, semanticPhase, semanticTarget, semanticAdoptedContextKey, currentSemanticTargetKey]);
 
   const dirtyNames = useMemo(
     () => new Set(variables.filter((variable) => !sameBinding(working[variable.name], baseline[variable.name])).map((variable) => variable.name)),
@@ -538,6 +598,29 @@ export function useEngineeringProperties(
 
   const revertField = (name: string) => commitWorking({ ...working, [name]: { ...(baseline[name] ?? EMPTY_BINDING) } });
   const revertAll = () => commitWorking(baseline);
+
+  const discardPreviousObjectChanges = () => {
+    if (!semanticSource || !semanticContract || !semanticTarget || semanticPhase !== "conflict") return;
+    const stableKey = semanticStableTargetKey(semanticTarget, semanticSource);
+    const nextBaseline = withSemanticGeometry(baseline, semanticSource);
+    const nextWorking = withSemanticGeometry(working, semanticSource);
+    setBaseline(nextBaseline);
+    setWorking(nextWorking);
+    setUndoStack((stack) => stack.map((snapshot) => withSemanticGeometry(snapshot, semanticSource)));
+    pendingPreviousTargetKeyRef.current = null;
+    activeSemanticStableKeyRef.current = stableKey;
+    semanticAdoptionKeyRef.current = null;
+    setSemanticAdoptedContextKey(currentSemanticTargetKey);
+    setRevision((current) => current + 1);
+    setRunResult(null);
+    setPendingRun(null);
+    setPreview(null);
+    setPreviewPhase("checking");
+    setPreviewMessage(null);
+    previewGeneration.current += 1;
+    setSemanticPhase("ready");
+    setSemanticMessage(null);
+  };
 
   const executeSnapshot = async (snapshot: RunSnapshot) => {
     setRunBusy(true);
@@ -599,6 +682,8 @@ export function useEngineeringProperties(
       !workspaceId ||
       !selected ||
       runBusy ||
+      semanticPhase === "conflict" ||
+      (selectedSemanticContract?.semantic_context.model_family_key === REVIEWED_FAMILY_KEY && semanticTarget && semanticAdoptedContextKey !== currentSemanticTargetKey) ||
       previewPhase !== "ready" ||
       preview?.state !== "ready" ||
       !preview.normalized_input_set ||
@@ -621,7 +706,7 @@ export function useEngineeringProperties(
   };
 
   const retryRunStart = () => {
-    if (!pendingRun || runBusy) return;
+    if (!pendingRun || runBusy || semanticPhase === "conflict") return;
     void executeSnapshot(pendingRun);
   };
 
@@ -656,6 +741,7 @@ export function useEngineeringProperties(
     undo,
     revertField,
     revertAll,
+    discardPreviousObjectChanges,
     startRun,
     retryRunStart
   };
@@ -689,10 +775,12 @@ function blockerCount(controller: EngineeringPropertiesController): number {
 
 export function EngineeringPropertiesPanel({
   controller,
-  stageContext
+  stageContext,
+  navigate
 }: {
   controller: EngineeringPropertiesController;
   stageContext?: ReactNode;
+  navigate?: Navigate;
 }) {
   const selected = controller.selected;
   const variables = selected?.input_contract?.variables ?? [];
@@ -803,6 +891,15 @@ export function EngineeringPropertiesPanel({
               <div><dt>Status</dt><dd>{linkedParameter?.status ?? "unavailable"}</dd></div>
               <div><dt>Record ID</dt><dd>{binding.parameterId}</dd></div>
             </dl>
+            {navigate ? (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => navigate(`/engineering-data?kind=parameter&id=${encodeURIComponent(binding.parameterId)}`)}
+              >
+                Open source
+              </button>
+            ) : null}
           </details>
         ) : null}
         {isDirty ? <button type="button" className="secondary-button" onClick={() => controller.revertField(variable.name)}>Revert field</button> : null}
@@ -845,7 +942,12 @@ export function EngineeringPropertiesPanel({
 
           {controller.semanticPhase === "loading" ? <InlineNotice tone="neutral">Resolving authoritative object source…</InlineNotice> : null}
           {controller.semanticPhase === "limited" && controller.semanticMessage ? <InlineNotice tone="neutral">{controller.semanticMessage}</InlineNotice> : null}
-          {controller.semanticPhase === "conflict" && controller.semanticMessage ? <InlineNotice tone="warning">{controller.semanticMessage}</InlineNotice> : null}
+          {controller.semanticPhase === "conflict" && controller.semanticMessage ? (
+            <InlineNotice tone="warning">
+              {controller.semanticMessage}
+              <div><button type="button" className="secondary-button" onClick={controller.discardPreviousObjectChanges}>Discard previous object changes and load selected object</button></div>
+            </InlineNotice>
+          ) : null}
 
           <div className="dof-strip" aria-live="polite">
             {controller.previewPhase === "checking" ? <strong>Checking…</strong> : null}
@@ -889,13 +991,13 @@ export function EngineeringPropertiesPanel({
             </label>
             <button
               type="button"
-              disabled={controller.runBusy || controller.previewPhase !== "ready" || controller.preview?.state !== "ready" || !controller.runLabel.trim()}
+              disabled={controller.runBusy || controller.semanticPhase === "conflict" || controller.previewPhase !== "ready" || controller.preview?.state !== "ready" || !controller.runLabel.trim()}
               onClick={controller.startRun}
             >
               Run
             </button>
           </div>
-          {controller.pendingRun && controller.runMessage ? <button type="button" className="secondary-button" disabled={controller.runBusy} onClick={controller.retryRunStart}>Retry same run request</button> : null}
+          {controller.pendingRun && controller.runMessage ? <button type="button" className="secondary-button" disabled={controller.runBusy || controller.semanticPhase === "conflict"} onClick={controller.retryRunStart}>Retry same run request</button> : null}
           {controller.runMessage ? <p>{controller.runMessage}</p> : null}
           {controller.runResult ? <p>Execution status: <strong>{controller.runResult.runner_job.status}</strong></p> : null}
         </>
