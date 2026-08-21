@@ -119,7 +119,7 @@ The current repository already contains more than a UI mockup, but it is still a
 | Gmsh meshing adapter | **Implemented; qualification separate** | Integration exists; exact executable/host/scientific qualification is a separate gate. |
 | CalculiX static FEM adapter | **Implemented; qualification separate** | Deterministic deck/result handling and verification foundations exist. |
 | CAD → mesh → FEM → evidence → UI chain | **Implemented, opt-in** | A real physical-design path exists, including a bounded evidence-guided repair loop. |
-| Deterministic BlueRev screening models | **Working M0/M1 experiments** | Hydraulics, biomass/nutrient bookkeeping, harvesting, buoyancy and optical-transmission proxies exist. They are not an integrated predictive photobioreactor model. |
+| Deterministic photobioreactor screening models | **Working M0/M1 experiments** | Hydraulics, biomass/nutrient bookkeeping, harvesting, buoyancy and optical-transmission proxies exist. They are not an integrated predictive photobioreactor model. |
 | Custom process-kernel DAG | **Implemented experiment; no sunk-cost protection** | The current kernel is acyclic/feed-forward and is not the target general PBR solver. It is frozen from expansion pending an upstream bake-off and replacement/retirement decision. |
 | Integrated microalgae photobioreactor process evaluator | **Planned** | The real coupled biology/light/mixing/gas-transfer/control problem remains a major engineering gap. |
 | Process design / optimization loop | **Planned** | The intended inner loop is deterministic DOE/search/optimization over typed evaluator results; Jarvis stays outside the per-candidate numerical loop. |
@@ -332,7 +332,7 @@ Pinned frontend dependencies: [`frontend/package.json`](frontend/package.json).
 - **build123d / OCP / OpenCascade** for deterministic B-Rep geometry;
 - **Gmsh** through a registry-bound external-tool adapter for meshing;
 - **CalculiX** through a registry-bound adapter for static FEM;
-- bounded BlueRev M0/M1 screening calculations and runner experiments;
+- bounded photobioreactor M0/M1 screening calculations and runner experiments;
 - typed simulation runs, artifacts, manifests, digests and CAD/mesh/FEM evidence.
 
 The current Gmsh and CalculiX integrations are intentionally safe-default disabled until an operator provides an exact executable/version/provenance/hash-qualified registry entry. An adapter being implemented is not the same as a solver being scientifically qualified for every use case.
