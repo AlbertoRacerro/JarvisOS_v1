@@ -178,6 +178,11 @@ assert.equal(await page.getByRole("button", { name: "Confirm", exact: true }).co
 await page.waitForTimeout(200);
 assert.ok(previewCalls > beforePreview, "working revision change triggers fresh deterministic preflight");
 
+// Restore the prior single-field test to baseline so the next bulk case has exactly two dirty fields.
+const reservoirRow = editedField.locator("xpath=ancestor::div[contains(@class,'scenario-variable')]");
+await reservoirRow.getByRole("button", { name: "Revert field", exact: true }).click();
+await page.waitForTimeout(150);
+
 // Hostile Other content remains inert.
 await page.getByRole("button", { name: "Other", exact: true }).click();
 const other = page.getByPlaceholder("Describe an alternative");
