@@ -35,26 +35,27 @@ function EvidenceApp() {
   const [selection, setSelection] = useState<StageSelection>(() => part("ws1", "cand-a", "session-a1"));
   const [atomicProbeResult, setAtomicProbeResult] = useState("not-run");
   const controller = useEngineeringProperties(workspaceId, () => undefined, selection);
-  const primedSafeFix = useRef(false);
+  const primedModelId = useRef("");
 
   useEffect(() => {
     if (
-      primedSafeFix.current ||
       workspaceId !== "ws1" ||
       selection.kind !== "bluecad-part" ||
       selection.candidateId !== "cand-a" ||
       controller.semanticPhase !== "ready" ||
       !controller.semanticSource ||
-      !controller.semanticContract
+      !controller.semanticContract ||
+      !controller.selected ||
+      primedModelId.current === controller.selected.id
     ) return;
-    const variable = controller.selected?.input_contract?.variables.find((item) => item.name === "tube_length");
+    const variable = controller.selected.input_contract?.variables.find((item) => item.name === "tube_length");
     const baseline = controller.baseline.tube_length;
     const working = controller.working.tube_length;
     if (!variable || !baseline?.value || !working || working.value !== baseline.value || working.parameterId !== baseline.parameterId) return;
-    primedSafeFix.current = true;
+    primedModelId.current = controller.selected.id;
     // A required empty override is a real deterministic blocker with an exact
-    // valid CAD-linked baseline. This primes one reviewable safe-fix without
-    // relying on any unit-only Parameter inference.
+    // valid CAD-linked baseline. Re-prime once per model contract so stale-model
+    // evidence can return to the original contract and continue deterministically.
     controller.updateValue(variable, "");
   }, [controller, selection, workspaceId]);
 
