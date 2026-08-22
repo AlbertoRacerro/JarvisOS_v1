@@ -20,7 +20,7 @@ validate workspace + kind + current state + references
         ├─ invalid / stale / unsafe → fail closed
         └─ valid
              ↓
-      atomic lifecycle mutation
+      atomic lifecycle mutation + audit event
              ↓
  canonical list / lineage / context projections
              ↓
@@ -127,6 +127,8 @@ The server must validate at least:
 - referential/dependency constraints are respected;
 - the operation cannot silently corrupt canonical lineage.
 
+Every accepted lifecycle mutation must also create a durable audit event containing at least target identity/kind, actor or authenticated source, operation, prior lifecycle state, resulting lifecycle state, and reason when the command carries one. The lifecycle mutation and its audit event must commit atomically in the same server-owned transaction: neither may succeed without the other. Readiness must reuse the existing events/logging boundary when sufficient rather than introduce event sourcing or a new audit store.
+
 The frontend may request an operation and render its result. It does not decide whether a transition is valid by local state alone.
 
 Readiness must choose the smallest transition API shape. A generic command endpoint is not required if narrow existing per-kind routes are simpler and safer; conversely, duplicated per-kind lifecycle logic is not justified merely to preserve historical route layout.
@@ -143,6 +145,8 @@ Canonical edit is distinct from 071b working-state edit:
 The UI must label that distinction clearly enough that editing a project Parameter cannot be mistaken for changing only the current run configuration.
 
 For fields with provenance, uncertainty, units, replacement relationships or downstream dependencies, server validation remains authoritative.
+
+If readiness authorizes an edit to a canonical Parameter field that can affect a linked working/run input (including value or unit), it must also define the minimum immutable source-revision/value binding needed to detect source drift. Preview, run creation and final execution claim must fail closed when the canonical source no longer matches the source revision/value/unit captured by the working/run snapshot. A canonical edit must never let an older captured value execute while retaining the edited Parameter's source identity as if it were current. This is a narrow linked-source integrity guard, not authorization to redesign run orchestration.
 
 098 does not require a universal arbitrary JSON editor. Raw payload/schema internals remain Audit/technical surfaces.
 
@@ -239,13 +243,13 @@ However, historical run/evidence provenance may still resolve the record for Aud
 
 098 does not retroactively mutate 071b transient working state.
 
-If a canonical Parameter currently supplies a value to an open working configuration and the canonical record is later deactivated/archived/deleted/superseded:
+If a canonical Parameter currently supplies a value to an open working configuration and the canonical record is later edited/deactivated/archived/deleted/superseded:
 
 - the existing transient working state is not silently rewritten;
-- subsequent authoritative source resolution/preflight must detect that the source is no longer current where relevant;
+- subsequent authoritative source resolution/preflight must detect that the source is no longer current or no longer matches the captured source revision/value/unit where relevant;
 - the operator receives a deterministic stale/unavailable/source-changed condition rather than an invisible replacement.
 
-The exact reconciliation behavior is a readiness decision based on current 071b/058c seams. 098 therefore **does authorize the minimum source-resolution/preflight guard change required to enforce lifecycle truth for linked canonical sources**. It does not authorize broader run orchestration, solver, snapshot, or unrelated preflight redesign.
+The exact reconciliation behavior is a readiness decision based on current 071b/058c seams. 098 therefore **does authorize the minimum source-resolution/preflight/create/claim guard change required to enforce lifecycle and canonical-source revision truth for linked canonical sources**. It does not authorize broader run orchestration, solver, snapshot, or unrelated preflight redesign.
 
 ## 13. Concurrency and idempotency
 
@@ -253,10 +257,10 @@ Lifecycle operations must tolerate duplicate clicks/retries without producing co
 
 Readiness must inspect current SQLite transaction patterns and choose the minimum server-owned protection. At minimum:
 
-- transition validation and mutation occur atomically;
+- transition validation, lifecycle mutation and audit event occur atomically;
 - stale expected state fails closed;
 - supersede cannot produce two active replacements through a race if the domain contract requires one;
-- delete/archive retries converge to the same canonical outcome or return an explicit already-transitioned result.
+- delete/archive retries converge to the same canonical outcome or return an explicit already-transitioned result without duplicate audit side effects.
 
 No generic event-sourcing system or command bus is authorized merely to implement these guarantees.
 
@@ -276,10 +280,12 @@ Implementation/readiness must cover, as applicable:
 10. inactive/archived/superseded/deleted record absent from normal authoritative canonical AI/context projection;
 11. historical run/evidence lineage remains inspectable;
 12. canonical lifecycle change does not silently mutate open 071b working state, while subsequent linked-source resolution/preflight fails closed when that source is no longer current;
-13. workspace switch while a mutation is in flight cannot apply stale UI state to the new workspace;
-14. backend rejection leaves UI unchanged and communicates the actual reason;
-15. keyboard/focus/effective-200% behavior for confirmation/action controls;
-16. no provider call, runner execution or simulation run is triggered by lifecycle mutation itself.
+13. canonical Parameter value/unit edit after preview or queueing cannot execute the old captured value while claiming the edited source identity; preview/create/claim detect source drift or equivalent revision mismatch;
+14. lifecycle mutation and audit event are atomic, and duplicate retries do not duplicate destructive/audit side effects;
+15. workspace switch while a mutation is in flight cannot apply stale UI state to the new workspace;
+16. backend rejection leaves UI unchanged and communicates the actual reason;
+17. keyboard/focus/effective-200% behavior for confirmation/action controls;
+18. no provider call, runner execution or simulation run is triggered by lifecycle mutation itself.
 
 ## 15. Browser acceptance
 
@@ -297,7 +303,7 @@ A browser/evidence harness for the implemented subset must prove:
 
 ## 16. Scope and implementation-now boundary
 
-This definition authorizes a later readiness decision to implement only the minimum server + Engineering Data changes necessary for truthful lifecycle behavior over the currently supported canonical record families, plus the minimum linked-source resolution/preflight guard required so a noncurrent canonical source cannot silently authorize a run.
+This definition authorizes a later readiness decision to implement only the minimum server + Engineering Data changes necessary for truthful lifecycle behavior over the currently supported canonical record families, plus the minimum linked-source integrity guards required so a noncurrent or edited canonical source cannot silently authorize a run against stale captured semantics.
 
 Readiness must explicitly list:
 
@@ -306,7 +312,8 @@ Readiness must explicitly list:
 - schema additions, if any;
 - route/service changes;
 - canonical query/context filters affected;
-- linked-source/preflight guard changes required by lifecycle enforcement;
+- linked-source revision/preflight/create/claim guard changes required by lifecycle/edit enforcement;
+- audit event fields and the existing transaction/event seam used to commit mutation + audit atomically;
 - frontend action/confirmation changes;
 - migration/default semantics for existing rows;
 - exact deterministic and browser tests.
@@ -335,7 +342,7 @@ None of those are required by 098.
 - automatic deletion from AI/Jarvis prose;
 - silent canonical mutation from 097 working-state actions;
 - variant creation/comparison (006b/058b);
-- run execution, solver/snapshot changes, or preflight redesign beyond the minimum linked-canonical-source lifecycle guard required by §12;
+- run execution, solver/snapshot changes, or preflight redesign beyond the minimum linked-canonical-source lifecycle/revision guard required by §§6 and 12;
 - provider, budget, egress or thread changes;
 - Notes;
 - 062 grading UI;
@@ -354,9 +361,10 @@ A separate readiness record must answer from exact then-current runtime:
 5. Which references make delete unsafe and how are tombstones resolved?
 6. What exact supersede relationship is already authoritative for Parameters and can it be reused safely?
 7. Which canonical list/context/dependency queries must filter lifecycle state?
-8. How does 058c/071b detect a linked canonical source that becomes non-current after the working state was opened, including the minimum required source-resolution/preflight guard?
+8. How does 058c/071b detect a linked canonical source that becomes non-current or is edited after the working state was opened, including the minimum required source-revision/preflight/create/claim guard?
 9. What is the minimum exact per-kind edit surface that does not pre-empt 101?
-10. What exact browser matrix and rollback prove no false UI state after failed/stale transitions?
+10. What existing events/logging seam can atomically record lifecycle actor, operation, prior/resulting state and reason with the mutation?
+11. What exact browser matrix and rollback prove no false UI state after failed/stale transitions?
 
 Implementation cannot begin until those questions are answered and independently reviewed.
 
@@ -365,12 +373,12 @@ Implementation cannot begin until those questions are answered and independently
 A future implementation is complete only when:
 
 1. lifecycle semantics are server-owned and distinct from evidence/value quality;
-2. implemented transitions are atomic, stale-safe and workspace-safe;
+2. implemented transitions are atomic, stale-safe and workspace-safe, and their durable audit event commits atomically with the mutation;
 3. supersede preserves explicit lineage;
 4. delete is truthful, safe and hidden from normal view without destroying required audit lineage;
 5. normal authoritative canonical projections consistently exclude noncurrent lifecycle states while explicit history/alternative views remain available;
 6. Engineering Data exposes only valid actions and refreshes from server truth;
-7. open working configuration is never silently rewritten by canonical lifecycle changes, and subsequent linked-source resolution/preflight fails closed for a source that is no longer current;
+7. open working configuration is never silently rewritten by canonical lifecycle/edit changes, and subsequent linked-source resolution/preflight/create/claim fails closed for a source that is noncurrent or no longer matches the captured source revision/value/unit;
 8. deterministic and browser acceptance are green on one immutable exact head;
 9. no current P0/P1/beta-blocking P2 remains;
 10. merge and registry reconciliation complete before 006b begins.
