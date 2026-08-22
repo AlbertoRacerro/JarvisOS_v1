@@ -116,7 +116,7 @@ For example, a Parameter may be lifecycle `Active` while its `value_status` rema
 
 ## 5. Canonical mutation authority
 
-All lifecycle writes are server-owned.
+All lifecycle writes and canonical edits authorized by 098 are server-owned.
 
 The server must validate at least:
 
@@ -129,7 +129,7 @@ The server must validate at least:
 - referential/dependency constraints are respected;
 - the operation cannot silently corrupt canonical lineage.
 
-Every accepted lifecycle mutation must also create a durable audit event containing at least target identity/kind, actor or authenticated source, operation, prior lifecycle state, resulting lifecycle state, and reason when the command carries one. The lifecycle mutation and its audit event must commit atomically in the same server-owned transaction: neither may succeed without the other. When the mutation changes upstream semantic authority and therefore requires 050/051 freshness invalidation, the required dependent stale marks must participate in that same transaction as well; if the closure cannot be computed or safely persisted, the canonical mutation fails closed. Readiness must reuse the existing events/logging and freshness boundaries when sufficient rather than introduce event sourcing, a new audit store, or a second dependency engine.
+Every accepted canonical mutation under 098, including both lifecycle transitions and supported edits, must also create a durable audit event. The event must contain at least target identity/kind, actor or authenticated source, operation, and enough prior/resulting state to reconstruct the canonical change: prior/resulting lifecycle for lifecycle operations, or the edited field set with prior/resulting canonical values/units where an edit changes those fields; include the reason when the command carries one. The canonical mutation and its audit event must commit atomically in the same server-owned transaction: neither may succeed without the other. When the mutation changes upstream semantic authority and therefore requires 050/051 freshness invalidation, the required dependent stale marks must participate in that same transaction as well; if the closure cannot be computed or safely persisted, the canonical mutation fails closed. Readiness must reuse the existing events/logging and freshness boundaries when sufficient rather than introduce event sourcing, a new audit store, or a second dependency engine.
 
 The frontend may request an operation and render its result. It does not decide whether a transition is valid by local state alone.
 
@@ -151,6 +151,8 @@ For fields with provenance, uncertainty, units, replacement relationships or dow
 If readiness authorizes an edit to a canonical Parameter field that can affect a linked working/run input (including value or unit), it must also define the minimum immutable source-revision/value binding needed to detect source drift. Preview, run creation and final execution claim must fail closed when the canonical source no longer matches the source revision/value/unit captured by the working/run snapshot. A canonical edit must never let an older captured value execute while retaining the edited Parameter's source identity as if it were current. This is a narrow linked-source integrity guard, not authorization to redesign run orchestration.
 
 A canonical value/unit edit also changes the semantic basis of already-promoted downstream records. Readiness must therefore either reuse/adapt the existing 050/051 freshness invalidation authority so the affected dependency closure becomes stale atomically with the edit, or reject that edit before commit if current lineage cannot support truthful invalidation. Updating the source while leaving dependent canonical results marked fresh is not an allowed partial implementation.
+
+Every accepted canonical edit must commit its durable audit event in the same transaction as the edit and any required 050/051 freshness marks. If the audit event or required freshness closure cannot be persisted atomically, the edit fails closed before canonical state changes.
 
 098 does not require a universal arbitrary JSON editor. Raw payload/schema internals remain Audit/technical surfaces.
 
@@ -265,7 +267,7 @@ Lifecycle operations must tolerate duplicate clicks/retries without producing co
 
 Readiness must inspect current SQLite transaction patterns and choose the minimum server-owned protection. At minimum:
 
-- transition validation, lifecycle mutation, required 050/051 dependent freshness marks, and audit event occur atomically when the operation changes upstream authority;
+- validation, the canonical edit or lifecycle mutation, any required 050/051 dependent freshness marks, and the corresponding audit event occur atomically when the operation changes canonical state;
 - stale expected state fails closed;
 - supersede cannot produce two active replacements through a race if the domain contract requires one;
 - delete/archive retries converge to the same canonical outcome or return an explicit already-transitioned result without duplicate audit or freshness side effects.
@@ -290,7 +292,7 @@ Implementation/readiness must cover, as applicable:
 12. canonical lifecycle change does not silently mutate open 071b working state, while subsequent linked-source resolution/preflight fails closed when that source is no longer current;
 13. canonical Parameter value/unit edit after preview or queueing cannot execute the old captured value while claiming the edited source identity; preview/create/claim detect source drift or equivalent revision mismatch;
 14. canonical Parameter value/unit edit or current-source retirement/deactivation/archive/delete/supersede either atomically persists the complete affected 050/051 downstream freshness closure with the canonical mutation or rejects the transition before commit when truthful invalidation is unavailable;
-15. lifecycle mutation, required freshness invalidation, and audit event are atomic, and duplicate retries do not duplicate destructive/audit/freshness side effects;
+15. canonical edit or lifecycle mutation, required freshness invalidation, and durable audit event are atomic, and duplicate retries do not duplicate destructive/audit/freshness side effects;
 16. workspace switch while a mutation is in flight cannot apply stale UI state to the new workspace;
 17. backend rejection leaves UI unchanged and communicates the actual reason;
 18. keyboard/focus/effective-200% behavior for confirmation/action controls;
@@ -323,7 +325,7 @@ Readiness must explicitly list:
 - canonical query/context filters affected;
 - linked-source revision/preflight/create/claim guard changes required by lifecycle/edit enforcement;
 - exact 050/051 freshness preparation/persistence seam used for each edit/transition that changes upstream authority, or the explicit rejection rule where complete invalidation is not safely representable;
-- audit event fields and the existing transaction/event seam used to commit mutation + required freshness marks + audit atomically;
+- audit event fields and the existing transaction/event seam used to commit canonical edit/lifecycle mutation + required freshness marks + audit atomically;
 - frontend action/confirmation changes;
 - migration/default semantics for existing rows;
 - exact deterministic and browser tests.
@@ -374,7 +376,7 @@ A separate readiness record must answer from exact then-current runtime:
 7. Which canonical list/context/dependency queries must filter lifecycle state?
 8. How does 058c/071b detect a linked canonical source that becomes non-current or is edited after the working state was opened, including the minimum required source-revision/preflight/create/claim guard?
 9. What is the minimum exact per-kind edit surface that does not pre-empt 101?
-10. What existing events/logging seam can atomically record lifecycle actor, operation, prior/resulting state and reason with the mutation?
+10. What existing events/logging seam can atomically record every supported canonical edit or lifecycle operation, including actor/source, operation, prior/resulting lifecycle or edited values/units as applicable, and reason when supplied, together with the canonical mutation and required freshness marks?
 11. For each supported canonical edit/retirement transition that changes upstream authority, what exact 050/051 dependency closure must be marked stale in the same transaction, and which transition must instead be rejected if the current graph cannot establish complete truthful invalidation?
 12. What exact browser matrix and rollback prove no false UI state after failed/stale transitions?
 
@@ -385,7 +387,7 @@ Implementation cannot begin until those questions are answered and independently
 A future implementation is complete only when:
 
 1. lifecycle semantics are server-owned and distinct from evidence/value quality;
-2. implemented transitions are atomic, stale-safe and workspace-safe, and their durable audit event commits atomically with the mutation;
+2. implemented canonical edits and lifecycle transitions are atomic, stale-safe and workspace-safe, and their durable audit events commit atomically with the canonical mutation and any required freshness marks;
 3. edits/transitions that change upstream canonical authority either atomically persist the required complete 050/051 downstream freshness closure or fail closed before mutation;
 4. supersede preserves explicit lineage;
 5. delete is truthful, safe and hidden from normal view without destroying required audit lineage;
