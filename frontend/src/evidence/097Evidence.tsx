@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 
 // Evidence-only harness for product head ac2762a27fe314a0f5e46b2600a9131dac42c471.
@@ -30,6 +30,17 @@ function EvidenceApp() {
   const [workspaceId, setWorkspaceId] = useState("ws1");
   const [selection, setSelection] = useState<StageSelection>(() => part("ws1", "cand-a", "session-a1"));
   const controller = useEngineeringProperties(workspaceId, () => undefined, selection);
+  const primedSafeFix = useRef(false);
+
+  useEffect(() => {
+    if (primedSafeFix.current || workspaceId !== "ws1" || selection.kind !== "bluecad-part" || selection.candidateId !== "cand-a") return;
+    const variable = controller.selected?.input_contract?.variables.find((item) => item.name === "tube_length");
+    const baseline = controller.baseline.tube_length;
+    const working = controller.working.tube_length;
+    if (!variable || !baseline?.value || !working || working.value !== baseline.value || working.parameterId !== baseline.parameterId) return;
+    primedSafeFix.current = true;
+    controller.updateValue(variable, String(Number(baseline.value) + 1));
+  }, [controller, selection, workspaceId]);
 
   const switchWorkspace = () => {
     const next = workspaceId === "ws1" ? "ws2" : "ws1";
