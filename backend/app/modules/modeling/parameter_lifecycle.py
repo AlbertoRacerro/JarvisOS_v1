@@ -4,7 +4,7 @@ import sqlite3
 from typing import Any
 
 from app.core.database import open_sqlite_connection
-from app.core.repository import row_to_model
+from app.core.repository import row_to_model, rows_to_models
 from app.modules.events.service import log_event, utc_now
 from app.modules.flowsheet.service import build_flowsheet_graph_from_connection
 from app.modules.modeling.models import ParameterLifecycleCommand, ParameterRead, ParameterUpdate
@@ -17,18 +17,6 @@ class ParameterLifecycleError(ValueError):
         self.message = message
 
 
-_EDIT_FIELDS = (
-    "name",
-    "symbol",
-    "value",
-    "unit",
-    "value_status",
-    "value_min",
-    "value_max",
-    "source_ref",
-    "confidence",
-    "notes",
-)
 _AUTHORITY_FIELDS = {"value", "unit"}
 _TARGETS = {
     "activate": {"inactive": "active"},
@@ -46,6 +34,25 @@ def _parameter_row(connection: sqlite3.Connection, workspace_id: str, parameter_
     if row is None:
         raise ParameterLifecycleError("parameter_not_found", "Parameter not found in workspace.")
     return row
+
+
+def list_lifecycle_parameters(workspace_id: str, *, include_noncurrent: bool = False) -> list[ParameterRead]:
+    with open_sqlite_connection() as connection:
+        if connection.execute("SELECT id FROM workspaces WHERE id = ?", (workspace_id,)).fetchone() is None:
+            raise ValueError("Workspace not found.")
+        clause = "" if include_noncurrent else " AND lifecycle_state = 'active'"
+        rows = connection.execute(
+            """
+            SELECT id, workspace_id, name, symbol, value,
+                   COALESCE(unit, 'unspecified') AS unit,
+                   COALESCE(value_status, 'candidate') AS value_status,
+                   value_min, value_max, source_ref, confidence, status,
+                   created_at, updated_at, notes, supersedes_parameter_id, lifecycle_state
+            FROM parameters
+            WHERE workspace_id = ?""" + clause + " ORDER BY created_at DESC",
+            (workspace_id,),
+        ).fetchall()
+    return rows_to_models(rows, ParameterRead)
 
 
 def _downstream_refs(connection: sqlite3.Connection, workspace_id: str, parameter_id: str) -> tuple[str, ...]:
@@ -66,9 +73,7 @@ def _downstream_refs(connection: sqlite3.Connection, workspace_id: str, paramete
     return tuple(sorted(seen - {source}))
 
 
-def _require_no_downstream_dependents(
-    connection: sqlite3.Connection, workspace_id: str, parameter_id: str
-) -> None:
+def _require_no_downstream_dependents(connection: sqlite3.Connection, workspace_id: str, parameter_id: str) -> None:
     dependents = _downstream_refs(connection, workspace_id, parameter_id)
     if dependents:
         raise ParameterLifecycleError(
@@ -98,7 +103,8 @@ def update_parameter(parameter_id: str, payload: ParameterUpdate) -> ParameterRe
                 raise ParameterLifecycleError("parameter_stale", "Parameter changed since it was reviewed.")
             if row["lifecycle_state"] != "active":
                 raise ParameterLifecycleError("parameter_not_active", "Only an active Parameter may be edited in V0.")
-            if _AUTHORITY_FIELDS.intersection(updates) and any(row[field] != updates[field] for field in _AUTHORITY_FIELDS.intersection(updates)):
+            changed_authority = _AUTHORITY_FIELDS.intersection(updates)
+            if changed_authority and any(row[field] != updates[field] for field in changed_authority):
                 _require_no_downstream_dependents(connection, payload.workspace_id, parameter_id)
 
             merged_min = updates.get("value_min", row["value_min"])
@@ -113,10 +119,12 @@ def update_parameter(parameter_id: str, payload: ParameterUpdate) -> ParameterRe
 
             now = utc_now()
             assignments = ", ".join(f"{field} = ?" for field in changed)
-            connection.execute(
+            cursor = connection.execute(
                 f"UPDATE parameters SET {assignments}, updated_at = ? WHERE id = ? AND workspace_id = ? AND updated_at = ?",
                 (*changed.values(), now, parameter_id, payload.workspace_id, payload.expected_updated_at),
             )
+            if cursor.rowcount != 1:
+                raise ParameterLifecycleError("parameter_stale", "Parameter changed before commit.")
             prior = {field: row[field] for field in changed}
             log_event(
                 connection,
@@ -128,8 +136,7 @@ def update_parameter(parameter_id: str, payload: ParameterUpdate) -> ParameterRe
                 payload=_event_payload(operation="edit", prior=prior, result=changed),
             )
             connection.commit()
-            updated = _parameter_row(connection, payload.workspace_id, parameter_id)
-            return row_to_model(updated, ParameterRead)
+            return row_to_model(_parameter_row(connection, payload.workspace_id, parameter_id), ParameterRead)
         except Exception:
             connection.rollback()
             raise
@@ -153,10 +160,12 @@ def transition_parameter(parameter_id: str, payload: ParameterLifecycleCommand) 
                 _require_no_downstream_dependents(connection, payload.workspace_id, parameter_id)
 
             now = utc_now()
-            connection.execute(
+            cursor = connection.execute(
                 "UPDATE parameters SET lifecycle_state = ?, updated_at = ? WHERE id = ? AND workspace_id = ? AND updated_at = ? AND lifecycle_state = ?",
                 (target, now, parameter_id, payload.workspace_id, payload.expected_updated_at, current),
             )
+            if cursor.rowcount != 1:
+                raise ParameterLifecycleError("parameter_stale", "Parameter lifecycle changed before commit.")
             log_event(
                 connection,
                 event_type="ParameterLifecycleChanged",
@@ -172,8 +181,7 @@ def transition_parameter(parameter_id: str, payload: ParameterLifecycleCommand) 
                 ),
             )
             connection.commit()
-            updated = _parameter_row(connection, payload.workspace_id, parameter_id)
-            return row_to_model(updated, ParameterRead)
+            return row_to_model(_parameter_row(connection, payload.workspace_id, parameter_id), ParameterRead)
         except Exception:
             connection.rollback()
             raise
