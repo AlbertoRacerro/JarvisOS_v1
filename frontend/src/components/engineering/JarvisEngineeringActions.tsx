@@ -1,32 +1,14 @@
 import { useMemo, useState } from "react";
 
 import type { ModelInputVariable, Parameter } from "../../api/client";
-import type { EngineeringPropertiesController } from "./EngineeringProperties";
+import type {
+  EngineeringActionOperation,
+  EngineeringPropertiesController,
+  EngineeringWorkingAction,
+  WorkingBinding
+} from "./EngineeringProperties";
 
-type WorkingBinding = Readonly<{ value: string; parameterId: string }>;
 type ActionStatus = "ready" | "applied" | "stale" | "invalid" | "rejected";
-type ActionBasis = "working-baseline" | "cad-source";
-
-type EngineeringActionOperation = Readonly<{
-  variableName: string;
-  label: string;
-  unit: string;
-  expectedBinding: WorkingBinding;
-  proposedBinding: WorkingBinding;
-  basis: ActionBasis;
-  basisLabel: string;
-  reason: string;
-}>;
-
-export type EngineeringWorkingAction = Readonly<{
-  id: string;
-  workspaceId: string;
-  modelVersionId: string;
-  contractDigest: string;
-  workingRevision: number;
-  semanticFingerprint: string;
-  operations: EngineeringActionOperation[];
-}>;
 
 function sameBinding(left: WorkingBinding | undefined, right: WorkingBinding | undefined): boolean {
   return (left?.value ?? "") === (right?.value ?? "") && (left?.parameterId ?? "") === (right?.parameterId ?? "");
@@ -35,25 +17,6 @@ function sameBinding(left: WorkingBinding | undefined, right: WorkingBinding | u
 function finiteBinding(binding: WorkingBinding | undefined): boolean {
   const value = binding?.value.trim() ?? "";
   return Boolean(value) && Number.isFinite(Number(value));
-}
-
-function semanticFingerprint(controller: EngineeringPropertiesController): string {
-  const target = controller.semanticTarget;
-  if (!target) return "";
-  const source = controller.semanticSource;
-  return [
-    target.workspaceId,
-    target.candidateId,
-    target.artifactId,
-    target.viewerSessionId,
-    target.ephemeralObjectId,
-    target.semanticKey,
-    target.partId,
-    target.partKind ?? "",
-    source?.transformation_version ?? "",
-    source?.source_simulation_run_id ?? "",
-    source?.source_model_version_id ?? ""
-  ].join("\u001f");
 }
 
 function compatibleParameters(controller: EngineeringPropertiesController, variable: ModelInputVariable): Parameter[] {
@@ -111,22 +74,20 @@ function safeOperation(controller: EngineeringPropertiesController, variable: Mo
     };
   }
 
-  // A matching unit alone is not enough engineering evidence to bind an unrelated
-  // canonical Parameter to a missing field (dimensionless values are the obvious
-  // counterexample). Until a semantic parameter-to-variable identity exists, an
-  // empty baseline stays unresolved rather than receiving a guessed safe fix.
+  // Exact-unit compatibility alone is not semantic identity. Until the current
+  // controller has a proven Parameter-to-variable identity, an empty baseline
+  // stays unresolved rather than receiving a guessed safe fix.
   return null;
 }
 
 function actionFromOperations(controller: EngineeringPropertiesController, operations: EngineeringActionOperation[]): EngineeringWorkingAction | null {
   if (!controller.workspaceId || !controller.selected || !controller.selected.input_contract_sha256 || !operations.length) return null;
-  const fingerprint = semanticFingerprint(controller);
   const id = [
     controller.workspaceId,
     controller.selected.id,
     controller.selected.input_contract_sha256,
     String(controller.revision),
-    fingerprint,
+    controller.actionSemanticFingerprint,
     ...operations.map((operation) => `${operation.variableName}:${operation.expectedBinding.value}:${operation.expectedBinding.parameterId}:${operation.proposedBinding.value}:${operation.proposedBinding.parameterId}`)
   ].join("\u001e");
   return {
@@ -135,69 +96,9 @@ function actionFromOperations(controller: EngineeringPropertiesController, opera
     modelVersionId: controller.selected.id,
     contractDigest: controller.selected.input_contract_sha256,
     workingRevision: controller.revision,
-    semanticFingerprint: fingerprint,
+    semanticFingerprint: controller.actionSemanticFingerprint,
     operations
   };
-}
-
-function validateAction(controller: EngineeringPropertiesController, action: EngineeringWorkingAction): "ok" | "stale" | "invalid" {
-  if (
-    !controller.workspaceId
-    || !controller.selected
-    || controller.workspaceId !== action.workspaceId
-    || controller.selected.id !== action.modelVersionId
-    || controller.selected.input_contract_sha256 !== action.contractDigest
-    || controller.revision !== action.workingRevision
-    || semanticFingerprint(controller) !== action.semanticFingerprint
-  ) return "stale";
-
-  const variables = controller.selected.input_contract?.variables ?? [];
-  for (const operation of action.operations) {
-    const variable = variables.find((item) => item.name === operation.variableName);
-    if (!variable || variable.unit !== operation.unit) return "invalid";
-    if (!sameBinding(controller.working[operation.variableName], operation.expectedBinding)) return "stale";
-    if (!finiteBinding(operation.proposedBinding)) return "invalid";
-
-    if (operation.proposedBinding.parameterId) {
-      if (operation.basis === "cad-source") {
-        if (!cadBaselineMatches(controller, variable, operation.proposedBinding)) return "invalid";
-      } else {
-        const parameter = compatibleParameters(controller, variable).find((item) => item.id === operation.proposedBinding.parameterId);
-        if (!parameter || String(parameter.value ?? "") !== operation.proposedBinding.value) return "invalid";
-      }
-    }
-  }
-  return "ok";
-}
-
-function applyAction(controller: EngineeringPropertiesController, action: EngineeringWorkingAction): "applied" | "stale" | "invalid" {
-  const validation = validateAction(controller, action);
-  if (validation !== "ok") return validation;
-
-  if (action.operations.length === 1) {
-    const operation = action.operations[0];
-    const variable = controller.selected?.input_contract?.variables.find((item) => item.name === operation.variableName);
-    if (!variable) return "invalid";
-    if (sameBinding(operation.proposedBinding, controller.baseline[operation.variableName])) {
-      controller.revertField(operation.variableName);
-      return "applied";
-    }
-    if (operation.proposedBinding.parameterId) {
-      controller.selectParameter(variable, operation.proposedBinding.parameterId);
-      return "applied";
-    }
-    controller.updateValue(variable, operation.proposedBinding.value);
-    return "applied";
-  }
-
-  const operationNames = new Set(action.operations.map((operation) => operation.variableName));
-  const dirtyNames = [...controller.dirtyNames];
-  const exactRevertAll = dirtyNames.length === action.operations.length
-    && dirtyNames.every((name) => operationNames.has(name))
-    && action.operations.every((operation) => sameBinding(operation.proposedBinding, controller.baseline[operation.variableName]));
-  if (!exactRevertAll) return "invalid";
-  controller.revertAll();
-  return "applied";
 }
 
 function renderBinding(binding: WorkingBinding, unit: string): string {
@@ -239,8 +140,7 @@ export default function JarvisEngineeringActions({ controller }: { controller: E
 
   const confirm = () => {
     if (!selectedAction || status !== "ready") return;
-    const result = applyAction(controller, selectedAction);
-    setStatus(result);
+    setStatus(controller.applyWorkingAction(selectedAction));
   };
 
   const goToIssue = () => {
