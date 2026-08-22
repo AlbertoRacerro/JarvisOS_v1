@@ -1,0 +1,411 @@
+# 098 — ENGINEERING-RECORD-LIFECYCLE-0
+
+Status: **definition-only; implementation not authorized**  
+Date: 2026-08-22  
+Derived from exact reconciled master: `c7613c4866821ffd6c2854f421cbf3beeb13b005`  
+Depends on: 035, 040, 050, 051, 071b
+
+## 1. Purpose
+
+Add explicit server-owned lifecycle authority for canonical engineering records and expose it through the project-centric Engineering Data surface without creating a second record store, hiding destructive state only in the frontend, or collapsing distinct meanings into a generic `status` toggle.
+
+The operator contract is:
+
+```text
+canonical engineering record
+        ↓
+server-owned lifecycle command
+        ↓
+validate workspace + kind + current state + references
+        ├─ invalid / stale / unsafe → fail closed
+        └─ valid
+             ↓
+      atomic lifecycle mutation + audit event
+             ↓
+ canonical list / lineage / context projections
+             ↓
+ Engineering Data refreshes from server truth
+```
+
+098 owns lifecycle semantics only. It does not own transient 071b working configuration, Jarvis working-state actions from 097, variants from 006b, comparison from 058b, or the broader canonical-write unification planned for 101.
+
+A separate readiness decision derived from exact then-current runtime must choose the minimum per-record implementation seam and schema/API changes. This definition does not authorize guessed uniform CRUD across record kinds whose current contracts differ.
+
+## 2. Exact-master runtime inventory
+
+Fresh inspection of exact master shows a material lifecycle gap.
+
+### 2.1 Engineering Data is read-only
+
+`frontend/src/pages/EngineeringData.tsx` currently lists and inspects Model Specs, Assumptions, Parameters and Decisions. It has search, kind filters, workspace switching and exact Parameter source navigation, but no canonical record edit/lifecycle controls.
+
+The page reads each record's persisted `status` as display data. It does not own lifecycle truth and must not implement archive/delete by client-side filtering or local-only flags.
+
+### 2.2 Current modeling APIs are asymmetric
+
+`backend/app/modules/modeling/routes.py` currently exposes create/list for Model Specs, Assumptions, Parameters and Decisions. Requirements additionally have get + patch. There is no current general update/delete/archive/supersede API for Assumptions, Parameters or Decisions.
+
+`backend/app/modules/modeling/models.py` also proves that existing status vocabularies are not uniform:
+
+- Assumption: `proposed | accepted | rejected | superseded`;
+- Parameter: free-form `status` plus separate `value_status`, with `supersedes_parameter_id` and a rule that replacements are created as `proposed`;
+- Requirement: `draft | active | retired` with an existing update model;
+- Decision: free-form `status`;
+- Model Spec: free-form `status` plus `maturity_status`.
+
+Therefore 098 must not pretend these existing fields already implement one coherent lifecycle.
+
+### 2.3 Existing lineage and promotion authority must remain intact
+
+Specs 040/050/051 already own canonical proposal/promotion and dependency/staleness relationships. A lifecycle transition that affects visibility or operational use must preserve lineage and must not silently erase dependency evidence.
+
+071b remains the sole transient working-configuration owner. Editing or retiring a canonical record must not silently overwrite an already-open working configuration.
+
+A canonical edit or lifecycle transition that changes the meaning or current usability of an upstream canonical source must also preserve 050/051 freshness truth. Readiness must inspect the actual dependency graph and existing freshness transaction seam and choose the minimum safe behavior: either atomically persist the affected downstream stale closure together with the canonical mutation, or reject the mutation before commit when truthful dependent reconciliation cannot be established. Merely filtering the changed source out of future lists/context is insufficient if already-promoted dependent outputs, runs, decisions or other canonical records would remain falsely fresh/current.
+
+## 3. Lifecycle vocabulary
+
+098 freezes these operator-facing lifecycle meanings.
+
+### Active
+
+The record is eligible for normal current-model/project use under its existing domain rules.
+
+`Active` does **not** mean scientifically validated, measured, fresh or accepted. Those are separate quality/provenance concepts.
+
+### Inactive
+
+The record remains legitimate and available but is deliberately not used in the current operational context.
+
+Typical use: a valid alternative assumption/specification/parameter that should remain available without being treated as current authority.
+
+### Superseded
+
+The record is historical and has been replaced by a newer canonical record with explicit lineage.
+
+Supersede must identify the replacement relationship. It is not equivalent to delete or archive.
+
+### Archived
+
+The record is legitimate historical/project information that is no longer operationally current. Archive preserves identity and lineage but removes the record from normal active views unless explicitly requested.
+
+### Deleted
+
+The operator has declared the record erroneous, duplicate or otherwise removed from normal product experience.
+
+Deleted records disappear from ordinary Engineering Data and ordinary canonical context projections. When audit/lineage requirements require retention, deletion may be implemented server-side as a tombstone/soft-delete rather than physical row destruction.
+
+`Deleted` is not a frontend-only hide flag.
+
+## 4. Separate lifecycle from value/evidence quality
+
+Lifecycle answers: **should this record participate in the current canonical project experience?**
+
+It does not answer:
+
+- is the numeric value measured, literature-derived, validated or accepted;
+- is evidence fresh;
+- is confidence high;
+- is a proposal promoted;
+- is a run successful;
+- is a working override dirty.
+
+For example, a Parameter may be lifecycle `Active` while its `value_status` remains `literature`; an archived record may still have high-quality historical evidence.
+
+098 must not overload existing Parameter `value_status`, Assumption proposal status, Requirement state, or Model Spec maturity into the new lifecycle semantics without an explicit readiness mapping that preserves their existing meaning.
+
+## 5. Canonical mutation authority
+
+All lifecycle writes and canonical edits authorized by 098 are server-owned.
+
+The server must validate at least:
+
+- record exists;
+- record belongs to the requested/current workspace;
+- record kind is supported by the transition;
+- current lifecycle/precondition still matches when required;
+- every supported canonical Edit carries an expected immutable revision/current-value precondition (or an equivalent immutable compare-and-swap token) captured from the record state the operator actually reviewed, and the server validates that precondition immediately before mutation;
+- transition is legal;
+- replacement/supersession target exists in the same authoritative domain when required;
+- referential/dependency constraints are respected;
+- the operation cannot silently corrupt canonical lineage.
+
+A canonical Edit whose expected revision/current-value precondition no longer matches server truth is stale and must fail closed before any canonical mutation, audit event, or freshness side effect. A delayed request therefore cannot overwrite a newer accepted canonical edit. Readiness must choose the smallest existing immutable precondition available per implemented record kind; this requirement does not authorize a generic versioning framework or command bus.
+
+Every accepted canonical mutation under 098, including both lifecycle transitions and supported edits, must also create a durable audit event. The event must contain at least target identity/kind, actor or authenticated source, operation, and enough prior/resulting state to reconstruct the canonical change: prior/resulting lifecycle for lifecycle operations, or the edited field set with prior/resulting canonical values/units where an edit changes those fields; include the reason when the command carries one. The canonical mutation and its audit event must commit atomically in the same server-owned transaction: neither may succeed without the other. When the mutation changes upstream semantic authority and therefore requires 050/051 freshness invalidation, the required dependent stale marks must participate in that same transaction as well; if the closure cannot be computed or safely persisted, the canonical mutation fails closed. Readiness must reuse the existing events/logging and freshness boundaries when sufficient rather than introduce event sourcing, a new audit store, or a second dependency engine.
+
+The frontend may request an operation and render its result. It does not decide whether a transition is valid by local state alone.
+
+Readiness must choose the smallest transition API shape. A generic command endpoint is not required if narrow existing per-kind routes are simpler and safer; conversely, duplicated per-kind lifecycle logic is not justified merely to preserve historical route layout.
+
+## 6. Edit semantics
+
+098 includes operator-visible canonical **Edit** only where readiness can prove a bounded current server contract for the record kind.
+
+Canonical edit is distinct from 071b working-state edit:
+
+- Properties / Jarvis 097 edit transient working configuration;
+- Engineering Data edit mutates canonical record state.
+
+The UI must label that distinction clearly enough that editing a project Parameter cannot be mistaken for changing only the current run configuration.
+
+For fields with provenance, uncertainty, units, replacement relationships or downstream dependencies, server validation remains authoritative.
+
+Every supported canonical Edit request must carry the expected immutable revision/current-value precondition frozen from the record state displayed when the operator began or confirmed the edit. The server must compare that precondition to current canonical truth inside the same server-owned mutation path before applying changes. If another accepted edit has advanced the record, the stale request returns a deterministic conflict/stale result and performs **no** canonical write, audit event, or 050/051 freshness mutation. The client must refresh from server truth rather than silently retrying the stale values. This is bounded optimistic concurrency for the implemented canonical edit seam, not a generic repository-wide revision framework.
+
+If readiness authorizes an edit to a canonical Parameter field that can affect a linked working/run input (including value or unit), it must also define the minimum immutable source-revision/value binding needed to detect source drift. Preview, run creation and final execution claim must fail closed when the canonical source no longer matches the source revision/value/unit captured by the working/run snapshot. A canonical edit must never let an older captured value execute while retaining the edited Parameter's source identity as if it were current. This is a narrow linked-source integrity guard, not authorization to redesign run orchestration.
+
+A canonical value/unit edit also changes the semantic basis of already-promoted downstream records. Readiness must therefore either reuse/adapt the existing 050/051 freshness invalidation authority so the affected dependency closure becomes stale atomically with the edit, or reject that edit before commit if current lineage cannot support truthful invalidation. Updating the source while leaving dependent canonical results marked fresh is not an allowed partial implementation.
+
+Every accepted canonical edit must commit its durable audit event in the same transaction as the edit and any required 050/051 freshness marks. If the audit event or required freshness closure cannot be persisted atomically, the edit fails closed before canonical state changes.
+
+098 does not require a universal arbitrary JSON editor. Raw payload/schema internals remain Audit/technical surfaces.
+
+## 7. Supersede semantics
+
+Supersede is a two-record transition:
+
+```text
+old canonical record ──superseded by──> replacement canonical record
+```
+
+Required properties:
+
+- old record remains addressable for lineage/audit;
+- replacement identity is explicit;
+- the relationship is workspace-safe and kind/domain-compatible;
+- ordinary current views prefer the replacement;
+- stale/dependency propagation continues to use canonical relationship authority rather than UI inference.
+
+Existing `supersedes_parameter_id` is evidence of a Parameter replacement concept, but readiness must inspect exact service/schema behavior before reusing or generalizing it. This definition does not assume it is sufficient for all kinds.
+
+## 8. Delete safety
+
+Delete must be fail-closed.
+
+Readiness must inspect actual references from flowsheet/dependency/evidence/run/proposal/canonical records and choose one of these outcomes per supported kind:
+
+1. safe tombstone/soft-delete while preserving dependent lineage and atomically marking any affected downstream canonical dependency closure stale when the deleted record was current authority;
+2. reject delete with a concrete dependency reason;
+3. require an explicit replacement/supersede/archive action instead.
+
+Physical cascade deletion of engineering evidence is not authorized by default.
+
+A deleted record must not remain silently selectable as a normal canonical input merely because a legacy query forgot to filter it.
+
+## 9. Normal view versus Audit
+
+Engineering Data normal mode is project-centric and quiet.
+
+Normal view:
+
+- active/current records first;
+- inactive/archived/superseded/deleted records excluded from ordinary current results by default unless the surface explicitly asks to inspect alternatives/history;
+- lifecycle action names are human-readable;
+- UUIDs and raw technical state remain secondary.
+
+Advanced/Audit may expose:
+
+- `Show inactive`;
+- `Show archived`;
+- `Show superseded`;
+- `Show deleted`;
+- exact record IDs;
+- lifecycle timestamps/replacement IDs if authoritative;
+- raw persisted status fields where needed for diagnosis.
+
+No audit requirement forces noncurrent records back into the normal authoritative operator list.
+
+## 10. Engineering Data action surface
+
+For a selected supported canonical record, actions may include only those valid for its current state and server authority, for example:
+
+```text
+Edit
+Deactivate / Activate
+Archive
+Supersede
+Delete
+```
+
+The UI must not show every action for every kind/state if the backend cannot safely perform it.
+
+Potentially destructive or semantically significant actions require an explicit confirmation that identifies the target and consequence. A transition response must come from server truth and the list/inspector must refresh from that response/current canonical reads.
+
+Stale workspace/selection responses must not mutate a record in another workspace or leave the UI claiming a transition that the server rejected.
+
+## 11. Context and downstream visibility
+
+Lifecycle state must affect normal canonical projections consistently.
+
+At minimum, readiness must inspect and test:
+
+- Engineering Data listing;
+- 042/context selection where canonical records are projected into AI context;
+- 050/051 dependency and staleness views and mutation-time invalidation authority;
+- any Parameter lookup used as source authority by 058c/071b;
+- proposal/promotion surfaces from 040/054.
+
+Inactive, superseded, archived, or deleted records must not continue to enter normal authoritative context merely because one legacy query omits lifecycle filtering. A surface that intentionally inspects alternatives/history may resolve them explicitly without treating them as current authority.
+
+A transition that removes current upstream authority, or an edit that changes a dependency-driving value/unit, must also make affected downstream canonical records truthfully stale in the same mutation transaction when the current dependency graph can establish that closure. If the existing 050/051 authority cannot establish a complete safe closure for a proposed transition, the server must reject that transition rather than leave dependent records falsely current.
+
+However, historical run/evidence provenance may still resolve the record for Audit/lineage.
+
+## 12. Working-configuration interaction
+
+098 does not retroactively mutate 071b transient working state.
+
+If a canonical Parameter currently supplies a value to an open working configuration and the canonical record is later edited/deactivated/archived/deleted/superseded:
+
+- the existing transient working state is not silently rewritten;
+- subsequent authoritative source resolution/preflight must detect that the source is no longer current or no longer matches the captured source revision/value/unit where relevant;
+- the operator receives a deterministic stale/unavailable/source-changed condition rather than an invisible replacement.
+
+The exact reconciliation behavior is a readiness decision based on current 071b/058c seams. 098 therefore **does authorize the minimum source-resolution/preflight/create/claim guard change required to enforce lifecycle and canonical-source revision truth for linked canonical sources**. It does not authorize broader run orchestration, solver, snapshot, or unrelated preflight redesign.
+
+This linked-source guard is complementary to canonical dependency invalidation: blocking a stale future run does not by itself make already-promoted downstream canonical records stale. Readiness must enforce both where applicable, atomically with the canonical edit/lifecycle transition or by rejecting the transition before commit.
+
+## 13. Concurrency and idempotency
+
+Lifecycle operations and supported canonical edits must tolerate duplicate clicks/retries without producing contradictory relationships, lost updates, or repeated destructive side effects.
+
+Readiness must inspect current SQLite transaction patterns and choose the minimum server-owned protection. At minimum:
+
+- validation, including the canonical Edit expected immutable revision/current-value precondition, the canonical edit or lifecycle mutation, any required 050/051 dependent freshness marks, and the corresponding audit event occur atomically when the operation changes canonical state;
+- a stale canonical Edit precondition fails closed before mutation and cannot overwrite a newer accepted edit; no audit/freshness side effect is emitted for that rejected stale request;
+- stale expected lifecycle state fails closed;
+- supersede cannot produce two active replacements through a race if the domain contract requires one;
+- delete/archive retries converge to the same canonical outcome or return an explicit already-transitioned result without duplicate audit or freshness side effects.
+
+No generic event-sourcing system, command bus, or repository-wide versioning framework is authorized merely to implement these guarantees.
+
+## 14. Failure modes that must be tested
+
+Implementation/readiness must cover, as applicable:
+
+1. wrong workspace record ID;
+2. unsupported lifecycle transition;
+3. stale current-state precondition;
+4. duplicate/retried transition;
+5. delete with canonical dependents;
+6. supersede with missing/incompatible replacement;
+7. two concurrent supersede attempts;
+8. two canonical Edit requests derived from the same immutable revision/current value race or arrive out of order: only the first accepted mutation may commit, while the stale second request fails closed with no canonical overwrite, audit event or freshness side effect;
+9. inactive/archived/superseded/deleted record absent from normal current Engineering Data results;
+10. audit/history view can still resolve retained noncurrent/tombstone history where required;
+11. inactive/archived/superseded/deleted record absent from normal authoritative canonical AI/context projection;
+12. historical run/evidence lineage remains inspectable;
+13. canonical lifecycle change does not silently mutate open 071b working state, while subsequent linked-source resolution/preflight fails closed when that source is no longer current;
+14. canonical Parameter value/unit edit after preview or queueing cannot execute the old captured value while claiming the edited source identity; preview/create/claim detect source drift or equivalent revision mismatch;
+15. canonical Parameter value/unit edit or current-source retirement/deactivation/archive/delete/supersede either atomically persists the complete affected 050/051 downstream freshness closure with the canonical mutation or rejects the transition before commit when truthful invalidation is unavailable;
+16. canonical edit or lifecycle mutation, required freshness invalidation, and durable audit event are atomic, and duplicate retries do not duplicate destructive/audit/freshness side effects;
+17. workspace switch while a mutation is in flight cannot apply stale UI state to the new workspace;
+18. backend rejection leaves UI unchanged and communicates the actual reason;
+19. keyboard/focus/effective-200% behavior for confirmation/action controls;
+20. no provider call, runner execution or simulation run is triggered by lifecycle mutation itself.
+
+## 15. Browser acceptance
+
+A browser/evidence harness for the implemented subset must prove:
+
+- actions appear only for supported record/state combinations;
+- selection and action confirmation remain usable at effective 200%;
+- destructive actions identify the target and consequence;
+- successful transition updates the normal list from server truth;
+- rejected/stale transition does not optimistically leave false state;
+- a stale canonical Edit conflict refreshes from server truth and never leaves the UI claiming the rejected edit was applied;
+- `Show inactive/archived/superseded/deleted` is secondary and does not contaminate normal authoritative view;
+- workspace switching clears stale selection/action state;
+- no page-level overflow or focus trap;
+- existing light/dark/system and reduced-motion invariants remain intact.
+
+## 16. Scope and implementation-now boundary
+
+This definition authorizes a later readiness decision to implement only the minimum server + Engineering Data changes necessary for truthful lifecycle behavior over the currently supported canonical record families, plus the minimum linked-source integrity guards and 050/051 freshness reconciliation required so a noncurrent or edited canonical source cannot silently authorize a run or leave downstream canonical state falsely fresh.
+
+Readiness must explicitly list:
+
+- record kinds implemented now;
+- lifecycle transitions implemented now per kind;
+- schema additions, if any;
+- route/service changes;
+- canonical query/context filters affected;
+- exact immutable expected-revision/current-value precondition used for each supported canonical Edit and the deterministic stale-conflict response;
+- linked-source revision/preflight/create/claim guard changes required by lifecycle/edit enforcement;
+- exact 050/051 freshness preparation/persistence seam used for each edit/transition that changes upstream authority, or the explicit rejection rule where complete invalidation is not safely representable;
+- audit event fields and the existing transaction/event seam used to commit canonical edit/lifecycle mutation + required freshness marks + audit atomically;
+- frontend action/confirmation changes;
+- migration/default semantics for existing rows;
+- exact deterministic and browser tests.
+
+If a record kind cannot safely support the full lifecycle with current authority, readiness must narrow it rather than invent semantics.
+
+## 17. Prepared but not implemented here
+
+The design must not preclude:
+
+- future unified canonical write intent under 101;
+- richer history/audit views;
+- bulk lifecycle operations;
+- Jarvis proposals that ask the operator to perform canonical lifecycle changes through a future typed canonical-write authority.
+
+None of those are required by 098.
+
+## 18. Non-goals
+
+098 does **not** authorize:
+
+- a second engineering/canonical database;
+- event sourcing or a generic command bus;
+- browser-only lifecycle state;
+- physical cascade deletion by default;
+- automatic deletion from AI/Jarvis prose;
+- silent canonical mutation from 097 working-state actions;
+- variant creation/comparison (006b/058b);
+- run execution, solver/snapshot changes, or preflight redesign beyond the minimum linked-canonical-source lifecycle/revision guard required by §§6 and 12;
+- a second dependency/freshness engine or broad 050/051 redesign; only the minimum reuse/adaptation required to invalidate an affected closure atomically, otherwise reject the edit/transition;
+- provider, budget, egress or thread changes;
+- Notes;
+- 062 grading UI;
+- global visual identity (100);
+- 101 canonical-state-write unification ahead of its queue slot;
+- broad cleanup of the placeholder `app/modules/engineering` boundary (105 owns that later cleanup).
+
+## 19. Readiness questions
+
+A separate readiness record must answer from exact then-current runtime:
+
+1. Which current tables/records are the actual canonical lifecycle targets for 098?
+2. Which existing `status` fields must remain domain/quality fields rather than lifecycle?
+3. Is one additive lifecycle column sufficient, or do some kinds require a different minimal representation?
+4. What is the safe existing-row migration/default?
+5. Which references make delete unsafe and how are tombstones resolved?
+6. What exact supersede relationship is already authoritative for Parameters and can it be reused safely?
+7. Which canonical list/context/dependency queries must filter lifecycle state?
+8. How does 058c/071b detect a linked canonical source that becomes non-current or is edited after the working state was opened, including the minimum required source-revision/preflight/create/claim guard?
+9. What is the minimum exact per-kind edit surface that does not pre-empt 101?
+10. What existing immutable revision/current-value (or equivalent compare-and-swap) precondition can each supported canonical Edit carry, where is it validated inside the server-owned mutation transaction, and what exact stale-conflict response proves a delayed edit cannot overwrite newer canonical state?
+11. What existing events/logging seam can atomically record every supported canonical edit or lifecycle operation, including actor/source, operation, prior/resulting lifecycle or edited values/units as applicable, and reason when supplied, together with the canonical mutation and required freshness marks?
+12. For each supported canonical edit/retirement transition that changes upstream authority, what exact 050/051 dependency closure must be marked stale in the same transaction, and which transition must instead be rejected if the current graph cannot establish complete truthful invalidation?
+13. What exact deterministic concurrency test proves two stale/racing canonical Edit requests cannot both commit, and that the rejected request creates no audit/freshness side effects?
+14. What exact browser matrix and rollback prove no false UI state after failed/stale transitions or stale canonical Edit conflicts?
+
+Implementation cannot begin until those questions are answered and independently reviewed.
+
+## 20. Definition of done for 098 implementation
+
+A future implementation is complete only when:
+
+1. lifecycle semantics are server-owned and distinct from evidence/value quality;
+2. implemented canonical edits and lifecycle transitions are atomic, workspace-safe and stale-safe: every supported canonical Edit validates an expected immutable revision/current-value precondition before mutation, and a stale edit cannot overwrite newer canonical state or emit audit/freshness side effects;
+3. every accepted canonical edit/lifecycle mutation commits its durable audit event atomically with the canonical mutation and any required freshness marks;
+4. edits/transitions that change upstream canonical authority either atomically persist the required complete 050/051 downstream freshness closure or fail closed before mutation;
+5. supersede preserves explicit lineage;
+6. delete is truthful, safe and hidden from normal view without destroying required audit lineage;
+7. normal authoritative canonical projections consistently exclude noncurrent lifecycle states while explicit history/alternative views remain available;
+8. Engineering Data exposes only valid actions and refreshes from server truth, including after stale-edit conflicts;
+9. open working configuration is never silently rewritten by canonical lifecycle/edit changes, and subsequent linked-source resolution/preflight/create/claim fails closed for a source that is noncurrent or no longer matches the captured source revision/value/unit;
+10. deterministic and browser acceptance are green on one immutable exact head;
+11. no current P0/P1/beta-blocking P2 remains;
+12. merge and registry reconciliation complete before 006b begins.
