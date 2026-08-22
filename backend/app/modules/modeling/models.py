@@ -3,6 +3,9 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 
+ParameterLifecycleState = Literal["active", "inactive", "superseded", "archived", "deleted"]
+
+
 class ModelSpecCreate(BaseModel):
     title: str = Field(min_length=1)
     engineering_question: str = Field(min_length=1)
@@ -67,6 +70,36 @@ class ParameterRead(ParameterCreate):
     workspace_id: str
     created_at: str
     updated_at: str
+    lifecycle_state: ParameterLifecycleState = "active"
+
+
+class ParameterUpdate(BaseModel):
+    workspace_id: str
+    expected_updated_at: str
+    name: str | None = Field(default=None, min_length=1)
+    symbol: str | None = None
+    value: str | None = None
+    unit: str | None = Field(default=None, min_length=1)
+    value_status: Literal["candidate", "literature", "measured", "validated", "accepted"] | None = None
+    value_min: float | None = None
+    value_max: float | None = None
+    source_ref: str | None = None
+    confidence: float | None = None
+    notes: str | None = None
+
+    @model_validator(mode="after")
+    def validate_uncertainty_bounds(self) -> "ParameterUpdate":
+        if self.value_min is not None and self.value_max is not None and self.value_min > self.value_max:
+            raise ValueError("value_min must be less than or equal to value_max")
+        return self
+
+
+class ParameterLifecycleCommand(BaseModel):
+    workspace_id: str
+    action: Literal["activate", "deactivate", "archive", "delete"]
+    expected_lifecycle_state: ParameterLifecycleState
+    expected_updated_at: str
+    reason: str | None = Field(default=None, max_length=500)
 
 
 class RequirementCreate(BaseModel):
