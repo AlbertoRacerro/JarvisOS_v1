@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import ReactDOM from "react-dom/client";
 
+// Evidence-only harness for product head ac2762a27fe314a0f5e46b2600a9131dac42c471.
 import type { StageSelection } from "../app/selection";
 import { EngineeringPropertiesPanel, useEngineeringProperties } from "../components/engineering/EngineeringProperties";
 import JarvisEngineeringActions from "../components/engineering/JarvisEngineeringActions";
