@@ -38,15 +38,24 @@ function EvidenceApp() {
   const primedSafeFix = useRef(false);
 
   useEffect(() => {
-    if (primedSafeFix.current || workspaceId !== "ws1" || selection.kind !== "bluecad-part" || selection.candidateId !== "cand-a") return;
+    if (
+      primedSafeFix.current ||
+      workspaceId !== "ws1" ||
+      selection.kind !== "bluecad-part" ||
+      selection.candidateId !== "cand-a" ||
+      controller.semanticPhase !== "ready" ||
+      !controller.semanticSource ||
+      !controller.semanticContract
+    ) return;
     const variable = controller.selected?.input_contract?.variables.find((item) => item.name === "tube_length");
     const baseline = controller.baseline.tube_length;
     const working = controller.working.tube_length;
     if (!variable || !baseline?.value || !working || working.value !== baseline.value || working.parameterId !== baseline.parameterId) return;
     primedSafeFix.current = true;
-    // Prime a real deterministic blocker while retaining an exact valid baseline.
-    // A merely dirty-but-valid field is not a blocker and therefore must not create a Jarvis safe-fix action.
-    controller.updateValue(variable, "not-a-number");
+    // A required empty override is a real deterministic blocker with an exact
+    // valid CAD-linked baseline. This primes one reviewable safe-fix without
+    // relying on any unit-only Parameter inference.
+    controller.updateValue(variable, "");
   }, [controller, selection, workspaceId]);
 
   const switchWorkspace = () => {
