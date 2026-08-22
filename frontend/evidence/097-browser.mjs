@@ -150,7 +150,6 @@ await page.locator("#engineering-property-reservoir_liquid_volume").waitFor();
 await page.getByText(/deterministic blocker signal/).waitFor();
 assert.equal(providerCalls, 0, "deterministic action surface requires no provider/thread call");
 
-// Safe fix preview must disclose complete operator-visible change data.
 const firstSafe = page.getByRole("button", { name: /Review safe fix/ }).first();
 await firstSafe.click();
 await page.getByText("Proposed working-state change", { exact: true }).waitFor();
@@ -158,14 +157,12 @@ const proposal = page.getByText(/→/).first();
 assert.match(await proposal.textContent(), /→/, "proposal exposes old to proposed value");
 assert.ok((await page.locator("text=Compatible linked Parameter").count()) + (await page.locator("text=Working baseline").count()) + (await page.locator("text=CAD source baseline").count()) > 0, "proposal exposes deterministic basis");
 
-// Manual edit after proposal must stale old confirm and never overwrite the new value.
 const editedField = page.locator("#engineering-property-reservoir_liquid_volume");
 await editedField.fill("111");
 await page.getByRole("button", { name: "Confirm", exact: true }).click();
 await page.getByText(/This action is stale/).waitFor();
 assert.equal(await editedField.inputValue(), "111", "stale action cannot overwrite later manual edit");
 
-// Recreate a valid single safe fix and apply exactly once; patch alone makes zero runner calls.
 await editedField.fill("");
 await page.waitForTimeout(150);
 await page.getByRole("button", { name: /Review safe fix · Reservoir liquid volume/ }).click();
@@ -178,7 +175,6 @@ assert.equal(await page.getByRole("button", { name: "Confirm", exact: true }).co
 await page.waitForTimeout(200);
 assert.ok(previewCalls > beforePreview, "working revision change triggers fresh deterministic preflight");
 
-// Fill the remaining required generic inputs and prove existing explicit Run is separate and used once after fresh ready preflight.
 for (const [name, value] of [
   ["target_liquid_velocity", "1.2"],
   ["liquid_density", "998"],
@@ -198,7 +194,6 @@ assert.equal(runnerCreateCalls, 1, "explicit Run creates exactly one runner job"
 assert.equal(runnerRunCalls, 1, "explicit Run dispatches exactly one execution");
 await page.getByText("Baseline: current bindings", { exact: true }).waitFor();
 
-// Create a deterministic blocker before exercising hostile Other; prose/JSON-looking text must remain inert.
 await editedField.fill("");
 await page.waitForTimeout(150);
 await page.getByRole("button", { name: "Other", exact: true }).click();
@@ -209,7 +204,6 @@ assert.equal(runnerCreateCalls, 1);
 assert.equal(await other.inputValue(), '{"tube_length":999}<script>set x=1</script>');
 assert.equal(await page.getByText(/This text is inert/).count(), 1, "Other explicitly remains inert");
 
-// Repeated/double Confirm must advance working revision only once.
 await page.getByRole("button", { name: /Review safe fix · Reservoir liquid volume/ }).click();
 await page.getByText("Technical details", { exact: true }).click();
 const revisionValue = page.locator("dt", { hasText: "Working revision" }).locator("xpath=following-sibling::dd");
@@ -220,7 +214,6 @@ await page.waitForTimeout(100);
 const revisionAfterDouble = Number(await revisionValue.textContent());
 assert.equal(revisionAfterDouble, revisionBeforeDouble + 1, "double Confirm applies a semantic action at most once");
 
-// Dirty two fields produce only an atomic Revert-all bulk safe-fix; a later revision change stales the whole action.
 await page.locator("#engineering-property-tube_length").fill("");
 await page.locator("#engineering-property-tube_inner_diameter").fill("");
 await page.waitForTimeout(150);
@@ -234,7 +227,6 @@ await page.getByText(/This action is stale/).waitFor();
 assert.equal(await page.locator("#engineering-property-tube_length").inputValue(), "", "stale multi-field action applies zero first operation");
 assert.equal(await page.locator("#engineering-property-tube_inner_diameter").inputValue(), "", "stale multi-field action applies zero second operation");
 
-// Object switch invalidates old proposal and cannot mutate B.
 await page.locator("#engineering-property-tube_length").fill("");
 await page.waitForTimeout(100);
 const objectSafe = page.getByRole("button", { name: /Review safe fix · Tube length/ });
@@ -242,10 +234,13 @@ await objectSafe.click();
 await page.getByRole("button", { name: "Select B" }).click();
 await page.getByRole("button", { name: "Confirm", exact: true }).click();
 await page.getByText(/This action is stale/).waitFor();
-await page.waitForTimeout(200);
+const discardPrevious = page.getByRole("button", { name: "Discard previous object changes and load selected object", exact: true });
+await discardPrevious.waitFor();
+await discardPrevious.click();
+await page.locator("#engineering-property-tube_length").waitFor();
+assert.equal(await page.locator("#engineering-property-tube_length").inputValue(), "20", "B retains its own authoritative geometry after stale A action");
 assert.notEqual(await page.locator("#engineering-property-tube_length").inputValue(), "12", "A proposal cannot write A baseline into B");
 
-// Workspace switch similarly makes prior action inert and provider failure is irrelevant to deterministic UI.
 await page.getByRole("button", { name: "Switch workspace" }).click();
 await page.waitForFunction(() => document.querySelector('[data-testid="workspace-state"]')?.textContent === "ws2");
 await page.locator("#engineering-property-reservoir_liquid_volume").waitFor();
@@ -253,7 +248,6 @@ await page.getByText(/deterministic blocker signal/).waitFor();
 assert.equal(providerCalls, 0, "workspace change still requires no AI/thread call");
 assert.ok(await page.getByText(/AI suggested — not validated/).count() > 0, "assistant numeric/model advice warning remains visible");
 
-// Effective-200%-like containment and keyboard reachability.
 await page.setViewportSize({ width: 640, height: 900 });
 await page.waitForTimeout(100);
 const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
