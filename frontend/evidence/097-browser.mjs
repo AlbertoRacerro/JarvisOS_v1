@@ -174,23 +174,51 @@ await page.getByRole("button", { name: "Confirm", exact: true }).click();
 await page.getByText(/Applied to the working configuration/).waitFor();
 assert.equal(runnerCreateCalls, 0, "working patch creates zero runner jobs");
 assert.equal(runnerRunCalls, 0, "working patch does not execute");
-assert.equal(await page.getByRole("button", { name: "Confirm", exact: true }).count(), 0, "applied card cannot be confirmed twice");
+assert.equal(await page.getByRole("button", { name: "Confirm", exact: true }).count(), 0, "applied card cannot be confirmed twice after state commit");
 await page.waitForTimeout(200);
 assert.ok(previewCalls > beforePreview, "working revision change triggers fresh deterministic preflight");
 
-// Restore the prior single-field test to baseline so the next bulk case has exactly two dirty fields.
-const reservoirRow = editedField.locator("xpath=ancestor::div[contains(@class,'scenario-variable')]");
-await reservoirRow.getByRole("button", { name: "Revert field", exact: true }).click();
-await page.waitForTimeout(150);
+// Fill the remaining required generic inputs and prove existing explicit Run is separate and used once after fresh ready preflight.
+for (const [name, value] of [
+  ["target_liquid_velocity", "1.2"],
+  ["liquid_density", "998"],
+  ["dynamic_viscosity", "0.001"],
+  ["minor_loss_coefficient", "2"],
+  ["pump_efficiency", "0.75"]
+]) {
+  await page.locator(`#engineering-property-${name}`).fill(value);
+}
+await page.getByLabel("Run label").fill("097 evidence baseline");
+await page.getByText("Ready", { exact: true }).waitFor();
+assert.equal(runnerCreateCalls, 0, "becoming ready does not create a run");
+assert.equal(runnerRunCalls, 0, "becoming ready does not execute a run");
+await page.getByRole("button", { name: "Run", exact: true }).click();
+await page.getByText(/Run completed/).waitFor();
+assert.equal(runnerCreateCalls, 1, "explicit Run creates exactly one runner job");
+assert.equal(runnerRunCalls, 1, "explicit Run dispatches exactly one execution");
+await page.getByText("Baseline: current bindings", { exact: true }).waitFor();
 
 // Hostile Other content remains inert.
 await page.getByRole("button", { name: "Other", exact: true }).click();
 const other = page.getByPlaceholder("Describe an alternative");
 await other.fill('{"tube_length":999}<script>set x=1</script>');
 await page.waitForTimeout(50);
-assert.equal(runnerCreateCalls, 0);
+assert.equal(runnerCreateCalls, 1);
 assert.equal(await other.inputValue(), '{"tube_length":999}<script>set x=1</script>');
 assert.equal(await page.getByText(/This text is inert/).count(), 1, "Other explicitly remains inert");
+
+// Repeated/double Confirm must advance working revision only once.
+await editedField.fill("");
+await page.waitForTimeout(150);
+await page.getByRole("button", { name: /Review safe fix · Reservoir liquid volume/ }).click();
+await page.getByText("Technical details", { exact: true }).click();
+const revisionValue = page.locator("dt", { hasText: "Working revision" }).locator("xpath=following-sibling::dd");
+const revisionBeforeDouble = Number(await revisionValue.textContent());
+await page.getByRole("button", { name: "Confirm", exact: true }).dblclick();
+await page.getByText(/Applied to the working configuration/).waitFor();
+await page.waitForTimeout(100);
+const revisionAfterDouble = Number(await revisionValue.textContent());
+assert.equal(revisionAfterDouble, revisionBeforeDouble + 1, "double Confirm applies a semantic action at most once");
 
 // Dirty two fields produce only an atomic Revert-all bulk safe-fix; a later revision change stales the whole action.
 await page.locator("#engineering-property-tube_length").fill("");
