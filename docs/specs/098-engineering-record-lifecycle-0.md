@@ -185,12 +185,13 @@ Engineering Data normal mode is project-centric and quiet.
 Normal view:
 
 - active/current records first;
-- archived/superseded/deleted records excluded from ordinary results by default;
+- inactive/archived/superseded/deleted records excluded from ordinary current results by default unless the surface explicitly asks to inspect alternatives/history;
 - lifecycle action names are human-readable;
 - UUIDs and raw technical state remain secondary.
 
 Advanced/Audit may expose:
 
+- `Show inactive`;
 - `Show archived`;
 - `Show superseded`;
 - `Show deleted`;
@@ -198,7 +199,7 @@ Advanced/Audit may expose:
 - lifecycle timestamps/replacement IDs if authoritative;
 - raw persisted status fields where needed for diagnosis.
 
-No audit requirement forces deleted records back into the normal operator list.
+No audit requirement forces noncurrent records back into the normal authoritative operator list.
 
 ## 10. Engineering Data action surface
 
@@ -230,7 +231,7 @@ At minimum, readiness must inspect and test:
 - any Parameter lookup used as source authority by 058c/071b;
 - proposal/promotion surfaces from 040/054.
 
-A deleted or archived record must not continue to enter normal authoritative context merely because one legacy query omits lifecycle filtering.
+Inactive, superseded, archived, or deleted records must not continue to enter normal authoritative context merely because one legacy query omits lifecycle filtering. A surface that intentionally inspects alternatives/history may resolve them explicitly without treating them as current authority.
 
 However, historical run/evidence provenance may still resolve the record for Audit/lineage.
 
@@ -244,7 +245,7 @@ If a canonical Parameter currently supplies a value to an open working configura
 - subsequent authoritative source resolution/preflight must detect that the source is no longer current where relevant;
 - the operator receives a deterministic stale/unavailable/source-changed condition rather than an invisible replacement.
 
-The exact reconciliation behavior is a readiness decision based on current 071b/058c seams.
+The exact reconciliation behavior is a readiness decision based on current 071b/058c seams. 098 therefore **does authorize the minimum source-resolution/preflight guard change required to enforce lifecycle truth for linked canonical sources**. It does not authorize broader run orchestration, solver, snapshot, or unrelated preflight redesign.
 
 ## 13. Concurrency and idempotency
 
@@ -270,15 +271,15 @@ Implementation/readiness must cover, as applicable:
 5. delete with canonical dependents;
 6. supersede with missing/incompatible replacement;
 7. two concurrent supersede attempts;
-8. archived/deleted record absent from normal Engineering Data;
-9. audit view can still resolve retained tombstone/history where required;
-10. archived/deleted record absent from normal canonical AI/context projection;
+8. inactive/archived/superseded/deleted record absent from normal current Engineering Data results;
+9. audit/history view can still resolve retained noncurrent/tombstone history where required;
+10. inactive/archived/superseded/deleted record absent from normal authoritative canonical AI/context projection;
 11. historical run/evidence lineage remains inspectable;
-12. canonical lifecycle change does not silently mutate open 071b working state;
+12. canonical lifecycle change does not silently mutate open 071b working state, while subsequent linked-source resolution/preflight fails closed when that source is no longer current;
 13. workspace switch while a mutation is in flight cannot apply stale UI state to the new workspace;
 14. backend rejection leaves UI unchanged and communicates the actual reason;
 15. keyboard/focus/effective-200% behavior for confirmation/action controls;
-16. no provider call, runner execution or simulation run is triggered by lifecycle mutation.
+16. no provider call, runner execution or simulation run is triggered by lifecycle mutation itself.
 
 ## 15. Browser acceptance
 
@@ -289,14 +290,14 @@ A browser/evidence harness for the implemented subset must prove:
 - destructive actions identify the target and consequence;
 - successful transition updates the normal list from server truth;
 - rejected/stale transition does not optimistically leave false state;
-- `Show archived/superseded/deleted` is secondary and does not contaminate normal view;
+- `Show inactive/archived/superseded/deleted` is secondary and does not contaminate normal authoritative view;
 - workspace switching clears stale selection/action state;
 - no page-level overflow or focus trap;
 - existing light/dark/system and reduced-motion invariants remain intact.
 
 ## 16. Scope and implementation-now boundary
 
-This definition authorizes a later readiness decision to implement only the minimum server + Engineering Data changes necessary for truthful lifecycle behavior over the currently supported canonical record families.
+This definition authorizes a later readiness decision to implement only the minimum server + Engineering Data changes necessary for truthful lifecycle behavior over the currently supported canonical record families, plus the minimum linked-source resolution/preflight guard required so a noncurrent canonical source cannot silently authorize a run.
 
 Readiness must explicitly list:
 
@@ -305,6 +306,7 @@ Readiness must explicitly list:
 - schema additions, if any;
 - route/service changes;
 - canonical query/context filters affected;
+- linked-source/preflight guard changes required by lifecycle enforcement;
 - frontend action/confirmation changes;
 - migration/default semantics for existing rows;
 - exact deterministic and browser tests.
@@ -333,7 +335,7 @@ None of those are required by 098.
 - automatic deletion from AI/Jarvis prose;
 - silent canonical mutation from 097 working-state actions;
 - variant creation/comparison (006b/058b);
-- run execution or preflight changes;
+- run execution, solver/snapshot changes, or preflight redesign beyond the minimum linked-canonical-source lifecycle guard required by §12;
 - provider, budget, egress or thread changes;
 - Notes;
 - 062 grading UI;
@@ -352,7 +354,7 @@ A separate readiness record must answer from exact then-current runtime:
 5. Which references make delete unsafe and how are tombstones resolved?
 6. What exact supersede relationship is already authoritative for Parameters and can it be reused safely?
 7. Which canonical list/context/dependency queries must filter lifecycle state?
-8. How does 058c/071b detect a linked canonical source that becomes non-current after the working state was opened?
+8. How does 058c/071b detect a linked canonical source that becomes non-current after the working state was opened, including the minimum required source-resolution/preflight guard?
 9. What is the minimum exact per-kind edit surface that does not pre-empt 101?
 10. What exact browser matrix and rollback prove no false UI state after failed/stale transitions?
 
@@ -366,9 +368,9 @@ A future implementation is complete only when:
 2. implemented transitions are atomic, stale-safe and workspace-safe;
 3. supersede preserves explicit lineage;
 4. delete is truthful, safe and hidden from normal view without destroying required audit lineage;
-5. normal canonical projections consistently respect lifecycle state;
+5. normal authoritative canonical projections consistently exclude noncurrent lifecycle states while explicit history/alternative views remain available;
 6. Engineering Data exposes only valid actions and refreshes from server truth;
-7. open working configuration is never silently rewritten by canonical lifecycle changes;
+7. open working configuration is never silently rewritten by canonical lifecycle changes, and subsequent linked-source resolution/preflight fails closed for a source that is no longer current;
 8. deterministic and browser acceptance are green on one immutable exact head;
 9. no current P0/P1/beta-blocking P2 remains;
 10. merge and registry reconciliation complete before 006b begins.
