@@ -168,7 +168,7 @@ await page.getByLabel("Model contract").selectOption("model-alt-ws1");
 await page.getByRole("button", { name: "Confirm", exact: true }).click();
 await page.getByText(/This action is stale/).waitFor();
 await page.getByLabel("Model contract").selectOption("model-semantic-v3-ws1");
-await page.locator("#engineering-property-reservoir_liquid_volume").waitFor();
+await page.locator("#engineering-property-tube_length").waitFor();
 
 const firstSafe = page.getByRole("button", { name: /Review safe fix/ }).first();
 await firstSafe.click();
@@ -176,10 +176,10 @@ await page.getByText("Proposed working-state change", { exact: true }).waitFor()
 const proposal = page.getByText(/→/).first();
 assert.match(await proposal.textContent(), /→/, "proposal exposes old to proposed value");
 assert.match(await proposal.textContent(), /(m|mm|L|m\/s|kg\/m3|Pa\*s|1)/, "proposal exposes exact engineering unit");
-assert.ok((await page.locator("text=Compatible linked Parameter").count()) + (await page.locator("text=Working baseline").count()) + (await page.locator("text=CAD source baseline").count()) > 0, "proposal exposes deterministic basis");
-assert.ok(await page.getByText(/Restore the|Use the only currently compatible/).count() > 0, "proposal exposes deterministic reason before Confirm");
+assert.ok((await page.locator("text=Working baseline").count()) + (await page.locator("text=CAD source baseline").count()) > 0, "proposal exposes deterministic basis");
+assert.ok(await page.getByText(/Restore the/).count() > 0, "proposal exposes deterministic reason before Confirm");
 
-const editedField = page.locator("#engineering-property-reservoir_liquid_volume");
+const editedField = page.locator("#engineering-property-tube_length");
 await editedField.fill("111");
 await page.getByRole("button", { name: "Confirm", exact: true }).click();
 await page.getByText(/This action is stale/).waitFor();
@@ -187,7 +187,7 @@ assert.equal(await editedField.inputValue(), "111", "stale action cannot overwri
 
 await editedField.fill("");
 await page.waitForTimeout(150);
-await page.getByRole("button", { name: /Review safe fix · Reservoir liquid volume/ }).click();
+await page.getByRole("button", { name: /Review safe fix · Tube length/ }).click();
 const beforePreview = previewCalls;
 await page.getByRole("button", { name: "Confirm", exact: true }).click();
 await page.getByText(/Applied to the working configuration/).waitFor();
@@ -199,6 +199,7 @@ await page.waitForTimeout(200);
 assert.ok(previewCalls > beforePreview, "working revision change triggers fresh deterministic preflight");
 
 for (const [name, value] of [
+  ["reservoir_liquid_volume", "100"],
   ["target_liquid_velocity", "1.2"],
   ["liquid_density", "998"],
   ["dynamic_viscosity", "0.001"],
@@ -228,7 +229,7 @@ assert.equal(runnerCreateCalls, 1);
 assert.equal(await other.inputValue(), '{"tube_length":999}<script>set x=1</script>');
 assert.equal(await page.getByText(/This text is inert/).count(), 1, "Other explicitly remains inert");
 
-await page.getByRole("button", { name: /Review safe fix · Reservoir liquid volume/ }).click();
+await page.getByRole("button", { name: /Review safe fix · Tube length/ }).click();
 await page.getByText("Technical details", { exact: true }).click();
 const revisionValue = page.locator("dt", { hasText: "Working revision" }).locator("xpath=following-sibling::dd");
 const revisionBeforeDouble = Number(await revisionValue.textContent());
@@ -252,6 +253,15 @@ await page.getByText(/This action is stale/).waitFor();
 assert.equal(await page.locator("#engineering-property-tube_length").inputValue(), "", "stale multi-field action applies zero first operation");
 assert.equal(await page.locator("#engineering-property-tube_inner_diameter").inputValue(), "", "stale multi-field action applies zero second operation");
 assert.equal(sourceMutationCalls, 0, "stale action does not mutate source authority");
+
+// Direct evidence-only owner probe: the first operation is valid but the second
+// has a deliberately wrong unit. The owner must reject the whole action before
+// committing any mutation, proving invalid multi-op atomicity separately from
+// the stale-revision case above.
+await page.getByRole("button", { name: "Probe invalid atomic action", exact: true }).click();
+await page.getByTestId("atomic-probe-result").getByText("invalid:unchanged", { exact: true }).waitFor();
+assert.equal(await page.locator("#engineering-property-tube_length").inputValue(), "", "invalid multi-op leaves valid first operation unapplied");
+assert.equal(await page.locator("#engineering-property-tube_inner_diameter").inputValue(), "", "invalid multi-op leaves second operation unapplied");
 
 await page.locator("#engineering-property-tube_length").fill("");
 await page.waitForTimeout(100);
