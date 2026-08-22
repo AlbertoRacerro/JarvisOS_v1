@@ -21,6 +21,7 @@ from app.modules.modeling.models import (
 )
 from app.modules.modeling.parameter_lifecycle import (
     ParameterLifecycleError,
+    list_lifecycle_parameters,
     transition_parameter,
     update_parameter,
 )
@@ -36,7 +37,6 @@ from app.modules.modeling.service import (
     list_assumptions,
     list_decisions,
     list_model_specs,
-    list_parameters,
     list_requirements,
     list_simulation_runs,
     update_requirement,
@@ -110,12 +110,9 @@ def create_parameter_endpoint(workspace_id: str, payload: ParameterCreate) -> Pa
 
 
 @router.get("/workspaces/{workspace_id}/parameters", response_model=list[ParameterRead])
-def list_parameters_endpoint(
-    workspace_id: str,
-    include_noncurrent: bool = Query(default=False),
-) -> list[ParameterRead]:
+def list_parameters_endpoint(workspace_id: str, include_noncurrent: bool = Query(default=False)) -> list[ParameterRead]:
     try:
-        return list_parameters(workspace_id, include_noncurrent=include_noncurrent)
+        return list_lifecycle_parameters(workspace_id, include_noncurrent=include_noncurrent)
     except ValueError as exc:
         raise _domain_error(exc) from exc
 
