@@ -224,6 +224,8 @@ export default function JarvisEngineeringActions({ controller }: { controller: E
   const [otherText, setOtherText] = useState("");
 
   const blockers = useMemo(() => blockerVariables(controller), [controller]);
+  const previewErrors = controller.preview?.errors ?? [];
+  const blockerSignalCount = blockers.length + previewErrors.length;
   const safeOperations = useMemo(
     () => blockers.map((variable) => safeOperation(controller, variable)).filter((item): item is EngineeringActionOperation => Boolean(item)),
     [blockers, controller]
@@ -264,12 +266,13 @@ export default function JarvisEngineeringActions({ controller }: { controller: E
     <section aria-label="Jarvis engineering actions">
       <div className="shell-properties__selection">
         <strong>Engineering actions</strong>
-        <p>{blockers.length ? `${blockers.length} deterministic blocker${blockers.length === 1 ? "" : "s"} in the current working configuration.` : "Current working configuration has no deterministic field blocker."}</p>
+        <p>{blockerSignalCount ? `${blockerSignalCount} deterministic blocker signal${blockerSignalCount === 1 ? "" : "s"} in the current working configuration.` : "Current working configuration has no deterministic blocker."}</p>
       </div>
 
-      {blockers.length ? (
+      {blockerSignalCount ? (
         <div>
-          <p><strong>{blockers[0].label}</strong> · {blockers[0].unit}</p>
+          {blockers[0] ? <p><strong>{blockers[0].label}</strong> · {blockers[0].unit}</p> : null}
+          {!blockers.length && previewErrors[0] ? <p><strong>Preflight</strong> · {previewErrors[0]}</p> : null}
           {safeOperations.length ? <small>Only fixes with an existing deterministic basis are offered. No value is invented.</small> : <small>No deterministic safe value is available. Edit Properties manually or ask Jarvis for advisory help.</small>}
           <div>
             {bulkAction ? <button type="button" className="secondary-button" onClick={() => previewAction(bulkAction)}>Apply safe fixes</button> : null}
@@ -278,7 +281,7 @@ export default function JarvisEngineeringActions({ controller }: { controller: E
                 Review safe fix · {action.operations[0].label}
               </button>
             ))}
-            <button type="button" className="secondary-button" onClick={goToIssue}>I'll edit</button>
+            {blockers.length ? <button type="button" className="secondary-button" onClick={goToIssue}>I'll edit</button> : null}
             <button type="button" className="secondary-button" onClick={() => setShowOther((current) => !current)}>Other</button>
           </div>
         </div>
