@@ -3,7 +3,11 @@ import ReactDOM from "react-dom/client";
 
 // Evidence-only harness for the current PR #333 product head. This file is never merged.
 import type { StageSelection } from "../app/selection";
-import { EngineeringPropertiesPanel, useEngineeringProperties } from "../components/engineering/EngineeringProperties";
+import {
+  EngineeringPropertiesPanel,
+  useEngineeringProperties,
+  type EngineeringWorkingAction
+} from "../components/engineering/EngineeringProperties";
 import JarvisEngineeringActions from "../components/engineering/JarvisEngineeringActions";
 import "../styles/tokens.css";
 import "../styles/global.css";
@@ -29,6 +33,7 @@ function part(workspaceId: string, candidateId: string, session: string): StageS
 function EvidenceApp() {
   const [workspaceId, setWorkspaceId] = useState("ws1");
   const [selection, setSelection] = useState<StageSelection>(() => part("ws1", "cand-a", "session-a1"));
+  const [atomicProbeResult, setAtomicProbeResult] = useState("not-run");
   const controller = useEngineeringProperties(workspaceId, () => undefined, selection);
   const primedSafeFix = useRef(false);
 
@@ -50,12 +55,64 @@ function EvidenceApp() {
     setSelection(part(next, next === "ws1" ? "cand-a" : "cand-c", `session-${next}`));
   };
 
+  const probeInvalidAtomicAction = () => {
+    const selected = controller.selected;
+    const length = controller.working.tube_length;
+    const inner = controller.working.tube_inner_diameter;
+    const lengthBaseline = controller.baseline.tube_length;
+    const innerBaseline = controller.baseline.tube_inner_diameter;
+    if (!controller.workspaceId || !selected?.input_contract_sha256 || !length || !inner || !lengthBaseline || !innerBaseline) {
+      setAtomicProbeResult("unavailable");
+      return;
+    }
+    const before = JSON.stringify({ length, inner, revision: controller.revision });
+    const action: EngineeringWorkingAction = {
+      id: "evidence-invalid-multi-op",
+      workspaceId: controller.workspaceId,
+      modelVersionId: selected.id,
+      contractDigest: selected.input_contract_sha256,
+      workingRevision: controller.revision,
+      semanticFingerprint: controller.actionSemanticFingerprint,
+      operations: [
+        {
+          variableName: "tube_length",
+          label: "Tube length",
+          unit: "m",
+          expectedBinding: { ...length },
+          proposedBinding: { ...lengthBaseline },
+          basis: "cad-source",
+          basisLabel: "CAD source baseline",
+          reason: "Evidence probe valid first operation."
+        },
+        {
+          variableName: "tube_inner_diameter",
+          label: "Tube inner diameter",
+          unit: "cm",
+          expectedBinding: { ...inner },
+          proposedBinding: { ...innerBaseline },
+          basis: "cad-source",
+          basisLabel: "CAD source baseline",
+          reason: "Evidence probe deliberately invalid second operation."
+        }
+      ]
+    };
+    const result = controller.applyWorkingAction(action);
+    const after = JSON.stringify({
+      length: controller.working.tube_length,
+      inner: controller.working.tube_inner_diameter,
+      revision: controller.revision
+    });
+    setAtomicProbeResult(`${result}:${before === after ? "unchanged" : "changed"}`);
+  };
+
   return (
     <main style={{ minHeight: "100vh", padding: 12 }}>
       <div data-testid="evidence-controls" style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
         <button type="button" onClick={() => setSelection(part(workspaceId, "cand-a", `session-a-${Date.now()}`))}>Select A</button>
         <button type="button" onClick={() => setSelection(part(workspaceId, "cand-b", `session-b-${Date.now()}`))}>Select B</button>
         <button type="button" onClick={switchWorkspace}>Switch workspace</button>
+        <button type="button" onClick={probeInvalidAtomicAction}>Probe invalid atomic action</button>
+        <span data-testid="atomic-probe-result">{atomicProbeResult}</span>
         <span data-testid="workspace-state">{workspaceId}</span>
         <span data-testid="selection-state">{selection.kind === "bluecad-part" ? `${selection.candidateId}:${selection.partId}` : "none"}</span>
       </div>
