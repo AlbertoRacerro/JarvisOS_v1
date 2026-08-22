@@ -198,7 +198,9 @@ assert.equal(runnerCreateCalls, 1, "explicit Run creates exactly one runner job"
 assert.equal(runnerRunCalls, 1, "explicit Run dispatches exactly one execution");
 await page.getByText("Baseline: current bindings", { exact: true }).waitFor();
 
-// Hostile Other content remains inert.
+// Create a deterministic blocker before exercising hostile Other; prose/JSON-looking text must remain inert.
+await editedField.fill("");
+await page.waitForTimeout(150);
 await page.getByRole("button", { name: "Other", exact: true }).click();
 const other = page.getByPlaceholder("Describe an alternative");
 await other.fill('{"tube_length":999}<script>set x=1</script>');
@@ -208,8 +210,6 @@ assert.equal(await other.inputValue(), '{"tube_length":999}<script>set x=1</scri
 assert.equal(await page.getByText(/This text is inert/).count(), 1, "Other explicitly remains inert");
 
 // Repeated/double Confirm must advance working revision only once.
-await editedField.fill("");
-await page.waitForTimeout(150);
 await page.getByRole("button", { name: /Review safe fix · Reservoir liquid volume/ }).click();
 await page.getByText("Technical details", { exact: true }).click();
 const revisionValue = page.locator("dt", { hasText: "Working revision" }).locator("xpath=following-sibling::dd");
