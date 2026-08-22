@@ -18,7 +18,7 @@ import {
 } from "../../api/client";
 import InlineNotice from "../ui/InlineNotice";
 
-type WorkingBinding = Readonly<{ value: string; parameterId: string }>;
+export type WorkingBinding = Readonly<{ value: string; parameterId: string }>;
 type BindingMap = Record<string, WorkingBinding>;
 type PreviewPhase = "idle" | "checking" | "ready" | "unavailable" | "local-invalid";
 type SemanticPhase = "none" | "loading" | "limited" | "ready" | "conflict";
@@ -28,6 +28,28 @@ type RunSnapshot = Readonly<{
   bindings: BindingMap;
   payload: Record<string, unknown>;
 }>;
+
+export type EngineeringActionBasis = "working-baseline" | "cad-source";
+export type EngineeringActionOperation = Readonly<{
+  variableName: string;
+  label: string;
+  unit: string;
+  expectedBinding: WorkingBinding;
+  proposedBinding: WorkingBinding;
+  basis: EngineeringActionBasis;
+  basisLabel: string;
+  reason: string;
+}>;
+export type EngineeringWorkingAction = Readonly<{
+  id: string;
+  workspaceId: string;
+  modelVersionId: string;
+  contractDigest: string;
+  workingRevision: number;
+  semanticFingerprint: string;
+  operations: EngineeringActionOperation[];
+}>;
+export type EngineeringActionApplyResult = "applied" | "stale" | "invalid";
 
 type BluecadPartSelection = Extract<StageSelection, { kind: "bluecad-part" }>;
 type SemanticVariable = ModelInputVariable & Readonly<{
@@ -82,6 +104,8 @@ export type EngineeringPropertiesController = Readonly<{
   semanticMessage: string | null;
   semanticSource: SemanticSource | null;
   semanticContract: SemanticContract | null;
+  actionSemanticFingerprint: string;
+  applyWorkingAction(action: EngineeringWorkingAction): EngineeringActionApplyResult;
   updateValue(variable: ModelInputVariable, value: string): void;
   selectParameter(variable: ModelInputVariable, parameterId: string): void;
   undo(): void;
@@ -117,6 +141,11 @@ function emptyBindings(variables: ModelInputVariable[]): BindingMap {
 
 function sameBinding(left: WorkingBinding | undefined, right: WorkingBinding | undefined): boolean {
   return (left?.value ?? "") === (right?.value ?? "") && (left?.parameterId ?? "") === (right?.parameterId ?? "");
+}
+
+function finiteBinding(binding: WorkingBinding | undefined): boolean {
+  const value = binding?.value.trim() ?? "";
+  return Boolean(value) && Number.isFinite(Number(value));
 }
 
 function buildPayload(variables: ModelInputVariable[], bindings: BindingMap): {
@@ -267,6 +296,23 @@ function semanticTargetKey(target: BluecadPartSelection | null): string {
   ].join("\u001f");
 }
 
+function actionSemanticFingerprint(target: BluecadPartSelection | null, source: SemanticSource | null): string {
+  if (!target) return "";
+  return [
+    target.workspaceId,
+    target.candidateId,
+    target.artifactId,
+    target.viewerSessionId,
+    target.ephemeralObjectId,
+    target.semanticKey,
+    target.partId,
+    target.partKind ?? "",
+    source?.transformation_version ?? "",
+    source?.source_simulation_run_id ?? "",
+    source?.source_model_version_id ?? ""
+  ].join("\u001f");
+}
+
 function semanticStableTargetKey(target: BluecadPartSelection, source: SemanticSource): string {
   return [
     target.workspaceId,
@@ -340,6 +386,10 @@ export function useEngineeringProperties(
   const selected = useMemo(() => eligible.find((item) => item.id === selectedId) ?? null, [eligible, selectedId]);
   const variables = selected?.input_contract?.variables ?? [];
   const semanticContract = useMemo(() => reviewedContractForTarget(selected, semanticTarget), [selected, semanticTarget]);
+  const currentActionSemanticFingerprint = useMemo(
+    () => actionSemanticFingerprint(semanticTarget, semanticSource),
+    [semanticTarget, semanticSource]
+  );
 
   useEffect(() => {
     if (workspaceId) return;
@@ -570,6 +620,54 @@ export function useEngineeringProperties(
     setRunResult(null);
   };
 
+  const applyWorkingAction = (action: EngineeringWorkingAction): EngineeringActionApplyResult => {
+    if (
+      !workspaceId ||
+      !selected ||
+      workspaceId !== action.workspaceId ||
+      selected.id !== action.modelVersionId ||
+      selected.input_contract_sha256 !== action.contractDigest ||
+      revision !== action.workingRevision ||
+      currentActionSemanticFingerprint !== action.semanticFingerprint
+    ) return "stale";
+
+    const next = cloneBindings(working);
+    for (const operation of action.operations) {
+      const variable = variables.find((item) => item.name === operation.variableName);
+      if (!variable || variable.unit !== operation.unit) return "invalid";
+      if (!sameBinding(working[operation.variableName], operation.expectedBinding)) return "stale";
+      if (!finiteBinding(operation.proposedBinding)) return "invalid";
+
+      if (operation.basis === "cad-source") {
+        const sourceBinding = semanticSource?.geometry_bindings[operation.variableName as keyof SemanticSource["geometry_bindings"]];
+        if (
+          !sourceBinding ||
+          String(sourceBinding.value) !== operation.proposedBinding.value ||
+          sourceBinding.unit !== operation.unit ||
+          sourceBinding.source_parameter_id !== operation.proposedBinding.parameterId
+        ) return "invalid";
+      } else {
+        if (!sameBinding(operation.proposedBinding, baseline[operation.variableName])) return "invalid";
+        if (operation.proposedBinding.parameterId) {
+          const parameter = parameters.find((item) =>
+            item.id === operation.proposedBinding.parameterId &&
+            item.unit === variable.unit &&
+            item.value != null &&
+            Number.isFinite(Number(item.value)) &&
+            String(item.value) === operation.proposedBinding.value &&
+            item.status !== "superseded"
+          );
+          if (!parameter) return "invalid";
+        }
+      }
+      next[operation.variableName] = { ...operation.proposedBinding };
+    }
+
+    if (!action.operations.length) return "invalid";
+    commitWorking(next);
+    return "applied";
+  };
+
   const updateValue = (variable: ModelInputVariable, value: string) => {
     const next = { ...working, [variable.name]: { value, parameterId: "" } };
     commitWorking(next);
@@ -731,6 +829,8 @@ export function useEngineeringProperties(
     semanticMessage,
     semanticSource,
     semanticContract,
+    actionSemanticFingerprint: currentActionSemanticFingerprint,
+    applyWorkingAction,
     updateValue,
     selectParameter,
     undo,

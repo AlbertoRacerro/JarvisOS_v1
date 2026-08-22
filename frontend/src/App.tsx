@@ -10,6 +10,7 @@ import {
   EngineeringPropertiesPanel,
   useEngineeringProperties
 } from "./components/engineering/EngineeringProperties";
+import JarvisEngineeringActions from "./components/engineering/JarvisEngineeringActions";
 import LegacyDiagnosticSurface from "./components/shell/LegacyDiagnosticSurface";
 import MigrationPendingSurface from "./components/shell/MigrationPendingSurface";
 import AIDraft from "./pages/AIDraft";
@@ -94,7 +95,11 @@ function App() {
   const semanticSelectionContext = selection?.kind === "bluecad-part"
     ? <div className="shell-properties__selection"><strong>{selection.partId}</strong><p>{selection.partKind ? `${selection.partKind} · selected BLUECAD part` : "Selected BLUECAD part"}</p></div>
     : undefined;
-  const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection, semanticSelectionContext);
+  const jarvisLocalContext = <>
+    {semanticSelectionContext}
+    <JarvisEngineeringActions controller={engineeringProperties} />
+  </>;
+  const jarvisSidecar = useJarvisSidecar(workspaceId, route.id, selection, jarvisLocalContext);
   const propertiesContent = <EngineeringPropertiesPanel controller={engineeringProperties} stageContext={stageSidecar} navigate={navigate} />;
   const effectiveShellRegions: ShellRegionContributions = {
     ...shellRegions,
