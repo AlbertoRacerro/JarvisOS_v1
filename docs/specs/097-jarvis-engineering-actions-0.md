@@ -132,7 +132,10 @@ Bed void fraction is required by the active Ergun contract.
 [Use previous successful value]
 [I'll edit]
 [Ask Jarvis for a suggestion]
+[Other]
 ```
+
+Whenever Jarvis presents a bounded typed choice set for a blocker, decision or engineering action, that choice set must include an explicit **`Other`** escape hatch. `Other` may collect operator-supplied alternative input, but selecting it is inert by itself: free text does not become an executable mutation until the alternative is converted into a separately typed, deterministically validated action under the same target/revision/atomicity/consent rules.
 
 The blocker notification itself must not depend on successful provider execution. If Jarvis AI is unavailable, the deterministic blocker remains visible in Properties and may still be represented in the Jarvis area using deterministic local/server evidence.
 
@@ -349,7 +352,10 @@ A bounded action card/request may show:
 - basis/source;
 - reason;
 - stale/current status;
+- typed bounded choices when the action asks the operator to choose among alternatives; every such choice set includes `Other` as an escape hatch;
 - Confirm / Reject / Regenerate / Undo where applicable.
+
+Selecting `Other` opens operator-supplied alternative input but does not itself authorize mutation. The supplied text remains advisory/inert until it is converted to a separately typed action and passes the same deterministic validation, stale-precondition, consent and atomic-apply rules. `Other` must therefore never become a backdoor for executing free-form chat text.
 
 Machine identifiers and exact precondition tokens belong under `Technical details` / Audit.
 
@@ -591,7 +597,8 @@ Implementation is acceptable only when all applicable criteria are proven on one
 17. Effective-200%, keyboard/focus, theme/reduced-motion and no-global-overflow behavior remain valid.
 18. Hostile user/model strings render inertly and cannot create executable action controls without typed validated action data.
 19. Raw action/audit payload remains bounded/collapsed.
-20. Repository CI, spec-status gate and BLUECAD proof remain green on the exact implementation head.
+20. Every bounded typed blocker/decision/action choice set includes `Other`; choosing `Other` leaves operator-supplied alternative text inert until it becomes a separately typed, deterministically validated action, and free text cannot mutate working state through this escape hatch.
+21. Repository CI, spec-status gate and BLUECAD proof remain green on the exact implementation head.
 
 ## 24. Required browser/adversarial matrix
 
@@ -615,6 +622,7 @@ Readiness must turn these into reproducible exact-head browser/evidence cases.
 16. 200%/compact sidecar tab mode → action confirmation and Properties result remain reachable without horizontal overflow.
 17. Keyboard-only confirmation/rejection/Undo; focus stable across preflight refresh.
 18. Theme/system/reduced-motion and long engineering labels/units/reasons.
+19. Bounded typed choice request exposes `Other`; selecting it accepts operator alternative input but performs no mutation, and hostile/command-like text entered there remains inert until separately typed and validated.
 
 If previous-successful-run restore is authorized by readiness, add exact compatibility/stale provenance cases before implementation.
 
@@ -655,6 +663,7 @@ A separate exact-master readiness record must answer all of the following from c
 13. Which deterministic/unit/browser tests prove no Markdown/text parsing path can mutate state?
 14. How are action proposal/apply errors represented without conflating AI/provider failure, stale precondition and deterministic validation failure?
 15. How does explicit `...and run` reuse the existing 071b preflight/create/run/retry path without a second execution route?
+16. How are typed bounded choice requests required by 095 represented with an explicit `Other` escape hatch while guaranteeing that operator alternative free text remains inert until separately typed and validated?
 
 If exact runtime cannot answer these safely within a bounded slice, readiness must reduce the implementation surface rather than invent a new generic command/action architecture.
 
@@ -678,7 +687,7 @@ This definition is complete when:
 2. registry row 097 remains `planned` and Implementation PR remains `—`;
 3. a separate fresh readiness decision is required before any 097 runtime code;
 4. readiness is required to derive the exact typed action transport/allow-list from runtime rather than presuming a new schema/store;
-5. every maintainer-approved 095 Jarvis action rule is represented as a testable contract or explicit deferral;
+5. every maintainer-approved 095 Jarvis action rule is represented as a testable contract or explicit deferral, including typed bounded choices with an explicit `Other` escape hatch whose alternative free text is inert until separately typed and validated;
 6. 071b remains the sole working-state owner;
 7. 058c remains the source of engineering object/model/property semantics;
 8. canonical data mutation/lifecycle, variants, comparisons, Notes, 062 grading, visual identity and later engineering-stack work remain outside scope;
