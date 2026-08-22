@@ -10,7 +10,7 @@ const variables = [
   ["liquid_density", "Liquid density", "kg/m3", "property", "Properties", []],
   ["dynamic_viscosity", "Dynamic viscosity", "Pa*s", "property", "Properties", []],
   ["minor_loss_coefficient", "Minor loss coefficient", "1", "model_parameter", "Model configuration", []],
-  ["pump_efficiency", "Pump efficiency", "1", "equipment", "Equipment", []]
+  ["pump_efficiency", "Pump efficiency for the reviewed hydraulic operating configuration with a deliberately long engineering label", "1", "equipment", "Equipment", []]
 ].map(([name, label, unit, category, property_group, applicable_part_kinds]) => ({
   name, label, unit, required: true, category, property_group, applicable_part_kinds,
   description: `${label} evidence field.`
@@ -42,6 +42,16 @@ function implementation(workspaceId) {
   };
 }
 
+function alternateImplementation(workspaceId) {
+  const original = implementation(workspaceId);
+  return {
+    ...original,
+    id: `model-alt-${workspaceId}`,
+    version_label: "alternate reviewed 047 contract for stale-action evidence",
+    input_contract_sha256: workspaceId === "ws1" ? "d".repeat(64) : "e".repeat(64)
+  };
+}
+
 function parameters(workspaceId) {
   const prefix = workspaceId === "ws1" ? "" : "2-";
   return [
@@ -52,8 +62,7 @@ function parameters(workspaceId) {
     ["p-velocity", "Target velocity", "1.2", "m/s"],
     ["p-density", "Liquid density", "998", "kg/m3"],
     ["p-viscosity", "Dynamic viscosity", "0.001", "Pa*s"],
-    ["p-minor", "Minor loss", "2", "1"],
-    ["p-eff", "Pump efficiency", "0.75", "1"]
+    ["p-minor", "Minor loss", "2", "1"]
   ].map(([id, name, value, unit]) => ({ id: `${prefix}${id}`, workspace_id: workspaceId, name, value, unit, status: "accepted" }));
 }
 
@@ -81,15 +90,17 @@ let providerCalls = 0;
 let runnerCreateCalls = 0;
 let runnerRunCalls = 0;
 let previewCalls = 0;
+let sourceMutationCalls = 0;
 
 const browser = await chromium.launch({ headless: true });
-const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, colorScheme: "light" });
+const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, colorScheme: "light", reducedMotion: "no-preference" });
 const page = await context.newPage();
 
 await page.route("http://127.0.0.1:8000/**", async (route) => {
   const request = route.request();
   const url = new URL(request.url());
   if (url.pathname.includes("/ai/") || url.pathname.includes("/threads")) providerCalls += 1;
+  if (request.method() !== "GET" && (url.pathname.includes("/parameters") || url.pathname.includes("/bluecad/"))) sourceMutationCalls += 1;
   const json = (body, status = 200) => route.fulfill({ status, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" }, body: JSON.stringify(body) });
 
   const wsMatch = url.pathname.match(/^\/workspaces\/(ws1|ws2)/);
@@ -98,7 +109,7 @@ await page.route("http://127.0.0.1:8000/**", async (route) => {
     { id: "ws1", name: "Evidence one", slug: "evidence-one", status: "active", created_at: "2026-08-22T00:00:00Z", updated_at: "2026-08-22T00:00:00Z" },
     { id: "ws2", name: "Evidence two", slug: "evidence-two", status: "active", created_at: "2026-08-22T00:00:00Z", updated_at: "2026-08-22T00:00:00Z" }
   ]);
-  if (ws && request.method() === "GET" && url.pathname === `/workspaces/${ws}/model-implementations`) return json([implementation(ws)]);
+  if (ws && request.method() === "GET" && url.pathname === `/workspaces/${ws}/model-implementations`) return json([implementation(ws), alternateImplementation(ws)]);
   if (ws && request.method() === "GET" && url.pathname === `/workspaces/${ws}/parameters`) return json(parameters(ws));
   if (ws && request.method() === "GET" && url.pathname === `/workspaces/${ws}/model-specs`) return json([]);
   if (ws && request.method() === "GET" && url.pathname === `/workspaces/${ws}/assumptions`) return json([]);
@@ -120,8 +131,8 @@ await page.route("http://127.0.0.1:8000/**", async (route) => {
     const missing = rows.filter((v) => v.required && v.binding_state === "missing").length;
     const invalid = rows.filter((v) => v.binding_state === "invalid").length;
     return json({
-      model_version_id: `model-semantic-v3-${ws}`,
-      contract_sha256: implementation(ws).input_contract_sha256,
+      model_version_id: url.pathname.includes("model-alt-") ? `model-alt-${ws}` : `model-semantic-v3-${ws}`,
+      contract_sha256: url.pathname.includes("model-alt-") ? alternateImplementation(ws).input_contract_sha256 : implementation(ws).input_contract_sha256,
       evaluation_mode: "forward",
       structural_input_dof: 9,
       bound_input_dof: 9 - missing,
@@ -149,13 +160,24 @@ await page.goto("http://127.0.0.1:4173/097-evidence.html");
 await page.locator("#engineering-property-reservoir_liquid_volume").waitFor();
 await page.getByText(/deterministic blocker signal/).waitFor();
 assert.equal(providerCalls, 0, "deterministic action surface requires no provider/thread call");
+assert.equal(await page.getByRole("button", { name: /Review safe fix · Pump efficiency/ }).count(), 0, "required blocker without baseline or compatible Parameter gets no invented safe fix");
+
+// A proposal bound to model/contract A must go stale when the selected contract changes.
+await page.getByRole("button", { name: /Review safe fix/ }).first().click();
+await page.getByLabel("Model contract").selectOption("model-alt-ws1");
+await page.getByRole("button", { name: "Confirm", exact: true }).click();
+await page.getByText(/This action is stale/).waitFor();
+await page.getByLabel("Model contract").selectOption("model-semantic-v3-ws1");
+await page.locator("#engineering-property-reservoir_liquid_volume").waitFor();
 
 const firstSafe = page.getByRole("button", { name: /Review safe fix/ }).first();
 await firstSafe.click();
 await page.getByText("Proposed working-state change", { exact: true }).waitFor();
 const proposal = page.getByText(/→/).first();
 assert.match(await proposal.textContent(), /→/, "proposal exposes old to proposed value");
+assert.match(await proposal.textContent(), /(m|mm|L|m\/s|kg\/m3|Pa\*s|1)/, "proposal exposes exact engineering unit");
 assert.ok((await page.locator("text=Compatible linked Parameter").count()) + (await page.locator("text=Working baseline").count()) + (await page.locator("text=CAD source baseline").count()) > 0, "proposal exposes deterministic basis");
+assert.ok(await page.getByText(/Restore the|Use the only currently compatible/).count() > 0, "proposal exposes deterministic reason before Confirm");
 
 const editedField = page.locator("#engineering-property-reservoir_liquid_volume");
 await editedField.fill("111");
@@ -171,6 +193,7 @@ await page.getByRole("button", { name: "Confirm", exact: true }).click();
 await page.getByText(/Applied to the working configuration/).waitFor();
 assert.equal(runnerCreateCalls, 0, "working patch creates zero runner jobs");
 assert.equal(runnerRunCalls, 0, "working patch does not execute");
+assert.equal(sourceMutationCalls, 0, "working patch does not mutate canonical Parameter or CAD source authority");
 assert.equal(await page.getByRole("button", { name: "Confirm", exact: true }).count(), 0, "applied card cannot be confirmed twice after state commit");
 await page.waitForTimeout(200);
 assert.ok(previewCalls > beforePreview, "working revision change triggers fresh deterministic preflight");
@@ -192,6 +215,7 @@ await page.getByRole("button", { name: "Run", exact: true }).click();
 await page.getByText(/Run completed/).waitFor();
 assert.equal(runnerCreateCalls, 1, "explicit Run creates exactly one runner job");
 assert.equal(runnerRunCalls, 1, "explicit Run dispatches exactly one execution");
+assert.equal(sourceMutationCalls, 0, "running through existing 071b route does not rewrite canonical Parameter/CAD source evidence");
 await page.getByText("Baseline: current bindings", { exact: true }).waitFor();
 
 await editedField.fill("");
@@ -221,11 +245,13 @@ const bulk = page.getByRole("button", { name: "Apply safe fixes", exact: true })
 await bulk.waitFor();
 await bulk.click();
 assert.ok(await page.getByText(/Tube length/).count() > 0 && await page.getByText(/Tube inner diameter/).count() > 0, "multi-field preview exposes both operations");
+assert.ok(await page.getByText("CAD source baseline", { exact: true }).count() >= 2, "multi-field preview exposes each source basis before Confirm");
 await page.locator("#engineering-property-tube_outer_diameter").fill("91");
 await page.getByRole("button", { name: "Confirm", exact: true }).click();
 await page.getByText(/This action is stale/).waitFor();
 assert.equal(await page.locator("#engineering-property-tube_length").inputValue(), "", "stale multi-field action applies zero first operation");
 assert.equal(await page.locator("#engineering-property-tube_inner_diameter").inputValue(), "", "stale multi-field action applies zero second operation");
+assert.equal(sourceMutationCalls, 0, "stale action does not mutate source authority");
 
 await page.locator("#engineering-property-tube_length").fill("");
 await page.waitForTimeout(100);
@@ -248,13 +274,15 @@ await page.getByText(/deterministic blocker signal/).waitFor();
 assert.equal(providerCalls, 0, "workspace change still requires no AI/thread call");
 assert.ok(await page.getByText(/AI suggested — not validated/).count() > 0, "assistant numeric/model advice warning remains visible");
 
+await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
 await page.setViewportSize({ width: 640, height: 900 });
 await page.waitForTimeout(100);
 const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-assert.ok(overflow <= 1, `compact viewport has no page-level horizontal overflow (delta=${overflow})`);
+assert.ok(overflow <= 1, `compact/dark/reduced-motion viewport has no page-level horizontal overflow (delta=${overflow})`);
 const otherButton = page.getByRole("button", { name: "Other", exact: true });
 await otherButton.focus();
 assert.equal(await otherButton.evaluate((el) => el === document.activeElement), true, "action controls are keyboard focusable");
+assert.equal(sourceMutationCalls, 0, "no working action mutates canonical Parameter/CAD source authority");
 
 console.log("097_BROWSER_EVIDENCE_PASS");
 await browser.close();
