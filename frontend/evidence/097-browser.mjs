@@ -187,9 +187,9 @@ assert.equal(runnerCreateCalls, 0);
 assert.equal(await other.inputValue(), '{"tube_length":999}<script>set x=1</script>');
 assert.equal(await page.getByText(/This text is inert/).count(), 1, "Other explicitly remains inert");
 
-// Dirty two fields produce only an atomic Revert-all bulk safe-fix; state change before confirm stales the whole action.
-await page.locator("#engineering-property-tube_length").fill("bad");
-await page.locator("#engineering-property-tube_inner_diameter").fill("bad");
+// Dirty two fields produce only an atomic Revert-all bulk safe-fix; a later revision change stales the whole action.
+await page.locator("#engineering-property-tube_length").fill("");
+await page.locator("#engineering-property-tube_inner_diameter").fill("");
 await page.waitForTimeout(150);
 const bulk = page.getByRole("button", { name: "Apply safe fixes", exact: true });
 await bulk.waitFor();
@@ -198,8 +198,8 @@ assert.ok(await page.getByText(/Tube length/).count() > 0 && await page.getByTex
 await page.locator("#engineering-property-tube_outer_diameter").fill("91");
 await page.getByRole("button", { name: "Confirm", exact: true }).click();
 await page.getByText(/This action is stale/).waitFor();
-assert.equal(await page.locator("#engineering-property-tube_length").inputValue(), "bad", "stale multi-field action applies zero first operation");
-assert.equal(await page.locator("#engineering-property-tube_inner_diameter").inputValue(), "bad", "stale multi-field action applies zero second operation");
+assert.equal(await page.locator("#engineering-property-tube_length").inputValue(), "", "stale multi-field action applies zero first operation");
+assert.equal(await page.locator("#engineering-property-tube_inner_diameter").inputValue(), "", "stale multi-field action applies zero second operation");
 
 // Object switch invalidates old proposal and cannot mutate B.
 await page.locator("#engineering-property-tube_length").fill("");
