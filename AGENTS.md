@@ -98,6 +98,23 @@ This never weakens the product execution spine or safe defaults.
 - `STATUS.md` is the sole live status and priority authority.
 - Do not infer state from legacy `Status:` prose, strategy documents, or chat handoffs.
 
+## Lean codebase policy
+
+JarvisOS is expected to be maintained and reviewed primarily by AI coding agents. Optimize for **minimum semantic surface**, not beginner-oriented ceremony and not code golf.
+
+- Prefer the smallest number of real concepts, code paths, schemas and ownership boundaries that preserve behavior and invariants.
+- Prefer direct functions/modules over class → factory → facade → manager chains when the extra layer does not enforce authority, security, transactions, provenance, a scientific contract, a replacement seam, or meaningful independent reuse.
+- Do not split cohesive code merely to make files shorter. A direct larger module can be better than many tiny modules connected by indirection.
+- Do not compress code into cryptic expressions, clever metaprogramming, or remove useful types/invariants merely to reduce LOC.
+- Existing code has zero sunk-cost privilege. If a qualified upstream or a simpler existing boundary solves the same generic problem better, prefer wrap/replace/delete over parallel maintenance.
+- **No current consumer is not proof of dead code.** Before deleting an apparently unreachable backend/API/tool capability, establish current product intent. Desired-but-unwired functionality is `WIRE`/`DEFER`, not deletion material.
+- Do not preserve compatibility wrappers for hypothetical consumers. Preserve them only when a real supported consumer, migration requirement, public contract, authority boundary or accepted specification requires them.
+- Tests are evidence, not automatic product intent. A test-only path may be obsolete, or it may encode an important scientific/security/behavior contract; trace the owner before removal.
+- Runtime optimization requires profiling. Fewer Python/TypeScript lines do not by themselves prove lower wall time; distinguish first-party CPU cost from database/filesystem, native CAD kernels, external solvers, network/model latency and other waits.
+- Broad cleanup must be spec-authorized. When code is adjacent to the current task, do not refactor it opportunistically unless the active specification requires the simplification.
+
+For codebase-wide cleanup, specs 100a/100b define the evidence and deletion gates. Outside those slices, the same principle still applies: absence of reachability alone never authorizes deletion of a desired capability.
+
 ## Cross-chat idea intake and external-reference register
 
 `docs/IDEA_INTAKE_AND_CANDIDATE_INTEGRATIONS.md` is the canonical cross-chat intake register for external projects, papers, products, engineering methods, hardware concepts, and other ideas that may be useful to JarvisOS, BLUECAD, or BlueRev. It is a reference/candidate register only and never overrides `docs/specs/STATUS.md`, an accepted specification, or an ADR.
@@ -240,7 +257,7 @@ Maintainer-owned conformance tests matching `backend/tests/**/test_*_conformance
 
 - Use existing Python style, type hints, and small pure functions.
 - English for code, comments, docs, and commit messages.
-- Follow existing service/routes/models layout.
+- Follow existing service/routes/models layout only where that layout still adds a real ownership boundary; do not preserve ceremony for its own sake.
 - SQLite migrations are additive in `backend/app/core/schema.py`; no Alembic.
 - Short imperative commit subjects; one logical change per commit.
 

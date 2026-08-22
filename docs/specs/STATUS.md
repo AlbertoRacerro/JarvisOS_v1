@@ -92,21 +92,23 @@ The binding order is:
 24. 006b PARAMETRIC-VARIANTS-1, freshly re-derived;
 25. 058b VARIANT-COMPARISON-1, freshly re-derived;
 26. 100 VISUAL-IDENTITY-1;
-27. 101 CANONICAL-STATE-WRITE-1;
-28. 102 ENGINEERING-EVIDENCE-CONTRACT-1;
-29. 103 PROCESS-UPSTREAM-BAKEOFF-1;
-30. 104 PROCESS-STACK-STRANGLER-1;
-31. 105 ENGINEERING-DOMAIN-CLEANUP-1;
-32. 106 ENGINEERING-EVALUATOR-1;
-33. 107 PBR-EVALUATOR-1;
-34. 108 DESIGN-STUDY-CONTROLLER-1;
-35. 109 PROCESS-CAD-HANDOFF-1;
-36. 110 MULTIFIDELITY-ENGINEERING-1.
+27. 100a CODEBASE-LEAN-AUDIT-1;
+28. 100b CODEBASE-LEAN-CLEANUP-1;
+29. 101 CANONICAL-STATE-WRITE-1;
+30. 102 ENGINEERING-EVIDENCE-CONTRACT-1;
+31. 103 PROCESS-UPSTREAM-BAKEOFF-1;
+32. 104 PROCESS-STACK-STRANGLER-1;
+33. 105 ENGINEERING-DOMAIN-CLEANUP-1;
+34. 106 ENGINEERING-EVALUATOR-1;
+35. 107 PBR-EVALUATOR-1;
+36. 108 DESIGN-STUDY-CONTROLLER-1;
+37. 109 PROCESS-CAD-HANDOFF-1;
+38. 110 MULTIFIDELITY-ENGINEERING-1.
 
-Items 26–36 are the maintainer-approved post-functional-beta extension registered on
-2026-08-21 after the public/canonical architecture reconciliation. They remain `planned`
+Items 26–38 are the maintainer-approved post-functional-beta extension registered on
+2026-08-21 and amended on 2026-08-22 after the public/canonical architecture and codebase-maintainability reviews. They remain `planned`
 until the normal definition/full-spec/readiness lifecycle authorizes each slice. Their order
-encodes the zero-sunk-cost rule: fix authority/evidence semantics, evaluate upstreams from
+encodes the zero-sunk-cost rule: finish visual identity, audit and simplify the active semantic surface without deleting desired-but-unwired capability, fix authority/evidence semantics, evaluate upstreams from
 scratch, retire duplicated generic infrastructure, then build PBR/design-study capability on
 the selected boundaries.
 
@@ -122,7 +124,7 @@ reference for the zero-sunk-cost bake-off and future PBR work. Spec 107 is the s
 integrated PBR evaluator implementation authority after 103/106. Spec 093 and any Aspen-like
 editable flowsheet remain outside the current functional queue. Global visual identity is now
 registered as 100: it remains independently removable from functional slices, but by maintainer
-decision it is ordered after 058b and before architecture-remediation runtime work.
+decision it is ordered after 058b and before the lean audit/cleanup and architecture-remediation runtime work.
 
 The queue is binding but not immutable. If a slice proves non-implementable within its
 accepted boundary, or a prerequisite proves insufficient, the active front stops and a later
@@ -138,7 +140,7 @@ it changes. Silent abandonment or substitution is not authorized.
 3. Preserve merged 059a/059b, 061a/061b, 075, 076, 077, 079, 082, 094, 070, 083, 084, 085, 086, 087, 088, 035, 089, 054, 090, 091, 029, 096, 071b, 092, and 058c authority boundaries; definition-only 095 remains non-implementation authority.
 4. Preserve the merged documentation/evidence from 047–049, 072, 075 and cancelled 078 as incumbent/reference evidence with zero sunk-cost privilege during 103; 107 is the sole future integrated PBR evaluator implementation authority after 103/106.
 5. Keep 066–068 and 080 frozen; keep 062 itself blocked/deferred while allowing the operator-workstation queue to proceed without routine grading UI.
-6. After 058b, execute 100 visual identity before any 101–110 runtime work. Then follow 101→110 unless a future definition-only re-derivation records a concrete reason to change the order.
+6. After 058b, execute 100 visual identity, then 100a audit and a freshly re-derived 100b high-confidence cleanup before any 101–110 runtime work. If 100a proves no worthwhile generic cleanup outside later owned slices, cancel 100b rather than inventing churn; otherwise follow 101→110 after 100b merges.
 
 ## Registry
 
@@ -255,7 +257,9 @@ it changes. Silent abandonment or substitution is not authorized.
 | 098 | planned | — | ENGINEERING-RECORD-LIFECYCLE-0 | 035, 040, 050, 051, 071b | Add explicit server-owned Edit / Active-Inactive / Archive / Supersede / Delete semantics and project-centric Engineering Data actions without destroying lineage or hiding deletion only in frontend state. |
 | 099 | merged | [#306](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/306) | REVIEW-SECRET-BOUNDARY-0 | 017, 019 | Emergency security implementation under [the 2026-08-19 readiness decision](099-readiness-2026-08-19.md) merged through PR #306: provider-secret Cheap/Senior jobs execute only trusted master code while reviewed PR content remains inert GitHub API data; the interrupt is closed; resumed 092/#303 subsequently completed and merged on 2026-08-20. |
 | 100 | planned | — | VISUAL-IDENTITY-1 | 097, 098, 058b | Apply the independently removable global visual identity only after the functional operator-workstation queue completes; visual design must not redefine backend authority, engineering semantics or canonical data. |
-| 101 | planned | — | CANONICAL-STATE-WRITE-1 | 040, 042, 071b, 098, 100 | Unify legacy modeling CRUD and MemoryStore/canonical record transitions behind one server-owned write-intent/lifecycle/audit boundary; separate Parameter record lifecycle from value/evidence quality and prevent proposed records from entering authoritative context by value-quality alone. |
+| 100a | planned | — | CODEBASE-LEAN-AUDIT-1 | 100 | Audit the complete first-party codebase from exact post-100 master for minimum semantic surface, desired-but-unwired capabilities, dead/superseded residue, duplication, overengineering, upstream replacement candidates and measured performance hotspots; absence of a current consumer is never deletion authority. |
+| 100b | planned | — | CODEBASE-LEAN-CLEANUP-1 | 100a | Freshly re-derive one bounded high-confidence behavior-preserving cleanup batch from 100a; preserve `WIRE`/`DEFER` capabilities, delete/merge/inline only fully evidenced candidates, avoid pre-empting 101 or 103–105, and cancel rather than manufacture churn if the remaining ROI is low. |
+| 101 | planned | — | CANONICAL-STATE-WRITE-1 | 040, 042, 071b, 098, 100b | Unify legacy modeling CRUD and MemoryStore/canonical record transitions behind one server-owned write-intent/lifecycle/audit boundary; separate Parameter record lifecycle from value/evidence quality and prevent proposed records from entering authoritative context by value-quality alone. |
 | 102 | planned | — | ENGINEERING-EVIDENCE-CONTRACT-1 | 044, 077, 101 | Generalize evaluator/evidence metadata for producer/version, digests, units, fidelity, validity domain, qualification, known exclusions, uncertainty and typed outcomes while preserving current solver-specific evidence and egress lineage. |
 | 103 | planned | — | PROCESS-UPSTREAM-BAKEOFF-1 | 047, 048, 049, 075, 100, 102 | Re-evaluate the custom process stack from zero against current upstreams such as IDAES/Pyomo/WaterTAP, BioSTEAM/QSDsan, CasADi/OpenMDAO, DWSIM/CAPE-OPEN and property libraries; produce explicit KEEP/WRAP/REPLACE/DELETE decisions with license, dynamics/recycle, optimization, diagnostics, Windows/local and qualification evidence. |
 | 104 | planned | — | PROCESS-STACK-STRANGLER-1 | 103 | Execute the 103 decision: migrate only still-useful domain equations/tests/adapters, switch callers to selected upstream boundaries, and delete duplicated generic custom process-solver infrastructure rather than maintaining parallel engines for sunk-cost reasons. |
@@ -285,4 +289,4 @@ it changes. Silent abandonment or substitution is not authorized.
   sole future integrated PBR evaluator implementation authority after 103/106.
 - IDs 081–099 are reserved by FRONTEND-BETA-AUTHORITY-0 plus the 094 normal-spine re-derivation, 095 operator-workstation re-derivation, and the 099 emergency security interrupt as recorded in the registry;
   all references use the canonical three-digit form required by the registry gate, with existing suffix form reused only where explicitly registered (such as 071b).
-- IDs 100–110 are reserved by the 2026-08-21 architecture reconciliation for the post-functional-beta visual-identity and zero-sunk-cost architecture/process replatforming sequence. They are planning rows only until individually re-derived and made ready.
+- IDs 100–110, including the explicitly registered suffix slices 100a/100b, are reserved for the post-functional-beta visual-identity, lean-codebase and zero-sunk-cost architecture/process replatforming sequence. They are planning rows only until individually re-derived and made ready.
