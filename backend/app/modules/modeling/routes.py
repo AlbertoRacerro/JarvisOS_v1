@@ -1,6 +1,6 @@
 import sqlite3
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from app.modules.modeling.models import (
     AssumptionCreate,
@@ -10,12 +10,19 @@ from app.modules.modeling.models import (
     ModelSpecCreate,
     ModelSpecRead,
     ParameterCreate,
+    ParameterLifecycleCommand,
     ParameterRead,
+    ParameterUpdate,
     RequirementCreate,
     RequirementRead,
     RequirementUpdate,
     SimulationRunCreate,
     SimulationRunRead,
+)
+from app.modules.modeling.parameter_lifecycle import (
+    ParameterLifecycleError,
+    transition_parameter,
+    update_parameter,
 )
 from app.modules.modeling.service import (
     create_assumption,
@@ -39,6 +46,14 @@ router = APIRouter(tags=["modeling"])
 
 
 def _domain_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, ParameterLifecycleError):
+        status = 409 if exc.code in {
+            "parameter_stale",
+            "parameter_lifecycle_dependents_require_reconciliation",
+            "parameter_lifecycle_transition_invalid",
+            "parameter_not_active",
+        } else 404 if exc.code == "parameter_not_found" else 400
+        return HTTPException(status_code=status, detail={"code": exc.code, "message": exc.message})
     if isinstance(exc, ValueError):
         return HTTPException(status_code=404, detail=str(exc))
     if isinstance(exc, sqlite3.IntegrityError):
@@ -95,10 +110,29 @@ def create_parameter_endpoint(workspace_id: str, payload: ParameterCreate) -> Pa
 
 
 @router.get("/workspaces/{workspace_id}/parameters", response_model=list[ParameterRead])
-def list_parameters_endpoint(workspace_id: str) -> list[ParameterRead]:
+def list_parameters_endpoint(
+    workspace_id: str,
+    include_noncurrent: bool = Query(default=False),
+) -> list[ParameterRead]:
     try:
-        return list_parameters(workspace_id)
+        return list_parameters(workspace_id, include_noncurrent=include_noncurrent)
     except ValueError as exc:
+        raise _domain_error(exc) from exc
+
+
+@router.patch("/parameters/{parameter_id}", response_model=ParameterRead)
+def update_parameter_endpoint(parameter_id: str, payload: ParameterUpdate) -> ParameterRead:
+    try:
+        return update_parameter(parameter_id, payload)
+    except (ParameterLifecycleError, sqlite3.IntegrityError) as exc:
+        raise _domain_error(exc) from exc
+
+
+@router.post("/parameters/{parameter_id}/lifecycle", response_model=ParameterRead)
+def transition_parameter_endpoint(parameter_id: str, payload: ParameterLifecycleCommand) -> ParameterRead:
+    try:
+        return transition_parameter(parameter_id, payload)
+    except (ParameterLifecycleError, sqlite3.IntegrityError) as exc:
         raise _domain_error(exc) from exc
 
 
