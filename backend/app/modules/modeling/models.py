@@ -2,7 +2,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-
 ParameterLifecycleState = Literal["active", "inactive", "superseded", "archived", "deleted"]
 
 
