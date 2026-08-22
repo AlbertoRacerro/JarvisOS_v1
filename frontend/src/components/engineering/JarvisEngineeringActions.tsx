@@ -5,7 +5,7 @@ import type { EngineeringPropertiesController } from "./EngineeringProperties";
 
 type WorkingBinding = Readonly<{ value: string; parameterId: string }>;
 type ActionStatus = "ready" | "applied" | "stale" | "invalid" | "rejected";
-type ActionBasis = "working-baseline" | "cad-source" | "compatible-parameter";
+type ActionBasis = "working-baseline" | "cad-source";
 
 type EngineeringActionOperation = Readonly<{
   variableName: string;
@@ -111,22 +111,10 @@ function safeOperation(controller: EngineeringPropertiesController, variable: Mo
     };
   }
 
-  if (!finiteBinding(current)) {
-    const compatible = compatibleParameters(controller, variable);
-    if (compatible.length === 1) {
-      const parameter = compatible[0];
-      return {
-        variableName: variable.name,
-        label: variable.label,
-        unit: variable.unit,
-        expectedBinding: { ...current },
-        proposedBinding: { value: parameter.value ?? "", parameterId: parameter.id },
-        basis: "compatible-parameter",
-        basisLabel: `Compatible linked Parameter · ${parameter.name}`,
-        reason: "Use the only currently compatible same-unit finite Parameter already available in this workspace."
-      };
-    }
-  }
+  // A matching unit alone is not enough engineering evidence to bind an unrelated
+  // canonical Parameter to a missing field (dimensionless values are the obvious
+  // counterexample). Until a semantic parameter-to-variable identity exists, an
+  // empty baseline stays unresolved rather than receiving a guessed safe fix.
   return null;
 }
 
