@@ -5,7 +5,7 @@ Depends on runtime authority: 100a
 
 ## 1. Purpose
 
-Execute one bounded, high-confidence cleanup batch derived from the exact 100a codebase audit before 101 begins.
+Execute one bounded, high-confidence cleanup batch derived from the exact 100a codebase audit before 101 begins, **or** record an explicit no-action disposition when 100a proves that no generic cleanup has enough ROI to justify runtime churn.
 
 The goal is to reduce active semantic surface while preserving desired product behavior, security/authority boundaries, scientific evidence and future capability reachability.
 
@@ -17,7 +17,7 @@ This definition is written before 100a runs and therefore must **not** guess whi
 
 After 100a merges, 100b must be freshly re-derived from then-current `master` and its audit artifact. The readiness record must freeze the exact candidate list, touched boundaries, preservation obligations and expected reduction.
 
-If 100a produces no high-ROI behavior-preserving cleanup outside work already owned by 101 or 103–105, 100b should be cancelled rather than manufacturing refactor work to justify its existence.
+If 100a produces no high-ROI behavior-preserving cleanup outside work already owned by 101 or 103–105, 100b must **not** manufacture refactor work to justify its existence. Instead, it records the exact `NO_ACTION` conclusion with audit evidence, makes no runtime mutation, merges that disposition, and releases 101. This keeps the dependency mechanically closed without creating sunk-cost pressure to change code.
 
 ## 3. Governing rule
 
@@ -27,9 +27,14 @@ A desired backend capability with no current frontend/client consumer is a `WIRE
 
 100b may not delete a capability merely because it is unreachable from the current UI. Product intent and the full 100a deletion gate must already be resolved.
 
-## 4. Authorized disposition classes
+## 4. Authorized outcomes and disposition classes
 
-100b may execute only high-confidence findings classified by 100a as:
+100b has two valid top-level outcomes:
+
+- `CLEANUP` — execute one bounded high-confidence candidate set;
+- `NO_ACTION` — 100a found no generic cleanup whose expected value justifies runtime churn before 101.
+
+For a `CLEANUP` outcome, 100b may execute only high-confidence findings classified by 100a as:
 
 - `SIMPLIFY`;
 - `MERGE`;
@@ -77,6 +82,8 @@ For each accepted cleanup packet:
 7. measure active-source reduction before and after, but do not distort code to maximize the number;
 8. stop when remaining opportunities cross into low-confidence or low-ROI territory.
 
+For a `NO_ACTION` outcome, none of these rules creates a requirement to touch runtime code. The correct implementation is evidence plus registry lifecycle only.
+
 ## 7. No code golf / no pedagogical ceremony
 
 The target is **minimum semantic surface**, not minimum characters.
@@ -96,7 +103,7 @@ JarvisOS is expected to be maintained and reviewed heavily by AI agents. Code sh
 
 The fresh 100b spec/readiness must identify the behavior proof for every cleanup family.
 
-At minimum:
+For a `CLEANUP` outcome, at minimum:
 
 - full backend tests and Ruff remain green;
 - frontend build/tests run if frontend code is touched;
@@ -106,6 +113,8 @@ At minimum:
 - tests that protect an accepted behavior contract are migrated with the implementation rather than deleted to make cleanup pass.
 
 A failing test is not evidence that the test is obsolete. Its owning behavior must be traced first.
+
+For a `NO_ACTION` outcome, normal repository exact-head gates still run, but no artificial runtime test or source modification is required beyond proving that the audit evidence was consumed and the disposition is coherent.
 
 ## 9. Runtime performance
 
@@ -117,7 +126,7 @@ Do not infer that fewer Python/TypeScript lines produce lower wall time.
 
 ## 10. Required before/after evidence
 
-The implementation PR must record:
+For a `CLEANUP` outcome, the implementation PR must record:
 
 - exact base/head SHA;
 - candidate list frozen by readiness;
@@ -131,39 +140,43 @@ The implementation PR must record:
 
 Net source reduction is expected for a cleanup slice. If implementation grows active runtime code overall, the PR must demonstrate a concrete semantic-surface reduction that outweighs LOC growth or the candidate should be removed from 100b.
 
+For a `NO_ACTION` outcome, record the exact 100a artifact/SHA, the rejected candidate set or empty high-confidence set, why expected ROI is insufficient, and the mapping of remaining findings to later specs. Runtime before/after LOC is unchanged by design.
+
 ## 11. Acceptance criteria
 
 The fresh post-100a implementation spec/readiness must refine these criteria without weakening them:
 
-1. Every concrete mutation maps to a high-confidence 100a disposition authorized by section 4.
-2. No code is deleted solely because it lacks a current consumer.
-3. Every deleted capability satisfies the complete 100a deletion gate on the exact implementation base.
-4. Desired-but-unwired backend/API capability is preserved and remains classified `WIRE`/`DEFER` or assigned to a product slice.
-5. No canonical-state semantic redesign from 101 is pre-implemented.
-6. No process-upstream selection/strangling from 103/104 is pre-implemented.
-7. No substantial engineering-domain redesign from 105 is smuggled into this slice.
-8. Active semantic surface decreases materially enough to justify the churn; the PR records before/after evidence.
-9. Accepted behavior, authority/security invariants and scientific fixtures remain intact.
-10. No new broad framework, dependency, state store, compatibility subsystem or cleanup platform is added.
-11. Runtime-performance claims are measured rather than inferred from LOC.
-12. Cleanup stops at the low-confidence/low-ROI frontier instead of broadening scope to hit an arbitrary reduction target.
-13. Exact-head deterministic gates are green and no current blocking review finding remains.
+1. 100b declares exactly one top-level outcome: `CLEANUP` or `NO_ACTION`.
+2. Every concrete mutation in a `CLEANUP` outcome maps to a high-confidence 100a disposition authorized by section 4.
+3. No code is deleted solely because it lacks a current consumer.
+4. Every deleted capability satisfies the complete 100a deletion gate on the exact implementation base.
+5. Desired-but-unwired backend/API capability is preserved and remains classified `WIRE`/`DEFER` or assigned to a product slice.
+6. No canonical-state semantic redesign from 101 is pre-implemented.
+7. No process-upstream selection/strangling from 103/104 is pre-implemented.
+8. No substantial engineering-domain redesign from 105 is smuggled into this slice.
+9. For `CLEANUP`, active semantic surface decreases materially enough to justify the churn and the PR records before/after evidence.
+10. For `NO_ACTION`, no runtime source is changed merely to force a cleanup result; exact audit evidence justifies proceeding directly to 101.
+11. Accepted behavior, authority/security invariants and scientific fixtures remain intact.
+12. No new broad framework, dependency, state store, compatibility subsystem or cleanup platform is added.
+13. Runtime-performance claims are measured rather than inferred from LOC.
+14. Cleanup stops at the low-confidence/low-ROI frontier instead of broadening scope to hit an arbitrary reduction target.
+15. Exact-head deterministic gates are green and no current blocking review finding remains.
 
 ## 12. Minimum-necessary test
 
-Criterion: remove high-confidence historical/duplicate semantic surface before 101–110 build on it.  
-Is this work necessary? **Only if 100a proves high-ROI candidates.**  
+Criterion: remove high-confidence historical/duplicate semantic surface before 101–110 build on it, without creating refactor work when the audit does not justify it.  
+Is this work necessary? **The decision slice is necessary; runtime cleanup is conditional on 100a evidence.**  
 Can the criterion be achieved by a broad refactor? **No.** Broad refactoring creates churn and risks mixing feature semantics with cleanup.  
 Can the criterion be achieved by automatic dead-code deletion? **No.** Unwired desired capabilities and authority/scientific boundaries can look unreachable to static tools.  
-What happens if the audit finds little value? Cancel 100b and proceed to 101; sunk cost in the cleanup plan is also zero.
+What happens if the audit finds little value? Record and merge `NO_ACTION`, make no runtime cleanup, and proceed to 101. Sunk cost in the cleanup plan is also zero.
 
 ## 13. Definition of done
 
 - 100a merged and its exact audit evidence consumed;
-- 100b freshly re-derived and readiness freezes one bounded high-confidence candidate set;
-- implementation satisfies section 11;
+- 100b freshly re-derived and readiness freezes either one bounded high-confidence `CLEANUP` candidate set or an evidence-backed `NO_ACTION` disposition;
+- selected outcome satisfies section 11;
 - desired unwired capabilities are preserved;
-- before/after semantic-surface evidence recorded;
+- before/after semantic-surface evidence is recorded for `CLEANUP`, or unchanged runtime surface is explicit for `NO_ACTION`;
 - exact-head gates green;
-- implementation merged and registry reconciled;
-- 101 begins only from the simplified reconciled master.
+- implementation/disposition PR merged and registry reconciled;
+- 101 begins only from the reconciled post-100b master.
