@@ -371,7 +371,7 @@ def list_parameters(workspace_id: str) -> list[ParameterRead]:
                 COALESCE(unit, 'unspecified') AS unit,
                 COALESCE(value_status, 'candidate') AS value_status,
                 value_min, value_max, source_ref, confidence, status,
-                created_at, updated_at, notes, supersedes_parameter_id
+                created_at, updated_at, notes, supersedes_parameter_id, lifecycle_state
             FROM parameters
             WHERE workspace_id = ?
             ORDER BY created_at DESC
