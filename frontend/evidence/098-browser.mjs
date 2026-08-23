@@ -162,7 +162,8 @@ assert.equal(await page.getByText(/was updated in canonical Engineering Data/).c
 assert.equal(await page.getByTestId("evidence-workspace").textContent(), "ws2");
 
 // Keyboard, compact/effective-200%-like containment and dark/reduced-motion rendering.
-await page.getByText("Workspace two parameter", { exact: true }).first().focus();
+const workspaceTwoRow = page.getByRole("button", { name: /Workspace two parameter/ }).first();
+await workspaceTwoRow.focus();
 assert.equal(await page.evaluate(() => document.activeElement?.tagName), "BUTTON");
 const compact = await browser.newContext({ viewport: { width: 640, height: 900 }, colorScheme: "dark", reducedMotion: "reduce" });
 const compactPage = await compact.newPage();
