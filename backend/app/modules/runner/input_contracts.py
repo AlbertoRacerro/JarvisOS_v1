@@ -265,8 +265,9 @@ def build_binding_preview(
             )
             continue
 
+        source_parameter_updated_at: str | None = None
         if isinstance(contract, (ModelInputContractV2, ModelInputContractV3)):
-            value, source_parameter_id, errors = _validate_v2_binding(
+            value, source_parameter_id, source_parameter_updated_at, errors = _validate_v2_binding(
                 variable,
                 item,
                 load_parameter=load_parameter,
@@ -289,6 +290,8 @@ def build_binding_preview(
             }
             if source_parameter_id:
                 normalized_item["source_parameter_id"] = source_parameter_id
+                if source_parameter_updated_at is not None:
+                    normalized_item["source_parameter_updated_at"] = source_parameter_updated_at
             normalized[variable.name] = normalized_item
             if variable.required:
                 bound_required += 1
@@ -342,7 +345,7 @@ def normalize_input_set_v2(
         raise RunnerSafetyError("runner_input_invalid", "Input set does not match the schema-v2/v3 contract.")
     normalized: dict[str, dict[str, object]] = {}
     for variable in contract.variables:
-        value, source_parameter_id, errors = _validate_v2_binding(
+        value, source_parameter_id, source_parameter_updated_at, errors = _validate_v2_binding(
             variable,
             input_set[variable.name],
             load_parameter=load_parameter,
@@ -355,6 +358,8 @@ def normalize_input_set_v2(
         normalized_item: dict[str, object] = {"value": value, "unit": variable.unit}
         if source_parameter_id:
             normalized_item["source_parameter_id"] = source_parameter_id
+            if source_parameter_updated_at is not None:
+                normalized_item["source_parameter_updated_at"] = source_parameter_updated_at
         normalized[variable.name] = normalized_item
     return normalized
 
@@ -460,15 +465,16 @@ def _validate_v2_binding(
     item: object,
     *,
     load_parameter: ParameterLoader | None,
-) -> tuple[float | None, str | None, list[str]]:
+) -> tuple[float | None, str | None, str | None, list[str]]:
     errors: list[str] = []
     value: float | None = None
     source_parameter_id: str | None = None
+    source_parameter_updated_at: str | None = None
     if not isinstance(item, dict):
-        return None, None, ["binding_object_invalid"]
-    allowed = {"value", "unit", "source_parameter_id"}
+        return None, None, None, ["binding_object_invalid"]
+    allowed = {"value", "unit", "source_parameter_id", "source_parameter_updated_at"}
     if set(item) - allowed or "value" not in item or "unit" not in item:
-        return None, None, ["binding_object_invalid"]
+        return None, None, None, ["binding_object_invalid"]
     raw_value = item.get("value")
     source_unit = item.get("unit")
     if (
@@ -498,17 +504,28 @@ def _validate_v2_binding(
         else:
             source_parameter_id = raw_source
 
+    supplied_updated_at = item.get("source_parameter_updated_at")
+    if supplied_updated_at is not None and (
+        not isinstance(supplied_updated_at, str) or not supplied_updated_at.strip()
+    ):
+        errors.append("binding_parameter_revision_invalid")
+    elif supplied_updated_at is not None and source_parameter_id is None:
+        errors.append("binding_parameter_revision_without_reference")
+
     if source_parameter_id is not None and not errors:
         if load_parameter is None:
-            return value, source_parameter_id, errors
+            return value, source_parameter_id, None, errors
         parameter = load_parameter(source_parameter_id)
         if parameter is None:
             errors.append("binding_parameter_not_found")
         else:
             parameter_value = _finite_parameter_value(parameter.get("value"))
             parameter_unit = parameter.get("unit")
+            parameter_updated_at = parameter.get("updated_at")
             if parameter_value is None or not isinstance(parameter_unit, str):
                 errors.append("binding_parameter_value_invalid")
+            elif not isinstance(parameter_updated_at, str) or not parameter_updated_at.strip():
+                errors.append("binding_parameter_revision_invalid")
             else:
                 try:
                     normalized_parameter_value = normalize_magnitude(
@@ -523,7 +540,11 @@ def _validate_v2_binding(
                 else:
                     if value is not None and normalized_parameter_value != value:
                         errors.append("binding_parameter_value_mismatch")
-    return value, source_parameter_id, errors
+                    if supplied_updated_at is not None and supplied_updated_at != parameter_updated_at:
+                        errors.append("binding_parameter_revision_mismatch")
+                    if not errors:
+                        source_parameter_updated_at = parameter_updated_at
+    return value, source_parameter_id, source_parameter_updated_at, errors
 
 
 def _finite_parameter_value(value: object) -> float | None:
