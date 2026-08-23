@@ -31,7 +31,7 @@ def validate_parameter_replacement_proposal(
             "A Parameter cannot supersede itself.",
         )
     row = connection.execute(
-        "SELECT id, workspace_id, status, unit FROM parameters WHERE id = ?",
+        "SELECT id, workspace_id, status, lifecycle_state, unit FROM parameters WHERE id = ?",
         (supersedes_parameter_id,),
     ).fetchone()
     if row is None:
@@ -48,6 +48,11 @@ def validate_parameter_replacement_proposal(
         raise ParameterReplacementError(
             "parameter_replacement_source_not_accepted",
             "The superseded Parameter is not accepted.",
+        )
+    if str(row["lifecycle_state"]) != "active":
+        raise ParameterReplacementError(
+            "parameter_replacement_source_not_active",
+            "Only a lifecycle-active Parameter can be superseded.",
         )
     if str(row["unit"]) != unit:
         raise ParameterReplacementError(
