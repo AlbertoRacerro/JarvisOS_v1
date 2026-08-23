@@ -5,9 +5,9 @@ import test_token_flow_local_runtime_integration as local
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.core.cad_link_schema import CAD_LINK_SCHEMA_MIGRATION_RECORD
 from app.core.database import get_current_schema_migration, open_sqlite_connection
 from app.core.grade_schema import GRADE_SCHEMA_MIGRATION_ID
+from app.core.schema import CURRENT_SCHEMA_MIGRATION_ID
 from app.modules.ai.execution import run_ai_task
 from app.modules.ai.flow_grade_contracts import FlowGradeConflictError
 from app.modules.ai.flow_grade_events import set_flow_grade, withdraw_flow_grade
@@ -34,7 +34,7 @@ def _complete_local_flow() -> str:
 
 def test_grade_schema_remains_applied_and_required(initialized_database) -> None:
     migration = get_current_schema_migration()
-    assert migration.migration_id == CAD_LINK_SCHEMA_MIGRATION_RECORD["migration_id"]
+    assert migration.migration_id == CURRENT_SCHEMA_MIGRATION_ID
     with open_sqlite_connection() as connection:
         tables = {
             row["name"]

@@ -17,9 +17,8 @@ def test_grade_schema_remains_registered_after_cad_link_migration() -> None:
 
     assert first.ready is True
     assert second.ready is True
-    assert CURRENT_SCHEMA_MIGRATION_ID == CAD_LINK_SCHEMA_MIGRATION_RECORD["migration_id"]
     assert get_current_schema_migration().migration_id == CURRENT_SCHEMA_MIGRATION_ID
-    assert count_schema_migrations() == 16
+    assert count_schema_migrations() == 17
 
     with open_sqlite_connection() as connection:
         migrations = {
@@ -36,6 +35,7 @@ def test_grade_schema_remains_registered_after_cad_link_migration() -> None:
         }
 
     assert migrations[GRADE_SCHEMA_MIGRATION_ID] == "applied"
+    assert migrations[CAD_LINK_SCHEMA_MIGRATION_RECORD["migration_id"]] == "applied"
     assert migrations[CURRENT_SCHEMA_MIGRATION_ID] == "applied"
     assert {
         "ai_flow_grade_subjects",

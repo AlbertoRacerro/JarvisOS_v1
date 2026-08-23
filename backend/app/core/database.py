@@ -53,6 +53,15 @@ RUNNER_CREATE_REQUEST_INDEX_STATEMENTS = (
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_runner_jobs_workspace_request_key "
     "ON runner_jobs(workspace_id, request_key) WHERE request_key IS NOT NULL",
 )
+PARAMETER_LIFECYCLE_MIGRATION_RECORD = {
+    "migration_id": "0016_parameter_lifecycle",
+    "name": "Parameter lifecycle state",
+    "checksum": None,
+}
+PARAMETER_LIFECYCLE_INDEX_STATEMENT = (
+    "CREATE INDEX IF NOT EXISTS idx_parameters_workspace_lifecycle "
+    "ON parameters(workspace_id, lifecycle_state)"
+)
 
 
 @dataclass(frozen=True)
@@ -126,6 +135,7 @@ def initialize_database() -> DatabaseInfo:
             except sqlite3.OperationalError as exc:
                 if "duplicate column name" not in str(exc).lower():
                     raise
+        _ensure_parameter_lifecycle_schema(connection)
         for statement in SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         for statement in CAD_LINK_SCHEMA_INDEX_STATEMENTS:
@@ -269,6 +279,7 @@ def _record_schema_migrations(connection: sqlite3.Connection) -> None:
         TOKEN_FLOW_SCHEMA_MIGRATION_RECORD,
         GRADE_SCHEMA_MIGRATION_RECORD,
         AI_THREAD_SCHEMA_MIGRATION_RECORD,
+        PARAMETER_LIFECYCLE_MIGRATION_RECORD,
     ]
     for record in records:
         connection.execute(
@@ -282,6 +293,27 @@ def _record_schema_migrations(connection: sqlite3.Connection) -> None:
             """,
             (record["migration_id"], record["name"], now, record["checksum"]),
         )
+
+
+def _ensure_parameter_lifecycle_schema(connection: sqlite3.Connection) -> None:
+    columns = {
+        str(row["name"])
+        for row in connection.execute("PRAGMA table_info(parameters)").fetchall()
+    }
+    if "lifecycle_state" not in columns:
+        connection.execute(
+            "ALTER TABLE parameters ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'active'"
+        )
+        connection.execute(
+            """
+            UPDATE parameters
+            SET lifecycle_state = CASE
+                WHEN status = 'superseded' THEN 'superseded'
+                ELSE 'active'
+            END
+            """
+        )
+    connection.execute(PARAMETER_LIFECYCLE_INDEX_STATEMENT)
 
 
 def _empty_schema_migration() -> SchemaMigrationInfo:

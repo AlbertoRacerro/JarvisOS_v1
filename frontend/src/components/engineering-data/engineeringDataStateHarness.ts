@@ -7,7 +7,7 @@ function assert(condition: boolean, message: string): void {
 const rows = projectEngineeringData({
   modelSpecs: [{ id: "m2", workspace_id: "w", title: "zeta", engineering_question: "Q", status: "odd-status", maturity_status: "draft", schema_version: 1, created_at: "", updated_at: "" }, { id: "m1", workspace_id: "w", title: "Alpha", engineering_question: "Pump sizing", status: "active", maturity_status: "draft", schema_version: 1, created_at: "", updated_at: "" }],
   assumptions: [{ id: "a1", workspace_id: "w", statement: "Sea water density", confidence: 0.7, status: "accepted" }],
-  parameters: [{ id: "p1", workspace_id: "w", name: "Tube diameter", symbol: "D", value: "0.05", unit: "m", status: "active" }],
+  parameters: [{ id: "p1", workspace_id: "w", name: "Tube diameter", symbol: "D", value: "0.05", unit: "m", value_status: "accepted", lifecycle_state: "active", status: "accepted", created_at: "", updated_at: "" }],
   decisions: [{ id: "d1", workspace_id: "w", title: "Material", decision_text: "Use HDPE", status: "recorded" }],
 });
 assert(rows.map(recordKey).join(",") === "model-spec:m1,model-spec:m2,assumption:a1,parameter:p1,decision:d1", "kind/primary ordering drift");

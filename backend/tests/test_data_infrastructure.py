@@ -58,7 +58,6 @@ def test_schema_migration_table_records_baseline_and_current_version(client: Tes
         ).fetchall()
 
     migrations = {row["migration_id"]: dict(row) for row in rows}
-    assert CURRENT_SCHEMA_MIGRATION_ID == CAD_LINK_SCHEMA_MIGRATION_RECORD["migration_id"]
     assert SCHEMA_BASELINE_MIGRATION_ID in migrations
     assert SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_ID in migrations
     assert GRADE_SCHEMA_MIGRATION_ID in migrations

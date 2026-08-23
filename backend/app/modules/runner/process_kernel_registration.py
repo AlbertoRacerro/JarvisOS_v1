@@ -8,6 +8,7 @@ from app.core.database import open_sqlite_connection
 from app.modules.modeling.models import ModelSpecCreate
 from app.modules.modeling.service import create_model_spec
 from app.modules.runner import service as _base
+from app.modules.runner.linked_parameters import load_usable_linked_parameter
 from app.modules.runner.models import ModelImplementationCreate, ModelImplementationRead
 from app.modules.runner.process_kernel_047 import (
     MODEL_LABEL,
@@ -124,11 +125,7 @@ def normalize_process_kernel_input(
         _require_workspace(connection, workspace_id)
 
         def load_parameter(parameter_id: str) -> dict[str, object] | None:
-            row = connection.execute(
-                "SELECT id, workspace_id, value, unit FROM parameters WHERE id = ? AND workspace_id = ?",
-                (parameter_id, workspace_id),
-            ).fetchone()
-            return dict(row) if row is not None else None
+            return load_usable_linked_parameter(connection, workspace_id, parameter_id)
 
         return normalize_input_set(input_set, load_parameter=load_parameter)
 

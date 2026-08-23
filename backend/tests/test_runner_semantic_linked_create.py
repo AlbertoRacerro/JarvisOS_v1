@@ -156,6 +156,18 @@ def _preview(client: TestClient, model_version_id: str, bindings: dict[str, obje
     )
 
 
+def _normalized_linked_input(client: TestClient, model_version_id: str, parameter_id: str) -> dict[str, object]:
+    preview = _preview(client, model_version_id, _linked_input(parameter_id))
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["state"] == "ready", body
+    normalized = body["normalized_input_set"]
+    assert isinstance(normalized, dict)
+    assert normalized["tube_length"]["source_parameter_id"] == parameter_id
+    assert normalized["tube_length"]["source_parameter_updated_at"]
+    return normalized
+
+
 def _runner_event_types(runner_job_id: str) -> list[str]:
     from app.core.database import open_sqlite_connection
 
@@ -190,7 +202,7 @@ def test_schema_v3_new_create_rejects_superseded_link_without_rows(client: TestC
 def test_schema_v3_same_key_replay_survives_source_staleness(client: TestClient) -> None:
     model_version_id = _register(client, semantic=True)
     parameter_id = _create_parameter(client)
-    input_set = _linked_input(parameter_id)
+    input_set = _normalized_linked_input(client, model_version_id, parameter_id)
     payload = _payload(model_version_id, input_set, "semantic-create-replay-0001")
 
     first = client.post("/workspaces/bluerev/runner-jobs", json=payload)
@@ -239,10 +251,31 @@ def test_schema_v3_preview_rejects_051_stale_non_superseded_parameter(client: Te
     assert "binding_parameter_not_found" in tube["errors"]
 
 
+def test_schema_v3_convertible_linked_source_survives_create_and_final_claim(client: TestClient) -> None:
+    model_version_id = _register(client, semantic=True)
+    parameter_id = _create_parameter(client, value="20000", unit="mm")
+    input_set = _normalized_linked_input(client, model_version_id, parameter_id)
+    tube = input_set["tube_length"]
+    assert isinstance(tube, dict)
+    assert tube["value"] == 20.0
+    assert tube["unit"] == "m"
+
+    create = client.post(
+        "/workspaces/bluerev/runner-jobs",
+        json=_payload(model_version_id, input_set, "semantic-convertible-source-0001"),
+    )
+    assert create.status_code == 201, create.text
+
+    run = client.post(f"/runner-jobs/{create.json()['runner_job']['id']}/run")
+    assert run.status_code == 200, run.text
+    assert run.json()["runner_job"]["status"] == "succeeded"
+    assert run.json()["simulation_run"]["status"] == "succeeded"
+
+
 def test_schema_v3_run_claim_fails_closed_if_source_becomes_unusable(client: TestClient) -> None:
     model_version_id = _register(client, semantic=True)
     parameter_id = _create_parameter(client)
-    input_set = _linked_input(parameter_id)
+    input_set = _normalized_linked_input(client, model_version_id, parameter_id)
     create = client.post(
         "/workspaces/bluerev/runner-jobs",
         json=_payload(model_version_id, input_set, "semantic-run-stale-0001"),

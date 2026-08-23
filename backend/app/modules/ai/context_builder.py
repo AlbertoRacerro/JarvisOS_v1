@@ -178,6 +178,11 @@ def _format_parameter(parameter) -> str:
     return "; ".join(parts)
 
 
+def _current_parameters(records: list[object]) -> list[object]:
+    """Return only lifecycle-current Parameters for normal canonical AI context."""
+    return [record for record in records if getattr(record, "lifecycle_state", "active") == "active"]
+
+
 def build_workspace_context_bundle(
     workspace_id: str = "bluerev",
     budget_chars: int = DEFAULT_CONTEXT_BUDGET_CHARS,
@@ -185,12 +190,13 @@ def build_workspace_context_bundle(
 ) -> ContextBundle:
     """Build project context.
 
-    With no selection spec this preserves the legacy full-dump byte-for-byte:
-    decisions, assumptions, then parameters only, with created-at list ordering.
-    With a selection spec this deterministically selects decisions, assumptions,
-    parameters, and requirements by kind/status/id/query using updated_at DESC,
-    id ASC ordering. Over-budget selected packs drop whole blocks in this order:
-    parameters, assumptions, requirements, decisions.
+    With no selection spec this preserves the legacy full-dump ordering:
+    decisions, assumptions, then lifecycle-current parameters only, with
+    created-at list ordering. With a selection spec this deterministically
+    selects decisions, assumptions, lifecycle-current parameters, and
+    requirements by kind/status/id/query using updated_at DESC, id ASC ordering.
+    Over-budget selected packs drop whole blocks in this order: parameters,
+    assumptions, requirements, decisions.
     """
     if selection is not None:
         return _build_selected_workspace_context_bundle(workspace_id, budget_chars, selection)
@@ -206,7 +212,7 @@ def build_workspace_context_bundle(
         raw.append(
             {"source": f"assumption:{assumption.id}", "type": "assumption", "id": assumption.id, "content": _format_assumption(assumption)}
         )
-    for parameter in list_parameters(workspace_id):
+    for parameter in _current_parameters(list_parameters(workspace_id)):
         raw.append(
             {"source": f"parameter:{parameter.id}", "type": "parameter", "id": parameter.id, "content": _format_parameter(parameter)}
         )
@@ -276,6 +282,8 @@ def _build_selected_workspace_context_bundle(
         query=selection.query,
         max_items_per_kind=selection.max_items_per_kind,
     )
+    if "parameter" in records_by_kind:
+        records_by_kind["parameter"] = _current_parameters(records_by_kind["parameter"])
     if "evidence" in kinds:
         records_by_kind["evidence"] = select_evidence_records(
             workspace_id,
