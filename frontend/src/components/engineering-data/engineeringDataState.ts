@@ -6,7 +6,11 @@ export type ModelSpecRecord = Readonly<{
   status: string; maturity_status: string; schema_version: number; created_at: string; updated_at: string;
 }>;
 export type AssumptionRecord = Readonly<{ id: string; workspace_id: string; statement: string; confidence?: number | null; status: string }>;
-export type ParameterRecord = Readonly<{ id: string; workspace_id: string; name: string; symbol?: string | null; value?: string | null; unit?: string | null; status: string }>;
+export type ParameterRecord = Readonly<{
+  id: string; workspace_id: string; name: string; symbol?: string | null; value?: string | null; unit?: string | null;
+  value_status: string; value_min?: number | null; value_max?: number | null; source_ref?: string | null; confidence?: number | null;
+  status: string; notes?: string | null; supersedes_parameter_id?: string | null; lifecycle_state: string; created_at: string; updated_at: string;
+}>;
 export type DecisionRecord = Readonly<{ id: string; workspace_id: string; title: string; decision_text: string; status: string }>;
 
 export type EngineeringRecordProjection =
@@ -73,8 +77,8 @@ export function projectEngineeringData(input: EngineeringDataInput): Engineering
       workspaceId: record.workspace_id,
       primary: record.name,
       secondary: [record.symbol, record.value, record.unit].filter(Boolean).join(" · "),
-      status: record.status,
-      searchText: searchable([record.name, record.symbol, record.value, record.unit, record.status, record.id]),
+      status: record.lifecycle_state,
+      searchText: searchable([record.name, record.symbol, record.value, record.unit, record.lifecycle_state, record.status, record.value_status, record.id]),
       record,
     })),
     ...input.decisions.map((record) => ({
