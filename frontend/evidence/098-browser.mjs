@@ -141,12 +141,11 @@ await page.getByLabel(/Advanced\/Audit: show noncurrent Parameters/).check();
 await page.getByText("Free parameter", { exact: true }).first().waitFor();
 await page.getByText("Inactive", { exact: true }).first().waitFor();
 
-// Supersede must not fabricate a replacement and must route to existing review authority.
+// Supersede stays in existing replacement authority and the surface routes there without mutation.
 await page.getByText("Server truth", { exact: true }).first().click();
 const supersede = page.locator("p", { hasText: "Supersede:" }).first();
 await supersede.waitFor();
-assert.match(await supersede.textContent(), /existing Parameter replacement proposal\/review authority/);
-assert.match(await supersede.textContent(), /does not invent a replacement record/);
+assert.match(await supersede.textContent(), /replacement promotion stays in the existing Parameter proposal\/review authority/);
 await page.getByRole("link", { name: "Open replacement review" }).click();
 assert.equal(await page.getByTestId("evidence-navigation").textContent(), "/review", "Supersede routes to canonical replacement review surface");
 
