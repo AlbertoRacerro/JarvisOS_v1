@@ -251,6 +251,27 @@ def test_schema_v3_preview_rejects_051_stale_non_superseded_parameter(client: Te
     assert "binding_parameter_not_found" in tube["errors"]
 
 
+def test_schema_v3_convertible_linked_source_survives_create_and_final_claim(client: TestClient) -> None:
+    model_version_id = _register(client, semantic=True)
+    parameter_id = _create_parameter(client, value="20000", unit="mm")
+    input_set = _normalized_linked_input(client, model_version_id, parameter_id)
+    tube = input_set["tube_length"]
+    assert isinstance(tube, dict)
+    assert tube["value"] == 20.0
+    assert tube["unit"] == "m"
+
+    create = client.post(
+        "/workspaces/bluerev/runner-jobs",
+        json=_payload(model_version_id, input_set, "semantic-convertible-source-0001"),
+    )
+    assert create.status_code == 201, create.text
+
+    run = client.post(f"/runner-jobs/{create.json()['runner_job']['id']}/run")
+    assert run.status_code == 200, run.text
+    assert run.json()["runner_job"]["status"] == "succeeded"
+    assert run.json()["simulation_run"]["status"] == "succeeded"
+
+
 def test_schema_v3_run_claim_fails_closed_if_source_becomes_unusable(client: TestClient) -> None:
     model_version_id = _register(client, semantic=True)
     parameter_id = _create_parameter(client)
