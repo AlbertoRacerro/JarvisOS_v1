@@ -43,7 +43,7 @@ def inspect_linked_parameter_usability(
     workspace_id: str,
     parameter_id: str,
 ) -> LinkedParameterUsability:
-    """Return fail-closed 058c usability for one canonical linked Parameter.
+    """Return fail-closed 058c/098 usability for one canonical linked Parameter.
 
     This consumes existing Parameter lifecycle plus the canonical 051 freshness
     overlay. It deliberately does not follow replacement links or create a new
@@ -51,7 +51,11 @@ def inspect_linked_parameter_usability(
     """
 
     row = connection.execute(
-        "SELECT id, workspace_id, value, unit, status FROM parameters WHERE id = ?",
+        """
+        SELECT id, workspace_id, value, unit, status, lifecycle_state, updated_at
+        FROM parameters
+        WHERE id = ?
+        """,
         (parameter_id,),
     ).fetchone()
     if row is None:
@@ -62,13 +66,18 @@ def inspect_linked_parameter_usability(
         return LinkedParameterUsability(False, None, "inaccessible")
     if str(parameter.get("status")) == "superseded":
         return LinkedParameterUsability(False, None, "superseded")
+    if str(parameter.get("lifecycle_state")) != "active":
+        return LinkedParameterUsability(False, None, "noncurrent_lifecycle")
 
     value = _finite_number(parameter.get("value"))
     unit = parameter.get("unit")
+    updated_at = parameter.get("updated_at")
     if value is None:
         return LinkedParameterUsability(False, None, "invalid_value")
     if not isinstance(unit, str) or not unit.strip():
         return LinkedParameterUsability(False, None, "invalid_unit")
+    if not isinstance(updated_at, str) or not updated_at.strip():
+        return LinkedParameterUsability(False, None, "invalid_revision")
 
     record_ref = f"parameter:{parameter_id}"
     stale = connection.execute(
@@ -100,15 +109,66 @@ def require_linked_parameters_usable(
     workspace_id: str,
     normalized_input_payload: str | dict[str, Any],
 ) -> None:
-    for parameter_id in linked_parameter_ids(normalized_input_payload):
-        if not inspect_linked_parameter_usability(connection, workspace_id, parameter_id).usable:
+    """Fail closed when a canonical linked source is no longer current.
+
+    098 adds an immutable ``source_parameter_updated_at`` token to new schema-v2/v3
+    normalized snapshots. When that token is present, create/final-claim validation
+    also requires an exact source revision match. Historical snapshots that predate
+    the token keep the pre-098 usability behavior until the normalization seam has
+    captured a revision for them; schema-v1/no-contract authority remains unchanged
+    because callers invoke this guard only for canonical schema-v2/v3 contracts.
+    """
+
+    for item in linked_parameter_items(normalized_input_payload):
+        parameter_id = str(item["source_parameter_id"])
+        result = inspect_linked_parameter_usability(connection, workspace_id, parameter_id)
+        if not result.usable or result.parameter is None:
+            raise RunnerSafetyError(
+                LINKED_PARAMETER_UNUSABLE_CODE,
+                LINKED_PARAMETER_UNUSABLE_MESSAGE,
+            )
+
+        expected_updated_at = item.get("source_parameter_updated_at")
+        if expected_updated_at is None:
+            continue
+        if (
+            not isinstance(expected_updated_at, str)
+            or not expected_updated_at.strip()
+            or result.parameter.get("updated_at") != expected_updated_at
+        ):
             raise RunnerSafetyError(
                 LINKED_PARAMETER_UNUSABLE_CODE,
                 LINKED_PARAMETER_UNUSABLE_MESSAGE,
             )
 
 
+def linked_parameter_items(normalized_input_payload: str | dict[str, Any]) -> tuple[dict[str, Any], ...]:
+    payload = _normalized_payload(normalized_input_payload)
+    items: list[dict[str, Any]] = []
+    for item in payload.values():
+        if not isinstance(item, dict):
+            continue
+        source_parameter_id = item.get("source_parameter_id")
+        if source_parameter_id is None:
+            continue
+        if not isinstance(source_parameter_id, str) or not source_parameter_id.strip():
+            raise RunnerSafetyError("runner_input_invalid", "Stored linked Parameter identity is invalid.")
+        source_parameter_updated_at = item.get("source_parameter_updated_at")
+        if source_parameter_updated_at is not None and (
+            not isinstance(source_parameter_updated_at, str) or not source_parameter_updated_at.strip()
+        ):
+            raise RunnerSafetyError("runner_input_invalid", "Stored linked Parameter revision is invalid.")
+        items.append(item)
+    return tuple(items)
+
+
 def linked_parameter_ids(normalized_input_payload: str | dict[str, Any]) -> tuple[str, ...]:
+    return tuple(
+        sorted({str(item["source_parameter_id"]) for item in linked_parameter_items(normalized_input_payload)})
+    )
+
+
+def _normalized_payload(normalized_input_payload: str | dict[str, Any]) -> dict[str, Any]:
     if isinstance(normalized_input_payload, str):
         try:
             payload = json.loads(normalized_input_payload)
@@ -119,18 +179,7 @@ def linked_parameter_ids(normalized_input_payload: str | dict[str, Any]) -> tupl
 
     if not isinstance(payload, dict):
         raise RunnerSafetyError("runner_input_invalid", "Stored runner input payload must be an object.")
-
-    ids: set[str] = set()
-    for item in payload.values():
-        if not isinstance(item, dict):
-            continue
-        source_parameter_id = item.get("source_parameter_id")
-        if source_parameter_id is None:
-            continue
-        if not isinstance(source_parameter_id, str) or not source_parameter_id.strip():
-            raise RunnerSafetyError("runner_input_invalid", "Stored linked Parameter identity is invalid.")
-        ids.add(source_parameter_id)
-    return tuple(sorted(ids))
+    return payload
 
 
 def _finite_number(value: object) -> float | None:
