@@ -272,6 +272,19 @@ def validate_calc_v0_input(input_set: dict[str, Any]) -> tuple[str, str]:
                     f"calc_v0 input {name} source_parameter_id must be a non-empty string.",
                 )
             normalized_item["source_parameter_id"] = source_parameter_id
+        source_parameter_updated_at = item.get("source_parameter_updated_at")
+        if source_parameter_updated_at is not None:
+            if source_parameter_id is None:
+                raise RunnerSafetyError(
+                    "runner_input_invalid",
+                    f"calc_v0 input {name} source_parameter_updated_at requires source_parameter_id.",
+                )
+            if not isinstance(source_parameter_updated_at, str) or not source_parameter_updated_at.strip():
+                raise RunnerSafetyError(
+                    "runner_input_invalid",
+                    f"calc_v0 input {name} source_parameter_updated_at must be a non-empty string.",
+                )
+            normalized_item["source_parameter_updated_at"] = source_parameter_updated_at
         normalized[name] = normalized_item
     normalized_encoded = canonical_json(normalized)
     return normalized_encoded, normalized_encoded
