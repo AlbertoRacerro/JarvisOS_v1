@@ -145,3 +145,45 @@ def test_replacement_validator_rejects_nonactive_source(client: TestClient) -> N
                 value="11",
             )
     assert exc_info.value.code == "parameter_replacement_source_not_active"
+
+
+def test_replacement_promotion_and_replay_keep_lifecycle_pair_coherent(client: TestClient) -> None:
+    superseded = _create_parameter(client, name="Original parameter")
+    replacement = _create_parameter(client, name="Replacement parameter")
+
+    from app.core.database import open_sqlite_connection
+
+    with open_sqlite_connection() as connection:
+        connection.execute(
+            """
+            UPDATE parameters
+            SET status = 'proposed', supersedes_parameter_id = ?
+            WHERE id = ?
+            """,
+            (superseded["id"], replacement["id"]),
+        )
+        connection.commit()
+
+    promoted = client.post(f"/memory/parameter/{replacement['id']}/promote-replacement")
+    assert promoted.status_code == 200, promoted.text
+
+    def _states() -> dict[str, tuple[str, str]]:
+        with open_sqlite_connection() as connection:
+            rows = connection.execute(
+                "SELECT id, status, lifecycle_state FROM parameters WHERE id IN (?, ?)",
+                (superseded["id"], replacement["id"]),
+            ).fetchall()
+        return {str(row["id"]): (str(row["status"]), str(row["lifecycle_state"])) for row in rows}
+
+    assert _states() == {
+        str(superseded["id"]): ("superseded", "superseded"),
+        str(replacement["id"]): ("accepted", "active"),
+    }
+
+    replayed = client.post(f"/memory/parameter/{replacement['id']}/promote-replacement")
+    assert replayed.status_code == 200, replayed.text
+    assert replayed.json()["invalidation"]["id"] == promoted.json()["invalidation"]["id"]
+    assert _states() == {
+        str(superseded["id"]): ("superseded", "superseded"),
+        str(replacement["id"]): ("accepted", "active"),
+    }
