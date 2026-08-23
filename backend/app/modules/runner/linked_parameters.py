@@ -109,37 +109,40 @@ def require_linked_parameters_usable(
     workspace_id: str,
     normalized_input_payload: str | dict[str, Any],
 ) -> None:
-    """Fail closed when a canonical linked source is no longer current.
+    """Fail closed when a canonical linked source no longer matches its snapshot.
 
     098 adds an immutable ``source_parameter_updated_at`` token to new schema-v2/v3
-    normalized snapshots. When that token is present, create/final-claim validation
-    also requires an exact source revision match. Historical snapshots that predate
-    the token keep the pre-098 usability behavior until the normalization seam has
-    captured a revision for them; schema-v1/no-contract authority remains unchanged
-    because callers invoke this guard only for canonical schema-v2/v3 contracts.
+    normalized snapshots. New linked snapshots must carry that token and create/final
+    claim validation requires exact revision, value, and unit identity. Historical
+    schema-v2/v3 payloads that predate 098 may lack the token; they remain readable
+    historical evidence but fail closed if someone attempts to execute them. Schema-v1
+    and no-contract authority remains unchanged because callers invoke this guard only
+    for canonical schema-v2/v3 contracts.
     """
 
     for item in linked_parameter_items(normalized_input_payload):
         parameter_id = str(item["source_parameter_id"])
         result = inspect_linked_parameter_usability(connection, workspace_id, parameter_id)
         if not result.usable or result.parameter is None:
-            raise RunnerSafetyError(
-                LINKED_PARAMETER_UNUSABLE_CODE,
-                LINKED_PARAMETER_UNUSABLE_MESSAGE,
-            )
+            _raise_linked_parameter_unusable()
 
         expected_updated_at = item.get("source_parameter_updated_at")
-        if expected_updated_at is None:
-            continue
+        expected_value = _finite_number(item.get("value"))
+        expected_unit = item.get("unit")
+        current_value = _finite_number(result.parameter.get("value"))
+        current_unit = result.parameter.get("unit")
         if (
             not isinstance(expected_updated_at, str)
             or not expected_updated_at.strip()
             or result.parameter.get("updated_at") != expected_updated_at
+            or expected_value is None
+            or current_value is None
+            or expected_value != current_value
+            or not isinstance(expected_unit, str)
+            or not expected_unit.strip()
+            or current_unit != expected_unit
         ):
-            raise RunnerSafetyError(
-                LINKED_PARAMETER_UNUSABLE_CODE,
-                LINKED_PARAMETER_UNUSABLE_MESSAGE,
-            )
+            _raise_linked_parameter_unusable()
 
 
 def linked_parameter_items(normalized_input_payload: str | dict[str, Any]) -> tuple[dict[str, Any], ...]:
@@ -180,6 +183,13 @@ def _normalized_payload(normalized_input_payload: str | dict[str, Any]) -> dict[
     if not isinstance(payload, dict):
         raise RunnerSafetyError("runner_input_invalid", "Stored runner input payload must be an object.")
     return payload
+
+
+def _raise_linked_parameter_unusable() -> None:
+    raise RunnerSafetyError(
+        LINKED_PARAMETER_UNUSABLE_CODE,
+        LINKED_PARAMETER_UNUSABLE_MESSAGE,
+    )
 
 
 def _finite_number(value: object) -> float | None:
