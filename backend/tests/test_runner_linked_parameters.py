@@ -24,7 +24,9 @@ def _connection() -> sqlite3.Connection:
             workspace_id TEXT NOT NULL,
             value TEXT,
             unit TEXT NOT NULL,
-            status TEXT NOT NULL
+            status TEXT NOT NULL,
+            lifecycle_state TEXT NOT NULL DEFAULT 'active',
+            updated_at TEXT NOT NULL
         );
         CREATE TABLE freshness_marks (
             id TEXT PRIMARY KEY,
@@ -44,10 +46,16 @@ def _insert_parameter(
     value: object = "12.5",
     unit: str = "m",
     status: str = "accepted",
+    lifecycle_state: str = "active",
+    updated_at: str = "2026-08-23T00:00:00+00:00",
 ) -> None:
     connection.execute(
-        "INSERT INTO parameters (id, workspace_id, value, unit, status) VALUES (?, ?, ?, ?, ?)",
-        (parameter_id, workspace_id, value, unit, status),
+        """
+        INSERT INTO parameters (
+            id, workspace_id, value, unit, status, lifecycle_state, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (parameter_id, workspace_id, value, unit, status, lifecycle_state, updated_at),
     )
 
 
@@ -102,7 +110,7 @@ def test_linked_parameter_usability_fails_closed_for_canonical_unusable_states(
     elif mutation == "invalid_value":
         _insert_parameter(connection, value="nan")
     elif mutation == "superseded":
-        _insert_parameter(connection, status="superseded")
+        _insert_parameter(connection, status="superseded", lifecycle_state="superseded")
     else:
         _insert_parameter(connection)
         connection.execute(
@@ -140,7 +148,7 @@ def test_linked_parameter_ids_are_deterministic_and_deduplicated() -> None:
 
 def test_require_linked_parameters_usable_raises_exact_stale_claim_contract() -> None:
     connection = _connection()
-    _insert_parameter(connection, status="superseded")
+    _insert_parameter(connection, status="superseded", lifecycle_state="superseded")
     payload = {"tube_length": {"value": 12.5, "unit": "m", "source_parameter_id": "parameter-1"}}
 
     with pytest.raises(RunnerSafetyError) as caught:
