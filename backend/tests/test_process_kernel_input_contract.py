@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from app.modules.runner.input_contracts import canonicalize_input_contract
-from app.modules.runner.process_kernel_047 import build_binding_preview_v2, expected_contract
+from app.modules.runner.process_kernel_047 import (
+    build_binding_preview_v2,
+    expected_contract,
+)
 
 
 _COMPLETE_BINDINGS = {
