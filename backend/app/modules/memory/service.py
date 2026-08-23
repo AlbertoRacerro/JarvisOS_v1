@@ -303,9 +303,13 @@ def promote_parameter_replacement(record_id: str) -> ParameterReplacementRead:
                 connection.execute("BEGIN IMMEDIATE")
                 existing = connection.execute(
                     """
-                    SELECT id, workspace_id, superseded_parameter_id, replacement_parameter_id
-                    FROM freshness_invalidations
-                    WHERE replacement_parameter_id = ?
+                    SELECT fi.id, fi.workspace_id, fi.superseded_parameter_id, fi.replacement_parameter_id,
+                           superseded.lifecycle_state AS superseded_lifecycle_state,
+                           replacement.lifecycle_state AS replacement_lifecycle_state
+                    FROM freshness_invalidations AS fi
+                    LEFT JOIN parameters AS superseded ON superseded.id = fi.superseded_parameter_id
+                    LEFT JOIN parameters AS replacement ON replacement.id = fi.replacement_parameter_id
+                    WHERE fi.replacement_parameter_id = ?
                     """,
                     (record_id,),
                 ).fetchone()
@@ -317,6 +321,8 @@ def promote_parameter_replacement(record_id: str) -> ParameterReplacementRead:
                         or superseded is None
                         or accepted.status != "accepted"
                         or superseded.status != "superseded"
+                        or existing["replacement_lifecycle_state"] != "active"
+                        or existing["superseded_lifecycle_state"] != "superseded"
                     ):
                         raise ParameterReplacementError(
                             "parameter_replacement_state_inconsistent",
@@ -382,11 +388,19 @@ def promote_parameter_replacement(record_id: str) -> ParameterReplacementRead:
                     created_at=now,
                 )
                 connection.execute(
-                    "UPDATE parameters SET status = 'superseded', updated_at = ? WHERE id = ?",
+                    """
+                    UPDATE parameters
+                    SET status = 'superseded', lifecycle_state = 'superseded', updated_at = ?
+                    WHERE id = ?
+                    """,
                     (now, superseded_id),
                 )
                 connection.execute(
-                    "UPDATE parameters SET status = 'accepted', promoted_at = ?, updated_at = ? WHERE id = ?",
+                    """
+                    UPDATE parameters
+                    SET status = 'accepted', lifecycle_state = 'active', promoted_at = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
                     (now, now, record_id),
                 )
                 persist_freshness_invalidation(connection, prepared)
