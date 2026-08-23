@@ -6,7 +6,6 @@ from app.modules.runner.process_kernel_047 import (
     expected_contract,
 )
 
-
 _COMPLETE_BINDINGS = {
     "tube_length": {"value": 12.0, "unit": "m"},
     "tube_inner_diameter": {"value": 80.0, "unit": "mm"},
