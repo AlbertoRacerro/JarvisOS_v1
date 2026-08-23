@@ -32,7 +32,10 @@ for name, expected_unit in EXPECTED_UNITS.items():
     item = inputs.get(name)
     if not isinstance(item, dict):
         fail("input_contract_invalid", name)
-    allowed_keys = {"value", "unit", "source_parameter_id"}
+    # source_parameter_updated_at is runner-owned provenance/CAS evidence. The
+    # runner validates it before execution; the physical model deliberately
+    # ignores it while accepting the normalized schema-v3 input envelope.
+    allowed_keys = {"value", "unit", "source_parameter_id", "source_parameter_updated_at"}
     if "value" not in item or "unit" not in item or not set(item).issubset(allowed_keys):
         fail("input_contract_invalid", name)
     value = item["value"]
