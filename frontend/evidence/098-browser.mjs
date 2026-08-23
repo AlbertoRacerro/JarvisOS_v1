@@ -143,7 +143,7 @@ await page.getByText("Inactive", { exact: true }).first().waitFor();
 
 // Supersede must not fabricate a replacement; V0 visibly routes conceptually to existing authority.
 await page.getByText("Server truth", { exact: true }).first().click();
-const supersede = page.getByText(/Supersede:/).first();
+const supersede = page.locator("p", { hasText: "Supersede:" }).first();
 await supersede.waitFor();
 assert.match(await supersede.textContent(), /existing Parameter replacement proposal\/review authority/);
 assert.match(await supersede.textContent(), /does not invent a replacement record/);
