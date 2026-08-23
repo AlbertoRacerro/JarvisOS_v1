@@ -386,9 +386,10 @@ def test_flowsheet_and_replacement_propagate_stale_through_process_link(client: 
 
 def test_migration_and_registry_contract_are_live(client: TestClient) -> None:
     from app.core.database import get_current_schema_migration, open_sqlite_connection
+    from app.core.schema import CURRENT_SCHEMA_MIGRATION_ID
 
     current = get_current_schema_migration()
-    assert current.migration_id == "0015_cad_link_0"
+    assert current.migration_id == CURRENT_SCHEMA_MIGRATION_ID
     with open_sqlite_connection() as connection:
         columns = {
             row["name"] for row in connection.execute("PRAGMA table_info(bluecad_cad_links)")
