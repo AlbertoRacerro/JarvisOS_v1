@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from math import isfinite
 from typing import Any
 
+from app.modules.process_kernel.errors import ProcessKernelError
+from app.modules.process_kernel.units import normalize_magnitude, resolve_unit
 from app.modules.runner.input_contracts import parse_stored_input_contract
 from app.modules.runner.safety import RunnerSafetyError
 
@@ -113,11 +115,11 @@ def require_linked_parameters_usable(
 
     098 adds an immutable ``source_parameter_updated_at`` token to new schema-v2/v3
     normalized snapshots. New linked snapshots must carry that token and create/final
-    claim validation requires exact revision, value, and unit identity. Historical
-    schema-v2/v3 payloads that predate 098 may lack the token; they remain readable
-    historical evidence but fail closed if someone attempts to execute them. Schema-v1
-    and no-contract authority remains unchanged because callers invoke this guard only
-    for canonical schema-v2/v3 contracts.
+    claim validation requires exact revision plus physical value identity in the
+    normalized contract unit. Historical schema-v2/v3 payloads that predate 098 may
+    lack the token; they remain readable historical evidence but fail closed if someone
+    attempts to execute them. Schema-v1 and no-contract authority remains unchanged
+    because callers invoke this guard only for canonical schema-v2/v3 contracts.
     """
 
     for item in linked_parameter_items(normalized_input_payload):
@@ -137,11 +139,25 @@ def require_linked_parameters_usable(
             or result.parameter.get("updated_at") != expected_updated_at
             or expected_value is None
             or current_value is None
-            or expected_value != current_value
             or not isinstance(expected_unit, str)
             or not expected_unit.strip()
-            or current_unit != expected_unit
+            or not isinstance(current_unit, str)
+            or not current_unit.strip()
         ):
+            _raise_linked_parameter_unusable()
+
+        try:
+            target = resolve_unit(expected_unit)
+            normalized_current_value = normalize_magnitude(
+                current_value,
+                source_unit=current_unit,
+                target_unit=expected_unit,
+                physical_dimension=target.physical_dimension,
+                semantic_basis=target.semantic_basis,
+            )
+        except ProcessKernelError:
+            _raise_linked_parameter_unusable()
+        if normalized_current_value != expected_value:
             _raise_linked_parameter_unusable()
 
 
