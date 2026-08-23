@@ -332,10 +332,11 @@ function ParameterActions({ parameter, mutationPending, onEdit, onTransition, na
   </section>;
 }
 
-function numberOrNull(value: string): number | null {
+function optionalNumber(value: string, label: string): number | null {
   if (!value.trim()) return null;
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
+  if (!Number.isFinite(parsed)) throw new Error(`${label} must be a finite number or left blank.`);
+  return parsed;
 }
 
 function ParameterEditForm({ parameter, disabled, onCancel, onSubmit }: { parameter: CanonicalParameter; disabled: boolean; onCancel(): void; onSubmit(edits: ParameterEditInput): void }) {
@@ -349,35 +350,48 @@ function ParameterEditForm({ parameter, disabled, onCancel, onSubmit }: { parame
   const [sourceRef, setSourceRef] = useState(parameter.source_ref ?? "");
   const [confidence, setConfidence] = useState(parameter.confidence?.toString() ?? "");
   const [notes, setNotes] = useState(parameter.notes ?? "");
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!name.trim() || !unit.trim()) return;
-    onSubmit({
-      name: name.trim(),
-      symbol: symbol.trim() || null,
-      value: value.trim() || null,
-      unit: unit.trim(),
-      value_status: valueStatus,
-      value_min: numberOrNull(valueMin),
-      value_max: numberOrNull(valueMax),
-      source_ref: sourceRef.trim() || null,
-      confidence: numberOrNull(confidence),
-      notes: notes.trim() || null,
-    });
+    try {
+      const parsedMin = optionalNumber(valueMin, "Minimum");
+      const parsedMax = optionalNumber(valueMax, "Maximum");
+      const parsedConfidence = optionalNumber(confidence, "Confidence");
+      if (parsedMin !== null && parsedMax !== null && parsedMin > parsedMax) {
+        throw new Error("Minimum must be less than or equal to Maximum.");
+      }
+      setValidationError(null);
+      onSubmit({
+        name: name.trim(),
+        symbol: symbol.trim() || null,
+        value: value.trim() || null,
+        unit: unit.trim(),
+        value_status: valueStatus,
+        value_min: parsedMin,
+        value_max: parsedMax,
+        source_ref: sourceRef.trim() || null,
+        confidence: parsedConfidence,
+        notes: notes.trim() || null,
+      });
+    } catch (error) {
+      setValidationError(error instanceof Error ? error.message : "Numeric fields are invalid.");
+    }
   };
 
   return <form className="engineering-data__edit-form" onSubmit={submit}>
     <p><strong>Canonical edit.</strong> Saving changes the project Parameter after a server-side compare-and-swap check. A stale edit is rejected and refreshed; it never silently overwrites newer server truth.</p>
+    {validationError ? <p role="alert"><strong>Check numeric fields.</strong> {validationError}</p> : null}
     <div className="engineering-data__edit-grid">
       <label>Name<input required value={name} onChange={(event) => setName(event.target.value)} /></label>
       <label>Symbol<input value={symbol} onChange={(event) => setSymbol(event.target.value)} /></label>
       <label>Value<input value={value} onChange={(event) => setValue(event.target.value)} /></label>
       <label>Unit<input required value={unit} onChange={(event) => setUnit(event.target.value)} /></label>
       <label>Value status<select value={valueStatus} onChange={(event) => setValueStatus(event.target.value as CanonicalParameter["value_status"])}><option value="candidate">Candidate</option><option value="literature">Literature</option><option value="measured">Measured</option><option value="validated">Validated</option><option value="accepted">Accepted</option></select></label>
-      <label>Minimum<input inputMode="decimal" value={valueMin} onChange={(event) => setValueMin(event.target.value)} /></label>
-      <label>Maximum<input inputMode="decimal" value={valueMax} onChange={(event) => setValueMax(event.target.value)} /></label>
-      <label>Confidence<input inputMode="decimal" value={confidence} onChange={(event) => setConfidence(event.target.value)} /></label>
+      <label>Minimum<input inputMode="decimal" value={valueMin} onChange={(event) => { setValueMin(event.target.value); setValidationError(null); }} /></label>
+      <label>Maximum<input inputMode="decimal" value={valueMax} onChange={(event) => { setValueMax(event.target.value); setValidationError(null); }} /></label>
+      <label>Confidence<input inputMode="decimal" value={confidence} onChange={(event) => { setConfidence(event.target.value); setValidationError(null); }} /></label>
       <label className="is-wide">Source reference<input value={sourceRef} onChange={(event) => setSourceRef(event.target.value)} /></label>
       <label className="is-wide">Notes<textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
     </div>
