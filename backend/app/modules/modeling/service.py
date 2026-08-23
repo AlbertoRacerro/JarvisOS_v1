@@ -155,6 +155,10 @@ def select_context_records(
         status_column = _CONTEXT_STATUS_COLUMNS[kind]
         values: list[object] = [workspace_id]
         clauses = ["workspace_id = ?"]
+        if kind == "parameter":
+            # Lifecycle-current filtering belongs in the shared selector so it
+            # applies before ordering/LIMIT and explicit IDs cannot bypass it.
+            clauses.append("lifecycle_state = 'active'")
         if selected_ids:
             placeholders = ", ".join("?" for _ in selected_ids)
             clauses.append(f"id IN ({placeholders})")
