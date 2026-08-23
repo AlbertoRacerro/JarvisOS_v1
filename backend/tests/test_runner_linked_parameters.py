@@ -167,6 +167,13 @@ def test_require_linked_parameters_usable_accepts_exact_snapshot_identity() -> N
     require_linked_parameters_usable(connection, "workspace-1", _snapshot())
 
 
+def test_require_linked_parameters_usable_accepts_convertible_current_source_unit() -> None:
+    connection = _connection()
+    _insert_parameter(connection, value="12500", unit="mm")
+
+    require_linked_parameters_usable(connection, "workspace-1", _snapshot())
+
+
 @pytest.mark.parametrize(
     "payload",
     [
