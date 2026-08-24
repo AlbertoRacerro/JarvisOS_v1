@@ -13,6 +13,7 @@ import {
   toggleRunSelection,
   type AnalyticsRun,
 } from "./analyticsState";
+import { parseSourceRunTarget, sourceRunHref } from "./variantComparisonNavigation";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -65,7 +66,11 @@ assert(normalizeBaselineRunId(["a", "b"], null) === "a", "first selected run did
 assert(normalizeBaselineRunId(["a", "b"], "b") === "b", "explicit selected baseline was not preserved");
 assert(normalizeBaselineRunId(["a"], "b") === "a", "removed baseline did not fall back to first remaining run");
 
-const implementation = (variables: Array<{ name: string; label?: string; unit: string; required: boolean }>, id = "model-v1"): ModelImplementation => ({
+const implementation = (
+  variables: Array<{ name: string; label?: string; unit: string; required: boolean }>,
+  id = "model-v1",
+  semanticContext?: unknown
+): ModelImplementation => ({
   id,
   workspace_id: "ws",
   model_spec_id: "spec",
@@ -77,8 +82,9 @@ const implementation = (variables: Array<{ name: string; label?: string; unit: s
   created_at: "2026-08-24T00:00:00Z",
   input_contract_sha256: "b".repeat(64),
   input_contract: {
-    schema_version: 1,
+    schema_version: semanticContext === undefined ? 1 : 3,
     evaluation_mode: "forward",
+    ...(semanticContext === undefined ? {} : { semantic_context: semanticContext }),
     variables: variables.map((item) => ({
       name: item.name,
       label: item.label ?? item.name,
@@ -87,7 +93,7 @@ const implementation = (variables: Array<{ name: string; label?: string; unit: s
       category: "operating",
       description: "fixture"
     }))
-  }
+  } as unknown as ModelImplementation["input_contract"]
 });
 const inputRun = (
   id: string,
@@ -109,21 +115,41 @@ const inputRun = (
   ...patch
 });
 const binding = (value: unknown, unit: string, source_parameter_id?: string) => ({ value, unit, ...(source_parameter_id ? { source_parameter_id } : {}) });
-const contract = implementation([
+const variables = [
   { name: "temperature", label: "Temperature", unit: "K", required: true },
   { name: "pressure", label: "Pressure", unit: "Pa", required: true },
   { name: "optional", label: "Optional input", unit: "kg", required: false }
-]);
+];
+const contract = implementation(variables);
+const semanticContract = implementation(variables, "model-v1", {
+  applicable_part_kinds: ["tube_run"],
+  model_family_key: "geometry_hydraulics",
+  model_family_label: "Geometry & hydraulics",
+  model_option_label: "Reviewed tubular-loop V0"
+});
+const malformedSemanticContract = implementation(variables, "model-v1", {
+  applicable_part_kinds: ["tube_run"],
+  model_family_key: "geometry_hydraulics",
+  model_family_label: "Geometry & hydraulics",
+  model_option_label: 42
+});
 const configA = inputRun("config-a", { temperature: binding(300, "K", "historical-param"), pressure: binding(10, "Pa") });
 const configB = inputRun("config-b", { temperature: binding(330, "K"), pressure: binding(10, "Pa") });
 const configComparison = compareEngineeringConfigurations("ws", [configA, configB], [contract], null);
 assert(configComparison.state === "ready" && configComparison.baselineRunId === "config-a", "compatible configuration did not compare with deterministic baseline");
+assert(configComparison.modelChoice === null, "model choice was fabricated without authoritative schema-v3 metadata");
+const semanticComparison = compareEngineeringConfigurations("ws", [configA, configB], [semanticContract], null);
+assert(semanticComparison.state === "ready" && semanticComparison.modelChoice?.familyKey === "geometry_hydraulics" && semanticComparison.modelChoice.optionLabel === "Reviewed tubular-loop V0", "valid schema-v3 model choice was omitted");
+const malformedSemanticComparison = compareEngineeringConfigurations("ws", [configA, configB], [malformedSemanticContract], null);
+assert(malformedSemanticComparison.state === "ready" && malformedSemanticComparison.modelChoice === null, "malformed schema-v3 model choice was rendered");
 const temperatureRow = configComparison.rows.find((row) => row.name === "temperature");
 assert(temperatureRow?.cells[0].displayValue === "300" && temperatureRow.cells[1].delta === 30, "configuration value/delta projection failed");
 const optionalRow = configComparison.rows.find((row) => row.name === "optional");
 assert(optionalRow?.cells.every((cell) => cell.value === null && cell.displayValue === "Empty"), "missing optional input did not remain explicit Empty");
 const rebased = compareEngineeringConfigurations("ws", [configA, configB], [contract], "config-b");
 assert(rebased.state === "ready" && rebased.rows.find((row) => row.name === "temperature")?.cells[0].delta === -30, "explicit baseline did not produce deterministic absolute delta");
+const unavailableWithBaseline = compareEngineeringConfigurations("ws", [configA, configB], [], "config-b");
+assert(unavailableWithBaseline.state === "rejected" && unavailableWithBaseline.baselineRunId === "config-b", "configuration-unavailable state discarded the selected comparison baseline");
 assert(compareEngineeringConfigurations("ws", [configA, { ...configB, model_version_id: "model-v2" }], [contract, implementation([{ name: "temperature", unit: "K", required: true }], "model-v2")], null).state === "rejected", "different model versions were configuration-aligned");
 assert(compareEngineeringConfigurations("ws", [configA, inputRun("bad-unit", { temperature: binding(300, "C"), pressure: binding(10, "Pa") })], [contract], null).state === "rejected", "configuration unit mismatch was accepted");
 assert(compareEngineeringConfigurations("ws", [configA, inputRun("unknown", { temperature: binding(300, "K"), pressure: binding(10, "Pa"), surprise: binding(1, "Pa") })], [contract], null).state === "rejected", "unknown configuration field was accepted");
@@ -132,5 +158,13 @@ assert(compareEngineeringConfigurations("ws", [configA, inputRun("nonfinite", { 
 const oversizedContract = implementation(Array.from({ length: MAX_CONFIGURATION_VARIABLES + 1 }, (_, index) => ({ name: `v${index}`, unit: "Pa", required: false })));
 assert(compareEngineeringConfigurations("ws", [configA, configB], [oversizedContract], null).state === "rejected", "oversized configuration contract was accepted");
 assert(compareEngineeringConfigurations("ws", [configA, { ...configB, input_payload: "x".repeat(1_048_577) }], [contract], null).state === "rejected", "oversized input payload was accepted");
+
+const sourceHref = sourceRunHref("workspace A", "run/42");
+const sourceTarget = parseSourceRunTarget(sourceHref.slice(sourceHref.indexOf("?")));
+assert(sourceTarget?.workspaceId === "workspace A" && sourceTarget.runId === "run/42", "source-run deep link did not preserve exact workspace and run identity");
+assert(parseSourceRunTarget("?workspace=ws") === null, "partial source-run deep link was accepted");
+assert(parseSourceRunTarget("?workspace=ws&run=") === null, "blank source-run identity was accepted");
+assert(parseSourceRunTarget(`?workspace=${"w".repeat(257)}&run=r`) === null, "oversized source-run identity was accepted");
+assert(parseSourceRunTarget("?workspace=ws&workspace=other&run=r") === null, "ambiguous source-run workspace was accepted");
 
 console.log("analytics state harness passed");
