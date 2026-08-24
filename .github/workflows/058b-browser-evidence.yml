@@ -1,0 +1,50 @@
+name: 058b Browser Evidence
+
+on:
+  pull_request:
+    branches:
+      - impl/058b-variant-comparison-1
+    paths:
+      - "frontend/**"
+      - ".github/workflows/058b-browser-evidence.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  browser-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: TypeScript and production build
+        working-directory: frontend
+        run: npm run build
+      - name: Install evidence-only Playwright runtime
+        working-directory: frontend
+        run: |
+          npm install --no-save --package-lock=false playwright@1.54.2
+          npx playwright install --with-deps chromium
+      - name: Start evidence harness
+        working-directory: frontend
+        run: |
+          npm run dev -- --port 4173 > /tmp/058b-vite.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4173/058b-evidence.html >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/058b-vite.log
+          exit 1
+      - name: Run 058b browser matrix
+        working-directory: frontend
+        run: node evidence/058b-browser.mjs
