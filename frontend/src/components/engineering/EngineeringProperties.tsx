@@ -16,7 +16,13 @@ import {
   type Parameter,
   type RunnerJobRunResponse
 } from "../../api/client";
+import type { SimulationRunDetail } from "../../api/runs";
 import InlineNotice from "../ui/InlineNotice";
+import {
+  reconstructPreviousRunBaseline,
+  type PreviousRunBaseline,
+  type PreviousRunLoadability
+} from "./previousRunLoad";
 
 export type WorkingBinding = Readonly<{ value: string; parameterId: string }>;
 type BindingMap = Record<string, WorkingBinding>;
@@ -50,6 +56,12 @@ export type EngineeringWorkingAction = Readonly<{
   operations: EngineeringActionOperation[];
 }>;
 export type EngineeringActionApplyResult = "applied" | "stale" | "invalid";
+export type PreviousRunApplyResult =
+  | Readonly<{ status: "loaded" }>
+  | Readonly<{ status: "pending-model-switch" }>
+  | Readonly<{ status: "confirm-required" }>
+  | Readonly<{ status: "stale" }>
+  | Readonly<{ status: "incompatible"; reason: string }>;
 
 type BluecadPartSelection = Extract<StageSelection, { kind: "bluecad-part" }>;
 type SemanticVariable = ModelInputVariable & Readonly<{
@@ -78,6 +90,12 @@ type SemanticSource = Readonly<{
   geometry_bindings: Readonly<Record<"tube_length" | "tube_inner_diameter" | "tube_outer_diameter", SemanticGeometryBinding>>;
 }>;
 
+type PendingPreviousRunLoad = Readonly<{
+  generation: number;
+  expectedRevision: number;
+  baseline: PreviousRunBaseline;
+}>;
+
 export type EngineeringPropertiesController = Readonly<{
   workspaceId: string | null;
   implementations: ModelImplementation[];
@@ -87,6 +105,9 @@ export type EngineeringPropertiesController = Readonly<{
   parameters: Parameter[];
   baseline: BindingMap;
   working: BindingMap;
+  previousRunBaseline: PreviousRunBaseline | null;
+  previousRunLoadability(run: SimulationRunDetail): PreviousRunLoadability;
+  loadPreviousSuccessfulRun(run: SimulationRunDetail, expectedRevision: number, replaceDirty?: boolean): PreviousRunApplyResult;
   preview: BindingPreviewResponse | null;
   previewPhase: PreviewPhase;
   previewMessage: string | null;
@@ -345,6 +366,7 @@ export function useEngineeringProperties(
   const [selectedId, setSelectedIdState] = useState("");
   const [baseline, setBaseline] = useState<BindingMap>({});
   const [working, setWorking] = useState<BindingMap>({});
+  const [previousRunBaseline, setPreviousRunBaseline] = useState<PreviousRunBaseline | null>(null);
   const [undoStack, setUndoStack] = useState<BindingMap[]>([]);
   const [revision, setRevision] = useState(0);
   const [preview, setPreview] = useState<BindingPreviewResponse | null>(null);
@@ -361,6 +383,8 @@ export function useEngineeringProperties(
   const [semanticAdoptedContextKey, setSemanticAdoptedContextKey] = useState("");
 
   const loadGeneration = useRef(0);
+  const previousRunLoadGeneration = useRef(0);
+  const pendingPreviousRunLoadRef = useRef<PendingPreviousRunLoad | null>(null);
   const previewGeneration = useRef(0);
   const semanticGeneration = useRef(0);
   const semanticAdoptionKeyRef = useRef<string | null>(null);
@@ -390,6 +414,12 @@ export function useEngineeringProperties(
     () => actionSemanticFingerprint(semanticTarget, semanticSource),
     [semanticTarget, semanticSource]
   );
+
+  useEffect(() => {
+    previousRunLoadGeneration.current += 1;
+    pendingPreviousRunLoadRef.current = null;
+    setPreviousRunBaseline(null);
+  }, [workspaceId]);
 
   useEffect(() => {
     if (workspaceId) return;
@@ -427,9 +457,20 @@ export function useEngineeringProperties(
   }, [eligible, selectedId]);
 
   useEffect(() => {
-    const next = emptyBindings(variables);
+    const pending = pendingPreviousRunLoadRef.current;
+    const pendingMatches = Boolean(
+      pending &&
+      selected &&
+      pending.generation === previousRunLoadGeneration.current &&
+      pending.baseline.workspaceId === workspaceId &&
+      pending.baseline.modelVersionId === selected.id &&
+      pending.baseline.contractDigest === selected.input_contract_sha256 &&
+      pending.expectedRevision === revisionRef.current
+    );
+    const next = pendingMatches ? cloneBindings(pending!.baseline.bindings) : emptyBindings(variables);
     setBaseline(next);
     setWorking(next);
+    setPreviousRunBaseline(pendingMatches ? pending!.baseline : null);
     setUndoStack([]);
     setPreview(null);
     setPreviewPhase(selected ? "checking" : "idle");
@@ -441,9 +482,21 @@ export function useEngineeringProperties(
     setRevision((current) => current + 1);
     previewGeneration.current += 1;
     semanticAdoptionKeyRef.current = null;
-    activeSemanticStableKeyRef.current = null;
     pendingPreviousTargetKeyRef.current = null;
-    setSemanticAdoptedContextKey("");
+    if (pendingMatches) {
+      pendingPreviousRunLoadRef.current = null;
+      if (semanticTarget && semanticSource) {
+        activeSemanticStableKeyRef.current = semanticStableTargetKey(semanticTarget, semanticSource);
+        setSemanticAdoptedContextKey(currentSemanticTargetKey);
+      } else {
+        activeSemanticStableKeyRef.current = null;
+        setSemanticAdoptedContextKey("");
+      }
+    } else {
+      if (pending && selected?.id === pending.baseline.modelVersionId) pendingPreviousRunLoadRef.current = null;
+      activeSemanticStableKeyRef.current = null;
+      setSemanticAdoptedContextKey("");
+    }
   }, [selected?.id]);
 
   useEffect(() => {
@@ -536,6 +589,7 @@ export function useEngineeringProperties(
     setSemanticAdoptedContextKey(currentSemanticTargetKey);
     setBaseline(nextBaseline);
     setWorking(nextWorking);
+    setPreviousRunBaseline(null);
     setUndoStack((stack) => stack.map((snapshot) => withSemanticGeometry(snapshot, semanticSource)));
     setRevision((current) => current + 1);
     setPreview(null);
@@ -620,6 +674,80 @@ export function useEngineeringProperties(
     setRunResult(null);
   };
 
+  const previousRunLoadability = (run: SimulationRunDetail): PreviousRunLoadability => {
+    if (!workspaceId) return { loadable: false, reason: "Run did not succeed" };
+    const result = reconstructPreviousRunBaseline(workspaceId, run, eligible);
+    if (!result.loadable) return result;
+    const implementation = eligible.find((item) => item.id === result.baseline.modelVersionId) ?? null;
+    const contract = semanticContractOf(implementation);
+    const hasObjectSpecificVariables = Boolean(contract?.variables.some((variable) => (variable.applicable_part_kinds?.length ?? 0) > 0));
+    if (hasObjectSpecificVariables && !reviewedContractForTarget(implementation, semanticTarget)) {
+      return { loadable: false, reason: "Current engineering target is incompatible" };
+    }
+    return result;
+  };
+
+  const adoptPreviousRunBaseline = (nextBaseline: PreviousRunBaseline): PreviousRunApplyResult => {
+    if (
+      !workspaceId ||
+      nextBaseline.workspaceId !== workspaceId ||
+      selectedIdRef.current !== nextBaseline.modelVersionId ||
+      selected?.input_contract_sha256 !== nextBaseline.contractDigest
+    ) return { status: "stale" };
+    const next = cloneBindings(nextBaseline.bindings);
+    setBaseline(next);
+    setWorking(next);
+    setPreviousRunBaseline(nextBaseline);
+    setUndoStack([]);
+    setRunResult(null);
+    setRunMessage(null);
+    setPendingRun(null);
+    setRevision((current) => current + 1);
+    setPreview(null);
+    setPreviewPhase("checking");
+    setPreviewMessage(null);
+    previewGeneration.current += 1;
+    if (semanticTarget && semanticSource) {
+      activeSemanticStableKeyRef.current = semanticStableTargetKey(semanticTarget, semanticSource);
+      semanticAdoptionKeyRef.current = null;
+      setSemanticAdoptedContextKey(currentSemanticTargetKey);
+    }
+    return { status: "loaded" };
+  };
+
+  const loadPreviousSuccessfulRun = (
+    run: SimulationRunDetail,
+    expectedRevision: number,
+    replaceDirty = false
+  ): PreviousRunApplyResult => {
+    if (!workspaceId || expectedRevision !== revisionRef.current) return { status: "stale" };
+    const loadability = previousRunLoadability(run);
+    if (!loadability.loadable) return { status: "incompatible", reason: loadability.reason };
+    if (dirtyNames.size > 0 && !replaceDirty) return { status: "confirm-required" };
+    if (expectedRevision !== revisionRef.current) return { status: "stale" };
+
+    const generation = ++previousRunLoadGeneration.current;
+    if (loadability.baseline.modelVersionId === selectedIdRef.current) {
+      pendingPreviousRunLoadRef.current = null;
+      return adoptPreviousRunBaseline(loadability.baseline);
+    }
+
+    pendingPreviousRunLoadRef.current = {
+      generation,
+      expectedRevision,
+      baseline: loadability.baseline
+    };
+    setSelectedIdState(loadability.baseline.modelVersionId);
+    return { status: "pending-model-switch" };
+  };
+
+  const setSelectedId = (value: string) => {
+    previousRunLoadGeneration.current += 1;
+    pendingPreviousRunLoadRef.current = null;
+    setPreviousRunBaseline(null);
+    setSelectedIdState(value);
+  };
+
   const applyWorkingAction = (action: EngineeringWorkingAction): EngineeringActionApplyResult => {
     if (
       !workspaceId ||
@@ -699,6 +827,7 @@ export function useEngineeringProperties(
     const nextWorking = withSemanticGeometry(working, semanticSource);
     setBaseline(nextBaseline);
     setWorking(nextWorking);
+    setPreviousRunBaseline(null);
     setUndoStack((stack) => stack.map((snapshot) => withSemanticGeometry(snapshot, semanticSource)));
     pendingPreviousTargetKeyRef.current = null;
     activeSemanticStableKeyRef.current = stableKey;
@@ -733,6 +862,7 @@ export function useEngineeringProperties(
           setPendingRun(null);
           if (revisionRef.current === snapshot.revision && selectedIdRef.current === selected?.id) {
             setBaseline(cloneBindings(snapshot.bindings));
+            setPreviousRunBaseline(null);
             setUndoStack([]);
           }
           setRunMessage("Run already completed successfully. Canonical project records were not changed.");
@@ -756,6 +886,7 @@ export function useEngineeringProperties(
       if (result.runner_job.status === "succeeded") {
         if (revisionRef.current === snapshot.revision && selectedIdRef.current === selected?.id) {
           setBaseline(cloneBindings(snapshot.bindings));
+          setPreviousRunBaseline(null);
           setUndoStack([]);
         }
         setRunMessage("Run completed. Canonical project records were not changed.");
@@ -808,10 +939,13 @@ export function useEngineeringProperties(
     implementations: eligible,
     selected,
     selectedId,
-    setSelectedId: setSelectedIdState,
+    setSelectedId,
     parameters,
     baseline,
     working,
+    previousRunBaseline,
+    previousRunLoadability,
+    loadPreviousSuccessfulRun,
     preview,
     previewPhase,
     previewMessage,
@@ -939,9 +1073,14 @@ export function EngineeringPropertiesPanel({
     const isDirty = controller.dirtyNames.has(variable.name);
     const isRequiredMissing = Boolean(variable.required && variablePreview?.binding_state === "missing");
     const isInvalid = variablePreview?.binding_state === "invalid" || (binding.value.trim() !== "" && !Number.isFinite(Number(binding.value)));
+    const fromPreviousRun = Boolean(
+      controller.previousRunBaseline &&
+      !isDirty &&
+      sameBinding(binding, controller.baseline[variable.name])
+    );
     const source = binding.parameterId
       ? `Linked parameter · ${linkedParameter?.name ?? "linked source"}`
-      : binding.value.trim() ? "Working override" : "Empty";
+      : binding.value.trim() ? (fromPreviousRun ? "Previous successful run" : "Working override") : "Empty";
     return (
       <div className="scenario-variable" key={variable.name}>
         <div>
@@ -1005,6 +1144,10 @@ export function EngineeringPropertiesPanel({
     return <InlineNotice tone="neutral">No workspace is available for engineering Properties.</InlineNotice>;
   }
 
+  const baselineLabel = controller.previousRunBaseline
+    ? `${controller.previousRunBaseline.runLabel} · Previous successful run`
+    : "current bindings";
+
   return (
     <div className="engineering-properties">
       {controller.implementations.length === 0 ? (
@@ -1048,7 +1191,7 @@ export function EngineeringPropertiesPanel({
             {controller.previewPhase === "ready" && controller.preview?.state === "ready" ? <strong>Ready</strong> : null}
             {blockers > 0 ? <strong>{blockers} blocker{blockers === 1 ? "" : "s"}</strong> : null}
             {controller.previewPhase === "unavailable" ? <strong>Preflight unavailable</strong> : null}
-            {controller.dirtyNames.size > 0 ? <span>{controller.dirtyNames.size} unsaved change{controller.dirtyNames.size === 1 ? "" : "s"} · Baseline: current bindings</span> : <span>Baseline: current bindings</span>}
+            {controller.dirtyNames.size > 0 ? <span>{controller.dirtyNames.size} unsaved change{controller.dirtyNames.size === 1 ? "" : "s"} · Baseline: {baselineLabel}</span> : <span>Baseline: {baselineLabel}</span>}
           </div>
           {controller.previewMessage ? <div className="error-banner">{controller.previewMessage}</div> : null}
           {blockers > 0 ? <button type="button" className="secondary-button" onClick={goToFirstIssue}>Go to first issue</button> : null}
@@ -1105,6 +1248,15 @@ export function EngineeringPropertiesPanel({
             <div><dt>Basis</dt><dd>Reviewed 047 CAD link</dd></div>
             <div><dt>Source run</dt><dd>{controller.semanticSource.source_simulation_run_id}</dd></div>
             <div><dt>Source model</dt><dd>{controller.semanticSource.source_model_version_id}</dd></div>
+          </dl>
+        </details>
+      ) : null}
+      {controller.previousRunBaseline ? (
+        <details className="shell-properties__inspect">
+          <summary>Previous run baseline</summary>
+          <dl className="details">
+            <div><dt>Run</dt><dd>{controller.previousRunBaseline.runLabel}</dd></div>
+            <div><dt>Run id</dt><dd>{controller.previousRunBaseline.runId}</dd></div>
           </dl>
         </details>
       ) : null}

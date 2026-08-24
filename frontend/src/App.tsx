@@ -61,7 +61,7 @@ function App() {
         content = <section className="shell-home" aria-labelledby="shell-home-title"><header className="shell-home__header"><p className="eyebrow">Application shell</p><h1 id="shell-home-title">Home</h1></header><div className="shell-home__content"><Dashboard /></div></section>;
         break;
       case "runs":
-        content = <RunsWorkbench workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} />;
+        content = <RunsWorkbench workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} engineeringProperties={engineeringProperties} />;
         break;
       case "engineering-data":
         content = <EngineeringData workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} navigate={navigate} />;

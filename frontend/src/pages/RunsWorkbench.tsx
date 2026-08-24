@@ -2,14 +2,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { listWorkspaces, type Workspace } from "../api/client";
 import { RunsRequestError, getRun, listRunArtifacts, listRunLogs, listRuns, type RunArtifact, type RunLog, type SimulationRunDetail, type SimulationRunSummary } from "../api/runs";
+import type { EngineeringPropertiesController } from "../components/engineering/EngineeringProperties";
 import { acceptsResponse, chooseSelection, projectPayload, visibleRuns } from "../components/runs/state";
 
 type Props = {
   workspaceId: string | null;
   onWorkspaceChange(next: string | null): void;
+  engineeringProperties: EngineeringPropertiesController;
 };
 
 type LoadState = "idle" | "loading" | "ready" | "error";
+type PreviousRunConfirmation = Readonly<{ runId: string; revision: number }>;
 
 function fmt(value: string | null): string {
   if (!value) return "—";
@@ -17,7 +20,7 @@ function fmt(value: string | null): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-function RunsWorkbench({ workspaceId, onWorkspaceChange }: Props) {
+function RunsWorkbench({ workspaceId, onWorkspaceChange, engineeringProperties }: Props) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceState, setWorkspaceState] = useState<LoadState>("loading");
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
@@ -36,6 +39,8 @@ function RunsWorkbench({ workspaceId, onWorkspaceChange }: Props) {
   const [artifactsError, setArtifactsError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [previousRunConfirmation, setPreviousRunConfirmation] = useState<PreviousRunConfirmation | null>(null);
+  const [previousRunMessage, setPreviousRunMessage] = useState<string | null>(null);
 
   const workspaceGeneration = useRef(0);
   const listGeneration = useRef(0);
@@ -68,6 +73,8 @@ function RunsWorkbench({ workspaceId, onWorkspaceChange }: Props) {
     setDetailError(null);
     setLogsError(null);
     setArtifactsError(null);
+    setPreviousRunConfirmation(null);
+    setPreviousRunMessage(null);
     pendingRefreshFocus.current = null;
   };
 
@@ -197,6 +204,8 @@ function RunsWorkbench({ workspaceId, onWorkspaceChange }: Props) {
     setDetail(null);
     setLogs([]);
     setArtifacts([]);
+    setPreviousRunConfirmation(null);
+    setPreviousRunMessage(null);
     if (workspaceId && selectedId) {
       loadDetail(workspaceId, selectedId);
       loadLogs(workspaceId, selectedId);
@@ -207,6 +216,42 @@ function RunsWorkbench({ workspaceId, onWorkspaceChange }: Props) {
   const statuses = useMemo(() => Array.from(new Set(runs.map((run) => run.status))).sort(), [runs]);
   const filtered = useMemo(() => visibleRuns(runs, query, statusFilter), [runs, query, statusFilter]);
   const hiddenSelection = Boolean(selectedId && !filtered.some((run) => run.id === selectedId));
+  const previousRunLoadability = detail ? engineeringProperties.previousRunLoadability(detail) : null;
+
+  const handleLoadResult = (result: ReturnType<EngineeringPropertiesController["loadPreviousSuccessfulRun"]>) => {
+    if (result.status === "confirm-required") return;
+    setPreviousRunConfirmation(null);
+    if (result.status === "loaded") {
+      setPreviousRunMessage("Loaded as working configuration. Deterministic preflight is checking the restored snapshot.");
+    } else if (result.status === "pending-model-switch") {
+      setPreviousRunMessage("Switching to the run's exact model contract before applying the working configuration.");
+    } else if (result.status === "stale") {
+      setPreviousRunMessage("Working configuration changed before load completed. Nothing was replaced.");
+    } else {
+      setPreviousRunMessage(result.reason);
+    }
+  };
+
+  const requestPreviousRunLoad = () => {
+    if (!detail || !previousRunLoadability?.loadable) return;
+    const expectedRevision = engineeringProperties.revision;
+    const result = engineeringProperties.loadPreviousSuccessfulRun(detail, expectedRevision);
+    if (result.status === "confirm-required") {
+      setPreviousRunConfirmation({ runId: detail.id, revision: expectedRevision });
+      setPreviousRunMessage(null);
+      return;
+    }
+    handleLoadResult(result);
+  };
+
+  const confirmPreviousRunLoad = () => {
+    if (!detail || !previousRunConfirmation || previousRunConfirmation.runId !== detail.id) {
+      setPreviousRunConfirmation(null);
+      setPreviousRunMessage("Selected run changed before confirmation. Nothing was replaced.");
+      return;
+    }
+    handleLoadResult(engineeringProperties.loadPreviousSuccessfulRun(detail, previousRunConfirmation.revision, true));
+  };
 
   if (workspaceState === "error") return <section className="runs-empty"><h1>Runs</h1><p>Workspace discovery failed: {workspaceError}</p><button onClick={loadWorkspaces}>Retry</button></section>;
   if (workspaceState === "loading") return <section className="runs-empty"><h1>Runs</h1><p>Loading workspaces…</p></section>;
@@ -239,6 +284,22 @@ function RunsWorkbench({ workspaceId, onWorkspaceChange }: Props) {
           {detail && <>
             <header className="run-detail__header"><div><p className="eyebrow">Persisted run</p><h2>{detail.run_label || "Unnamed run"}</h2></div><strong className="run-status">{detail.status}</strong></header>
             <dl className="run-facts"><div><dt>Created</dt><dd>{fmt(detail.created_at)}</dd></div><div><dt>Started</dt><dd>{fmt(detail.started_at)}</dd></div><div><dt>Completed</dt><dd>{fmt(detail.completed_at)}</dd></div></dl>
+            <section className="run-evidence" aria-label="Working configuration action">
+              <header><h3>Working configuration</h3></header>
+              {previousRunLoadability?.loadable ? (
+                <button type="button" onClick={requestPreviousRunLoad}>Load as working configuration</button>
+              ) : (
+                <p>{previousRunLoadability?.reason ?? "This run cannot be loaded as a working configuration."}</p>
+              )}
+              {previousRunConfirmation ? (
+                <div className="runs-inline-error" role="alert">
+                  <p>Current unsaved working edits will be replaced. This does not change canonical project records.</p>
+                  <button type="button" onClick={confirmPreviousRunLoad}>Replace unsaved changes</button>
+                  <button type="button" onClick={() => setPreviousRunConfirmation(null)}>Cancel</button>
+                </div>
+              ) : null}
+              {previousRunMessage ? <p aria-live="polite">{previousRunMessage}</p> : null}
+            </section>
             {detail.notes && <p className="run-notes">{detail.notes}</p>}
             <details className="run-technical"><summary>Technical details</summary><dl className="run-facts"><div><dt>Run id</dt><dd className="technical-token">{detail.id}</dd></div><div><dt>Model version id</dt><dd className="technical-token">{detail.model_version_id ?? "—"}</dd></div></dl></details>
             <Payload title="Inputs" projection={projectPayload(detail.input_payload, "input")} />
