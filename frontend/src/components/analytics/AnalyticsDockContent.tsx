@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { listModelImplementations, type ModelImplementation } from "../../api/client";
 import { listRuns, type SimulationRunSummary } from "../../api/runs";
 import {
   MAX_SELECTED_RUNS,
   acceptsWorkspaceResponse,
   compareAnalyticsRuns,
+  compareEngineeringConfigurations,
+  normalizeBaselineRunId,
   retainExistingSelection,
   toggleRunSelection,
 } from "./analyticsState";
+import { sourceRunHref } from "./variantComparisonNavigation";
 
 type Props = Readonly<{ workspaceId: string | null }>;
 type LoadState = "idle" | "loading" | "ready" | "error";
@@ -16,15 +20,24 @@ function formatNumber(value: number): string {
   return String(value);
 }
 
+function formatDelta(value: number | null): string {
+  if (value === null) return "—";
+  if (value === 0) return "No change";
+  return `${value > 0 ? "+" : ""}${formatNumber(value)}`;
+}
+
 function boundedRunLabel(run: SimulationRunSummary): string {
   return Array.from(run.run_label?.trim() || run.id).slice(0, 160).join("");
 }
 
 function AnalyticsDockContent({ workspaceId }: Props) {
   const [runs, setRuns] = useState<SimulationRunSummary[]>([]);
+  const [implementations, setImplementations] = useState<ModelImplementation[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [baselineRunId, setBaselineRunId] = useState<string | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [modelError, setModelError] = useState<string | null>(null);
   const generationRef = useRef(0);
   const workspaceRef = useRef(workspaceId);
   workspaceRef.current = workspaceId;
@@ -33,31 +46,55 @@ function AnalyticsDockContent({ workspaceId }: Props) {
     const generation = ++generationRef.current;
     setLoadState("loading");
     setError(null);
-    void listRuns(targetWorkspace).then((rows) => {
+    setModelError(null);
+    setImplementations([]);
+    void Promise.allSettled([listRuns(targetWorkspace), listModelImplementations(targetWorkspace)]).then(([runResult, modelResult]) => {
       if (!acceptsWorkspaceResponse({ generation, identity: targetWorkspace }, generationRef.current, workspaceRef.current ?? "")) return;
-      setRuns(rows);
-      setSelectedIds((current) => retainExistingSelection(current, rows));
+      if (runResult.status === "rejected") {
+        setRuns([]);
+        setSelectedIds([]);
+        setBaselineRunId(null);
+        setImplementations([]);
+        setLoadState("error");
+        setError(runResult.reason instanceof Error ? runResult.reason.message : "Persisted run list failed.");
+        return;
+      }
+
+      setRuns(runResult.value);
+      setSelectedIds((current) => retainExistingSelection(current, runResult.value));
+      if (modelResult.status === "fulfilled") {
+        setImplementations(modelResult.value);
+      } else {
+        setImplementations([]);
+        setModelError(modelResult.reason instanceof Error ? modelResult.reason.message : "Model contracts unavailable.");
+      }
       setLoadState("ready");
-    }).catch((cause: Error) => {
-      if (!acceptsWorkspaceResponse({ generation, identity: targetWorkspace }, generationRef.current, workspaceRef.current ?? "")) return;
-      setRuns([]);
-      setSelectedIds([]);
-      setLoadState("error");
-      setError(cause.message);
     });
   };
 
   useEffect(() => {
     generationRef.current += 1;
     setRuns([]);
+    setImplementations([]);
     setSelectedIds([]);
+    setBaselineRunId(null);
     setError(null);
+    setModelError(null);
     setLoadState(workspaceId ? "loading" : "idle");
     if (workspaceId) load(workspaceId);
   }, [workspaceId]);
 
+  useEffect(() => {
+    setBaselineRunId((current) => normalizeBaselineRunId(selectedIds, current));
+  }, [selectedIds]);
+
   const selectedRuns = useMemo(() => selectedIds.map((id) => runs.find((run) => run.id === id)).filter((run): run is SimulationRunSummary => Boolean(run)), [runs, selectedIds]);
   const comparison = useMemo(() => compareAnalyticsRuns(selectedRuns), [selectedRuns]);
+  const visibleBaselineRunId = normalizeBaselineRunId(selectedIds, baselineRunId);
+  const configuration = useMemo(
+    () => workspaceId ? compareEngineeringConfigurations(workspaceId, selectedRuns, implementations, visibleBaselineRunId) : null,
+    [workspaceId, selectedRuns, implementations, visibleBaselineRunId]
+  );
   const capReached = selectedIds.length >= MAX_SELECTED_RUNS;
 
   if (!workspaceId) return <div className="analytics-dock-content"><p className="analytics-empty">Analytics unavailable until a workspace is selected.</p></div>;
@@ -84,8 +121,31 @@ function AnalyticsDockContent({ workspaceId }: Props) {
         {capReached && <p className="analytics-help">Six-run comparison limit reached. Remove a selected run to choose another.</p>}
       </section>}
 
+      {selectedRuns.length >= 2 && visibleBaselineRunId && <fieldset className="analytics-selection">
+        <legend>Comparison baseline</legend>
+        <p className="analytics-help">Baseline applies to engineering configuration and remains available when configuration evidence is unavailable but recorded results are still comparable.</p>
+        <div className="analytics-run-list">{selectedRuns.map((run) => <label key={run.id} className="analytics-run-row"><input type="radio" name="analytics-baseline" checked={visibleBaselineRunId === run.id} onChange={() => setBaselineRunId(run.id)} /><span><strong>{boundedRunLabel(run)}</strong>{visibleBaselineRunId === run.id && <small>Baseline</small>}</span></label>)}</div>
+      </fieldset>}
+
+      {selectedRuns.length > 0 && <section className="analytics-results" aria-labelledby="analytics-source-runs-title">
+        <h4 id="analytics-source-runs-title">Source runs</h4>
+        <div className="analytics-run-list">{selectedRuns.map((run) => <a key={run.id} href={sourceRunHref(workspaceId, run.id)}>Open {boundedRunLabel(run)}</a>)}</div>
+      </section>}
+
+      <section className="analytics-results" aria-live="polite" aria-labelledby="analytics-configuration-title">
+        <h4 id="analytics-configuration-title">Engineering configuration</h4>
+        {modelError && selectedIds.length >= 2 && <p className="analytics-rejection">Model contracts unavailable: {modelError}</p>}
+        {!modelError && configuration?.message && <p className={configuration.state === "rejected" ? "analytics-rejection" : "analytics-help"}>{configuration.message}</p>}
+        {!modelError && configuration?.state === "ready" && configuration.baselineRunId && <>
+          <div className="analytics-table-wrap"><table><thead><tr><th scope="col">Engineering input</th>{selectedRuns.map((run) => <th scope="col" key={run.id}>{boundedRunLabel(run)}{configuration.baselineRunId === run.id ? " · Baseline" : ""}</th>)}</tr></thead><tbody>
+            {configuration.modelChoice && <tr><th scope="row">{configuration.modelChoice.familyLabel}<small className="technical-token">{configuration.modelChoice.familyKey}</small><small>Model choice</small></th>{selectedRuns.map((run) => <td key={run.id}><span>{configuration.modelChoice?.optionLabel}</span><small>{run.id === configuration.baselineRunId ? "Baseline model" : "Same exact model version"}</small></td>)}</tr>}
+            {configuration.rows.map((row) => <tr key={row.name}><th scope="row">{row.label}<small className="technical-token">{row.name}</small><small>{row.unit}</small></th>{row.cells.map((cell) => <td key={cell.runId}><span>{cell.displayValue}{cell.value !== null ? ` ${row.unit}` : ""}</span><small>{cell.runId === configuration.baselineRunId ? "Baseline" : `Δ ${formatDelta(cell.delta)}${cell.delta !== null ? ` ${row.unit}` : ""}`}</small></td>)}</tr>)}
+          </tbody></table></div>
+        </>}
+      </section>
+
       <section className="analytics-results" aria-live="polite" aria-labelledby="analytics-results-title">
-        <h4 id="analytics-results-title">Comparison</h4>
+        <h4 id="analytics-results-title">Recorded results</h4>
         {comparison.message && <p className={comparison.state === "rejected" ? "analytics-rejection" : "analytics-help"}>{comparison.message}</p>}
         {comparison.groups.length > 0 && <div className="analytics-groups">{comparison.groups.map((group) => group.state === "rejected" ? (
           <article key={group.key} className="analytics-group analytics-group--rejected"><header><strong className="technical-token">{group.key}</strong><span>Rejected</span></header><p>{group.reason}</p></article>
