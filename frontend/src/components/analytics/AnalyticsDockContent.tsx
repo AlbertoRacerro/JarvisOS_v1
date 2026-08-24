@@ -11,6 +11,7 @@ import {
   retainExistingSelection,
   toggleRunSelection,
 } from "./analyticsState";
+import { sourceRunHref } from "./variantComparisonNavigation";
 
 type Props = Readonly<{ workspaceId: string | null }>;
 type LoadState = "idle" | "loading" | "ready" | "error";
@@ -89,9 +90,10 @@ function AnalyticsDockContent({ workspaceId }: Props) {
 
   const selectedRuns = useMemo(() => selectedIds.map((id) => runs.find((run) => run.id === id)).filter((run): run is SimulationRunSummary => Boolean(run)), [runs, selectedIds]);
   const comparison = useMemo(() => compareAnalyticsRuns(selectedRuns), [selectedRuns]);
+  const visibleBaselineRunId = normalizeBaselineRunId(selectedIds, baselineRunId);
   const configuration = useMemo(
-    () => workspaceId ? compareEngineeringConfigurations(workspaceId, selectedRuns, implementations, baselineRunId) : null,
-    [workspaceId, selectedRuns, implementations, baselineRunId]
+    () => workspaceId ? compareEngineeringConfigurations(workspaceId, selectedRuns, implementations, visibleBaselineRunId) : null,
+    [workspaceId, selectedRuns, implementations, visibleBaselineRunId]
   );
   const capReached = selectedIds.length >= MAX_SELECTED_RUNS;
 
@@ -119,13 +121,26 @@ function AnalyticsDockContent({ workspaceId }: Props) {
         {capReached && <p className="analytics-help">Six-run comparison limit reached. Remove a selected run to choose another.</p>}
       </section>}
 
+      {selectedRuns.length >= 2 && visibleBaselineRunId && <fieldset className="analytics-selection">
+        <legend>Comparison baseline</legend>
+        <p className="analytics-help">Baseline applies to engineering configuration and remains available when configuration evidence is unavailable but recorded results are still comparable.</p>
+        <div className="analytics-run-list">{selectedRuns.map((run) => <label key={run.id} className="analytics-run-row"><input type="radio" name="analytics-baseline" checked={visibleBaselineRunId === run.id} onChange={() => setBaselineRunId(run.id)} /><span><strong>{boundedRunLabel(run)}</strong>{visibleBaselineRunId === run.id && <small>Baseline</small>}</span></label>)}</div>
+      </fieldset>}
+
+      {selectedRuns.length > 0 && <section className="analytics-results" aria-labelledby="analytics-source-runs-title">
+        <h4 id="analytics-source-runs-title">Source runs</h4>
+        <div className="analytics-run-list">{selectedRuns.map((run) => <a key={run.id} href={sourceRunHref(workspaceId, run.id)}>Open {boundedRunLabel(run)}</a>)}</div>
+      </section>}
+
       <section className="analytics-results" aria-live="polite" aria-labelledby="analytics-configuration-title">
-        <div className="analytics-section-heading"><h4 id="analytics-configuration-title">Engineering configuration</h4><a href="/runs">Open source runs</a></div>
+        <h4 id="analytics-configuration-title">Engineering configuration</h4>
         {modelError && selectedIds.length >= 2 && <p className="analytics-rejection">Model contracts unavailable: {modelError}</p>}
         {!modelError && configuration?.message && <p className={configuration.state === "rejected" ? "analytics-rejection" : "analytics-help"}>{configuration.message}</p>}
         {!modelError && configuration?.state === "ready" && configuration.baselineRunId && <>
-          <fieldset className="analytics-selection"><legend>Comparison baseline</legend><div className="analytics-run-list">{selectedRuns.map((run) => <label key={run.id} className="analytics-run-row"><input type="radio" name="analytics-baseline" checked={configuration.baselineRunId === run.id} onChange={() => setBaselineRunId(run.id)} /><span><strong>{boundedRunLabel(run)}</strong>{configuration.baselineRunId === run.id && <small>Baseline</small>}</span></label>)}</div></fieldset>
-          <div className="analytics-table-wrap"><table><thead><tr><th scope="col">Engineering input</th>{selectedRuns.map((run) => <th scope="col" key={run.id}>{boundedRunLabel(run)}{configuration.baselineRunId === run.id ? " · Baseline" : ""}</th>)}</tr></thead><tbody>{configuration.rows.map((row) => <tr key={row.name}><th scope="row">{row.label}<small className="technical-token">{row.name}</small><small>{row.unit}</small></th>{row.cells.map((cell) => <td key={cell.runId}><span>{cell.displayValue}{cell.value !== null ? ` ${row.unit}` : ""}</span><small>{cell.runId === configuration.baselineRunId ? "Baseline" : `Δ ${formatDelta(cell.delta)}${cell.delta !== null ? ` ${row.unit}` : ""}`}</small></td>)}</tr>)}</tbody></table></div>
+          <div className="analytics-table-wrap"><table><thead><tr><th scope="col">Engineering input</th>{selectedRuns.map((run) => <th scope="col" key={run.id}>{boundedRunLabel(run)}{configuration.baselineRunId === run.id ? " · Baseline" : ""}</th>)}</tr></thead><tbody>
+            {configuration.modelChoice && <tr><th scope="row">{configuration.modelChoice.familyLabel}<small className="technical-token">{configuration.modelChoice.familyKey}</small><small>Model choice</small></th>{selectedRuns.map((run) => <td key={run.id}><span>{configuration.modelChoice?.optionLabel}</span><small>{run.id === configuration.baselineRunId ? "Baseline model" : "Same exact model version"}</small></td>)}</tr>}
+            {configuration.rows.map((row) => <tr key={row.name}><th scope="row">{row.label}<small className="technical-token">{row.name}</small><small>{row.unit}</small></th>{row.cells.map((cell) => <td key={cell.runId}><span>{cell.displayValue}{cell.value !== null ? ` ${row.unit}` : ""}</span><small>{cell.runId === configuration.baselineRunId ? "Baseline" : `Δ ${formatDelta(cell.delta)}${cell.delta !== null ? ` ${row.unit}` : ""}`}</small></td>)}</tr>)}
+          </tbody></table></div>
         </>}
       </section>
 
