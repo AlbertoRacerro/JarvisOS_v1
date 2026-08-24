@@ -1,6 +1,6 @@
 import type { ModelImplementation } from "../../api/client";
 import type { SimulationRunSummary } from "../../api/runs";
-import { reconstructPreviousRunBaseline } from "../engineering/previousRunLoad";
+import { reconstructPreviousRunBaseline, type PreviousRunBaseline } from "../engineering/previousRunLoad";
 
 export type AnalyticsRun = Readonly<{
   id: string;
@@ -56,7 +56,6 @@ type ConfigurationVariable = Readonly<{
   name: string;
   label: string;
   unit: string;
-  required: boolean;
 }>;
 
 export const MAX_SELECTED_RUNS = 6;
@@ -210,7 +209,7 @@ function configurationVariables(implementation: ModelImplementation): Configurat
     ) return null;
     if (label !== undefined && (typeof label !== "string" || codePointLength(label) > MAX_CONFIGURATION_NAME_LENGTH)) return null;
     names.add(name);
-    variables.push({ name, label: typeof label === "string" && label.trim() ? label.trim() : name, unit, required });
+    variables.push({ name, label: typeof label === "string" && label.trim() ? label.trim() : name, unit });
   }
   return variables;
 }
@@ -241,7 +240,7 @@ export function compareEngineeringConfigurations(
   const variables = configurationVariables(implementation);
   if (!variables) return configurationReject("Engineering configuration is unavailable because the exact input contract is missing, malformed, or exceeds comparison bounds.", baselineRunId);
 
-  const baselines = new Map<string, ReturnType<typeof reconstructPreviousRunBaseline> extends { loadable: true; baseline: infer T } ? T : never>();
+  const baselines = new Map<string, PreviousRunBaseline>();
   for (const run of runs) {
     if (run.input_payload === null || new TextEncoder().encode(run.input_payload).length > MAX_CONFIGURATION_PAYLOAD_BYTES) {
       return configurationReject(`${labelFor(run)}: persisted input snapshot is missing or exceeds the 1 MiB comparison limit.`, baselineRunId);
