@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { listWorkspaces, type Workspace } from "../api/client";
 import { RunsRequestError, getRun, listRunArtifacts, listRunLogs, listRuns, type RunArtifact, type RunLog, type SimulationRunDetail, type SimulationRunSummary } from "../api/runs";
+import { parseSourceRunTarget, type SourceRunTarget } from "../components/analytics/variantComparisonNavigation";
 import type { EngineeringPropertiesController } from "../components/engineering/EngineeringProperties";
 import { acceptsResponse, chooseSelection, projectPayload, visibleRuns } from "../components/runs/state";
 
@@ -18,6 +19,10 @@ function fmt(value: string | null): string {
   if (!value) return "—";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function initialSourceRunTarget(): SourceRunTarget | null {
+  return typeof window === "undefined" ? null : parseSourceRunTarget(window.location.search);
 }
 
 function RunsWorkbench({ workspaceId, onWorkspaceChange, engineeringProperties }: Props) {
@@ -52,6 +57,7 @@ function RunsWorkbench({ workspaceId, onWorkspaceChange, engineeringProperties }
   const searchRef = useRef<HTMLInputElement>(null);
   const runRefs = useRef(new Map<string, HTMLButtonElement>());
   const pendingRefreshFocus = useRef<{ runId: string | null } | null>(null);
+  const pendingSourceRun = useRef<SourceRunTarget | null>(initialSourceRunTarget());
   currentWorkspace.current = workspaceId;
   currentRun.current = selectedId;
 
@@ -78,7 +84,8 @@ function RunsWorkbench({ workspaceId, onWorkspaceChange, engineeringProperties }
     pendingRefreshFocus.current = null;
   };
 
-  const changeWorkspace = (next: string | null) => {
+  const changeWorkspace = (next: string | null, preserveSourceTarget = false) => {
+    if (!preserveSourceTarget) pendingSourceRun.current = null;
     clearRunState();
     onWorkspaceChange(next);
   };
@@ -91,6 +98,16 @@ function RunsWorkbench({ workspaceId, onWorkspaceChange, engineeringProperties }
       if (!acceptsResponse({ generation, identity: "workspaces" }, workspaceGeneration.current, "workspaces")) return;
       setWorkspaces(rows);
       setWorkspaceState("ready");
+
+      const sourceTarget = pendingSourceRun.current;
+      if (sourceTarget) {
+        if (rows.some((row) => row.id === sourceTarget.workspaceId)) {
+          if (currentWorkspace.current !== sourceTarget.workspaceId) changeWorkspace(sourceTarget.workspaceId, true);
+          return;
+        }
+        pendingSourceRun.current = null;
+      }
+
       const activeWorkspace = currentWorkspace.current;
       const valid = activeWorkspace !== null && rows.some((row) => row.id === activeWorkspace);
       if (!valid) changeWorkspace(rows[0]?.id ?? null);
@@ -110,13 +127,18 @@ function RunsWorkbench({ workspaceId, onWorkspaceChange, engineeringProperties }
     setRunsError(null);
     void listRuns(targetWorkspace).then((rows) => {
       if (!acceptsResponse({ generation, identity: targetWorkspace }, listGeneration.current, currentWorkspace.current ?? "")) return;
+      const sourceTarget = pendingSourceRun.current;
+      const sourceRunId = sourceTarget?.workspaceId === targetWorkspace && rows.some((row) => row.id === sourceTarget.runId)
+        ? sourceTarget.runId
+        : null;
       setRuns(rows);
       setRunsState("ready");
       setSelectedId((current) => {
-        const next = chooseSelection(current, rows);
+        const next = sourceRunId ?? chooseSelection(current, rows);
         if (focusedRunId && !rows.some((row) => row.id === focusedRunId)) pendingRefreshFocus.current = { runId: next };
         return next;
       });
+      if (sourceTarget?.workspaceId === targetWorkspace) pendingSourceRun.current = null;
     }).catch((error: Error) => {
       if (!acceptsResponse({ generation, identity: targetWorkspace }, listGeneration.current, currentWorkspace.current ?? "")) return;
       setRuns([]);
