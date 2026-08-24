@@ -1,3 +1,7 @@
+import type { ModelImplementation } from "../../api/client";
+import type { SimulationRunSummary } from "../../api/runs";
+import { reconstructPreviousRunBaseline } from "../engineering/previousRunLoad";
+
 export type AnalyticsRun = Readonly<{
   id: string;
   model_version_id: string | null;
@@ -28,11 +32,41 @@ export type ComparisonResult = Readonly<{
   groups: readonly ComparisonGroup[];
 }>;
 
+export type ConfigurationCell = Readonly<{
+  runId: string;
+  runLabel: string;
+  value: number | null;
+  displayValue: string;
+  delta: number | null;
+}>;
+export type ConfigurationRow = Readonly<{
+  name: string;
+  label: string;
+  unit: string;
+  cells: readonly ConfigurationCell[];
+}>;
+export type ConfigurationComparison = Readonly<{
+  state: "instruction" | "rejected" | "ready";
+  message: string | null;
+  baselineRunId: string | null;
+  rows: readonly ConfigurationRow[];
+}>;
+
+type ConfigurationVariable = Readonly<{
+  name: string;
+  label: string;
+  unit: string;
+  required: boolean;
+}>;
+
 export const MAX_SELECTED_RUNS = 6;
 export const MAX_OUTPUT_KEYS = 128;
 export const MAX_OUTPUT_KEY_LENGTH = 160;
 export const MAX_UNIT_LENGTH = 64;
 export const MAX_OUTPUT_PAYLOAD_BYTES = 1_048_576;
+export const MAX_CONFIGURATION_VARIABLES = 128;
+export const MAX_CONFIGURATION_NAME_LENGTH = 160;
+export const MAX_CONFIGURATION_PAYLOAD_BYTES = 1_048_576;
 
 export function acceptsWorkspaceResponse(request: RequestContext, currentGeneration: number, currentWorkspace: string): boolean {
   return request.generation === currentGeneration && request.identity === currentWorkspace;
@@ -112,6 +146,11 @@ export function toggleRunSelection(selectedIds: readonly string[], runId: string
   return [...selectedIds, runId];
 }
 
+export function normalizeBaselineRunId(selectedIds: readonly string[], currentBaselineRunId: string | null): string | null {
+  if (currentBaselineRunId && selectedIds.includes(currentBaselineRunId)) return currentBaselineRunId;
+  return selectedIds[0] ?? null;
+}
+
 export function compareAnalyticsRuns(runs: readonly AnalyticsRun[]): ComparisonResult {
   const projections = runs.map(projectAnalyticsRun);
   if (runs.length === 0) return { state: "instruction", message: "Select at least two persisted runs to compare.", projections, groups: [] };
@@ -144,4 +183,93 @@ export function compareAnalyticsRuns(runs: readonly AnalyticsRun[]): ComparisonR
 
   if (groups.length === 0) return { state: "rejected", message: "Selected runs contain no trustworthy comparable observations.", projections, groups: [] };
   return { state: "ready", message: null, projections, groups };
+}
+
+function configurationVariables(implementation: ModelImplementation): ConfigurationVariable[] | null {
+  const rawContract = implementation.input_contract as unknown;
+  if (!isRecord(rawContract) || !Array.isArray(rawContract.variables) || !implementation.input_contract_sha256?.trim()) return null;
+  if (rawContract.variables.length > MAX_CONFIGURATION_VARIABLES) return null;
+
+  const variables: ConfigurationVariable[] = [];
+  const names = new Set<string>();
+  for (const rawVariable of rawContract.variables) {
+    if (!isRecord(rawVariable)) return null;
+    const name = rawVariable.name;
+    const label = rawVariable.label;
+    const unit = rawVariable.unit;
+    const required = rawVariable.required;
+    if (
+      typeof name !== "string" ||
+      name.trim().length === 0 ||
+      codePointLength(name) > MAX_CONFIGURATION_NAME_LENGTH ||
+      names.has(name) ||
+      typeof unit !== "string" ||
+      unit.trim().length === 0 ||
+      codePointLength(unit) > MAX_UNIT_LENGTH ||
+      typeof required !== "boolean"
+    ) return null;
+    if (label !== undefined && (typeof label !== "string" || codePointLength(label) > MAX_CONFIGURATION_NAME_LENGTH)) return null;
+    names.add(name);
+    variables.push({ name, label: typeof label === "string" && label.trim() ? label.trim() : name, unit, required });
+  }
+  return variables;
+}
+
+function configurationReject(message: string, baselineRunId: string | null): ConfigurationComparison {
+  return { state: "rejected", message, baselineRunId, rows: [] };
+}
+
+export function compareEngineeringConfigurations(
+  workspaceId: string,
+  runs: readonly SimulationRunSummary[],
+  implementations: readonly ModelImplementation[],
+  requestedBaselineRunId: string | null
+): ConfigurationComparison {
+  const selectedIds = runs.map((run) => run.id);
+  const baselineRunId = normalizeBaselineRunId(selectedIds, requestedBaselineRunId);
+  if (runs.length === 0) return { state: "instruction", message: "Select at least two persisted runs to compare engineering configuration.", baselineRunId, rows: [] };
+  if (runs.length === 1) return { state: "instruction", message: "Select one more persisted run to compare engineering configuration.", baselineRunId, rows: [] };
+  if (runs.length > MAX_SELECTED_RUNS) return configurationReject(`A comparison may include at most ${MAX_SELECTED_RUNS} runs.`, baselineRunId);
+
+  const modelVersionId = runs[0].model_version_id;
+  if (!modelVersionId || runs.some((run) => run.workspace_id !== workspaceId || run.status !== "succeeded" || run.model_version_id !== modelVersionId)) {
+    return configurationReject("Engineering configuration requires succeeded runs from this workspace with one exact model version.", baselineRunId);
+  }
+
+  const implementation = implementations.find((item) => item.id === modelVersionId && item.workspace_id === workspaceId);
+  if (!implementation) return configurationReject("Engineering configuration is unavailable because the exact model version is not available.", baselineRunId);
+  const variables = configurationVariables(implementation);
+  if (!variables) return configurationReject("Engineering configuration is unavailable because the exact input contract is missing, malformed, or exceeds comparison bounds.", baselineRunId);
+
+  const baselines = new Map<string, ReturnType<typeof reconstructPreviousRunBaseline> extends { loadable: true; baseline: infer T } ? T : never>();
+  for (const run of runs) {
+    if (run.input_payload === null || new TextEncoder().encode(run.input_payload).length > MAX_CONFIGURATION_PAYLOAD_BYTES) {
+      return configurationReject(`${labelFor(run)}: persisted input snapshot is missing or exceeds the 1 MiB comparison limit.`, baselineRunId);
+    }
+    const reconstructed = reconstructPreviousRunBaseline(workspaceId, run, implementations);
+    if (!reconstructed.loadable) return configurationReject(`${labelFor(run)}: ${reconstructed.reason}.`, baselineRunId);
+    baselines.set(run.id, reconstructed.baseline);
+  }
+
+  if (!baselineRunId || !baselines.has(baselineRunId)) return configurationReject("Comparison baseline is not part of the selected run set.", baselineRunId);
+
+  const rows: ConfigurationRow[] = variables.map((variable) => {
+    const baselineBinding = baselines.get(baselineRunId)?.bindings[variable.name];
+    const baselineValue = baselineBinding?.value ? Number(baselineBinding.value) : null;
+    const cells = runs.map((run): ConfigurationCell => {
+      const binding = baselines.get(run.id)?.bindings[variable.name];
+      const value = binding?.value ? Number(binding.value) : null;
+      const delta = value !== null && baselineValue !== null ? value - baselineValue : null;
+      return {
+        runId: run.id,
+        runLabel: labelFor(run),
+        value,
+        displayValue: value === null ? "Empty" : String(value),
+        delta
+      };
+    });
+    return { name: variable.name, label: variable.label, unit: variable.unit, cells };
+  });
+
+  return { state: "ready", message: null, baselineRunId, rows };
 }
