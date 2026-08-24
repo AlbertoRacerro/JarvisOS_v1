@@ -22,3 +22,13 @@ export function parseSourceRunTarget(search: string): SourceRunTarget | null {
   if (!validId(workspaceId) || !validId(runId)) return null;
   return { workspaceId, runId };
 }
+
+export function resolveSourceWorkspace(target: SourceRunTarget | null, workspaceIds: readonly string[]): string | null {
+  if (!target) return null;
+  return workspaceIds.includes(target.workspaceId) ? target.workspaceId : null;
+}
+
+export function resolveSourceRun(target: SourceRunTarget | null, workspaceId: string, runIds: readonly string[]): string | null {
+  if (!target || target.workspaceId !== workspaceId) return null;
+  return runIds.includes(target.runId) ? target.runId : null;
+}
