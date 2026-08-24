@@ -43,7 +43,8 @@ function RunsEvidence() {
 }
 
 function EvidenceApp() {
-  return window.location.pathname === "/runs" ? <RunsEvidence /> : <ComparisonEvidence />;
+  const params = new URLSearchParams(window.location.search);
+  return params.get("evidenceRunLanding") === "1" ? <RunsEvidence /> : <ComparisonEvidence />;
 }
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
