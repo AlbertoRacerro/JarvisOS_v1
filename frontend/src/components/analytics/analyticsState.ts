@@ -45,10 +45,16 @@ export type ConfigurationRow = Readonly<{
   unit: string;
   cells: readonly ConfigurationCell[];
 }>;
+export type ConfigurationModelChoice = Readonly<{
+  familyKey: string;
+  familyLabel: string;
+  optionLabel: string;
+}>;
 export type ConfigurationComparison = Readonly<{
   state: "instruction" | "rejected" | "ready";
   message: string | null;
   baselineRunId: string | null;
+  modelChoice: ConfigurationModelChoice | null;
   rows: readonly ConfigurationRow[];
 }>;
 
@@ -214,8 +220,33 @@ function configurationVariables(implementation: ModelImplementation): Configurat
   return variables;
 }
 
+function configurationModelChoice(implementation: ModelImplementation): ConfigurationModelChoice | null {
+  const rawContract = implementation.input_contract as unknown;
+  if (!isRecord(rawContract) || rawContract.schema_version !== 3 || !isRecord(rawContract.semantic_context)) return null;
+  const context = rawContract.semantic_context;
+  if (
+    !Array.isArray(context.applicable_part_kinds) ||
+    context.applicable_part_kinds.length > MAX_CONFIGURATION_VARIABLES ||
+    !context.applicable_part_kinds.every((item) => typeof item === "string" && item.trim().length > 0 && codePointLength(item) <= MAX_CONFIGURATION_NAME_LENGTH) ||
+    typeof context.model_family_key !== "string" ||
+    context.model_family_key.trim().length === 0 ||
+    codePointLength(context.model_family_key) > MAX_CONFIGURATION_NAME_LENGTH ||
+    typeof context.model_family_label !== "string" ||
+    context.model_family_label.trim().length === 0 ||
+    codePointLength(context.model_family_label) > MAX_CONFIGURATION_NAME_LENGTH ||
+    typeof context.model_option_label !== "string" ||
+    context.model_option_label.trim().length === 0 ||
+    codePointLength(context.model_option_label) > MAX_CONFIGURATION_NAME_LENGTH
+  ) return null;
+  return {
+    familyKey: context.model_family_key,
+    familyLabel: context.model_family_label,
+    optionLabel: context.model_option_label
+  };
+}
+
 function configurationReject(message: string, baselineRunId: string | null): ConfigurationComparison {
-  return { state: "rejected", message, baselineRunId, rows: [] };
+  return { state: "rejected", message, baselineRunId, modelChoice: null, rows: [] };
 }
 
 export function compareEngineeringConfigurations(
@@ -226,8 +257,8 @@ export function compareEngineeringConfigurations(
 ): ConfigurationComparison {
   const selectedIds = runs.map((run) => run.id);
   const baselineRunId = normalizeBaselineRunId(selectedIds, requestedBaselineRunId);
-  if (runs.length === 0) return { state: "instruction", message: "Select at least two persisted runs to compare engineering configuration.", baselineRunId, rows: [] };
-  if (runs.length === 1) return { state: "instruction", message: "Select one more persisted run to compare engineering configuration.", baselineRunId, rows: [] };
+  if (runs.length === 0) return { state: "instruction", message: "Select at least two persisted runs to compare engineering configuration.", baselineRunId, modelChoice: null, rows: [] };
+  if (runs.length === 1) return { state: "instruction", message: "Select one more persisted run to compare engineering configuration.", baselineRunId, modelChoice: null, rows: [] };
   if (runs.length > MAX_SELECTED_RUNS) return configurationReject(`A comparison may include at most ${MAX_SELECTED_RUNS} runs.`, baselineRunId);
 
   const modelVersionId = runs[0].model_version_id;
@@ -270,5 +301,5 @@ export function compareEngineeringConfigurations(
     return { name: variable.name, label: variable.label, unit: variable.unit, cells };
   });
 
-  return { state: "ready", message: null, baselineRunId, rows };
+  return { state: "ready", message: null, baselineRunId, modelChoice: configurationModelChoice(implementation), rows };
 }
