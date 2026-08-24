@@ -13,7 +13,7 @@ import {
   toggleRunSelection,
   type AnalyticsRun,
 } from "./analyticsState";
-import { parseSourceRunTarget, sourceRunHref } from "./variantComparisonNavigation";
+import { parseSourceRunTarget, resolveSourceRun, resolveSourceWorkspace, sourceRunHref } from "./variantComparisonNavigation";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -162,6 +162,11 @@ assert(compareEngineeringConfigurations("ws", [configA, { ...configB, input_payl
 const sourceHref = sourceRunHref("workspace A", "run/42");
 const sourceTarget = parseSourceRunTarget(sourceHref.slice(sourceHref.indexOf("?")));
 assert(sourceTarget?.workspaceId === "workspace A" && sourceTarget.runId === "run/42", "source-run deep link did not preserve exact workspace and run identity");
+assert(resolveSourceWorkspace(sourceTarget, ["other", "workspace A"]) === "workspace A", "source-run target did not select its exact available workspace");
+assert(resolveSourceWorkspace(sourceTarget, ["other"]) === null, "missing source workspace did not fail closed");
+assert(resolveSourceRun(sourceTarget, "workspace A", ["other", "run/42"]) === "run/42", "source-run target did not select its exact available run");
+assert(resolveSourceRun(sourceTarget, "other", ["run/42"]) === null, "source run crossed workspace identity");
+assert(resolveSourceRun(sourceTarget, "workspace A", ["other"]) === null, "missing source run did not fail closed");
 assert(parseSourceRunTarget("?workspace=ws") === null, "partial source-run deep link was accepted");
 assert(parseSourceRunTarget("?workspace=ws&run=") === null, "blank source-run identity was accepted");
 assert(parseSourceRunTarget(`?workspace=${"w".repeat(257)}&run=r`) === null, "oversized source-run identity was accepted");
