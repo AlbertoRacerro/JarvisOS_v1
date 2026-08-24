@@ -9,9 +9,11 @@ export type PreviousRunLoadReason =
   | "Model version is no longer available"
   | "Run snapshot is incomplete"
   | "Run snapshot does not match this model contract"
-  | "Units do not match the current contract";
+  | "Units do not match the current contract"
+  | "Current engineering target is incompatible";
 
 export type PreviousRunBaseline = Readonly<{
+  workspaceId: string;
   runId: string;
   runLabel: string;
   modelVersionId: string;
@@ -124,6 +126,7 @@ export function reconstructPreviousRunBaseline(
   return {
     loadable: true,
     baseline: {
+      workspaceId,
       runId: run.id,
       runLabel: run.run_label?.trim() || "Unnamed run",
       modelVersionId: implementation.id,
