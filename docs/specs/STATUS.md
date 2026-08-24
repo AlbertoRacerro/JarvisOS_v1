@@ -91,21 +91,22 @@ The binding order is:
 23. 098 ENGINEERING-RECORD-LIFECYCLE-0;
 24. 006b PARAMETRIC-VARIANTS-1, freshly re-derived;
 25. 058b VARIANT-COMPARISON-1, freshly re-derived;
-26. 100 VISUAL-IDENTITY-1;
-27. 100a CODEBASE-LEAN-AUDIT-1;
-28. 100b CODEBASE-LEAN-CLEANUP-1;
-29. 101 CANONICAL-STATE-WRITE-1;
-30. 102 ENGINEERING-EVIDENCE-CONTRACT-1;
-31. 103 PROCESS-UPSTREAM-BAKEOFF-1;
-32. 104 PROCESS-STACK-STRANGLER-1;
-33. 105 ENGINEERING-DOMAIN-CLEANUP-1;
-34. 106 ENGINEERING-EVALUATOR-1;
-35. 107 PBR-EVALUATOR-1;
-36. 108 DESIGN-STUDY-CONTROLLER-1;
-37. 109 PROCESS-CAD-HANDOFF-1;
-38. 110 MULTIFIDELITY-ENGINEERING-1.
+26. 058d PROCESS-WORKSPACE-SCAFFOLD-0;
+27. 100 VISUAL-IDENTITY-1;
+28. 100a CODEBASE-LEAN-AUDIT-1;
+29. 100b CODEBASE-LEAN-CLEANUP-1;
+30. 101 CANONICAL-STATE-WRITE-1;
+31. 102 ENGINEERING-EVIDENCE-CONTRACT-1;
+32. 103 PROCESS-UPSTREAM-BAKEOFF-1;
+33. 104 PROCESS-STACK-STRANGLER-1;
+34. 105 ENGINEERING-DOMAIN-CLEANUP-1;
+35. 106 ENGINEERING-EVALUATOR-1;
+36. 107 PBR-EVALUATOR-1;
+37. 108 DESIGN-STUDY-CONTROLLER-1;
+38. 109 PROCESS-CAD-HANDOFF-1;
+39. 110 MULTIFIDELITY-ENGINEERING-1.
 
-Items 26–38 are the maintainer-approved post-functional-beta extension registered on
+Items 27–39 are the maintainer-approved post-functional-beta extension registered on
 2026-08-21 and amended on 2026-08-22 after the public/canonical architecture and codebase-maintainability reviews. They remain `planned`
 until the normal definition/full-spec/readiness lifecycle authorizes each slice. Their order
 encodes the zero-sunk-cost rule: finish visual identity, audit and simplify the active semantic surface without deleting desired-but-unwired capability, fix authority/evidence semantics, evaluate upstreams from
@@ -124,7 +125,7 @@ reference for the zero-sunk-cost bake-off and future PBR work. Spec 107 is the s
 integrated PBR evaluator implementation authority after 103/106. Spec 093 and any Aspen-like
 editable flowsheet remain outside the current functional queue. Global visual identity is now
 registered as 100: it remains independently removable from functional slices, but by maintainer
-decision it is ordered after 058b and before the lean audit/cleanup and architecture-remediation runtime work.
+decision it is ordered after the 058d process-workspace scaffold and before the lean audit/cleanup and architecture-remediation runtime work.
 
 The queue is binding but not immutable. If a slice proves non-implementable within its
 accepted boundary, or a prerequisite proves insufficient, the active front stops and a later
@@ -135,12 +136,12 @@ it changes. Silent abandonment or substitution is not authorized.
 
 ## Current priority and drafting order
 
-1. 058b VARIANT-COMPARISON-1 definition PR #352, readiness PR #353, and bounded frontend-only implementation PR #355 are merged. The functional operator-workstation queue is complete through 058b. Before any VISUAL-IDENTITY-1 definition or implementation, the maintainer-mandated 058d PROCESS-WORKSPACE-SCAFFOLD-0 registry slice must be inserted and then taken through its normal definition/readiness/implementation/reconciliation lifecycle.
+1. 058b VARIANT-COMPARISON-1 definition PR #352, readiness PR #353, and bounded frontend-only implementation PR #355 are merged and reconciled. Planned 058d PROCESS-WORKSPACE-SCAFFOLD-0 is now registered as the sole next definition front; no 058d runtime implementation is authorized before its separate definition/readiness lifecycle, and no 100 VISUAL-IDENTITY-1 definition or implementation may begin before 058d implementation/reconciliation completes.
 2. 099 REVIEW-SECRET-BOUNDARY-0 is merged through PR #306 and reconciled; the emergency security interrupt is closed.
 3. Preserve merged 059a/059b, 061a/061b, 075, 076, 077, 079, 082, 094, 070, 083, 084, 085, 086, 087, 088, 035, 089, 054, 090, 091, 029, 096, 071b, 092, 058c, 097, 098, 006b, and 058b authority boundaries; definition-only 095 remains non-implementation authority.
 4. Preserve the merged documentation/evidence from 047–049, 072, 075 and cancelled 078 as incumbent/reference evidence with zero sunk-cost privilege during 103; 107 is the sole future integrated PBR evaluator implementation authority after 103/106.
 5. Keep 066–068 and 080 frozen; keep 062 itself blocked/deferred while allowing the operator-workstation queue to proceed without routine grading UI.
-6. Insert and complete 058d before 100 visual identity. After 058d reconciliation, execute 100, then 100a audit and a freshly re-derived 100b disposition before any 101–110 runtime work. If 100a proves no worthwhile generic cleanup outside later owned slices, 100b records and merges `NO_ACTION` without runtime churn; otherwise it executes one bounded `CLEANUP` batch. Then follow 101→110.
+6. Complete 058d definition/readiness/implementation/reconciliation before 100 visual identity. After 058d reconciliation, execute 100, then 100a audit and a freshly re-derived 100b disposition before any 101–110 runtime work. If 100a proves no worthwhile generic cleanup outside later owned slices, 100b records and merges `NO_ACTION` without runtime churn; otherwise it executes one bounded `CLEANUP` batch. Then follow 101→110.
 
 ## Registry
 
@@ -210,6 +211,7 @@ it changes. Silent abandonment or substitution is not authorized.
 | 058 | cancelled | — | Unified workspace home layout | — | Cancelled as a monolithic implementation slice. Its product objective is redistributed across 070 UI foundation, 083 application shell, 091 Jarvis sidecar, and 029 Settings. |
 | 058b | merged | [#355](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/355) | Workbench UX pass 2: variant comparison and design history | 006b, 071b, 083, 085, 089 | Re-derived as VARIANT-COMPARISON-1 under definition PR #352 and [the 2026-08-24 readiness decision](058b-readiness-2026-08-24.md) under PR #353. Implementation PR #355 merged the bounded frontend-only V0 in the existing Analysis Dock: immutable successful-run configuration/result comparison, authoritative schema-v3 model choice when evidenced, explicit transient baseline/deltas, six-run cap, hostile-payload and stale-workspace bounds, exact source-run navigation, and zero backend/store/canonical/run/provider side effects. |
 | 058c | merged | [#319](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/319) | Report-to-3D linking | 044, 071b, 085, 092 | SCENE-SEMANTICS-A1 definition PR #314, model-choice amendment PR #316, fresh readiness PR #317, and implementation PR #319 are merged. The bounded schema-v3 semantic companion, guarded linked-Parameter freshness, candidate semantic-source projection, selected-object Properties composition, stable target transitions, and exact source navigation are now runtime authority; later queue items remain separate. |
+| 058d | planned | — | PROCESS-WORKSPACE-SCAFFOLD-0 | 058b, 071b, 083, 089, 091, 096 | Frontend-only bridge before 100: separate the existing dependency/provenance Lineage surface from a future true process flowsheet; introduce a distinct Process route/stage and inert canvas-first workstation scaffold reusing the application shell, Jarvis/Properties sidecar and Analysis Dock. Toolbar, palette and canvas may be clearly inert slots/empty state only. No backend process topology/API/schema/store, React-owned process records, persistent drag/drop, solver calls or final visual identity is authorized; the real editable process workbench remains post-backend and must be re-derived from future process/evaluator contracts. |
 | 059 | planned | — | IP-EGRESS-1 umbrella definition | 003, 015, 018, 021, 040, 042 | Definition amended through PR #95 and reconciled with ADR-059 for external policy autopilot, automatic sanitization, sampled audit, and explicit maintainer residual-risk acceptance; this row remains definition-only. |
 | 059a | merged | [#90](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/90) | IP-EGRESS-1A: sensitivity and context foundation | 003, 015, 018, 021, 040, 042 | Digest-bound labels/derivatives, deterministic floors, stale handling, coherent read-snapshot selection, and S0/S1-only external preview merged in #90. |
 | 059b | merged | [#119](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/119) | IP-EGRESS-1B: policy autopilot and execution enforcement | 059a | Prompt/manual-context authority, automatic sanitizer provenance, exact per-binding packets and decisions, ticket-ID confirmation, atomic projected-budget reservation, sampled audit, fallback enforcement, and usage-source-bound accounting are merged. |
@@ -256,7 +258,7 @@ it changes. Silent abandonment or substitution is not authorized.
 | 097 | merged | [#333](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/333) | JARVIS-ENGINEERING-ACTIONS-0 | 071b, 091, 058c | Definition PR #329, [the 2026-08-22 readiness decision](097-readiness-2026-08-22.md) under PR #331, and implementation PR #333 are merged. The bounded frontend-only deterministic engineering-action surface reuses the single 071b/058c working owner for typed atomic compare-and-apply, proven-basis-only safe fixes, complete operator-visible previews, stale target/source/revision protection, inert `Other`/assistant prose, and explicit preflight/Run separation without backend/thread/provider/history/action-store expansion. |
 | 098 | merged | [#339](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/339) | ENGINEERING-RECORD-LIFECYCLE-0 | 035, 040, 050, 051, 071b | Definition PR #336, [the 2026-08-22 readiness decision](098-readiness-2026-08-22.md) under PR #337, and implementation PR #339 are merged. The Parameter-first V0 now has separate server-owned lifecycle state, exact CAS/audit/dependency fail-closed edits and transitions, lifecycle-current context/history projections, replacement-authority preservation, linked source revision plus unit-normalized value identity, and server-backed Engineering Data edit/lifecycle controls; other record kinds remain read-only. |
 | 099 | merged | [#306](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/306) | REVIEW-SECRET-BOUNDARY-0 | 017, 019 | Emergency security implementation under [the 2026-08-19 readiness decision](099-readiness-2026-08-19.md) merged through PR #306: provider-secret Cheap/Senior jobs execute only trusted master code while reviewed PR content remains inert GitHub API data; the interrupt is closed; resumed 092/#303 subsequently completed and merged on 2026-08-20. |
-| 100 | planned | — | VISUAL-IDENTITY-1 | 097, 098, 058b | Apply the independently removable global visual identity only after the functional operator-workstation queue completes; visual design must not redefine backend authority, engineering semantics or canonical data. |
+| 100 | planned | — | VISUAL-IDENTITY-1 | 097, 098, 058b, 058d | Apply the independently removable global visual identity only after the functional operator-workstation queue and 058d scaffold lifecycle complete; visual design must not redefine backend authority, engineering semantics or canonical data. |
 | 100a | planned | — | CODEBASE-LEAN-AUDIT-1 | 100 | Audit the complete first-party codebase from exact post-100 master for minimum semantic surface, desired-but-unwired capabilities, dead/superseded residue, duplication, overengineering, upstream replacement candidates and measured performance hotspots; absence of a current consumer is never deletion authority. |
 | 100b | planned | — | CODEBASE-LEAN-CLEANUP-1 | 100a | Freshly re-derive either one bounded high-confidence `CLEANUP` batch or an evidence-backed `NO_ACTION` disposition from 100a; preserve `WIRE`/`DEFER` capabilities, avoid pre-empting 101 or 103–105, and never invent runtime churn merely to satisfy the cleanup slot. |
 | 101 | planned | — | CANONICAL-STATE-WRITE-1 | 040, 042, 071b, 098, 100b | Unify legacy modeling CRUD and MemoryStore/canonical record transitions behind one server-owned write-intent/lifecycle/audit boundary; separate Parameter record lifecycle from value/evidence quality and prevent proposed records from entering authoritative context by value-quality alone. |
@@ -278,7 +280,7 @@ it changes. Silent abandonment or substitution is not authorized.
 - Historical `057 = Workspace home`, `057b`, and `057c` references remain
   superseded and must not be reused. Monolithic 058 is now cancelled; its product
   objective is redistributed across 070, 083, 091, and 029, while 058b and 058c
-  retain their own re-derived operator-workstation scopes.
+  retain their own re-derived operator-workstation scopes and 058d is the explicitly registered pre-100 process-workspace scaffold slice.
 - Specs 030 and 037 are cancelled as standalone conversation surfaces; their valid
   proposal and BLUECAD on-ramp responsibilities are absorbed by 090 and 091.
 - Specs 031, 034, and 036 retain only bounded JarvisOS-side vocabulary, persona-policy,
