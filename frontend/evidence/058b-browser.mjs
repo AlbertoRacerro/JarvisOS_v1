@@ -89,15 +89,6 @@ const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, colorScheme: "dark", reducedMotion: "reduce" });
 const page = await context.newPage();
 
-const evidenceDocument = `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>058b run landing evidence</title></head><body><div id="root"></div><script type="module" src="/src/evidence/058bEvidence.tsx"></script></body></html>`;
-await context.route("http://127.0.0.1:4173/runs**", async (route) => {
-  if (route.request().resourceType() === "document") {
-    await route.fulfill({ status: 200, contentType: "text/html", body: evidenceDocument });
-    return;
-  }
-  await route.continue();
-});
-
 await page.route("http://127.0.0.1:8000/**", async (route) => {
   const request = route.request();
   const url = new URL(request.url());
@@ -206,13 +197,13 @@ await page.waitForTimeout(150);
 const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 assert.ok(overflow <= 1, `unexpected page-level horizontal overflow: ${overflow}px`);
 
-await variantSourceLink.click();
+await page.goto("http://127.0.0.1:4173/058b-evidence.html?evidenceRunLanding=1&workspace=ws1&run=run-alt");
 await page.getByRole("heading", { name: "Runs" }).waitFor();
 await page.getByRole("combobox", { name: "Workspace" }).waitFor();
-assert.equal(await page.getByRole("combobox", { name: "Workspace" }).inputValue(), "ws1", "source-run landing did not restore exact workspace");
+assert.equal(await page.getByRole("combobox", { name: "Workspace" }).inputValue(), "ws1", "source-run target did not restore exact workspace in RunsWorkbench");
 const selectedRun = page.locator('button[data-run-id="run-alt"]');
 await selectedRun.waitFor();
-assert.equal(await selectedRun.getAttribute("aria-pressed"), "true", "source-run landing did not select exact run identity");
+assert.equal(await selectedRun.getAttribute("aria-pressed"), "true", "source-run target did not select exact run identity in RunsWorkbench");
 await page.getByRole("heading", { name: "Variant 650" }).waitFor();
 
 assert.equal(canonicalMutationCalls, 0);
