@@ -10,6 +10,7 @@ export type AccentPreference = Readonly<{
 export const APPEARANCE_STORAGE_KEY = "jarvisos:appearance:v1";
 export const APPEARANCE_OPTIONS: readonly AppearancePreference[] = ["system", "light", "dark"];
 export const ACCENT_STORAGE_KEY = "jarvisos:accent:v1";
+export const VISUAL_PREFERENCE_EVENT = "jarvisos:visual-preference-change";
 export const DEFAULT_ACCENT_HEX = "#528B68";
 export const ACCENT_PRESETS: Readonly<Record<Exclude<AccentPreset, "custom">, string>> = {
   microalgae: DEFAULT_ACCENT_HEX,
@@ -45,6 +46,11 @@ function safeStorage(): Storage | null {
   }
 }
 
+function notifyVisualPreferenceChange(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(VISUAL_PREFERENCE_EVENT));
+}
+
 function safeColorSchemeQuery(): MediaQueryList | null {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return null;
   try {
@@ -67,12 +73,14 @@ export function readAppearancePreference(): AppearancePreference {
 
 export function writeAppearancePreference(preference: AppearancePreference): void {
   const storage = safeStorage();
-  if (!storage) return;
-  try {
-    storage.setItem(APPEARANCE_STORAGE_KEY, preference);
-  } catch {
-    // Appearance persistence is best-effort and carries no application authority.
+  if (storage) {
+    try {
+      storage.setItem(APPEARANCE_STORAGE_KEY, preference);
+    } catch {
+      // Appearance persistence is best-effort and carries no application authority.
+    }
   }
+  notifyVisualPreferenceChange();
 }
 
 export function readAccentPreference(): AccentPreference {
@@ -109,6 +117,7 @@ export function writeAccentPreference(preference: AccentPreference): AccentPrefe
       // Accent persistence is visual-only best effort.
     }
   }
+  notifyVisualPreferenceChange();
   return safePreference;
 }
 
@@ -168,6 +177,12 @@ export function applyStoredAppearance(): AppearancePreference {
 export function applyStoredVisualPreferences(): void {
   applyStoredAppearance();
   applyStoredAccent();
+}
+
+export function subscribeToVisualPreferenceUpdates(listener: () => void): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  window.addEventListener(VISUAL_PREFERENCE_EVENT, listener);
+  return () => window.removeEventListener(VISUAL_PREFERENCE_EVENT, listener);
 }
 
 export function subscribeToSystemAppearance(

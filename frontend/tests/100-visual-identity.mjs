@@ -7,6 +7,8 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 const theme = read("src/theme.ts");
 const tokens = read("src/styles/tokens.css");
 const main = read("src/main.tsx");
+const settings = read("src/pages/Settings.tsx");
+const settingsCss = read("src/styles/settings.css");
 const processStage = read("src/stages/ProcessStage.tsx");
 const pkg = JSON.parse(read("package.json"));
 
@@ -44,6 +46,14 @@ check(tokens.includes("--control-height-default: 2.1875rem"), "35px default cont
 check(tokens.includes("@media (prefers-reduced-motion: reduce)"), "reduced-motion rule missing");
 check(tokens.includes("--motion-fast: 0ms") && tokens.includes("--motion-standard: 0ms"), "reduced-motion must collapse non-essential motion");
 check(!tokens.includes("backdrop-filter"), "structural glass is not authorized in first pass");
+
+check(settings.includes('type="color"'), "Settings Custom accent must use the native color input");
+check(settings.includes("Reset to Microalgae"), "Settings accent Reset is missing");
+check(settings.includes("APPEARANCE_OPTIONS.map"), "Settings appearance choices are missing");
+check(settings.includes("ACCENT_OPTIONS.map"), "Settings accent choices are missing");
+check(settings.includes("normalizeAccentHex(customAccentDraft)"), "malformed Custom HEX is not guarded before application");
+check(settingsCss.includes("var(--color-status-danger-text)"), "invalid custom HEX lacks non-accent error semantics");
+check(!/saveAISetting\([^\n]*(accent|appearance)/i.test(settings), "visual preferences must not use canonical settings API");
 
 check(!/pump|compressor|reactor|heat exchanger|stream node/i.test(processStage), "Process scaffold gained fake process semantics");
 check(!/fetch\(|axios|provider|runner/i.test(theme), "visual preference owner gained runtime execution/API authority");

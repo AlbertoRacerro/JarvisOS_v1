@@ -4,7 +4,7 @@ import type { Navigate } from "../app/AppLink";
 import type { AppRouteDefinition } from "../app/routes";
 import type { StageSelection } from "../app/selection";
 import type { ShellRegion, ShellRegionContributions } from "../stages/registry";
-import { APPEARANCE_OPTIONS, applyAppearancePreference, applyResolvedAppearance, readAppearancePreference, subscribeToSystemAppearance, writeAppearancePreference, type AppearancePreference } from "../theme";
+import { APPEARANCE_OPTIONS, applyAppearancePreference, applyResolvedAppearance, readAppearancePreference, subscribeToSystemAppearance, subscribeToVisualPreferenceUpdates, writeAppearancePreference, type AppearancePreference } from "../theme";
 import AnalysisDock from "./shell/AnalysisDock";
 import ContextualNavigator from "./shell/ContextualNavigator";
 import ContextualSidecar from "./shell/ContextualSidecar";
@@ -34,6 +34,7 @@ function Layout({ route, navigate, selection, propertiesContent, shellRegions, s
   const dockToggleRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => { applyAppearancePreference(appearance); return subscribeToSystemAppearance(appearance, applyResolvedAppearance); }, [appearance]);
+  useEffect(() => subscribeToVisualPreferenceUpdates(() => setAppearance(readAppearancePreference())), []);
   useEffect(() => {
     setNavigatorOpen(false); setSidecarOpen(false); setDockOpen(false);
     document.title = `${route.title} · JarvisOS`;

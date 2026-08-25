@@ -14,6 +14,23 @@ import {
 } from "../api/settings";
 import InlineNotice from "../components/ui/InlineNotice";
 import Surface from "../components/ui/Surface";
+import {
+  ACCENT_OPTIONS,
+  ACCENT_PRESETS,
+  APPEARANCE_OPTIONS,
+  DEFAULT_ACCENT_HEX,
+  applyAccentPreference,
+  applyAppearancePreference,
+  normalizeAccentHex,
+  readAccentPreference,
+  readAppearancePreference,
+  subscribeToVisualPreferenceUpdates,
+  writeAccentPreference,
+  writeAppearancePreference,
+  type AccentPreference,
+  type AccentPreset,
+  type AppearancePreference
+} from "../theme";
 
 type NumericKey =
   | "monthly_api_budget_usd"
@@ -37,6 +54,13 @@ const numericKeys: NumericKey[] = [
   "scaleway_hard_stop_token_cap",
   "max_direct_continuations"
 ];
+
+const accentLabels: Readonly<Record<AccentPreset, string>> = {
+  microalgae: "Microalgae",
+  "leaf-chlorophyll": "Leaf Chlorophyll",
+  lagoon: "Lagoon",
+  custom: "Custom"
+};
 
 function draftFrom(settings: AISettings): Draft {
   return {
@@ -76,6 +100,12 @@ function Settings() {
   const [error, setError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [appearance, setAppearance] = useState<AppearancePreference>(() => readAppearancePreference());
+  const [accent, setAccent] = useState<AccentPreference>(() => readAccentPreference());
+  const [customAccentDraft, setCustomAccentDraft] = useState(() => {
+    const stored = readAccentPreference();
+    return stored.preset === "custom" ? stored.customHex ?? DEFAULT_ACCENT_HEX : DEFAULT_ACCENT_HEX;
+  });
 
   const loadCanonical = useCallback(async (
     preserveDraft = false,
@@ -135,6 +165,14 @@ function Settings() {
   useEffect(() => {
     if (confirmDelete) deleteConfirmRef.current?.focus();
   }, [confirmDelete]);
+
+  useEffect(() => subscribeToVisualPreferenceUpdates(() => {
+    const nextAppearance = readAppearancePreference();
+    const nextAccent = readAccentPreference();
+    setAppearance(nextAppearance);
+    setAccent(nextAccent);
+    if (nextAccent.preset === "custom" && nextAccent.customHex) setCustomAccentDraft(nextAccent.customHex);
+  }), []);
 
   const refreshAfterMutation = async (savedKey?: EditableKey): Promise<boolean> => {
     const refreshed = await loadCanonical(true, savedKey, false);
@@ -245,6 +283,34 @@ function Settings() {
     if (await loadCanonical(true)) setMessage("Canonical state reloaded.");
   };
 
+  const setVisualAppearance = (preference: AppearancePreference) => {
+    writeAppearancePreference(preference);
+    applyAppearancePreference(preference);
+    setAppearance(preference);
+  };
+
+  const setVisualAccent = (preset: AccentPreset, customHex?: string) => {
+    const requested: AccentPreference = preset === "custom"
+      ? { preset, customHex: normalizeAccentHex(customHex ?? customAccentDraft) ?? DEFAULT_ACCENT_HEX }
+      : { preset };
+    const stored = writeAccentPreference(requested);
+    applyAccentPreference(stored);
+    setAccent(stored);
+    if (stored.preset === "custom" && stored.customHex) setCustomAccentDraft(stored.customHex);
+  };
+
+  const updateCustomAccent = (raw: string) => {
+    setCustomAccentDraft(raw);
+    const normalized = normalizeAccentHex(raw);
+    if (!normalized) return;
+    setVisualAccent("custom", normalized);
+  };
+
+  const resetAccent = () => {
+    setCustomAccentDraft(DEFAULT_ACCENT_HEX);
+    setVisualAccent("microalgae");
+  };
+
   const allMutationsBusy = settingsBusy || credentialBusy || uncertain;
 
   return (
@@ -252,7 +318,7 @@ function Settings() {
       <header className="page-header">
         <p className="eyebrow">Operator controls</p>
         <h1 id="settings-title">Settings</h1>
-        <p>Budget, provider permission and secure credential controls. Internal routing and diagnostics stay read-only.</p>
+        <p>Visual preferences stay local. Budget, provider permission and secure credential controls remain canonical server-owned settings.</p>
       </header>
 
       {loading && <InlineNotice tone="info">Loading canonical settings.</InlineNotice>}
@@ -265,6 +331,54 @@ function Settings() {
       {message && <InlineNotice tone="success">{message}</InlineNotice>}
 
       <div className="settings-grid">
+        <Surface className="settings-card settings-card--visual">
+          <div className="settings-visual__heading">
+            <div>
+              <p className="eyebrow">Local visual preference</p>
+              <h2>Appearance & accent</h2>
+            </div>
+            <span className="settings-accent-preview" aria-hidden="true" />
+          </div>
+          <fieldset className="settings-visual__group">
+            <legend>Appearance</legend>
+            <div className="settings-choice-row">
+              {APPEARANCE_OPTIONS.map((option) => (
+                <label key={option} className="settings-choice">
+                  <input type="radio" name="appearance" value={option} checked={appearance === option} onChange={() => setVisualAppearance(option)} />
+                  <span>{option[0].toUpperCase() + option.slice(1)}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset className="settings-visual__group">
+            <legend>Accent</legend>
+            <div className="settings-accent-grid">
+              {ACCENT_OPTIONS.map((option) => (
+                <label key={option} className="settings-accent-choice">
+                  <input type="radio" name="accent" value={option} checked={accent.preset === option} onChange={() => setVisualAccent(option)} />
+                  <span className="settings-accent-swatch" style={{ "--settings-swatch": option === "custom" ? customAccentDraft : ACCENT_PRESETS[option as Exclude<AccentPreset, "custom">] } as React.CSSProperties} aria-hidden="true" />
+                  <span>{accentLabels[option]}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          {accent.preset === "custom" && (
+            <div className="settings-custom-accent">
+              <label>
+                <span>Custom color</span>
+                <input type="color" value={normalizeAccentHex(customAccentDraft) ?? DEFAULT_ACCENT_HEX} onChange={(event) => updateCustomAccent(event.target.value)} />
+              </label>
+              <label>
+                <span>HEX</span>
+                <input aria-invalid={normalizeAccentHex(customAccentDraft) === null} value={customAccentDraft} maxLength={7} spellCheck={false} onChange={(event) => updateCustomAccent(event.target.value)} />
+              </label>
+              <button className="button-secondary" type="button" onClick={resetAccent}>Reset to Microalgae</button>
+              {normalizeAccentHex(customAccentDraft) === null && <small className="settings-accent-error">Use a six-digit HEX value such as #528B68.</small>}
+            </div>
+          )}
+          <p className="settings-muted">Accent affects navigation, focus and selection emphasis only. Engineering status and scientific colors remain independent.</p>
+        </Surface>
+
         <Surface className="settings-card">
           <h2>AI permission & budget</h2>
           <p className="settings-card__summary">
