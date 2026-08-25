@@ -2,7 +2,7 @@
 
 Status: canonical intake register; **not implementation authority**  
 Created: 2026-08-19  
-Last audit update: 2026-08-21  
+Last audit update: 2026-08-25  
 Owner: repository maintainer
 
 This is the compact canonical register for external projects, papers, products, repositories, architectural patterns, engineering ideas, hardware concepts and other material that may be useful to JarvisOS, BLUECAD or BlueRev.
@@ -122,6 +122,7 @@ Value grades: `S`, `A`, `B`, `C`, `D`; grade is reference/integration value, not
 | REF-060 | NanoClaw | sandbox / credential / egress / worker lifecycle | CODE-FIRST | S | CANDIDATE | explicit mounts, non-root sessions, credential-less containers, optional forced proxy, fail-closed spawn and surviving-session adoption |
 | REF-061 | antirez / Salvatore Sanfilippo editing and QA patterns | stale-write prevention / diff-aware QA | CODE-FIRST | A+ | CANDIDATE | compare-and-set/version identity for edits plus adversarial exact-diff review layered above deterministic tests |
 | REF-062 | RizzoClaw | simple agent memory negative reference | CODE-FIRST | C | PARKED | useful negative evidence: Markdown project memory can leak sensitive context/provenance concerns; keep memory classes/sensitivity explicit |
+| REF-063 | Bioo + Heirloom + AIR COMPANY + Linear + Raycast + Recursion + Vercel + Instrument typography + Phosphor Icons | visual identity / frontend design system | DOCS-FIRST | A+ | PROMOTED | maintainer-selected living-engineering visual direction; open Instrument/Plex typography candidates, Phosphor generic icons, bounded accent theming and reference-only external brand cues; promoted into the 100 design-authority pack |
 
 ---
 
@@ -209,6 +210,11 @@ Nous/upstream provenance:
 - `docs/audits/UPSTREAM_AUTHOR_ECOSYSTEM_AUDIT_CONTINUATION_2026-08-19.md`
 - `docs/audits/UPSTREAM_AUTHOR_ECOSYSTEM_AUDIT_CONTINUATION_2_2026-08-19.md`
 - `docs/audits/UPSTREAM_AUTHOR_ECOSYSTEM_AUDIT_CONTINUATION_3_2026-08-19.md`
+
+Visual identity / frontend design:
+
+- `docs/audits/VISUAL_IDENTITY_REFERENCE_AUDIT_2026-08-25.md`
+- `docs/design/visual-identity-100/README.md`
 
 Legacy detailed register prose:
 
