@@ -3,8 +3,9 @@ import type { ComponentType, ReactNode } from "react";
 import type { Navigate } from "../app/AppLink";
 import type { StageSelection } from "../app/selection";
 import type { StageKind } from "../app/routes";
-import FlowsheetStage from "./FlowsheetStage";
+import LineageStage from "./LineageStage";
 import ModelStage from "./ModelStage";
+import ProcessStage from "./ProcessStage";
 import ResultsStage from "./ResultsStage";
 import ReviewStage from "./ReviewStage";
 
@@ -34,7 +35,8 @@ export type StageDefinition = Readonly<{
 
 export const PRIMARY_STAGES: Readonly<Record<StageKind, StageDefinition>> = {
   model: { kind: "model", label: "Model", render: ModelStage },
+  process: { kind: "process", label: "Process", render: ProcessStage },
   results: { kind: "results", label: "Results", render: ResultsStage },
-  review: { kind: "review", label: "Review", render: ReviewStage },
-  flowsheet: { kind: "flowsheet", label: "Flowsheet", render: FlowsheetStage }
+  lineage: { kind: "lineage", label: "Lineage", render: LineageStage },
+  review: { kind: "review", label: "Review", render: ReviewStage }
 };
