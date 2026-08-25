@@ -1,11 +1,39 @@
 export type AppearancePreference = "system" | "light" | "dark";
 export type ResolvedAppearance = "light" | "dark";
+export type AccentPreset = "microalgae" | "leaf-chlorophyll" | "lagoon" | "custom";
+
+export type AccentPreference = Readonly<{
+  preset: AccentPreset;
+  customHex?: string;
+}>;
 
 export const APPEARANCE_STORAGE_KEY = "jarvisos:appearance:v1";
 export const APPEARANCE_OPTIONS: readonly AppearancePreference[] = ["system", "light", "dark"];
+export const ACCENT_STORAGE_KEY = "jarvisos:accent:v1";
+export const DEFAULT_ACCENT_HEX = "#528B68";
+export const ACCENT_PRESETS: Readonly<Record<Exclude<AccentPreset, "custom">, string>> = {
+  microalgae: DEFAULT_ACCENT_HEX,
+  "leaf-chlorophyll": "#5F8F52",
+  lagoon: "#4F938A"
+};
+export const ACCENT_OPTIONS: readonly AccentPreset[] = [
+  "microalgae",
+  "leaf-chlorophyll",
+  "lagoon",
+  "custom"
+];
 
 function isAppearancePreference(value: unknown): value is AppearancePreference {
   return value === "system" || value === "light" || value === "dark";
+}
+
+function isAccentPreset(value: unknown): value is AccentPreset {
+  return ACCENT_OPTIONS.includes(value as AccentPreset);
+}
+
+export function normalizeAccentHex(value: string): string | null {
+  const normalized = value.trim().toUpperCase();
+  return /^#[0-9A-F]{6}$/.test(normalized) ? normalized : null;
 }
 
 function safeStorage(): Storage | null {
@@ -47,6 +75,72 @@ export function writeAppearancePreference(preference: AppearancePreference): voi
   }
 }
 
+export function readAccentPreference(): AccentPreference {
+  const storage = safeStorage();
+  if (!storage) return { preset: "microalgae" };
+  try {
+    const raw = storage.getItem(ACCENT_STORAGE_KEY);
+    if (!raw) return { preset: "microalgae" };
+    const parsed = JSON.parse(raw) as { preset?: unknown; customHex?: unknown };
+    if (!isAccentPreset(parsed.preset)) return { preset: "microalgae" };
+    if (parsed.preset !== "custom") return { preset: parsed.preset };
+    if (typeof parsed.customHex !== "string") return { preset: "microalgae" };
+    const customHex = normalizeAccentHex(parsed.customHex);
+    return customHex ? { preset: "custom", customHex } : { preset: "microalgae" };
+  } catch {
+    return { preset: "microalgae" };
+  }
+}
+
+export function writeAccentPreference(preference: AccentPreference): AccentPreference {
+  const safePreference = preference.preset === "custom"
+    ? (() => {
+      const customHex = normalizeAccentHex(preference.customHex ?? "");
+      return customHex ? { preset: "custom" as const, customHex } : { preset: "microalgae" as const };
+    })()
+    : isAccentPreset(preference.preset)
+      ? { preset: preference.preset }
+      : { preset: "microalgae" as const };
+  const storage = safeStorage();
+  if (storage) {
+    try {
+      storage.setItem(ACCENT_STORAGE_KEY, JSON.stringify(safePreference));
+    } catch {
+      // Accent persistence is visual-only best effort.
+    }
+  }
+  return safePreference;
+}
+
+export function accentHex(preference: AccentPreference): string {
+  if (preference.preset === "custom") {
+    return normalizeAccentHex(preference.customHex ?? "") ?? DEFAULT_ACCENT_HEX;
+  }
+  return ACCENT_PRESETS[preference.preset] ?? DEFAULT_ACCENT_HEX;
+}
+
+export function applyAccentPreference(preference: AccentPreference): AccentPreference {
+  const safePreference = preference.preset === "custom"
+    ? (() => {
+      const customHex = normalizeAccentHex(preference.customHex ?? "");
+      return customHex ? { preset: "custom" as const, customHex } : { preset: "microalgae" as const };
+    })()
+    : isAccentPreset(preference.preset)
+      ? { preset: preference.preset }
+      : { preset: "microalgae" as const };
+  if (typeof document === "undefined") return safePreference;
+  const root = document.documentElement;
+  root.dataset.accent = safePreference.preset;
+  root.style.setProperty("--accent-seed", accentHex(safePreference));
+  return safePreference;
+}
+
+export function applyStoredAccent(): AccentPreference {
+  const preference = readAccentPreference();
+  applyAccentPreference(preference);
+  return preference;
+}
+
 export function resolveAppearance(preference: AppearancePreference): ResolvedAppearance {
   if (preference === "light" || preference === "dark") return preference;
   return safeColorSchemeQuery()?.matches ? "dark" : "light";
@@ -69,6 +163,11 @@ export function applyStoredAppearance(): AppearancePreference {
   const preference = readAppearancePreference();
   applyAppearancePreference(preference);
   return preference;
+}
+
+export function applyStoredVisualPreferences(): void {
+  applyStoredAppearance();
+  applyStoredAccent();
 }
 
 export function subscribeToSystemAppearance(
