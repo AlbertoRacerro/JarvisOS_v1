@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc && vite build",
+    "test:058d": "node tests/058d-process-workspace.mjs",
+    "build": "npm run test:058d && tsc && vite build",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
