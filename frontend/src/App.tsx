@@ -104,7 +104,7 @@ function App() {
   const effectiveShellRegions: ShellRegionContributions = {
     ...shellRegions,
     sidecar: jarvisSidecar,
-    ...(route.id === "runs" || route.id === "engineering-data"
+    ...(route.id === "runs" || route.id === "engineering-data" || route.id === "design-process"
       ? { dock: <AnalyticsDockContent workspaceId={workspaceId} /> }
       : {})
   };
