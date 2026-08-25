@@ -1,12 +1,13 @@
 export type PrimaryNavId = "home" | "design" | "runs" | "engineering-data" | "review" | "settings";
 
-export type StageKind = "model" | "results" | "review" | "flowsheet";
+export type StageKind = "model" | "process" | "results" | "lineage" | "review";
 
 export type RouteId =
   | "home"
   | "design-model"
+  | "design-process"
   | "design-results"
-  | "design-flowsheet"
+  | "design-lineage"
   | "runs"
   | "engineering-data"
   | "review"
@@ -31,8 +32,9 @@ export type AppRouteDefinition = Readonly<{
 export const PRODUCTION_ROUTES: readonly AppRouteDefinition[] = [
   { id: "home", path: "/home", title: "Home", primaryNav: "home" },
   { id: "design-model", path: "/design/model", title: "Model", primaryNav: "design", stageKind: "model" },
+  { id: "design-process", path: "/design/process", title: "Process", primaryNav: "design", stageKind: "process" },
   { id: "design-results", path: "/design/results", title: "Results", primaryNav: "design", stageKind: "results" },
-  { id: "design-flowsheet", path: "/design/flowsheet", title: "Flowsheet", primaryNav: "design", stageKind: "flowsheet" },
+  { id: "design-lineage", path: "/design/lineage", title: "Lineage", primaryNav: "design", stageKind: "lineage" },
   { id: "runs", path: "/runs", title: "Runs", primaryNav: "runs" },
   { id: "engineering-data", path: "/engineering-data", title: "Engineering Data", primaryNav: "engineering-data" },
   { id: "review", path: "/review", title: "Review", primaryNav: "review", stageKind: "review" },
@@ -59,8 +61,9 @@ export const PRIMARY_NAV_ITEMS = [
 
 export const DESIGN_STAGE_ITEMS = [
   { kind: "model", label: "Model", href: "/design/model" },
+  { kind: "process", label: "Process", href: "/design/process" },
   { kind: "results", label: "Results", href: "/design/results" },
-  { kind: "flowsheet", label: "Flowsheet", href: "/design/flowsheet" }
+  { kind: "lineage", label: "Lineage", href: "/design/lineage" }
 ] as const satisfies readonly Readonly<{ kind: Exclude<StageKind, "review">; label: string; href: string }>[];
 
 export type ResolvedRoute = Readonly<{
@@ -84,6 +87,16 @@ export function resolveRoute(pathname: string): ResolvedRoute {
     return {
       route: PRODUCTION_ROUTES[0],
       canonicalPath: "/home",
+      shouldReplace: true
+    };
+  }
+
+  if (normalized === "/design/flowsheet") {
+    const lineageRoute = PRODUCTION_ROUTES.find((candidate) => candidate.id === "design-lineage");
+    if (!lineageRoute) throw new Error("Canonical Lineage route is missing.");
+    return {
+      route: lineageRoute,
+      canonicalPath: lineageRoute.path,
       shouldReplace: true
     };
   }
