@@ -1,0 +1,44 @@
+name: Transfer 100 in-review status
+
+on:
+  push:
+    branches: [transfer/100-status-inreview]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-status:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: impl/100-visual-identity-1
+          fetch-depth: 0
+      - name: Patch live registry for implementation PR
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('docs/specs/STATUS.md')
+          text = p.read_text(encoding='utf-8')
+          replacements = {
+            "Item 27 is now `ready` after merged definition/full-spec/readiness authority and this registry reconciliation; items 28–39 remain `planned`": "Item 27 is now `in_review` through implementation PR #371 after merged definition/full-spec/readiness authority; items 28–39 remain `planned`",
+            "1. 100 VISUAL-IDENTITY-1 is `ready` after definition/full-spec PR #368 and readiness PR #369; implementation is the next authorized front and remains bounded by `docs/specs/100-visual-identity-1.md`, `docs/specs/100-readiness-2026-08-25.md`, and the exact-master Visual Identity Authority Pack.": "1. 100 VISUAL-IDENTITY-1 is `in_review` through implementation PR #371 after definition/full-spec PR #368 and readiness PR #369; the implementation remains bounded by `docs/specs/100-visual-identity-1.md`, `docs/specs/100-readiness-2026-08-25.md`, and the exact-master Visual Identity Authority Pack.",
+            "| 100 | ready | — | VISUAL-IDENTITY-1 | 097, 098, 058b, 058d | Full spec merged through PR #368 and readiness through PR #369. Authorize the bounded frontend-only visual-identity implementation under `100-readiness-2026-08-25.md`; preserve product/engineering authority and stop after 100 reconciliation for maintainer visual inspection. |": "| 100 | in_review | [#371](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/371) | VISUAL-IDENTITY-1 | 097, 098, 058b, 058d | Full spec merged through PR #368 and readiness through PR #369. Implementation PR #371 is the bounded frontend-only visual-identity pass under `100-readiness-2026-08-25.md`; preserve product/engineering authority and stop after 100 reconciliation for maintainer visual inspection. |",
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'expected STATUS text not found: {old[:80]}')
+              text = text.replace(old, new, 1)
+          p.write_text(text, encoding='utf-8')
+          PY
+      - name: Commit and push product status update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/specs/STATUS.md
+          git diff --cached --quiet && exit 0
+          git commit -m "Mark VISUAL-IDENTITY-1 in review"
+          git push origin HEAD:impl/100-visual-identity-1
