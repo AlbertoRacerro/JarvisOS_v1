@@ -52,18 +52,7 @@ jobs:
           const fs=require('fs');
           const p='evidence/100-browser.mjs';
           let s=fs.readFileSync(p,'utf8');
-          const glbBuilder=`const gltfDoc=JSON.parse(gltf);
-delete gltfDoc.buffers[0].uri;
-const jsonSource=Buffer.from(JSON.stringify(gltfDoc),'utf8');
-const jsonPad=(4-(jsonSource.length%4))%4;
-const jsonChunk=Buffer.concat([jsonSource,Buffer.alloc(jsonPad,0x20)]);
-const binPad=(4-(triBytes.length%4))%4;
-const binChunk=Buffer.concat([triBytes,Buffer.alloc(binPad)]);
-const glb=Buffer.alloc(12+8+jsonChunk.length+8+binChunk.length);
-glb.writeUInt32LE(0x46546c67,0); glb.writeUInt32LE(2,4); glb.writeUInt32LE(glb.length,8);
-glb.writeUInt32LE(jsonChunk.length,12); glb.writeUInt32LE(0x4e4f534a,16); jsonChunk.copy(glb,20);
-const binHeader=20+jsonChunk.length; glb.writeUInt32LE(binChunk.length,binHeader); glb.writeUInt32LE(0x004e4942,binHeader+4); binChunk.copy(glb,binHeader+8);
-`;
+          const glbBuilder="const gltfDoc=JSON.parse(gltf);\ndelete gltfDoc.buffers[0].uri;\nconst jsonSource=Buffer.from(JSON.stringify(gltfDoc),'utf8');\nconst jsonPad=(4-(jsonSource.length%4))%4;\nconst jsonChunk=Buffer.concat([jsonSource,Buffer.alloc(jsonPad,0x20)]);\nconst binPad=(4-(triBytes.length%4))%4;\nconst binChunk=Buffer.concat([triBytes,Buffer.alloc(binPad)]);\nconst glb=Buffer.alloc(12+8+jsonChunk.length+8+binChunk.length);\nglb.writeUInt32LE(0x46546c67,0); glb.writeUInt32LE(2,4); glb.writeUInt32LE(glb.length,8);\nglb.writeUInt32LE(jsonChunk.length,12); glb.writeUInt32LE(0x4e4f534a,16); jsonChunk.copy(glb,20);\nconst binHeader=20+jsonChunk.length; glb.writeUInt32LE(binChunk.length,binHeader); glb.writeUInt32LE(0x004e4942,binHeader+4); binChunk.copy(glb,binHeader+8);\n";
           if(!s.includes('const workspace =')) throw new Error('workspace fixture seam missing');
           s=s.replace('const workspace =',glbBuilder+'const workspace =');
           const replacements=[
