@@ -37,6 +37,15 @@ for (const token of semanticTokens) {
 }
 check(tokens.includes("--accent-seed: #528B68"), "accent seed token missing");
 check(tokens.includes("--color-accent-primary: var(--accent-seed)"), "accent primary must derive from accent seed");
+const derivedAccentTokens = [
+  "--color-accent-subtle", "--color-accent-surface", "--color-accent-border",
+  "--color-accent-border-strong", "--color-accent-hover", "--color-accent-active", "--color-focus-ring"
+];
+for (const token of derivedAccentTokens) {
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  check(new RegExp(`${escaped}:\\s*color-mix\\(in oklch, var\\(--accent-seed\\)`).test(tokens), `${token} must derive from the selected accent seed`);
+  check((tokens.match(new RegExp(`${escaped}:`, "g")) ?? []).length >= 2, `${token} requires a deterministic fallback before perceptual derivation`);
+}
 check(!/--color-status-[^:]+:\s*var\(--accent/.test(tokens), "semantic status token depends on user accent");
 check(tokens.includes("--font-size-caption: 0.75rem"), "12px metadata scale missing");
 check(tokens.includes("--font-size-label: 0.8125rem"), "13px label scale missing");
