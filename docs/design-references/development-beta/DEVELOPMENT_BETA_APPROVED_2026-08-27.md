@@ -28,7 +28,7 @@ Approved rendered reference identity:
 - `development_roadmap_beta_mockup_v9_timeline_execution.png`
 - SHA-256: `bf37f0df84af967d9264a030ae2283c6ebf121ebc038cbc31620a6482afd8f83`
 
-The exact approved HTML is preserved beside this file as `development-roadmap-timeline-beta-approved-2026-08-27.html`.
+The repository freezes the approved semantics plus exact local artifact identities/hashes. The local HTML fixture remains the maintainer-approved composition reference for this session; any future repository-embedded copy must match the hash above exactly.
 
 Approved composition and interaction rules:
 
@@ -86,7 +86,7 @@ Approved rendered reference identities:
 - add-event dialog: `5f362dd6fd8ce761253754400dc72430640ada9f39a2dcd042919d8cbde12cd8`
 - selected-event actions: `97e1697d8730ffdeadaa17790d9ccb94cdee4c07ae385f17506dbc0f3e6d68e0`
 
-The exact approved HTML is preserved beside this file as `development-calendar-beta-approved-2026-08-27.html`.
+The repository freezes the approved semantics plus exact local artifact identities/hashes. The local HTML fixture remains the maintainer-approved composition reference for this session; any future repository-embedded copy must match the hash above exactly.
 
 Calendar is not a duplicate rendering of Roadmap windows. Its distinct purpose is actual time management: day/week scheduling down to hours and minutes.
 
@@ -119,7 +119,7 @@ Earlier approved multi-context behavior reference:
 
 - SHA-256: `4838750050dd0d18f03efc9d21f706ff319c30096d82dcd02baaa86fc8dddcf1`
 
-The exact approved HTML is preserved beside this file as `development-brainstorm-beta-approved-2026-08-27.html`.
+The repository freezes the approved semantics plus exact local artifact identities/hashes. The local HTML fixture remains the maintainer-approved composition reference for this session; any future repository-embedded copy must match the hash above exactly.
 
 Brainstorm is not a Kanban lifecycle such as Inbox/Exploring/Candidate. Its primary model is:
 
