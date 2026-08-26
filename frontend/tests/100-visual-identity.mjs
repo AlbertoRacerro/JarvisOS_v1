@@ -8,10 +8,12 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 const theme = read("src/theme.ts");
 const tokens = read("src/styles/tokens.css");
 const main = read("src/main.tsx");
+const layout = read("src/components/Layout.tsx");
 const settings = read("src/pages/Settings.tsx");
 const settingsCss = read("src/styles/settings.css");
 const processStage = read("src/stages/ProcessStage.tsx");
 const pkg = JSON.parse(read("package.json"));
+const lock = JSON.parse(read("package-lock.json"));
 
 const failures = [];
 const check = (condition, message) => { if (!condition) failures.push(message); };
@@ -56,6 +58,28 @@ check(tokens.includes("--control-height-default: 2.1875rem"), "35px default cont
 check(tokens.includes("@media (prefers-reduced-motion: reduce)"), "reduced-motion rule missing");
 check(tokens.includes("--motion-fast: 0ms") && tokens.includes("--motion-standard: 0ms"), "reduced-motion must collapse non-essential motion");
 check(!tokens.includes("backdrop-filter"), "structural glass is not authorized in first pass");
+
+const localFonts = [
+  ["public/fonts/InstrumentSans-Regular.woff2", '/fonts/InstrumentSans-Regular.woff2'],
+  ["public/fonts/InstrumentSans-Medium.woff2", '/fonts/InstrumentSans-Medium.woff2'],
+  ["public/fonts/InstrumentSans-SemiBold.woff2", '/fonts/InstrumentSans-SemiBold.woff2'],
+  ["public/fonts/IBMPlexMono-Variable.woff2", '/fonts/IBMPlexMono-Variable.woff2']
+];
+for (const [relative, cssPath] of localFonts) {
+  const absolute = path.join(root, relative);
+  check(fs.existsSync(absolute) && fs.statSync(absolute).size > 0, `${relative} missing or empty`);
+  check(tokens.includes(`url("${cssPath}") format("woff2")`), `${relative} is not referenced as a local woff2 source`);
+}
+check(!/@font-face[\s\S]*url\(["']?https?:\/\//i.test(tokens), "normal font rendering must not depend on a remote URL");
+
+check(pkg.dependencies?.["@phosphor-icons/react"] === "2.1.10", "Phosphor dependency must be pinned to 2.1.10");
+check(lock.packages?.[""]?.dependencies?.["@phosphor-icons/react"] === "2.1.10", "lockfile root must pin Phosphor 2.1.10");
+check(lock.packages?.["node_modules/@phosphor-icons/react"]?.version === "2.1.10", "resolved Phosphor package must be 2.1.10");
+for (const forbidden of ["lucide-react", "@tabler/icons-react", "phosphor-react"]) {
+  check(!(forbidden in (pkg.dependencies ?? {})) && !(forbidden in (pkg.devDependencies ?? {})), `${forbidden} generic icon dependency is forbidden`);
+}
+check(layout.includes('from "@phosphor-icons/react"'), "allowed shell controls must consume the pinned Phosphor family");
+check(layout.includes('aria-hidden="true"'), "decorative shell icons must not duplicate accessible control names");
 
 check(settings.includes('type="color"'), "Settings Custom accent must use the native color input");
 check(settings.includes("Reset to Microalgae"), "Settings accent Reset is missing");
