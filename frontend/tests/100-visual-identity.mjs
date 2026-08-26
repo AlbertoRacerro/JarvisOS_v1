@@ -51,9 +51,11 @@ for (const token of semanticTokens) {
 check(tokens.includes("--accent-seed: #528B68"), "accent seed token missing");
 check(tokens.includes("--color-accent-primary: var(--accent-seed)"), "accent primary must derive from accent seed");
 check(tokens.includes("--color-accent-foreground:"), "contrast-safe accent foreground role missing");
+check((tokens.match(/--color-accent-hover:\s*var\(--accent-seed\)/g) ?? []).length >= 2, "hover fills must preserve the raw-seed foreground contrast decision");
+check((tokens.match(/--color-accent-active:\s*var\(--accent-seed\)/g) ?? []).length >= 2, "active fills must preserve the raw-seed foreground contrast decision");
+check((tokens.match(/--color-focus-ring:\s*var\(--color-accent-foreground\)/g) ?? []).length >= 2, "focus ring must use the contrast-safe accent foreground role");
 const derivedAccentTokens = [
-  "--color-accent-subtle", "--color-accent-surface", "--color-accent-border",
-  "--color-accent-border-strong", "--color-accent-hover", "--color-accent-active", "--color-focus-ring"
+  "--color-accent-subtle", "--color-accent-surface", "--color-accent-border", "--color-accent-border-strong"
 ];
 for (const token of derivedAccentTokens) {
   const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -63,6 +65,8 @@ for (const token of derivedAccentTokens) {
 const perceptualSupportIndex = tokens.indexOf("@supports (color: color-mix(in oklch, red, blue))");
 check(perceptualSupportIndex >= 0, "perceptual accent overrides require an @supports feature boundary");
 check(perceptualSupportIndex < 0 || !tokens.slice(0, perceptualSupportIndex).includes("color-mix(in oklch"), "unsupported color-mix expressions must not override literal fallbacks outside @supports");
+const supportedAccentBlock = perceptualSupportIndex >= 0 ? tokens.slice(perceptualSupportIndex) : "";
+check(!/--color-(?:accent-hover|accent-active|focus-ring):\s*color-mix/.test(supportedAccentBlock), "interaction fills/focus must not be remixed away from their validated contrast roles");
 check(!/--color-status-[^:]+:\s*var\(--accent/.test(tokens), "semantic status token depends on user accent");
 const darkTokens = tokens.split('[data-theme="dark"] {')[1]?.split("@supports (color: color-mix")[0] ?? "";
 check(darkTokens.includes("--color-text-inverse: #eef2ee"), "dark technical surfaces require a light inverse-text token");
