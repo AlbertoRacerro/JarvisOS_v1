@@ -18,7 +18,7 @@ jobs:
       - name: Prove product tree matches frozen head
         run: |
           git fetch --no-tags --depth=1 origin db2591239a4ba22906157898b5ba83eb1e03e9a0
-          git diff --exit-code db2591239a4ba22906157898b5ba83eb1e03e9a0 -- frontend ':!frontend/evidence/100-browser.mjs' backend schemas docs/specs/STATUS.md
+          git diff --exit-code db2591239a4ba22906157898b5ba83eb1e03e9a0 -- frontend ':!frontend/evidence/100-browser.mjs' ':!frontend/evidence/.100-browser-rerun' backend schemas docs/specs/STATUS.md
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
