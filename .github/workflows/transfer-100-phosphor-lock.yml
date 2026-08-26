@@ -1,0 +1,32 @@
+name: Transfer 100 Phosphor lock
+
+on:
+  push:
+    branches: [transfer/100-phosphor-lock]
+
+permissions:
+  contents: write
+
+jobs:
+  lock:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: transfer/100-phosphor-lock
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Generate exact lockfile
+        working-directory: frontend
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit generated lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/package-lock.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Generate Phosphor lockfile"
+          git push origin HEAD:transfer/100-phosphor-lock
