@@ -1,0 +1,51 @@
+name: 100 Font Blob Transfer
+
+on:
+  push:
+    branches:
+      - transfer/100-font-blobs
+
+permissions:
+  contents: write
+
+jobs:
+  transfer:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: transfer/100-font-blobs
+          persist-credentials: true
+          fetch-depth: 1
+      - name: Download exact readiness-frozen fonts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p frontend/public/fonts
+          curl --fail --location --silent --show-error \
+            'https://raw.githubusercontent.com/Instrument/instrument-sans/7fa22308a3d0c94ee2b3cd537a1196b65db34a3e/fonts/webfonts/InstrumentSans-Regular.woff2' \
+            -o frontend/public/fonts/InstrumentSans-Regular.woff2
+          curl --fail --location --silent --show-error \
+            'https://raw.githubusercontent.com/Instrument/instrument-sans/7fa22308a3d0c94ee2b3cd537a1196b65db34a3e/fonts/webfonts/InstrumentSans-Medium.woff2' \
+            -o frontend/public/fonts/InstrumentSans-Medium.woff2
+          curl --fail --location --silent --show-error \
+            'https://raw.githubusercontent.com/Instrument/instrument-sans/7fa22308a3d0c94ee2b3cd537a1196b65db34a3e/fonts/webfonts/InstrumentSans-SemiBold.woff2' \
+            -o frontend/public/fonts/InstrumentSans-SemiBold.woff2
+          curl --fail --location --silent --show-error \
+            'https://raw.githubusercontent.com/IBM/plex/bf260093582f04622aacc1e9f9ca604d7ccd0c42/packages/plex-mono-variable/fonts/complete/woff2/IBM%20Plex%20Mono%20Var-Roman.woff2' \
+            -o frontend/public/fonts/IBMPlexMono-Variable.woff2
+          test "$(git hash-object frontend/public/fonts/InstrumentSans-Regular.woff2)" = '1e0a9719d54a0b5bb46ad8dabae3cad1a6eee203'
+          test "$(git hash-object frontend/public/fonts/InstrumentSans-Medium.woff2)" = '1360f22eac6514275f824c522e5329e3336928ea'
+          test "$(git hash-object frontend/public/fonts/InstrumentSans-SemiBold.woff2)" = '2285afc8e68c954a07bb438231acb1ca67afb3d2'
+          test "$(git hash-object frontend/public/fonts/IBMPlexMono-Variable.woff2)" = '09a8c306fe9df33ffb8c2ff8edca7cb7025d79a2'
+      - name: Persist blobs on transfer branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add frontend/public/fonts/*.woff2
+          git commit -m 'Stage exact visual identity font binaries'
+          git push origin HEAD:transfer/100-font-blobs
