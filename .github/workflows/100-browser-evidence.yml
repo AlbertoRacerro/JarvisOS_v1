@@ -56,7 +56,7 @@ jobs:
           if(!s.includes('const workspace =')) throw new Error('workspace fixture seam missing');
           s=s.replace('const workspace =',glbBuilder+'const workspace =');
           const replacements=[
-            ["const browser=await engine.launch({headless:true});","const browser=await engine.launch(engineName==='firefox'?{headless:true,firefoxUserPrefs:{'webgl.disabled':false,'webgl.force-enabled':true},env:{...process.env,MOZ_WEBRENDER:'1',LIBGL_ALWAYS_SOFTWARE:'1'}}:{headless:true});"],
+            ["const browser=await engine.launch({headless:true});","const browser=await engine.launch(engineName==='firefox'?{headless:false,firefoxUserPrefs:{'webgl.disabled':false,'webgl.force-enabled':true},env:{...process.env,MOZ_WEBRENDER:'1',LIBGL_ALWAYS_SOFTWARE:'1'}}:{headless:true});"],
             ["if(p==='/workspaces/ws-1/bluecad/artifacts/bound-glb/content') return route.fulfill({status:200,contentType:'model/gltf+json',headers:{'Access-Control-Allow-Origin':'*'},body:gltf});","if(p==='/workspaces/ws-1/bluecad/artifacts/bound-glb/content') return route.fulfill({status:200,contentType:'model/gltf-binary',headers:{'Access-Control-Allow-Origin':'*'},body:glb});"],
             ["await page.getByLabel('Inspectable mesh').selectOption('mesh-1');","await page.getByLabel('Inspectable mesh').selectOption('mesh-1',{force:true});"],
             ["const jarvis=page.getByRole('tab',{name:'Jarvis'}); assert.ok(await jarvis.count(),'Jarvis tab missing on selected BLUECAD object');","const jarvis=page.locator('#shell-sidecar-tab-jarvis'); assert.equal(await jarvis.count(),1,'Jarvis tab missing on selected BLUECAD object');"],
@@ -67,7 +67,7 @@ jobs:
           NODE
       - name: Run Chromium and Firefox visual matrix
         working-directory: frontend
-        run: node evidence/100-browser.mjs
+        run: xvfb-run -a node evidence/100-browser.mjs
       - name: Upload visual evidence
         if: always()
         uses: actions/upload-artifact@v4
