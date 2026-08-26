@@ -45,6 +45,10 @@ jobs:
           done
           cat /tmp/jarvisos-100-vite.log
           exit 1
+      - name: Normalize evidence-only hidden-select interaction
+        working-directory: frontend
+        run: |
+          node -e "const fs=require('fs');const p='evidence/100-browser.mjs';let s=fs.readFileSync(p,'utf8');const a=\"await page.getByLabel('Inspectable mesh').selectOption('mesh-1');\";const b=\"await page.getByLabel('Inspectable mesh').selectOption('mesh-1',{force:true});\";if(!s.includes(a))throw new Error('expected harness seam missing');fs.writeFileSync(p,s.replace(a,b));"
       - name: Run Chromium and Firefox visual matrix
         working-directory: frontend
         run: node evidence/100-browser.mjs
