@@ -1,0 +1,46 @@
+name: 100 Eyebrow Contrast Evidence
+
+on:
+  push:
+    branches: [evidence/100-eyebrow-f086e91]
+
+permissions:
+  contents: read
+
+jobs:
+  eyebrow-contrast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Prove product tree matches frozen corrective head
+        run: |
+          git fetch --no-tags --depth=1 origin f086e91fedb5cf8896fbb0ed0702b44bc5999321
+          git diff --exit-code f086e91fedb5cf8896fbb0ed0702b44bc5999321 -- frontend ':!frontend/evidence/100-eyebrow-contrast-browser.mjs' backend schemas docs/specs/STATUS.md
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install exact frontend dependencies
+        working-directory: frontend
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Production build
+        working-directory: frontend
+        run: npm run build
+      - name: Install evidence-only Playwright
+        working-directory: frontend
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium firefox
+      - name: Run rendered eyebrow contrast proof
+        working-directory: frontend
+        run: node evidence/100-eyebrow-contrast-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 100-eyebrow-contrast-f086e91
+          path: frontend/reports/100-eyebrow/
+          if-no-files-found: error
