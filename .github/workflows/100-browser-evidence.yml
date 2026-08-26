@@ -53,6 +53,7 @@ jobs:
           const p='evidence/100-browser.mjs';
           let s=fs.readFileSync(p,'utf8');
           const replacements=[
+            ["await page.getByText('Orbit, pan, zoom, or click a mesh to inspect visible geometry.').waitFor({timeout:10000});","await page.getByLabel('Inspectable mesh').waitFor({state:'attached',timeout:10000});"],
             ["await page.getByLabel('Inspectable mesh').selectOption('mesh-1');","await page.getByLabel('Inspectable mesh').selectOption('mesh-1',{force:true});"],
             ["const jarvis=page.getByRole('tab',{name:'Jarvis'}); assert.ok(await jarvis.count(),'Jarvis tab missing on selected BLUECAD object');","const jarvis=page.locator('#shell-sidecar-tab-jarvis'); assert.equal(await jarvis.count(),1,'Jarvis tab missing on selected BLUECAD object');"],
             ["await page.getByText('18.450',{exact:true}).first().waitFor();","await page.getByText('Q_rec · 18.450 · m3/h',{exact:true}).waitFor();"]
