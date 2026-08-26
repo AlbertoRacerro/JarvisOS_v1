@@ -63,7 +63,7 @@ summary:focus-visible,
 }
 
 .eyebrow {
-  color: var(--color-accent-hover);
+  color: var(--color-accent-foreground);
   font-size: var(--font-size-caption);
 }
 
