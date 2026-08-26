@@ -48,6 +48,7 @@
   padding: var(--space-3) var(--space-4);
   background: var(--color-bg-surface-raised);
   border-block-end: var(--border-width-default) solid var(--color-border-default);
+  box-shadow: var(--shadow-structural);
 }
 
 .shell-topbar__title {
@@ -120,17 +121,24 @@
   text-decoration: none;
   border: var(--border-width-default) solid transparent;
   border-radius: var(--radius-md);
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
 }
 
 .shell-nav-link:hover {
   color: var(--color-text-primary);
   background: var(--color-bg-surface);
+  border-color: var(--color-border-default);
 }
 
 .shell-nav-link[aria-current="page"] {
   color: var(--color-text-primary);
-  background: var(--color-bg-surface);
-  border-color: var(--color-border-strong);
+  background: var(--color-accent-subtle);
+  border-color: var(--color-accent-border-strong);
+  box-shadow: inset 3px 0 0 var(--color-accent-primary);
   font-weight: 700;
   text-decoration: underline;
   text-underline-offset: var(--space-1);
@@ -160,7 +168,7 @@
   min-width: 0;
   background: var(--color-bg-surface-raised);
   border: var(--border-width-default) solid var(--color-border-default);
-  box-shadow: var(--shadow-raised);
+  box-shadow: var(--shadow-structural);
 }
 
 .shell-navigator,
@@ -185,6 +193,7 @@
   height: min(72rem, calc(100vh - 8rem));
   max-height: calc(100vh - 8rem);
   overflow: hidden;
+  box-shadow: var(--shadow-raised);
 }
 
 .shell-panel__header,
@@ -218,7 +227,8 @@
 
 .shell-sidecar__tabs button[aria-selected="true"] {
   font-weight: 700;
-  border-color: var(--color-border-strong);
+  border-color: var(--color-accent-border-strong);
+  box-shadow: inset 0 -2px 0 var(--color-accent-primary);
 }
 
 .shell-sidecar__workbench {
@@ -340,6 +350,7 @@
   background: var(--color-bg-subtle);
   border: var(--border-width-default) solid var(--color-border-default);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-structural);
 }
 
 .process-stage {
@@ -370,25 +381,30 @@
 .process-stage__canvas {
   min-width: 0;
   border: var(--border-width-default) solid var(--color-border-default);
+  border-radius: var(--radius-md);
   background: var(--color-bg-surface);
+  box-shadow: var(--shadow-structural);
 }
 
 .process-stage__toolbar {
   grid-area: toolbar;
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-2);
-  padding: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-surface-raised);
 }
 
 .process-stage__palette {
   grid-area: palette;
-  padding: var(--space-4);
+  padding: var(--space-3);
   overflow: auto;
 }
 
 .process-stage__palette p {
   margin-block-end: 0;
+  color: var(--color-text-secondary);
 }
 
 .process-stage__canvas {
@@ -400,10 +416,20 @@
   overflow: auto;
   text-align: center;
   background: var(--color-bg-subtle);
+  background-image:
+    linear-gradient(var(--color-border-default) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-border-default) 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-position: -1px -1px;
 }
 
 .process-stage__canvas > div {
   max-width: 36rem;
+  padding: var(--space-5);
+  border: var(--border-width-default) solid var(--color-border-default);
+  border-radius: var(--radius-floating);
+  background: var(--color-bg-surface-raised);
+  box-shadow: var(--shadow-structural);
 }
 
 @media (max-width: 58rem) {
