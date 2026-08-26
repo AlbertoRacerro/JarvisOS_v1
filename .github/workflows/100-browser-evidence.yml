@@ -1,0 +1,80 @@
+name: 100 Browser Evidence
+
+on:
+  push:
+    branches: [evidence/100-browser-7a82fe13]
+
+permissions:
+  contents: read
+
+jobs:
+  browser-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Prove product tree matches frozen head
+        run: |
+          git fetch --no-tags --depth=1 origin 7a82fe1320ae512369b5144cf13c1295f2dc55b9
+          git diff --exit-code 7a82fe1320ae512369b5144cf13c1295f2dc55b9 -- frontend ':!frontend/evidence/100-browser.mjs' backend schemas docs/specs/STATUS.md
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install exact frontend dependencies
+        working-directory: frontend
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Production build
+        working-directory: frontend
+        run: npm run build
+      - name: Install evidence-only Playwright
+        working-directory: frontend
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium firefox
+      - name: Start production preview
+        working-directory: frontend
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/jarvisos-100-vite.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4173/design/model >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/jarvisos-100-vite.log
+          exit 1
+      - name: Normalize evidence-only interactions
+        working-directory: frontend
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const p='evidence/100-browser.mjs';
+          let s=fs.readFileSync(p,'utf8');
+          s=s.replace('const PRODUCT_HEAD = "0c6cbd1f09254185fc85220684a760dc26f8169b";','const PRODUCT_HEAD = "7a82fe1320ae512369b5144cf13c1295f2dc55b9";');
+          const glbBuilder="const gltfDoc=JSON.parse(gltf);\ndelete gltfDoc.buffers[0].uri;\nconst jsonSource=Buffer.from(JSON.stringify(gltfDoc),'utf8');\nconst jsonPad=(4-(jsonSource.length%4))%4;\nconst jsonChunk=Buffer.concat([jsonSource,Buffer.alloc(jsonPad,0x20)]);\nconst binPad=(4-(triBytes.length%4))%4;\nconst binChunk=Buffer.concat([triBytes,Buffer.alloc(binPad)]);\nconst glb=Buffer.alloc(12+8+jsonChunk.length+8+binChunk.length);\nglb.writeUInt32LE(0x46546c67,0); glb.writeUInt32LE(2,4); glb.writeUInt32LE(glb.length,8);\nglb.writeUInt32LE(jsonChunk.length,12); glb.writeUInt32LE(0x4e4f534a,16); jsonChunk.copy(glb,20);\nconst binHeader=20+jsonChunk.length; glb.writeUInt32LE(binChunk.length,binHeader); glb.writeUInt32LE(0x004e4942,binHeader+4); binChunk.copy(glb,binHeader+8);\n";
+          if(!s.includes('const workspace =')) throw new Error('workspace fixture seam missing');
+          s=s.replace('const workspace =',glbBuilder+'const workspace =');
+          const replacements=[
+            ['const browser=await engine.launch({headless:true});',`const browser=await engine.launch(engineName==="firefox"?{headless:false,firefoxUserPrefs:{"webgl.disabled":false,"webgl.force-enabled":true},env:{...process.env,MOZ_WEBRENDER:"1",LIBGL_ALWAYS_SOFTWARE:"1"}}:{headless:true});`],
+            ['if(p==="/workspaces/ws-1/bluecad/artifacts/bound-glb/content") return route.fulfill({status:200,contentType:"model/gltf+json",headers:{"Access-Control-Allow-Origin":"*"},body:gltf});','if(p==="/workspaces/ws-1/bluecad/artifacts/bound-glb/content") return route.fulfill({status:200,contentType:"model/gltf-binary",headers:{"Access-Control-Allow-Origin":"*"},body:glb});'],
+            ['await page.getByLabel("Inspectable mesh").selectOption("mesh-1");','await page.getByLabel("Inspectable mesh").selectOption("mesh-1",{force:true});'],
+            ['const jarvis=page.getByRole("tab",{name:"Jarvis"}); assert.ok(await jarvis.count(),"Jarvis tab missing on selected BLUECAD object");','const jarvis=page.locator("#shell-sidecar-tab-jarvis"); assert.equal(await jarvis.count(),1,"Jarvis tab missing on selected BLUECAD object");'],
+            ['await page.getByText("18.450",{exact:true}).first().waitFor();','await page.getByText("Q_rec · 18.450 · m3/h",{exact:true}).waitFor();']
+          ];
+          for(const [a,b] of replacements){if(!s.includes(a))throw new Error(`expected harness seam missing: ${a}`);s=s.replace(a,b);}
+          fs.writeFileSync(p,s);
+          NODE
+      - name: Run Chromium and Firefox visual matrix
+        working-directory: frontend
+        run: xvfb-run -a node evidence/100-browser.mjs
+      - name: Upload visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 100-browser-evidence-7a82fe13
+          path: |
+            frontend/reports/100-browser/**
+            /tmp/jarvisos-100-vite.log
+          if-no-files-found: warn
