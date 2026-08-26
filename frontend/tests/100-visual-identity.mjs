@@ -27,7 +27,7 @@ check(theme.includes('/^#[0-9A-F]{6}$/'), "six-digit HEX validation missing");
 check((theme.match(/preset: "microalgae"/g) ?? []).length >= 4, "invalid accent paths must fail to Microalgae");
 check(theme.includes("jarvisos:accent:v1"), "versioned accent storage key missing");
 check(theme.includes('root.style.setProperty("--accent-seed", seed)'), "accent seed is not applied through isolated CSS variable");
-check(theme.includes('ACCENT_FOREGROUND_LIGHT = "#FFFFFF"') && theme.includes('ACCENT_FOREGROUND_DARK = "#0D1411"'), "bounded accent foreground candidates missing");
+check(theme.includes('ACCENT_FOREGROUND_LIGHT = "#FFFFFF"') && theme.includes('ACCENT_FOREGROUND_DARK = "#000000"'), "bounded accent foreground candidates must span full readable contrast range");
 check(theme.includes("relativeLuminance") && theme.includes("contrastRatio"), "custom accent foreground must be contrast-derived");
 check(theme.includes('root.style.setProperty("--color-accent-on", accentForegroundHex(seed))'), "custom accent foreground is not applied from selected seed");
 check(main.includes("applyStoredVisualPreferences();"), "stored visual preferences are not initialized");
