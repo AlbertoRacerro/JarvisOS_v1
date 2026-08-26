@@ -312,6 +312,9 @@ function Settings() {
   };
 
   const allMutationsBusy = settingsBusy || credentialBusy || uncertain;
+  const customAccentSwatch = normalizeAccentHex(customAccentDraft)
+    ?? (accent.preset === "custom" ? accent.customHex : undefined)
+    ?? DEFAULT_ACCENT_HEX;
 
   return (
     <section className="settings-page" aria-labelledby="settings-title">
@@ -356,7 +359,7 @@ function Settings() {
               {ACCENT_OPTIONS.map((option) => (
                 <label key={option} className="settings-accent-choice">
                   <input type="radio" name="accent" value={option} checked={accent.preset === option} onChange={() => setVisualAccent(option)} />
-                  <span className="settings-accent-swatch" style={{ "--settings-swatch": option === "custom" ? customAccentDraft : ACCENT_PRESETS[option as Exclude<AccentPreset, "custom">] } as React.CSSProperties} aria-hidden="true" />
+                  <span className="settings-accent-swatch" style={{ "--settings-swatch": option === "custom" ? customAccentSwatch : ACCENT_PRESETS[option as Exclude<AccentPreset, "custom">] } as React.CSSProperties} aria-hidden="true" />
                   <span>{accentLabels[option]}</span>
                 </label>
               ))}
