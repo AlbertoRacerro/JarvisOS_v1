@@ -25,7 +25,7 @@ export const ACCENT_OPTIONS: readonly AccentPreset[] = [
 ];
 
 const ACCENT_FOREGROUND_LIGHT = "#FFFFFF";
-const ACCENT_FOREGROUND_DARK = "#0D1411";
+const ACCENT_FOREGROUND_DARK = "#000000";
 
 function isAppearancePreference(value: unknown): value is AppearancePreference {
   return value === "system" || value === "light" || value === "dark";
