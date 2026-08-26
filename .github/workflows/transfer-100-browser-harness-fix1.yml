@@ -1,0 +1,36 @@
+name: Transfer 100 browser harness fix 1
+
+on:
+  push:
+    branches: [transfer/100-browser-harness-fix1]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: evidence/100-browser-db259123
+      - name: Open BLUECAD navigator before choosing fixture candidate
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('frontend/evidence/100-browser.mjs')
+          s=p.read_text()
+          old="  await page.goto(`${ORIGIN}/design/model`); await page.getByRole('heading',{name:'Model workbench'}).waitFor();\n  await page.getByRole('button',{name:/Candidate bound/}).click();"
+          new="  await page.goto(`${ORIGIN}/design/model`); await page.getByRole('heading',{name:'Model workbench'}).waitFor();\n  const navigatorToggle=page.getByRole('button',{name:/Show navigator|Hide navigator/}); if((await navigatorToggle.first().textContent())?.includes('Show')) await navigatorToggle.first().click();\n  await page.getByRole('button',{name:/Candidate bound/}).click();"
+          if old not in s: raise SystemExit('target harness lines not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+      - name: Commit and push evidence-only fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/evidence/100-browser.mjs
+          git commit -m "Open BLUECAD navigator in visual evidence"
+          git push origin HEAD:evidence/100-browser-db259123
