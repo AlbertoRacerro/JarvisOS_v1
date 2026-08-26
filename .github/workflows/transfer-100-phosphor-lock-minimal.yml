@@ -1,0 +1,46 @@
+name: Transfer 100 minimal Phosphor lock
+
+on:
+  push:
+    branches: [transfer/100-phosphor-lock-minimal]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-lock:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: transfer/100-phosphor-lock-minimal
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Add exact Phosphor lock entry without npm normalization
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const p = 'frontend/package-lock.json';
+          const lock = JSON.parse(fs.readFileSync(p, 'utf8'));
+          lock.packages[''].dependencies['@phosphor-icons/react'] = '2.1.10';
+          lock.packages['node_modules/@phosphor-icons/react'] = {
+            version: '2.1.10',
+            resolved: 'https://registry.npmjs.org/@phosphor-icons/react/-/react-2.1.10.tgz',
+            integrity: 'sha512-vt8Tvq8GLjheAZZYa+YG/pW7HDbov8El/MANW8pOAz4eGxrwhnbfrQZq0Cp4q8zBEu8NIhHdnr+r8thnfRSNYA==',
+            license: 'MIT',
+            engines: { node: '>=10' },
+            peerDependencies: { react: '>= 16.8', 'react-dom': '>= 16.8' }
+          };
+          fs.writeFileSync(p, JSON.stringify(lock, null, 2) + '\n');
+          NODE
+      - name: Commit minimal lockfile patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/package-lock.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Generate minimal Phosphor lockfile"
+          git push origin HEAD:transfer/100-phosphor-lock-minimal
