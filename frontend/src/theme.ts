@@ -24,6 +24,9 @@ export const ACCENT_OPTIONS: readonly AccentPreset[] = [
   "custom"
 ];
 
+const ACCENT_FOREGROUND_LIGHT = "#FFFFFF";
+const ACCENT_FOREGROUND_DARK = "#0D1411";
+
 function isAppearancePreference(value: unknown): value is AppearancePreference {
   return value === "system" || value === "light" || value === "dark";
 }
@@ -35,6 +38,36 @@ function isAccentPreset(value: unknown): value is AccentPreset {
 export function normalizeAccentHex(value: string): string | null {
   const normalized = value.trim().toUpperCase();
   return /^#[0-9A-F]{6}$/.test(normalized) ? normalized : null;
+}
+
+function srgbChannelToLinear(channel: number): number {
+  const normalized = channel / 255;
+  return normalized <= 0.04045
+    ? normalized / 12.92
+    : ((normalized + 0.055) / 1.055) ** 2.4;
+}
+
+function relativeLuminance(hex: string): number {
+  const normalized = normalizeAccentHex(hex) ?? DEFAULT_ACCENT_HEX;
+  const red = srgbChannelToLinear(Number.parseInt(normalized.slice(1, 3), 16));
+  const green = srgbChannelToLinear(Number.parseInt(normalized.slice(3, 5), 16));
+  const blue = srgbChannelToLinear(Number.parseInt(normalized.slice(5, 7), 16));
+  return (0.2126 * red) + (0.7152 * green) + (0.0722 * blue);
+}
+
+function contrastRatio(firstHex: string, secondHex: string): number {
+  const first = relativeLuminance(firstHex);
+  const second = relativeLuminance(secondHex);
+  const lighter = Math.max(first, second);
+  const darker = Math.min(first, second);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+export function accentForegroundHex(seedHex: string): string {
+  const normalized = normalizeAccentHex(seedHex) ?? DEFAULT_ACCENT_HEX;
+  const lightContrast = contrastRatio(normalized, ACCENT_FOREGROUND_LIGHT);
+  const darkContrast = contrastRatio(normalized, ACCENT_FOREGROUND_DARK);
+  return lightContrast >= darkContrast ? ACCENT_FOREGROUND_LIGHT : ACCENT_FOREGROUND_DARK;
 }
 
 function safeStorage(): Storage | null {
@@ -139,8 +172,10 @@ export function applyAccentPreference(preference: AccentPreference): AccentPrefe
       : { preset: "microalgae" as const };
   if (typeof document === "undefined") return safePreference;
   const root = document.documentElement;
+  const seed = accentHex(safePreference);
   root.dataset.accent = safePreference.preset;
-  root.style.setProperty("--accent-seed", accentHex(safePreference));
+  root.style.setProperty("--accent-seed", seed);
+  root.style.setProperty("--color-accent-on", accentForegroundHex(seed));
   return safePreference;
 }
 
