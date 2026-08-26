@@ -69,21 +69,15 @@
 
   --accent-seed: #528B68;
   --color-accent-subtle: #edf3ee;
-  --color-accent-subtle: color-mix(in oklch, var(--accent-seed) 10%, #fbfcf8);
   --color-accent-surface: #dfe9e1;
-  --color-accent-surface: color-mix(in oklch, var(--accent-seed) 18%, #fbfcf8);
   --color-accent-border: #afc7b5;
-  --color-accent-border: color-mix(in oklch, var(--accent-seed) 38%, #cfd8ce);
   --color-accent-border-strong: #789c82;
-  --color-accent-border-strong: color-mix(in oklch, var(--accent-seed) 64%, #aab7aa);
   --color-accent-primary: var(--accent-seed);
+  --color-accent-foreground: #3f7257;
   --color-accent-hover: #416f53;
-  --color-accent-hover: color-mix(in oklch, var(--accent-seed) 86%, #20251f);
   --color-accent-active: #345942;
-  --color-accent-active: color-mix(in oklch, var(--accent-seed) 74%, #20251f);
   --color-accent-on: #ffffff;
   --color-focus-ring: #3f7257;
-  --color-focus-ring: color-mix(in oklch, var(--accent-seed) 72%, #1557b0);
 }
 
 :root,
@@ -186,19 +180,13 @@
   --color-border-default: #526158;
   --color-border-strong: #718078;
   --color-accent-subtle: #1c2a22;
-  --color-accent-subtle: color-mix(in oklch, var(--accent-seed) 14%, #18211d);
   --color-accent-surface: #22372b;
-  --color-accent-surface: color-mix(in oklch, var(--accent-seed) 22%, #18211d);
   --color-accent-border: #4c7058;
-  --color-accent-border: color-mix(in oklch, var(--accent-seed) 48%, #526158);
   --color-accent-border-strong: #679076;
-  --color-accent-border-strong: color-mix(in oklch, var(--accent-seed) 67%, #718078);
+  --color-accent-foreground: #91c7a1;
   --color-accent-hover: #91c7a1;
-  --color-accent-hover: color-mix(in oklch, var(--accent-seed) 86%, #eef2ee);
   --color-accent-active: #7aae8a;
-  --color-accent-active: color-mix(in oklch, var(--accent-seed) 72%, #eef2ee);
   --color-focus-ring: #74a987;
-  --color-focus-ring: color-mix(in oklch, var(--accent-seed) 70%, #8bbde8);
   --color-focus-separator: #101713;
 
   --color-status-info-bg: #142a3a;
@@ -221,6 +209,28 @@
   --color-status-synthetic-text: var(--palette-cyan-800);
   --color-status-archived-bg: #242b28;
   --color-status-archived-text: #c2cbc6;
+}
+
+@supports (color: color-mix(in oklch, red, blue)) {
+  :root {
+    --color-accent-subtle: color-mix(in oklch, var(--accent-seed) 10%, #fbfcf8);
+    --color-accent-surface: color-mix(in oklch, var(--accent-seed) 18%, #fbfcf8);
+    --color-accent-border: color-mix(in oklch, var(--accent-seed) 38%, #cfd8ce);
+    --color-accent-border-strong: color-mix(in oklch, var(--accent-seed) 64%, #aab7aa);
+    --color-accent-hover: color-mix(in oklch, var(--accent-seed) 86%, #20251f);
+    --color-accent-active: color-mix(in oklch, var(--accent-seed) 74%, #20251f);
+    --color-focus-ring: color-mix(in oklch, var(--accent-seed) 72%, #1557b0);
+  }
+
+  [data-theme="dark"] {
+    --color-accent-subtle: color-mix(in oklch, var(--accent-seed) 14%, #18211d);
+    --color-accent-surface: color-mix(in oklch, var(--accent-seed) 22%, #18211d);
+    --color-accent-border: color-mix(in oklch, var(--accent-seed) 48%, #526158);
+    --color-accent-border-strong: color-mix(in oklch, var(--accent-seed) 67%, #718078);
+    --color-accent-hover: color-mix(in oklch, var(--accent-seed) 86%, #eef2ee);
+    --color-accent-active: color-mix(in oklch, var(--accent-seed) 72%, #eef2ee);
+    --color-focus-ring: color-mix(in oklch, var(--accent-seed) 70%, #8bbde8);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
