@@ -45,10 +45,20 @@ jobs:
           done
           cat /tmp/jarvisos-100-vite.log
           exit 1
-      - name: Normalize evidence-only hidden-select interaction
+      - name: Normalize evidence-only BLUECAD interactions
         working-directory: frontend
         run: |
-          node -e "const fs=require('fs');const p='evidence/100-browser.mjs';let s=fs.readFileSync(p,'utf8');const a=\"await page.getByLabel('Inspectable mesh').selectOption('mesh-1');\";const b=\"await page.getByLabel('Inspectable mesh').selectOption('mesh-1',{force:true});\";if(!s.includes(a))throw new Error('expected harness seam missing');fs.writeFileSync(p,s.replace(a,b));"
+          node - <<'NODE'
+          const fs=require('fs');
+          const p='evidence/100-browser.mjs';
+          let s=fs.readFileSync(p,'utf8');
+          const replacements=[
+            ["await page.getByLabel('Inspectable mesh').selectOption('mesh-1');","await page.getByLabel('Inspectable mesh').selectOption('mesh-1',{force:true});"],
+            ["const jarvis=page.getByRole('tab',{name:'Jarvis'}); assert.ok(await jarvis.count(),'Jarvis tab missing on selected BLUECAD object');","const jarvis=page.locator('#shell-sidecar-tab-jarvis'); assert.equal(await jarvis.count(),1,'Jarvis tab missing on selected BLUECAD object');"]
+          ];
+          for(const [a,b] of replacements){if(!s.includes(a))throw new Error(`expected harness seam missing: ${a}`);s=s.replace(a,b);}
+          fs.writeFileSync(p,s);
+          NODE
       - name: Run Chromium and Firefox visual matrix
         working-directory: frontend
         run: node evidence/100-browser.mjs
