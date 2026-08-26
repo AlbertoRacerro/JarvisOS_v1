@@ -67,6 +67,7 @@ for (const [engineName,engine] of engines) {
 
   // A: real BLUECAD artifact fixture -> semantic selected object -> Properties/Jarvis/dock.
   await page.goto(`${ORIGIN}/design/model`); await page.getByRole('heading',{name:'Model workbench'}).waitFor();
+  const navigatorToggle=page.getByRole('button',{name:/Show navigator|Hide navigator/}); if((await navigatorToggle.first().textContent())?.includes('Show')) await navigatorToggle.first().click();
   await page.getByRole('button',{name:/Candidate bound/}).click();
   await page.getByText('Orbit, pan, zoom, or click a mesh to inspect visible geometry.').waitFor({timeout:10000});
   const contextToggle=page.getByRole('button',{name:/Show context|Hide context/}); if((await contextToggle.first().textContent())?.includes('Show')) await contextToggle.first().click();
