@@ -26,6 +26,9 @@ export const ACCENT_OPTIONS: readonly AccentPreset[] = [
 
 const ACCENT_FOREGROUND_LIGHT = "#FFFFFF";
 const ACCENT_FOREGROUND_DARK = "#000000";
+const ACCENT_TEXT_LIGHT_SURFACE = "#FFFFFF";
+const ACCENT_TEXT_DARK_SURFACE = "#202B26";
+const MIN_TEXT_CONTRAST = 4.5;
 
 function isAppearancePreference(value: unknown): value is AppearancePreference {
   return value === "system" || value === "light" || value === "dark";
@@ -67,6 +70,15 @@ export function accentForegroundHex(seedHex: string): string {
   const normalized = normalizeAccentHex(seedHex) ?? DEFAULT_ACCENT_HEX;
   const lightContrast = contrastRatio(normalized, ACCENT_FOREGROUND_LIGHT);
   const darkContrast = contrastRatio(normalized, ACCENT_FOREGROUND_DARK);
+  return lightContrast >= darkContrast ? ACCENT_FOREGROUND_LIGHT : ACCENT_FOREGROUND_DARK;
+}
+
+export function accentTextForegroundHex(seedHex: string, appearance: ResolvedAppearance): string {
+  const normalized = normalizeAccentHex(seedHex) ?? DEFAULT_ACCENT_HEX;
+  const surface = appearance === "dark" ? ACCENT_TEXT_DARK_SURFACE : ACCENT_TEXT_LIGHT_SURFACE;
+  if (contrastRatio(normalized, surface) >= MIN_TEXT_CONTRAST) return normalized;
+  const lightContrast = contrastRatio(surface, ACCENT_FOREGROUND_LIGHT);
+  const darkContrast = contrastRatio(surface, ACCENT_FOREGROUND_DARK);
   return lightContrast >= darkContrast ? ACCENT_FOREGROUND_LIGHT : ACCENT_FOREGROUND_DARK;
 }
 
@@ -173,9 +185,11 @@ export function applyAccentPreference(preference: AccentPreference): AccentPrefe
   if (typeof document === "undefined") return safePreference;
   const root = document.documentElement;
   const seed = accentHex(safePreference);
+  const appearance: ResolvedAppearance = root.dataset.theme === "dark" ? "dark" : "light";
   root.dataset.accent = safePreference.preset;
   root.style.setProperty("--accent-seed", seed);
   root.style.setProperty("--color-accent-on", accentForegroundHex(seed));
+  root.style.setProperty("--color-accent-foreground", accentTextForegroundHex(seed, appearance));
   return safePreference;
 }
 
@@ -195,6 +209,8 @@ export function applyResolvedAppearance(resolved: ResolvedAppearance): void {
   const root = document.documentElement;
   root.dataset.theme = resolved;
   root.style.colorScheme = resolved;
+  const seed = normalizeAccentHex(root.style.getPropertyValue("--accent-seed")) ?? DEFAULT_ACCENT_HEX;
+  root.style.setProperty("--color-accent-foreground", accentTextForegroundHex(seed, resolved));
 }
 
 export function applyAppearancePreference(preference: AppearancePreference): ResolvedAppearance {
