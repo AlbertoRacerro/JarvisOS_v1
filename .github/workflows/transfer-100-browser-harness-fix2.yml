@@ -1,0 +1,36 @@
+name: Transfer 100 browser harness fix 2
+
+on:
+  push:
+    branches: [transfer/100-browser-harness-fix2]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: evidence/100-browser-db259123-r2
+      - name: Select mesh in active Jarvis contribution before opening Properties
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('frontend/evidence/100-browser.mjs')
+          s=p.read_text()
+          old="  const props=page.getByRole('tab',{name:'Properties'}); if(await props.count()) await props.click();\n  await page.getByLabel('Inspectable mesh').selectOption('mesh-1');\n  await page.locator('#shell-sidecar-pane-properties').filter({hasText:'PART-A'}).waitFor({timeout:10000});\n  const jarvis=page.getByRole('tab',{name:'Jarvis'}); assert.ok(await jarvis.count(),'Jarvis tab missing on selected BLUECAD object');"
+          new="  const jarvis=page.getByRole('tab',{name:'Jarvis'}); assert.ok(await jarvis.count(),'Jarvis tab missing on BLUECAD sidecar');\n  await page.locator('#shell-sidecar-pane-jarvis label:has-text(\"Inspectable mesh\") select').selectOption('mesh-1');\n  const props=page.getByRole('tab',{name:'Properties'}); assert.ok(await props.count(),'Properties tab missing on selected BLUECAD object'); await props.click();\n  await page.locator('#shell-sidecar-pane-properties').filter({hasText:'PART-A'}).waitFor({timeout:10000});"
+          if old not in s: raise SystemExit('target harness lines not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+      - name: Commit and push evidence-only fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/evidence/100-browser.mjs
+          git commit -m "Select BLUECAD mesh before Properties proof"
+          git push origin HEAD:evidence/100-browser-db259123-r2
