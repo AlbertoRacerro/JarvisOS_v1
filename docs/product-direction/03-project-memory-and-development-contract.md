@@ -58,6 +58,26 @@ Validation/evidence is version-scoped. Example: if Process passes for v12 and fa
 
 Historical runs should be inspectable from the model/version that owns them. A run can expose input snapshot, output snapshot, status, logs and artifacts without creating a peer `Runs` application destination.
 
+### Scalable dossier disclosure
+
+Model dossiers must remain compact and scannable even when a project accumulates many assumptions, parameters, runs, sources, artifacts or validation records.
+
+The normal Models view must therefore use bounded section summaries rather than allowing every section to grow vertically without limit. Each major dossier section header is an interactive disclosure control. Examples include `Definition`, `Assumptions`, `Methods & Equations`, `Parameters & Inputs`, `Process`, `BLUECAD`, `Results & Validation`, `Criticalities`, `Sources`, `Artifacts`, `Runs`, and `Changelog / Lineage`.
+
+Required interaction semantics:
+
+- collapsed state shows the section title plus a compact truthful summary/count/status sufficient for whole-dossier scanning;
+- clicking the section header expands that section in place to reveal its full bounded content;
+- clicking the same header again collapses it back to the compact summary state;
+- expansion must not navigate away from the selected model/version;
+- a large section may use its own internal scrolling, pagination, filtering or virtualization rather than forcing the entire page to grow indefinitely;
+- one expanded section must not cause unrelated sections to scale or visually dominate the page;
+- the user must be able to regain a complete overview of the dossier quickly by collapsing expanded sections;
+- disclosure state is presentation state only and must not change canonical engineering records;
+- keyboard/focus/ARIA behavior must make the same expand/collapse operation accessible without relying on pointer interaction.
+
+The default density should favor overview first, detail on demand. Do not solve scale by turning every subsection into a separate primary page or by hiding model-version ownership.
+
 ## Literature
 
 Literature owns externally sourced project knowledge and the external files that support it.
