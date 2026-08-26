@@ -45,7 +45,7 @@ jobs:
           done
           cat /tmp/jarvisos-100-vite.log
           exit 1
-      - name: Normalize evidence-only BLUECAD interactions
+      - name: Normalize evidence-only interactions
         working-directory: frontend
         run: |
           node - <<'NODE'
@@ -54,7 +54,8 @@ jobs:
           let s=fs.readFileSync(p,'utf8');
           const replacements=[
             ["await page.getByLabel('Inspectable mesh').selectOption('mesh-1');","await page.getByLabel('Inspectable mesh').selectOption('mesh-1',{force:true});"],
-            ["const jarvis=page.getByRole('tab',{name:'Jarvis'}); assert.ok(await jarvis.count(),'Jarvis tab missing on selected BLUECAD object');","const jarvis=page.locator('#shell-sidecar-tab-jarvis'); assert.equal(await jarvis.count(),1,'Jarvis tab missing on selected BLUECAD object');"]
+            ["const jarvis=page.getByRole('tab',{name:'Jarvis'}); assert.ok(await jarvis.count(),'Jarvis tab missing on selected BLUECAD object');","const jarvis=page.locator('#shell-sidecar-tab-jarvis'); assert.equal(await jarvis.count(),1,'Jarvis tab missing on selected BLUECAD object');"],
+            ["await page.getByText('18.450',{exact:true}).first().waitFor();","await page.getByText('Q_rec · 18.450 · m3/h',{exact:true}).waitFor();"]
           ];
           for(const [a,b] of replacements){if(!s.includes(a))throw new Error(`expected harness seam missing: ${a}`);s=s.replace(a,b);}
           fs.writeFileSync(p,s);
