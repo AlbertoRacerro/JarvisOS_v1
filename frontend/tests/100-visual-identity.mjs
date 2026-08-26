@@ -26,7 +26,10 @@ check(theme.includes('lagoon: "#4F938A"'), "Lagoon seed missing");
 check(theme.includes('/^#[0-9A-F]{6}$/'), "six-digit HEX validation missing");
 check((theme.match(/preset: "microalgae"/g) ?? []).length >= 4, "invalid accent paths must fail to Microalgae");
 check(theme.includes("jarvisos:accent:v1"), "versioned accent storage key missing");
-check(theme.includes("root.style.setProperty(\"--accent-seed\""), "accent seed is not applied through isolated CSS variable");
+check(theme.includes('root.style.setProperty("--accent-seed", seed)'), "accent seed is not applied through isolated CSS variable");
+check(theme.includes('ACCENT_FOREGROUND_LIGHT = "#FFFFFF"') && theme.includes('ACCENT_FOREGROUND_DARK = "#0D1411"'), "bounded accent foreground candidates missing");
+check(theme.includes("relativeLuminance") && theme.includes("contrastRatio"), "custom accent foreground must be contrast-derived");
+check(theme.includes('root.style.setProperty("--color-accent-on", accentForegroundHex(seed))'), "custom accent foreground is not applied from selected seed");
 check(main.includes("applyStoredVisualPreferences();"), "stored visual preferences are not initialized");
 
 const semanticTokens = [
@@ -49,6 +52,10 @@ for (const token of derivedAccentTokens) {
   check((tokens.match(new RegExp(`${escaped}:`, "g")) ?? []).length >= 2, `${token} requires a deterministic fallback before perceptual derivation`);
 }
 check(!/--color-status-[^:]+:\s*var\(--accent/.test(tokens), "semantic status token depends on user accent");
+const darkTokens = tokens.split('[data-theme="dark"] {')[1]?.split("@media (prefers-reduced-motion: reduce)")[0] ?? "";
+check(darkTokens.includes("--color-text-inverse: #eef2ee"), "dark technical surfaces require a light inverse-text token");
+check(darkTokens.includes("--color-text-on-accent: var(--color-accent-on)"), "dark accent fills must use the contrast-derived foreground token");
+check(!darkTokens.includes("--color-accent-on:"), "dark appearance must not override contrast-derived accent foreground");
 check(tokens.includes("--font-size-caption: 0.75rem"), "12px metadata scale missing");
 check(tokens.includes("--font-size-label: 0.8125rem"), "13px label scale missing");
 check(tokens.includes("--font-size-body: 0.875rem"), "14px body scale missing");
