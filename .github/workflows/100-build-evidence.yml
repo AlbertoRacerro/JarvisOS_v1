@@ -1,0 +1,29 @@
+name: 100 Exact-head Build Evidence
+
+on:
+  push:
+    branches: [evidence/100-build-db259123]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: db2591239a4ba22906157898b5ba83eb1e03e9a0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install exact frontend dependencies
+        working-directory: frontend
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run deterministic acceptance and production build
+        working-directory: frontend
+        run: npm run build
