@@ -58,7 +58,6 @@ jobs:
           const replacements=[
             ["const browser=await engine.launch({headless:true});","const browser=await engine.launch(engineName==='firefox'?{headless:true,firefoxUserPrefs:{'webgl.disabled':false,'webgl.force-enabled':true},env:{...process.env,MOZ_WEBRENDER:'1',LIBGL_ALWAYS_SOFTWARE:'1'}}:{headless:true});"],
             ["if(p==='/workspaces/ws-1/bluecad/artifacts/bound-glb/content') return route.fulfill({status:200,contentType:'model/gltf+json',headers:{'Access-Control-Allow-Origin':'*'},body:gltf});","if(p==='/workspaces/ws-1/bluecad/artifacts/bound-glb/content') return route.fulfill({status:200,contentType:'model/gltf-binary',headers:{'Access-Control-Allow-Origin':'*'},body:glb});"],
-            ["await page.getByText('Orbit, pan, zoom, or click a mesh to inspect visible geometry.').waitFor({timeout:10000});","await page.getByLabel('Inspectable mesh').waitFor({state:'attached',timeout:10000});"],
             ["await page.getByLabel('Inspectable mesh').selectOption('mesh-1');","await page.getByLabel('Inspectable mesh').selectOption('mesh-1',{force:true});"],
             ["const jarvis=page.getByRole('tab',{name:'Jarvis'}); assert.ok(await jarvis.count(),'Jarvis tab missing on selected BLUECAD object');","const jarvis=page.locator('#shell-sidecar-tab-jarvis'); assert.equal(await jarvis.count(),1,'Jarvis tab missing on selected BLUECAD object');"],
             ["await page.getByText('18.450',{exact:true}).first().waitFor();","await page.getByText('Q_rec · 18.450 · m3/h',{exact:true}).waitFor();"]
