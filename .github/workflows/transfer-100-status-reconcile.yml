@@ -1,0 +1,53 @@
+name: Transfer 100 status reconciliation
+
+on:
+  push:
+    branches: [transfer/100-status-reconcile]
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build docs-only reconciliation branch
+        env:
+          TARGET_BRANCH: reconcile/100-merged-after-implementation
+          EXPECTED_MASTER: e108c0b445e635b2e9374574c06d68de3969eacc
+        run: |
+          set -euo pipefail
+          git fetch origin master
+          test "$(git rev-parse origin/master)" = "$EXPECTED_MASTER"
+          git checkout -B "$TARGET_BRANCH" origin/master
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('docs/specs/STATUS.md')
+          s = p.read_text(encoding='utf-8')
+          replacements = {
+              "Item 27 is now `in_review` through implementation PR #371 after merged definition/full-spec/readiness authority; items 28–39 remain `planned` until the normal definition/full-spec/readiness lifecycle authorizes each slice.":
+              "Item 27 is now `merged` through implementation PR #371 after merged definition/full-spec/readiness authority; the maintainer visual-inspection hold is active and items 28–39 remain `planned` until that hold is explicitly released and the normal definition/full-spec/readiness lifecycle authorizes each slice.",
+              "1. 100 VISUAL-IDENTITY-1 is `in_review` through implementation PR #371 after definition/full-spec PR #368 and readiness PR #369; the implementation remains bounded by `docs/specs/100-visual-identity-1.md`, `docs/specs/100-readiness-2026-08-25.md`, and the exact-master Visual Identity Authority Pack.":
+              "1. 100 VISUAL-IDENTITY-1 is `merged` through implementation PR #371 after definition/full-spec PR #368 and readiness PR #369; the post-100 maintainer visual-inspection hold is active, so no 100a/100b or later runtime front is authorized until that inspection releases the hold.",
+              "6. Execute implementation/reconciliation for 100 visual identity, then stop for the maintainer visual inspection required by the post-100 hold before any 100a/100b or later runtime work.":
+              "6. Stop for the maintainer visual inspection required by the post-100 hold; do not begin 100a/100b or later runtime work until the maintainer explicitly releases that hold.",
+              "| 100 | in_review | [#371](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/371) | VISUAL-IDENTITY-1 | 097, 098, 058b, 058d | Full spec merged through PR #368 and readiness through PR #369. Implementation PR #371 is the bounded frontend-only visual-identity pass under `100-readiness-2026-08-25.md`; preserve product/engineering authority and stop after 100 reconciliation for maintainer visual inspection. |":
+              "| 100 | merged | [#371](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/371) | VISUAL-IDENTITY-1 | 097, 098, 058b, 058d | Full spec merged through PR #368, readiness through PR #369, and the bounded frontend-only visual-identity implementation through PR #371. The post-100 maintainer visual-inspection hold is active; preserve product/engineering authority and do not begin 100a/100b until that hold is explicitly released. |",
+          }
+          for old, new in replacements.items():
+              count = s.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one occurrence, found {count}: {old[:100]}')
+              s = s.replace(old, new)
+          p.write_text(s, encoding='utf-8')
+          PY
+          git diff --check
+          test "$(git diff --name-only)" = "docs/specs/STATUS.md"
+          git config user.name "AlbertoRacerro"
+          git config user.email "alberto.racerro@mail.polimi.it"
+          git add docs/specs/STATUS.md
+          git commit -m "Reconcile VISUAL-IDENTITY-1 after merge"
+          git push --force-with-lease origin "$TARGET_BRANCH"
