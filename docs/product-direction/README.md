@@ -32,6 +32,7 @@ Detailed contracts:
 - [`04-coding-and-self-development-contract.md`](04-coding-and-self-development-contract.md)
 - [`05-settings-contract.md`](05-settings-contract.md)
 - [`06-future-spec-decomposition.md`](06-future-spec-decomposition.md)
+- [`07-model-change-validation-and-reconciliation.md`](07-model-change-validation-and-reconciliation.md)
 
 ## Promotion rule
 
