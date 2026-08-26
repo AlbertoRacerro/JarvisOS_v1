@@ -12,7 +12,7 @@ The current `STATUS.md` queue and post-100 visual-inspection hold remain authori
 
 Before runtime implementation of this packet, create one definition-only authority specification whose job is to:
 
-1. cite PD-01 through PD-05;
+1. cite PD-01 through PD-05 plus PD-07; PD-06 remains the planning/decomposition map;
 2. reconcile the new primary navigation with merged operator-workstation authority (081/095 and merged frontend slices);
 3. explicitly retire/supersede the old user-facing assumption that `Runs`, `Engineering Data`, `Review`, `Model`, `Results` or `Lineage` remain normal peer destinations where this packet says otherwise;
 4. preserve reusable merged backend capabilities even when their old frontend destination is removed;
@@ -32,11 +32,16 @@ Potential independently reviewable slices:
 
 - `PROJECT-BASIS-1`: canonical project-level requirements/constraints/decisions and read APIs;
 - `MODEL-DOSSIER-1`: aggregate exact model-version definition, assumptions, equations/methods, parameters, Process/BLUECAD references, results, validation, criticalities, artifacts, runs and lineage without duplicating canonical records;
+- `MODEL-CHANGESET-1`: bounded Jarvis/user proposal change sets plus exact working-revision lineage such as user-facing `v13.01 -> v13.02`, without in-place overwrite of the reconciled parent;
+- `DETERMINISTIC-IMPACT-REVALIDATION-1`: classify accepted changes into re-evaluate-existing-outputs versus Process/BLUECAD/multi-domain recalculation, automatically resolve criterion-only changes from stored exact outputs, and expose explicit validation-required state only where recomputation is genuinely required;
+- `MODEL-RECONCILIATION-1`: batch `Approve all`, exact working-revision promotion/reconciliation, immutable prior snapshots, terminal validation requirements, and explicit acknowledgement for known failed mandatory criteria;
 - `LITERATURE-SOURCE-1`: structured Source/Document/Claim-or-Datum/Citation provenance, contextual conditions and links to records/models;
 - `PROJECT-SEARCH-1`: unified project-memory search across structured records and indexed attached content, extending existing FTS/search infrastructure rather than building a second index unnecessarily;
 - `ACTIVITY-TIMELINE-1`: event/read-model projection for readable project history, only if needed after canonical event ownership is clear.
 
 Existing 101/102 or other planned canonical-state/evidence work may provide prerequisites or overlap. A future authority spec must inspect them and decide whether to rederive, depend on, or keep them separate; do not rename/reinterpret them by chat convention.
+
+PD-07 is binding product direction for the candidate change-set/revalidation/reconciliation slices. In particular, do not implement a generic indefinite `stale` state where deterministic reevaluation from stored authoritative outputs can resolve the new condition immediately.
 
 ### B. Development foundation
 
@@ -92,7 +97,7 @@ Likely slices:
 
 - shell/nav replacement to `Design / Memory / Development / Coding / Settings` and removal of normal Home;
 - Design `Process | BLUECAD` navigation/context-strip reconciliation;
-- Memory `Project Basis | Models | Literature`;
+- Memory `Project Basis | Models | Literature`, including compact working-revision/validation states and eventual `Validate` orchestration or interim deep links into Process/BLUECAD;
 - Development `Roadmap | Brainstorm`;
 - Coding `Repository | Runtime`;
 - Settings `Appearance | AI | System` reconciliation to the approved HTML/product contract.
@@ -120,7 +125,7 @@ The future authority spec should decide exact IDs, but the least-churn dependenc
 
 1. authority/queue re-derivation;
 2. canonical state foundations that existing 101/102 still legitimately own;
-3. Project Memory backend/read models;
+3. Project Memory backend/read models plus working-revision/change-set, deterministic impact revalidation and reconciliation semantics from PD-07;
 4. Development proposal/roadmap backend;
 5. generic provider/settings backend generalization;
 6. Coding repository observability and development-pipeline state;
