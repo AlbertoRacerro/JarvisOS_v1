@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { ChatCircleDots, ChartLine, SidebarSimple } from "@phosphor-icons/react";
 
 import type { Navigate } from "../app/AppLink";
 import type { AppRouteDefinition } from "../app/routes";
 import type { StageSelection } from "../app/selection";
 import type { ShellRegion, ShellRegionContributions } from "../stages/registry";
-import { APPEARANCE_OPTIONS, applyAppearancePreference, applyResolvedAppearance, readAppearancePreference, subscribeToSystemAppearance, writeAppearancePreference, type AppearancePreference } from "../theme";
+import { APPEARANCE_OPTIONS, applyAppearancePreference, applyResolvedAppearance, readAppearancePreference, subscribeToSystemAppearance, subscribeToVisualPreferenceUpdates, writeAppearancePreference, type AppearancePreference } from "../theme";
 import AnalysisDock from "./shell/AnalysisDock";
 import ContextualNavigator from "./shell/ContextualNavigator";
 import ContextualSidecar from "./shell/ContextualSidecar";
@@ -34,6 +35,7 @@ function Layout({ route, navigate, selection, propertiesContent, shellRegions, s
   const dockToggleRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => { applyAppearancePreference(appearance); return subscribeToSystemAppearance(appearance, applyResolvedAppearance); }, [appearance]);
+  useEffect(() => subscribeToVisualPreferenceUpdates(() => setAppearance(readAppearancePreference())), []);
   useEffect(() => {
     setNavigatorOpen(false); setSidecarOpen(false); setDockOpen(false);
     document.title = `${route.title} · JarvisOS`;
@@ -52,7 +54,7 @@ function Layout({ route, navigate, selection, propertiesContent, shellRegions, s
   const closeNavigator = useCallback(() => { setNavigatorOpen(false); window.requestAnimationFrame(() => navigatorToggleRef.current?.focus()); }, []);
   const closeSidecar = useCallback(() => { setSidecarOpen(false); window.requestAnimationFrame(() => sidecarToggleRef.current?.focus()); }, []);
   const closeDock = useCallback(() => { setDockOpen(false); window.requestAnimationFrame(() => dockToggleRef.current?.focus()); }, []);
-  const panelControls = <><Button ref={navigatorToggleRef} variant="ghost" aria-expanded={navigatorOpen} aria-controls="shell-navigator" onClick={() => setNavigatorOpen((current) => !current)}>{navigatorOpen ? "Hide navigator" : "Show navigator"}</Button><Button ref={sidecarToggleRef} variant="ghost" aria-expanded={sidecarOpen} aria-controls="shell-sidecar" onClick={() => setSidecarOpen((current) => !current)}>{sidecarOpen ? "Hide context" : "Show context"}</Button><Button ref={dockToggleRef} variant="ghost" aria-expanded={dockOpen} aria-controls="shell-analysis-dock" onClick={() => setDockOpen((current) => !current)}>{dockOpen ? "Hide analysis" : "Show analysis"}</Button></>;
+  const panelControls = <><Button ref={navigatorToggleRef} variant="ghost" aria-expanded={navigatorOpen} aria-controls="shell-navigator" onClick={() => setNavigatorOpen((current) => !current)}><SidebarSimple size={16} aria-hidden="true" />{navigatorOpen ? "Hide navigator" : "Show navigator"}</Button><Button ref={sidecarToggleRef} variant="ghost" aria-expanded={sidecarOpen} aria-controls="shell-sidecar" onClick={() => setSidecarOpen((current) => !current)}><ChatCircleDots size={16} aria-hidden="true" />{sidecarOpen ? "Hide context" : "Show context"}</Button><Button ref={dockToggleRef} variant="ghost" aria-expanded={dockOpen} aria-controls="shell-analysis-dock" onClick={() => setDockOpen((current) => !current)}><ChartLine size={16} aria-hidden="true" />{dockOpen ? "Hide analysis" : "Show analysis"}</Button></>;
 
   return <div className="application-shell"><a className="shell-skip-link" href="#app-main">Skip to main content</a><TopBar title={route.title} panelControls={panelControls} appearanceControl={<Field className="appearance-control shell-appearance-control" label="Appearance" control={appearanceSelect} />} /><Rail current={route.primaryNav} navigate={navigate} /><div className="shell-workspace"><ContextualNavigator open={navigatorOpen} currentStage={route.primaryNav === "design" ? route.stageKind : undefined} navigate={navigate} onClose={closeNavigator} content={shellRegions.navigator} /><main id="app-main" className="shell-main" ref={mainRef} tabIndex={-1}>{children}</main><ContextualSidecar open={sidecarOpen} selection={selection} onClose={closeSidecar} content={shellRegions.sidecar} propertiesContent={propertiesContent} /></div><AnalysisDock open={dockOpen} onClose={closeDock} content={shellRegions.dock} /></div>;
 }

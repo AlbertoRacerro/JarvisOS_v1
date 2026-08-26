@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "test:058d": "node tests/058d-process-workspace.mjs",
-    "build": "npm run test:058d && tsc && vite build",
+    "test:100": "node tests/100-visual-identity.mjs",
+    "build": "npm run test:058d && npm run test:100 && tsc && vite build",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
+    "@phosphor-icons/react": "2.1.10",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "three": "0.171.0"
