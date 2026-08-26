@@ -18,7 +18,7 @@
   z-index: 100;
   padding: var(--space-2) var(--space-3);
   background: var(--color-bg-surface-raised);
-  color: var(--color-accent-primary);
+  color: var(--color-accent-foreground);
   border: var(--border-width-default) solid var(--color-focus-ring);
   border-radius: var(--radius-md);
   transform: translateY(-200%);
@@ -262,7 +262,8 @@
 
 .shell-properties__header h3,
 .shell-properties__header p,
-.shell-properties__selection p {
+.shell-properties__selection p,
+.shell-properties__inspect p {
   margin-block: 0;
 }
 
@@ -339,7 +340,7 @@
 }
 
 .shell-text-link {
-  color: var(--color-accent-primary);
+  color: var(--color-accent-foreground);
   font-weight: 700;
 }
 
