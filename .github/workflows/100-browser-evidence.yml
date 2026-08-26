@@ -2,7 +2,7 @@ name: 100 Browser Evidence
 
 on:
   push:
-    branches: [evidence/100-browser-534d06d8]
+    branches: [evidence/100-browser-d169639d]
 
 permissions:
   contents: read
@@ -17,8 +17,8 @@ jobs:
           fetch-depth: 2
       - name: Prove product tree matches frozen head
         run: |
-          git fetch --no-tags --depth=1 origin 534d06d8c5b0fb790b83ced747203641da752e43
-          git diff --exit-code 534d06d8c5b0fb790b83ced747203641da752e43 -- frontend ':!frontend/evidence/100-browser.mjs' backend schemas docs/specs/STATUS.md
+          git fetch --no-tags --depth=1 origin d169639d4c12900c6bd6085bf0f368c24bb4fe23
+          git diff --exit-code d169639d4c12900c6bd6085bf0f368c24bb4fe23 -- frontend ':!frontend/evidence/100-browser.mjs' backend schemas docs/specs/STATUS.md
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -52,7 +52,7 @@ jobs:
           const fs=require('fs');
           const p='evidence/100-browser.mjs';
           let s=fs.readFileSync(p,'utf8');
-          s=s.replace('const PRODUCT_HEAD = "0c6cbd1f09254185fc85220684a760dc26f8169b";','const PRODUCT_HEAD = "534d06d8c5b0fb790b83ced747203641da752e43";');
+          s=s.replace('const PRODUCT_HEAD = "0c6cbd1f09254185fc85220684a760dc26f8169b";','const PRODUCT_HEAD = "d169639d4c12900c6bd6085bf0f368c24bb4fe23";');
           const glbBuilder="const gltfDoc=JSON.parse(gltf);\ndelete gltfDoc.buffers[0].uri;\nconst jsonSource=Buffer.from(JSON.stringify(gltfDoc),'utf8');\nconst jsonPad=(4-(jsonSource.length%4))%4;\nconst jsonChunk=Buffer.concat([jsonSource,Buffer.alloc(jsonPad,0x20)]);\nconst binPad=(4-(triBytes.length%4))%4;\nconst binChunk=Buffer.concat([triBytes,Buffer.alloc(binPad)]);\nconst glb=Buffer.alloc(12+8+jsonChunk.length+8+binChunk.length);\nglb.writeUInt32LE(0x46546c67,0); glb.writeUInt32LE(2,4); glb.writeUInt32LE(glb.length,8);\nglb.writeUInt32LE(jsonChunk.length,12); glb.writeUInt32LE(0x4e4f534a,16); jsonChunk.copy(glb,20);\nconst binHeader=20+jsonChunk.length; glb.writeUInt32LE(binChunk.length,binHeader); glb.writeUInt32LE(0x004e4942,binHeader+4); binChunk.copy(glb,binHeader+8);\n";
           if(!s.includes('const workspace =')) throw new Error('workspace fixture seam missing');
           s=s.replace('const workspace =',glbBuilder+'const workspace =');
@@ -70,6 +70,9 @@ jobs:
           const light='    const contrast=await accentContrast(); assert.ok(contrast.ratio>=4.5,`${seed} on-accent contrast ${contrast.ratio.toFixed(2)} < 4.5`);';
           const lightR=light+'\n    const foreground=await foregroundContrast(); assert.ok(foreground>=4.5,`${seed} foreground accent contrast ${foreground.toFixed(2)} < 4.5`); const focus=await focusContrast(); assert.ok(focus>=3,`${seed} focus contrast ${focus.toFixed(2)} < 3`); const hover=await primaryHoverContrast(); assert.ok(hover>=4.5,`${seed} hover fill contrast ${hover.toFixed(2)} < 4.5`);';
           if(!s.includes(light)) throw new Error('light seam missing');s=s.replace(light,lightR);
+          const cProof='  await page.getByText("Q_rec · 18.450 · m3/h",{exact:true}).waitFor(); await shot("C-engineering-data-light");';
+          const cProofR=`  await page.getByText("Q_rec · 18.450 · m3/h",{exact:true}).waitFor();\n  for (const [appearance,seed] of [["light","#FFFFFF"],["dark","#000000"]]) {\n    await page.evaluate(([a,s])=>{localStorage.setItem("jarvisos:appearance:v1",a);localStorage.setItem("jarvisos:accent:v1",JSON.stringify({preset:"custom",customHex:s}));},[appearance,seed]);\n    await page.reload(); await page.getByRole("heading",{name:"Engineering Data"}).waitFor();\n    const record=page.locator(".engineering-record").first(); await record.click();\n    const selected=await record.evaluate(el=>{const cs=getComputedStyle(el),root=getComputedStyle(document.documentElement);const parse=(v)=>{v=v.trim();const h=v.match(/^#([0-9a-f]{6})$/i);if(h){const n=parseInt(h[1],16);return[(n>>16)&255,(n>>8)&255,n&255];}const r=v.match(/^rgba?\\(\\s*(\\d+)\\D+(\\d+)\\D+(\\d+)/i);return r?[+r[1],+r[2],+r[3]]:null;};const lum=(rgb)=>{const x=rgb.map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);return .2126*x[0]+.7152*x[1]+.0722*x[2];};const marker=parse(root.getPropertyValue("--color-accent-foreground")),bg=parse(cs.backgroundColor);let ratio=0;if(marker&&bg){const [hi,lo]=[lum(marker),lum(bg)].sort((x,y)=>y-x);ratio=(hi+.05)/(lo+.05);}return{isSelected:el.classList.contains("is-selected"),boxShadow:cs.boxShadow,ratio};});\n    assert.ok(selected.isSelected,appearance+" extreme Custom lost selected-record state"); assert.ok(selected.boxShadow.includes("inset"),appearance+" extreme Custom lost selected-record marker"); assert.ok(selected.ratio>=3,appearance+" extreme Custom selected marker contrast "+selected.ratio.toFixed(2)+" < 3");\n  }\n  await page.evaluate(()=>{localStorage.setItem("jarvisos:appearance:v1","light");localStorage.setItem("jarvisos:accent:v1",JSON.stringify({preset:"microalgae"}));}); await page.reload(); await page.getByRole("heading",{name:"Engineering Data"}).waitFor(); await shot("C-engineering-data-light");`;
+          if(!s.includes(cProof)) throw new Error('selected-record proof seam missing');s=s.replace(cProof,cProofR);
           const reset='  await page.getByRole("button",{name:"Reset to Microalgae"}).click(); assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue("--accent-seed").trim()),"#528B68"); await shot("D-settings-light");';
           const invalid='  const seedBeforeInvalid=await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue("--accent-seed").trim());\n  await hex.fill("#FFFFF"); await page.waitForTimeout(80);\n  assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).getPropertyValue("--accent-seed").trim()),seedBeforeInvalid,"malformed HEX reached global accent state");\n  const customSwatch=page.getByLabel("Custom",{exact:true}).locator("..").locator(".settings-accent-swatch");\n  const swatchBackground=await customSwatch.evaluate(el=>getComputedStyle(el).backgroundColor);\n  assert.ok(swatchBackground && swatchBackground!=="rgba(0, 0, 0, 0)"&&swatchBackground!=="transparent","malformed HEX invalidated Custom swatch CSS");\n'+reset;
           if(!s.includes(reset)) throw new Error('invalid seam missing');s=s.replace(reset,invalid);
@@ -85,7 +88,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: 100-browser-evidence-534d06d8
+          name: 100-browser-evidence-d169639d
           path: |
             frontend/reports/100-browser/**
             /tmp/jarvisos-100-vite.log
