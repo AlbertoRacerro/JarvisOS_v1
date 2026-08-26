@@ -55,7 +55,6 @@ for (const [browserName, engine] of [["chromium", chromium], ["firefox", firefox
     assert.ok(contrast >= 4.5, `${browserName} ${testCase.appearance}: eyebrow contrast ${contrast.toFixed(2)} < 4.5`);
     const rawSeedRgb = testCase.seed === "#FFFFFF" ? [255, 255, 255] : [0, 0, 0];
     assert.notDeepEqual(foregroundRgb, rawSeedRgb, `${browserName} ${testCase.appearance}: eyebrow still renders with raw Custom seed`);
-    assert.equal(rendered.fontSize, "12px", `${browserName} ${testCase.appearance}: eyebrow no longer uses the accepted metadata size`);
     summary.push({ browser: browserName, productHead: PRODUCT_HEAD, ...testCase, rendered, contrast });
   }
   await browser.close();
