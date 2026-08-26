@@ -71,10 +71,10 @@ for (const [engineName,engine] of engines) {
   await page.getByRole('button',{name:/Candidate bound/}).click();
   await page.getByText('Orbit, pan, zoom, or click a mesh to inspect visible geometry.').waitFor({timeout:10000});
   const contextToggle=page.getByRole('button',{name:/Show context|Hide context/}); if((await contextToggle.first().textContent())?.includes('Show')) await contextToggle.first().click();
-  const props=page.getByRole('tab',{name:'Properties'}); if(await props.count()) await props.click();
-  await page.getByLabel('Inspectable mesh').selectOption('mesh-1');
+  const jarvis=page.getByRole('tab',{name:'Jarvis'}); assert.ok(await jarvis.count(),'Jarvis tab missing on BLUECAD sidecar');
+  await page.locator('#shell-sidecar-pane-jarvis label:has-text("Inspectable mesh") select').selectOption('mesh-1');
+  const props=page.getByRole('tab',{name:'Properties'}); assert.ok(await props.count(),'Properties tab missing on selected BLUECAD object'); await props.click();
   await page.locator('#shell-sidecar-pane-properties').filter({hasText:'PART-A'}).waitFor({timeout:10000});
-  const jarvis=page.getByRole('tab',{name:'Jarvis'}); assert.ok(await jarvis.count(),'Jarvis tab missing on selected BLUECAD object');
   const dockToggle=page.getByRole('button',{name:/Show analysis|Hide analysis/}); if((await dockToggle.first().textContent())?.includes('Show')) await dockToggle.first().click();
   await page.getByRole('heading',{name:'Analysis dock'}).waitFor(); await shot('A-model-light');
 
