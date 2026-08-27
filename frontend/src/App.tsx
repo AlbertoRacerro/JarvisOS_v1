@@ -14,6 +14,7 @@ import JarvisEngineeringActions from "./components/engineering/JarvisEngineering
 import FinalOperatorReadSurface from "./components/fusion/FinalOperatorReadSurface";
 import FinalOperatorUnavailableSurface from "./components/fusion/FinalOperatorUnavailableSurface";
 import FinalSettingsSurface from "./components/fusion/FinalSettingsSurface";
+import FinalWorkspaceHeader from "./components/fusion/FinalWorkspaceHeader";
 import LegacyDiagnosticSurface from "./components/shell/LegacyDiagnosticSurface";
 import MigrationPendingSurface from "./components/shell/MigrationPendingSurface";
 import AIDraft from "./pages/AIDraft";
@@ -55,28 +56,28 @@ function App() {
   } else {
     switch (route.id) {
       case "memory-project-basis":
-        content = <FinalOperatorReadSurface kind="project-basis" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} />;
+        content = <><FinalWorkspaceHeader group="memory" active="project-basis" navigate={navigate} /><FinalOperatorReadSurface kind="project-basis" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
         break;
       case "memory-models":
-        content = <FinalOperatorReadSurface kind="models" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} />;
+        content = <><FinalWorkspaceHeader group="memory" active="models" navigate={navigate} /><FinalOperatorReadSurface kind="models" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
         break;
       case "memory-literature":
-        content = <FinalOperatorUnavailableSurface kind="literature" title="Literature" description="The approved compact list and inline-preview composition is present, but no bounded literature corpus/read owner exists yet. Reference fixture citations are not production facts." navigate={navigate} />;
+        content = <><FinalWorkspaceHeader group="memory" active="literature" navigate={navigate} /><FinalOperatorUnavailableSurface kind="literature" title="Literature" description="The approved compact list and inline-preview composition is present, but no bounded literature corpus/read owner exists yet. Reference fixture citations are not production facts." navigate={navigate} /></>;
         break;
       case "development-roadmap-timeline":
-        content = <FinalOperatorUnavailableSurface kind="roadmap" title="Roadmap · Timeline" description="No server-owned roadmap item store currently supplies truthful workstream or execution-status items. Timeline geometry and Execution status remain visible without fabricated bars or counts." navigate={navigate} />;
+        content = <><FinalWorkspaceHeader group="development" active="roadmap" navigate={navigate} /><FinalOperatorUnavailableSurface kind="roadmap" title="Roadmap · Timeline" description="No server-owned roadmap item store currently supplies truthful workstream or execution-status items. Timeline geometry and Execution status remain visible without fabricated bars or counts." navigate={navigate} /></>;
         break;
       case "development-roadmap-calendar":
-        content = <FinalOperatorUnavailableSurface kind="calendar" title="Roadmap · Calendar" description="No server-owned time-allocation calendar currently supplies actual scheduled work. Week remains the canonical default view; Gantt/reference blocks are not converted into synthetic events." navigate={navigate} />;
+        content = <><FinalWorkspaceHeader group="development" active="roadmap" navigate={navigate} /><FinalOperatorUnavailableSurface kind="calendar" title="Roadmap · Calendar" description="No server-owned time-allocation calendar currently supplies actual scheduled work. Week remains the canonical default view; Gantt/reference blocks are not converted into synthetic events." navigate={navigate} /></>;
         break;
       case "development-brainstorm":
-        content = <FinalOperatorUnavailableSurface kind="brainstorm" title="Brainstorm" description="The RAW → discussion/reconciliation → RECONCILED → explicit promotion composition is present, but there is no accepted persistence owner for those records in this frontend-only slice." navigate={navigate} links={[{ href: "/ai-threads", label: "Open existing AI Threads compatibility view" }]} />;
+        content = <><FinalWorkspaceHeader group="development" active="brainstorm" navigate={navigate} /><FinalOperatorUnavailableSurface kind="brainstorm" title="Brainstorm" description="The RAW → discussion/reconciliation → RECONCILED → explicit promotion composition is present, but there is no accepted persistence owner for those records in this frontend-only slice." navigate={navigate} links={[{ href: "/ai-threads", label: "Open existing AI Threads compatibility view" }]} /></>;
         break;
       case "coding-repository":
-        content = <FinalOperatorUnavailableSurface kind="repository" title="Repository" description="Repository Inspector and preview geometry are present, but no accepted frontend-safe repository observer supplies remote repository truth. The browser does not call GitHub or store a GitHub token directly." navigate={navigate} />;
+        content = <><FinalWorkspaceHeader group="coding" active="repository" navigate={navigate} /><FinalOperatorUnavailableSurface kind="repository" title="Repository" description="Repository Inspector and preview geometry are present, but no accepted frontend-safe repository observer supplies remote repository truth. The browser does not call GitHub or store a GitHub token directly." navigate={navigate} /></>;
         break;
       case "coding-runtime":
-        content = <FinalOperatorReadSurface kind="runtime" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} />;
+        content = <><FinalWorkspaceHeader group="coding" active="runtime" navigate={navigate} /><FinalOperatorReadSurface kind="runtime" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
         break;
       case "settings-appearance":
         content = <FinalSettingsSurface section="appearance" navigate={navigate} />;
