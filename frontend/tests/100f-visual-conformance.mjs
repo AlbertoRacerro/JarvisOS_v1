@@ -7,6 +7,7 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 const app = read("src/App.tsx");
 const settings = read("src/components/fusion/FinalSettingsSurface.tsx");
 const settingsCss = read("src/styles/final-settings.css");
+const designCss = read("src/styles/final-fusion-canonical-overrides.css");
 const failures = [];
 const check = (condition, message) => { if (!condition) failures.push(message); };
 const includesAll = (text, fragments, message) => { for (const fragment of fragments) check(text.includes(fragment), `${message}: missing ${fragment}`); };
@@ -32,6 +33,16 @@ includesAll(settingsCss, [
   ".application-shell--final .bluecad-workbench__viewport",
   ".application-shell--final .bluecad-workbench__empty-viewer"
 ], "Settings section filtering or BLUECAD empty viewport composition missing");
+includesAll(designCss, [
+  ".process-stage__palette-grid",
+  "grid-template-columns: repeat(2, minmax(0, 1fr))",
+  ".application-shell--final .shell-navigator",
+  ".application-shell--final .shell-sidecar",
+  "width: 240px",
+  "width: 300px",
+  ".bluecad-final-stage__toolbar button",
+  "background: transparent !important"
+], "Canonical Process/BLUECAD workstation composition missing");
 check(!settings.includes("fetch(") && !settings.includes("localStorage") && !settings.includes("sessionStorage"), "Settings wrapper gained data/authority state");
 
 if (failures.length) {
