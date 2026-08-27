@@ -6,7 +6,7 @@ Status: maintainer-approved capability preservation map; planning evidence only;
 
 Ensure that every capability approved during the final operator-workstation inspection survives implementation planning even when the current backend cannot yet support it. This matrix links the visible product behavior to candidate backend/domain ownership and the pseudo-spec families in `FINAL_VISUAL_IMPLEMENTATION_PACK_2026-08-27.md`.
 
-`100c FINAL-PRODUCT-DIRECTION-AUTHORITY-0` must audit exact post-100a/100b master, replace candidate ownership with the minimum real canonical ownership, merge overlapping pseudo-specs where appropriate, and allocate the binding spec queue. It may not silently drop a capability merely because current code does not expose it.
+`100c FINAL-PRODUCT-DIRECTION-AUTHORITY-0` must audit exact post-100a/100b master, replace candidate ownership with the minimum real canonical ownership, reconcile every semantically overlapping non-merged live/planned `STATUS.md` row, merge overlapping pseudo-specs where appropriate, and allocate the binding spec queue. It may not silently drop a capability merely because current code does not expose it.
 
 Legend:
 
@@ -29,9 +29,9 @@ Legend:
 | --- | --- | --- | --- | --- | --- |
 | Design peer modes | Only `Process | BLUECAD` as peer modes | existing frontend Design shell | existing Process/BLUECAD capability owners + 100c overlap audit | FV-F02 | Models/Results/Runs/Evidence/Review/Lineage stay contextual, not peer pages |
 | Design context strip | Current model/version, current state, last run, proposal count, source count where available | modeling/runs/proposals/source records | existing owners; 100c rederive read projection | FV-F02 | counts/status must derive from exact records, never demo fixture |
-| Process editing surface | Aspen-like engineering workbench composition represented by approved Process HTML, with equipment/library/canvas and right Jarvis/Properties language | existing Process/modeling/engineering modules; planned 101–110 | 100c must map to retained engineering specs rather than invent duplicate model store | FV-F02 | visual reference does not itself authorize solver/topology semantics absent from active specs |
+| Process editing surface | Aspen-like engineering workbench composition represented by approved Process HTML, with equipment/library/canvas and right Jarvis/Properties language | existing Process/modeling/engineering modules; planned engineering rows to audit | 100c must map to retained engineering specs rather than invent duplicate model store | FV-F02 | visual reference does not itself authorize solver/topology semantics absent from active specs |
 | Process Properties | Selected object exposes editable truthful property fields and units where backend supports them | modeling/engineering parameter owners | existing/rederived | FV-F02 | property edits follow canonical proposal/write authority; no frontend-only values |
-| BLUECAD editing surface | Approved BLUECAD technical/CAD composition, with shared shell/right interaction language and CAD-specific tools | existing BLUECAD/CAD bridge/tool owners | existing/rederived; 100c overlap with 103–110 | FV-F02 | no fake CAD operation/artifact/validation |
+| BLUECAD editing surface | Approved BLUECAD technical/CAD composition, with shared shell/right interaction language and CAD-specific tools | existing BLUECAD/CAD bridge/tool owners | existing/rederived; 100c overlap audit | FV-F02 | no fake CAD operation/artifact/validation |
 | Design proposals | Jarvis may propose bounded engineering changes; operator inspects/accepts under owner policy | existing proposal/event/modeling owners | overlap with FV-B03/B04/B05 where model changes apply | FV-F02/F03 | proposed change is not current model until promotion |
 
 ## Memory — Project Basis
@@ -104,7 +104,7 @@ Legend:
 | Add to Roadmap | mature idea creates/proposes project work | Brainstorm→Roadmap bridge | FV-B10 + FV-B08 | FV-F08/F06 | promotion is explicit |
 | Promote to Design | enters Design proposal/change path | Brainstorm→Design proposal bridge | FV-B10 | FV-F08/F02 | does not directly mutate model |
 | Promote to Coding | enters Coding development proposal | Brainstorm→Coding bridge | FV-B10/B15/B16 | FV-F08/F10 | does not directly edit code |
-| Record speech | future local speech-to-text capture into Raw | media/local AI/egress policy owner to rederive | FV-B22 | FV-F08 | no always-on/background recording; truthful unavailable before backend exists |
+| Record speech | future local speech-to-text capture into Raw | media/local AI/egress policy owner to rederive | FV-B22 | FV-F08 | no always-on/background recording; every transcription inference uses canonical `run_ai_task`/accepted successor and `ai_jobs` ledger; no direct media→provider/model path |
 
 ## Settings — Appearance / AI / System
 
@@ -151,15 +151,16 @@ Legend:
 
 | Capability | Required operator behavior | Candidate owner to audit | Backend draft | Frontend draft | No-fake / authority rule |
 | --- | --- | --- | --- | --- | --- |
-| Real terminal session | real local PTY/session, PowerShell default on Windows | new security-bounded local PTY/session service | FV-B21 | FV-F12 | browser does not execute shell directly; no fake terminal pretending execution |
-| Terminal / Logs tabs | lower Runtime area can switch between terminal and logs | Runtime UI + PTY/log readers | FV-B21 | FV-F12 | log availability preserved |
-| Session cwd/history/scroll | active cwd, session-scoped scroll/history, stdin/stdout/stderr | PTY session owner | FV-B21 | FV-F12 | terminal history is not canonical project Memory |
+| Real terminal session | real local PTY/session, PowerShell default on Windows | new security-bounded local PTY/session service | FV-B21 | FV-F12 | browser never executes shell directly and receives only backend-secret-safe/redacted terminal output; no fake terminal pretending execution |
+| Terminal / Logs tabs | lower Runtime area can switch between terminal and logs | Runtime UI + PTY/log readers | FV-B21 | FV-F12 | log availability preserved; neither tab may expose secrets |
+| Session cwd/history/scroll | active cwd, session-scoped scroll/history, stdin/stdout/stderr after backend display filtering | PTY session owner | FV-B21 | FV-F12 | terminal history is not canonical project Memory; raw PTY bytes are not a frontend contract |
 | Ctrl+C / interrupt | real interrupt/control handling | PTY owner | FV-B21 | FV-F12 | backend-mediated |
-| Open terminal here | Repository Inspector/worktree/path action opens validated allowed cwd | repository inspector → PTY bridge | FV-B14/B21 | FV-F10/F12 | backend validates path; no arbitrary frontend filesystem authority |
-| Send output to Jarvis | selected/bounded terminal output becomes explicit context | PTY/context/AI egress boundary | FV-B21/B16 | FV-F12 | secret scrubbing/policy required |
+| Open terminal here | Repository Inspector/worktree/path action opens validated allowed cwd | repository inspector → PTY bridge | FV-B14/B21 | FV-F10/F12 | backend validates path; no arbitrary frontend filesystem authority; protected credential paths remain denied/isolated |
+| Send output to Jarvis | selected/bounded secret-safe terminal output becomes explicit context | PTY/context/AI egress boundary | FV-B21/B16 | FV-F12 | separate Jarvis-context scrubbing/policy still applies after the mandatory frontend display boundary |
 | Jarvis command proposal | Jarvis returns command text with Insert/Copy | proposal/context owner | FV-B21/B16 | FV-F12 | command is not executed automatically |
 | High-risk command confirmation | backend classifies high-risk/destructive command families and UI requires explicit confirmation/policy | PTY security/policy owner | FV-B21 | FV-F12 | cannot be bypassed by prompt text |
-| Offline CI | fake/replaceable PTY adapter exercises lifecycle without Windows PowerShell | PTY service tests | FV-B21 | FV-F12 integration tests | no live shell/network/provider dependency in CI |
+| Secret-safe terminal process | child process receives a deliberately scrubbed/minimum environment and cannot inherit provider/API/repository secrets by default | PTY security/process isolation owner | FV-B21 | FV-F12 | if target-OS isolation/redaction cannot be proven, arbitrary PTY streaming is `DEFER_TRIGGERED`/unavailable rather than weakening no-secret frontend responses |
+| Offline CI | fake/replaceable PTY adapter exercises lifecycle/security failure modes without Windows PowerShell | PTY service tests | FV-B21 | FV-F12 integration tests | no live shell/network/provider dependency in CI |
 
 ## Cross-surface completion obligations
 
@@ -168,11 +169,12 @@ Legend:
 - Project Basis changes can affect model working revisions and deterministic revalidation;
 - Literature/project search records can be explicitly added to Jarvis context and linked to exact model/project usage;
 - Brainstorm promotion reaches Roadmap, Design proposal or Coding proposal without direct authority mutation;
+- Brainstorm speech transcription, if retained, always traverses the canonical AI execution/audit spine;
 - Roadmap and Calendar share item links but retain distinct project-window versus actual-time semantics;
 - Repository and Runtime remain distinct remote-versus-local truth sources;
 - Repository Inspector can open architecture artifacts without making architecture a permanent first-screen surface;
 - Runtime divergence uses Repository evidence but never equates remote latest with local execution;
-- integrated terminal is a separate security authority from self-update and cannot bypass Coding/Git/spec lifecycle.
+- integrated terminal is a separate security authority from self-update, cannot bypass Coding/Git/spec lifecycle, and cannot weaken the no-secret frontend-response invariant.
 
 ## 100c disposition requirement
 
