@@ -114,6 +114,11 @@ includesAll(fusion, [
   'Repository Inspector', 'Preview · Architecture',
   'Local current · actually executed', 'GitHub latest · remote exact', 'Terminal · Logs'
 ], "canonical staged composition missing");
+includesAll(fusion, [
+  'navigate("/development/roadmap/calendar")',
+  'navigate("/development/roadmap/timeline")',
+  'aria-label="Roadmap views"'
+], "Roadmap Timeline/Calendar NAVIGATE contract missing from visible production surface");
 includesAll(fusion, ["Add workstream", "Add event", "Reconcile", "Promote", "Suggest modification", "Safe update", "Open terminal"], "future affordance preservation");
 check(fusion.includes("disabled title={reason}"), "unsupported commit/execute affordances are not fail-closed");
 check(!/fetch\(|axios|localStorage|sessionStorage/i.test(fusion), "truthless fusion component gained data/API authority");
