@@ -59,19 +59,29 @@ check(!/iframe|srcDoc/.test(app), "static HTML embedding is forbidden");
 check(!/localStorage|sessionStorage|fetch\(|axios|github\.com\/api/i.test(app), "final surface shell gained private truth/API authority");
 
 includesAll(fusion, [
-  'title="Project search"', 'title="Project Basis"', 'title="Jarvis context"',
-  'title="Model identity"', 'title="Version dossier"', 'title="Results · Runs · Lineage"',
-  'title="Literature list"', 'title="Inline preview"',
-  'title="Timeline"', 'title="Ready"', 'title="In progress"', 'title="Blocked"',
-  '>Week</button>', 'title="Week schedule"',
-  'title="RAW"', 'title="Discussion · Reconciliation"', 'title="RECONCILED · Jarvis context"',
-  'title="Repository Inspector"', 'title="Preview · Architecture"',
-  'title="Local executed identity"', 'title="Remote exact identity"', 'title="Terminal · Logs"'
-], "canonical structural regions missing from truthful empty surfaces");
+  'title="Project search"', 'title="Project Basis"', 'title="Jarvis"',
+  'title="Model versions"', 'title="Version dossier"', 'Results · Runs · Lineage remain contextual',
+  'title="Literature"', 'Compact list · inline multi-expand', 'Bounded preview unavailable',
+  'title="Timeline"', 'Execution status', '"Ready", "In progress", "Blocked"',
+  '["Day", "Week", "Month", "Agenda"]', 'actual time allocation',
+  '<strong>RAW</strong>', '<strong>RECONCILED</strong>', 'Opening an idea never adds it to context',
+  'Repository Inspector', 'Preview · Architecture',
+  'Local current · actually executed', 'GitHub latest · remote exact', 'Terminal · Logs'
+], "canonical staged composition missing");
 includesAll(fusion, ["Approve all", "Add workstream", "Add event", "Reconcile", "Promote", "Suggest modification", "Safe update", "Open terminal"], "future affordance preservation");
 check(fusion.includes("disabled title={reason}"), "unsupported commit/execute affordances are not fail-closed");
 check(!/fetch\(|axios|localStorage|sessionStorage/i.test(fusion), "truthless fusion component gained data/API authority");
-check(fusionCss.includes("final-fusion__three-column") && fusionCss.includes("final-fusion__roadmap") && fusionCss.includes("final-fusion__runtime"), "surface-specific composition collapsed into a generic placeholder");
+check(!/healthy|working tree clean|remote current|PASS|Aligned|cd951bae|86cdedde/i.test(fusion), "canonical HTML fixture success/identity leaked into production staged surfaces");
+
+includesAll(fusionCss, [
+  "final-fusion__workbench--memory", "grid-template-columns: 255px minmax(0, 1fr) 315px",
+  "final-fusion__workbench--models", "grid-template-columns: 230px minmax(0, 1fr) 310px",
+  "final-fusion__workbench--development", "grid-template-columns: minmax(0, 1fr) 350px",
+  "final-fusion__workbench--brainstorm", "grid-template-columns: minmax(0, 1fr) 360px",
+  "final-fusion__preview-skeleton", "grid-template-columns: minmax(0,1fr) 218px",
+  "final-fusion__execution-grid", "final-fusion__week-head", "final-fusion__repo-inspector-body", "final-fusion__compare"
+], "canonical reference panel geometry missing");
+check(!fusionCss.includes("border-radius: 16px") && !fusionCss.includes("border-radius: 20px"), "large-radius dashboard styling leaked into canonical fusion CSS");
 
 check(pkg.scripts?.["test:100f"] === "node tests/100f-final-operator-frontend-fusion.mjs", "test:100f is not wired");
 check((pkg.scripts?.build ?? "").includes("npm run test:100f"), "build does not execute test:100f");
