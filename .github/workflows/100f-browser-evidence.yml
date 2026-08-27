@@ -1,0 +1,75 @@
+name: 100f Browser Evidence
+
+on:
+  push:
+    branches: [evidence/100f-browser-75fc8f38]
+
+permissions:
+  contents: read
+
+jobs:
+  browser-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Prove product tree matches frozen head
+        run: |
+          git fetch --no-tags --depth=1 origin 75fc8f385f2481c118b09065c163f5aede3753a7
+          git diff --exit-code 75fc8f385f2481c118b09065c163f5aede3753a7 -- \
+            frontend ':!frontend/evidence/100f-browser.mjs' \
+            backend schemas docs/specs/STATUS.md
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install exact frontend dependencies
+        working-directory: frontend
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Production build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Install evidence-only Playwright
+        working-directory: frontend
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium firefox
+
+      - name: Bind evidence harness to exact product head
+        run: |
+          sed -i 's/c241599492c9d4c5b2968998aedbe870474b6fdc/75fc8f385f2481c118b09065c163f5aede3753a7/g' frontend/evidence/100f-browser.mjs
+          grep -F 'const PRODUCT_HEAD="75fc8f385f2481c118b09065c163f5aede3753a7";' frontend/evidence/100f-browser.mjs
+
+      - name: Start production and canonical-reference servers
+        run: |
+          (cd frontend && npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/jarvisos-100f-vite.log 2>&1) &
+          python3 -m http.server 4174 --bind 127.0.0.1 > /tmp/jarvisos-100f-reference.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4173/design/process >/dev/null && \
+               curl --fail --silent http://127.0.0.1:4174/docs/design-references/process-beta/process-beta-approved-2026-08-26.html >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/jarvisos-100f-vite.log || true
+          cat /tmp/jarvisos-100f-reference.log || true
+          exit 1
+
+      - name: Run 11-surface paired browser matrix
+        working-directory: frontend
+        run: node evidence/100f-browser.mjs
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 100f-browser-evidence-75fc8f38
+          path: frontend/evidence/100f-artifacts
+          if-no-files-found: error
