@@ -41,7 +41,8 @@ includesAll(lineageStage, [
 ], "retained Lineage runtime/stale-guard contract");
 assert((lineageStage.match(/acceptsLineageResponse/g) ?? []).length >= 5, "Lineage response guards were reduced unexpectedly");
 
-assert(processStage.trimStart().startsWith('import type { PrimaryStageProps } from "./registry";'), "ProcessStage gained a runtime import");
+// 100f adds presentation-only Phosphor icons before the type import; keep the authority boundary rather than enforcing import order.
+assert(processStage.includes('import type { PrimaryStageProps } from "./registry";'), "ProcessStage lost its type-only stage contract");
 assert(!/from\s+["'][^"']*(?:api|lineage|runner|provider)/i.test(processStage), "ProcessStage imports runtime/domain authority");
 assert(!/\b(?:fetch|localStorage|sessionStorage|onSelectionChange|onWorkspaceChange|useEffect|useState)\b/.test(processStage), "ProcessStage gained state, storage, fetch, or selection authority");
 assert((processStage.match(/\bdisabled\b/g) ?? []).length >= 2, "Process controls are not deterministically disabled");
