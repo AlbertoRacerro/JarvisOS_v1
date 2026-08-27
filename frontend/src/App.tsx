@@ -11,6 +11,7 @@ import {
   useEngineeringProperties
 } from "./components/engineering/EngineeringProperties";
 import JarvisEngineeringActions from "./components/engineering/JarvisEngineeringActions";
+import FinalOperatorReadSurface from "./components/fusion/FinalOperatorReadSurface";
 import FinalOperatorUnavailableSurface from "./components/fusion/FinalOperatorUnavailableSurface";
 import LegacyDiagnosticSurface from "./components/shell/LegacyDiagnosticSurface";
 import MigrationPendingSurface from "./components/shell/MigrationPendingSurface";
@@ -54,10 +55,10 @@ function App() {
   } else {
     switch (route.id) {
       case "memory-project-basis":
-        content = <FinalOperatorUnavailableSurface kind="project-basis" title="Project Basis" description="The approved Project Basis composition is present, but no dedicated server-owned Project Basis read/write contract exists yet. Canonical project facts are not synthesized in React." navigate={navigate} links={[{ href: "/engineering-data", label: "Open existing Engineering Data compatibility view" }]} />;
+        content = <FinalOperatorReadSurface kind="project-basis" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} />;
         break;
       case "memory-models":
-        content = <FinalOperatorUnavailableSurface kind="models" title="Models" description="The approved exact-version model dossier requires a truthful model inventory/read owner. Existing engineering records remain reachable without being reinterpreted as model dossiers." navigate={navigate} links={[{ href: "/engineering-data", label: "Open existing Engineering Data compatibility view" }, { href: "/runs", label: "Open existing Runs compatibility view" }]} />;
+        content = <FinalOperatorReadSurface kind="models" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} />;
         break;
       case "memory-literature":
         content = <FinalOperatorUnavailableSurface kind="literature" title="Literature" description="The approved compact list and inline-preview composition is present, but no bounded literature corpus/read owner exists yet. Reference fixture citations are not production facts." navigate={navigate} />;
@@ -75,7 +76,7 @@ function App() {
         content = <FinalOperatorUnavailableSurface kind="repository" title="Repository" description="Repository Inspector and preview geometry are present, but no accepted frontend-safe repository observer supplies remote repository truth. The browser does not call GitHub or store a GitHub token directly." navigate={navigate} />;
         break;
       case "coding-runtime":
-        content = <FinalOperatorUnavailableSurface kind="runtime" title="Runtime" description="No accepted runtime observer supplies local-executed versus remote-exact state. Identity remains Unknown and update/terminal controls remain unavailable rather than fabricating health, SHA or alignment." navigate={navigate} links={[{ href: "/legacy/system-status", label: "Open existing system diagnostic" }]} />;
+        content = <FinalOperatorReadSurface kind="runtime" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} />;
         break;
       case "settings-appearance":
       case "settings-ai":
