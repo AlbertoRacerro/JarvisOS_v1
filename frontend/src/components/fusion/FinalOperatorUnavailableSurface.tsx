@@ -123,12 +123,12 @@ function LiteratureSurface({ description }: Readonly<{ description: string }>) {
   );
 }
 
-function RoadmapSurface({ description }: Readonly<{ description: string }>) {
+function RoadmapSurface({ description, navigate }: Readonly<{ description: string; navigate: Navigate }>) {
   const [executionOpen, setExecutionOpen] = useState(true);
   return (
     <div className="final-fusion__workbench final-fusion__workbench--development">
       <Panel title="Timeline" className="final-fusion__roadmap-main">
-        <div className="final-fusion__roadmap-toolbar"><div className="final-fusion__segmented"><button type="button" className="is-active">Timeline</button><button type="button" disabled>Calendar</button></div><div><input aria-label="Search roadmap" placeholder="Search roadmap…" disabled />{actionButton("Add workstream")}</div></div>
+        <div className="final-fusion__roadmap-toolbar"><div className="final-fusion__segmented"><button type="button" className="is-active" aria-current="page">Timeline</button><button type="button" onClick={() => navigate("/development/roadmap/calendar")}>Calendar</button></div><div><input aria-label="Search roadmap" placeholder="Search roadmap…" disabled />{actionButton("Add workstream")}</div></div>
         <div className="final-fusion__timeline-controls"><span>Project windows · sequencing · dependencies</span><div className="final-fusion__chips"><span>Year</span><span>Quarter</span><span>Month</span></div></div>
         <div className="final-fusion__timeline-empty"><div className="final-fusion__months">{["Scope", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((item) => <span key={item}>{item}</span>)}</div><EmptyCopy>{description}</EmptyCopy></div>
         <section className={`final-fusion__execution ${executionOpen ? "" : "is-collapsed"}`}>
@@ -141,14 +141,14 @@ function RoadmapSurface({ description }: Readonly<{ description: string }>) {
   );
 }
 
-function CalendarSurface({ description }: Readonly<{ description: string }>) {
+function CalendarSurface({ description, navigate }: Readonly<{ description: string; navigate: Navigate }>) {
   const [view, setView] = useState("Week");
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   return (
     <div className="final-fusion__workbench final-fusion__workbench--development">
       <Panel title="Calendar" className="final-fusion__calendar-main">
-        <div className="final-fusion__calendar-toolbar"><div className="final-fusion__segmented" aria-label="Calendar views">{["Day", "Week", "Month", "Agenda"].map((label) => <button key={label} type="button" className={view === label ? "is-active" : ""} onClick={() => setView(label)}>{label}</button>)}</div>{actionButton("Add event")}</div>
-        <div className="final-fusion__calendar-nav"><button type="button" disabled>‹</button><strong>{view} · actual time allocation</strong><button type="button" disabled>›</button></div>
+        <div className="final-fusion__calendar-toolbar"><div className="final-fusion__segmented" aria-label="Roadmap views"><button type="button" onClick={() => navigate("/development/roadmap/timeline")}>Timeline</button><button type="button" className="is-active" aria-current="page">Calendar</button></div>{actionButton("Add event")}</div>
+        <div className="final-fusion__calendar-nav"><div className="final-fusion__segmented" aria-label="Calendar views">{["Day", "Week", "Month", "Agenda"].map((label) => <button key={label} type="button" className={view === label ? "is-active" : ""} onClick={() => setView(label)}>{label}</button>)}</div><button type="button" disabled>‹</button><strong>{view} · actual time allocation</strong><button type="button" disabled>›</button></div>
         <div className="final-fusion__week-head"><span>Time</span>{days.map((day) => <span key={day}>{day}<small>—</small></span>)}</div>
         <div className="final-fusion__all-day"><span>All day</span>{days.map((day) => <span key={day} />)}</div>
         <div className="final-fusion__time-grid"><div className="final-fusion__hours">{Array.from({ length: 12 }, (_, index) => <span key={index}>{String(index + 8).padStart(2, "0")}:00</span>)}</div><div className="final-fusion__day-grid"><EmptyCopy>{description}</EmptyCopy></div></div>
@@ -194,13 +194,13 @@ function RuntimeSurface({ description }: Readonly<{ description: string }>) {
   );
 }
 
-function SurfaceBody({ kind, description }: Readonly<{ kind: FinalSurfaceKind; description: string }>) {
+function SurfaceBody({ kind, description, navigate }: Readonly<{ kind: FinalSurfaceKind; description: string; navigate: Navigate }>) {
   switch (kind) {
     case "project-basis": return <ProjectBasisSurface description={description} />;
     case "models": return <ModelsSurface description={description} />;
     case "literature": return <LiteratureSurface description={description} />;
-    case "roadmap": return <RoadmapSurface description={description} />;
-    case "calendar": return <CalendarSurface description={description} />;
+    case "roadmap": return <RoadmapSurface description={description} navigate={navigate} />;
+    case "calendar": return <CalendarSurface description={description} navigate={navigate} />;
     case "brainstorm": return <BrainstormSurface description={description} />;
     case "repository": return <RepositorySurface description={description} />;
     case "runtime": return <RuntimeSurface description={description} />;
@@ -211,7 +211,7 @@ function FinalOperatorUnavailableSurface({ kind, title, description, navigate, l
   return (
     <section className={`final-fusion final-fusion--${kind}`} aria-labelledby={`final-fusion-${kind}-title`}>
       <header className="final-fusion__surface-head"><div><p className="eyebrow">Final operator surface · truthful staged state</p><h1 id={`final-fusion-${kind}-title`}>{title}</h1><p>{description}</p></div></header>
-      <SurfaceBody kind={kind} description={description} />
+      <SurfaceBody kind={kind} description={description} navigate={navigate} />
       {links.length > 0 && <nav className="final-fusion__links" aria-label={`${title} compatibility routes`}>{links.map((link) => <AppLink key={link.href} href={link.href} navigate={navigate}>{link.label}</AppLink>)}</nav>}
     </section>
   );
