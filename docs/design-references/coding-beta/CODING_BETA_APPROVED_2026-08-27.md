@@ -2,7 +2,7 @@
 
 Status: maintainer-approved visual/product reference; not runtime implementation authority.
 
-This file freezes the approved `Coding` workspace composition reached during the 2026-08-27 maintainer visual pass. It supplements `docs/product-direction/04-coding-and-self-development-contract.md`. `docs/specs/STATUS.md` remains the live implementation registry and must be reconciled to the maintainer release recorded separately for the post-100 hold.
+This file freezes the approved `Coding` workspace composition reached during the 2026-08-27 maintainer visual pass, including the later Repository Inspector and local-vs-GitHub Runtime refinement. It supplements `docs/product-direction/04-coding-and-self-development-contract.md`. `docs/specs/STATUS.md` remains the live implementation registry.
 
 ## Shared Coding shell
 
@@ -16,17 +16,17 @@ Primary navigation remains exactly:
 
 The approved warm limestone / near-white operator shell is reused. Normal application typography follows the Inter / Inter Display direction already frozen by the maintainer, with regular/medium weights rather than heavy bold treatment. IBM Plex Mono is reserved for code, paths, hashes, ports and logs. Generic icons remain Phosphor-only where icons are needed.
 
-## Repository
+## Repository — final refined direction
 
 Final approved local HTML identity:
 
-- `coding_repository_beta_mockup_v1.html`
-- SHA-256: `56897ca83cb3adb1d0ac74041335b014631f1f819f7457ba86e210aaf65122a7`
+- `coding_repository_beta_mockup_v2_inspector.html`
+- SHA-256: `afe3bf43eebc3da65e38aadcb27dcaac6f55b61959077cad82cbc51979b1d11f`
 
 Approved rendered reference identity:
 
-- `coding_repository_beta_mockup_v1.png`
-- SHA-256: `662ae1225ec0c471fad16814e6246052d38d199181595c6f326e77d53b724ea0`
+- `coding_repository_beta_mockup_v2_inspector.png`
+- SHA-256: `d6b398833d05c35cfb9288f4284326388ae35127ae3fb1f4fc8db7ff30b8b3be`
 
 The exact approved HTML is preserved beside this file as `coding-repository-beta-approved-2026-08-27.html`.
 
@@ -34,46 +34,54 @@ Approved composition and semantics:
 
 - Repository represents GitHub remote/future software state, not the currently loaded local runtime;
 - the top strip exposes repository identity, branch, exact/short SHA, remote-current status and working-tree cleanliness where truthfully available;
-- the dominant active-development card renders the canonical software lifecycle as `Proposal -> Plan -> Implementation -> Tests -> Review -> Reconciliation -> Merge`;
+- the active-development card renders the canonical lifecycle `Proposal -> Plan -> Implementation -> Tests -> Review -> Reconciliation -> Merge`;
 - software changes remain isolated in a branch/worktree. Jarvis never directly mutates the currently executed code path;
-- exact-head deterministic gates and an independent review remain first-class merge prerequisites when required by accepted authority;
-- `Current work` summarizes only real or explicitly future development fronts without inventing implementation authorization;
-- the `Repository architecture` surface is a semantic, navigable graph rather than a static image. Selecting a node scopes inspection/Jarvis context and may expose dependencies, files and tests without itself mutating code;
-- Jarvis remains on the right with an explicit active context that may include exact master/PR/file/module/spec references;
-- repository facts are read-only summaries of the selected remote state;
-- a Brainstorm `Promote -> Coding` action becomes a Coding development proposal and still passes the Coding lifecycle before merge.
+- architecture is **not** permanently visible as a dedicated graph surface;
+- the lower dominant surface is a general `Repository Inspector`: one search/inspection entry point for specs, Markdown, architecture artifacts, SVGs, code, tests, configuration, workflows, images and other repository-readable artifacts;
+- filtering may expose `All | Docs | Specs | Architecture | Code | Tests | Config` or equivalent presentation-only categories;
+- Markdown supports rendered preview and raw/source inspection; SVG architecture artifacts render as diagrams only when selected; code/config receive appropriate syntax/structured previews; images may render directly where safe;
+- selecting an artifact shows its exact repository path/ref and a bounded preview rather than navigating away from Coding;
+- each selected artifact exposes `Add to Jarvis context`, `Suggest modification`, and `Open on GitHub` where a direct remote URL exists;
+- `Open on GitHub` links to the exact repository file/ref and does not alter JarvisOS state;
+- Jarvis active context may combine multiple files/specs/SVGs/PRs/modules so the operator can ask cross-document consistency questions;
+- `Suggest modification` is proposal-only: the operator describes the intended change, Jarvis may prepare a diff/plan, and any accepted mutation still enters the normal isolated development lifecycle before merge;
+- architecture remains fully supported as an inspectable/searchable artifact family rather than a permanently pinned page element;
+- search may later become semantic in addition to literal/path/ID lookup, but must not invent repository facts or create a second truth store.
 
-## Runtime
+## Runtime — final refined direction
 
 Final approved local HTML identity:
 
-- `coding_runtime_beta_mockup_v1.html`
-- SHA-256: `48e867be8d7c865abf9b5fe653cf47713bab146c5f81c48779ca725c9430bfee`
+- `coding_runtime_beta_mockup_v2_divergence.html`
+- SHA-256: `041b2f8974a1ad866ac5fad700c920c3a4816e6a0d6263a185e20c0ca421893e`
 
 Approved rendered reference identity:
 
-- `coding_runtime_beta_mockup_v1.png`
-- SHA-256: `2d716f74baad8104653e91b4191451aa58c59372685c15db6c6295aa9cf1b0ca`
+- `coding_runtime_beta_mockup_v2_divergence.png`
+- SHA-256: `a59b8e0788807052600335fd5753783ca7c0728b4f10fa7714dfcc7168df1306`
 
 The exact approved HTML is preserved beside this file as `coding-runtime-beta-approved-2026-08-27.html`.
 
-Runtime is explicitly distinct from Repository. It represents the JarvisOS instance actually loaded on the workstation.
+Runtime is explicitly distinct from Repository. It represents the JarvisOS instance actually loaded/executed on the workstation.
 
 Approved composition and semantics:
 
-- the top surface exposes local runtime health, cleanliness and whether an approved remote target is newer;
-- loaded runtime identity includes local SHA, approved remote target SHA, working-tree state, state-snapshot availability and rollback point where truthfully available;
-- local services/health endpoints are inspectable individually;
-- the safe update path is explicit: `Save state -> Fetch approved target -> Migration -> Build -> Smoke -> Restart -> Health / rollback`;
-- remote code is never hot-swapped into the currently running process;
-- dirty local changes block the normal update path and must be explained rather than silently overwritten;
-- post-restart health failure arms/uses rollback according to later accepted runtime authority;
-- runtime logs show essential local events and preserve access to full logs separately;
-- Jarvis may inspect differences, prepare an update plan and explain blockers, but restart/deploy/update remains an explicit operator action under the accepted runtime policy;
-- update preparation must never invent service health or successful gates that were not actually observed.
+- local-vs-GitHub divergence is a primary first-screen concept rather than a secondary metadata row;
+- the **actually executed local version is green** and clearly labeled `Local current` / `actually executed`, with local SHA/path/health/cleanliness where truthfully observable;
+- the **latest approved GitHub/remote version is orange** and clearly labeled as newer remote state that is **not yet executed locally**;
+- the UI must never imply that a newer GitHub SHA is already running merely because it exists on `master`;
+- the comparison area exposes an explicit alignment state such as `aligned`, `local behind remote`, or an equivalent truthful state;
+- when GitHub is ahead, Runtime exposes a semantic delta: concise descriptions of commits/features/contracts added after the local SHA, with the ability to inspect the full change set/commit/file evidence;
+- semantic summaries must be derived from real repository differences and clearly distinguish runtime-affecting changes from docs/reference-only changes when possible;
+- Jarvis may answer `what changed since my local version?`, compare commits/files, summarize added features and explain whether an update is safe;
+- local services/health remain visible but subordinate to version alignment;
+- migration/update phases no longer consume a large permanent pipeline. The guarded sequence remains authoritative but is compact/collapsed until the operator requests an update;
+- the future update path remains `save state -> fetch approved target -> migration -> build -> smoke -> restart -> health -> rollback`, with dirty local changes blocking unsafe overwrite and failed post-restart health preserving rollback behavior;
+- runtime logs retain essential evidence and full-log access without dominating the page;
+- update/restart/deploy remains an explicit operator action under accepted runtime authority.
 
 ## Authority boundary
 
-These references freeze approved visual composition and interaction intent only. They do not by themselves create Repository/Runtime backend capabilities, authorize new state stores or process supervisors, bypass spec/readiness, or grant Jarvis commit/deploy authority.
+These references freeze approved visual composition and interaction intent only. They do not by themselves create Repository Inspector indexing, semantic search, Runtime comparison APIs, new state stores/process supervisors, or Jarvis commit/deploy authority. Real previews, health, SHAs, semantic deltas and GitHub links must be sourced from actual repository/runtime evidence.
 
 When an approved HTML artifact and an incorrectly rendered screenshot disagree, the approved HTML/composition contract is authoritative.
