@@ -6,6 +6,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 const app = read("src/App.tsx");
 const settings = read("src/components/fusion/FinalSettingsSurface.tsx");
+const workspaceHeader = read("src/components/fusion/FinalWorkspaceHeader.tsx");
+const workspaceHeaderCss = read("src/styles/final-workspace-header.css");
 const settingsCss = read("src/styles/final-settings.css");
 const designCss = read("src/styles/final-fusion-canonical-overrides.css");
 const failures = [];
@@ -17,6 +19,27 @@ includesAll(app, [
   '<FinalSettingsSurface section="ai"',
   '<FinalSettingsSurface section="system"'
 ], "Settings canonical routes are not section-specific");
+includesAll(app, [
+  '<FinalWorkspaceHeader group="memory" active="project-basis"',
+  '<FinalWorkspaceHeader group="memory" active="models"',
+  '<FinalWorkspaceHeader group="memory" active="literature"',
+  '<FinalWorkspaceHeader group="development" active="roadmap"',
+  '<FinalWorkspaceHeader group="development" active="brainstorm"',
+  '<FinalWorkspaceHeader group="coding" active="repository"',
+  '<FinalWorkspaceHeader group="coding" active="runtime"'
+], "Canonical Memory/Development/Coding workspace headings are not routed");
+includesAll(workspaceHeader, [
+  'title: "Project knowledge"', '"Project Basis", "/memory/project-basis"', '"Models", "/memory/models"', '"Literature", "/memory/literature"',
+  'title: "Development"', '"Roadmap", "/development/roadmap/timeline"', '"Brainstorm", "/development/brainstorm"',
+  'title: "Coding"', '"Repository", "/coding/repository"', '"Runtime", "/coding/runtime"',
+  'aria-current={active === id ? "page" : undefined}'
+], "Canonical workspace peer-tab language drifted");
+includesAll(workspaceHeaderCss, [
+  ".final-fusion__workspace-head",
+  ".final-fusion__peer-tabs",
+  ".final-fusion__peer-tabs a.is-active",
+  ".final-fusion__workspace-head + .final-fusion > .final-fusion__surface-head"
+], "Workspace heading composition or stale nested-heading suppression missing");
 includesAll(settings, [
   'label: "Appearance"', 'href: "/settings/appearance"',
   'label: "AI"', 'href: "/settings/ai"',
@@ -44,6 +67,7 @@ includesAll(designCss, [
   "background: transparent !important"
 ], "Canonical Process/BLUECAD workstation composition missing");
 check(!settings.includes("fetch(") && !settings.includes("localStorage") && !settings.includes("sessionStorage"), "Settings wrapper gained data/authority state");
+check(!workspaceHeader.includes("fetch(") && !workspaceHeader.includes("localStorage") && !workspaceHeader.includes("sessionStorage"), "Workspace header gained data/authority state");
 
 if (failures.length) {
   console.error("100f visual conformance acceptance failed:");
