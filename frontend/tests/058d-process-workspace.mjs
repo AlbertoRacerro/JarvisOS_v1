@@ -46,7 +46,12 @@ assert(processStage.includes('import type { PrimaryStageProps } from "./registry
 assert(!/from\s+["'][^"']*(?:api|lineage|runner|provider)/i.test(processStage), "ProcessStage imports runtime/domain authority");
 assert(!/\b(?:fetch|localStorage|sessionStorage|onSelectionChange|onWorkspaceChange|useEffect|useState)\b/.test(processStage), "ProcessStage gained state, storage, fetch, or selection authority");
 assert((processStage.match(/\bdisabled\b/g) ?? []).length >= 2, "Process controls are not deterministically disabled");
-assert(!/\bonClick\s*=/.test(processStage), "Process scaffold exposes a mutating click handler");
+// 100f adds exactly one canonical NAVIGATE handler between Design peers; Process authoring mutations remain forbidden.
+const processClickHandlers = processStage.match(/\bonClick\s*=/g) ?? [];
+assert(
+  processClickHandlers.length === 1 && processStage.includes('onClick={() => navigate("/design/bluecad")}'),
+  "Process scaffold exposes a non-navigation click handler"
+);
 // 100f supersedes the old 058d literal copy while preserving the same truthful unavailable boundary.
 includesAll(processStage, [
   "topology editing and solving remain unavailable until server-owned Process contracts exist.",
