@@ -23,6 +23,16 @@ jobs:
           mkdir -p /tmp/jarvisos-product/frontend/evidence
           cp frontend/evidence/100f-browser.mjs /tmp/jarvisos-product/frontend/evidence/100f-browser.mjs
           sed -i 's/221d50d9befcb7fafe56148e7104da9a056d36f4/c36c0f88219fd6d5ef42c575b19a8dfbe90875d1/g' /tmp/jarvisos-product/frontend/evidence/100f-browser.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('/tmp/jarvisos-product/frontend/evidence/100f-browser.mjs')
+          text = p.read_text()
+          old = 'await collapse.click();assert.equal(await collapse.getAttribute("aria-expanded"),"false");await stateShot(page,engine,s,"execution-collapsed");await page.getByRole("button",{name:"Expand",exact:true}).click();'
+          new = 'await collapse.click();const expand=page.getByRole("button",{name:"Expand",exact:true});assert.equal(await expand.getAttribute("aria-expanded"),"false");await stateShot(page,engine,s,"execution-collapsed");await expand.click();'
+          if old not in text:
+              raise SystemExit('expected Roadmap interaction proof locator pattern not found')
+          p.write_text(text.replace(old, new))
+          PY
           test "$(git -C /tmp/jarvisos-product rev-parse HEAD)" = "c36c0f88219fd6d5ef42c575b19a8dfbe90875d1"
 
       - uses: actions/setup-node@v4
