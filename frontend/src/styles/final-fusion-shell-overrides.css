@@ -11,6 +11,8 @@
     "rail workspace"
     "rail dock";
   min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: #fbfaf6;
   font-family: "Inter Display", "Inter", "Instrument Sans", "Segoe UI", Arial, sans-serif;
 }
@@ -70,12 +72,32 @@
 }
 
 .application-shell--final .shell-workspace {
-  min-height: 100vh;
+  min-height: 0;
+  height: 100vh;
+  align-items: stretch;
+  overflow: hidden;
   background: #fbfaf6;
 }
 
 .application-shell--final .shell-main {
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  overflow: auto;
   padding: 16px 16px 18px;
+}
+
+.application-shell--final .shell-main > * {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.application-shell--final .shell-sidecar,
+.application-shell--final .shell-navigator {
+  align-self: stretch;
+  max-height: calc(100vh - 24px);
+  overflow: auto;
 }
 
 /* Process/BLUECAD approved 1365×768 references use a slightly tighter main
@@ -88,6 +110,9 @@
 
 @media (max-width: 760px) {
   .application-shell--final {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-areas:
@@ -107,7 +132,10 @@
     flex-wrap: wrap;
   }
 
-  .application-shell--final .shell-workspace {
+  .application-shell--final .shell-workspace,
+  .application-shell--final .shell-main {
+    height: auto;
     min-height: 0;
+    overflow: visible;
   }
 }
