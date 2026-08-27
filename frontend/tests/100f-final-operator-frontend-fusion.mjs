@@ -151,7 +151,8 @@ includesAll(fusionCss, [
 ], "canonical reference panel geometry missing");
 check(!fusionCss.includes("border-radius: 16px") && !fusionCss.includes("border-radius: 20px"), "large-radius dashboard styling leaked into canonical fusion CSS");
 
-check(pkg.scripts?.["test:100f"] === "node tests/100f-final-operator-frontend-fusion.mjs", "test:100f is not wired");
+const test100f = pkg.scripts?.["test:100f"] ?? "";
+check(test100f.includes("node tests/100f-final-operator-frontend-fusion.mjs") && test100f.includes("node tests/100f-visual-conformance.mjs"), "test:100f is not wired");
 check((pkg.scripts?.build ?? "").includes("npm run test:100f"), "build does not execute test:100f");
 
 if (failures.length) {
