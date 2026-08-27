@@ -37,7 +37,9 @@ function Layout({ route, navigate, selection, propertiesContent, shellRegions, s
   useEffect(() => { applyAppearancePreference(appearance); return subscribeToSystemAppearance(appearance, applyResolvedAppearance); }, [appearance]);
   useEffect(() => subscribeToVisualPreferenceUpdates(() => setAppearance(readAppearancePreference())), []);
   useEffect(() => {
-    setNavigatorOpen(false); setSidecarOpen(false); setDockOpen(false);
+    setNavigatorOpen(false);
+    setSidecarOpen(route.id === "design-process" || route.id === "design-bluecad");
+    setDockOpen(false);
     document.title = `${route.title} · JarvisOS`;
     const frame = window.requestAnimationFrame(() => mainRef.current?.focus());
     return () => window.cancelAnimationFrame(frame);
