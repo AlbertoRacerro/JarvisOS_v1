@@ -37,7 +37,13 @@ function Layout({ route, navigate, selection, propertiesContent, shellRegions, s
   useEffect(() => { applyAppearancePreference(appearance); return subscribeToSystemAppearance(appearance, applyResolvedAppearance); }, [appearance]);
   useEffect(() => subscribeToVisualPreferenceUpdates(() => setAppearance(readAppearancePreference())), []);
   useEffect(() => {
-    setNavigatorOpen(false); setSidecarOpen(false); setDockOpen(false);
+    // The approved BLUECAD composition has a persistent left model/feature
+    // navigator. Process owns its palette inside the stage, so it must not
+    // inherit this behavior. Other final surfaces keep contextual navigation
+    // closed unless explicitly requested.
+    setNavigatorOpen(route.id === "design-bluecad");
+    setSidecarOpen(route.id === "design-process" || route.id === "design-bluecad");
+    setDockOpen(false);
     document.title = `${route.title} · JarvisOS`;
     const frame = window.requestAnimationFrame(() => mainRef.current?.focus());
     return () => window.cancelAnimationFrame(frame);
@@ -55,8 +61,9 @@ function Layout({ route, navigate, selection, propertiesContent, shellRegions, s
   const closeSidecar = useCallback(() => { setSidecarOpen(false); window.requestAnimationFrame(() => sidecarToggleRef.current?.focus()); }, []);
   const closeDock = useCallback(() => { setDockOpen(false); window.requestAnimationFrame(() => dockToggleRef.current?.focus()); }, []);
   const panelControls = <><Button ref={navigatorToggleRef} variant="ghost" aria-expanded={navigatorOpen} aria-controls="shell-navigator" onClick={() => setNavigatorOpen((current) => !current)}><SidebarSimple size={16} aria-hidden="true" />{navigatorOpen ? "Hide navigator" : "Show navigator"}</Button><Button ref={sidecarToggleRef} variant="ghost" aria-expanded={sidecarOpen} aria-controls="shell-sidecar" onClick={() => setSidecarOpen((current) => !current)}><ChatCircleDots size={16} aria-hidden="true" />{sidecarOpen ? "Hide context" : "Show context"}</Button><Button ref={dockToggleRef} variant="ghost" aria-expanded={dockOpen} aria-controls="shell-analysis-dock" onClick={() => setDockOpen((current) => !current)}><ChartLine size={16} aria-hidden="true" />{dockOpen ? "Hide analysis" : "Show analysis"}</Button></>;
+  const finalOperatorRoute = route.primaryNav !== undefined;
 
-  return <div className="application-shell"><a className="shell-skip-link" href="#app-main">Skip to main content</a><TopBar title={route.title} panelControls={panelControls} appearanceControl={<Field className="appearance-control shell-appearance-control" label="Appearance" control={appearanceSelect} />} /><Rail current={route.primaryNav} navigate={navigate} /><div className="shell-workspace"><ContextualNavigator open={navigatorOpen} currentStage={route.primaryNav === "design" ? route.stageKind : undefined} navigate={navigate} onClose={closeNavigator} content={shellRegions.navigator} /><main id="app-main" className="shell-main" ref={mainRef} tabIndex={-1}>{children}</main><ContextualSidecar open={sidecarOpen} selection={selection} onClose={closeSidecar} content={shellRegions.sidecar} propertiesContent={propertiesContent} /></div><AnalysisDock open={dockOpen} onClose={closeDock} content={shellRegions.dock} /></div>;
+  return <div className={`application-shell${finalOperatorRoute ? " application-shell--final" : ""}`}><a className="shell-skip-link" href="#app-main">Skip to main content</a>{!finalOperatorRoute && <TopBar title={route.title} panelControls={panelControls} appearanceControl={<Field className="appearance-control shell-appearance-control" label="Appearance" control={appearanceSelect} />} />}<Rail current={route.primaryNav} navigate={navigate} /><div className="shell-workspace"><ContextualNavigator open={navigatorOpen} route={route} navigate={navigate} onClose={closeNavigator} content={shellRegions.navigator} /><main id="app-main" className="shell-main" ref={mainRef} tabIndex={-1}>{children}</main><ContextualSidecar open={sidecarOpen} selection={selection} onClose={closeSidecar} content={shellRegions.sidecar} propertiesContent={propertiesContent} /></div><AnalysisDock open={dockOpen} onClose={closeDock} content={shellRegions.dock} /></div>;
 }
 
 export default Layout;

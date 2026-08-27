@@ -4,12 +4,8 @@ import { dirname, resolve } from "node:path";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path) => readFileSync(resolve(root, path), "utf8");
-const assert = (condition, message) => {
-  if (!condition) throw new Error(`058d acceptance failed: ${message}`);
-};
-const includesAll = (text, fragments, message) => {
-  for (const fragment of fragments) assert(text.includes(fragment), `${message}: missing ${fragment}`);
-};
+const assert = (condition, message) => { if (!condition) throw new Error(`058d acceptance failed: ${message}`); };
+const includesAll = (text, fragments, message) => { for (const fragment of fragments) assert(text.includes(fragment), `${message}: missing ${fragment}`); };
 
 const routes = read("src/app/routes.ts");
 const registry = read("src/stages/registry.ts");
@@ -17,25 +13,19 @@ const processStage = read("src/stages/ProcessStage.tsx");
 const lineageStage = read("src/stages/LineageStage.tsx");
 const app = read("src/App.tsx");
 
-// 1-4: canonical Process/Lineage routes and historical replace-style Flowsheet alias.
+// 100f supersedes the visible 058d Design peer IA while preserving Process and deterministic historical aliases.
 includesAll(routes, [
   'id: "design-process", path: "/design/process"',
-  'id: "design-lineage", path: "/design/lineage"',
-  'if (normalized === "/design/flowsheet")',
-  'candidate.id === "design-lineage"',
-  'canonicalPath: lineageRoute.path',
-  'shouldReplace: true',
+  'id: "design-bluecad", path: "/design/bluecad"',
+  '"/design/lineage": "/memory/models"',
+  '"/design/flowsheet": "/memory/models"',
   'pathOnly.replace(/\\/+$/g, "")'
-], "route migration contract");
+], "100f route migration contract");
+const designPeerBlock = routes.match(/design: \[([\s\S]*?)\n  \],\n  memory:/)?.[1] ?? "";
+const designLabels = [...designPeerBlock.matchAll(/label: "([^"]+)"/g)].map((match) => match[1]);
+assert(JSON.stringify(designLabels) === JSON.stringify(["Process", "BLUECAD"]), `100f Design peers drifted: ${designLabels.join(" -> ")}`);
 
-// 5: Design stage order is exactly Model -> Process -> Results -> Lineage with no visible Flowsheet entry.
-const stageBlock = routes.match(/export const DESIGN_STAGE_ITEMS = \[([\s\S]*?)\] as const/)?.[1] ?? "";
-assert(stageBlock.length > 0, "DESIGN_STAGE_ITEMS block missing");
-const stageLabels = [...stageBlock.matchAll(/label: "([^"]+)"/g)].map((match) => match[1]);
-assert(JSON.stringify(stageLabels) === JSON.stringify(["Model", "Process", "Results", "Lineage"]), `unexpected Design stage order: ${stageLabels.join(" -> ")}`);
-assert(!stageBlock.includes("Flowsheet"), "visible Flowsheet stage remains");
-
-// 6: registry has distinct Process and Lineage component ownership and no flowsheet stage key.
+// Historical registry ownership remains distinct so retained compatibility code does not collapse Process/Lineage semantics.
 includesAll(registry, [
   'import LineageStage from "./LineageStage"',
   'import ProcessStage from "./ProcessStage"',
@@ -44,36 +34,34 @@ includesAll(registry, [
 ], "stage registry contract");
 assert(!/\bflowsheet\s*:/.test(registry), "registry still exposes a flowsheet stage key");
 
-// 7: renamed Lineage stage preserves graph/node/freshness reads plus stale response guards.
 includesAll(lineageStage, [
-  "getLineageGraph",
-  "getLineageNode",
-  "getLineageFreshness",
-  "acceptsLineageResponse",
-  "workspaceRef.current !== targetWorkspaceId",
-  "workspaceRef.current !== workspaceId",
-  "selectedRefRef.current !== nodeRef",
+  "getLineageGraph", "getLineageNode", "getLineageFreshness", "acceptsLineageResponse",
+  "workspaceRef.current !== targetWorkspaceId", "workspaceRef.current !== workspaceId", "selectedRefRef.current !== nodeRef",
   'aria-labelledby="lineage-stage-title"'
-], "Lineage runtime/stale-guard contract");
+], "retained Lineage runtime/stale-guard contract");
 assert((lineageStage.match(/acceptsLineageResponse/g) ?? []).length >= 5, "Lineage response guards were reduced unexpectedly");
 
-// 8-10,13: Process scaffold is presentation-only, selection-neutral, storage-free and inert.
-assert(processStage.trimStart().startsWith('import type { PrimaryStageProps } from "./registry";'), "ProcessStage gained a runtime import");
+// 100f adds presentation-only Phosphor icons before the type import; keep the authority boundary rather than enforcing import order.
+assert(processStage.includes('import type { PrimaryStageProps } from "./registry";'), "ProcessStage lost its type-only stage contract");
 assert(!/from\s+["'][^"']*(?:api|lineage|runner|provider)/i.test(processStage), "ProcessStage imports runtime/domain authority");
 assert(!/\b(?:fetch|localStorage|sessionStorage|onSelectionChange|onWorkspaceChange|useEffect|useState)\b/.test(processStage), "ProcessStage gained state, storage, fetch, or selection authority");
 assert((processStage.match(/\bdisabled\b/g) ?? []).length >= 2, "Process controls are not deterministically disabled");
-assert(!/\bonClick\s*=/.test(processStage), "Process scaffold exposes a mutating click handler");
+// 100f adds exactly one canonical NAVIGATE handler between Design peers; Process authoring mutations remain forbidden.
+const processClickHandlers = processStage.match(/\bonClick\s*=/g) ?? [];
+assert(
+  processClickHandlers.length === 1 && processStage.includes('onClick={() => navigate("/design/bluecad")}'),
+  "Process scaffold exposes a non-navigation click handler"
+);
+// 100f supersedes the old 058d literal copy while preserving the same fail-closed server-authority boundary.
 includesAll(processStage, [
-  "Process topology editing is unavailable until server-owned process and evaluator contracts are integrated.",
+  "Future Process authoring control — unavailable until server-owned topology/evaluator authority is integrated.",
+  "Process topology editing will activate only when server-owned Process and evaluator contracts are integrated.",
   "No process topology is loaded.",
-  "Not available yet."
+  "This canvas becomes authoritative only after Process backends are connected. No topology is fabricated in the frontend."
 ], "truthful Process empty-state contract");
 
-// 11: route transitions clear stale selection and shell context before the next stage owns presentation.
 const routeReset = app.match(/useEffect\(\(\) => \{([\s\S]*?)\}, \[route\.id\]\);/)?.[1] ?? "";
 includesAll(routeReset, ["setSelection(null)", "setShellRegions({})", "setShellRegionRequest(null)"], "route-id stale-context reset");
-
-// 12: Process reuses the existing 089 dock owner and does not introduce process-specific analytics authority.
 includesAll(app, [
   'import AnalyticsDockContent from "./components/analytics/AnalyticsDockContent"',
   'route.id === "design-process"',

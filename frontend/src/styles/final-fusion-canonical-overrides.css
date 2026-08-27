@@ -1,0 +1,378 @@
+/* 100f canonical composition corrections.
+ * The canonical center surfaces own their visible top bars/dossier heads.
+ * Suppress the generic Panel title strip only for those main regions so the
+ * production geometry matches the approved HTML instead of stacking an extra
+ * non-canonical header above it. Side panels keep the shared Panel header.
+ */
+.final-fusion__basis > .final-fusion__panel-head,
+.final-fusion__model-dossier > .final-fusion__panel-head,
+.final-fusion__literature > .final-fusion__panel-head,
+.final-fusion__roadmap-main > .final-fusion__panel-head,
+.final-fusion__calendar-main > .final-fusion__panel-head,
+.final-fusion__brain > .final-fusion__panel-head,
+.final-fusion__repo > .final-fusion__panel-head,
+.final-fusion__runtime-main > .final-fusion__panel-head {
+  display: none;
+}
+
+/* Final surfaces are workstation compositions, not top-of-page cards. */
+.final-fusion {
+  height: 100%;
+  min-height: 0;
+}
+
+.final-fusion__surface-head {
+  flex: 0 0 auto;
+}
+
+.final-fusion__workbench {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Process keeps the approved canvas-first hierarchy even while authoring is
+ * unavailable. Controls are intentionally present but inert; no topology is
+ * fabricated in React. */
+.process-stage {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #222821;
+}
+
+.process-stage__header {
+  flex: 0 0 auto;
+  min-height: 58px;
+  padding: 2px 2px 0;
+}
+
+.process-stage__header h1 {
+  margin: 3px 0 3px;
+  font-size: 22px;
+  line-height: 1.08;
+  font-weight: 500;
+  letter-spacing: -.025em;
+}
+
+.process-stage__header .panel-subtitle {
+  margin: 0;
+  max-width: 760px;
+  font-size: 9px;
+  line-height: 1.35;
+  color: #747b72;
+}
+
+.process-stage__workbench {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-rows: 80px minmax(0, 1fr);
+  grid-template-areas:
+    "toolbar toolbar"
+    "palette canvas";
+  border: 1px solid #ddd5c8;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #fffefc;
+  box-shadow: 0 10px 28px rgba(60,58,41,.05);
+}
+
+.process-stage__toolbar {
+  grid-area: toolbar;
+  min-height: 80px;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 2px;
+  padding: 7px 10px;
+  overflow-x: hidden;
+  border-bottom: 1px solid #ddd5c8;
+  background: #fffefc;
+}
+
+.process-stage__tool,
+.process-stage__toolbar .process-stage__tool:disabled {
+  flex: 1 1 0;
+  min-width: 42px;
+  min-height: 66px;
+  padding: 4px 3px !important;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent !important;
+  border-radius: 4px !important;
+  background: transparent !important;
+  color: #57614e !important;
+  opacity: .72;
+}
+
+.process-stage__tool svg { color: #4b6f3b; }
+.process-stage__tool span { font-size: 8px; line-height: 1.05; white-space: nowrap; }
+
+.process-stage__palette {
+  grid-area: palette;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #ddd5c8;
+  background: linear-gradient(180deg,#fffdfc,#fcf8f2);
+}
+
+.process-stage__palette-head {
+  min-height: 39px;
+  padding: 10px 10px 7px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  border-bottom: 1px solid #e8e0d4;
+}
+.process-stage__palette-head strong { font-size: 10px; font-weight: 500; }
+.process-stage__palette-head span { font-size: 7px; color: #888f86; }
+
+.process-stage__palette-search {
+  margin: 8px 8px 5px;
+  min-height: 30px;
+  padding: 7px 8px;
+  border: 1px solid #dfd7ca;
+  border-radius: 4px;
+  background: #fffefc;
+  color: #969b94;
+  font-size: 8px;
+}
+
+.process-stage__palette-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 8px 6px;
+}
+.process-stage__palette-filters span {
+  padding: 5px 8px;
+  border: 1px solid #e1dace;
+  border-radius: 10px;
+  background: #fffefc;
+  color: #6b746b;
+  font-size: 7px;
+  line-height: 1;
+}
+.process-stage__palette-filters span.is-active {
+  background: #edf7e7;
+  border-color: rgba(75,142,47,.45);
+  color: #28581a;
+  font-weight: 600;
+}
+
+.process-stage__palette-list {
+  min-height: 0;
+  overflow: auto;
+  padding: 0 8px 9px;
+}
+.process-stage__palette-list section { padding: 6px 0; border-top: 1px solid #e9e2d7; }
+.process-stage__palette-list section:first-child { border-top: 0; }
+.process-stage__palette-list h2 {
+  margin: 0 0 5px;
+  font-size: 7px;
+  font-weight: 500;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: #777f75;
+}
+.process-stage__palette-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.process-stage__palette-list button,
+.process-stage__palette-list button:disabled {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  margin: 0;
+  padding: 7px 8px !important;
+  border: 1px solid #e2dbcf !important;
+  border-radius: 4px !important;
+  background: linear-gradient(180deg,#fffdfc,#faf6ef) !important;
+  color: #5e665d !important;
+  text-align: left;
+  font-size: 8px;
+  line-height: 1.15;
+  overflow-wrap: normal;
+  word-break: normal;
+  opacity: .72;
+}
+
+.process-stage__canvas {
+  grid-area: canvas;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background-color: #fffefc;
+  background-image:
+    linear-gradient(#ece8e0 1px, transparent 1px),
+    linear-gradient(90deg, #ece8e0 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+.process-stage__canvas-meta {
+  position: absolute;
+  inset: 9px auto auto 9px;
+  display: flex;
+  gap: 4px;
+}
+.process-stage__canvas-meta span {
+  padding: 5px 7px;
+  border: 1px solid #e2dacd;
+  border-radius: 8px;
+  background: rgba(255,255,255,.92);
+  color: #747b72;
+  font-size: 7px;
+}
+
+.process-stage__canvas-empty {
+  width: min(50%, 390px);
+  min-width: 300px;
+  max-width: 390px;
+  padding: 24px 26px;
+  border: 1px solid #ded7cb;
+  border-radius: 5px;
+  background: rgba(255,254,252,.94);
+  text-align: center;
+  box-shadow: 0 12px 28px rgba(70,67,55,.07);
+}
+.process-stage__canvas-empty strong { font-size: 12px; font-weight: 500; }
+.process-stage__canvas-empty .panel-subtitle { margin: 8px 0 0; font-size: 9px; line-height: 1.4; }
+
+/* Design final routes reuse the legacy shell regions but the canonical
+ * workstations treat them as compact structural columns, not generic app cards. */
+.application-shell--final .shell-navigator,
+.application-shell--final .shell-sidecar {
+  margin: 12px 0 16px;
+  padding: 10px;
+  border-color: #ddd5c8;
+  border-radius: 5px;
+  background: linear-gradient(180deg,#fffdfc 0%,#fcf8f2 100%);
+  box-shadow: 0 10px 26px rgba(60,58,41,.06);
+}
+.application-shell--final .shell-navigator { width: 240px; }
+.application-shell--final .shell-sidecar {
+  width: 300px;
+  height: calc(100vh - 28px);
+  max-height: calc(100vh - 28px);
+}
+.application-shell--final .shell-panel__header {
+  min-height: 30px;
+  margin-block-end: 8px;
+  align-items: center;
+  gap: 6px;
+}
+.application-shell--final .shell-panel__header h2 {
+  min-width: 0;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.15;
+  font-weight: 600;
+  overflow-wrap: normal;
+}
+.application-shell--final .shell-panel__header .ui-button {
+  min-height: 24px;
+  padding: 3px 6px;
+  font-size: 7px;
+  white-space: nowrap;
+}
+.application-shell--final .shell-sidecar__workbench {
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0;
+}
+.application-shell--final .shell-sidecar__pane {
+  padding: 9px 3px;
+  font-size: 8px;
+}
+.application-shell--final .shell-sidecar__pane--jarvis {
+  padding-top: 2px;
+  padding-block-end: 10px;
+}
+.application-shell--final .shell-properties__header h3 {
+  margin: 2px 0 6px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.application-shell--final .shell-properties__header .eyebrow,
+.application-shell--final .shell-sidecar .eyebrow { font-size: 6.5px; }
+.application-shell--final .shell-sidecar .ui-inline-notice,
+.application-shell--final .shell-sidecar p,
+.application-shell--final .shell-sidecar summary,
+.application-shell--final .shell-sidecar dt,
+.application-shell--final .shell-sidecar dd {
+  font-size: 7.5px;
+  line-height: 1.35;
+}
+
+/* BLUECAD final stage: icon-first compact toolstrip and dominant viewport.
+ * Foundation button defaults are deliberately neutralized here; green remains
+ * an accent, never the toolbar fill. */
+.bluecad-final-stage {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bluecad-final-stage__header { flex: 0 0 auto; min-height: 58px; padding: 2px 2px 0; }
+.bluecad-final-stage__header h1 { margin: 3px 0; font-size: 22px; line-height: 1.08; font-weight: 500; letter-spacing: -.025em; }
+.bluecad-final-stage__header .panel-subtitle { margin: 0; max-width: 720px; font-size: 9px; line-height: 1.35; }
+.bluecad-final-stage__toolbar {
+  flex: 0 0 80px;
+  min-height: 80px;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 2px;
+  padding: 7px 10px;
+  overflow: hidden;
+  border: 1px solid #ddd5c8;
+  border-radius: 5px;
+  background: #fffefc;
+}
+.bluecad-final-stage__toolbar button,
+.bluecad-final-stage__toolbar button:disabled {
+  flex: 1 1 0;
+  min-width: 40px;
+  min-height: 66px;
+  padding: 4px 2px !important;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent !important;
+  border-radius: 4px !important;
+  background: transparent !important;
+  color: #57614e !important;
+  opacity: .72;
+}
+.bluecad-final-stage__toolbar button svg { color: #4b6f3b; }
+.bluecad-final-stage__toolbar button span { font-size: 8px; line-height: 1; white-space: nowrap; }
+.bluecad-final-stage__body { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.bluecad-final-stage__body .bluecad-page,
+.bluecad-final-stage__body .bluecad-grid,
+.bluecad-final-stage__body .bluecad-workbench,
+.bluecad-final-stage__body .bluecad-workbench__viewport { min-height: 0; }
+.bluecad-final-stage__body .bluecad-page { height: 100%; padding: 0; }
+.bluecad-final-stage__body .bluecad-workbench { height: 100%; }
+
+@media (max-width: 980px) {
+  .process-stage__workbench { grid-template-columns: 180px minmax(0,1fr); }
+  .application-shell--final .shell-navigator,
+  .application-shell--final .shell-sidecar { width: 190px; }
+}
