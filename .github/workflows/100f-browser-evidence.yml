@@ -43,18 +43,22 @@ jobs:
           npm install --no-save --package-lock=false playwright@1.55.0
           npx playwright install --with-deps chromium firefox
 
-      - name: Start production preview
-        working-directory: frontend
+      - name: Start production and canonical-reference servers
         run: |
-          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/jarvisos-100f-vite.log 2>&1 &
+          (cd frontend && npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/jarvisos-100f-vite.log 2>&1) &
+          python3 -m http.server 4174 --bind 127.0.0.1 > /tmp/jarvisos-100f-reference.log 2>&1 &
           for i in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:4173/design/process >/dev/null; then exit 0; fi
+            if curl --fail --silent http://127.0.0.1:4173/design/process >/dev/null && \
+               curl --fail --silent http://127.0.0.1:4174/docs/design-references/process-beta/process-beta-approved-2026-08-26.html >/dev/null; then
+              exit 0
+            fi
             sleep 1
           done
-          cat /tmp/jarvisos-100f-vite.log
+          cat /tmp/jarvisos-100f-vite.log || true
+          cat /tmp/jarvisos-100f-reference.log || true
           exit 1
 
-      - name: Run 11-surface browser matrix
+      - name: Run 11-surface paired browser matrix
         working-directory: frontend
         run: node evidence/100f-browser.mjs
 
