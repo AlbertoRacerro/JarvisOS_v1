@@ -13,6 +13,7 @@ import {
 import JarvisEngineeringActions from "./components/engineering/JarvisEngineeringActions";
 import FinalOperatorReadSurface from "./components/fusion/FinalOperatorReadSurface";
 import FinalOperatorUnavailableSurface from "./components/fusion/FinalOperatorUnavailableSurface";
+import FinalSettingsSurface from "./components/fusion/FinalSettingsSurface";
 import LegacyDiagnosticSurface from "./components/shell/LegacyDiagnosticSurface";
 import MigrationPendingSurface from "./components/shell/MigrationPendingSurface";
 import AIDraft from "./pages/AIDraft";
@@ -20,7 +21,6 @@ import AIThreads from "./pages/AIThreads";
 import DomainFoundation from "./pages/DomainFoundation";
 import EngineeringData from "./pages/EngineeringData";
 import RunsWorkbench from "./pages/RunsWorkbench";
-import Settings from "./pages/Settings";
 import SystemStatus from "./pages/SystemStatus";
 import { PRIMARY_STAGES, type ShellRegion, type ShellRegionContributions } from "./stages/registry";
 
@@ -79,9 +79,13 @@ function App() {
         content = <FinalOperatorReadSurface kind="runtime" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} />;
         break;
       case "settings-appearance":
+        content = <FinalSettingsSurface section="appearance" navigate={navigate} />;
+        break;
       case "settings-ai":
+        content = <FinalSettingsSurface section="ai" navigate={navigate} />;
+        break;
       case "settings-system":
-        content = <Settings />;
+        content = <FinalSettingsSurface section="system" navigate={navigate} />;
         break;
       case "runs":
         content = <RunsWorkbench workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} engineeringProperties={engineeringProperties} />;
