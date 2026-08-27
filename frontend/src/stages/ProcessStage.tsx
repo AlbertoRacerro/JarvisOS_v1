@@ -42,26 +42,33 @@ const futureTools: readonly FutureTool[] = [
 ];
 
 const equipmentGroups = [
-  ["Streams", "Material stream", "Energy stream"],
-  ["Mixing & split", "Mixer", "Splitter"],
-  ["Heat transfer", "Heater", "Cooler", "Heat exchanger"],
+  ["Flow", "Material stream", "Energy stream", "Mixer", "Splitter"],
+  ["Heat", "Heater", "Cooler", "Heat exchanger"],
   ["Pressure", "Pump", "Compressor", "Valve"],
-  ["Reaction & separation", "Reactor", "Separator", "Column"]
+  ["Reaction", "Reactor"],
+  ["Separation", "Separator", "Column"]
 ] as const;
 
-function ProcessStage(_props: PrimaryStageProps) {
+function ProcessStage({ navigate }: PrimaryStageProps) {
   const unavailableReason = "Future Process authoring control — unavailable until server-owned topology/evaluator authority is integrated.";
 
   return (
-    <section className="process-stage" aria-labelledby="process-stage-title">
-      <header className="page-header process-stage__header">
-        <div>
-          <p className="eyebrow">Process</p>
-          <h1 id="process-stage-title">Process workspace</h1>
-          <p className="panel-subtitle">
-            Approved process-workbench composition is preserved; topology editing and solving remain unavailable until server-owned Process contracts exist.
-          </p>
+    <section className="process-stage design-stage" aria-labelledby="process-stage-title">
+      <header className="design-stage__header process-stage__header">
+        <div className="design-stage__title-row">
+          <div>
+            <p className="eyebrow">Design</p>
+            <h1 id="process-stage-title">Process workspace</h1>
+            <p className="panel-subtitle">
+              Process topology editing will activate only when server-owned Process and evaluator contracts are integrated.
+            </p>
+          </div>
+          <span className="design-stage__truth-state">Topology · Unavailable</span>
         </div>
+        <nav className="design-stage__tabs" aria-label="Design workspaces">
+          <button type="button" className="is-active" aria-current="page">Process</button>
+          <button type="button" onClick={() => navigate("/design/bluecad")}>BLUECAD</button>
+        </nav>
       </header>
 
       <div className="process-stage__workbench">
@@ -75,7 +82,7 @@ function ProcessStage(_props: PrimaryStageProps) {
               title={unavailableReason}
               aria-label={`${label} unavailable: ${unavailableReason}`}
             >
-              <Icon size={15} aria-hidden="true" />
+              <Icon size={17} aria-hidden="true" />
               <span>{label}</span>
             </button>
           ))}
@@ -83,28 +90,39 @@ function ProcessStage(_props: PrimaryStageProps) {
 
         <aside className="process-stage__palette" aria-label="Process equipment">
           <div className="process-stage__palette-head">
-            <strong>Equipment</strong>
+            <strong>Process equipment</strong>
             <span>Future palette</span>
           </div>
           <div className="process-stage__palette-search" aria-disabled="true">Search equipment…</div>
+          <div className="process-stage__palette-filters" aria-label="Equipment categories">
+            {['All', 'Flow', 'Heat', 'Separation', 'Reaction'].map((label) => (
+              <span key={label} className={label === 'All' ? 'is-active' : undefined}>{label}</span>
+            ))}
+          </div>
           <div className="process-stage__palette-list">
             {equipmentGroups.map(([group, ...items]) => (
               <section key={group}>
                 <h2>{group}</h2>
-                {items.map((item) => (
-                  <button key={item} type="button" disabled title={unavailableReason}>{item}</button>
-                ))}
+                <div className="process-stage__palette-grid">
+                  {items.map((item) => (
+                    <button key={item} type="button" disabled title={unavailableReason}>{item}</button>
+                  ))}
+                </div>
               </section>
             ))}
           </div>
         </aside>
 
         <div className="process-stage__canvas" role="region" aria-label="Process canvas">
+          <div className="process-stage__canvas-meta" aria-hidden="true">
+            <span>Snap · unavailable</span><span>Routing · unavailable</span><span>Server-owned semantics</span>
+          </div>
           <div className="process-stage__canvas-empty">
             <strong>No process topology is loaded.</strong>
             <p className="panel-subtitle">
-              The warm-grid canvas and authoring affordances are present, but no topology is fabricated in the frontend.
+              This canvas becomes authoritative only after Process backends are connected. No topology is fabricated in the frontend.
             </p>
+            <span className="process-stage__empty-badge">Visual scaffold</span>
           </div>
         </div>
       </div>
