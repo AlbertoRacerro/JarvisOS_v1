@@ -1,0 +1,113 @@
+/* 100f final shared-shell overlay.
+ * The eleven canonical operator references use a rail-only shell with the
+ * screen-local heading/tabs inside the workspace. Normal final routes therefore
+ * suppress the legacy global top bar instead of stacking a second header above
+ * the normative composition. Compatibility/diagnostic routes keep the old shell.
+ */
+.application-shell--final {
+  grid-template-columns: 170px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "rail workspace"
+    "rail dock";
+  min-height: 100vh;
+  background: #fbfaf6;
+  font-family: "Inter Display", "Inter", "Instrument Sans", "Segoe UI", Arial, sans-serif;
+}
+
+.application-shell--final .shell-topbar {
+  display: none;
+}
+
+.application-shell--final .shell-rail {
+  padding: 20px 9px 12px;
+  gap: 23px;
+  background: linear-gradient(180deg, #faf7f0 0%, #faf6ee 100%);
+  border-inline-end-color: #e5dcce;
+}
+
+.application-shell--final .shell-rail__identity {
+  gap: 4px;
+  padding-inline: 4px;
+}
+
+.application-shell--final .shell-rail__identity strong {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+
+.application-shell--final .shell-rail__identity span {
+  font-size: 8px;
+  color: #7d847d;
+}
+
+.application-shell--final .shell-rail__links {
+  gap: 2px;
+}
+
+.application-shell--final .shell-nav-link {
+  min-height: 38px;
+  padding: 9px 12px;
+  border-radius: 4px;
+  color: #596159;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.application-shell--final .shell-nav-link:hover {
+  background: #fffefc;
+  border-color: #ddd5c8;
+}
+
+.application-shell--final .shell-nav-link[aria-current="page"] {
+  color: #1f2720;
+  background: #fffefc;
+  border-color: rgba(70, 126, 42, .65);
+  box-shadow: inset 3px 0 0 #467e2a, 0 4px 14px rgba(75, 142, 47, .10);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.application-shell--final .shell-workspace {
+  min-height: 100vh;
+  background: #fbfaf6;
+}
+
+.application-shell--final .shell-main {
+  padding: 16px 16px 18px;
+}
+
+/* Process/BLUECAD approved 1365×768 references use a slightly tighter main
+ * inset while retaining the same 170 px rail. */
+@media (max-width: 1400px) {
+  .application-shell--final .shell-main {
+    padding: 12px 14px 16px;
+  }
+}
+
+@media (max-width: 760px) {
+  .application-shell--final {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "rail"
+      "workspace"
+      "dock";
+  }
+
+  .application-shell--final .shell-rail {
+    min-height: auto;
+    border-inline-end: 0;
+    border-block-end: 1px solid #e5dcce;
+  }
+
+  .application-shell--final .shell-rail__links {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .application-shell--final .shell-workspace {
+    min-height: 0;
+  }
+}
