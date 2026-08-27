@@ -150,7 +150,12 @@ for (const label of ["Heat exchanger", "Pump", "Compressor", "Reactor"]) {
   check(processStage.includes(`"${label}"`), `final Process future palette is missing ${label}`);
 }
 check((processStage.match(/\bdisabled\b/g) ?? []).length >= 2, "final Process future palette/toolbar is not deterministically disabled");
-check(!/\bonClick\s*=|\buseState\b|\buseEffect\b|\bfetch\s*\(/.test(processStage), "Process future affordances gained frontend mutation/runtime authority");
+const processClickHandlers = processStage.match(/\bonClick\s*=/g) ?? [];
+check(
+  processClickHandlers.length === 1 && processStage.includes('onClick={() => navigate("/design/bluecad")}'),
+  "final Process scaffold exposes a non-navigation click handler"
+);
+check(!/\buseState\b|\buseEffect\b|\bfetch\s*\(/.test(processStage), "Process future affordances gained frontend mutation/runtime authority");
 check(!/fetch\(|axios|provider|runner/i.test(theme), "visual preference owner gained runtime execution/API authority");
 check(pkg.scripts?.["test:058d"] === "node tests/058d-process-workspace.mjs", "058d deterministic gate changed");
 check(pkg.scripts?.["test:100"] === "node tests/100-visual-identity.mjs", "100 deterministic gate not wired");
