@@ -47,10 +47,11 @@ assert(!/from\s+["'][^"']*(?:api|lineage|runner|provider)/i.test(processStage), 
 assert(!/\b(?:fetch|localStorage|sessionStorage|onSelectionChange|onWorkspaceChange|useEffect|useState)\b/.test(processStage), "ProcessStage gained state, storage, fetch, or selection authority");
 assert((processStage.match(/\bdisabled\b/g) ?? []).length >= 2, "Process controls are not deterministically disabled");
 assert(!/\bonClick\s*=/.test(processStage), "Process scaffold exposes a mutating click handler");
+// 100f supersedes the old 058d literal copy while preserving the same truthful unavailable boundary.
 includesAll(processStage, [
-  "Process topology editing is unavailable until server-owned process and evaluator contracts are integrated.",
+  "topology editing and solving remain unavailable until server-owned Process contracts exist.",
   "No process topology is loaded.",
-  "Not available yet."
+  "The warm-grid canvas and authoring affordances are present, but no topology is fabricated in the frontend."
 ], "truthful Process empty-state contract");
 
 const routeReset = app.match(/useEffect\(\(\) => \{([\s\S]*?)\}, \[route\.id\]\);/)?.[1] ?? "";
