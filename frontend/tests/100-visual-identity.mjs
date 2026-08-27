@@ -144,7 +144,13 @@ check(settings.includes('option === "custom" ? customAccentSwatch'), "Custom swa
 check(settingsCss.includes("var(--color-status-danger-text)"), "invalid custom HEX lacks non-accent error semantics");
 check(!/saveAISetting\([^\n]*(accent|appearance)/i.test(settings), "visual preferences must not use canonical settings API");
 
-check(!/pump|compressor|reactor|heat exchanger|stream node/i.test(processStage), "Process scaffold gained fake process semantics");
+// 100f supersedes the old blanket ban on equipment names: the canonical Process target
+// requires a visible future palette, but every authoring affordance must remain inert.
+for (const label of ["Heat exchanger", "Pump", "Compressor", "Reactor"]) {
+  check(processStage.includes(`"${label}"`), `final Process future palette is missing ${label}`);
+}
+check((processStage.match(/\bdisabled\b/g) ?? []).length >= 2, "final Process future palette/toolbar is not deterministically disabled");
+check(!/\bonClick\s*=|\buseState\b|\buseEffect\b|\bfetch\s*\(/.test(processStage), "Process future affordances gained frontend mutation/runtime authority");
 check(!/fetch\(|axios|provider|runner/i.test(theme), "visual preference owner gained runtime execution/API authority");
 check(pkg.scripts?.["test:058d"] === "node tests/058d-process-workspace.mjs", "058d deterministic gate changed");
 check(pkg.scripts?.["test:100"] === "node tests/100-visual-identity.mjs", "100 deterministic gate not wired");
