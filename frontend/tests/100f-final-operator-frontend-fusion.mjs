@@ -13,6 +13,8 @@ const readFusion = read("src/components/fusion/FinalOperatorReadSurface.tsx");
 const readApi = read("src/api/finalOperatorReads.ts");
 const fusionCss = read("src/styles/final-fusion.css");
 const shellOverlay = read("src/styles/final-fusion-shell-overrides.css");
+const canonicalOverlay = read("src/styles/final-fusion-canonical-overrides.css");
+const processStage = read("src/stages/ProcessStage.tsx");
 const contextNav = read("src/components/shell/ContextualNavigator.tsx");
 const pkg = JSON.parse(read("package.json"));
 const failures = [];
@@ -101,8 +103,22 @@ includesAll(shellOverlay, [
   "display: none",
   'font-family: "Inter Display", "Inter"',
   "#fbfaf6",
-  "#faf6ee"
+  "#faf6ee",
+  "height: 100vh",
+  ".application-shell--final .shell-main > *"
 ], "canonical rail/shell geometry or visual language missing");
+
+includesAll(processStage, [
+  'label: "Select"', 'label: "Pan"', 'label: "Add equipment"', 'label: "Connect"', 'label: "Disconnect"',
+  'label: "Multi-select"', 'label: "Duplicate"', 'label: "Delete"', 'label: "Fit view"', 'label: "Zoom"',
+  'label: "Undo"', 'label: "Redo"', 'label: "Auto-layout"', 'label: "Validate"', 'label: "Solve"',
+  'disabled', 'No process topology is loaded.'
+], "canonical Process future affordances or fail-closed empty state missing");
+check(!/useState|fetch\(|axios|localStorage|sessionStorage/i.test(processStage), "Process scaffold gained frontend topology/API authority");
+includesAll(canonicalOverlay, [
+  ".process-stage__toolbar", ".process-stage__palette", ".process-stage__canvas",
+  "grid-template-columns: 190px minmax(0, 1fr)", "background-size: 40px 40px"
+], "canonical Process workstation composition missing");
 
 includesAll(fusion, [
   'title="Project search"', 'title="Project Basis"', 'title="Jarvis"',
