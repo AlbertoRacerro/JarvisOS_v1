@@ -1,0 +1,16 @@
+/* 100f canonical composition corrections.
+ * The canonical center surfaces own their visible top bars/dossier heads.
+ * Suppress the generic Panel title strip only for those main regions so the
+ * production geometry matches the approved HTML instead of stacking an extra
+ * non-canonical header above it. Side panels keep the shared Panel header.
+ */
+.final-fusion__basis > .final-fusion__panel-head,
+.final-fusion__model-dossier > .final-fusion__panel-head,
+.final-fusion__literature > .final-fusion__panel-head,
+.final-fusion__roadmap-main > .final-fusion__panel-head,
+.final-fusion__calendar-main > .final-fusion__panel-head,
+.final-fusion__brain > .final-fusion__panel-head,
+.final-fusion__repo > .final-fusion__panel-head,
+.final-fusion__runtime-main > .final-fusion__panel-head {
+  display: none;
+}
