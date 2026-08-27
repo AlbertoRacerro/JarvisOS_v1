@@ -37,7 +37,11 @@ function Layout({ route, navigate, selection, propertiesContent, shellRegions, s
   useEffect(() => { applyAppearancePreference(appearance); return subscribeToSystemAppearance(appearance, applyResolvedAppearance); }, [appearance]);
   useEffect(() => subscribeToVisualPreferenceUpdates(() => setAppearance(readAppearancePreference())), []);
   useEffect(() => {
-    setNavigatorOpen(false);
+    // The approved BLUECAD composition has a persistent left model/feature
+    // navigator. Process owns its palette inside the stage, so it must not
+    // inherit this behavior. Other final surfaces keep contextual navigation
+    // closed unless explicitly requested.
+    setNavigatorOpen(route.id === "design-bluecad");
     setSidecarOpen(route.id === "design-process" || route.id === "design-bluecad");
     setDockOpen(false);
     document.title = `${route.title} · JarvisOS`;
