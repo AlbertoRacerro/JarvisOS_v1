@@ -6,8 +6,11 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 const routes = read("src/app/routes.ts");
 const app = read("src/App.tsx");
+const layout = read("src/components/Layout.tsx");
+const main = read("src/main.tsx");
 const fusion = read("src/components/fusion/FinalOperatorUnavailableSurface.tsx");
 const fusionCss = read("src/styles/final-fusion.css");
+const shellOverlay = read("src/styles/final-fusion-shell-overrides.css");
 const contextNav = read("src/components/shell/ContextualNavigator.tsx");
 const pkg = JSON.parse(read("package.json"));
 const failures = [];
@@ -57,6 +60,21 @@ check(app.includes("No server-owned roadmap item store") && app.includes("No ser
 check(app.includes("browser does not call GitHub") && app.includes("Identity remains Unknown") && app.includes("update/terminal controls remain unavailable"), "Coding truth boundaries are not explicit");
 check(!/iframe|srcDoc/.test(app), "static HTML embedding is forbidden");
 check(!/localStorage|sessionStorage|fetch\(|axios|github\.com\/api/i.test(app), "final surface shell gained private truth/API authority");
+
+includesAll(layout, [
+  "const finalOperatorRoute = route.primaryNav !== undefined",
+  'application-shell--final',
+  '!finalOperatorRoute && <TopBar'
+], "canonical final routes must use rail-only shared shell rather than stacked legacy topbar");
+check(main.includes('final-fusion-shell-overrides.css'), "final shared-shell canonical overlay is not loaded");
+includesAll(shellOverlay, [
+  "grid-template-columns: 170px minmax(0, 1fr)",
+  ".application-shell--final .shell-topbar",
+  "display: none",
+  'font-family: "Inter Display", "Inter"',
+  "#fbfaf6",
+  "#faf6ee"
+], "canonical rail/shell geometry or visual language missing");
 
 includesAll(fusion, [
   'title="Project search"', 'title="Project Basis"', 'title="Jarvis"',
