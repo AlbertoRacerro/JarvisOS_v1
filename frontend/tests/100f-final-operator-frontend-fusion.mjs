@@ -9,6 +9,8 @@ const app = read("src/App.tsx");
 const layout = read("src/components/Layout.tsx");
 const main = read("src/main.tsx");
 const fusion = read("src/components/fusion/FinalOperatorUnavailableSurface.tsx");
+const readFusion = read("src/components/fusion/FinalOperatorReadSurface.tsx");
+const readApi = read("src/api/finalOperatorReads.ts");
 const fusionCss = read("src/styles/final-fusion.css");
 const shellOverlay = read("src/styles/final-fusion-shell-overrides.css");
 const contextNav = read("src/components/shell/ContextualNavigator.tsx");
@@ -53,13 +55,39 @@ check(contextNav.includes("ROADMAP_STAGE_ITEMS"), "Roadmap Timeline/Calendar sec
 check(app.includes('route.id === "design-process" || route.id === "design-bluecad"'), "Process/BLUECAD do not reuse the existing stage shell");
 check(app.includes('sidecar: route.primaryNav === "settings" ? undefined : jarvisSidecar'), "Settings must not expose Jarvis sidecar");
 includesAll(app, [
-  'kind="project-basis"', 'kind="models"', 'kind="literature"', 'kind="roadmap"',
-  'kind="calendar"', 'kind="brainstorm"', 'kind="repository"', 'kind="runtime"'
+  'FinalOperatorReadSurface kind="project-basis"', 'FinalOperatorReadSurface kind="models"',
+  'kind="literature"', 'kind="roadmap"', 'kind="calendar"', 'kind="brainstorm"',
+  'kind="repository"', 'FinalOperatorReadSurface kind="runtime"'
 ], "missing final production surface composition");
 check(app.includes("No server-owned roadmap item store") && app.includes("No server-owned time-allocation calendar"), "Development missing-authority states are not explicit");
-check(app.includes("browser does not call GitHub") && app.includes("Identity remains Unknown") && app.includes("update/terminal controls remain unavailable"), "Coding truth boundaries are not explicit");
+check(app.includes("browser does not call GitHub"), "Repository frontend/GitHub truth boundary is not explicit");
 check(!/iframe|srcDoc/.test(app), "static HTML embedding is forbidden");
 check(!/localStorage|sessionStorage|fetch\(|axios|github\.com\/api/i.test(app), "final surface shell gained private truth/API authority");
+
+includesAll(readFusion, [
+  "Working revisions are unavailable",
+  "Approve-all, working revision and deterministic revalidation require their future accepted owner.",
+  "Exact model-version inventory is not exposed by the current read owner.",
+  "Specification record; not an exact model version",
+  "Not projected from workspace-level records because exact model/version binding cannot be proven.",
+  "LOCAL · Unknown SHA",
+  "REMOTE · Unknown",
+  "does not prove an executed Git SHA",
+  "The frontend does not call GitHub directly or infer alignment.",
+  "Safe update and terminal EXECUTE authority are not present in 100f."
+], "truthful READ/Unknown boundary missing");
+check(!/cd951bae|86cdedde|working tree clean|remote current|PASS|Aligned/i.test(readFusion), "fixture repository/runtime success identity leaked into truthful read surface");
+check(!/localStorage|sessionStorage|github\.com\/api|api\.github|child_process|powershell|cmd\.exe/i.test(readFusion), "read surface crossed frontend authority boundary");
+
+includesAll(readApi, [
+  'getJson<FinalWorkspace[]>("/workspaces")',
+  "/model-specs",
+  "/requirements",
+  "/parameters",
+  "/decisions",
+  "getSystemInfo"
+], "accepted existing backend READ binding missing");
+check(!/github\.com|api\.github|localStorage|sessionStorage|child_process|powershell|cmd\.exe/i.test(readApi), "final read adapter crossed frontend authority boundary");
 
 includesAll(layout, [
   "const finalOperatorRoute = route.primaryNav !== undefined",
