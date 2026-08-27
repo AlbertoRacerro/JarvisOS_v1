@@ -1,0 +1,66 @@
+name: 100f Browser Evidence
+
+on:
+  push:
+    branches: [evidence/100f-browser-453c1497]
+
+permissions:
+  contents: read
+
+jobs:
+  browser-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Prove product tree matches frozen head
+        run: |
+          git fetch --no-tags --depth=1 origin 453c1497c3ad6e5fc51995476c150df9e1ebf928
+          git diff --exit-code 453c1497c3ad6e5fc51995476c150df9e1ebf928 -- \
+            frontend ':!frontend/evidence/100f-browser.mjs' \
+            backend schemas docs/specs/STATUS.md
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install exact frontend dependencies
+        working-directory: frontend
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Production build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Install evidence-only Playwright
+        working-directory: frontend
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium firefox
+
+      - name: Start production preview
+        working-directory: frontend
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/jarvisos-100f-vite.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4173/design/process >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/jarvisos-100f-vite.log
+          exit 1
+
+      - name: Run 11-surface browser matrix
+        working-directory: frontend
+        run: node evidence/100f-browser.mjs
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 100f-browser-evidence-453c1497
+          path: frontend/evidence/100f-artifacts
+          if-no-files-found: error
