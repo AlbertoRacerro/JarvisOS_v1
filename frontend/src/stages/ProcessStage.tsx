@@ -34,7 +34,7 @@ const futureTools: readonly FutureTool[] = [
   { label: "Delete", icon: Trash },
   { label: "Fit view", icon: ArrowsOut },
   { label: "Zoom", icon: MagnifyingGlassPlus },
-  { label: "Undo", icon: ArrowCounterwise },
+  { label: "Undo", icon: ArrowCounterClockwise },
   { label: "Redo", icon: ArrowClockwise },
   { label: "Auto-layout", icon: MagicWand },
   { label: "Validate", icon: CheckCircle },
