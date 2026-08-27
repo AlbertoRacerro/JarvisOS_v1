@@ -9,6 +9,8 @@ Freeze the final operator-facing product semantics reached after the maintainer 
 
 This document is a product-direction reconciliation layer over PD-02 through PD-07. Where this document and the approved references under `docs/design-references/` are more specific than earlier product-direction prose, this document wins for future product composition. It does not change `docs/specs/STATUS.md` by itself and it does not authorize runtime implementation.
 
+The final preservation packet is intentionally split by role: the approved UI manifest and byte-identified HTMLs own visual/composition identity; `docs/design-references/FINAL_OPERATOR_INTERACTION_CONTRACT_2026-08-27.md` owns the frozen user-visible interaction/state-transition semantics; the capability matrix and pseudo-spec pack preserve future backend/frontend obligations. Builders must not infer omitted behavior from current runtime convenience or chat memory.
+
 ## Global shell
 
 Normal primary navigation is exactly:
@@ -27,7 +29,7 @@ Normal peer modes remain exactly:
 
 Model, Results, Runs, Evidence, Review, Lineage, Files, and History remain contextual/owned information rather than peer Design destinations.
 
-The approved Process/BLUECAD compositions under `docs/design-references/` remain the visual reference. Process and BLUECAD share the right-side Jarvis/Properties interaction language while retaining different editing semantics.
+The approved Process/BLUECAD compositions under `docs/design-references/` remain the visual reference. Process and BLUECAD share the right-side Jarvis/Properties interaction language while retaining different editing semantics. Visible engineering/CAD affordances that are not yet backed by accepted runtime authority remain preserved as truthful unavailable/future behavior; missing backend support is not permission to redesign the approved workbench away.
 
 ## Memory
 
@@ -43,7 +45,7 @@ The final composition is:
 
 Project Basis owns authoritative project-level objective/question, requirements, acceptance criteria, stable constraints, architectural/global decisions, boundary conditions, standards/regulations, and resource/capability constraints.
 
-Change/validation semantics follow PD-07. Criterion-only changes that can be checked from exact existing outputs should be re-evaluated deterministically without a solver rerun; recalculation-required changes expose a truthful contextual validation action. Accepted proposal batches create inspectable working revisions rather than silently overwriting the reconciled model.
+Change/validation semantics follow PD-07. Criterion-only changes that can be checked from exact existing outputs should be re-evaluated deterministically without a solver rerun; recalculation-required changes expose a truthful contextual validation action. Accepted proposal batches create inspectable working revisions rather than silently overwriting the reconciled model. The approved `Approve all` interaction applies only to the exact displayed bounded batch; acceptance creates/advances the working revision, clears the proposal surface and updates visible values from that exact revision.
 
 ### Models
 
@@ -76,6 +78,8 @@ A standalone `Board` destination is removed. Its useful state-management capabil
 Timeline is project scheduling/dependency planning. Calendar is actual time allocation. One Roadmap item may have zero, one, or many Calendar blocks. Roadmap duration does not imply continuously occupied calendar time.
 
 Calendar supports `Day | Week | Month | Agenda`; Week is the normal hour-by-hour planning view. Calendar supports work sessions, calls/meetings, experiments/lab sessions, reviews, reminders, deadlines and unavailable/personal blocks where useful.
+
+Manual operator Add/Edit/Delete actions commit through the owning Roadmap/Calendar backend authority. Jarvis scheduling/work-item generation remains proposal-only until explicit acceptance. These action classes must not be collapsed merely because the same form/component can serve both paths.
 
 ### Brainstorm
 
@@ -127,6 +131,8 @@ A selected artifact exposes a bounded preview appropriate to its type and, when 
 - `Suggest modification`;
 - `Open on GitHub`.
 
+These actions retain distinct semantics: Add-to-context is explicit context mutation, Suggest-modification is proposal-only, and Open-on-GitHub is navigation. Selection/browsing alone does none of them.
+
 `Suggest modification` is proposal-only. It may produce a proposed diff/plan, but accepted mutation still follows the isolated Coding lifecycle:
 
 `Proposal -> Plan -> Implementation -> Tests -> Independent Review -> Reconciliation -> Merge`
@@ -172,13 +178,13 @@ Normal tabs remain exactly:
 
 `Appearance | AI | System`
 
-Settings remains compact and provider-agnostic. Credentials belong to provider/integration identity, not individual model rows. Generic provider management, orchestration policy, budget/limits and System diagnostics should reuse canonical backend boundaries rather than create frontend-owned state.
+Settings remains compact and provider-agnostic. Credentials belong to provider/integration identity, not individual model rows. Generic provider management, orchestration policy, budget/limits and System diagnostics should reuse canonical backend boundaries rather than create frontend-owned state. Provider API identities and coding-tool integrations such as Codex/Claude Code remain separately representable where semantically distinct.
 
 ## Implementation promotion rule
 
 The final visual/product direction is broader than spec 100, which implemented a bounded visual pass over the then-existing runtime. Future runtime work must therefore be decomposed into independent backend/read-model/frontend slices rather than treated as one giant `visual identity` follow-up.
 
-`docs/spec-drafts/FINAL_VISUAL_IMPLEMENTATION_PACK_2026-08-27.md` contains draft candidate slices. Those drafts are not implementation authority.
+`docs/spec-drafts/FINAL_VISUAL_IMPLEMENTATION_PACK_2026-08-27.md` contains draft candidate slices. `docs/design-references/FINAL_OPERATOR_INTERACTION_CONTRACT_2026-08-27.md` preserves the user-visible action/state semantics those slices must collectively implement. Those drafts are not implementation authority.
 
 Before implementing them, the repository should promote a definition-only authority/queue-rederivation slice that:
 
@@ -187,7 +193,8 @@ Before implementing them, the repository should promote a definition-only author
 3. eliminates overlap and second truth stores;
 4. allocates final spec IDs/dependencies/order;
 5. preserves one implementation front at a time;
-6. requires the normal definition/full-spec/readiness lifecycle for each runtime slice.
+6. requires the normal definition/full-spec/readiness lifecycle for each runtime slice;
+7. assigns every capability-matrix row and interaction-contract family to a final owner or explicit reference/defer/supersession disposition.
 
 ## Hard lines
 
@@ -200,3 +207,4 @@ Before implementing them, the repository should promote a definition-only author
 - No claim that GitHub latest is already the locally executed runtime.
 - No terminal command auto-execution by Jarvis as the default interaction.
 - No self-update without exact target identity, dirty-state guard, deterministic preparation, health verification and rollback semantics.
+- No replacement of an approved action class/state transition with a simpler behavior solely because implementation is easier or backend support is incomplete.

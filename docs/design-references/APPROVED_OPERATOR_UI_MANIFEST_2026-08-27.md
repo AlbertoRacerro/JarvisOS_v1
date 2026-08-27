@@ -4,6 +4,8 @@ Status: maintainer-approved normative visual manifest.
 
 This file is the single index of the HTML references approved during the final JarvisOS operator-workstation visual inspection. These HTML files are not moodboards and are not optional examples. Subject to the explicit cross-surface overlays below, they are the normative visual/composition target for future frontend implementation at their reference viewport.
 
+The mandatory companion for user-visible interaction/state-transition semantics is `FINAL_OPERATOR_INTERACTION_CONTRACT_2026-08-27.md`. A future frontend must conform to both the byte-identified HTML composition and the preserved interaction contract; matching one while redesigning the other is not conformance.
+
 ## Normative rule
 
 For each listed surface, production frontend implementation MUST reproduce the approved reference's visible hierarchy, proportions, spacing, typography, colors, component treatment, control placement, information density and interaction structure at the reference viewport. Fixture/demo values in the HTML are illustrative data only and MUST be replaced by truthful runtime/backend data. A missing backend capability does not authorize an implementer to delete, rename, simplify or reinterpret an approved visible capability: the missing capability must instead remain visibly truthful/unavailable until its owning backend specification is implemented.
@@ -44,16 +46,18 @@ The following later maintainer decisions apply to every individual HTML, includi
 
 All eleven entries above were preserved as repository files. The materialization step that reconstructed previously missing references verified their SHA-256 before writing them and removed its temporary payload/workflow afterward.
 
-## Visual precedence
+## Visual and interaction precedence
 
-When two sources appear to disagree, use this order for future frontend composition:
+When two sources appear to disagree, use this order for future product/frontend behavior:
 
 1. the final cross-surface overlays in this manifest;
-2. the canonical HTML for the selected surface plus its most-specific approved reference document under `docs/design-references/`;
-3. `docs/product-direction/08-final-visual-product-contract.md` for final product semantics and ownership placement;
-4. earlier product-direction documents only where not superseded above.
+2. the canonical HTML for the selected surface for exact visual/composition target;
+3. `FINAL_OPERATOR_INTERACTION_CONTRACT_2026-08-27.md` for exact preserved user-visible action classes, state transitions and interaction semantics;
+4. the most-specific approved reference document under `docs/design-references/`;
+5. `docs/product-direction/08-final-visual-product-contract.md` for final product semantics and ownership placement;
+6. earlier product-direction documents only where not superseded above.
 
-This visual precedence does not replace implementation authority. `docs/specs/STATUS.md`, the active canonical spec/readiness record and exact current code remain authoritative for what work is currently allowed and what functionality exists today.
+This precedence does not replace implementation authority. `docs/specs/STATUS.md`, the active canonical spec/readiness record and exact current code remain authoritative for what work is currently allowed and what functionality exists today.
 
 ## Frontend proof requirement
 
@@ -63,13 +67,13 @@ A frontend implementation PR that materially changes one of these surfaces must 
 - major panel geometry and ordering;
 - typography roles and density;
 - key component styling;
-- the visible interaction states required by the owning spec;
+- the visible interaction states and action classes required by the owning spec and final interaction contract;
 - absence of fabricated backend/runtime state.
 
 Pixel-for-pixel identity is not required for unavoidable browser/font rasterization differences, but composition-changing drift is a defect unless the maintainer has explicitly approved a new reference.
 
 ## Functional preservation rule
 
-The HTML references define the intended operator surface; they do not grant backend authority. Every visible action and state must be backed by a truthful backend/domain/read-model contract before it is presented as functional. `docs/spec-drafts/FINAL_OPERATOR_CAPABILITY_MATRIX_2026-08-27.md` maps the approved surfaces to the required capability families, and `docs/spec-drafts/FINAL_VISUAL_IMPLEMENTATION_PACK_2026-08-27.md` records the pseudo-spec decomposition pending 100c re-derivation.
+The HTML references define the intended operator surface; they do not grant backend authority. Every visible action and state must be backed by a truthful backend/domain/read-model contract before it is presented as functional. `FINAL_OPERATOR_INTERACTION_CONTRACT_2026-08-27.md` preserves exact operator behavior, `docs/spec-drafts/FINAL_OPERATOR_CAPABILITY_MATRIX_2026-08-27.md` maps the approved surfaces to the required capability families, and `docs/spec-drafts/FINAL_VISUAL_IMPLEMENTATION_PACK_2026-08-27.md` records the pseudo-spec decomposition pending 100c re-derivation.
 
-No implementer may treat absence of a current backend route/table/service as evidence that the approved frontend capability should disappear.
+No implementer may treat absence of a current backend route/table/service as evidence that the approved frontend capability or interaction should disappear.

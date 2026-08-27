@@ -4,7 +4,7 @@ Status: definition-only authority kernel; not implementation-ready; no runtime a
 
 ## Purpose
 
-Re-derive the post-cleanup JarvisOS implementation queue from exact current `master` after the maintainer-completed final visual/product inspection, using the final product contract and draft implementation pack as planning inputs while preserving all merged authority and eliminating overlap with every semantically overlapping live/planned registry row.
+Re-derive the post-cleanup JarvisOS implementation queue from exact current `master` after the maintainer-completed final visual/product inspection, using the final product contract and complete preservation packet as planning inputs while preserving all merged authority and eliminating overlap with every semantically overlapping live/planned registry row.
 
 This slice exists because spec 100 implemented a bounded visual pass over the then-current operator workstation, while the completed maintainer inspection subsequently froze broader product behavior for Memory, Development, Coding, Settings and the future integrated terminal. Those decisions must not be implemented ad hoc from design references or chat context.
 
@@ -30,12 +30,18 @@ At execution, resolve exact current versions of:
 - `docs/specs/STATUS.md`;
 - `docs/ARCHITECTURE.md` and `docs/DECISIONS.md`;
 - PD-01 through PD-08, especially PD-02, PD-03, PD-04, PD-05, PD-07 and PD-08;
-- all approved visual/product references under `docs/design-references/`;
+- `docs/design-references/APPROVED_OPERATOR_UI_MANIFEST_2026-08-27.md`;
+- all eleven canonical HTML files named by that manifest;
+- `docs/design-references/FRONTEND_CONFORMANCE_CONTRACT_2026-08-27.md`;
+- `docs/design-references/FINAL_OPERATOR_INTERACTION_CONTRACT_2026-08-27.md`;
+- every most-specific approved surface reference under `docs/design-references/`, including the future Runtime terminal direction;
 - `docs/spec-drafts/FINAL_VISUAL_IMPLEMENTATION_PACK_2026-08-27.md`;
 - `docs/spec-drafts/FINAL_OPERATOR_CAPABILITY_MATRIX_2026-08-27.md`;
 - exact merged outputs/reports from 100a and 100b;
 - exact current code/read/write owners for project memory, modeling, events, files, search/FTS, AI/providers, GitHub/repository integration, local runtime, runners/tools, frontend routes/components and security boundaries;
 - **every non-merged `STATUS.md` row whose scope semantically overlaps the final product direction**, including but not limited to 053/055, 063/064, 069, 101–110 and any row added before 100c executes.
+
+The canonical HTMLs own approved visual/composition geometry. `FINAL_OPERATOR_INTERACTION_CONTRACT_2026-08-27.md` owns the preserved user-visible action classes, transitions, explicit-context behavior and superseded interaction interpretations. The capability matrix and pseudo-spec pack preserve implementation obligations. 100c may minimize/merge ownership boundaries, but it may not reinterpret those approved product behaviors merely because exact-master implementation differs or an easier UI/backend shape exists.
 
 ## Authority task
 
@@ -58,9 +64,11 @@ Required output:
 7. Update the binding order in `STATUS.md` once, preserving already merged work and one implementation front at a time.
 8. Preserve frontend/backend separation: frontend visual references never authorize fake backend state; backend capability is not deleted merely because it lacks a current frontend consumer.
 9. Preserve 066–068 and 080 freeze unless a separate explicit maintainer decision changes it.
-10. Preserve 093/Aspen-like editable process topology exclusion unless later engineering-domain authority explicitly reopens it.
+10. Preserve 093/Aspen-like editable process topology exclusion unless later engineering-domain authority explicitly reopens it; retain the approved Process affordances as truthful unavailable/future controls until then rather than redesigning them away.
 11. Record migration/compatibility obligations for removing old peer destinations while preserving direct links/backend capabilities where required.
 12. For every capability row in `FINAL_OPERATOR_CAPABILITY_MATRIX_2026-08-27.md`, record a final owning spec, reference-only disposition, concrete deferral trigger, or explicit maintainer-authorized rejection/supersession.
+13. For every user-facing action/state/transition in `FINAL_OPERATOR_INTERACTION_CONTRACT_2026-08-27.md`, bind it to the final owning frontend/backend spec(s), `REFERENCE_ONLY`, or a concrete `DEFER_TRIGGERED` prerequisite. A user-visible interaction may not disappear merely because multiple pseudo-specs were merged.
+14. Produce a surface-level conformance map for all eleven canonical HTML references showing which retained specs own default render, READ, CONTEXT, PROPOSE, COMMIT, EXECUTE and NAVIGATE behavior where applicable.
 
 ## Product decisions that must survive re-derivation
 
@@ -76,14 +84,17 @@ No normal Home.
 
 `Process | BLUECAD` only as peer modes. Model/Results/Runs/Evidence/Lineage remain contextual/owned information.
 
+Process and BLUECAD retain their exact canonical HTML composition and shared Jarvis-over-Properties interaction language. Process topology/equipment affordances and BLUECAD CAD affordances may remain truthful unavailable until their owning backend authority exists; absence of current backend support does not authorize their removal or substitution.
+
 ### Memory
 
 `Project Basis | Models | Literature` only.
 
-- Project Basis supports PD-07 deterministic impact/revalidation/working-revision semantics.
+- Project Basis supports PD-07 deterministic impact/revalidation/working-revision semantics, including bounded proposal approval, inspectable working revisions and contextual recomputation only when exact stored outputs are insufficient.
 - Models use overview-first bounded disclosures and exact version ownership.
 - Literature uses compact list + inline multi-expand + bounded preview/full-file open.
 - Search is a read projection, not another truth store.
+- Browsing/opening records does not silently add Jarvis context.
 
 ### Development
 
@@ -93,6 +104,7 @@ No normal Home.
 - Calendar is actual hour/minute scheduling and may link multiple blocks to one Roadmap item.
 - Brainstorm is `RAW -> discussion/reconciliation -> RECONCILED -> explicit promotion`, not the older proposal-inbox/Kanban UI assumption.
 - explicit Jarvis context basket; opening an idea does not silently add context.
+- manual Roadmap/Calendar operator mutations and Jarvis proposals keep their distinct COMMIT vs PROPOSE authority classes.
 
 ### Coding
 
@@ -102,13 +114,13 @@ Repository:
 - remote GitHub/future state;
 - Repository Inspector is the main general search/preview surface;
 - specs/Markdown/SVG architecture/code/tests/config/workflows/images may be inspected safely;
-- `Add to Jarvis context`, `Suggest modification`, `Open on GitHub`;
+- `Add to Jarvis context`, `Suggest modification`, `Open on GitHub` retain CONTEXT/PROPOSE/NAVIGATE semantics respectively;
 - architecture is searchable/inspectable, not permanently pinned;
 - modification remains proposal -> isolated development lifecycle.
 
 Runtime:
 - local actually executed SHA and latest approved GitHub SHA are independently truthful;
-- explicit aligned/local-behind/divergent state;
+- explicit aligned/local-behind/divergent/unknown state;
 - semantic delta is evidence-backed by real commits/files;
 - safe update remains guarded/reversible but phases need not dominate the first screen;
 - future integrated real terminal uses a separate typed backend PTY/session boundary, PowerShell-default on Windows, never frontend shell authority;
@@ -116,7 +128,7 @@ Runtime:
 
 ### Settings
 
-`Appearance | AI | System` only. Provider/integration credentials are provider-scoped, not model-scoped; reuse canonical secure storage/policy/provider gateway.
+`Appearance | AI | System` only. Provider/integration credentials are provider-scoped, not model-scoped; reuse canonical secure storage/policy/provider gateway. Provider API identities remain semantically distinguishable from coding-tool integrations such as Codex/Claude Code where applicable.
 
 ## Mandatory overlap questions
 
@@ -132,6 +144,7 @@ The re-derivation must explicitly answer:
 - What security/auth/process/secret-display boundary is required before any PTY/PowerShell terminal can be safe?
 - Which frontend route/component migrations can occur before backend work using truthful unavailable/readonly states, and which must wait?
 - Which engineering-domain dependencies remain valid after 100a/100b and final operator-product needs?
+- For each canonical surface, which accepted spec owns every non-presentation action class from the interaction contract, and what exact unavailable state is used until that owner lands?
 
 ## Deliverables
 
@@ -141,7 +154,9 @@ The re-derivation must explicitly answer:
 - one canonical queue re-derivation document;
 - one `STATUS.md` registry patch allocating/reordering retained slices and resolving duplicate/overlapping planned ownership;
 - per-retained-slice kernel links or explicitly queued kernel-drafting steps;
-- explicit rejected/deferred draft list with reasons so later agents do not resurrect discarded architecture by chat memory.
+- explicit rejected/deferred draft list with reasons so later agents do not resurrect discarded architecture by chat memory;
+- one final capability disposition table covering every row in `FINAL_OPERATOR_CAPABILITY_MATRIX_2026-08-27.md`;
+- one final interaction ownership table covering every interaction/action/state family in `FINAL_OPERATOR_INTERACTION_CONTRACT_2026-08-27.md` and all eleven canonical HTML surfaces.
 
 ## Acceptance criteria
 
@@ -151,6 +166,9 @@ The re-derivation must explicitly answer:
 - Existing 101–110 have explicit retain/rederive/merge/reorder dispositions.
 - Final queue is acyclic and preserves one implementation front.
 - Final queue contains the required backend authority before any frontend that would otherwise fabricate state.
+- Every capability-matrix row has a final owner/disposition.
+- Every interaction-contract action/state family has a final owner/disposition; merging pseudo-specs does not silently drop visible behavior.
+- All eleven canonical HTML surfaces have explicit implementation ownership and exact-reference browser-proof obligations.
 - Safe self-update and integrated terminal are distinct authority slices unless exact-master evidence proves one minimal boundary can safely own both without broadening command/process authority.
 - The terminal cannot be promoted without an explicit security/failure-mode spec covering local-only access, PTY lifecycle, process/environment secret isolation, secret-safe frontend output/redaction, protected path/cwd validation, command confirmation policy, Jarvis-context secret handling and offline CI fakes.
 - Brainstorm speech capture cannot be promoted as a parallel inference path; every transcription inference must use the canonical AI execution spine and ledger/audit semantics.
@@ -165,15 +183,16 @@ The re-derivation must explicitly answer:
 - no terminal implementation;
 - no editable semantic architecture graph implementation;
 - no Process/PBR/multifidelity implementation;
-- no removal of desired-but-unwired capability merely because the current frontend does not expose it.
+- no removal of desired-but-unwired capability merely because the current frontend does not expose it;
+- no visual or interaction redesign of the canonical eleven-surface packet.
 
 ## Test del minimo necessario
 
 Criterio di accettazione della spec:
-Produce one exact-master authority map and binding queue that can implement the final maintainer-approved product without duplicate stores, duplicate live planned owners, fake frontend state or ad-hoc queue changes.
+Produce one exact-master authority map and binding queue that can implement the final maintainer-approved product without duplicate stores, duplicate live planned owners, fake frontend state, silently lost interactions or ad-hoc queue changes.
 
 Questo lavoro serve a soddisfarlo? **sì** — the final product decisions cross multiple existing/future owners and PD-06 already requires an authority re-derivation before implementation.
 
-Il criterio è raggiungibile senza di esso? **no** — directly implementing the draft pack would create a parallel queue and could duplicate or pre-empt existing planned work.
+Il criterio è raggiungibile senza di esso? **no** — directly implementing the draft pack would create a parallel queue and could duplicate/pre-empt existing planned work or lose approved interaction semantics when drafts are merged.
 
 Se sì: perché lo aggiungo comunque: N/A.
