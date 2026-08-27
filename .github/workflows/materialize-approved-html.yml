@@ -26,7 +26,6 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import base64, gzip, hashlib
-
           root = Path('.')
           jobs = {
             'docs/design-references/.materialize/bluecad.html.gz.b64': ('docs/design-references/bluecad-beta/bluecad-beta-approved-2026-08-26.html', 'da4ddfb1ebf6e0c7d39c133bf9b7c0da82e14428bad87748b0f7aa37a7e17bd9'),
@@ -35,17 +34,19 @@ jobs:
             'docs/design-references/.materialize/settings.html.gz.b64': ('docs/design-references/settings-beta/settings-beta-approved-2026-08-26.html', 'f30a0937f9e8cb1a189ade226a004ac4206597d1130433748b87d4c61043e5de'),
             'docs/design-references/.materialize/development-roadmap.html.gz.b64': ('docs/design-references/development-beta/development-roadmap-timeline-beta-approved-2026-08-27.html', 'eb71ddab8cd829d041319fca7a6b08d4e7f60ae57a51f96310ed9ea11d20dc70'),
             'docs/design-references/.materialize/development-calendar.html.gz.b64': ('docs/design-references/development-beta/development-calendar-beta-approved-2026-08-27.html', '3dc94b861478007080a3d9658ec81bc3c46394d0bf73f9a5aa4aa669024b2737'),
-            'docs/design-references/.materialize/development-brainstorm.html.gz.b64': ('docs/design-references/development-beta/development-brainstorm-beta-approved-2026-08-27.html', '2b30f8d558045becf3c79b7d9a7bfcfd186a42a6278d92f53a0150be61f82631'),
           }
           for src, (dst, expected) in jobs.items():
-              packed = base64.b64decode((root/src).read_text().strip())
-              data = gzip.decompress(packed)
+              data = gzip.decompress(base64.b64decode((root/src).read_text().strip()))
               got = hashlib.sha256(data).hexdigest()
-              if got != expected:
-                  raise SystemExit(f'{src}: sha256 {got} != {expected}')
-              p = root/dst
-              p.parent.mkdir(parents=True, exist_ok=True)
-              p.write_bytes(data)
+              if got != expected: raise SystemExit(f'{src}: sha256 {got} != {expected}')
+              p = root/dst; p.parent.mkdir(parents=True, exist_ok=True); p.write_bytes(data)
+
+          brain_b64 = ''.join((root/f'docs/design-references/.materialize/brainstorm.part{i}').read_text() for i in range(1,5))
+          if len(brain_b64) != 11544: raise SystemExit(f'brainstorm payload length {len(brain_b64)} != 11544')
+          brain = gzip.decompress(base64.b64decode(brain_b64))
+          brain_expected = '2b30f8d558045becf3c79b7d9a7bfcfd186a42a6278d92f53a0150be61f82631'
+          if hashlib.sha256(brain).hexdigest() != brain_expected: raise SystemExit('brainstorm sha256 mismatch')
+          p = root/'docs/design-references/development-beta/development-brainstorm-beta-approved-2026-08-27.html'; p.parent.mkdir(parents=True, exist_ok=True); p.write_bytes(brain)
 
           checks = {
             'docs/design-references/process-beta/process-beta-approved-2026-08-26.html': 'd3bb06d9a7c761699a21b9b6b0a1901214a799f06dd31570c2fbfedc018cc475',
@@ -55,8 +56,7 @@ jobs:
           }
           for path, expected in checks.items():
               got = hashlib.sha256((root/path).read_bytes()).hexdigest()
-              if got != expected:
-                  raise SystemExit(f'{path}: sha256 {got} != {expected}')
+              if got != expected: raise SystemExit(f'{path}: sha256 {got} != {expected}')
           PY
       - name: Commit exact references and remove temporary materializer
         shell: bash
@@ -67,9 +67,5 @@ jobs:
           git config user.name 'JarvisOS reference materializer'
           git config user.email 'actions@users.noreply.github.com'
           git add -A
-          if git diff --cached --quiet; then
-            echo 'Nothing to commit'
-            exit 0
-          fi
           git commit -m 'docs: materialize canonical approved HTML references'
           git push origin HEAD:docs/final-visual-spec-pack-2026-08-27
