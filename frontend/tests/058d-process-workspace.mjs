@@ -52,11 +52,12 @@ assert(
   processClickHandlers.length === 1 && processStage.includes('onClick={() => navigate("/design/bluecad")}'),
   "Process scaffold exposes a non-navigation click handler"
 );
-// 100f supersedes the old 058d literal copy while preserving the same truthful unavailable boundary.
+// 100f supersedes the old 058d literal copy while preserving the same fail-closed server-authority boundary.
 includesAll(processStage, [
-  "topology editing and solving remain unavailable until server-owned Process contracts exist.",
+  "Future Process authoring control — unavailable until server-owned topology/evaluator authority is integrated.",
+  "Process topology editing will activate only when server-owned Process and evaluator contracts are integrated.",
   "No process topology is loaded.",
-  "The warm-grid canvas and authoring affordances are present, but no topology is fabricated in the frontend."
+  "This canvas becomes authoritative only after Process backends are connected. No topology is fabricated in the frontend."
 ], "truthful Process empty-state contract");
 
 const routeReset = app.match(/useEffect\(\(\) => \{([\s\S]*?)\}, \[route\.id\]\);/)?.[1] ?? "";
