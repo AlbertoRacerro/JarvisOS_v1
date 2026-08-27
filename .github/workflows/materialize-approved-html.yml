@@ -1,0 +1,75 @@
+name: Materialize canonical approved HTML references
+
+on:
+  push:
+    branches:
+      - docs/final-visual-spec-pack-2026-08-27
+    paths:
+      - 'docs/design-references/.materialize/**'
+      - '.github/workflows/materialize-approved-html.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Materialize exact HTML and verify hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import base64, gzip, hashlib
+
+          root = Path('.')
+          jobs = {
+            'docs/design-references/.materialize/bluecad.html.gz.b64': ('docs/design-references/bluecad-beta/bluecad-beta-approved-2026-08-26.html', 'da4ddfb1ebf6e0c7d39c133bf9b7c0da82e14428bad87748b0f7aa37a7e17bd9'),
+            'docs/design-references/.materialize/memory-project-basis.html.gz.b64': ('docs/design-references/memory-beta/memory-project-basis-beta-approved-2026-08-26.html', 'f901f977979d8389bec74a65510d1841ea12aa1e706f19dce0816a01d852b324'),
+            'docs/design-references/.materialize/memory-literature.html.gz.b64': ('docs/design-references/memory-beta/memory-literature-beta-approved-2026-08-26.html', 'c9e4225c5969ae86d9da6936b20eebfa6edbbc8a05b82a11d1a09d5a2231d150'),
+            'docs/design-references/.materialize/settings.html.gz.b64': ('docs/design-references/settings-beta/settings-beta-approved-2026-08-26.html', 'f30a0937f9e8cb1a189ade226a004ac4206597d1130433748b87d4c61043e5de'),
+            'docs/design-references/.materialize/development-roadmap.html.gz.b64': ('docs/design-references/development-beta/development-roadmap-timeline-beta-approved-2026-08-27.html', 'eb71ddab8cd829d041319fca7a6b08d4e7f60ae57a51f96310ed9ea11d20dc70'),
+            'docs/design-references/.materialize/development-calendar.html.gz.b64': ('docs/design-references/development-beta/development-calendar-beta-approved-2026-08-27.html', '3dc94b861478007080a3d9658ec81bc3c46394d0bf73f9a5aa4aa669024b2737'),
+            'docs/design-references/.materialize/development-brainstorm.html.gz.b64': ('docs/design-references/development-beta/development-brainstorm-beta-approved-2026-08-27.html', '2b30f8d558045becf3c79b7d9a7bfcfd186a42a6278d92f53a0150be61f82631'),
+          }
+          for src, (dst, expected) in jobs.items():
+              packed = base64.b64decode((root/src).read_text().strip())
+              data = gzip.decompress(packed)
+              got = hashlib.sha256(data).hexdigest()
+              if got != expected:
+                  raise SystemExit(f'{src}: sha256 {got} != {expected}')
+              p = root/dst
+              p.parent.mkdir(parents=True, exist_ok=True)
+              p.write_bytes(data)
+
+          checks = {
+            'docs/design-references/process-beta/process-beta-approved-2026-08-26.html': 'd3bb06d9a7c761699a21b9b6b0a1901214a799f06dd31570c2fbfedc018cc475',
+            'docs/design-references/memory-beta/memory-models-beta-approved-2026-08-26.html': '2e76a9d740bb07adacc85379e71912b50015af5706995367ed1b1593d921f627',
+            'docs/design-references/coding-beta/coding-repository-beta-approved-2026-08-27.html': 'afe3bf43eebc3da65e38aadcb27dcaac6f55b61959077cad82cbc51979b1d11f',
+            'docs/design-references/coding-beta/coding-runtime-beta-approved-2026-08-27.html': '041b2f8974a1ad866ac5fad700c920c3a4816e6a0d6263a185e20c0ca421893e',
+          }
+          for path, expected in checks.items():
+              got = hashlib.sha256((root/path).read_bytes()).hexdigest()
+              if got != expected:
+                  raise SystemExit(f'{path}: sha256 {got} != {expected}')
+          PY
+      - name: Commit exact references and remove temporary materializer
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf docs/design-references/.materialize
+          rm -f .github/workflows/materialize-approved-html.yml
+          git config user.name 'JarvisOS reference materializer'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo 'Nothing to commit'
+            exit 0
+          fi
+          git commit -m 'docs: materialize canonical approved HTML references'
+          git push origin HEAD:docs/final-visual-spec-pack-2026-08-27
