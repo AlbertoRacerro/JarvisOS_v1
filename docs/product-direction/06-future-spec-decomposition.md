@@ -4,135 +4,155 @@ Status: planning map only; not implementation authority and not a parallel queue
 
 ## Purpose
 
-Provide an explicit translation path from the 2026-08-26 maintainer-approved product direction into future real specifications without prematurely changing `docs/specs/STATUS.md`.
+Provide an explicit translation path from the maintainer-approved product direction into future real specifications without prematurely changing `docs/specs/STATUS.md`.
 
-The current `STATUS.md` queue and post-100 visual-inspection hold remain authoritative until a dedicated definition/authority spec re-derives them.
+PD-08 is the final 2026-08-27 product/visual reconciliation layer. Where the older decomposition below would conflict with PD-08, the approved UI manifest or frontend conformance contract, the newer final layer wins. This file must not be used to resurrect superseded Board/proposal-inbox/permanent-architecture assumptions.
+
+`docs/specs/STATUS.md` remains the sole live queue authority. The post-100 visual-inspection hold was released and registry-reconciled on 2026-08-27; current queue state must always be re-read from exact `STATUS.md`.
 
 ## Required first promotion step
 
-Before runtime implementation of this packet, create one definition-only authority specification whose job is to:
+Before runtime implementation of the final product-direction packet, execute a definition-only authority/queue-rederivation slice when and only when `STATUS.md` authorizes it. That authority work must:
 
-1. cite PD-01 through PD-05 plus PD-07; PD-06 remains the planning/decomposition map;
-2. reconcile the new primary navigation with merged operator-workstation authority (081/095 and merged frontend slices);
-3. explicitly retire/supersede the old user-facing assumption that `Runs`, `Engineering Data`, `Review`, `Model`, `Results` or `Lineage` remain normal peer destinations where this packet says otherwise;
-4. preserve reusable merged backend capabilities even when their old frontend destination is removed;
-5. re-derive the remaining post-100 implementation order;
-6. state which existing planned specs 101–110 remain valid unchanged, which require re-derivation, and which new slices are required;
-7. retain one-implementation-front repository rules unless separately amended.
+1. cite PD-01 through PD-08, with PD-08 as the final product-composition reconciliation; PD-06 remains the planning/decomposition map;
+2. cite `docs/design-references/APPROVED_OPERATOR_UI_MANIFEST_2026-08-27.md`, `docs/design-references/FRONTEND_CONFORMANCE_CONTRACT_2026-08-27.md`, the most-specific canonical HTML/reference, and `docs/spec-drafts/FINAL_OPERATOR_CAPABILITY_MATRIX_2026-08-27.md` for any frontend/product-facing slice;
+3. reconcile the new primary navigation with merged operator-workstation authority (081/095 and merged frontend slices);
+4. explicitly retire/supersede old user-facing peer-page assumptions where final product direction says otherwise, while preserving reusable backend capability and compatible deep links where required;
+5. audit exact post-100a/100b master and re-derive the remaining implementation order;
+6. classify every semantically overlapping non-merged `STATUS.md` row — not only 101–110 — as retained, rederived, merged, reordered, deferred or cancelled/superseded;
+7. audit every FV-B/FV-F pseudo-spec and every capability-matrix row, allocate one canonical owner for each retained behavior, and eliminate second truth stores;
+8. retain one-implementation-front repository rules unless separately amended;
+9. preserve backend-before-frontend authority whenever a frontend would otherwise have to fabricate state;
+10. keep self-update, interactive terminal authority and AI/model execution as separate security/egress responsibilities unless exact-master evidence proves a smaller safe boundary.
 
-Do not silently edit an existing implementation spec to absorb this product-direction change.
+Do not silently edit an existing implementation spec to absorb this product-direction change and do not implement directly from this planning map.
 
-## Candidate backend/domain slices
+## Candidate capability families
 
-The names below are descriptive placeholders, not allocated spec IDs.
+The names below remain descriptive planning families, not allocated live spec IDs. `docs/spec-drafts/FINAL_VISUAL_IMPLEMENTATION_PACK_2026-08-27.md` is the complete 2026-08-27 pseudo-spec inventory and supersedes the older partial candidate lists previously carried in this file.
 
-### A. Project Memory foundation
+### A. Project Memory / model authority
 
-Potential independently reviewable slices:
+Required future capability families include:
 
-- `PROJECT-BASIS-1`: canonical project-level requirements/constraints/decisions and read APIs;
-- `MODEL-DOSSIER-1`: aggregate exact model-version definition, assumptions, equations/methods, parameters, Process/BLUECAD references, results, validation, criticalities, artifacts, runs and lineage without duplicating canonical records;
-- `MODEL-CHANGESET-1`: bounded Jarvis/user proposal change sets plus exact working-revision lineage such as user-facing `v13.01 -> v13.02`, without in-place overwrite of the reconciled parent;
-- `DETERMINISTIC-IMPACT-REVALIDATION-1`: classify accepted changes into re-evaluate-existing-outputs versus Process/BLUECAD/multi-domain recalculation, automatically resolve criterion-only changes from stored exact outputs, and expose explicit validation-required state only where recomputation is genuinely required;
-- `MODEL-RECONCILIATION-1`: batch `Approve all`, exact working-revision promotion/reconciliation, immutable prior snapshots, terminal validation requirements, and explicit acknowledgement for known failed mandatory criteria;
-- `LITERATURE-SOURCE-1`: structured Source/Document/Claim-or-Datum/Citation provenance, contextual conditions and links to records/models;
-- `PROJECT-SEARCH-1`: unified project-memory search across structured records and indexed attached content, extending existing FTS/search infrastructure rather than building a second index unnecessarily;
-- `ACTIVITY-TIMELINE-1`: event/read-model projection for readable project history, only if needed after canonical event ownership is clear.
+- project-level basis: objective/question, requirements, acceptance criteria, stable constraints, boundary conditions, standards/regulations, decisions and resource/capability constraints;
+- exact model/version dossier read projection over canonical records;
+- bounded model change sets and inspectable working revisions;
+- deterministic impact/revalidation that re-evaluates stored exact outputs when sufficient and requests recomputation only where genuinely required;
+- model reconciliation/promotion preserving immutable prior snapshots;
+- Literature source/document/claim-or-datum/citation provenance and bounded preview;
+- project search as a read projection over existing canonical records/indexes.
 
-Existing 101/102 or other planned canonical-state/evidence work may provide prerequisites or overlap. A future authority spec must inspect them and decide whether to rederive, depend on, or keep them separate; do not rename/reinterpret them by chat convention.
+PD-07 remains binding for change-set/revalidation/reconciliation semantics. Do not implement a generic indefinite `stale` state when deterministic evaluation against exact stored outputs can resolve the condition immediately.
 
-PD-07 is binding product direction for the candidate change-set/revalidation/reconciliation slices. In particular, do not implement a generic indefinite `stale` state where deterministic reevaluation from stored authoritative outputs can resolve the new condition immediately.
+### B. Development
 
-### B. Development foundation
+Final Development semantics are exactly those reconciled in PD-08:
 
-Potential slices:
+- peer sections: `Roadmap | Brainstorm`;
+- Roadmap views: `Timeline | Calendar` only;
+- no standalone Board page; operational state is a collapsible Timeline `Execution status` emphasizing `Ready | In progress | Blocked`;
+- Roadmap stores project work/window/dependency intent; Calendar stores actual date/time allocation and one Roadmap item may link to zero/one/many Calendar blocks;
+- Brainstorm is `RAW -> discussion/reconciliation -> RECONCILED -> explicit promotion`, not the older Inbox/Exploring/Candidate/Proposal-Inbox Kanban model;
+- Jarvis context accumulation is explicit and removable;
+- promotion to Roadmap, Design or Coding is explicit and never silently crosses authority boundaries;
+- future speech capture is local-first in product intent but every transcription inference must use the canonical AI execution spine/ledger and privacy/egress policy.
 
-- `ROADMAP-1`: milestone/task/dependency/deadline canonical model with Timeline/Calendar/Board projections over one store;
-- `BRAINSTORM-1`: non-authoritative notes/proposals/warnings/reminders with provenance;
-- `PROPOSAL-INBOX-1`: persistent lifecycle, priority, snooze/reminder semantics and explicit promotion to Roadmap/Memory;
-- `DEVELOPMENT-JARVIS-ACTIONS-1`: bounded Jarvis actions that create/update proposals and prepare promotion without silently crossing authority boundaries.
+### C. Coding / Repository
 
-Priority semantics must preserve `Critical`, `High`, `Normal`, and `Opportunity`; color is supplemental only.
+Required capability families include:
 
-### C. Coding/repository foundation
+- remote repository observability with exact repo/branch/SHA/PR/check/review identity;
+- Repository Inspector search/preview across safe repository artifacts such as Markdown/specs/code/tests/config/workflows/architecture SVG/images;
+- `Add to Jarvis context`, proposal-only `Suggest modification`, and `Open on GitHub`;
+- persistent inspectable Coding lifecycle `Proposal -> Plan -> Implementation -> Tests -> Independent Review -> Reconciliation -> Merge` with exact-head invalidation;
+- searchable Coding knowledge tied to accepted specs/ADRs/architecture/invariants/provenance;
+- optional semantic architecture artifacts only after separate need/readiness proof.
 
-Potential slices:
+Architecture is **not** permanently pinned to the normal Repository first screen. It is an inspectable artifact family inside Repository Inspector.
 
-- `REPOSITORY-OBSERVABILITY-1`: canonical read-only repository/branch/head/PR/check/review state for the Coding workspace;
-- `DEV-PIPELINE-STATE-1`: persistent `Proposal -> Plan -> Implementation -> Tests -> Independent Review -> Reconciliation -> Merge` state model with exact-head invalidation;
-- `HERMES-DEV-ORCHESTRATION-1`: later candidate integration of Hermes as 24/7 orchestrator behind JarvisOS authority/policy, after a concrete runtime boundary and evaluation prove it superior to current automation patterns;
-- `CODING-KNOWLEDGE-1`: searchable JarvisOS architecture/decision/invariant/known-limitation knowledge tied to code/PR provenance;
-- `ARCHITECTURE-GRAPH-1`: semantic typed block/edge architecture model and read/write contract;
-- `ARCHITECTURE-EDITOR-1`: frontend/editor interaction over the accepted graph contract;
-- `JARVIS-CODING-ACTIONS-1`: contextual inspect/plan/implement/check/reconcile proposals behind repository authority.
+Frontend never receives direct GitHub credentials or mutation authority. `Suggest modification` is not a save-to-file shortcut.
 
-Do not combine the semantic architecture store with arbitrary drawing coordinates. Semantic graph changes and layout-only changes require distinguishable provenance.
+### D. Local Runtime / divergence / self-update
 
-### D. Local Runtime/self-update foundation
+Required capability families include:
 
-Potential slices:
+- actual local runtime identity: running commit/version/worktree/branch/dirty state/services/health;
+- separately observed approved/latest GitHub target identity;
+- explicit aligned/local-behind/divergent state;
+- evidence-backed semantic delta between exact local and remote SHAs with underlying commits/files inspectable;
+- safe exact-target self-update with state preservation, dirty-state guard, migration/build/smoke evidence, explicit restart, post-restart health and rollback.
 
-- `LOCAL-RUNTIME-IDENTITY-1`: running commit/version/worktree/branch/health versus remote master;
-- `SAFE-SELF-UPDATE-1`: exact-target update contract, dirty-worktree guard, migration/build/smoke/health gates, restart and automatic rollback;
-- `RUNTIME-CODING-BRIDGE-1`: safe deep links between remote repository objects and the local running installation.
+The normal Runtime first screen should prioritize local-vs-GitHub identity/divergence. Update phases stay compact until update preparation is requested.
 
-The frontend must never directly gain unrestricted filesystem/shell/Git authority. Local operations belong behind a typed backend boundary and policy.
+### E. Integrated local terminal
 
-### E. Generic AI provider/settings foundation
+The final product direction includes a future real `Terminal | Logs` surface in Coding Runtime, with PowerShell default on Windows, but only behind a separately specified PTY/session security boundary.
 
-Potential slices:
+Any retained terminal slice must prove all of the following before promotion:
 
-- `PROVIDER-CREDENTIALS-GENERIC-1`: generalize accepted secure credential storage to multiple provider/integration identities without parallel secret stores;
-- `PROVIDER-CATALOG-1`: discover/refresh available provider models/capabilities where supported;
-- `ORCHESTRATION-POLICY-VIEW-1`: expose canonical permission/routing/fallback/sensitivity/budget state to Settings;
-- `HERMES-PRODUCT-ORCHESTRATION-1`: only after a separately proven Hermes boundary defines what Hermes owns and what JarvisOS policy/deterministic code continues to own.
+- backend-owned PTY/session lifecycle, cwd validation, stdin/stdout/stderr/interrupt support;
+- no frontend-direct process/filesystem/shell authority;
+- scrubbed/minimum child environment with no inherited provider/API/repository credentials by default;
+- a backend secret-safe display/redaction/isolation boundary before terminal output becomes a frontend response;
+- protected-path/credential-store handling and local-only/auth policy;
+- high-risk command confirmation/policy;
+- explicit Jarvis command proposal/insert/copy semantics with no default auto-execution;
+- bounded `Send output to Jarvis` with secret policy;
+- fake/replaceable PTY adapter for CI rather than requiring live Windows PowerShell.
 
-Existing provider gateway specs 015/018, secure credential storage 082, Scaleway spine 094 and current policy/egress infrastructure are prerequisites/evidence, not disposable sunk cost and not automatic final architecture.
+If adequate secret isolation/redaction cannot be proven on the target OS/runtime, arbitrary PTY streaming remains deferred/unavailable rather than weakening the repository no-secret invariant.
 
-## Candidate frontend slices
+### F. Generic AI provider/settings
 
-Frontend specs should be created after each owning backend/read contract is sufficiently stable, except for visual-reference/prototype work that is explicitly non-runtime.
+Required capability families include:
 
-Likely slices:
+- provider/integration-scoped secure credentials, not API keys attached to individual model rows;
+- provider connectivity/capability/model catalogue where supported;
+- orchestration/routing/fallback/privacy/egress/budget policy projections over accepted backend authority;
+- local AI as a provider/runtime capability without assuming external credentials;
+- System diagnostics from observed backend/runtime/database/service state.
 
-- shell/nav replacement to `Design / Memory / Development / Coding / Settings` and removal of normal Home;
-- Design `Process | BLUECAD` navigation/context-strip reconciliation;
-- Memory `Project Basis | Models | Literature`, including compact working-revision/validation states and eventual `Validate` orchestration or interim deep links into Process/BLUECAD;
-- Development `Roadmap | Brainstorm`;
-- Coding `Repository | Runtime`;
-- Settings `Appearance | AI | System` reconciliation to the approved HTML/product contract.
+Existing provider gateway specs 015/018, secure credential storage 082, Scaleway spine 094 and policy/egress infrastructure are prerequisites/evidence, not disposable sunk cost and not automatic final architecture. Hermes labels must not create Hermes authority before a separately accepted backend contract exists.
 
-Do not couple all five workspaces into one giant frontend implementation spec.
+## Candidate frontend families
 
-## Parallel-work recommendation while visual HTML is still being designed
+Frontend specifications should normally follow sufficiently stable owning backend/read contracts, except for clearly non-functional visual/reference work that preserves truthful unavailable states.
 
-Parallel **specification drafting/research** is useful; parallel uncoordinated runtime implementation is not yet recommended.
+Final required workspace composition is:
 
-Once this product-direction packet is merged, builders may productively work on docs-only activities such as:
+- shell rail `Design | Memory | Development | Coding | Settings`, no normal Home;
+- Design `Process | BLUECAD`;
+- Memory `Project Basis | Models | Literature`;
+- Development `Roadmap | Brainstorm`, Roadmap `Timeline | Calendar`, no Board peer page;
+- Coding `Repository | Runtime`, with Repository Inspector and local-vs-GitHub Runtime divergence;
+- Settings `Appearance | AI | System`;
+- future Runtime `Terminal | Logs` only after terminal backend/security authority exists.
 
-- audit current backend ownership against the candidate slices above;
-- draft definition kernels/full specs for backend slices whose product semantics are already frozen;
-- identify overlap with 101–110 and propose an exact queue re-derivation;
-- prepare deterministic acceptance criteria and migration evidence.
+Every surface listed in the canonical UI manifest must be implemented against its exact HTML/reference viewport and the frontend conformance contract. Missing backend capability is implementation work, not permission to redesign the approved frontend away.
 
-Keep those drafts `planned`/non-authoritative until the normal lifecycle promotes them.
+Do not couple all workspaces into one giant frontend implementation spec.
 
-Do **not** use this planning packet itself as permission to start backend runtime implementation while the current post-100 hold remains active.
+## Parallel-work recommendation
 
-## Suggested promotion order after the maintainer finishes the current visual/product inspection
+Parallel specification drafting/research may be useful; parallel uncoordinated runtime implementation is not authorized by this file.
 
-The future authority spec should decide exact IDs, but the least-churn dependency shape is likely:
+Builders/coordinators may only work on whichever definition/spec/readiness/implementation front live `STATUS.md` authorizes. Planning documents may support audits and future kernel drafting, but they do not create a second queue.
 
-1. authority/queue re-derivation;
-2. canonical state foundations that existing 101/102 still legitimately own;
-3. Project Memory backend/read models plus working-revision/change-set, deterministic impact revalidation and reconciliation semantics from PD-07;
-4. Development proposal/roadmap backend;
-5. generic provider/settings backend generalization;
-6. Coding repository observability and development-pipeline state;
-7. Hermes development orchestration evaluation/integration;
-8. local runtime identity and safe self-update;
-9. semantic architecture graph, then editor;
-10. workspace frontends over the accepted contracts;
-11. later engineering-domain/process/CAD evaluator work in the dependency order revalidated against existing 103–110.
+## Suggested promotion shape after exact post-cleanup re-derivation
+
+The future authority spec must derive exact IDs/order from current evidence, but a likely dependency shape is:
+
+1. canonical authority/evidence foundations retained from overlapping live rows;
+2. Project Memory/model read and PD-07 change/revalidation/reconciliation capability;
+3. Development Roadmap/Calendar/Brainstorm domain;
+4. generic provider/settings backend projection;
+5. Repository observability/Inspector and Coding lifecycle;
+6. local Runtime identity/divergence;
+7. safe self-update;
+8. integrated terminal PTY as a separate security-bounded slice;
+9. frontend workspace migrations over stable truthful contracts;
+10. optional speech capture/semantic architecture only when prerequisites and value remain valid;
+11. engineering Process/PBR/multifidelity work in the dependency order revalidated against exact current engineering specs.
 
 This order is a recommendation for the future authority spec, not a change to `STATUS.md`.
