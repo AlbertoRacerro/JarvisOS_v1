@@ -6,6 +6,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 const routes = read("src/app/routes.ts");
 const app = read("src/App.tsx");
+const fusion = read("src/components/fusion/FinalOperatorUnavailableSurface.tsx");
+const fusionCss = read("src/styles/final-fusion.css");
 const contextNav = read("src/components/shell/ContextualNavigator.tsx");
 const pkg = JSON.parse(read("package.json"));
 const failures = [];
@@ -47,10 +49,30 @@ check(contextNav.includes("ROADMAP_STAGE_ITEMS"), "Roadmap Timeline/Calendar sec
 
 check(app.includes('route.id === "design-process" || route.id === "design-bluecad"'), "Process/BLUECAD do not reuse the existing stage shell");
 check(app.includes('sidecar: route.primaryNav === "settings" ? undefined : jarvisSidecar'), "Settings must not expose Jarvis sidecar");
+includesAll(app, [
+  'kind="project-basis"', 'kind="models"', 'kind="literature"', 'kind="roadmap"',
+  'kind="calendar"', 'kind="brainstorm"', 'kind="repository"', 'kind="runtime"'
+], "missing final production surface composition");
 check(app.includes("No server-owned roadmap item store") && app.includes("No server-owned time-allocation calendar"), "Development missing-authority states are not explicit");
-check(app.includes("browser does not call GitHub") && app.includes("Runtime health, SHA, update and terminal state therefore remain Unknown or unavailable"), "Coding truth boundaries are not explicit");
+check(app.includes("browser does not call GitHub") && app.includes("Identity remains Unknown") && app.includes("update/terminal controls remain unavailable"), "Coding truth boundaries are not explicit");
 check(!/iframe|srcDoc/.test(app), "static HTML embedding is forbidden");
 check(!/localStorage|sessionStorage|fetch\(|axios|github\.com\/api/i.test(app), "final surface shell gained private truth/API authority");
+
+includesAll(fusion, [
+  'title="Project search"', 'title="Project Basis"', 'title="Jarvis context"',
+  'title="Model identity"', 'title="Version dossier"', 'title="Results · Runs · Lineage"',
+  'title="Literature list"', 'title="Inline preview"',
+  'title="Timeline"', 'title="Ready"', 'title="In progress"', 'title="Blocked"',
+  '>Week</button>', 'title="Week schedule"',
+  'title="RAW"', 'title="Discussion · Reconciliation"', 'title="RECONCILED · Jarvis context"',
+  'title="Repository Inspector"', 'title="Preview · Architecture"',
+  'title="Local executed identity"', 'title="Remote exact identity"', 'title="Terminal · Logs"'
+], "canonical structural regions missing from truthful empty surfaces");
+includesAll(fusion, ["Approve all", "Add workstream", "Add event", "Reconcile", "Promote", "Suggest modification", "Safe update", "Open terminal"], "future affordance preservation");
+check(fusion.includes("disabled title={reason}"), "unsupported commit/execute affordances are not fail-closed");
+check(!/fetch\(|axios|localStorage|sessionStorage/i.test(fusion), "truthless fusion component gained data/API authority");
+check(fusionCss.includes("final-fusion__three-column") && fusionCss.includes("final-fusion__roadmap") && fusionCss.includes("final-fusion__runtime"), "surface-specific composition collapsed into a generic placeholder");
+
 check(pkg.scripts?.["test:100f"] === "node tests/100f-final-operator-frontend-fusion.mjs", "test:100f is not wired");
 check((pkg.scripts?.build ?? "").includes("npm run test:100f"), "build does not execute test:100f");
 
