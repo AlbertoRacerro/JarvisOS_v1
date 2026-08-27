@@ -94,8 +94,9 @@ check(!/github\.com|api\.github|localStorage|sessionStorage|child_process|powers
 includesAll(layout, [
   "const finalOperatorRoute = route.primaryNav !== undefined",
   'application-shell--final',
-  '!finalOperatorRoute && <TopBar'
-], "canonical final routes must use rail-only shared shell rather than stacked legacy topbar");
+  '!finalOperatorRoute && <TopBar',
+  'setNavigatorOpen(route.id === "design-bluecad")'
+], "canonical final routes must use rail-only shared shell and persistent BLUECAD navigator");
 check(main.includes('final-fusion-shell-overrides.css'), "final shared-shell canonical overlay is not loaded");
 includesAll(shellOverlay, [
   "grid-template-columns: 170px minmax(0, 1fr)",
