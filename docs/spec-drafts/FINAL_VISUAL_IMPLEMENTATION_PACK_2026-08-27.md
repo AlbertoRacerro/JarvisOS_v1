@@ -6,7 +6,7 @@ Status: planning drafts only; not implementation authority; not a parallel queue
 
 Translate the final maintainer-approved operator experience into independently promotable backend/domain/frontend specifications without pretending the exact runtime ownership/dependency graph is already known.
 
-These entries are deliberately **pseudo-specs**. They preserve required product behavior, acceptance intent, likely ownership and non-goals. A future authority/queue-rederivation slice must audit exact master, reconcile overlap with existing 101–110 and merged capabilities, allocate canonical IDs, and then promote each retained slice through the normal definition -> full spec -> readiness -> implementation lifecycle.
+These entries are deliberately **pseudo-specs**. They preserve required product behavior, acceptance intent, likely ownership and non-goals. A future authority/queue-rederivation slice must audit exact master, reconcile overlap with every semantically overlapping active/planned `STATUS.md` row and merged capability, allocate canonical IDs, and then promote each retained slice through the normal definition -> full spec -> readiness -> implementation lifecycle.
 
 No builder may implement directly from this file.
 
@@ -264,26 +264,29 @@ No builder may implement directly from this file.
 **Required behavior:**
 - create/close bounded PTY/session;
 - set/get session working directory under allowed policy;
-- stream stdout/stderr and terminal-control data;
+- execute the terminal process with a deliberately scrubbed/minimum environment that does not inherit provider API keys, repository tokens, credential-store secrets or other protected values by default;
+- stream stdout/stderr and terminal-control data only through a backend-owned **secret-safe display boundary**; raw PTY bytes are never forwarded directly to the frontend without policy/redaction processing;
+- deny or isolate protected credential/config paths and secret-store access according to the accepted local terminal security policy; frontend path requests never grant filesystem authority;
+- if the target OS/runtime cannot prove adequate secret isolation/redaction for an interactive shell, arbitrary PTY streaming remains unavailable/`DEFER_TRIGGERED` rather than weakening the repository no-secret frontend invariant;
 - stdin and interrupt/Ctrl+C support;
 - session history/scroll belongs to terminal session, not canonical project memory;
 - `Open terminal here` may target repo/worktree/path only after backend path validation;
 - commands proposed by Jarvis are text proposals; explicit operator action inserts/executes;
 - high-risk/destructive command families require explicit confirmation/policy;
-- scrub/avoid secret leakage into Jarvis context/logs;
+- scrub/avoid secret leakage into Jarvis context/logs in addition to the mandatory frontend display boundary;
 - Linux CI uses fake PTY/process adapter; no test requires live Windows PowerShell.
 
-**Security boundary:** no raw arbitrary-process endpoint exposed to remote clients; loopback/local auth and command/session policy must be explicitly re-derived in full spec.
+**Security boundary:** no raw arbitrary-process endpoint exposed to remote clients; loopback/local auth, OS-level process/environment isolation, path/cwd validation, output redaction and command/session policy must be explicitly re-derived and failure-mode tested in the full spec. Prompt text or a command-string denylist alone is not a sufficient secret boundary.
 
-**Non-goals:** bypassing Git/spec lifecycle; remote shell server; hidden autonomous shell execution.
+**Non-goals:** bypassing Git/spec lifecycle; remote shell server; hidden autonomous shell execution; weakening the repository-wide rule that secrets must not appear in frontend responses.
 
 ## FV-B22 — BRAINSTORM-SPEECH-CAPTURE-1
 
 **Goal:** local speech-to-text capture for Raw Brainstorm notes.
 
-**Required behavior:** record/attach audio through a bounded local media path; local-first transcription when selected; preserve original audio only according to explicit retention policy; transcription remains Raw content until user accepts/saves; model/provider selection respects privacy/egress policy.
+**Required behavior:** record/attach audio through a bounded local media path; every transcription inference — including local-first execution — must enter the canonical AI execution spine through `run_ai_task` (or its exact accepted successor) and create the corresponding `ai_jobs` audit/ledger record; preserve original audio only according to explicit retention policy; transcription remains Raw content until user accepts/saves; model/provider selection respects privacy/egress policy; the media boundary never invokes a model/provider adapter directly.
 
-**Non-goals:** always-on microphone; background recording; cloud speech provider by default.
+**Non-goals:** always-on microphone; background recording; cloud speech provider by default; an unaudited parallel speech-model execution path.
 
 ## FV-B23 — ARCHITECTURE-SEMANTIC-ARTIFACT-1
 
@@ -339,7 +342,7 @@ No builder may implement directly from this file.
 
 **Goal:** final large Timeline plus integrated collapsible Execution status.
 
-**Required behavior:** only `Timeline | Calendar`; workstream bars use approved condensed light type treatment only inside colored bars; Current/Ready/Blocked state cards use normal app typography; Add/Edit/Delete; dependency/milestone interactions; presentation filters; no standalone Board page.
+**Required behavior:** only `Timeline | Calendar`; workstream bars use approved condensed light type treatment only inside colored bars; `Ready | In progress | Blocked` state cards use normal app typography; Add/Edit/Delete; dependency/milestone interactions; presentation filters; no standalone Board page.
 
 ## FV-F07 — ROADMAP-CALENDAR-UI-1
 
@@ -379,9 +382,9 @@ No builder may implement directly from this file.
 
 **Goal:** replace/augment lower Runtime log surface with a real `Terminal | Logs` panel after FV-B21 exists.
 
-**Required behavior:** xterm-like terminal emulator; PowerShell prompt on Windows; active cwd/session indicator; scrollback; keyboard/interrupt; optional tab creation only if backend supports it; `Send output to Jarvis`; `Insert command` from Jarvis proposal; `Open terminal here` from Repository Inspector; explicit confirmation UI for backend-classified high-risk commands.
+**Required behavior:** xterm-like terminal emulator; PowerShell prompt on Windows; active cwd/session indicator; scrollback; keyboard/interrupt; optional tab creation only if backend supports it; `Send output to Jarvis`; `Insert command` from Jarvis proposal; `Open terminal here` from Repository Inspector; explicit confirmation UI for backend-classified high-risk commands. The UI receives only the secret-safe/redacted stream defined by FV-B21 and must never expose a raw PTY transport that can bypass that boundary.
 
-**Non-goals:** browser-side command execution; terminal mock that pretends to execute.
+**Non-goals:** browser-side command execution; terminal mock that pretends to execute; raw secret-bearing PTY output in frontend responses.
 
 ## FV-F13 — REPOSITORY-SUGGEST-MODIFICATION-UI-1
 
@@ -428,6 +431,6 @@ Likely sequencing shape after 100a/100b and final authority rederivation:
 8. integrated terminal PTY as a separate security-bounded slice;
 9. frontend workspace migrations over stable contracts;
 10. optional speech capture/semantic architecture only when prerequisites and product value remain valid;
-11. engineering Process/PBR/multifidelity work remains ordered according to the revalidated 103–110 dependency graph.
+11. engineering Process/PBR/multifidelity work remains ordered according to the revalidated engineering dependency graph.
 
 The authority spec may change this order only with explicit evidence/dependency reasoning and must preserve already merged work.
