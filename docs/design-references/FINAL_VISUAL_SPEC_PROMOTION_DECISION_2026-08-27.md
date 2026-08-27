@@ -15,20 +15,22 @@ The repository therefore records:
 
 ## Queue insertion intent
 
-`100c FINAL-PRODUCT-DIRECTION-AUTHORITY-0` is intended to be inserted into the binding queue **after 100b and before 101**.
+`100c FINAL-PRODUCT-DIRECTION-AUTHORITY-0` is the maintainer's intended future insertion **after 100b and before 101**.
 
-This decision does not make 100c implementation-ready and does not change the current `100a=planned` front. The canonical sequence remains:
+This document records that intent but is not live queue authority. `docs/specs/STATUS.md` remains the sole authority for whether 100c actually occupies that position and when it may start.
+
+The intended sequence, once separately reconciled into `STATUS.md`, is:
 
 1. complete 100a through its normal lifecycle;
 2. complete 100b through its normal lifecycle/disposition;
-3. reconcile `STATUS.md` to insert/activate 100c if the row is not already present;
-4. execute 100c as documentation/authority re-derivation only;
-5. only then proceed through the newly re-derived runtime queue.
+3. perform a separately authorized docs-only registry reconciliation that inserts/activates 100c if the maintainer still chooses this direction after exact post-100b inspection;
+4. execute 100c as documentation/authority re-derivation only after `STATUS.md` authorizes it;
+5. only then proceed through the queue produced by that re-derivation.
 
 100c must not mechanically promote every pseudo-spec. It must classify overlap, retain one canonical owner, eliminate unnecessary slices, and decide which existing 101–110 remain valid/rederived/reordered.
 
 ## Builder behavior
 
-External builders may use this explicit maintainer decision to perform the **docs-only registry insertion/reconciliation** for 100c after 100b if `STATUS.md` has not yet been updated. They may not use this document to skip `STATUS.md`, start 100c before 100b, or implement any FV draft directly.
+External builders must continue to follow live `STATUS.md`. This planning decision alone does **not** authorize them to insert 100c, divert from 101, or implement any FV draft. If 100b finishes while 100c is absent from `STATUS.md`, a separate maintainer/coordinator-authorized registry reconciliation is required before 100c can become the next queue item.
 
 The draft pack is planning evidence, not a parallel queue.
