@@ -93,24 +93,24 @@ The binding order is:
 25. 058b VARIANT-COMPARISON-1, freshly re-derived;
 26. 058d PROCESS-WORKSPACE-SCAFFOLD-0;
 27. 100 VISUAL-IDENTITY-1;
-28. 100a CODEBASE-LEAN-AUDIT-1;
-29. 100b CODEBASE-LEAN-CLEANUP-1;
-30. 101 CANONICAL-STATE-WRITE-1;
-31. 102 ENGINEERING-EVIDENCE-CONTRACT-1;
-32. 103 PROCESS-UPSTREAM-BAKEOFF-1;
-33. 104 PROCESS-STACK-STRANGLER-1;
-34. 105 ENGINEERING-DOMAIN-CLEANUP-1;
-35. 106 ENGINEERING-EVALUATOR-1;
-36. 107 PBR-EVALUATOR-1;
-37. 108 DESIGN-STUDY-CONTROLLER-1;
-38. 109 PROCESS-CAD-HANDOFF-1;
-39. 110 MULTIFIDELITY-ENGINEERING-1.
+28. 100f FINAL-OPERATOR-FRONTEND-FUSION-1;
+29. 100a CODEBASE-LEAN-AUDIT-1;
+30. 100b CODEBASE-LEAN-CLEANUP-1;
+31. 100c FINAL-PRODUCT-DIRECTION-AUTHORITY-0;
+32. 101 CANONICAL-STATE-WRITE-1;
+33. 102 ENGINEERING-EVIDENCE-CONTRACT-1;
+34. 103 PROCESS-UPSTREAM-BAKEOFF-1;
+35. 104 PROCESS-STACK-STRANGLER-1;
+36. 105 ENGINEERING-DOMAIN-CLEANUP-1;
+37. 106 ENGINEERING-EVALUATOR-1;
+38. 107 PBR-EVALUATOR-1;
+39. 108 DESIGN-STUDY-CONTROLLER-1;
+40. 109 PROCESS-CAD-HANDOFF-1;
+41. 110 MULTIFIDELITY-ENGINEERING-1.
 
-Items 27–39 are the maintainer-approved post-functional-beta extension registered on
-2026-08-21 and amended on 2026-08-22 after the public/canonical architecture and codebase-maintainability reviews. Item 27 is now `merged` through implementation PR #371 after merged definition/full-spec/readiness authority; the maintainer released the post-100 visual-inspection hold on 2026-08-27 in `docs/design-references/VISUAL_IDENTITY_MAINTAINER_RELEASE_2026-08-27.md`. Items 28–39 remain `planned` until the normal definition/full-spec/readiness lifecycle authorizes each slice. Their order
-encodes the zero-sunk-cost rule: finish visual identity, audit and simplify the active semantic surface without deleting desired-but-unwired capability, fix authority/evidence semantics, evaluate upstreams from
-scratch, retire duplicated generic infrastructure, then build PBR/design-study capability on
-the selected boundaries.
+Items 27–41 are the maintainer-approved post-functional-beta extension registered on
+2026-08-21 and amended on 2026-08-27 after the final operator-product preservation packet merged through PR #388. Item 27 is `merged` through implementation PR #371; item 28 is now the sole `ready` runtime front under the merged 100f full specification/readiness and the eleven-reference preservation packet; items 29–41 remain `planned` until their own normal lifecycle authorizes them. Their order
+encodes the zero-sunk-cost rule while requiring the complete canonical frontend fusion before lean audit/cleanup and later backend/domain work.
 
 The maintainer completed the 062 frontend design decision on 2026-08-17: no permanent
 `Was this useful?` grading control belongs in normal Jarvis chat. Existing 062 backend/evaluation
@@ -123,8 +123,8 @@ implementation identity; its merged planning/scientific evidence remains histori
 reference for the zero-sunk-cost bake-off and future PBR work. Spec 107 is the sole future
 integrated PBR evaluator implementation authority after 103/106. Spec 093 and any Aspen-like
 editable flowsheet remain outside the current functional queue. Global visual identity is now
-registered as 100: it remains independently removable from functional slices, but by maintainer
-decision it is ordered after the 058d process-workspace scaffold and before the lean audit/cleanup and architecture-remediation runtime work.
+registered as 100; the final eleven-surface operator frontend fusion is registered separately as
+100f so approved composition and interaction can land truthfully before backend/domain expansion.
 
 The queue is binding but not immutable. If a slice proves non-implementable within its
 accepted boundary, or a prerequisite proves insufficient, the active front stops and a later
@@ -135,12 +135,12 @@ it changes. Silent abandonment or substitution is not authorized.
 
 ## Current priority and drafting order
 
-1. 100a CODEBASE-LEAN-AUDIT-1 is the next `planned` slice after the maintainer released the post-100 visual-inspection hold on 2026-08-27; it is not implementation-ready and must begin with the normal definition/kernel → full spec → readiness lifecycle before any audit implementation work.
+1. 100f FINAL-OPERATOR-FRONTEND-FUSION-1 is the sole `ready` front after PR #388 merged the final operator-product preservation packet. Implement all eleven canonical HTML targets in the production React/Vite shell under `100f-final-operator-frontend-fusion-1.md` and `100f-readiness-2026-08-27.md`, then stop for maintainer inspection after merge and registry reconciliation.
 2. 099 REVIEW-SECRET-BOUNDARY-0 is merged through PR #306 and reconciled; the emergency security interrupt is closed.
 3. Preserve merged 059a/059b, 061a/061b, 075, 076, 077, 079, 082, 094, 070, 083, 084, 085, 086, 087, 088, 035, 089, 054, 090, 091, 029, 096, 071b, 092, 058c, 097, 098, 006b, 058b, 058d, and 100 authority boundaries; definition-only 095 remains non-implementation authority.
 4. Preserve the merged documentation/evidence from 047–049, 072, 075 and cancelled 078 as incumbent/reference evidence with zero sunk-cost privilege during 103; 107 is the sole future integrated PBR evaluator implementation authority after 103/106.
 5. Keep 066–068 and 080 frozen; keep 062 itself blocked/deferred while allowing the operator-workstation queue to proceed without routine grading UI.
-6. Begin the canonical definition lifecycle for 100a from fresh exact `master`; the 2026-08-27 release does not alter the `planned` state of 100a or any later slice.
+6. Keep 100a, 100b, 100c and 101–110 `planned` while 100f is active; do not begin them until the maintainer releases the explicit post-100f inspection hold.
 
 ## Registry
 
@@ -257,9 +257,11 @@ it changes. Silent abandonment or substitution is not authorized.
 | 097 | merged | [#333](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/333) | JARVIS-ENGINEERING-ACTIONS-0 | 071b, 091, 058c | Definition PR #329, [the 2026-08-22 readiness decision](097-readiness-2026-08-22.md) under PR #331, and implementation PR #333 are merged. The bounded frontend-only deterministic engineering-action surface reuses the single 071b/058c working owner for typed atomic compare-and-apply, proven-basis-only safe fixes, complete operator-visible previews, stale target/source/revision protection, inert `Other`/assistant prose, and explicit preflight/Run separation without backend/thread/provider/history/action-store expansion. |
 | 098 | merged | [#339](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/339) | ENGINEERING-RECORD-LIFECYCLE-0 | 035, 040, 050, 051, 071b | Definition PR #336, [the 2026-08-22 readiness decision](098-readiness-2026-08-22.md) under PR #337, and implementation PR #339 are merged. The Parameter-first V0 now has separate server-owned lifecycle state, exact CAS/audit/dependency fail-closed edits and transitions, lifecycle-current context/history projections, replacement-authority preservation, linked source revision plus unit-normalized value identity, and server-backed Engineering Data edit/lifecycle controls; other record kinds remain read-only. |
 | 099 | merged | [#306](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/306) | REVIEW-SECRET-BOUNDARY-0 | 017, 019 | Emergency security implementation under [the 2026-08-19 readiness decision](099-readiness-2026-08-19.md) merged through PR #306: provider-secret Cheap/Senior jobs execute only trusted master code while reviewed PR content remains inert GitHub API data; the interrupt is closed; resumed 092/#303 subsequently completed and merged on 2026-08-20. |
-| 100 | merged | [#371](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/371) | VISUAL-IDENTITY-1 | 097, 098, 058b, 058d | Full spec merged through PR #368, readiness through PR #369, and the bounded frontend-only visual-identity implementation through PR #371. The post-100 maintainer visual-inspection hold was released on 2026-08-27 by `docs/design-references/VISUAL_IDENTITY_MAINTAINER_RELEASE_2026-08-27.md`; preserve product/engineering authority and require the normal lifecycle before 100a/100b. |
+| 100 | merged | [#371](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/371) | VISUAL-IDENTITY-1 | 097, 098, 058b, 058d | Full spec merged through PR #368, readiness through PR #369, and the bounded frontend-only visual-identity implementation through PR #371. The post-100 maintainer visual-inspection hold was released on 2026-08-27 by `docs/design-references/VISUAL_IDENTITY_MAINTAINER_RELEASE_2026-08-27.md`; preserve product/engineering authority and require the normal lifecycle before later work. |
+| 100f | ready | — | FINAL-OPERATOR-FRONTEND-FUSION-1 | 058d, 100 | PR #388 merged the final eleven-reference preservation packet. Full spec `100f-final-operator-frontend-fusion-1.md` and readiness `100f-readiness-2026-08-27.md` authorize one frontend-only production fusion of all eleven canonical operator surfaces using existing truthful backend authority, with missing future actions rendered unavailable and a mandatory maintainer inspection hold after merge/reconciliation. |
 | 100a | planned | — | CODEBASE-LEAN-AUDIT-1 | 100 | Audit the complete first-party codebase from exact post-100 master for minimum semantic surface, desired-but-unwired capabilities, dead/superseded residue, duplication, overengineering, upstream replacement candidates and measured performance hotspots; absence of a current consumer is never deletion authority. |
 | 100b | planned | — | CODEBASE-LEAN-CLEANUP-1 | 100a | Freshly re-derive either one bounded high-confidence `CLEANUP` batch or an evidence-backed `NO_ACTION` disposition from 100a; preserve `WIRE`/`DEFER` capabilities, avoid pre-empting 101 or 103–105, and never invent runtime churn merely to satisfy the cleanup slot. |
+| 100c | planned | — | FINAL-PRODUCT-DIRECTION-AUTHORITY-0 | 100b | Definition-only post-cleanup authority kernel preserved by PR #388. Re-derive the remaining operator-product/backend queue from exact post-100b master without runtime implementation, duplicate truth stores or ad-hoc promotion of the reference packet. |
 | 101 | planned | — | CANONICAL-STATE-WRITE-1 | 040, 042, 071b, 098, 100b | Unify legacy modeling CRUD and MemoryStore/canonical record transitions behind one server-owned write-intent/lifecycle/audit boundary; separate Parameter record lifecycle from value/evidence quality and prevent proposed records from entering authoritative context by value-quality alone. |
 | 102 | planned | — | ENGINEERING-EVIDENCE-CONTRACT-1 | 044, 077, 101 | Generalize evaluator/evidence metadata for producer/version, digests, units, fidelity, validity domain, qualification, known exclusions, uncertainty and typed outcomes while preserving current solver-specific evidence and egress lineage. |
 | 103 | planned | — | PROCESS-UPSTREAM-BAKEOFF-1 | 047, 048, 049, 075, 100, 102 | Re-evaluate the custom process stack from zero against current upstreams such as IDAES/Pyomo/WaterTAP, BioSTEAM/QSDsan, CasADi/OpenMDAO, DWSIM/CAPE-OPEN and property libraries; produce explicit KEEP/WRAP/REPLACE/DELETE decisions with license, dynamics/recycle, optimization, diagnostics, Windows/local and qualification evidence. |
@@ -290,4 +292,4 @@ it changes. Silent abandonment or substitution is not authorized.
   sole future integrated PBR evaluator implementation authority after 103/106.
 - IDs 081–099 are reserved by FRONTEND-BETA-AUTHORITY-0 plus the 094 normal-spine re-derivation, 095 operator-workstation re-derivation, and the 099 emergency security interrupt as recorded in the registry;
   all references use the canonical three-digit form required by the registry gate, with existing suffix form reused only where explicitly registered (such as 071b).
-- IDs 100–110, including the explicitly registered suffix slices 100a/100b, are reserved for the post-functional-beta visual-identity, lean-codebase and zero-sunk-cost architecture/process replatforming sequence. They are planning rows only until individually re-derived and made ready.
+- IDs 100–110, including the explicitly registered suffix slices 100f/100a/100b/100c, are reserved for the post-functional-beta visual identity, final operator frontend fusion, lean-codebase and zero-sunk-cost architecture/process replatforming sequence. Their implementation authority is exactly the live state recorded in this registry; `planned` rows remain non-authoritative until individually re-derived and made ready.
