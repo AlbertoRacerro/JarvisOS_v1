@@ -18,8 +18,8 @@ jobs:
 
       - name: Prove product tree matches frozen head
         run: |
-          git fetch --no-tags --depth=1 origin cdbbd06760f7f46876e9787a97cbbc30fb71b07c
-          git diff --exit-code cdbbd06760f7f46876e9787a97cbbc30fb71b07c -- \
+          git fetch --no-tags --depth=1 origin fcf367d229ba113e06094c1d511eedb7b0f9c3d0
+          git diff --exit-code fcf367d229ba113e06094c1d511eedb7b0f9c3d0 -- \
             frontend ':!frontend/evidence/100f-browser.mjs' \
             backend schemas docs/specs/STATUS.md
 
@@ -45,8 +45,8 @@ jobs:
 
       - name: Bind evidence harness to exact product head
         run: |
-          sed -i 's/c241599492c9d4c5b2968998aedbe870474b6fdc/cdbbd06760f7f46876e9787a97cbbc30fb71b07c/g' frontend/evidence/100f-browser.mjs
-          grep -F 'const PRODUCT_HEAD="cdbbd06760f7f46876e9787a97cbbc30fb71b07c";' frontend/evidence/100f-browser.mjs
+          sed -i 's/c241599492c9d4c5b2968998aedbe870474b6fdc/fcf367d229ba113e06094c1d511eedb7b0f9c3d0/g' frontend/evidence/100f-browser.mjs
+          grep -F 'const PRODUCT_HEAD="fcf367d229ba113e06094c1d511eedb7b0f9c3d0";' frontend/evidence/100f-browser.mjs
 
       - name: Start production and canonical-reference servers
         run: |
@@ -70,6 +70,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: 100f-browser-evidence-cdbbd067
+          name: 100f-browser-evidence-fcf367d2
           path: frontend/evidence/100f-artifacts
           if-no-files-found: error
