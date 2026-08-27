@@ -118,7 +118,7 @@ includesAll(processStage, [
 check(!/useState|fetch\(|axios|localStorage|sessionStorage/i.test(processStage), "Process scaffold gained frontend topology/API authority");
 includesAll(canonicalOverlay, [
   ".process-stage__toolbar", ".process-stage__palette", ".process-stage__canvas",
-  "grid-template-columns: 190px minmax(0, 1fr)", "background-size: 40px 40px"
+  "grid-template-columns: 240px minmax(0, 1fr)", "background-size: 24px 24px"
 ], "canonical Process workstation composition missing");
 
 includesAll(fusion, [
