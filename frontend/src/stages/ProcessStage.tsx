@@ -17,6 +17,9 @@ function ProcessStage(_props: PrimaryStageProps) {
         <div className="process-stage__toolbar" aria-label="Process tools">
           <button type="button" className="secondary-button" disabled>Add equipment</button>
           <button type="button" className="secondary-button" disabled>Connect</button>
+          <button type="button" className="secondary-button" disabled>Disconnect</button>
+          <button type="button" className="secondary-button" disabled>Validate</button>
+          <button type="button" className="secondary-button" disabled>Solve</button>
         </div>
 
         <aside className="process-stage__palette" aria-label="Process equipment">
