@@ -285,7 +285,7 @@ def _find_existing_interaction(
 
 
 def _context_blocks_for_new_submit(workspace_id: str, payload: AIThreadSubmit) -> list[dict] | None:
-    blocks: list[dict] = []
+    blocks: list[dict] | None = None
     if payload.context_selection is not None:
         selection = ContextSelectionSpec(**payload.context_selection.model_dump())
         try:
@@ -294,7 +294,9 @@ def _context_blocks_for_new_submit(workspace_id: str, payload: AIThreadSubmit) -
             raise AIThreadError(str(exc)) from exc
         if bundle.context_digest != payload.expected_context_digest:
             raise AIThreadConflictError("context pack changed since preview")
-        blocks.extend(bundle.blocks)
+        # Preserve the exact server-rebuilt legacy block list when Jarvis exact-ref
+        # context is absent so spec 090/091 callers retain their established semantics.
+        blocks = bundle.blocks
 
     if payload.jarvis_context is not None:
         if payload.jarvis_context.workspace_id != workspace_id:
@@ -311,7 +313,10 @@ def _context_blocks_for_new_submit(workspace_id: str, payload: AIThreadSubmit) -
             )
         except JarvisContextConflictError as exc:
             raise AIThreadConflictError(str(exc)) from exc
-        blocks.extend(preview.blocks)
+        if blocks is None:
+            blocks = preview.blocks
+        elif preview.blocks:
+            blocks = [*blocks, *preview.blocks]
 
     return blocks or None
 
