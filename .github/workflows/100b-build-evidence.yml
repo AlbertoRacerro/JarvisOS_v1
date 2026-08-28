@@ -1,0 +1,34 @@
+name: 100b Build Evidence
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/100b-build-evidence.yml"
+
+jobs:
+  frontend-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prove product tree matches frozen 100b head
+        shell: bash
+        run: |
+          git diff --exit-code 98b3f011feaf0db1e63cd9be6bb77e87a6cf0574 -- frontend backend schemas
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build exact 100b frontend
+        working-directory: frontend
+        run: npm run build
