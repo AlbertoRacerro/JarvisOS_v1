@@ -2,8 +2,7 @@ name: Hermes GLM Worker Experiment
 
 on:
   pull_request:
-    branches:
-      - master
+    branches: [master]
     types: [opened, synchronize, reopened]
     paths:
       - .github/workflows/hermes-glm-worker-experiment.yml
@@ -24,14 +23,14 @@ jobs:
 
     steps:
       - name: Checkout exact PR head
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.12'
 
@@ -66,17 +65,11 @@ jobs:
           mkdir -p "$RUNNER_TEMP/hermes-home" "$RUNNER_TEMP/hermes-safe-write" "$RUNNER_TEMP/hermes-smoke"
           cat > "$RUNNER_TEMP/hermes-prompt.txt" <<EOF
           You are an untrusted read-only preflight reviewer for JarvisOS_v1.
-
           Repository checkout expected HEAD: ${EXPECTED_HEAD}
+          Use only available file tools. Do not write, patch, create, rename, delete, or modify files. Do not reveal credentials or environment variables.
 
-          Use only the available file tools. Do not write, patch, create, rename, delete, or modify any file. Do not ask for or reveal environment variables, credentials, API keys, tokens, or secrets.
-
-          Inspect the repository itself. Required reads:
-          1. AGENTS.md
-          2. docs/specs/STATUS.md
-          3. locate and inspect the relevant docs/specs/111* specification material that exists in this checkout
-
-          Return a concise Markdown report with exactly these headings:
+          Read AGENTS.md, docs/specs/STATUS.md, and the relevant docs/specs/111* material that exists in this checkout.
+          Return concise Markdown with exactly these headings:
           # HEAD
           # CURRENT_BINDING_FRONT
           # HARD_INVARIANTS
@@ -84,27 +77,20 @@ jobs:
           # MATERIAL_FAILURE_MODE
           # WORKER_VERDICT
 
-          Requirements:
-          - HEAD: state the expected checkout SHA above and whether repository evidence is consistent with it; never invent another SHA.
-          - CURRENT_BINDING_FRONT: report the current binding front and lifecycle state strictly from STATUS.md.
-          - HARD_INVARIANTS: list at least three concrete hard invariants from AGENTS.md.
-          - SPEC_111_OWNER_SEAM: identify one exact existing owner seam that 111 must reuse rather than duplicate, with repository path(s).
-          - MATERIAL_FAILURE_MODE: identify one concrete failure mode that a future 111 implementation must fail closed on.
-          - WORKER_VERDICT: PASS, PARTIAL, or FAIL for usefulness of Hermes+GLM as a cheap read-only repository preflight worker, followed by one short reason.
-          - If evidence is missing or ambiguous, say unavailable/unknown rather than guessing.
+          State unknown/unavailable rather than guessing. List at least three hard invariants. Identify one exact existing owner seam 111 must reuse and one material fail-closed failure mode.
           EOF
 
       - name: Run Hermes with GLM-4.7-Flash free tier and gate output
         shell: bash
         env:
-          GLM_API_KEY: ${{ secrets.GLM_FREE_API_KEY }}
+          GLM_API_KEY: ${{ secrets.JARVIS_HERMES_FREE }}
           GLM_BASE_URL: https://api.z.ai/api/paas/v4
           HERMES_HOME: ${{ runner.temp }}/hermes-home
           HERMES_WRITE_SAFE_ROOT: ${{ runner.temp }}/hermes-safe-write
         run: |
           set -euo pipefail
           if [ -z "${GLM_API_KEY:-}" ]; then
-            echo "GLM_FREE_API_KEY secret is unavailable to this workflow."
+            echo "JARVIS_HERMES_FREE secret is unavailable to this workflow."
             exit 2
           fi
           test "$GLM_BASE_URL" = "https://api.z.ai/api/paas/v4"
@@ -125,8 +111,7 @@ jobs:
           set -e
 
           HERMES_RC="$rc" python - <<'PY'
-          import json
-          import os
+          import json, os
           from pathlib import Path
 
           key = os.environ.get("GLM_API_KEY", "")
@@ -135,31 +120,27 @@ jobs:
           report_path = smoke / "report.md"
           usage_path = smoke / "usage.json"
           stderr_path = root / "hermes-stderr.txt"
-
           report = report_path.read_text(encoding="utf-8", errors="replace") if report_path.exists() else ""
           usage_text = usage_path.read_text(encoding="utf-8", errors="replace") if usage_path.exists() else ""
           stderr = stderr_path.read_text(encoding="utf-8", errors="replace") if stderr_path.exists() else ""
-
           if key and (key in report or key in usage_text or key in stderr):
               raise SystemExit("Secret leak detected in Hermes evidence")
-          if not usage_path.exists():
-              raise SystemExit("Hermes usage report missing")
 
-          usage = json.loads(usage_text)
+          usage = json.loads(usage_text) if usage_text else {}
           provider = str(usage.get("provider", "")).lower()
           model = str(usage.get("model", "")).lower()
-          size = len(report.encode("utf-8"))
           failed = bool(usage.get("failed"))
           completed = bool(usage.get("completed"))
           failure = str(usage.get("failure", ""))
           estimated_cost = usage.get("estimated_cost_usd")
+          size = len(report.encode("utf-8"))
 
           diagnostic = {
               "hermes_rc": int(os.environ.get("HERMES_RC", "-999")),
               "requested_provider": "zai",
               "requested_model": "glm-4.7-flash",
               "requested_base_url": "https://api.z.ai/api/paas/v4",
-              "credential_secret_name": "GLM_FREE_API_KEY",
+              "credential_secret_name": "JARVIS_HERMES_FREE",
               "provider": provider,
               "model": model,
               "api_calls": usage.get("api_calls"),
@@ -173,17 +154,16 @@ jobs:
               "failure": failure[:1000],
               "stderr": stderr[:1000],
           }
-          (smoke / "diagnostic.json").write_text(
-              json.dumps(diagnostic, indent=2, sort_keys=True) + "\n",
-              encoding="utf-8",
-          )
+          (smoke / "diagnostic.json").write_text(json.dumps(diagnostic, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
+          if not usage_text:
+              raise SystemExit("Hermes usage report missing")
           if failed or not completed:
               raise SystemExit(f"Hermes/provider run failed: {failure[:400]!r}")
           if provider != "zai":
-              raise SystemExit(f"Unexpected provider in successful usage report: {provider!r}")
+              raise SystemExit(f"Unexpected provider: {provider!r}")
           if "glm-4.7-flash" not in model:
-              raise SystemExit(f"Unexpected model in successful usage report: {model!r}")
+              raise SystemExit(f"Unexpected model: {model!r}")
           if isinstance(estimated_cost, (int, float)) and estimated_cost > 0:
               raise SystemExit(f"Free-tier smoke reported non-zero estimated cost: {estimated_cost}")
           if size < 40 or size > 65536:
@@ -191,7 +171,6 @@ jobs:
           PY
 
           if [ "$rc" -ne 0 ]; then
-            echo "Hermes invocation returned exit code $rc."
             exit "$rc"
           fi
 
@@ -208,7 +187,7 @@ jobs:
 
       - name: Upload bounded smoke evidence
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: hermes-glm-read-only-smoke-${{ github.event.pull_request.head.sha }}
           path: |
