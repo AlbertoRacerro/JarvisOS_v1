@@ -42,28 +42,33 @@
   border-bottom: 0;
 }
 
+/* Settings tabs are buttons and inherit stronger global primary-button rules.
+ * Use explicit final-shell overrides so secondary navigation cannot regress to
+ * the solid action green reserved for COMMIT/primary actions. */
 .application-shell--final .final-settings__tab {
   min-height: 34px;
-  padding: 7px 14px;
-  border: 1px solid #ddd5c8;
-  border-radius: 4px;
-  background: #fffefc;
-  color: #536052;
-  box-shadow: none;
+  padding: 7px 14px !important;
+  border: 1px solid #ddd5c8 !important;
+  border-radius: 4px !important;
+  background: #fffefc !important;
+  color: #536052 !important;
+  box-shadow: none !important;
   font-size: 11px;
   font-weight: 500;
 }
 
-.application-shell--final .final-settings__tab:hover {
-  border-color: #a9b3a6;
-  background: #fffefc;
-  color: #354234;
+.application-shell--final .final-settings__tab:hover,
+.application-shell--final .final-settings__tab:focus-visible {
+  border-color: #a9b3a6 !important;
+  background: #fffefc !important;
+  color: #354234 !important;
 }
 
-.application-shell--final .final-settings__tab.is-active {
-  border-color: #76a964;
-  background: #edf7e7;
-  color: #28581a;
-  box-shadow: 0 5px 16px rgba(70, 126, 42, .08);
+.application-shell--final .final-settings__tab.is-active,
+.application-shell--final .final-settings__tab[aria-current="page"] {
+  border-color: #76a964 !important;
+  background: #edf7e7 !important;
+  color: #28581a !important;
+  box-shadow: 0 5px 16px rgba(70, 126, 42, .08) !important;
   font-weight: 600;
 }
