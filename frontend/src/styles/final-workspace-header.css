@@ -77,6 +77,10 @@
   height: auto;
 }
 
+.final-fusion__workspace-head + .final-fusion__workbench > .final-fusion__surface-head {
+  display: none;
+}
+
 @media (max-width: 900px) {
   .final-fusion__workspace-head {
     min-height: auto;
