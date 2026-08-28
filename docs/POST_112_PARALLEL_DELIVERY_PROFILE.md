@@ -2,10 +2,11 @@
 
 Status: canonical operational profile, dormant until activation gate
 Authorized: 2026-08-28
+Maintainer acceleration amendment: 2026-08-28
 
-This document defines the minimum controlled-parallel delivery exception to the repository's normal single-front execution rule. It changes repository-development process only. It does not change JarvisOS runtime authority, provider policy, product architecture, specification scope, queue order, credentials, egress, schemas, or model-promotion rules.
+This document defines the minimum controlled-parallel delivery exception to the repository's normal single-front execution rule. It changes repository-development process only. It does not change JarvisOS runtime authority, provider policy, product architecture, credentials, egress, schemas, or model-promotion rules.
 
-`docs/specs/STATUS.md` remains the sole live source of truth for work state, dependencies, queue order, and implementation-PR association. This file is not a second roadmap.
+`docs/specs/STATUS.md` remains the sole live source of truth for work state, dependencies, queue order, and implementation-PR association. This file is not a second roadmap. Where this profile records a maintainer-approved future ordering target, that target becomes executable only after the Integration Coordinator has reconciled the matching queue order into `STATUS.md` through the normal docs-only authority path.
 
 ## 1. Activation gate
 
@@ -21,20 +22,41 @@ At the first coordinating cycle after 112 is merged, the coordinator re-reads ex
 
 If disjointness cannot be proved, only the conflicting slices remain serial. Independent lanes may still proceed. A maintainer interruption is required only for the four canonical interruption classes in `AGENTS.md`.
 
-## 2. Maximum operating topology
+## 2. Maximum operating topology and scheduled work-stealing
 
-The post-112 profile supports at most four ChatGPT coordination roles:
+The logical post-112 topology supports at most four ChatGPT coordination roles:
 
 1. **Integration Coordinator** — sole owner of cross-lane integration, shared-file mutation, merge sequencing, registry reconciliation, and conflict resolution.
 2. **Knowledge Builder** — Project Knowledge lane.
 3. **Development Builder** — Development lane.
 4. **Coding Builder** — Coding lane.
 
-The profile defines roles, not guaranteed automation capacity. It must not disable or repurpose unrelated maintainer automations automatically. If only two JarvisOS builder slots are available, operate as coordinator + one lane and add lanes only after the maintainer explicitly makes additional slots available.
+These are logical responsibilities, not permanent automation identities. A scheduled ChatGPT automation does not own one lane merely because of its name or wake-up minute.
+
+The maintainer authorizes a stricter scheduled deployment with up to four staggered ChatGPT orchestrator automations, normally at `:00`, `:15`, `:30`, and `:45`. In this mode:
+
+- the four automations are interchangeable scheduler replicas;
+- **only one ChatGPT orchestrator may hold the coordinator/writer lock at a time**;
+- on wake-up, the lock holder temporarily assumes the Integration Coordinator role and may service any currently authorized lane;
+- the other scheduled instances exit without mutation when a fresh coordinator lock is already held;
+- GLM or other bounded read-only/proposal subworkers may continue concurrently because they do not own GitHub merge/shared-state authority.
+
+A work-stealing cycle must:
+
+1. resolve fresh exact `master`, `STATUS.md`, active PR heads, terminal CI/review evidence, and currently running/finished subworkers;
+2. consume already-terminal safe evidence first, including stale-result rejection;
+3. advance any immediately actionable lane one bounded step at a time, acquiring the relevant lane/shared ownership before mutation;
+4. launch the next bounded GLM subworker when useful, normally no more than one active worker per lane unless a fresh disjointness proof justifies more;
+5. repeat across other ready lanes while useful work is immediately available;
+6. exit as soon as the remaining next actions are only waits for GLM, CI, review, external availability, or a future scheduled wake-up.
+
+The orchestrator must **not** sleep, poll, or remain alive merely to consume its available runtime. It must not continue until timeout by default. When the remaining wall-clock budget is too small for a complete safe mutation plus verification, it records the exact next action and exits cleanly.
+
+This work-stealing mode intentionally concentrates GitHub write/merge authority in one ChatGPT process while allowing cheap subworkers to perform parallel bounded analysis/candidate work. It is therefore stricter than the maximum logical role topology and does not weaken any shared-file or exact-head rule.
 
 No two writers may mutate the same PR/head concurrently.
 
-## 3. Authorized post-112 lanes
+## 3. Authorized post-112 lanes and Hermes acceleration target
 
 Inside each lane, work remains sequential and normal dependency/readiness rules still apply.
 
@@ -46,15 +68,36 @@ Inside each lane, work remains sequential and normal dependency/readiness rules 
 
 `116 ROADMAP-CALENDAR-1 -> 117 BRAINSTORM-1`
 
-### Coding
+### Coding — pre-Hermes foundation
 
-`118 CODING-REPOSITORY-TRUTH-1 -> 119 CODING-RUNTIME-TRUTH-1 -> 120 DEVELOPMENT-PIPELINE-STATE-1 -> 124 PROVIDER-SETTINGS-GENERIC-1`
+The maintainer-approved acceleration target is:
 
-After the underlying domain owners are merged and the 111 common contract remains compatible, these domain-specific Jarvis adapter slices may also run as three independent lanes:
+`118 CODING-REPOSITORY-TRUTH-1 -> 119 CODING-RUNTIME-TRUTH-1 -> 120 DEVELOPMENT-PIPELINE-STATE-1 -> 123 JARVIS-CODING-ACTIONS-1`
 
-- Knowledge: `121 JARVIS-PROJECT-KNOWLEDGE-ACTIONS-1`
-- Development: `122 JARVIS-DEVELOPMENT-ACTIONS-1`
-- Coding: `123 JARVIS-CODING-ACTIONS-1`
+`123` is intentionally pulled forward once its own hard dependencies (`111`, `118`, `119`, `120`) are merged. `124`, `121`, `122`, `125`, and `126` are not prerequisites for this early Coding foundation.
+
+Because `STATUS.md` is the sole live queue authority, the changed position of `123` must be reconciled there through a docs-only queue amendment before an agent acts on this ordering. Until that reconciliation is merged, the current `STATUS.md` order wins.
+
+### Hermes V1 acceleration gate
+
+After `123` is actually merged and the queue has been reconciled accordingly, the next Coding objective is a **fresh Hermes V1 re-derivation/release gate**, before the remaining post-foundation slices.
+
+This gate does **not** authorize direct implementation of the legacy 066–068 kernels. Instead it must re-derive the Hermes boundary from then-current exact `master`, the accepted 111/118/119/120/123 contracts, the live AI execution/egress/budget spine, the pinned Hermes identity actually chosen for production, and the evidence collected by temporary GLM/Hermes experiments.
+
+The first useful Hermes release should be the minimum coding-capable dogfood profile that proves all of the following:
+
+- JarvisOS remains policy, credential, sensitivity, budget, egress, ledger, context, and promotion authority;
+- Hermes is an untrusted advisory orchestrator, never a second authority process;
+- every Hermes model path reaches a JarvisOS-owned model gateway or is disabled; no provider API key is given directly to Hermes;
+- Coding context/actions are obtained through JarvisOS-owned bounded capabilities rather than unrestricted direct repository/database/data-root authority;
+- the generic 111 capability/action registry is reused rather than creating one bespoke Hermes adapter per screen;
+- exact repository/runtime/pipeline truth comes from 118/119/120 owners;
+- suggested code changes remain proposals/candidate patches until the accepted development authority validates and applies them;
+- the temporary GitHub/OpenAI-Agents-SDK GLM harness is not retired until Hermes has parity evidence for the work it is replacing.
+
+Knowledge and Development base lanes do not wait for Hermes and may continue in parallel while the Coding lane reaches this gate.
+
+After Hermes V1 is proven, the remaining operator-domain slices continue under the then-current registry, with Hermes dogfooding used where appropriate. The intended post-Hermes remainder includes `124`, `121`, `122`, `125`, and `126`, subject to their own dependencies, readiness, security, and authority gates. No later slice becomes ready merely because Hermes exists.
 
 This profile does **not** automatically parallelize 125, 126, 102, the late Process/Design sequence 103–110, or 093. Those slices retain their own dependency, security, scientific, evidence, and readiness gates.
 
@@ -104,7 +147,7 @@ To remove ceremonial latency, a single planning PR may combine definition, full 
 
 Compression is forbidden when it would reduce evidence or blur independently removable specifications.
 
-High-risk work retains the full separate lifecycle. This includes, by default, security/credentials/egress, PTY, self-update, delicate schema migrations, Process/solver/evaluator authority, destructive actions, and hard-to-reverse cross-domain ownership.
+High-risk work retains the full separate lifecycle. This includes, by default, security/credentials/egress, Hermes isolation/model-call closure, PTY, self-update, delicate schema migrations, Process/solver/evaluator authority, destructive actions, and hard-to-reverse cross-domain ownership.
 
 `planned` never becomes implementation authority merely because planning is compressed.
 
@@ -135,26 +178,41 @@ The coordinating ChatGPT session is the default reasoning and orchestration laye
 
 External model use is evidence-driven:
 
+- **GLM subworkers are the normal cheap implementation-analysis workhorse** while the temporary harness is active. They receive an exact target ref/SHA and a narrow task, and return advisory evidence/candidate patches only. Normally keep at most one active GLM worker per Knowledge, Development, and Coding lane; use additional same-lane fan-out only when the tasks are demonstrably disjoint and the expected value exceeds coordination cost.
 - **Claude is the default independent reviewer/specialist** for material exact-head review, architecture, UX, API/schema-boundary, testing-strategy, and security critique when needed.
 - **Codex is a critical reserve**, not a routine reviewer. Do not use it for ordinary planning, documentation-only work, reconciliation, UI polish, small PRs, or a duplicate second review "for safety". Use Codex review only when Claude is genuinely unavailable/inadequate, an unresolved high-risk technical finding justifies a specialist second opinion, or the diff has a material Codex-specific advantage. Codex implementation remains available when its coding environment provides a concrete advantage over direct work.
 - Do not ask Claude and Codex the same generic question or duplicate reviews on one immutable head.
 - No artificial numeric iteration cap replaces engineering judgment; continue useful review/correction iterations while they materially reduce risk.
-- Cheap/free workers such as an isolated Hermes+GLM experiment may perform read-only preflight, impact analysis, candidate review, or other bounded work. Their output remains untrusted advisory evidence. A green worker workflow is never, by itself, merge authority.
+- A green GLM/Hermes/other worker workflow is never, by itself, merge authority.
 
 Mutable PRs should remain draft when doing so prevents automatic Codex review. Freeze the head and consume the minimum required independent review before changing draft state when a non-draft state is actually needed.
 
-## 10. Future read-only prework
+## 10. Temporary-harness to Hermes transition
+
+Until Hermes V1 passes its fresh compatibility, authority, isolation, and parity gates, the temporary GitHub Actions/OpenAI Agents SDK GLM harness remains an implementation accelerator rather than product runtime architecture.
+
+The transition is evidence-based, not date-based:
+
+1. prove the first Hermes profile on the accepted Coding owner surfaces;
+2. compare exact task completion, candidate-patch quality, failure handling, model-call closure, cost/usage visibility, and stale-head behavior against the temporary harness;
+3. dogfood Hermes on bounded real queue work while retaining the temporary harness as rollback;
+4. retire or reduce the temporary harness only after the replacement path is observably sufficient.
+
+Do not preserve duplicate orchestration infrastructure indefinitely merely because it once worked. Conversely, do not remove the rollback path before parity is proven.
+
+## 11. Future read-only prework
 
 Read-only analysis may be performed ahead of the active implementation frontier when it reduces later idle time without creating premature authority. Examples include:
 
 - ownership and dependency inventories for later domain lanes;
 - read-only research for 103 upstream Process bakeoff;
 - threat-model and boundary inventory for 125 self-update and 126 PTY;
-- solver/adapter source audits for later Process/engineering work.
+- solver/adapter source audits for later Process/engineering work;
+- pinned-Hermes compatibility and effective-config inventory that does not mutate product/runtime authority.
 
 Prework may not mutate product/runtime authority, open an unauthorized implementation front, or be treated as fresh implementation evidence indefinitely. It must be revalidated against fresh exact `master` when promoted into an accepted slice.
 
-## 11. Reconciliation and ceremony reduction
+## 12. Reconciliation and ceremony reduction
 
 Avoid PRs, checkpoint comments, review requests, screenshot passes, or repeated gates that add no new authority, evidence, or risk reduction.
 
@@ -167,7 +225,7 @@ Post-merge registry reconciliation may be automated or mechanically applied when
 
 Do not remove an audit, review, or gate that closes a real security, scientific, migration, authority, regression, or acceptance risk merely to reduce elapsed time.
 
-## 12. Conflict fallback
+## 13. Conflict fallback
 
 A conflict involving a shared owner, migration/schema sequencing, security/egress authority, cross-lane invariant, or overlapping runtime boundary returns **only the affected slices** to serial execution until the conflict is resolved.
 
@@ -175,7 +233,7 @@ Independent lanes remain eligible to continue if their own hard dependencies, re
 
 If the only safe resolution would require one of the four maintainer interruption classes, stop and contact the maintainer. Otherwise the Integration Coordinator chooses the least-cost reversible route and proceeds.
 
-## 13. Safety invariants preserved
+## 14. Safety invariants preserved
 
 This profile never authorizes:
 
@@ -187,6 +245,8 @@ This profile never authorizes:
 - a model or worker to become domain COMMIT/EXECUTE authority by inference;
 - frontend direct provider/filesystem/shell/GitHub authority;
 - bypass of existing egress, budget, credential, secret, or promotion boundaries;
+- direct provider credentials in Hermes;
+- direct implementation of stale 066–068 kernels without fresh re-derivation;
 - automatic activation before 112 is merged.
 
 When this profile conflicts with a narrower accepted specification or a hard invariant in `AGENTS.md`, the narrower/higher authority wins.
