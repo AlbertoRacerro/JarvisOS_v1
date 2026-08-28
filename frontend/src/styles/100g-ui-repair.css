@@ -1,0 +1,69 @@
+/* 100g final-operator UI repair: peer navigation is secondary navigation,
+ * never a primary action. Scope is intentionally limited to final routes. */
+.application-shell--final .design-stage__tabs {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.application-shell--final .design-stage__tabs button {
+  min-height: 34px;
+  padding: 7px 14px !important;
+  border: 1px solid #ddd5c8 !important;
+  border-radius: 4px !important;
+  background: #fffefc !important;
+  color: #536052 !important;
+  box-shadow: none !important;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.application-shell--final .design-stage__tabs button:hover {
+  border-color: #a9b3a6 !important;
+  background: #fffefc !important;
+  color: #354234 !important;
+}
+
+.application-shell--final .design-stage__tabs button.is-active,
+.application-shell--final .design-stage__tabs button[aria-current="page"] {
+  border-color: #76a964 !important;
+  background: #edf7e7 !important;
+  color: #28581a !important;
+  box-shadow: 0 5px 16px rgba(70, 126, 42, .08) !important;
+  font-weight: 600;
+}
+
+.application-shell--final .final-settings__tabs {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 22px 10px;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.application-shell--final .final-settings__tab {
+  min-height: 34px;
+  padding: 7px 14px;
+  border: 1px solid #ddd5c8;
+  border-radius: 4px;
+  background: #fffefc;
+  color: #536052;
+  box-shadow: none;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.application-shell--final .final-settings__tab:hover {
+  border-color: #a9b3a6;
+  background: #fffefc;
+  color: #354234;
+}
+
+.application-shell--final .final-settings__tab.is-active {
+  border-color: #76a964;
+  background: #edf7e7;
+  color: #28581a;
+  box-shadow: 0 5px 16px rgba(70, 126, 42, .08);
+  font-weight: 600;
+}
