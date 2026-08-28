@@ -19,7 +19,7 @@ jobs:
   read-only-smoke:
     if: github.event.pull_request.head.ref == 'experiment/hermes-glm-worker'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout exact PR head
@@ -44,7 +44,7 @@ jobs:
           git diff --exit-code
           test -z "$(git status --porcelain)"
 
-      - name: Install pinned Hermes Agent core
+      - name: Install pinned Hermes Agent core once
         shell: bash
         env:
           HERMES_UPSTREAM_SHA: 306db2776c6b6f1acc85c31c4dabba3263f0e9fd
@@ -62,7 +62,7 @@ jobs:
           EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/hermes-home" "$RUNNER_TEMP/hermes-safe-write" "$RUNNER_TEMP/hermes-smoke"
+          mkdir -p "$RUNNER_TEMP/hermes-safe-write" "$RUNNER_TEMP/hermes-smoke"
           cat > "$RUNNER_TEMP/hermes-prompt.txt" <<EOF
           You are an untrusted read-only preflight reviewer for JarvisOS_v1.
           Repository checkout expected HEAD: ${EXPECTED_HEAD}
@@ -80,12 +80,11 @@ jobs:
           State unknown/unavailable rather than guessing. List at least three hard invariants. Identify one exact existing owner seam 111 must reuse and one material fail-closed failure mode.
           EOF
 
-      - name: Run Hermes with GLM-4.7-Flash free tier and gate output
+      - name: Compare free GLM Flash models through Hermes
         shell: bash
         env:
           GLM_API_KEY: ${{ secrets.JARVIS_HERMES_FREE }}
           GLM_BASE_URL: https://api.z.ai/api/paas/v4
-          HERMES_HOME: ${{ runner.temp }}/hermes-home
           HERMES_WRITE_SAFE_ROOT: ${{ runner.temp }}/hermes-safe-write
         run: |
           set -euo pipefail
@@ -94,35 +93,38 @@ jobs:
             exit 2
           fi
           test "$GLM_BASE_URL" = "https://api.z.ai/api/paas/v4"
-
           cd "$GITHUB_WORKSPACE"
           PROMPT="$(cat "$RUNNER_TEMP/hermes-prompt.txt")"
-          set +e
-          timeout 300s hermes \
-            --provider zai \
-            --model glm-4.7-flash \
-            --toolsets file \
-            --ignore-user-config \
-            --usage-file "$RUNNER_TEMP/hermes-smoke/usage.json" \
-            -z "$PROMPT" \
-            > "$RUNNER_TEMP/hermes-smoke/report.md" \
-            2> "$RUNNER_TEMP/hermes-stderr.txt"
-          rc=$?
-          set -e
 
-          HERMES_RC="$rc" python - <<'PY'
+          for MODEL in glm-4.5-flash glm-4.6v-flash; do
+            SLUG="${MODEL//./-}"
+            OUT="$RUNNER_TEMP/hermes-smoke/$SLUG"
+            mkdir -p "$OUT" "$RUNNER_TEMP/hermes-home-$SLUG"
+            echo "=== Testing $MODEL ==="
+
+            set +e
+            HERMES_HOME="$RUNNER_TEMP/hermes-home-$SLUG" timeout 300s hermes \
+              --provider zai \
+              --model "$MODEL" \
+              --toolsets file \
+              --ignore-user-config \
+              --usage-file "$OUT/usage.json" \
+              -z "$PROMPT" \
+              > "$OUT/report.md" \
+              2> "$OUT/stderr.txt"
+            rc=$?
+            set -e
+
+            MODEL="$MODEL" HERMES_RC="$rc" OUT="$OUT" python - <<'PY'
           import json, os
           from pathlib import Path
 
+          model_requested = os.environ["MODEL"].lower()
+          out = Path(os.environ["OUT"])
           key = os.environ.get("GLM_API_KEY", "")
-          root = Path(os.environ["RUNNER_TEMP"])
-          smoke = root / "hermes-smoke"
-          report_path = smoke / "report.md"
-          usage_path = smoke / "usage.json"
-          stderr_path = root / "hermes-stderr.txt"
-          report = report_path.read_text(encoding="utf-8", errors="replace") if report_path.exists() else ""
-          usage_text = usage_path.read_text(encoding="utf-8", errors="replace") if usage_path.exists() else ""
-          stderr = stderr_path.read_text(encoding="utf-8", errors="replace") if stderr_path.exists() else ""
+          report = (out / "report.md").read_text(encoding="utf-8", errors="replace") if (out / "report.md").exists() else ""
+          usage_text = (out / "usage.json").read_text(encoding="utf-8", errors="replace") if (out / "usage.json").exists() else ""
+          stderr = (out / "stderr.txt").read_text(encoding="utf-8", errors="replace") if (out / "stderr.txt").exists() else ""
           if key and (key in report or key in usage_text or key in stderr):
               raise SystemExit("Secret leak detected in Hermes evidence")
 
@@ -134,13 +136,22 @@ jobs:
           failure = str(usage.get("failure", ""))
           estimated_cost = usage.get("estimated_cost_usd")
           size = len(report.encode("utf-8"))
+          success = bool(
+              usage_text
+              and completed
+              and not failed
+              and provider == "zai"
+              and model_requested in model
+              and not (isinstance(estimated_cost, (int, float)) and estimated_cost > 0)
+              and 40 <= size <= 65536
+          )
 
           diagnostic = {
-              "hermes_rc": int(os.environ.get("HERMES_RC", "-999")),
               "requested_provider": "zai",
-              "requested_model": "glm-4.7-flash",
+              "requested_model": model_requested,
               "requested_base_url": "https://api.z.ai/api/paas/v4",
               "credential_secret_name": "JARVIS_HERMES_FREE",
+              "hermes_rc": int(os.environ.get("HERMES_RC", "-999")),
               "provider": provider,
               "model": model,
               "api_calls": usage.get("api_calls"),
@@ -150,29 +161,33 @@ jobs:
               "estimated_cost_usd": estimated_cost,
               "completed": completed,
               "failed": failed,
+              "semantic_gate_success": success,
               "report_bytes": size,
-              "failure": failure[:1000],
-              "stderr": stderr[:1000],
+              "failure": failure[:1200],
+              "stderr": stderr[:1200],
           }
-          (smoke / "diagnostic.json").write_text(json.dumps(diagnostic, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-          if not usage_text:
-              raise SystemExit("Hermes usage report missing")
-          if failed or not completed:
-              raise SystemExit(f"Hermes/provider run failed: {failure[:400]!r}")
-          if provider != "zai":
-              raise SystemExit(f"Unexpected provider: {provider!r}")
-          if "glm-4.7-flash" not in model:
-              raise SystemExit(f"Unexpected model: {model!r}")
-          if isinstance(estimated_cost, (int, float)) and estimated_cost > 0:
-              raise SystemExit(f"Free-tier smoke reported non-zero estimated cost: {estimated_cost}")
-          if size < 40 or size > 65536:
-              raise SystemExit(f"Hermes report size outside bounds: {size}")
+          (out / "diagnostic.json").write_text(json.dumps(diagnostic, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          print(json.dumps({"model": model_requested, "success": success, "api_calls": usage.get("api_calls"), "failure": failure[:240]}))
           PY
+          done
 
-          if [ "$rc" -ne 0 ]; then
-            exit "$rc"
-          fi
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"]) / "hermes-smoke"
+          results = []
+          for path in sorted(root.glob("*/diagnostic.json")):
+              data = json.loads(path.read_text(encoding="utf-8"))
+              results.append(data)
+          if len(results) != 2:
+              raise SystemExit(f"Expected diagnostics for two models, got {len(results)}")
+          print("Free-model results:")
+          for data in results:
+              print(f"- {data['requested_model']}: success={data['semantic_gate_success']} calls={data['api_calls']} cost={data['estimated_cost_usd']} failure={data['failure'][:160]!r}")
+          if not any(bool(data.get("semantic_gate_success")) for data in results):
+              raise SystemExit("Neither free model completed successfully")
+          PY
 
       - name: Prove Hermes did not mutate repository
         if: always()
@@ -189,10 +204,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: hermes-glm-read-only-smoke-${{ github.event.pull_request.head.sha }}
+          name: hermes-glm-free-model-comparison-${{ github.event.pull_request.head.sha }}
           path: |
-            ${{ runner.temp }}/hermes-smoke/report.md
-            ${{ runner.temp }}/hermes-smoke/usage.json
-            ${{ runner.temp }}/hermes-smoke/diagnostic.json
+            ${{ runner.temp }}/hermes-smoke/*/report.md
+            ${{ runner.temp }}/hermes-smoke/*/usage.json
+            ${{ runner.temp }}/hermes-smoke/*/diagnostic.json
           if-no-files-found: warn
           retention-days: 7
