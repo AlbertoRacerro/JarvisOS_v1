@@ -1,0 +1,7 @@
+{
+  "task_id": "20260828-1813-111-candidate-v2",
+  "target_ref": "cf4bf1d2b4d2e242481c82bd493e082896ed6aeb",
+  "mode": "candidate_patch",
+  "max_turns": 5,
+  "instructions": "Inspect exact target_ref. Implement a candidate patch for spec 111 using only the exact readiness allow-list. Read AGENTS.md and the 111 full spec, route amendment, readiness, current AI routes, context builder, thread models/service and tests. Required: frozen canonical route pairs; workspace-bound exact refs with at least one exact identity; deterministic dedupe and conflicting duplicate rejection; empty production adapter registry with test-only adapters; reject common COMMIT and EXECUTE; deterministic whole-block budget drop disclosure; stale, unavailable or unknown makes preview non-dispatchable with factual outcomes; POST /ai/jarvis/context/preview; optional AIThreadSubmit jarvis context request plus expected digest pair; include them in immutable request digest; rebuild and revalidate before reservation; zero run_ai_task on mismatch, stale, unknown, workspace error; added exact refs unavailable for non-local route before run_ai_task; legacy context behavior unchanged. Do not touch STATUS, database, schema, frontend, egress authority, provider, domain or Hermes paths. Reuse canonical_digest and existing execution/prompt spine. Return report.md, usage.json and candidate.patch. Do not expand scope."
+}
