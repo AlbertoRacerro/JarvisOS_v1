@@ -4,7 +4,7 @@ Status: `EXPERIMENT / REFERENCE AUDIT` — not product/runtime implementation au
 
 ## Purpose
 
-Evaluate whether a pinned Hermes Agent harness using Z.AI `glm-4.7-flash` can perform useful, low-cost repository preflight/review work for JarvisOS without consuming scarce Codex review capacity and without acquiring product, merge, GitHub-write, shell, provider-policy, or domain authority.
+Evaluate whether a pinned Hermes Agent harness using Z.AI `glm-5.2` through the GLM Coding Plan endpoint can perform useful, low-cost repository preflight/review work for JarvisOS without consuming scarce Codex review capacity and without acquiring product, merge, GitHub-write, shell, provider-policy, or domain authority.
 
 This experiment is deliberately independent from the 111→112 product front. It may run on an isolated same-repository PR while 111/112 remain serial because it does not mutate `master`, `docs/specs/STATUS.md`, backend, frontend, schemas, product provider policy, or runtime state.
 
@@ -14,24 +14,29 @@ The existing intake owner is `REF-022 | NousResearch/Hermes Agent` in `docs/IDEA
 
 - Project: `NousResearch/hermes-agent`
 - License: MIT, as declared by upstream README/`pyproject.toml` at the pinned source.
-- Pinned upstream commit for this experiment: `306db2776c6b6f1acc85c31c4dabba3263f0e9fd`
-- Upstream package version at that commit: `0.20.6`
+- Pinned upstream commit: `306db2776c6b6f1acc85c31c4dabba3263f0e9fd`
+- Upstream package version: `0.20.6`
 - Provider: native Hermes `zai`
-- Model: `glm-4.7-flash`
+- Model: `glm-5.2`
+- Base URL override: `GLM_BASE_URL=https://api.z.ai/api/coding/paas/v4`
 - Credential input: existing repository Actions secret `GLM_API_KEY`; the secret is never committed and is scoped only to the Hermes invocation/gate step.
 
-The pinned upstream documentation at this commit explicitly supports:
+The first attempts used Hermes' default Z.AI general endpoint (`https://api.z.ai/api/paas/v4`) with `glm-4.7-flash`. Those attempts reached Z.AI but returned HTTP 429. They are not accepted as evidence about Coding Plan availability because Z.AI documents the Coding Plan endpoint and general endpoint as non-interchangeable. The experiment was therefore corrected to `glm-5.2` plus the Coding Plan endpoint before further interpretation.
 
-- `GLM_API_KEY` / `ZAI_API_KEY` aliases for Z.AI, with default base URL `https://api.z.ai/api/paas/v4`;
-- `hermes chat --oneshot` for non-interactive execution;
+The pinned Hermes source supports:
+
+- `GLM_API_KEY` / `ZAI_API_KEY` aliases for Z.AI;
+- `GLM_BASE_URL` as the Z.AI base-URL override;
+- top-level `-z/--oneshot` for non-interactive pipeline execution;
 - `--provider zai` and `--model ...` per run;
 - `--toolsets file` for the file toolset;
-- `--ignore-user-config`, `--source tool`, and `--max-turns` for isolated third-party runs;
+- `--ignore-user-config` for an isolated run;
+- `--usage-file` for bounded machine-readable run evidence;
 - `HERMES_WRITE_SAFE_ROOT`, which makes file writes outside configured safe roots fail closed.
 
 ## Minimum experiment boundary
 
-The first smoke test is intentionally weaker than a coding worker. Hermes receives only the `file` toolset. That toolset contains read/search plus write/patch tools upstream, so the workflow also sets `HERMES_WRITE_SAFE_ROOT` to a scratch directory outside the JarvisOS checkout. A model attempt to use `write_file`/`patch` against the repository therefore fails closed.
+The smoke test is intentionally weaker than a coding worker. Hermes receives only the `file` toolset. That toolset contains read/search plus write/patch tools upstream, so the workflow also sets `HERMES_WRITE_SAFE_ROOT` to a scratch directory outside the JarvisOS checkout. A model attempt to use `write_file`/`patch` against the repository therefore fails closed.
 
 Not enabled:
 
@@ -42,7 +47,6 @@ Not enabled:
 - delegation/subagents;
 - persistent memory;
 - cron/gateway;
-- `--yolo`;
 - GitHub mutation credentials;
 - merge/review authority.
 
@@ -66,15 +70,16 @@ Unknown or missing evidence must be reported as unknown/unavailable rather than 
 The workflow, not Hermes, proves:
 
 - checkout HEAD equals `github.event.pull_request.head.sha`;
-- repository diff is empty before the model run;
-- repository status is clean before the model run;
-- Hermes is installed from the exact pinned upstream SHA above;
-- requested provider is `zai` and requested model is `glm-4.7-flash`;
-- Hermes emits a non-empty bounded report;
-- Hermes usage evidence reports provider `zai` and model `glm-4.7-flash`;
-- the literal `GLM_API_KEY` value is absent from captured model output/stderr;
-- repository HEAD remains unchanged after the model run;
-- repository diff/status remain clean after the model run.
+- repository diff/status is clean before the model run;
+- Hermes is installed from the exact pinned upstream SHA;
+- requested provider is `zai`;
+- requested model is `glm-5.2`;
+- requested base URL is the Z.AI Coding Plan endpoint;
+- successful usage evidence reports provider `zai` and model `glm-5.2`;
+- Hermes emits a non-empty bounded report on success;
+- the literal `GLM_API_KEY` value is absent from captured report, usage evidence, and stderr;
+- repository HEAD/diff/status remain unchanged after the model run;
+- failure evidence is preserved separately from semantic success.
 
 A green workflow is necessary but not a semantic PASS. A later human/coordinator read must compare the report with repository truth and classify the experiment `PASS`, `PARTIAL`, or `FAIL`.
 
@@ -88,16 +93,7 @@ The model is a cloud Z.AI model. Repository content selected by Hermes may leave
 
 ## Promotion criteria
 
-Do not promote Hermes/GLM into a normal repository writer based on one smoke test. A later promotion decision should require repeated evidence across tasks such as:
-
-- exact-head repository impact mapping;
-- code/spec review against known findings;
-- test-failure root-cause analysis;
-- scope discipline and hallucination rate;
-- failure recovery;
-- token/API-call consumption and provider limits;
-- comparison with coordinator/Claude findings;
-- explicit branch-only write policy if write authority is ever considered.
+Do not promote Hermes/GLM into a normal repository writer based on one smoke test. A later promotion decision should require repeated evidence across tasks such as exact-head repository impact mapping, review against known findings, test-failure root-cause analysis, scope discipline, hallucination rate, failure recovery, token/API-call consumption, comparison with coordinator/Claude findings, and an explicit branch-only write policy if write authority is ever considered.
 
 Even after promotion as a cheap worker, merge authority, `STATUS.md`, shared integration files, security/egress policy, credentials, and high-risk runtime authority remain outside Hermes unless separately specified and proven.
 
@@ -107,8 +103,8 @@ Experimental workflow: `.github/workflows/hermes-glm-worker-experiment.yml`
 
 Pinned GitHub Actions:
 
-- `actions/checkout@11d5960a326750d5838078e36cf38b85af677262` (`v4` ref observed 2026-08-28)
-- `actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065` (`v5` ref observed 2026-08-28)
-- `actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02` (`v4` ref observed 2026-08-28)
+- `actions/checkout@11d5960a326750d5838078e36cf38b85af677262`
+- `actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065`
+- `actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02`
 
-The experimental PR must remain draft while the harness is being corrected so the repository's Codex auto-review is not intentionally triggered. It is not merged during the 111/112 foundation work unless a later explicit promotion decision re-derives that boundary.
+The experimental PR remains draft while the harness is being corrected so the repository's Codex auto-review is not intentionally triggered. It is not merged during the 111/112 foundation work unless a later explicit promotion decision re-derives that boundary.
