@@ -2,157 +2,28 @@ name: Reconcile 100c registry once
 
 on:
   push:
-    branches: [reconcile/100c-queue-after-definition]
+    branches:
+      - reconcile/100c-queue-after-definition
 
 permissions:
   contents: write
 
 jobs:
   reconcile:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: reconcile/100c-queue-after-definition
           fetch-depth: 2
-      - name: Rewrite canonical registry from merged 100c authority
+      - name: Patch registry
+        run: python scripts/reconcile_100c_tmp.py
+      - name: Validate and commit
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          import re
-
-          path = Path('docs/specs/STATUS.md')
-          text = path.read_text(encoding='utf-8')
-
-          binding = '''The binding order is:
-
-1. 081 FRONTEND-BETA-AUTHORITY-0 definition and registry reconciliation;
-2. 082 SECURE-CREDENTIAL-STORAGE-0;
-3. 094 SCALEWAY-NORMAL-SPINE-0;
-4. 070 UI-FOUNDATION-1, freshly re-derived from current `master`;
-5. 083 APP-SHELL-1;
-6. 084 BLUECAD-READ-MODEL-1;
-7. 085 BLUECAD-WORKBENCH-2;
-8. 086 MODEL-INSPECTION-A0;
-9. 087 LINEAGE-OVERVIEW-1;
-10. 088 RUNS-WORKBENCH-1;
-11. 035 ENGINEERING-DATA-1, freshly re-derived;
-12. 089 ANALYTICS-DOCK-1;
-13. 054 PROPOSAL-REVIEW-1, freshly re-derived;
-14. 090 AI-THREADS-0;
-15. 091 JARVIS-SIDECAR-1;
-16. 029 SETTINGS-1, freshly re-derived;
-17. 095 OPERATOR-WORKSTATION-AUTHORITY-1 definition and queue re-derivation;
-18. 096 OPERATOR-WORKBENCH-CORRECTION-0;
-19. 071b ENGINEERING-PROPERTIES-1;
-20. 092 SCENE-BINDING-0, freshly re-derived;
-21. 058c SCENE-SEMANTICS-A1, freshly re-derived;
-22. 097 JARVIS-ENGINEERING-ACTIONS-0;
-23. 098 ENGINEERING-RECORD-LIFECYCLE-0;
-24. 006b PARAMETRIC-VARIANTS-1, freshly re-derived;
-25. 058b VARIANT-COMPARISON-1, freshly re-derived;
-26. 058d PROCESS-WORKSPACE-SCAFFOLD-0;
-27. 100 VISUAL-IDENTITY-1;
-28. 100f FINAL-OPERATOR-FRONTEND-FUSION-1;
-29. 100a CODEBASE-LEAN-AUDIT-1;
-30. 100g FINAL-OPERATOR-UI-REPAIR-1;
-31. 100b CODEBASE-LEAN-CLEANUP-1;
-32. 100c FINAL-PRODUCT-DIRECTION-AUTHORITY-0 definition/queue re-derivation;
-33. 111 JARVIS-CONTEXT-ACTION-FOUNDATION-1;
-34. 112 PROJECT-KNOWLEDGE-CORE-1;
-35. 113 MODEL-DOSSIER-1;
-36. 114 LITERATURE-KNOWLEDGE-1;
-37. 115 PROJECT-SEARCH-1;
-38. 116 ROADMAP-CALENDAR-1;
-39. 117 BRAINSTORM-1;
-40. 118 CODING-REPOSITORY-TRUTH-1;
-41. 119 CODING-RUNTIME-TRUTH-1;
-42. 120 DEVELOPMENT-PIPELINE-STATE-1;
-43. 124 PROVIDER-SETTINGS-GENERIC-1;
-44. 121 JARVIS-PROJECT-KNOWLEDGE-ACTIONS-1;
-45. 122 JARVIS-DEVELOPMENT-ACTIONS-1;
-46. 123 JARVIS-CODING-ACTIONS-1;
-47. 125 SAFE-SELF-UPDATE-1;
-48. 126 LOCAL-TERMINAL-PTY-1;
-49. 102 ENGINEERING-EVIDENCE-CONTRACT-1, freshly re-derived when reached;
-50. 103 PROCESS-UPSTREAM-BAKEOFF-1;
-51. 104 PROCESS-STACK-STRANGLER-1;
-52. 105 ENGINEERING-DOMAIN-CLEANUP-1;
-53. 106 ENGINEERING-EVALUATOR-1;
-54. 107 PBR-EVALUATOR-1;
-55. 108 DESIGN-STUDY-CONTROLLER-1;
-56. 109 PROCESS-CAD-HANDOFF-1;
-57. 093 BLUEREV-SERIAL-TOPOLOGY-0, reordered after 109;
-58. 110 MULTIFIDELITY-ENGINEERING-1.
-
-PR #416 merged the 100c exact-master overlap/ownership audit and queue re-derivation on 2026-08-28. The re-derived order is now binding: Jarvis common context/action contracts first; Project Knowledge; Development; Coding truth and provider settings; incremental Jarvis domain actions; guarded self-update/terminal authority; and only then generalized engineering evidence plus the Process/Design sequence. Every newly allocated 111–126 row remains `planned` until its own definition/full-spec/readiness lifecycle authorizes implementation. Existing BLUECAD authority is preserved, Hermes 066–068 and 080 remain frozen, and Process topology/solver affordances remain truthful unavailable until the late engineering owners land.
-
-'''
-          pattern = r'The binding order is:\n\n.*?(?=The maintainer completed the 062 frontend design decision)'
-          text, n = re.subn(pattern, binding, text, flags=re.S)
-          assert n == 1, f'binding-order replacement count={n}'
-
-          priority = '''## Current priority and drafting order
-
-1. 100c FINAL-PRODUCT-DIRECTION-AUTHORITY-0 completed its definition/queue re-derivation through PR #416 from exact source master `f50eb0a1f5b246d5e6f6eabab3a033e9a8c5a5c5`. Its merged audit and ownership artifacts are planning authority only; 100c grants no runtime implementation authority.
-2. 111 JARVIS-CONTEXT-ACTION-FOUNDATION-1 is the next binding front. It is `planned`: derive its kernel/full spec/readiness from fresh exact master before any runtime implementation. Jarvis must remain an adapter over the current AI execution/policy spine, with explicit exact context refs and no second orchestration store.
-3. After 111, execute Project Knowledge 112–115, Development 116–117, Coding truth 118–120 plus provider/settings 124, then Jarvis domain adapters 121–123, guarded self-update 125 and security-gated terminal 126. Each row remains independently gated and one implementation front at a time.
-4. Re-derive/reorder 102 only after those operator-domain foundations, then preserve the late 103–110 engineering sequence with 093 after 109. BLUECAD remains preserved; Process topology/solver implementation stays late and cannot be fabricated by frontend state.
-5. 101 is superseded as a standalone row by 112; 055 is superseded as a standalone Project view; 064 and 069 remain trigger-deferred rather than immediate implementation fronts. Keep 066–068 and 080 frozen and 062 blocked/deferred.
-6. Preserve merged 059a/059b, 061a/061b, 075, 076, 077, 079, 082, 094, 070, 083, 084, 085, 086, 087, 088, 035, 089, 054, 090, 091, 029, 096, 071b, 092, 058c, 097, 098, 006b, 058b, 058d, 100, 100f, 100g, and 100b authority boundaries; definition-only 095 and 100c remain planning authority rather than runtime implementation identities.
-
-'''
-          pattern = r'## Current priority and drafting order\n\n.*?(?=## Registry)'
-          text, n = re.subn(pattern, priority, text, flags=re.S)
-          assert n == 1, f'priority replacement count={n}'
-
-          def replace_row(spec, row):
-              nonlocal_text = None
-              pattern = rf'^\| {re.escape(spec)} \|.*$'
-              global text
-              text, n = re.subn(pattern, row, text, count=1, flags=re.M)
-              assert n == 1, f'row {spec} replacement count={n}'
-
-          replace_row('055', '| 055 | cancelled | — | Project view | 100f, 100g | Superseded as a standalone owner by the final 100f/100g composition plus Project Knowledge owners 112–115; no second project store or peer Project page is authorized. |')
-          replace_row('064', '| 064 | planned | — | LIT-RAG-0 | 114, 115 | Trigger-deferred semantic retrieval extension only after 114/115 literal/structured search evidence proves insufficiency; it is not an immediate standalone implementation front and may not create a parallel knowledge store. |')
-          replace_row('069', '| 069 | planned | — | MEMORY-CONSOLIDATE-0 | 111 | Trigger-deferred while Hermes 066–068 remain frozen; reopen only under an explicit Hermes release and reuse canonical MemoryStore/proposal/context contracts rather than creating another memory authority. |')
-          replace_row('100c', '| 100c | planned | — | FINAL-PRODUCT-DIRECTION-AUTHORITY-0 | 100b | Definition/queue re-derivation merged through PR #416. The exact-master overlap audit, capability/interaction ownership map and canonical queue document are binding planning authority; 100c has no runtime implementation PR and the next front is planned 111. |')
-          replace_row('101', '| 101 | cancelled | — | CANONICAL-STATE-WRITE-1 | 040, 042, 071b, 098, 100b | Superseded as a standalone slice by 112 PROJECT-KNOWLEDGE-CORE-1 under merged 100c authority. Its valid canonical-write/lifecycle obligations remain mandatory inputs to 112; no parallel write layer may be built. |')
-          replace_row('102', '| 102 | planned | — | ENGINEERING-EVIDENCE-CONTRACT-1 | 044, 077 | Re-derive/reorder after the 111–126 operator-domain foundations; preserve existing 044/077 evidence authority and generalize only what later engineering evaluators actually require. |')
-
-          assert not re.search(r'^\| 111 \|', text, flags=re.M), '111 already exists unexpectedly'
-          anchor = re.search(r'^\| 110 \|.*$', text, flags=re.M)
-          assert anchor, '110 registry row missing'
-          rows = '''
-| 111 | planned | — | JARVIS-CONTEXT-ACTION-FOUNDATION-1 | 040, 042, 059b, 061a, 061b, 090, 091, 097 | Stable workspace/route/exact-ref context and generic capability/action contracts over the current AI execution/policy spine; explicit removable context, inspected preview/digest/provenance and fail-closed stale refs; no page business logic, Hermes runtime, second orchestration store or domain COMMIT/EXECUTE. |
-| 112 | planned | — | PROJECT-KNOWLEDGE-CORE-1 | 001, 035, 040, 042, 050, 051, 071b, 098, 111 | Canonical Project Basis write/change-set/working-revision, deterministic impact/revalidation and atomic reconciliation over existing engineering-record ownership; no second project/model store. |
-| 113 | planned | — | MODEL-DOSSIER-1 | 050, 051, 077, 112 | Read-only exact model/version/revision dossier over existing modeling/run/evidence/artifact/source owners with bounded disclosures; no canonical model writes. |
-| 114 | planned | — | LITERATURE-KNOWLEDGE-1 | 040, 042, 112 | Structured source/document/import/claim/datum/citation/location/used-by provenance bridged to existing file/source authority, with bounded safe preview/open; research/extraction stays proposal-only. |
-| 115 | planned | — | PROJECT-SEARCH-1 | 112, 113, 114 | Literal/structured project search returning exact owner/type/version/provenance as a read projection only; semantic retrieval remains trigger-deferred. |
-| 116 | planned | — | ROADMAP-CALENDAR-1 | 111 | Stable Roadmap work-item identity with deterministic gates plus separate real Calendar time-allocation entities and exact time-zone/link semantics; no Board store. |
-| 117 | planned | — | BRAINSTORM-1 | 111 | Immutable RAW capture and NEW/DISCUSSED/RECONCILED/SUPERSEDED lineage with explicit promotion proposals to Roadmap/Design/Coding; speech capture remains trigger-deferred. |
-| 118 | planned | — | CODING-REPOSITORY-TRUTH-1 | 111 | Server-side remote repository/ref/SHA/PR/check/review truth plus bounded Repository Inspector search/preview and exact safe GitHub URLs; no frontend GitHub token or duplicate repository truth. |
-| 119 | planned | — | CODING-RUNTIME-TRUTH-1 | 118 | Observe local executed path/ref/SHA/dirty/build/runtime identity and deterministic aligned/local-behind/divergent/unknown state; observation only, no update/restart authority. |
-| 120 | planned | — | DEVELOPMENT-PIPELINE-STATE-1 | 118 | Inspectable exact Proposal→Plan→Implementation→Tests→Independent Review→Reconciliation→Merge state with stale-gate invalidation; no hidden auto-merge or second queue. |
-| 121 | planned | — | JARVIS-PROJECT-KNOWLEDGE-ACTIONS-1 | 111, 112, 113, 114, 115 | Explicit exact context refs and stale-safe CONTEXT/PROPOSE actions over Project Basis, Models and Literature; domain COMMIT remains with Project Knowledge owners. |
-| 122 | planned | — | JARVIS-DEVELOPMENT-ACTIONS-1 | 111, 116, 117 | Explicit Development context basket and scheduling/reconciliation/Roadmap/promotion proposals; browsing remains context-neutral and acceptance stays domain-owned. |
-| 123 | planned | — | JARVIS-CODING-ACTIONS-1 | 111, 118, 119, 120 | Inspect/explain/context and Suggest modification as proposal/diff/plan only through accepted server-side development authority; no direct file mutation. |
-| 124 | planned | — | PROVIDER-SETTINGS-GENERIC-1 | 015, 018, 021, 059b, 061a, 082, 094, 111 | Provider/integration-scoped credential/config/status/test/catalogue/usage/budget/system projections over existing secure storage/provider/egress/policy owners; no model-scoped keys or Hermes claim. |
-| 125 | planned | — | SAFE-SELF-UPDATE-1 | 119, 120 | Guarded exact-target update/restart/rollback authority with dirty refusal, state preservation, migration/build/smoke/health and known-good rollback evidence; separate from observation and PTY. |
-| 126 | planned | — | LOCAL-TERMINAL-PTY-1 | 118, 119, 123 | Security-gated typed local PTY/session authority with validated cwd, scrubbed environment, secret-safe/redacted display boundary and explicit high-risk confirmation; remains unavailable until full security/readiness proof. |'''
-          pos = anchor.end()
-          text = text[:pos] + rows + text[pos:]
-
-          path.write_text(text, encoding='utf-8')
-          PY
           git diff --check
-          git diff -- docs/specs/STATUS.md
-      - name: Commit reconciliation and remove helper
-        run: |
           git config user.name "JarvisOS Roadmap Builder"
           git config user.email "actions@users.noreply.github.com"
-          git rm .github/workflows/reconcile-100c-once.yml
+          git rm .github/workflows/reconcile-100c-once.yml scripts/reconcile_100c_tmp.py
           git add docs/specs/STATUS.md
           git commit -m "Reconcile 100c binding queue"
           git push origin HEAD:reconcile/100c-queue-after-definition
