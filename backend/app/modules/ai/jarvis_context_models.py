@@ -49,6 +49,23 @@ class JarvisRouteDescriptor(BaseModel):
         return self
 
 
+class JarvisCapabilityDescriptor(BaseModel):
+    capability_id: str = Field(
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+    )
+    route_id: str = Field(min_length=1, max_length=96)
+    action_class: JarvisActionClass
+    label: str | None = Field(default=None, max_length=160)
+
+    @model_validator(mode="after")
+    def require_canonical_route_id(self) -> JarvisCapabilityDescriptor:
+        if self.route_id not in CANONICAL_ROUTE_PAIRS:
+            raise ValueError("capability route_id must be one frozen canonical route id")
+        return self
+
+
 class JarvisExactRef(BaseModel):
     workspace_id: str = Field(min_length=1, max_length=128)
     owner: str = Field(min_length=1, max_length=96, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,95}$")
