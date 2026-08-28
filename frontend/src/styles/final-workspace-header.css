@@ -1,13 +1,21 @@
 .final-fusion__workspace-head {
-  min-height: 104px;
-  padding: 14px 0 8px;
+  flex: 0 0 auto;
+  min-height: 0;
+  padding: 10px 0;
   display: grid;
-  align-content: start;
-  gap: 3px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "eyebrow tabs"
+    "title tabs"
+    "description tabs";
+  align-items: center;
+  column-gap: 20px;
+  row-gap: 2px;
   background: #fbfaf6;
 }
 
 .final-fusion__workspace-head .eyebrow {
+  grid-area: eyebrow;
   margin: 0;
   color: #6f786f;
   font-size: 8px;
@@ -16,6 +24,7 @@
 }
 
 .final-fusion__workspace-head h1 {
+  grid-area: title;
   margin: 0;
   font-size: 29px;
   line-height: 1.02;
@@ -24,14 +33,17 @@
 }
 
 .final-fusion__workspace-head > p:last-of-type {
+  grid-area: description;
   margin: 0;
   color: #687168;
   font-size: 11px;
 }
 
 .final-fusion__peer-tabs {
-  margin-top: 4px;
+  grid-area: tabs;
+  margin-top: 0;
   display: flex;
+  align-self: center;
   gap: 7px;
 }
 
@@ -56,7 +68,10 @@
 }
 
 .final-fusion__workspace-head + .final-fusion {
-  height: calc(100% - 104px);
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  height: auto;
 }
 
 .final-fusion__workspace-head + .final-fusion > .final-fusion__surface-head {
@@ -67,6 +82,13 @@
   .final-fusion__workspace-head {
     min-height: auto;
     padding: 10px 0 8px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "eyebrow"
+      "title"
+      "description"
+      "tabs";
+    align-items: start;
   }
 
   .final-fusion__workspace-head + .final-fusion {
@@ -74,6 +96,7 @@
   }
 
   .final-fusion__peer-tabs {
+    margin-top: 4px;
     overflow-x: auto;
   }
 }
