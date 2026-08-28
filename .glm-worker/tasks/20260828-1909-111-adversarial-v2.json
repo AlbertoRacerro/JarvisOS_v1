@@ -1,0 +1,14 @@
+{
+  "task_id": "20260828-1909-111-adversarial-v2",
+  "target_ref": "bb58153c444a2cdcb3e2f932287f48e7da577820",
+  "base_ref": "cf4bf1d2b4d2e242481c82bd493e082896ed6aeb",
+  "mode": "adversarial_pre_review",
+  "max_turns": 12,
+  "context_files": [
+    "AGENTS.md",
+    "docs/specs/STATUS.md",
+    "docs/specs/111-jarvis-context-action-foundation-1.md",
+    "docs/specs/111-readiness-2026-08-28.md"
+  ],
+  "instructions": "Adversarially review PR #425 exact head bb58153c444a2cdcb3e2f932287f48e7da577820 against the exact READY base and spec 111. Start with one batch read of the supplied context files and inspect_target_diff. Review only the current changed implementation files: backend/app/modules/ai/jarvis_context.py, jarvis_context_models.py, jarvis_context_routes.py, routes.py, thread_models.py, thread_service.py, backend/tests/test_ai_threads.py, backend/tests/test_jarvis_context.py; STATUS is evidence only and must never be edited. Verify readiness acceptance and failure modes, especially required tests 17-25, zero run_ai_task on stale/unknown/workspace/external exact-ref failures, explicit local-safe dispatch path, immutable request-id semantics, legacy context compatibility, empty production adapter registry, no COMMIT/EXECUTE authority, deterministic digest/context rebuild, and fail-closed stale/unavailable refs. If there is a concrete material defect with a smallest safe fix, produce a candidate patch only inside the readiness allow-list and run deterministic checks. Otherwise do not manufacture a patch: finish with an evidence-backed PASS. Do not reread unchanged files without a specific evidence gap. Workflow green alone is not PASS. Finish via submit_result once the verdict is supported."
+}
