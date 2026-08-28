@@ -1,0 +1,7 @@
+{
+  "task_id": "bootstrap-readonly-01",
+  "target_ref": "master",
+  "mode": "analysis",
+  "max_turns": 8,
+  "instructions": "Inspect the exact repository target. Read AGENTS.md, docs/specs/STATUS.md, and only the minimum additional files needed. Report: (1) the current binding implementation front and its lifecycle state; (2) up to three concrete read-only or proposal-only tasks that a cheap GLM worker could safely perform now without taking STATUS, merge, shared-integration, or provider-policy authority; (3) the strongest evidence path for each proposal. Do not edit files in this task. Keep the report under 500 words."
+}
