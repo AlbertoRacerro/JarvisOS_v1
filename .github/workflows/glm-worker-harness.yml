@@ -1,0 +1,148 @@
+name: Temporary GLM Worker Harness
+
+on:
+  push:
+    branches:
+      - experiment/glm-worker-harness
+    paths:
+      - ".glm-worker/tasks/*.json"
+
+permissions:
+  contents: read
+
+jobs:
+  glm-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout worker control plane
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          path: control
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Resolve immutable task packet
+        id: task
+        working-directory: control
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          before = os.environ["BEFORE_SHA"]
+          after = os.environ["AFTER_SHA"]
+          if before and set(before) != {"0"}:
+              cmd = ["git", "diff", "--name-only", before, after, "--", ".glm-worker/tasks"]
+          else:
+              cmd = ["git", "show", "--pretty=", "--name-only", after, "--", ".glm-worker/tasks"]
+          changed = subprocess.run(cmd, check=True, capture_output=True, text=True).stdout.splitlines()
+          tasks = [p for p in changed if p.startswith(".glm-worker/tasks/") and p.endswith(".json")]
+          if len(tasks) != 1:
+              raise SystemExit(f"expected exactly one immutable task packet, found {tasks}")
+
+          task_path = Path(tasks[0])
+          task = json.loads(task_path.read_text(encoding="utf-8"))
+          task_id = str(task.get("task_id", ""))
+          target_ref = str(task.get("target_ref", "master"))
+          if not re.fullmatch(r"[A-Za-z0-9._/-]{1,200}", target_ref) or target_ref.startswith("-"):
+              raise SystemExit("invalid target_ref")
+          if not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", task_id):
+              raise SystemExit("invalid task_id")
+          if not isinstance(task.get("instructions"), str) or not task["instructions"].strip():
+              raise SystemExit("task instructions are required")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"task_path={task_path.as_posix()}\n")
+              out.write(f"task_id={task_id}\n")
+              out.write(f"target_ref={target_ref}\n")
+          PY
+
+      - name: Checkout exact task target
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ steps.task.outputs.target_ref }}
+          path: workspace
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.11"
+
+      - name: Install pinned temporary harness dependency
+        run: python -m pip install --disable-pip-version-check "openai-agents==0.21.0"
+
+      - name: Record exact target SHA
+        id: target
+        working-directory: workspace
+        run: |
+          set -euo pipefail
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          test -z "$(git status --porcelain)"
+
+      - name: Run bounded GLM-5.3-Flash worker
+        id: worker
+        continue-on-error: true
+        env:
+          GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$GLM_API_KEY"
+          mkdir -p evidence
+          python control/tools/glm_worker_harness.py \
+            --task "control/${{ steps.task.outputs.task_path }}" \
+            --repo workspace \
+            --output evidence \
+            --model glm-5.3-flash \
+            --base-url https://api.z.ai/api/coding/paas/v4 \
+            > evidence/harness.stdout.txt \
+            2> evidence/harness.stderr.txt
+
+      - name: Prove target identity and bound evidence
+        if: always()
+        env:
+          EXPECTED_SHA: ${{ steps.target.outputs.sha }}
+          GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
+        run: |
+          set -euo pipefail
+          test "$(git -C workspace rev-parse HEAD)" = "$EXPECTED_SHA"
+          git -C workspace diff --check
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          secret = os.environ.get("GLM_API_KEY", "")
+          evidence = Path("evidence")
+          if not evidence.exists():
+              raise SystemExit("evidence directory missing")
+          for path in evidence.rglob("*"):
+              if not path.is_file():
+                  continue
+              if path.stat().st_size > 1_000_000:
+                  raise SystemExit(f"oversized evidence file: {path}")
+              text = path.read_text(encoding="utf-8", errors="replace")
+              if secret and secret in text:
+                  raise SystemExit(f"secret leaked into evidence: {path}")
+          PY
+
+      - name: Upload worker evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: glm-worker-${{ steps.task.outputs.task_id }}-${{ github.sha }}
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Fail if worker failed
+        if: steps.worker.outcome != 'success'
+        run: exit 1
