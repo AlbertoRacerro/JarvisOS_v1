@@ -752,3 +752,344 @@ def test_context_drift_race_returns_concurrently_reserved_duplicate(
             "SELECT COUNT(*) AS n FROM ai_jobs WHERE flow_id = ?",
             (result.flow_id,),
         ).fetchone()["n"] == 0
+
+
+def _jarvis_thread_request(workspace_id: str = "workspace-a", *, version: str = "v1"):
+    from app.modules.ai.jarvis_context_models import (
+        JarvisContextRequest,
+        JarvisExactRef,
+        JarvisRouteDescriptor,
+    )
+
+    return JarvisContextRequest(
+        workspace_id=workspace_id,
+        route=JarvisRouteDescriptor(
+            route_id="memory-project-basis",
+            canonical_path="/memory/project-basis",
+        ),
+        added_context_refs=[
+            JarvisExactRef(
+                workspace_id=workspace_id,
+                owner="test-owner",
+                kind="test-kind",
+                id="record-1",
+                version=version,
+            )
+        ],
+    )
+
+
+def _assert_zero_dispatch_state(*, workspace_id: str, thread_id: str) -> None:
+    with open_sqlite_connection() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) AS n FROM ai_thread_interactions WHERE thread_id = ?",
+            (thread_id,),
+        ).fetchone()["n"] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) AS n FROM ai_flows WHERE workspace_id = ?",
+            (workspace_id,),
+        ).fetchone()["n"] == 0
+        assert connection.execute(
+            "SELECT COUNT(*) AS n FROM ai_jobs",
+        ).fetchone()["n"] == 0
+
+
+def test_jarvis_context_binding_fields_must_be_supplied_as_a_pair() -> None:
+    request = _jarvis_thread_request()
+    digest = "sha256:" + "1" * 64
+
+    with pytest.raises(ValidationError):
+        AIThreadSubmit(
+            request_id="jarvis-request-only",
+            prompt="blocked",
+            jarvis_context=request,
+        )
+    with pytest.raises(ValidationError):
+        AIThreadSubmit(
+            request_id="jarvis-digest-only",
+            prompt="blocked",
+            expected_jarvis_context_digest=digest,
+        )
+
+
+def test_jarvis_owner_identity_drift_fails_before_reservation_or_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.modules.ai.jarvis_context import JarvisContextConflictError
+
+    workspace_id = "workspace-a"
+    _bootstrap_workspace(workspace_id)
+    thread = create_thread(AIThreadCreate(workspace_id=workspace_id))
+
+    def drifted_preview(*_args, **_kwargs):
+        raise JarvisContextConflictError("Jarvis context changed since inspected preview")
+
+    def unexpected_dispatch(**_kwargs):
+        raise AssertionError("stale inspected Jarvis context must not dispatch")
+
+    monkeypatch.setattr(thread_service, "require_dispatchable_preview", drifted_preview)
+    monkeypatch.setattr(thread_service, "run_ai_task", unexpected_dispatch)
+
+    with pytest.raises(AIThreadConflictError, match="changed since inspected preview"):
+        submit_interaction(
+            workspace_id=workspace_id,
+            thread_id=thread.id,
+            payload=AIThreadSubmit(
+                request_id="jarvis-drift",
+                prompt="blocked",
+                route_class="local:fast",
+                jarvis_context=_jarvis_thread_request(workspace_id),
+                expected_jarvis_context_digest="sha256:" + "2" * 64,
+            ),
+        )
+    _assert_zero_dispatch_state(workspace_id=workspace_id, thread_id=thread.id)
+
+
+def test_jarvis_context_workspace_mismatch_is_zero_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-a"
+    _bootstrap_workspace(workspace_id)
+    thread = create_thread(AIThreadCreate(workspace_id=workspace_id))
+
+    def unexpected_preview(*_args, **_kwargs):
+        raise AssertionError("workspace mismatch must fail before Jarvis preview rebuild")
+
+    def unexpected_dispatch(**_kwargs):
+        raise AssertionError("workspace mismatch must not dispatch")
+
+    monkeypatch.setattr(thread_service, "require_dispatchable_preview", unexpected_preview)
+    monkeypatch.setattr(thread_service, "run_ai_task", unexpected_dispatch)
+
+    with pytest.raises(AIThreadConflictError, match="workspace does not match"):
+        submit_interaction(
+            workspace_id=workspace_id,
+            thread_id=thread.id,
+            payload=AIThreadSubmit(
+                request_id="jarvis-workspace-mismatch",
+                prompt="blocked",
+                route_class="local:fast",
+                jarvis_context=_jarvis_thread_request("workspace-b"),
+                expected_jarvis_context_digest="sha256:" + "3" * 64,
+            ),
+        )
+    _assert_zero_dispatch_state(workspace_id=workspace_id, thread_id=thread.id)
+
+
+@pytest.mark.parametrize("resolution_state", ["unknown", "stale", "unavailable"])
+def test_jarvis_noncurrent_exact_ref_is_zero_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+    resolution_state: str,
+) -> None:
+    from app.modules.ai.jarvis_context import JarvisContextConflictError
+
+    workspace_id = "workspace-a"
+    _bootstrap_workspace(workspace_id)
+    thread = create_thread(AIThreadCreate(workspace_id=workspace_id))
+
+    def nondispatchable_preview(*_args, **_kwargs):
+        raise JarvisContextConflictError(
+            f"Jarvis context contains {resolution_state} exact refs"
+        )
+
+    def unexpected_dispatch(**_kwargs):
+        raise AssertionError("non-current exact ref must not dispatch")
+
+    monkeypatch.setattr(thread_service, "require_dispatchable_preview", nondispatchable_preview)
+    monkeypatch.setattr(thread_service, "run_ai_task", unexpected_dispatch)
+
+    with pytest.raises(AIThreadConflictError, match=resolution_state):
+        submit_interaction(
+            workspace_id=workspace_id,
+            thread_id=thread.id,
+            payload=AIThreadSubmit(
+                request_id=f"jarvis-{resolution_state}",
+                prompt="blocked",
+                route_class="local:fast",
+                jarvis_context=_jarvis_thread_request(workspace_id),
+                expected_jarvis_context_digest="sha256:" + "4" * 64,
+            ),
+        )
+    _assert_zero_dispatch_state(workspace_id=workspace_id, thread_id=thread.id)
+
+
+def test_jarvis_added_exact_refs_reject_external_route_before_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-a"
+    _bootstrap_workspace(workspace_id)
+    thread = create_thread(AIThreadCreate(workspace_id=workspace_id))
+
+    def unexpected_preview(*_args, **_kwargs):
+        raise AssertionError("external exact-ref route must fail before preview dispatchability")
+
+    def unexpected_dispatch(**_kwargs):
+        raise AssertionError("external exact-ref route must not dispatch")
+
+    monkeypatch.setattr(thread_service, "require_dispatchable_preview", unexpected_preview)
+    monkeypatch.setattr(thread_service, "run_ai_task", unexpected_dispatch)
+
+    with pytest.raises(AIThreadConflictError, match="unavailable for external routes"):
+        submit_interaction(
+            workspace_id=workspace_id,
+            thread_id=thread.id,
+            payload=AIThreadSubmit(
+                request_id="jarvis-external",
+                prompt="blocked",
+                route_class="cloud:smart",
+                jarvis_context=_jarvis_thread_request(workspace_id),
+                expected_jarvis_context_digest="sha256:" + "5" * 64,
+            ),
+        )
+    _assert_zero_dispatch_state(workspace_id=workspace_id, thread_id=thread.id)
+
+
+def test_jarvis_local_safe_route_reuses_ai_execution_and_thread_persistence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-a"
+    _bootstrap_workspace(workspace_id)
+    thread = create_thread(AIThreadCreate(workspace_id=workspace_id))
+    request = _jarvis_thread_request(workspace_id)
+    digest = "sha256:" + "6" * 64
+    blocks = [{"kind": "jarvis_exact_ref", "content": {"value": "inspected"}}]
+    preview_calls = 0
+
+    def current_preview(context_request, expected_digest):
+        nonlocal preview_calls
+        preview_calls += 1
+        assert context_request == request
+        assert expected_digest == digest
+        return SimpleNamespace(blocks=blocks)
+
+    monkeypatch.setattr(thread_service, "require_dispatchable_preview", current_preview)
+
+    interaction = submit_interaction(
+        workspace_id=workspace_id,
+        thread_id=thread.id,
+        payload=AIThreadSubmit(
+            request_id="jarvis-local-safe",
+            prompt="use inspected exact ref",
+            route_class="local:fast",
+            jarvis_context=request,
+            expected_jarvis_context_digest=digest,
+        ),
+    ).interaction
+
+    assert preview_calls == 1
+    assert interaction.persistence_state == "captured"
+    assert interaction.flow_state == "complete"
+    assert interaction.attempt_count == 1
+    with open_sqlite_connection() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) AS n FROM ai_jobs WHERE flow_id = ?",
+            (interaction.flow_id,),
+        ).fetchone()["n"] == 1
+
+
+def test_jarvis_unchanged_retry_is_durable_and_dispatches_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_id = "workspace-a"
+    _bootstrap_workspace(workspace_id)
+    thread = create_thread(AIThreadCreate(workspace_id=workspace_id))
+    request = _jarvis_thread_request(workspace_id)
+    digest = "sha256:" + "7" * 64
+    preview_calls = 0
+
+    def current_preview(_request, _digest):
+        nonlocal preview_calls
+        preview_calls += 1
+        return SimpleNamespace(blocks=[{"kind": "jarvis_exact_ref", "content": "current"}])
+
+    monkeypatch.setattr(thread_service, "require_dispatchable_preview", current_preview)
+    payload = AIThreadSubmit(
+        request_id="jarvis-idempotent",
+        prompt="one dispatch",
+        route_class="local:fast",
+        jarvis_context=request,
+        expected_jarvis_context_digest=digest,
+    )
+
+    first = submit_interaction(
+        workspace_id=workspace_id,
+        thread_id=thread.id,
+        payload=payload,
+    ).interaction
+    duplicate = submit_interaction(
+        workspace_id=workspace_id,
+        thread_id=thread.id,
+        payload=payload,
+    ).interaction
+
+    assert duplicate.id == first.id
+    assert duplicate.flow_id == first.flow_id
+    assert preview_calls == 1
+    with open_sqlite_connection() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) AS n FROM ai_jobs WHERE flow_id = ?",
+            (first.flow_id,),
+        ).fetchone()["n"] == 1
+
+
+@pytest.mark.parametrize("changed_semantics", ["route", "ref", "digest"])
+def test_jarvis_request_id_rejects_changed_bound_semantics(
+    monkeypatch: pytest.MonkeyPatch,
+    changed_semantics: str,
+) -> None:
+    workspace_id = "workspace-a"
+    _bootstrap_workspace(workspace_id)
+    thread = create_thread(AIThreadCreate(workspace_id=workspace_id))
+    request = _jarvis_thread_request(workspace_id, version="v1")
+    digest = "sha256:" + "8" * 64
+
+    monkeypatch.setattr(
+        thread_service,
+        "require_dispatchable_preview",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            blocks=[{"kind": "jarvis_exact_ref", "content": "current"}]
+        ),
+    )
+    first_payload = AIThreadSubmit(
+        request_id="jarvis-immutable",
+        prompt="immutable semantics",
+        route_class="local:fast",
+        jarvis_context=request,
+        expected_jarvis_context_digest=digest,
+    )
+    first = submit_interaction(
+        workspace_id=workspace_id,
+        thread_id=thread.id,
+        payload=first_payload,
+    ).interaction
+
+    changed_route = "local:smart" if changed_semantics == "route" else "local:fast"
+    changed_request = (
+        _jarvis_thread_request(workspace_id, version="v2")
+        if changed_semantics == "ref"
+        else request
+    )
+    changed_digest = "sha256:" + "9" * 64 if changed_semantics == "digest" else digest
+    second_payload = AIThreadSubmit(
+        request_id="jarvis-immutable",
+        prompt="immutable semantics",
+        route_class=changed_route,
+        jarvis_context=changed_request,
+        expected_jarvis_context_digest=changed_digest,
+    )
+
+    with pytest.raises(AIThreadConflictError, match="different submit semantics"):
+        submit_interaction(
+            workspace_id=workspace_id,
+            thread_id=thread.id,
+            payload=second_payload,
+        )
+    with open_sqlite_connection() as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) AS n FROM ai_thread_interactions WHERE thread_id = ?",
+            (thread.id,),
+        ).fetchone()["n"] == 1
+        assert connection.execute(
+            "SELECT COUNT(*) AS n FROM ai_jobs WHERE flow_id = ?",
+            (first.flow_id,),
+        ).fetchone()["n"] == 1
