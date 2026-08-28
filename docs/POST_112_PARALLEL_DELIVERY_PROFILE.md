@@ -27,11 +27,15 @@ If disjointness cannot be proved, only the conflicting slices remain serial. Ind
 
 Scheduler identities are generic ChatGPT compute slots. Integration, Knowledge, Development, and Coding are **logical responsibilities acquired dynamically**, not permanent automation identities.
 
-The post-112 deployment may use multiple staggered ChatGPT scheduler replicas, but:
+The post-112 deployment may use multiple staggered ChatGPT scheduler replicas only when the scheduler/control plane provides a **proved atomic global writer lease** shared by every replica. The lease must have one atomic acquire-or-fail operation, one owner identity, a bounded freshness/expiry rule, owner-only release, and deterministic stale-owner recovery. Acquisition happens before every GitHub/shared-authority mutation; failure to acquire means exit without mutation. A read-then-write convention, task-title convention, local process state, or repository workflow concurrency group that does not cover the external schedulers is not an adequate mutex.
+
+Until such an atomic lease is evidenced for the deployed scheduler replicas, **at most one ChatGPT writer scheduler may be enabled**. Additional scheduler slots may exist only disabled or as non-mutating observers. This fail-closed fallback preserves the one-writer invariant without inventing a repository-side lock implementation.
+
+When the atomic lease is available:
 
 - **only one ChatGPT coordinator/writer may hold the global repository/shared-authority mutex at a time**;
 - the lock holder temporarily owns Integration responsibilities and may service any currently authorized lane;
-- another ChatGPT scheduler that observes a fresh writer lock exits without mutation;
+- another ChatGPT scheduler that fails lease acquisition exits without mutation;
 - logical lane ownership is acquired for the current bounded action and released when that action is complete;
 - no two writers may mutate the same PR/head or shared authority concurrently.
 
