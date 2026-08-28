@@ -143,7 +143,7 @@ def _block_for(resolved: JarvisResolvedRef) -> dict[str, object]:
         ensure_ascii=False,
     )
     return {
-        "source": f"jarvis:{resolved.ref.owner}:{resolved.ref.kind}:{resolved.ref.id}",
+        "source": f"jarvis:{resolved.ref.owner}:{resolved.ref.kind}",
         "type": "jarvis_exact_ref",
         "id": resolved.ref.id,
         "content": content,
