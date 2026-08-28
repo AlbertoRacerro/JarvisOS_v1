@@ -88,7 +88,11 @@ class JarvisContextRequest(BaseModel):
     route: JarvisRouteDescriptor
     selected_refs: list[JarvisExactRef] = Field(default_factory=list, max_length=50)
     added_context_refs: list[JarvisExactRef] = Field(default_factory=list, max_length=50)
-    budget_chars: int = Field(default=DEFAULT_CONTEXT_BUDGET_CHARS, ge=0, le=200_000)
+    budget_chars: int = Field(
+        default=DEFAULT_CONTEXT_BUDGET_CHARS,
+        ge=0,
+        le=DEFAULT_CONTEXT_BUDGET_CHARS,
+    )
 
 
 class JarvisResolvedRef(BaseModel):
