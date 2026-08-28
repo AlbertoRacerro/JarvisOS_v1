@@ -2,6 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.modules.ai.jarvis_context_models import JarvisContextRequest
 from app.modules.ai.models import ContextPackSelectionRequest
 
 PersistenceState = Literal["reserved", "dispatching", "captured", "capture_failed"]
@@ -20,11 +21,19 @@ class AIThreadSubmit(BaseModel):
     max_tokens: int | None = Field(default=None, gt=0)
     context_selection: ContextPackSelectionRequest | None = None
     expected_context_digest: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
+    jarvis_context: JarvisContextRequest | None = None
+    expected_jarvis_context_digest: str | None = Field(
+        default=None, pattern=r"^sha256:[0-9a-f]{64}$"
+    )
 
     @model_validator(mode="after")
     def validate_context_binding(self) -> "AIThreadSubmit":
         if (self.context_selection is None) != (self.expected_context_digest is None):
             raise ValueError("context_selection and expected_context_digest must be supplied together")
+        if (self.jarvis_context is None) != (self.expected_jarvis_context_digest is None):
+            raise ValueError(
+                "jarvis_context and expected_jarvis_context_digest must be supplied together"
+            )
         return self
 
 
