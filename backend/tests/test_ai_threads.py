@@ -970,7 +970,7 @@ def test_jarvis_local_safe_route_reuses_ai_execution_and_thread_persistence(
         payload=AIThreadSubmit(
             request_id="jarvis-local-safe",
             prompt="use inspected exact ref",
-            route_class="local:fast",
+            route_class="local:fake",
             jarvis_context=request,
             expected_jarvis_context_digest=digest,
         ),
