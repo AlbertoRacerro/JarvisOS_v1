@@ -13,6 +13,7 @@ from app.modules.ai.flow_grade_cohort_routes import (
 )
 from app.modules.ai.flow_grade_routes import router as flow_grade_router
 from app.modules.ai.gateway import AIGateway
+from app.modules.ai.jarvis_context_routes import router as jarvis_context_router
 from app.modules.ai.models import (
     AISettingsRead,
     AISettingsUpdate,
@@ -41,6 +42,7 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 router.include_router(flow_grade_router)
 router.include_router(flow_grade_cohort_router)
 router.include_router(thread_router)
+router.include_router(jarvis_context_router)
 
 
 @router.get("/settings", response_model=AISettingsRead)
