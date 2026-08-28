@@ -1,0 +1,193 @@
+name: Hermes GLM Worker Experiment
+
+on:
+  pull_request:
+    branches:
+      - master
+    types: [opened, synchronize, reopened]
+    paths:
+      - .github/workflows/hermes-glm-worker-experiment.yml
+      - docs/experiments/HERMES_GLM_WORKER_EXPERIMENT_2026-08-28.md
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hermes-glm-worker-experiment-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  read-only-smoke:
+    if: github.event.pull_request.head.ref == 'experiment/hermes-glm-worker'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Prove exact clean checkout
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          git diff --exit-code
+          test -z "$(git status --porcelain)"
+
+      - name: Install pinned Hermes Agent core
+        shell: bash
+        env:
+          HERMES_UPSTREAM_SHA: 306db2776c6b6f1acc85c31c4dabba3263f0e9fd
+        run: |
+          set -euo pipefail
+          git clone --filter=blob:none https://github.com/NousResearch/hermes-agent.git "$RUNNER_TEMP/hermes-agent"
+          git -C "$RUNNER_TEMP/hermes-agent" checkout --detach "$HERMES_UPSTREAM_SHA"
+          test "$(git -C "$RUNNER_TEMP/hermes-agent" rev-parse HEAD)" = "$HERMES_UPSTREAM_SHA"
+          python -m pip install --disable-pip-version-check "$RUNNER_TEMP/hermes-agent"
+          hermes --version
+
+      - name: Prepare bounded smoke prompt
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/hermes-home" "$RUNNER_TEMP/hermes-safe-write" "$RUNNER_TEMP/hermes-smoke"
+          cat > "$RUNNER_TEMP/hermes-prompt.txt" <<EOF
+          You are an untrusted read-only preflight reviewer for JarvisOS_v1.
+
+          Repository checkout expected HEAD: ${EXPECTED_HEAD}
+
+          Use only the available file tools. Do not write, patch, create, rename, delete, or modify any file. Do not ask for or reveal environment variables, credentials, API keys, tokens, or secrets.
+
+          Inspect the repository itself. Required reads:
+          1. AGENTS.md
+          2. docs/specs/STATUS.md
+          3. locate and inspect the relevant docs/specs/111* specification material that exists in this checkout
+
+          Return a concise Markdown report with exactly these headings:
+          # HEAD
+          # CURRENT_BINDING_FRONT
+          # HARD_INVARIANTS
+          # SPEC_111_OWNER_SEAM
+          # MATERIAL_FAILURE_MODE
+          # WORKER_VERDICT
+
+          Requirements:
+          - HEAD: state the expected checkout SHA above and whether repository evidence is consistent with it; never invent another SHA.
+          - CURRENT_BINDING_FRONT: report the current binding front and lifecycle state strictly from STATUS.md.
+          - HARD_INVARIANTS: list at least three concrete hard invariants from AGENTS.md.
+          - SPEC_111_OWNER_SEAM: identify one exact existing owner seam that 111 must reuse rather than duplicate, with repository path(s).
+          - MATERIAL_FAILURE_MODE: identify one concrete failure mode that a future 111 implementation must fail closed on.
+          - WORKER_VERDICT: PASS, PARTIAL, or FAIL for usefulness of Hermes+GLM as a cheap read-only repository preflight worker, followed by one short reason.
+          - If evidence is missing or ambiguous, say unavailable/unknown rather than guessing.
+          EOF
+
+      - name: Run Hermes with GLM-4.7-Flash and gate output
+        shell: bash
+        env:
+          GLM_API_KEY: ${{ secrets.GLM_API_KEY }}
+          HERMES_HOME: ${{ runner.temp }}/hermes-home
+          HERMES_WRITE_SAFE_ROOT: ${{ runner.temp }}/hermes-safe-write
+        run: |
+          set -euo pipefail
+          if [ -z "${GLM_API_KEY:-}" ]; then
+            echo "GLM_API_KEY secret is unavailable to this workflow."
+            exit 2
+          fi
+
+          cd "$GITHUB_WORKSPACE"
+          set +e
+          hermes chat \
+            --oneshot \
+            --quiet \
+            --provider zai \
+            --model glm-4.7-flash \
+            --toolsets file \
+            --ignore-user-config \
+            --source tool \
+            --max-turns 12 \
+            --query-file "$RUNNER_TEMP/hermes-prompt.txt" \
+            --usage-file "$RUNNER_TEMP/hermes-smoke/usage.json" \
+            > "$RUNNER_TEMP/hermes-smoke/report.md" \
+            2> "$RUNNER_TEMP/hermes-stderr.txt"
+          rc=$?
+          set -e
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          key = os.environ.get("GLM_API_KEY", "")
+          report_path = Path(os.environ["RUNNER_TEMP"]) / "hermes-smoke" / "report.md"
+          usage_path = Path(os.environ["RUNNER_TEMP"]) / "hermes-smoke" / "usage.json"
+          stderr_path = Path(os.environ["RUNNER_TEMP"]) / "hermes-stderr.txt"
+          report = report_path.read_text(encoding="utf-8", errors="replace") if report_path.exists() else ""
+          stderr = stderr_path.read_text(encoding="utf-8", errors="replace") if stderr_path.exists() else ""
+
+          if key and (key in report or key in stderr):
+              raise SystemExit("Secret leak detected in Hermes output")
+          size = len(report.encode("utf-8"))
+          if size < 40 or size > 65536:
+              raise SystemExit(f"Hermes report size outside bounds: {size}")
+          if not usage_path.exists():
+              raise SystemExit("Hermes usage report missing")
+          usage = json.loads(usage_path.read_text(encoding="utf-8"))
+          provider = str(usage.get("provider", "")).lower()
+          model = str(usage.get("model", "")).lower()
+          if provider != "zai":
+              raise SystemExit(f"Unexpected provider in usage report: {provider!r}")
+          if "glm-4.7-flash" not in model:
+              raise SystemExit(f"Unexpected model in usage report: {model!r}")
+
+          metadata = {
+              "provider": provider,
+              "model": model,
+              "report_bytes": size,
+              "api_calls": usage.get("api_calls"),
+              "input_tokens": usage.get("input_tokens"),
+              "output_tokens": usage.get("output_tokens"),
+              "total_tokens": usage.get("total_tokens"),
+              "completed": usage.get("completed"),
+              "failed": usage.get("failed"),
+          }
+          (Path(os.environ["RUNNER_TEMP"]) / "hermes-smoke" / "metadata.json").write_text(
+              json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+          if [ "$rc" -ne 0 ]; then
+            echo "Hermes invocation failed with exit code $rc (stderr intentionally not printed)."
+            exit "$rc"
+          fi
+
+      - name: Prove Hermes did not mutate repository
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          git diff --exit-code
+          test -z "$(git status --porcelain)"
+
+      - name: Upload bounded smoke evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: hermes-glm-read-only-smoke-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/hermes-smoke
+          if-no-files-found: error
+          retention-days: 7
