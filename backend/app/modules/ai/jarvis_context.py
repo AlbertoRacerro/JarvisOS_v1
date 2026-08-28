@@ -4,7 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import Protocol
 
-from app.modules.ai.context_builder import canonical_digest
+from app.modules.ai.context_builder import DEFAULT_CONTEXT_BUDGET_CHARS, canonical_digest
 from app.modules.ai.jarvis_context_models import (
     JarvisActionClass,
     JarvisCapabilityDescriptor,
@@ -14,6 +14,8 @@ from app.modules.ai.jarvis_context_models import (
     JarvisExactRef,
     JarvisResolvedRef,
 )
+
+MAX_ADAPTER_PREVIEW_EVIDENCE_CHARS = DEFAULT_CONTEXT_BUDGET_CHARS
 
 
 class JarvisContextError(ValueError):
@@ -67,7 +69,7 @@ class JarvisContextAdapterRegistry:
         if "COMMIT" in resolved.action_classes or "EXECUTE" in resolved.action_classes:
             raise JarvisContextError("context adapter exposed forbidden common COMMIT/EXECUTE authority")
         try:
-            json.dumps(
+            serialized_evidence = json.dumps(
                 {"content": resolved.content, "provenance": resolved.provenance},
                 sort_keys=True,
                 separators=(",", ":"),
@@ -77,6 +79,8 @@ class JarvisContextAdapterRegistry:
             raise JarvisContextError(
                 "context adapter returned non-serializable preview evidence"
             ) from exc
+        if len(serialized_evidence) > MAX_ADAPTER_PREVIEW_EVIDENCE_CHARS:
+            raise JarvisContextError("context adapter returned oversized preview evidence")
         return resolved
 
 
