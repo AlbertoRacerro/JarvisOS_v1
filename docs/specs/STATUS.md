@@ -95,22 +95,22 @@ The binding order is:
 27. 100 VISUAL-IDENTITY-1;
 28. 100f FINAL-OPERATOR-FRONTEND-FUSION-1;
 29. 100a CODEBASE-LEAN-AUDIT-1;
-30. 100b CODEBASE-LEAN-CLEANUP-1;
-31. 100c FINAL-PRODUCT-DIRECTION-AUTHORITY-0;
-32. 101 CANONICAL-STATE-WRITE-1;
-33. 102 ENGINEERING-EVIDENCE-CONTRACT-1;
-34. 103 PROCESS-UPSTREAM-BAKEOFF-1;
-35. 104 PROCESS-STACK-STRANGLER-1;
-36. 105 ENGINEERING-DOMAIN-CLEANUP-1;
-37. 106 ENGINEERING-EVALUATOR-1;
-38. 107 PBR-EVALUATOR-1;
-39. 108 DESIGN-STUDY-CONTROLLER-1;
-40. 109 PROCESS-CAD-HANDOFF-1;
-41. 110 MULTIFIDELITY-ENGINEERING-1.
+30. 100g FINAL-OPERATOR-UI-REPAIR-1;
+31. 100b CODEBASE-LEAN-CLEANUP-1;
+32. 100c FINAL-PRODUCT-DIRECTION-AUTHORITY-0;
+33. 101 CANONICAL-STATE-WRITE-1;
+34. 102 ENGINEERING-EVIDENCE-CONTRACT-1;
+35. 103 PROCESS-UPSTREAM-BAKEOFF-1;
+36. 104 PROCESS-STACK-STRANGLER-1;
+37. 105 ENGINEERING-DOMAIN-CLEANUP-1;
+38. 106 ENGINEERING-EVALUATOR-1;
+39. 107 PBR-EVALUATOR-1;
+40. 108 DESIGN-STUDY-CONTROLLER-1;
+41. 109 PROCESS-CAD-HANDOFF-1;
+42. 110 MULTIFIDELITY-ENGINEERING-1.
 
-Items 27–41 are the maintainer-approved post-functional-beta extension registered on
-2026-08-21 and amended on 2026-08-27 after the final operator-product preservation packet merged through PR #388. Item 27 is `merged` through implementation PR #371; item 28 is `merged` through implementation PR #390 under the merged 100f full specification/readiness and the eleven-reference preservation packet. On 2026-08-28 the maintainer explicitly released the hold for the full lifecycle of 100a and the bounded 100b derivation described below; 100c and 101–110 remain held. Their order
-encodes the zero-sunk-cost rule while requiring the complete canonical frontend fusion before lean audit/cleanup and later backend/domain work.
+Items 27–42 are the maintainer-approved post-functional-beta extension registered on
+2026-08-21, amended on 2026-08-27 after the final operator-product preservation packet merged through PR #388, and updated on 2026-08-28 by the maintainer release that inserts 100g before 100b. Item 27 is `merged` through implementation PR #371; item 28 is `merged` through implementation PR #390 under the merged 100f full specification/readiness and the eleven-reference preservation packet. The current release authorizes 100g first, then the frozen 100b C1 runtime cleanup only after 100g is merged and reconciled, then definition-only 100c queue re-derivation. Their order encodes the time-to-useful and zero-sunk-cost rules while preserving the complete canonical frontend fusion before later backend/domain work.
 
 The maintainer completed the 062 frontend design decision on 2026-08-17: no permanent
 `Was this useful?` grading control belongs in normal Jarvis chat. Existing 062 backend/evaluation
@@ -135,12 +135,12 @@ it changes. Silent abandonment or substitution is not authorized.
 
 ## Current priority and drafting order
 
-1. 100f FINAL-OPERATOR-FRONTEND-FUSION-1 is `merged` through implementation PR #390 after PR #388 merged the final operator-product preservation packet. The eleven canonical HTML targets are fused in the production React/Vite shell under `100f-final-operator-frontend-fusion-1.md` and `100f-readiness-2026-08-27.md`. The 2026-08-28 maintainer release lifts the post-100f inspection hold only for the complete 100a lifecycle and then the bounded 100b derivation/disposition; it does not authorize 100c or 101–110.
-2. 100a CODEBASE-LEAN-AUDIT-1 is `merged` through implementation PR #405. Its exact audit artifact `docs/audits/100a-codebase-lean-audit-faddf39.md` records a single bounded `CLEANUP` candidate for fresh 100b derivation and no runtime mutation.
-3. 100b CODEBASE-LEAN-CLEANUP-1 full spec and readiness are merged through docs-only PR #406 with outcome `CLEANUP`. The sole frozen candidate is C1, and runtime implementation is maintainer-gated; stop at `100b=ready` until explicit maintainer review authorizes any source mutation.
-4. Preserve merged 059a/059b, 061a/061b, 075, 076, 077, 079, 082, 094, 070, 083, 084, 085, 086, 087, 088, 035, 089, 054, 090, 091, 029, 096, 071b, 092, 058c, 097, 098, 006b, 058b, 058d, 100, and 100f authority boundaries; definition-only 095 remains non-implementation authority.
-5. Preserve the merged documentation/evidence from 047–049, 072, 075 and cancelled 078 as incumbent/reference evidence with zero sunk-cost privilege during 103; 107 is the sole future integrated PBR evaluator implementation authority after 103/106.
-6. Keep 066–068 and 080 frozen; keep 062 itself blocked/deferred while allowing the operator-workstation queue to proceed without routine grading UI. Keep 100b `ready` and held for maintainer review of the frozen CLEANUP set; keep 100c and 101–110 `planned` and held.
+1. 100f FINAL-OPERATOR-FRONTEND-FUSION-1 is `merged` through implementation PR #390 after PR #388 merged the final operator-product preservation packet. The eleven canonical HTML targets remain the production composition authority.
+2. 100a CODEBASE-LEAN-AUDIT-1 is `merged` through implementation PR #405. Its exact audit artifact `docs/audits/100a-codebase-lean-audit-faddf39.md` records zero DELETE dispositions and one bounded cleanup candidate.
+3. 100g FINAL-OPERATOR-UI-REPAIR-1 is the sole current runtime front. Full spec `100g-final-operator-ui-repair-1.md` and readiness `100g-readiness-2026-08-28.md` merged through docs-only PR #408. It is `ready` to fix only the Memory/Development/Coding header dead-space regression and the cross-surface peer-tab language inconsistency, with exact-head browser proof required.
+4. 100b CODEBASE-LEAN-CLEANUP-1 remains `ready` but hard-depends on merged 100g before implementation. Its frozen candidate set is exactly C1 from PR #406/#407; the 2026-08-28 maintainer release authorizes that runtime cleanup only after 100g implementation and reconciliation are merged.
+5. 100c FINAL-PRODUCT-DIRECTION-AUTHORITY-0 remains `planned` until 100b is merged and reconciled. The maintainer release authorizes definition/queue re-derivation only, not runtime implementation inside 100c.
+6. Preserve merged 059a/059b, 061a/061b, 075, 076, 077, 079, 082, 094, 070, 083, 084, 085, 086, 087, 088, 035, 089, 054, 090, 091, 029, 096, 071b, 092, 058c, 097, 098, 006b, 058b, 058d, 100, and 100f authority boundaries; definition-only 095 remains non-implementation authority. Keep 066–068 and 080 frozen and 062 blocked/deferred.
 
 ## Registry
 
@@ -260,8 +260,9 @@ it changes. Silent abandonment or substitution is not authorized.
 | 100 | merged | [#371](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/371) | VISUAL-IDENTITY-1 | 097, 098, 058b, 058d | Full spec merged through PR #368, readiness through PR #369, and the bounded frontend-only visual-identity implementation through PR #371. The post-100 maintainer visual-inspection hold was released on 2026-08-27 by `docs/design-references/VISUAL_IDENTITY_MAINTAINER_RELEASE_2026-08-27.md`; preserve product/engineering authority and require the normal lifecycle before later work. |
 | 100f | merged | [#390](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/390) | FINAL-OPERATOR-FRONTEND-FUSION-1 | 058d, 100 | PR #388 merged the final eleven-reference preservation packet; full spec `100f-final-operator-frontend-fusion-1.md`, readiness `100f-readiness-2026-08-27.md`, and implementation PR #390 are merged. The frontend-only production fusion preserves all eleven canonical operator surfaces over existing truthful backend authority, keeps missing future actions explicitly unavailable, and activates the mandatory maintainer-inspection hold before 100a/100b/100c or backend work. |
 | 100a | merged | [#405](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/405) | CODEBASE-LEAN-AUDIT-1 | 100 | Implementation PR #405 merged the audit-only evidence artifact `docs/audits/100a-codebase-lean-audit-faddf39.md`, audited exact source SHA `faddf39aaae7513943fd337f352de905626120ca`, and found zero DELETE dispositions plus one bounded high-confidence MERGE candidate for fresh 100b derivation; no runtime cleanup or semantic mutation occurred. |
-| 100b | ready | — | CODEBASE-LEAN-CLEANUP-1 | 100a | Docs-only PR #406 merged the fresh full spec and `READY / CLEANUP` readiness decision. The frozen candidate set is exactly C1: merge `frontend/src/api/finalOperatorReads.ts` into the shared `frontend/src/api/client.ts` and update its sole evidenced fusion consumer, preserving truthful reads and 098 lifecycle fields. Runtime implementation remains maintainer-gated; `NEXT_EXACT_ACTION=MAINTAINER REVIEW OF 100b CLEANUP SET`. |
-| 100c | planned | — | FINAL-PRODUCT-DIRECTION-AUTHORITY-0 | 100b | Definition-only post-cleanup authority kernel preserved by PR #388. Re-derive the remaining operator-product/backend queue from exact post-100b master without runtime implementation, duplicate truth stores or ad-hoc promotion of the reference packet. |
+| 100g | ready | — | FINAL-OPERATOR-UI-REPAIR-1 | 100f | Full spec `100g-final-operator-ui-repair-1.md` and readiness `100g-readiness-2026-08-28.md` merged through docs-only PR #408. Authorizes exactly two frontend-only repairs: compact horizontal workspace-header composition for Memory/Development/Coding and one neutral/soft-accent peer-tab language across Design, Memory, Development, Coding and Settings, preserving Process/BLUECAD structural semantics and requiring deterministic plus exact-head browser proof. |
+| 100b | ready | — | CODEBASE-LEAN-CLEANUP-1 | 100a, 100g | Docs-only PR #406 merged the fresh full spec and `READY / CLEANUP` readiness decision. The frozen candidate set is exactly C1: merge `frontend/src/api/finalOperatorReads.ts` into the shared `frontend/src/api/client.ts` and update its sole evidenced fusion consumer, preserving truthful reads and 098 lifecycle fields. Runtime implementation is authorized only after 100g is implementation-merged and registry-reconciled. |
+| 100c | planned | — | FINAL-PRODUCT-DIRECTION-AUTHORITY-0 | 100b | Definition-only post-cleanup authority kernel preserved by PR #388. After 100b is merged and reconciled, the 2026-08-28 maintainer release authorizes fresh definition/queue re-derivation from exact master; 100c itself performs no runtime implementation. |
 | 101 | planned | — | CANONICAL-STATE-WRITE-1 | 040, 042, 071b, 098, 100b | Unify legacy modeling CRUD and MemoryStore/canonical record transitions behind one server-owned write-intent/lifecycle/audit boundary; separate Parameter record lifecycle from value/evidence quality and prevent proposed records from entering authoritative context by value-quality alone. |
 | 102 | planned | — | ENGINEERING-EVIDENCE-CONTRACT-1 | 044, 077, 101 | Generalize evaluator/evidence metadata for producer/version, digests, units, fidelity, validity domain, qualification, known exclusions, uncertainty and typed outcomes while preserving current solver-specific evidence and egress lineage. |
 | 103 | planned | — | PROCESS-UPSTREAM-BAKEOFF-1 | 047, 048, 049, 075, 100, 102 | Re-evaluate the custom process stack from zero against current upstreams such as IDAES/Pyomo/WaterTAP, BioSTEAM/QSDsan, CasADi/OpenMDAO, DWSIM/CAPE-OPEN and property libraries; produce explicit KEEP/WRAP/REPLACE/DELETE decisions with license, dynamics/recycle, optimization, diagnostics, Windows/local and qualification evidence. |
@@ -292,4 +293,4 @@ it changes. Silent abandonment or substitution is not authorized.
   sole future integrated PBR evaluator implementation authority after 103/106.
 - IDs 081–099 are reserved by FRONTEND-BETA-AUTHORITY-0 plus the 094 normal-spine re-derivation, 095 operator-workstation re-derivation, and the 099 emergency security interrupt as recorded in the registry;
   all references use the canonical three-digit form required by the registry gate, with existing suffix form reused only where explicitly registered (such as 071b).
-- IDs 100–110, including the explicitly registered suffix slices 100f/100a/100b/100c, are reserved for the post-functional-beta visual identity, final operator frontend fusion, lean-codebase and zero-sunk-cost architecture/process replatforming sequence. Their implementation authority is exactly the live state recorded in this registry; `planned` rows remain non-authoritative until individually re-derived and made ready.
+- IDs 100–110, including the explicitly registered suffix slices 100f/100a/100g/100b/100c, are reserved for the post-functional-beta visual identity, final operator frontend fusion, UI repair, lean-codebase and zero-sunk-cost architecture/process replatforming sequence. Their implementation authority is exactly the live state recorded in this registry; `planned` rows remain non-authoritative until individually re-derived and made ready.
