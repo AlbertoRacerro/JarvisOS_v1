@@ -27,15 +27,23 @@ If disjointness cannot be proved, only the conflicting slices remain serial. Ind
 
 Scheduler identities are generic ChatGPT compute slots. Integration, Knowledge, Development, and Coding are **logical responsibilities acquired dynamically**, not permanent automation identities.
 
-The post-112 deployment may use multiple staggered ChatGPT scheduler replicas only when the scheduler/control plane provides a **proved atomic global writer lease** shared by every replica. The lease must have one atomic acquire-or-fail operation, one owner identity, a bounded freshness/expiry rule, owner-only release, and deterministic stale-owner recovery. Acquisition happens before every GitHub/shared-authority mutation; failure to acquire means exit without mutation. A read-then-write convention, task-title convention, local process state, or repository workflow concurrency group that does not cover the external schedulers is not an adequate mutex.
+The normal post-112 scheduler topology is four interchangeable ChatGPT replicas staggered at `:00`, `:15`, `:30`, and `:45`. They reduce reaction latency; they do **not** authorize concurrent ChatGPT writers.
 
-Until such an atomic lease is evidenced for the deployed scheduler replicas, **at most one ChatGPT writer scheduler may be enabled**. Additional scheduler slots may exist only disabled or as non-mutating observers. This fail-closed fallback preserves the one-writer invariant without inventing a repository-side lock implementation.
+Every replica uses the same global ChatGPT writer-mutex protocol through the automation control plane before any GitHub/shared-authority mutation:
 
-When the atomic lease is available:
+1. read the live automation topology with `automations.peek`;
+2. if any other JarvisOS Roadmap Builder A/B/C/D title is `[BUSY <UTC-ISO>]` and that timestamp is less than 45 minutes old, exit without mutation;
+3. otherwise rename only itself to its base title plus `[BUSY <UTC-ISO>]`;
+4. immediately re-read the automation topology;
+5. if another fresh A/B/C/D BUSY marker is now present, restore the base title and exit without mutation; otherwise this replica is the sole ChatGPT coordinator/writer for the run;
+6. before returning, always restore its base title, including after a failure path.
 
-- **only one ChatGPT coordinator/writer may hold the global repository/shared-authority mutex at a time**;
-- the lock holder temporarily owns Integration responsibilities and may service any currently authorized lane;
-- another ChatGPT scheduler that fails lease acquisition exits without mutation;
+No GitHub/shared-authority mutation occurs before the post-rename re-check. A stale BUSY marker older than 45 minutes is not ownership evidence. The four schedulers may all remain enabled; mutual exclusion is achieved by this fail-closed peek/mark/re-peek protocol rather than by fixed lane affinity.
+
+While one replica owns the writer role:
+
+- **only one ChatGPT coordinator/writer may mutate GitHub/shared authority at a time**;
+- the owner temporarily holds Integration responsibilities and may service any currently authorized lane;
 - logical lane ownership is acquired for the current bounded action and released when that action is complete;
 - no two writers may mutate the same PR/head or shared authority concurrently.
 
