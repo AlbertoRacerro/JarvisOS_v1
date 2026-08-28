@@ -4,7 +4,7 @@ Status: `EXPERIMENT / REFERENCE AUDIT` — not product/runtime implementation au
 
 ## Purpose
 
-Evaluate whether a pinned Hermes Agent harness using Z.AI `glm-5.2` through the GLM Coding Plan endpoint can perform useful, low-cost repository preflight/review work for JarvisOS without consuming scarce Codex review capacity and without acquiring product, merge, GitHub-write, shell, provider-policy, or domain authority.
+Evaluate whether a pinned Hermes Agent harness using Z.AI `glm-4.7-flash` through the general API free tier can perform useful zero-token-cost repository preflight/review work for JarvisOS without consuming scarce Codex review capacity and without acquiring product, merge, GitHub-write, shell, provider-policy, or domain authority.
 
 This experiment is deliberately independent from the 111→112 product front. It may run on an isolated same-repository PR while 111/112 remain serial because it does not mutate `master`, `docs/specs/STATUS.md`, backend, frontend, schemas, product provider policy, or runtime state.
 
@@ -17,11 +17,13 @@ The existing intake owner is `REF-022 | NousResearch/Hermes Agent` in `docs/IDEA
 - Pinned upstream commit: `306db2776c6b6f1acc85c31c4dabba3263f0e9fd`
 - Upstream package version: `0.20.6`
 - Provider: native Hermes `zai`
-- Model: `glm-5.2`
-- Base URL override: `GLM_BASE_URL=https://api.z.ai/api/coding/paas/v4`
-- Credential input: existing repository Actions secret `GLM_API_KEY`; the secret is never committed and is scoped only to the Hermes invocation/gate step.
+- Model: `glm-4.7-flash`
+- Base URL: `https://api.z.ai/api/paas/v4`
+- Credential input: repository Actions secret `GLM_FREE_API_KEY`, mapped only inside the Hermes step to environment variable `GLM_API_KEY` because that is the upstream Hermes Z.AI credential name. The secret is never committed.
 
-The first attempts used Hermes' default Z.AI general endpoint (`https://api.z.ai/api/paas/v4`) with `glm-4.7-flash`. Those attempts reached Z.AI but returned HTTP 429. They are not accepted as evidence about Coding Plan availability because Z.AI documents the Coding Plan endpoint and general endpoint as non-interchangeable. The experiment was therefore corrected to `glm-5.2` plus the Coding Plan endpoint before further interpretation.
+The first attempts used the older repository secret `GLM_API_KEY` against the general endpoint and returned HTTP 429. A later diagnostic run established that this older key belonged to the Z.AI Coding Plan surface; using it with `glm-5.2` and `https://api.z.ai/api/coding/paas/v4` completed successfully but consumed paid/subscription usage. That run proved the Hermes harness but is not accepted as evidence for the desired free worker.
+
+The maintainer then created a separate general-API key stored as `GLM_FREE_API_KEY`. The current experiment is hard-locked to that secret, the general API endpoint, and `glm-4.7-flash`. There is no fallback to GLM-5.x or the Coding Plan endpoint.
 
 The pinned Hermes source supports:
 
@@ -50,7 +52,7 @@ Not enabled:
 - GitHub mutation credentials;
 - merge/review authority.
 
-The Actions job has repository permission `contents: read`; checkout uses `persist-credentials: false`. `GITHUB_TOKEN` is not passed to Hermes. The only external model credential exposed to the Hermes step is `GLM_API_KEY`.
+The Actions job has repository permission `contents: read`; checkout uses `persist-credentials: false`. `GITHUB_TOKEN` is not passed to Hermes. The only external model credential exposed to the Hermes step is the value of `GLM_FREE_API_KEY`, mapped to the upstream-compatible environment variable `GLM_API_KEY`.
 
 ## Exact smoke task
 
@@ -72,16 +74,19 @@ The workflow, not Hermes, proves:
 - checkout HEAD equals `github.event.pull_request.head.sha`;
 - repository diff/status is clean before the model run;
 - Hermes is installed from the exact pinned upstream SHA;
-- requested provider is `zai`;
-- requested model is `glm-5.2`;
-- requested base URL is the Z.AI Coding Plan endpoint;
-- successful usage evidence reports provider `zai` and model `glm-5.2`;
+- requested provider is exactly `zai`;
+- requested model is exactly `glm-4.7-flash`;
+- requested base URL is exactly `https://api.z.ai/api/paas/v4`;
+- credential source is the separate repository secret `GLM_FREE_API_KEY`;
+- there is no workflow fallback to GLM-5.x or the Coding Plan endpoint;
+- successful usage evidence reports provider `zai` and model `glm-4.7-flash`;
+- any numeric `estimated_cost_usd > 0` reported by Hermes fails the smoke;
 - Hermes emits a non-empty bounded report on success;
-- the literal `GLM_API_KEY` value is absent from captured report, usage evidence, and stderr;
+- the literal free-tier key value is absent from captured report, usage evidence, and stderr;
 - repository HEAD/diff/status remain unchanged after the model run;
 - failure evidence is preserved separately from semantic success.
 
-A green workflow is necessary but not a semantic PASS. A later human/coordinator read must compare the report with repository truth and classify the experiment `PASS`, `PARTIAL`, or `FAIL`.
+A green workflow is necessary but not a semantic PASS. The maintainer should also verify the Z.AI account usage/billing surface after the smoke if definitive provider-side zero-charge evidence is required; Hermes' local cost metadata is supporting evidence, not the billing authority.
 
 ## Supply-chain and security caveats
 
