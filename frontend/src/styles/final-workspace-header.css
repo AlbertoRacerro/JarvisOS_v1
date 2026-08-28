@@ -67,15 +67,14 @@
   box-shadow: 0 5px 16px rgba(70, 126, 42, .08);
 }
 
-.final-fusion__workspace-head + .final-fusion {
+/* App renders the workspace surface as the workbench itself, directly after
+ * FinalWorkspaceHeader. Bind the real production node rather than the older
+ * .final-fusion wrapper shape so the repaired header cannot leave a dead band. */
+.final-fusion__workspace-head + .final-fusion__workbench {
   flex: 1 1 auto;
   width: 100%;
   min-height: 0;
   height: auto;
-}
-
-.final-fusion__workspace-head + .final-fusion > .final-fusion__surface-head {
-  display: none;
 }
 
 @media (max-width: 900px) {
@@ -91,7 +90,7 @@
     align-items: start;
   }
 
-  .final-fusion__workspace-head + .final-fusion {
+  .final-fusion__workspace-head + .final-fusion__workbench {
     height: auto;
   }
 
