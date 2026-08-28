@@ -214,7 +214,7 @@ def test_current_adapter_yields_canonical_inert_block_and_stable_digest() -> Non
     assert first.included_count == 1
 
     block = first.blocks[0]
-    assert block["source"] == "jarvis:test-owner:test-kind:record-1"
+    assert block["source"] == "jarvis:test-owner:test-kind"
     assert block["type"] == "jarvis_exact_ref"
     assert block["id"] == "record-1"
     inert = json.loads(str(block["content"]))
