@@ -5,7 +5,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from app.modules.ai.context_builder import assemble_prompt
+from app.modules.ai.context_builder import DEFAULT_CONTEXT_BUDGET_CHARS, assemble_prompt
 from app.modules.ai.jarvis_context import (
     PRODUCTION_ADAPTER_REGISTRY,
     PRODUCTION_CAPABILITY_REGISTRY,
@@ -250,6 +250,16 @@ def test_nonserializable_adapter_evidence_fails_closed() -> None:
         build_jarvis_context_preview(
             _request(added_refs=[_ref()]),
             registry=_registry(StaticAdapter(content={"bad": object()})),
+        )
+
+
+def test_oversized_adapter_preview_evidence_fails_closed() -> None:
+    with pytest.raises(JarvisContextError, match="oversized"):
+        build_jarvis_context_preview(
+            _request(added_refs=[_ref()]),
+            registry=_registry(
+                StaticAdapter(content="x" * (DEFAULT_CONTEXT_BUDGET_CHARS + 1))
+            ),
         )
 
 
