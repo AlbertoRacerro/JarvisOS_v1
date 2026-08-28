@@ -1,0 +1,242 @@
+name: Temporary final agent policy reconcile
+
+on:
+  push:
+    branches:
+      - docs/final-agent-policy-reconcile
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Apply deterministic governance reconciliation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          def sub_once(path: str, pattern: str, replacement: str, *, flags: int = 0) -> None:
+              p = Path(path)
+              text = p.read_text(encoding="utf-8")
+              updated, count = re.subn(pattern, replacement, text, count=1, flags=flags)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}: {pattern[:80]}")
+              p.write_text(updated, encoding="utf-8")
+
+          # AGENTS.md: one live role matrix only.
+          agents_roles = r'''## Canonical development model roles
+
+Repository delivery uses one explicit role split. This is a development-process rule; it does not change JarvisOS product provider, routing, egress, credential, budget, or promotion authority.
+
+- **ChatGPT = Tech Lead / Architect / Maintainer.** It owns fresh repository/context reading, architecture and ownership decisions, definition/full-spec/readiness work, precise implementation packets, acceptance criteria and non-goals, semantic acceptance review, integration, shared-authority/`STATUS.md` mutation, and exact-head merge/reconciliation.
+- **GLM-5.3-Flash = bounded coding implementer and repair implementer.** For non-trivial code after a slice is actually `ready`, ChatGPT normally gives GLM an exact target/base SHA, allowed paths, preloaded authority/context, required behavior, invariants, non-goals, and acceptance checks. GLM works only in the bounded ephemeral candidate-patch path and receives no GitHub write, merge, queue, shared-registry, security, credential, provider-policy, or architecture authority. Broad/general/adversarial review is not its normal job.
+- **ChatGPT reviews every GLM candidate before remote application.** When a candidate is materially correct but needs bounded fixes, ChatGPT normally sends a narrow numbered `REPAIR ONLY` packet back to GLM instead of discarding the candidate and reimplementing it. ChatGPT may code directly for trivial/mechanical fixes, minimal delivery plumbing, or a proven GLM failure where another delegation has lower expected value.
+- **Claude = normal independent terminal reviewer** when an independent review is required or materially useful. Claude is not the default implementation worker.
+- **Codex = scarce specialist/high-risk reserve.** Use it only when there is a concrete material advantage or unresolved high-risk need; do not spend it on routine planning, docs-only work, registry reconciliation, ordinary UI polish, small PRs, or duplicate review.
+
+Deterministic repository/runtime evidence and accepted authority outrank every model claim. A green worker workflow is not semantic PASS or merge authority. GLM tasks are completion-first: budget them sufficiently to finish, while keeping exploration, paths, tools, and authority bounded.
+
+Detailed scheduling, exact-head, repair, independent-review, and post-112 mechanics are defined in `docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md` and `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md`; do not create another live role matrix.
+'''
+          sub_once(
+              "AGENTS.md",
+              r"## Model economy\n.*?(?=\n## Spec-driven work)",
+              agents_roles.rstrip(),
+              flags=re.S,
+          )
+
+          # Protocol: retire live checkpoint/watchdog-era role instructions and make the final pipeline singular.
+          protocol_roles = r'''## 6. Current external coordinating scheduler
+
+The external coordinating automations are maintainer-authorized ChatGPT scheduler replicas acting through the GitHub control plane. They are distinct from the repository-internal spec 079 workflow.
+
+Before exact `master` shows 112 as `merged`, the scheduler follows the single-front rule in section 5. After the activation gate, scheduler identities remain interchangeable compute slots and logical Integration/Knowledge/Development/Coding responsibilities are claimed dynamically under `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md`.
+
+The current scheduled topology uses a global ChatGPT coordinator/writer mutex. A lock holder may consume terminal evidence and service more than one immediately actionable lane in one run; another scheduler exits without mutation while that lock is fresh. The coordinator exits instead of sleeping or polling when the remaining actions are only waits.
+
+Shared integration boundaries, `STATUS.md`, merge sequencing, and registry reconciliation remain coordinator-owned. No two writers may mutate one PR/head or shared authority concurrently.
+
+Spec 079 remains narrower than this external scheduler: a 079 job may continue one accepted implementation only within its own exact specification and cannot review, repair findings, merge, select a new specification, or advance the queue. Nothing in this protocol broadens 079.
+
+Historical checkpoint/watchdog/frontend-sprint automation designs are non-normative provenance only. They are not roles to recreate or instruction sources for current delivery.
+
+## 7. Canonical delivery split and implementation packets
+
+The only current default model-role pipeline is:
+
+`ChatGPT specification/plan/packet -> GLM candidate implementation -> ChatGPT acceptance -> GLM repair when needed -> Claude independent terminal review when required/useful -> ChatGPT exact-head merge/reconciliation`.
+
+### ChatGPT responsibilities
+
+ChatGPT directly owns:
+
+- fresh repository, diff, spec, readiness, PR, CI, and review reading;
+- architecture, ownership, scope, non-goals, and specification decisions;
+- definition/full-spec/readiness and documentation authority;
+- the implementation packet and acceptance checks supplied to the coder;
+- semantic review of every candidate patch and all shared/integration decisions;
+- bounded mechanical GitHub delivery, exact-head merge decisions, and registry reconciliation.
+
+For a non-trivial code slice that is actually `ready`, ChatGPT should not default to implementing the whole slice itself. It first prepares a bounded implementation packet containing, as applicable:
+
+- exact target SHA and exact base SHA;
+- allowed write paths;
+- the minimum authority/context files that should be preloaded;
+- required behavior and invariants;
+- explicit non-goals and prohibited authority expansion;
+- deterministic acceptance tests/checks and expected evidence.
+
+ChatGPT may implement code directly when the change is trivial/mechanical, is minimal delivery plumbing, or a GLM failure has been proved and another delegation has lower expected value.
+
+### GLM-5.3-Flash responsibilities
+
+GLM-5.3-Flash is the normal bounded coding and repair worker while the temporary development harness is active. It:
+
+- implements from ChatGPT's already-decided packet rather than choosing architecture or queue direction;
+- works in an ephemeral exact-target checkout and returns candidate patch/report/check evidence;
+- has no GitHub write, merge, `STATUS.md`, shared-registry, security, credential, provider-policy, spending, or maintainer authority;
+- is not the default broad/general/adversarial reviewer;
+- must not expand scope merely because repository exploration suggests adjacent work.
+
+GLM work is completion-first, not minimum-token-first. Give a well-scoped implementation enough budget to finish rather than deliberately under-budgeting a likely failure, while still bounding exploration, paths, tools, wall time, and authority.
+
+### Acceptance and repair
+
+ChatGPT validates the GLM candidate against the exact packet, active spec/readiness, diff scope, deterministic evidence, and current head. Workflow success alone is not PASS.
+
+If a candidate is materially usable but has bounded defects, ChatGPT normally emits a numbered `REPAIR ONLY` packet tied to the exact candidate/target and sends the correction back to GLM. Do not automatically throw away a mostly-correct candidate and reimplement it. If the target head moved, revalidate or discard stale evidence before applying anything.
+
+## 8. Independent review and specialist reserve
+
+Claude is the normal independent terminal reviewer when independent review is required by the active authority or materially reduces merge risk. Claude reviews the frozen exact head and should return concrete findings tied to code/spec/evidence; it is not the default implementation worker.
+
+Codex is a scarce specialist/high-risk reserve. Use it only when Claude is unavailable or inadequate for a material need, an unresolved high-risk finding justifies a second specialist opinion, or a task has a concrete Codex-specific advantage. Do not use Codex routinely for planning, broad reading, CI polling, docs-only work, reconciliation, ordinary UI polish, small PRs, or duplicate review "for safety".
+
+Do not ask Claude and Codex the same generic question. A head mutation invalidates head-specific review where the changed evidence matters. Mutable PRs should remain draft when that prevents unnecessary automatic Codex review.
+
+Model review remains advisory evidence. Reproduce or trace findings against the current specification and exact head. Deterministic gates, actual code/runtime behavior, accepted authority, and the merge owner remain decisive.
+'''
+          sub_once(
+              "docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md",
+              r"## 6\. External coordinating automation roles\n.*?(?=\n## 9\. Maintainer interruption boundary)",
+              protocol_roles.rstrip(),
+              flags=re.S,
+          )
+
+          # Post-112 role allocation: implementation, not generic review, is GLM's default job.
+          profile_roles = r'''## 9. Canonical work allocation and model roles
+
+The four scheduled ChatGPT automations are interchangeable orchestration slots, not fixed lane identities. The active lock holder is the Tech Lead / Architect / Maintainer for that cycle and may work-steal across immediately actionable authorized lanes while preserving the global ChatGPT writer mutex and every shared-boundary rule in this profile.
+
+The canonical role split is:
+
+- **ChatGPT** owns repository/context reading, architecture and ownership decisions, definition/full-spec/readiness, precise implementation packets, acceptance criteria/non-goals, semantic candidate review, integration, shared authority, merge sequencing, and registry reconciliation.
+- **GLM-5.3-Flash** is the normal bounded coding and repair implementer for non-trivial `ready` code slices while the temporary harness is active. The task packet must bind the exact target/base SHA, allowed paths, authority/context, behavior, non-goals, and acceptance checks. GLM returns an ephemeral candidate patch and evidence only; it owns no GitHub write/merge/shared-state/security/provider/credential authority. Broad/general/adversarial review is not its default role.
+- **ChatGPT accepts or rejects the candidate.** Bounded defects normally become a numbered `REPAIR ONLY` GLM packet. Direct ChatGPT implementation is reserved for trivial/mechanical fixes, minimal delivery plumbing, or proved GLM failure where redelegation is not worthwhile.
+- **Claude** is the normal independent terminal reviewer when independent review is required or materially useful.
+- **Codex** is a scarce specialist/high-risk reserve only where there is concrete material advantage or unresolved high-risk need; it is not routine planning, docs, reconciliation, small-PR, UI-polish, or duplicate-review capacity.
+
+GLM tasks are completion-first: a sufficiently scoped implementation should receive enough turn/wall-time budget to complete instead of being deliberately under-budgeted, while exploration, tool set, paths, concurrency, and authority remain bounded. Workflow green is not semantic PASS.
+
+Normally keep at most one active candidate implementation worker per lane/head. Additional GLM workers may run concurrently only for tasks whose files and authority are demonstrably disjoint. A result tied to a moved head is stale until explicitly revalidated.
+
+Mutable PRs should remain draft when doing so prevents unnecessary automatic Codex review. Freeze the candidate head and consume only the independent review actually required or materially useful before merge.
+'''
+          sub_once(
+              "docs/POST_112_PARALLEL_DELIVERY_PROFILE.md",
+              r"## 9\. Work allocation and model economy\n.*?(?=\n## 10\. Temporary-harness to Hermes transition)",
+              profile_roles.rstrip(),
+              flags=re.S,
+          )
+
+          # Clarify that Hermes is the next Coding-lane objective, not a global barrier for 121/122/124.
+          sub_once(
+              "docs/POST_112_PARALLEL_DELIVERY_PROFILE.md",
+              r"After `123` is actually merged and the queue has been reconciled accordingly, the next Coding objective is a \*\*fresh Hermes V1 re-derivation/release gate\*\*, before the remaining post-foundation slices\.",
+              "After `123` is actually merged and the queue has been reconciled accordingly, the next **Coding-lane objective** is a **fresh Hermes V1 re-derivation/release gate**. This is not a global barrier for independent 121, 122, or 124 work whose own dependencies/readiness are already satisfied.",
+          )
+          sub_once(
+              "docs/POST_112_PARALLEL_DELIVERY_PROFILE.md",
+              r"After Hermes V1 is proven, the remaining operator-domain slices continue under the then-current registry, with Hermes dogfooding used where appropriate\. The intended post-Hermes remainder includes `124`, `121`, `122`, `125`, and `126`, subject to their own dependencies, readiness, security, and authority gates\. No later slice becomes ready merely because Hermes exists\.",
+              "Knowledge and Development domain adapters 121/122, and independent provider/settings owner 124, may proceed before, during, or after the Coding-lane Hermes gate whenever their own dependencies, readiness, ownership, and lane-disjointness rules permit. After Hermes V1 is proven, whichever operator-domain slices remain continue under the then-current registry with Hermes dogfooding where appropriate. 125 and 126 retain their separate security/readiness gates. No later slice becomes ready merely because Hermes exists.",
+          )
+
+          status = Path("docs/specs/STATUS.md")
+          text = status.read_text(encoding="utf-8")
+
+          def replace_exact(old: str, new: str) -> None:
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"STATUS expected one exact match, found {count}: {old[:90]!r}")
+              text = text.replace(old, new, 1)
+
+          replace_exact(
+              "- One implementation front at a time.",
+              "- One implementation front at a time through 112. After exact `master` records 112 as `merged`, only the controlled-parallel exception in `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md` may schedule proved-disjoint post-112 lanes.",
+          )
+          replace_exact(
+              "The queue remains sequential and every implementation slice must still pass the normal\nbacklog row → kernel or definition → full spec → readiness → implementation → exact-head\ngates → review → merge → registry-reconciliation lifecycle. A `planned` row is not\nimplementation authority.",
+              "The queue remains serial through 112 and every implementation slice still passes the normal\nbacklog row → kernel or definition → full spec → readiness → implementation → exact-head\ngates → review → merge → registry-reconciliation lifecycle. After 112 is merged, proved-disjoint\npost-112 lanes may be scheduled concurrently under the canonical parallel-delivery profile; this\nchanges scheduling only. A `planned` row is never implementation authority.",
+          )
+          replace_exact(
+              "The binding order is:",
+              "The binding order through 112, followed by the registered post-112 dependency presentation, is:\n\nItems 1–34 form the serial prefix. After 112 is merged, items below it are scheduled by dependency, readiness, and the controlled lane profile rather than interpreted as one global writer sequence.",
+          )
+          replace_exact(
+              "43. 124 PROVIDER-SETTINGS-GENERIC-1;\n44. 121 JARVIS-PROJECT-KNOWLEDGE-ACTIONS-1;\n45. 122 JARVIS-DEVELOPMENT-ACTIONS-1;\n46. 123 JARVIS-CODING-ACTIONS-1;",
+              "43. 123 JARVIS-CODING-ACTIONS-1;\n44. 124 PROVIDER-SETTINGS-GENERIC-1;\n45. 121 JARVIS-PROJECT-KNOWLEDGE-ACTIONS-1;\n46. 122 JARVIS-DEVELOPMENT-ACTIONS-1;",
+          )
+
+          text, count = re.subn(
+              r"PR #416 merged the 100c exact-master overlap/ownership audit and queue re-derivation on 2026-08-28\..*?until the late engineering owners land\.",
+              "PR #416 merged the 100c exact-master overlap/ownership audit and queue re-derivation on 2026-08-28. 111 subsequently merged through implementation PR #425. 112 is now the remaining serial gate and stays `planned` until its own accepted lifecycle makes it ready. After 112 merges, the canonical controlled-parallel profile schedules proved-disjoint Knowledge, Development, Coding, and independent provider/settings work by dependency/readiness rather than one global implementation sequence. Existing BLUECAD authority is preserved; legacy Hermes 066–068 and 080 remain frozen, and Process topology/solver affordances remain truthfully unavailable until their later owners land.",
+              text,
+              count=1,
+              flags=re.S,
+          )
+          if count != 1:
+              raise SystemExit(f"STATUS PR416 paragraph matches={count}")
+
+          replace_exact(
+              "Specs 066, 067, 068, and 080 remain frozen for the duration of the current functional queue and\nare not reopened by the architecture reconciliation.",
+              "Specs 066, 067, 068, and 080 remain frozen legacy implementation authorities. 066–068 may not be implemented directly: after 123, any Hermes V1 work requires a fresh exact-master derivation/release gate that preserves JarvisOS-owned context, policy, credentials, sensitivity, egress, budget, ledger, promotion, repository, database, and service authority. 080 remains frozen until an explicit later re-derivation.",
+          )
+          replace_exact(
+              "2. 111 JARVIS-CONTEXT-ACTION-FOUNDATION-1 is the current binding front. Its kernel/full spec/readiness are merged through PRs #418, #419, and #422, and implementation PR #425 is `in_review` under those exact accepted contracts. Jarvis must remain an adapter over the current AI execution/policy spine, with explicit exact context refs and no second orchestration store.",
+              "2. 111 JARVIS-CONTEXT-ACTION-FOUNDATION-1 is merged through implementation PR #425 under the accepted #418/#419/#422 contracts. 112 PROJECT-KNOWLEDGE-CORE-1 is the next binding serial front and remains `planned` pending its own definition/full-spec/readiness lifecycle.",
+          )
+          replace_exact(
+              "3. After 111, execute Project Knowledge 112–115, Development 116–117, Coding truth 118–120 plus provider/settings 124, then Jarvis domain adapters 121–123, guarded self-update 125 and security-gated terminal 126. Each row remains independently gated and one implementation front at a time.",
+              "3. After 112 merges, activate `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md`: Knowledge runs 113 → 114 → 115 and then 121 when its dependencies/readiness permit; Development runs 116 → 117 and then 122; Coding acceleration runs 118 → 119 → 120 → 123 and then a fresh Hermes V1 re-derivation/release gate. 124 is an independent provider/settings owner and may run post-112 whenever its own dependencies/readiness and lane-disjointness permit. 125/126 remain separately gated and are not automatically parallelized.",
+          )
+          replace_exact(
+              "6. Preserve merged 059a/059b, 061a/061b, 075, 076, 077, 079, 082, 094, 070, 083, 084, 085, 086, 087, 088, 035, 089, 054, 090, 091, 029, 096, 071b, 092, 058c, 097, 098, 006b, 058b, 058d, 100, 100f, 100g, and 100b authority boundaries; definition-only 095 and 100c remain planning authority rather than runtime implementation identities.",
+              "6. Preserve merged 059a/059b, 061a/061b, 075, 076, 077, 079, 082, 094, 070, 083, 084, 085, 086, 087, 088, 035, 089, 054, 090, 091, 029, 096, 071b, 092, 058c, 097, 098, 006b, 058b, 058d, 100, 100f, 100g, 100b, and 111 authority boundaries; definition-only 095 and 100c remain planning authority rather than runtime implementation identities.",
+          )
+          replace_exact(
+              "| 100c | planned | — | FINAL-PRODUCT-DIRECTION-AUTHORITY-0 | 100b | Definition/queue re-derivation merged through PR #416. Exact-master overlap audit, capability/interaction ownership map and canonical queue are binding planning authority; 100c has no runtime implementation PR and planned 111 is next. |",
+              "| 100c | planned | — | FINAL-PRODUCT-DIRECTION-AUTHORITY-0 | 100b | Definition/queue re-derivation merged through PR #416. Exact-master overlap audit, capability/interaction ownership map and canonical queue are binding planning authority; 100c has no runtime implementation PR. 111 has since merged and planned 112 is next. |",
+          )
+          replace_exact(
+              "| 111 | in_review | [#425](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/425) | JARVIS-CONTEXT-ACTION-FOUNDATION-1 | 040, 042, 059b, 061a, 061b, 090, 091, 097 | Stable workspace/route/exact-ref context and generic capability/action contracts over the current AI execution/policy spine; explicit removable context, inspected preview/digest/provenance and fail-closed stale refs; no page business logic, Hermes runtime, second orchestration store or domain COMMIT/EXECUTE. |",
+              "| 111 | merged | [#425](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/425) | JARVIS-CONTEXT-ACTION-FOUNDATION-1 | 040, 042, 059b, 061a, 061b, 090, 091, 097 | Stable workspace/route/exact-ref context and generic capability/action contracts over the current AI execution/policy spine; explicit removable context, inspected preview/digest/provenance and fail-closed stale refs; no page business logic, Hermes runtime, second orchestration store or domain COMMIT/EXECUTE. |",
+          )
+          status.write_text(text, encoding="utf-8")
+          PY
+
+          git diff --check
+          rm .github/workflows/tmp-final-agent-policy-reconcile.yml
+          git add -A
+          git config user.name "JarvisOS governance reconciler"
+          git config user.email "actions@users.noreply.github.com"
+          git commit -m "Reconcile final agent delivery policy"
+          git push origin HEAD:docs/final-agent-policy-reconcile
