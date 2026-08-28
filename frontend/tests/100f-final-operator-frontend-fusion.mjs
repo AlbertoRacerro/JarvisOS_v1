@@ -10,7 +10,7 @@ const layout = read("src/components/Layout.tsx");
 const main = read("src/main.tsx");
 const fusion = read("src/components/fusion/FinalOperatorUnavailableSurface.tsx");
 const readFusion = read("src/components/fusion/FinalOperatorReadSurface.tsx");
-const readApi = read("src/api/finalOperatorReads.ts");
+const readApi = read("src/api/client.ts");
 const fusionCss = read("src/styles/final-fusion.css");
 const shellOverlay = read("src/styles/final-fusion-shell-overrides.css");
 const canonicalOverlay = read("src/styles/final-fusion-canonical-overrides.css");
@@ -80,16 +80,21 @@ includesAll(readFusion, [
 ], "truthful READ/Unknown boundary missing");
 check(!/cd951bae|86cdedde|working tree clean|remote current|PASS|Aligned/i.test(readFusion), "fixture repository/runtime success identity leaked into truthful read surface");
 check(!/localStorage|sessionStorage|github\.com\/api|api\.github|child_process|powershell|cmd\.exe/i.test(readFusion), "read surface crossed frontend authority boundary");
+check(readFusion.includes('from "../../api/client"'), "final operator READ surface no longer uses the shared API client");
+check(!readFusion.includes("finalOperatorReads"), "stale finalOperatorReads import remains in the final operator READ surface");
 
 includesAll(readApi, [
-  'getJson<FinalWorkspace[]>("/workspaces")',
+  'getJson<Workspace[]>("/workspaces")',
   "/model-specs",
   "/requirements",
   "/parameters",
   "/decisions",
-  "getSystemInfo"
+  "getSystemInfo",
+  "export type Requirement = {",
+  "value_status?: string | null;",
+  "lifecycle_state?: string | null;"
 ], "accepted existing backend READ binding missing");
-check(!/github\.com|api\.github|localStorage|sessionStorage|child_process|powershell|cmd\.exe/i.test(readApi), "final read adapter crossed frontend authority boundary");
+check(!/github\.com|api\.github|localStorage|sessionStorage|child_process|powershell|cmd\.exe/i.test(readApi), "shared final read client crossed frontend authority boundary");
 
 includesAll(layout, [
   "const finalOperatorRoute = route.primaryNav !== undefined",
