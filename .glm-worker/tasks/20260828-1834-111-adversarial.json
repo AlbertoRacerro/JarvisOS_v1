@@ -1,0 +1,7 @@
+{
+  "task_id": "20260828-1834-111-adversarial",
+  "target_ref": "fb3273cf14582569573847fc5a0ccc67b880a48b",
+  "mode": "adversarial_pre_review",
+  "max_turns": 4,
+  "instructions": "Adversarially review PR #425 exact head fb3273cf14582569573847fc5a0ccc67b880a48b against AGENTS.md, docs/specs/111-jarvis-context-action-foundation-1.md and docs/specs/111-readiness-2026-08-28.md. Focus only on readiness acceptance and failure modes in the current changed files plus backend/tests/test_ai_threads.py. Verify especially required tests 17-25, zero run_ai_task on stale/unknown/workspace/external exact-ref failures, explicit local-safe dispatch path, immutable request-id semantics, legacy context compatibility, no production adapters, and no COMMIT/EXECUTE authority. Report concrete missing acceptance coverage or semantic defects with exact paths/functions. If a minimal correction is needed, produce candidate.patch touching only readiness allow-list files, preferably backend/tests/test_ai_threads.py and the smallest necessary implementation seam. Do not touch STATUS, schema, frontend, providers, egress authority, domains or Hermes. Workflow green alone is not PASS."
+}
