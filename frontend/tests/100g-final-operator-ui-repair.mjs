@@ -13,7 +13,7 @@ const shellCss = read("src/styles/final-fusion-shell-overrides.css");
 const workspaceCss = read("src/styles/final-workspace-header.css");
 const repairCss = read("src/styles/100g-ui-repair.css");
 const main = read("src/main.tsx");
-const app = read("src/App.tsx");
+const routes = read("src/app/routes.ts");
 const processStage = read("src/stages/ProcessStage.tsx");
 const bluecadStage = read("src/stages/ModelStage.tsx");
 const settingsSurface = read("src/components/fusion/FinalSettingsSurface.tsx");
@@ -37,12 +37,13 @@ assert(repairCss.includes('.design-stage__tabs button[aria-current="page"]'), "D
 assert(repairCss.includes(".application-shell--final .final-settings__tab.is-active"), "Settings active peer tab must share the soft-accent language");
 assert(main.includes('import "./styles/100g-ui-repair.css";'), "100g repair stylesheet must be loaded by production entrypoint");
 
-// Preserve exact routes and intentional Design workbench structure.
+// Preserve exact canonical routes and intentional Design workbench structure.
 for (const route of [
   "/memory/project-basis",
   "/memory/models",
   "/memory/literature",
-  "/development/roadmap",
+  "/development/roadmap/timeline",
+  "/development/roadmap/calendar",
   "/development/brainstorm",
   "/coding/repository",
   "/coding/runtime",
@@ -52,7 +53,7 @@ for (const route of [
   "/settings/ai",
   "/settings/system",
 ]) {
-  assert(app.includes(route), `canonical route must remain present: ${route}`);
+  assert(routes.includes(`path: "${route}"`), `canonical route must remain present: ${route}`);
 }
 assert(processStage.includes("process-stage__palette"), "Process operational palette must remain structurally distinct from the workspace header repair");
 assert(processStage.includes("design-stage__tabs") && bluecadStage.includes("design-stage__tabs"), "Process and BLUECAD must preserve their shared peer selector");
