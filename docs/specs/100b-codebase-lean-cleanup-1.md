@@ -1,182 +1,116 @@
 # 100b — CODEBASE-LEAN-CLEANUP-1
 
-Definition status: **boundary defined now; candidate set must be freshly re-derived from merged 100a evidence before readiness**  
-Depends on runtime authority: 100a
+Definition status: **freshly re-derived from merged 100a evidence; CLEANUP candidate frozen, runtime implementation maintainer-gated**  
+Exact derivation base: `6acf76316dc3301b7e8fe38f95b47e5860eb55c4`  
+Merged audit authority: `docs/audits/100a-codebase-lean-audit-faddf39.md`  
+Depends on runtime authority: 100a (`merged` through PR #405)
 
-## 1. Purpose
+## 1. Purpose and outcome
 
-Execute one bounded, high-confidence cleanup batch derived from the exact 100a codebase audit before 101 begins, **or** record an explicit no-action disposition when 100a proves that no generic cleanup has enough ROI to justify runtime churn.
+100b has exactly one evidence-backed top-level outcome on this base: **`CLEANUP`**.
 
-The goal is to reduce active semantic surface while preserving desired product behavior, security/authority boundaries, scientific evidence and future capability reachability.
+The merged 100a audit found no justified broad deletion pass and zero `DELETE` dispositions. It found one high-confidence `MERGE` candidate outside the semantic ownership of 101 and 103–105: fold the 100f-specific read adapter `frontend/src/api/finalOperatorReads.ts` into the existing shared client boundary `frontend/src/api/client.ts`, preserving every truthful read contract used by `frontend/src/components/fusion/FinalOperatorReadSurface.tsx`.
 
-This is not permission for a repository-wide aesthetic rewrite. 100b removes or collapses only what 100a has demonstrated to be unwanted, redundant, replaced or unnecessarily indirect with high confidence.
+This specification freezes that one candidate only. It does **not** authorize runtime implementation under the 2026-08-28 overnight release; maintainer review is required before any source mutation.
 
-## 2. Why the exact candidate list is intentionally deferred
+## 2. Frozen candidate set
 
-This definition is written before 100a runs and therefore must **not** guess which concrete modules are safe to delete.
+### C1 — merge final operator reads into the shared frontend API client
 
-After 100a merges, 100b must be freshly re-derived from then-current `master` and its audit artifact. The readiness record must freeze the exact candidate list, touched boundaries, preservation obligations and expected reduction.
+**Disposition:** `MERGE`  
+**Confidence:** high  
+**Audit evidence:** 100a ranked ROI/risk item 1 and bounded candidate C1.
 
-If 100a produces no high-ROI behavior-preserving cleanup outside work already owned by 101 or 103–105, 100b must **not** manufacture refactor work to justify its existence. Instead, it records the exact `NO_ACTION` conclusion with audit evidence, makes no runtime mutation, merges that disposition, and releases 101. This keeps the dependency mechanically closed without creating sunk-cost pressure to change code.
+Proposed runtime touched boundary, if later explicitly authorized:
 
-## 3. Governing rule
+- `frontend/src/api/client.ts` — retain as the single shared read/API owner and add any richer types/read functions that exist only in the focused adapter;
+- `frontend/src/api/finalOperatorReads.ts` — remove only after all accepted exports are migrated and consumers no longer import it;
+- `frontend/src/components/fusion/FinalOperatorReadSurface.tsx` — switch imports only; do not alter operator behavior, IA, rendering semantics or authority;
+- test-only frontend files only when required to preserve or strengthen existing contract assertions.
 
-> **Absence of a current consumer is not deletion authority.**
+No other runtime path is in the 100b candidate set.
 
-A desired backend capability with no current frontend/client consumer is a `WIRE`/`DEFER` finding, not dead code.
+## 3. Preservation obligations
 
-100b may not delete a capability merely because it is unreachable from the current UI. Product intent and the full 100a deletion gate must already be resolved.
+A later C1 implementation must preserve all of the following exactly:
 
-## 4. Authorized outcomes and disposition classes
+1. the same backend endpoints and server-owned READ authority;
+2. Project Basis, Models and Runtime truthful read/Unknown/unavailable behavior established by 100f;
+3. requirement reads used by the final operator surfaces;
+4. Parameter fidelity required by 098, including `value`, `unit`, `value_status` and `lifecycle_state` where exposed by the current server response;
+5. workspace/model/decision identity and payload fidelity;
+6. existing error behavior: consolidation must not turn failed/unknown reads into invented success/default data;
+7. no provider, GitHub, filesystem, shell, process or state-store access from the frontend;
+8. no canonical mutation, run creation, proposal promotion or feature wiring;
+9. the final operator IA and all eleven 100f surfaces unchanged.
 
-100b has two valid top-level outcomes:
+`Unused != unwanted` remains binding. Nothing classified by 100a as `WIRE`, `DEFER`, `KEEP`, `PROFILE` or `UNKNOWN` may enter this cleanup.
 
-- `CLEANUP` — execute one bounded high-confidence candidate set;
-- `NO_ACTION` — 100a found no generic cleanup whose expected value justifies runtime churn before 101.
+## 4. Explicit exclusions and later owners
 
-For a `CLEANUP` outcome, 100b may execute only high-confidence findings classified by 100a as:
+100b must not pre-implement or partially absorb:
 
-- `SIMPLIFY`;
-- `MERGE`;
-- `INLINE`;
-- `DELETE`;
-- `STRANGLE` only when the replacement is already present/reachable and migration is bounded inside 100b;
-- `REFERENCE_ONLY` only when the runtime removal is high-confidence and the required preservation destination is included in the same bounded plan.
+- modeling CRUD / MemoryStore / lifecycle unification — **101**;
+- process upstream selection or custom-kernel strangling — **103/104**;
+- `app/modules/engineering` retirement or the provenance-`flowsheet` naming/domain collision — **105**;
+- agent/file support retirement, feature wiring, backend API retirement, compatibility-route redesign or any unproven dead-code deletion;
+- any backend schema/API/domain/provider/Hermes/PTY/self-update authority;
+- visual or interaction changes to 100f.
 
-`DELETE_CANDIDATE`, `PROFILE` and `UNKNOWN` are not implementation authority.
+The 100a incumbent scientific/process tests and evidence remain protected for later zero-sunk-cost decisions.
 
-`WIRE` and `DEFER` are explicitly protected from cleanup. They must be preserved and mapped to the relevant existing/future product slice.
+## 5. Failure modes the cleanup must prevent
 
-`REPLACE_UPSTREAM` belongs in 100b only if the replacement is already selected and outside a later dedicated authority. Process-solver replacement remains owned by 103/104.
+A future implementation is invalid if it:
 
-## 5. Scope boundary against later specs
+- drops richer Parameter lifecycle fields while reusing a narrower existing type;
+- changes endpoint paths, query parameters or response interpretation;
+- turns optional/unknown server data into frontend defaults that look authoritative;
+- creates a second HTTP/client abstraction while claiming to remove one;
+- removes tests or compatibility behavior merely to make consolidation pass;
+- broadens into adjacent modules because they appear unused;
+- changes 100f composition, labels, routes or action classes;
+- grows active semantic surface without a demonstrated simplification that outweighs the growth.
 
-100b is intentionally placed before 101, but it must not steal the semantic work already reserved for later architecture slices.
+If exact implementation-base evidence shows C1 has already been collapsed, has acquired an independent semantic owner, or cannot preserve the obligations above with a bounded import/client change, readiness must be re-derived to `NO_ACTION` rather than substitute another cleanup target.
 
-### 5.1 101 remains owner of canonical-write semantics
+## 6. Required implementation proof if maintainer later authorizes C1
 
-100b may remove provably dead wrappers or duplicate code around state APIs, but it may not redesign lifecycle/write authority, Parameter status semantics, promotion rules or canonical-state behavior. Those belong to 101.
+The future runtime PR must record exact base/head SHA and before/after source evidence for the touched frontend boundary. At minimum it must prove:
 
-### 5.2 103/104 remain owners of process-stack selection and strangling
+- `cd frontend && npm run build` passes, including retained 058d/100/100f gates;
+- focused final-fusion/read assertions cover Project Basis, Models and Runtime behavior affected by the moved imports/types;
+- no backend files, schemas or APIs changed;
+- no stale import of `finalOperatorReads.ts` remains before that file is removed;
+- before/after active frontend source/file count is recorded, with net semantic-surface reduction;
+- all preserved `WIRE`/`DEFER` findings remain untouched.
 
-100b may classify or preserve evidence about process code, but it must not select a process upstream or delete the custom process kernel in advance of 103/104 unless the exact code is independently proven unrelated/dead and the later bake-off does not need it as incumbent evidence.
+No runtime-performance claim is authorized from LOC reduction. 100a measured structure, not latency/render/startup performance.
 
-### 5.3 105 remains owner of engineering-domain structural cleanup
+## 7. Acceptance criteria
 
-The obsolete `app/modules/engineering` boundary and the dependency/provenance `flowsheet` naming/domain collision remain 105 work unless 100a proves an entirely behavior-free deletion that 105 no longer needs. Prefer routing those findings to 105 rather than creating overlapping authority.
+100b is implementation-ready only if all are true:
 
-### 5.4 Feature wiring remains separate
+1. the top-level outcome remains exactly `CLEANUP` and candidate set remains exactly C1;
+2. 100a is `merged` and the exact merged artifact is cited;
+3. touched runtime boundaries are limited to the C1 paths above plus necessary focused tests;
+4. all section 3 preservation obligations are explicit and testable;
+5. no `DELETE` claim is inferred from missing callers;
+6. no 101, 103, 104 or 105 semantic work is pre-implemented;
+7. no new dependency, framework, state store, compatibility subsystem or infrastructure is introduced;
+8. expected reduction is one duplicate frontend API module/helper/type family, with accepted behavior retained in `client.ts`;
+9. exact-head deterministic gates for the docs-only definition/readiness PR are green and no material finding remains;
+10. runtime implementation remains blocked until explicit maintainer authorization after review of this frozen set.
 
-If 100a discovers a useful backend capability that should appear in the frontend, 100b does not implement the feature simply because the code is nearby. Record or reconcile the owning product spec instead.
+## 8. Minimum-necessary test
 
-## 6. Lean implementation rules
+The only justified generic pre-101 cleanup is the narrow duplicate frontend read boundary identified by 100a. A broad refactor, automatic dead-code pass, backend cleanup or feature wiring would increase semantic risk and collide with later accepted owners. Therefore C1 is the minimum candidate set and the correct stop point.
 
-For each accepted cleanup packet:
+## 9. Definition of done for the current authorized docs-only phase
 
-1. preserve externally meaningful behavior and current accepted invariants;
-2. remove compatibility code when no real supported consumer exists rather than replacing it with a new compatibility layer;
-3. prefer deleting an unnecessary abstraction over replacing it with a differently named abstraction;
-4. prefer one direct authoritative implementation over multiple facades/repositories/helpers carrying the same semantics;
-5. preserve boundaries that enforce actual authority, egress, security, transactions, provenance, scientific validity or replaceable solver/tool contracts;
-6. do not add infrastructure to manage cleanup complexity unless the cleanup cannot be safely executed without it;
-7. measure active-source reduction before and after, but do not distort code to maximize the number;
-8. stop when remaining opportunities cross into low-confidence or low-ROI territory.
-
-For a `NO_ACTION` outcome, none of these rules creates a requirement to touch runtime code. The correct implementation is evidence plus registry lifecycle only.
-
-## 7. No code golf / no pedagogical ceremony
-
-The target is **minimum semantic surface**, not minimum characters.
-
-Do not:
-
-- compress logic into cryptic expressions;
-- remove types or invariants that materially improve correctness;
-- merge unrelated authority boundaries merely to reduce files;
-- rewrite direct readable code into clever metaprogramming;
-- retain factory/facade/manager layers solely because they are a familiar enterprise pattern;
-- add explanatory classes/wrappers solely to make architecture easier for a hypothetical junior developer.
-
-JarvisOS is expected to be maintained and reviewed heavily by AI agents. Code should therefore expose the smallest number of real concepts and paths while keeping consequential invariants explicit.
-
-## 8. Testing and behavior preservation
-
-The fresh 100b spec/readiness must identify the behavior proof for every cleanup family.
-
-For a `CLEANUP` outcome, at minimum:
-
-- full backend tests and Ruff remain green;
-- frontend build/tests run if frontend code is touched;
-- workflow/security checkers run if scripts/workflows are touched;
-- public/runtime API behavior affected by a simplification has focused regression coverage;
-- deleted code must not leave stale imports, routes, configuration, docs claims or tests that refer to removed behavior;
-- tests that protect an accepted behavior contract are migrated with the implementation rather than deleted to make cleanup pass.
-
-A failing test is not evidence that the test is obsolete. Its owning behavior must be traced first.
-
-For a `NO_ACTION` outcome, normal repository exact-head gates still run, but no artificial runtime test or source modification is required beyond proving that the audit evidence was consumed and the disposition is coherent.
-
-## 9. Runtime performance
-
-100b is primarily a maintenance/semantic-surface optimization.
-
-Runtime-performance changes are allowed only for hotspots measured by 100a when the fix is behavior-preserving and remains inside the bounded cleanup candidate set. A substantial algorithm, storage, language or native-extension change requires a separate specification.
-
-Do not infer that fewer Python/TypeScript lines produce lower wall time.
-
-## 10. Required before/after evidence
-
-For a `CLEANUP` outcome, the implementation PR must record:
-
-- exact base/head SHA;
-- candidate list frozen by readiness;
-- active first-party source LOC before and after for touched areas;
-- file/module count before and after where meaningful;
-- deleted/merged/inline boundaries;
-- behavior proof used for each cleanup family;
-- any `WIRE`/`DEFER` capability discovered near touched code and explicitly preserved;
-- findings deliberately routed to 101, 103, 104, 105 or another future spec;
-- why the implementation stopped where it did.
-
-Net source reduction is expected for a cleanup slice. If implementation grows active runtime code overall, the PR must demonstrate a concrete semantic-surface reduction that outweighs LOC growth or the candidate should be removed from 100b.
-
-For a `NO_ACTION` outcome, record the exact 100a artifact/SHA, the rejected candidate set or empty high-confidence set, why expected ROI is insufficient, and the mapping of remaining findings to later specs. Runtime before/after LOC is unchanged by design.
-
-## 11. Acceptance criteria
-
-The fresh post-100a implementation spec/readiness must refine these criteria without weakening them:
-
-1. 100b declares exactly one top-level outcome: `CLEANUP` or `NO_ACTION`.
-2. Every concrete mutation in a `CLEANUP` outcome maps to a high-confidence 100a disposition authorized by section 4.
-3. No code is deleted solely because it lacks a current consumer.
-4. Every deleted capability satisfies the complete 100a deletion gate on the exact implementation base.
-5. Desired-but-unwired backend/API capability is preserved and remains classified `WIRE`/`DEFER` or assigned to a product slice.
-6. No canonical-state semantic redesign from 101 is pre-implemented.
-7. No process-upstream selection/strangling from 103/104 is pre-implemented.
-8. No substantial engineering-domain redesign from 105 is smuggled into this slice.
-9. For `CLEANUP`, active semantic surface decreases materially enough to justify the churn and the PR records before/after evidence.
-10. For `NO_ACTION`, no runtime source is changed merely to force a cleanup result; exact audit evidence justifies proceeding directly to 101.
-11. Accepted behavior, authority/security invariants and scientific fixtures remain intact.
-12. No new broad framework, dependency, state store, compatibility subsystem or cleanup platform is added.
-13. Runtime-performance claims are measured rather than inferred from LOC.
-14. Cleanup stops at the low-confidence/low-ROI frontier instead of broadening scope to hit an arbitrary reduction target.
-15. Exact-head deterministic gates are green and no current blocking review finding remains.
-
-## 12. Minimum-necessary test
-
-Criterion: remove high-confidence historical/duplicate semantic surface before 101–110 build on it, without creating refactor work when the audit does not justify it.  
-Is this work necessary? **The decision slice is necessary; runtime cleanup is conditional on 100a evidence.**  
-Can the criterion be achieved by a broad refactor? **No.** Broad refactoring creates churn and risks mixing feature semantics with cleanup.  
-Can the criterion be achieved by automatic dead-code deletion? **No.** Unwired desired capabilities and authority/scientific boundaries can look unreachable to static tools.  
-What happens if the audit finds little value? Record and merge `NO_ACTION`, make no runtime cleanup, and proceed to 101. Sunk cost in the cleanup plan is also zero.
-
-## 13. Definition of done
-
-- 100a merged and its exact audit evidence consumed;
-- 100b freshly re-derived and readiness freezes either one bounded high-confidence `CLEANUP` candidate set or an evidence-backed `NO_ACTION` disposition;
-- selected outcome satisfies section 11;
-- desired unwired capabilities are preserved;
-- before/after semantic-surface evidence is recorded for `CLEANUP`, or unchanged runtime surface is explicit for `NO_ACTION`;
-- exact-head gates green;
-- implementation/disposition PR merged and registry reconciled;
-- 101 begins only from the reconciled post-100b master.
+- this fresh full spec is merged from exact post-100a master;
+- `docs/specs/100b-readiness-2026-08-28.md` records a `READY / CLEANUP` disposition for C1 only;
+- `STATUS.md` is reconciled to `100b=ready` with no implementation PR;
+- a remote checkpoint records exact master, audit artifact, candidate, risk and proposed boundaries;
+- `NEXT_EXACT_ACTION=MAINTAINER REVIEW OF 100b CLEANUP SET`;
+- **no runtime source is mutated and 100c/101–110 do not start.**
