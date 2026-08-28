@@ -264,3 +264,31 @@ After the post-112 profile activates, this autonomy applies inside each authoriz
 This autonomy stops only for the four interruption reasons, destructive actions outside the specification, or a hard safety invariant.
 
 Maintainer-owned conformance tests matching `backend/tests/**/test_*_conformance.py` may not be changed unless the queued work explicitly assigns that exact modification.
+
+## Definition of done
+
+1. Acceptance criteria met.
+2. Required and full tests green.
+3. Ruff clean on touched Python.
+4. No unapproved dependency.
+5. Docs changed only within scope.
+6. PR records changes, tests, and deferred findings.
+7. Implementation PR has the correct `STATUS.md` state and number before merge.
+8. Merge is verified on `master`; registry is immediately reconciled.
+
+## Conventions
+
+- Use existing Python style, type hints, and small pure functions.
+- English for code, comments, docs, and commit messages.
+- Follow existing service/routes/models layout only where that layout still adds a real ownership boundary; do not preserve ceremony for its own sake.
+- SQLite migrations are additive in `backend/app/core/schema.py`; no Alembic.
+- Short imperative commit subjects; one logical change per commit.
+
+## What NOT to do
+
+- no broad refactors, renames, or file moves unless required by the specification;
+- no new frameworks, ORMs, agent libraries, or vector databases without accepted authority;
+- no touching `backend/.venv`, `frontend/node_modules`, report history, or the data root;
+- no expansion of tool/agent skeletons, MCP servers, background workers, or streaming unless a specification requires it;
+- no speculative work while touching adjacent code;
+- no combining independently removable specifications.
