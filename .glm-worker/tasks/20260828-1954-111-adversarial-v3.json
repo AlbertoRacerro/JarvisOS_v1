@@ -1,0 +1,14 @@
+{
+  "task_id": "20260828-1954-111-adversarial-v3",
+  "target_ref": "099fbf38b7809396cc45c20645aa1c4753db70fd",
+  "base_ref": "cf4bf1d2b4d2e242481c82bd493e082896ed6aeb",
+  "mode": "adversarial_pre_review",
+  "max_turns": 24,
+  "context_files": [
+    "docs/specs/111-jarvis-context-action-foundation-1.md",
+    "docs/specs/111-readiness-2026-08-28.md",
+    "backend/tests/test_jarvis_context.py",
+    "backend/tests/test_ai_threads.py"
+  ],
+  "instructions": "Adversarially review PR #425 exact head 099fbf38b7809396cc45c20645aa1c4753db70fd against the preloaded AGENTS.md, STATUS, spec 111, readiness, exact base-to-head diff and relevant tests. Determine whether any material P0/P1/P2 acceptance defect remains. Focus on route descriptor/mismatch behavior, exact-ref identity and workspace binding, deterministic context digest/budget/drop disclosure, fail-closed stale/unknown/unavailable handling, zero run_ai_task before invalid dispatch, external-route added-ref rejection, immutable request-id/digest semantics, legacy compatibility, empty production adapter registry and COMMIT/EXECUTE prohibition. Use exploration only for precise unresolved questions not answered by the packet. If a concrete minimal defect exists, produce the smallest candidate patch within the existing readiness allow-list and verify it; otherwise do not edit. Finish with submit_result and an explicit PASS or FINDINGS verdict tied to this exact SHA. Workflow green alone is not PASS."
+}
