@@ -16,6 +16,8 @@ JarvisOS is a single-user AI engineering workspace. Backend authority is FastAPI
 8. Model output is a proposal until explicit user or deterministic-policy promotion.
 9. Never fabricate outputs, validators, artifacts, metrics, or expected values to satisfy a gate.
 10. Prefer the smallest sufficient change. Do not add infrastructure likely to be removed or replaced.
+11. Deterministic repository/runtime evidence and accepted authority prevail over model claims.
+12. A green workflow alone is not semantic PASS.
 
 If a specification requires violating an invariant, stop and report the conflict.
 
@@ -36,14 +38,16 @@ This section supersedes earlier cadence, per-step authorization, and human-merge
 
 `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md` is the canonical execution profile for controlled parallel repository delivery after the activation gate below. It changes development mechanics only; `docs/specs/STATUS.md` remains the sole live authority for state, dependencies, queue order, and implementation-PR association.
 
-- Until fresh exact `master` shows `112 PROJECT-KNOWLEDGE-CORE-1` as `merged`, the ordinary one-active-front rule remains absolute for 111 and 112. The parallel profile grants no implementation authority before that point.
+- Until fresh exact `master` shows `112 PROJECT-KNOWLEDGE-CORE-1` as `merged`, the ordinary one-active-front rule remains absolute through 112. The parallel profile grants no implementation authority before that point.
 - After 112 is merged, the coordinating agent activates the profile automatically only for candidate lanes whose file, store, schema, migration, and authority boundaries are demonstrated to be sufficiently disjoint. No maintainer checkpoint is required merely to activate a proved-safe lane.
-- The profile permits at most one Integration Coordinator plus three isolated domain builders. The coordinator alone owns shared integration boundaries, merge sequencing, and registry reconciliation; no two writers may mutate one PR/head or one shared authority concurrently.
+- Scheduler identities are generic ChatGPT compute slots; logical Integration/Knowledge/Development/Coding responsibilities are dynamic locks, not permanent automation identities.
+- Only one ChatGPT coordinator/writer may own GitHub/shared-authority mutation at a time. The coordinator alone owns shared integration boundaries, merge sequencing, and registry reconciliation.
+- GLM candidate workers may run in parallel only on demonstrably disjoint exact-head tasks/lanes and own no GitHub, merge, queue, or shared-authority role.
 - Parallelism never makes a `planned` row implementable, skips a hard dependency, weakens exact-head evidence, or broadens runtime/model/provider authority.
 - A conflict returns only the affected slices to serial execution. Independent lanes may continue if their own dependencies, readiness, and ownership evidence remain valid.
-- The profile does not automatically parallelize the guarded self-update/PTY, generalized engineering-evidence, or late Process/Design sequence; those retain their own gates.
+- The profile does not automatically parallelize guarded self-update/PTY or other separately gated work.
 
-The detailed lane map, shared-file rules, planning-compression criteria, two-speed CI policy, browser-proof relevance, model-economy policy, read-only prework rule, and conflict fallback are defined only in `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md`; do not create a second parallel-delivery policy elsewhere.
+Detailed lane, mutex, work-stealing, shared-file, planning-compression, CI, browser-proof, read-only-prework, Hermes, and conflict mechanics live only in `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md`; do not create a second parallel-delivery policy elsewhere.
 
 ### Only four interruption reasons
 
@@ -92,22 +96,26 @@ The exception is bounded as follows:
 
 Review, finding, correction, and re-review behavior belongs only to separate spec 080. No 080 behavior may be smuggled into 079.
 
-## Model economy
+## Repository-development model roles
 
-Once existing egress policies permit it:
+The current normative delivery split is:
 
-- cheap external models are the normal compute workhorse;
-- frontier models are reserved for review, strategic documents, and hard tasks;
-- local models are the fallback when safe redaction is impossible or ambiguous.
+1. **ChatGPT — Tech Lead / Architect / Maintainer.** Resolve fresh repo/context, choose architecture and ownership, author definition/full spec/readiness, issue precise implementation packets, define scope/non-goals/acceptance criteria, review candidate diffs semantically, integrate, own `STATUS.md` and shared authority, and perform exact-head merge/reconciliation.
+2. **GLM-5.3-Flash — default bounded coding implementer and repair implementer for non-trivial READY code slices.** Give it exact target/base SHA, allowed paths, preloaded authority/context, required behavior, non-goals, and acceptance tests/checks. It writes candidate patches only in an ephemeral checkout. It owns no GitHub, merge, queue, architecture, policy, or shared-authority decision. Broad/general/adversarial review is not its default role.
+3. **ChatGPT acceptance and repair loop.** After GLM output, ChatGPT checks diff, scope, semantics, and tests. When materially fixable, prefer a narrow GLM `REPAIR ONLY` packet over discarding or reimplementing the patch. ChatGPT codes directly only for trivial/mechanical fixes, minimal delivery plumbing, or proven GLM failure where another delegation is not worthwhile.
+4. **Claude — normal independent terminal reviewer** when independent review is required or materially useful. Claude is a reviewer, not the default implementer.
+5. **Codex — scarce specialist/high-risk reserve** only where a concrete material advantage or unresolved high-risk need justifies it. Do not use Codex routinely for docs/planning/reconciliation, small PRs, ordinary UI polish, or duplicate review.
 
-For repository-development review/allocation, the post-112 profile may impose a stricter resource preference without changing product provider policy. In particular, scarce frontier-review capacity should not be consumed for work the coordinating chat or a cheaper bounded worker can perform safely.
+Deterministic repository/runtime evidence and accepted authority always outrank model claims. Workflow green alone is not semantic PASS. For GLM, prefer a sufficiently budgeted completed bounded task over a cheap failed attempt while keeping path, exploration, tool, and authority scope narrow.
 
-This never weakens the product execution spine or safe defaults.
+Detailed packet, review, repair, exact-head, and post-112 mechanics are canonical only in `docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md` and, after its activation gate, `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md`.
+
+This role split never weakens the product execution spine, provider policy, or safe defaults.
 
 ## Spec-driven work
 
 - Read `docs/specs/STATUS.md`, then `docs/specs/README.md`, then the selected specification.
-- Implement exactly one specification per implementation branch.
+- Implement exactly one specification per implementation branch, except only where the post-112 profile explicitly authorizes disjoint parallel lanes.
 - Scope, acceptance criteria, and non-goals are binding.
 - If the specification conflicts with current code, report the conflict; do not guess.
 - `STATUS.md` is the sole live status and priority authority.
@@ -195,7 +203,7 @@ Do not end with a hypothetical next step.
 | `backend/app/modules/tools/`, `agents/` | registry skeletons only; do not expand without a specification |
 | `backend/tests/` | Pytest suite |
 | `frontend/` | React/Vite operator UI |
-| `docs/` | canonical docs; `ARCHITECTURE.md` and `DECISIONS.md` win conflicts |
+| `docs/` | canonical documentation; use the authority-by-question precedence in `docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md` |
 | `docs/specs/` | work-item specifications and canonical `STATUS.md` |
 | `reports/` | generated evaluation/smoke reports |
 
@@ -245,15 +253,15 @@ Merge requirements:
 4. no scope, dependency, secret, spending, or security conflict;
 5. PR body includes the minimum-necessary test when required.
 
-When all five hold, merge immediately with the expected-head SHA and verify `master`. The merge owner then reconciles `STATUS.md` and continues the queue.
+When all five hold, merge immediately with the expected-head SHA and verify `master`. The merge owner then reconciles `STATUS.md` and continues according to the live registry and applicable delivery profile.
 
-External review workflows remain bounded by their own specifications. Spec 079 may continue implementation only. Spec 080, if later promoted, owns review/fix/re-review automation.
+External review workflows remain bounded by their own specifications. Spec 079 may continue implementation only. Spec 080, if later promoted, owns its narrower repository-internal review/fix/re-review automation and is not broadened by the external delivery pipeline.
 
 ## Agent autonomy
 
 Within the queued slice, proceed through inspection, definition, evidence, implementation, tests, CI diagnosis, review handling, merge, and status reconciliation without waiting between reversible steps.
 
-After the post-112 profile activates, this autonomy applies independently inside each authorized lane while the Integration Coordinator retains the shared-boundary and merge responsibilities defined by that profile.
+After the post-112 profile activates, this autonomy applies inside each authorized lane while the single ChatGPT coordinator/writer retains shared-boundary and merge responsibilities defined by that profile.
 
 This autonomy stops only for the four interruption reasons, destructive actions outside the specification, or a hard safety invariant.
 
