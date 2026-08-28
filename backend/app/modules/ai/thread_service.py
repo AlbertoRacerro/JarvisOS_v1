@@ -12,6 +12,10 @@ from app.modules.ai.context_builder import (
     canonical_digest,
 )
 from app.modules.ai.execution import run_ai_task
+from app.modules.ai.jarvis_context import (
+    JarvisContextConflictError,
+    require_dispatchable_preview,
+)
 from app.modules.ai.settings import ensure_ai_settings
 from app.modules.ai.thread_models import (
     AIThreadCreate,
@@ -139,6 +143,9 @@ def submit_interaction(
     if payload.context_selection is not None:
         digest_payload["context_selection"] = payload.context_selection.model_dump()
         digest_payload["expected_context_digest"] = payload.expected_context_digest
+    if payload.jarvis_context is not None:
+        digest_payload["jarvis_context"] = payload.jarvis_context.model_dump(mode="json")
+        digest_payload["expected_jarvis_context_digest"] = payload.expected_jarvis_context_digest
     request_digest = canonical_digest(digest_payload)
 
     duplicate_id = _find_existing_interaction(
@@ -278,16 +285,35 @@ def _find_existing_interaction(
 
 
 def _context_blocks_for_new_submit(workspace_id: str, payload: AIThreadSubmit) -> list[dict] | None:
-    if payload.context_selection is None:
-        return None
-    selection = ContextSelectionSpec(**payload.context_selection.model_dump())
-    try:
-        bundle = build_workspace_context_bundle(workspace_id, selection=selection)
-    except ValueError as exc:
-        raise AIThreadError(str(exc)) from exc
-    if bundle.context_digest != payload.expected_context_digest:
-        raise AIThreadConflictError("context pack changed since preview")
-    return bundle.blocks
+    blocks: list[dict] = []
+    if payload.context_selection is not None:
+        selection = ContextSelectionSpec(**payload.context_selection.model_dump())
+        try:
+            bundle = build_workspace_context_bundle(workspace_id, selection=selection)
+        except ValueError as exc:
+            raise AIThreadError(str(exc)) from exc
+        if bundle.context_digest != payload.expected_context_digest:
+            raise AIThreadConflictError("context pack changed since preview")
+        blocks.extend(bundle.blocks)
+
+    if payload.jarvis_context is not None:
+        if payload.jarvis_context.workspace_id != workspace_id:
+            raise AIThreadConflictError("Jarvis context workspace does not match thread workspace")
+        if payload.jarvis_context.added_context_refs and payload.route_class is not None:
+            if not payload.route_class.startswith("local:"):
+                raise AIThreadConflictError(
+                    "exact-ref Jarvis context is unavailable for external routes in spec 111"
+                )
+        try:
+            preview = require_dispatchable_preview(
+                payload.jarvis_context,
+                payload.expected_jarvis_context_digest or "",
+            )
+        except JarvisContextConflictError as exc:
+            raise AIThreadConflictError(str(exc)) from exc
+        blocks.extend(preview.blocks)
+
+    return blocks or None
 
 
 def _reserve_interaction(
