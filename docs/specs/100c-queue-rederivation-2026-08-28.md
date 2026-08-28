@@ -10,8 +10,10 @@ Primary evidence: `docs/audits/100c-final-product-direction-overlap-audit-f50eb0
 
 The order below implements the maintainer priority: Jarvis common foundation first; Project Knowledge backend; Development backend; Coding backend; incremental Jarvis domain actions; Design/Process last.
 
+`100c` is definition-only queue authority, not a runtime prerequisite. New implementation rows cite the merged 100c planning artifacts as governing authority but MUST NOT list `100c` as a hard `Depends on` row, because definition-only authority rows conventionally remain non-implementation (`planned`) and would otherwise make the registry gate impossible to satisfy.
+
 1. **111 JARVIS-CONTEXT-ACTION-FOUNDATION-1**
-   - Depends on: 040, 042, 059b, 061a, 061b, 090, 091, 097, 100c.
+   - Depends on: 040, 042, 059b, 061a, 061b, 090, 091, 097.
    - Scope kernel: stable workspace identity, route descriptor, exact selected refs with id/version/ref, explicit removable added-context refs, inspected preview + digest, provenance/source manifest, fail-closed stale refs, generic capability/action registry, Jarvis service/policy adapter over the current AI runtime.
    - Hard line: no page-specific business logic, no second orchestration store, no Hermes runtime, no canonical domain COMMIT/EXECUTE.
    - Promotes/absorbs: generic parts of 031/034/036 and the common part of FV-B11/FV-B16.
@@ -140,6 +142,7 @@ Other planned/deferred rows retain the exact dispositions in `docs/audits/100c-f
 Before any row above becomes `ready`, its definition/full spec/readiness must cite:
 
 - exact current master and current owner code;
+- merged 100c planning artifacts as governing definition authority (citation only, never a hard status dependency);
 - applicable PD contract, capability-matrix rows and interaction-contract action classes;
 - applicable canonical HTML path/hash/blob/viewport for user-facing work;
 - exact state/write owner and proof no second truth store is introduced;
