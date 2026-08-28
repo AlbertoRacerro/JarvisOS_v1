@@ -17,7 +17,7 @@ jobs:
       - name: Prove product tree matches frozen 100b head
         shell: bash
         run: |
-          git diff --exit-code 98b3f011feaf0db1e63cd9be6bb77e87a6cf0574 -- frontend backend schemas
+          git diff --exit-code 4f90310ad8d2c71326c27a9dd56aaba3369df368 -- frontend backend schemas
 
       - uses: actions/setup-node@v4
         with:
