@@ -35,20 +35,6 @@ jobs:
           python scripts/manual_review.py --self-test
           python scripts/check_review_secret_boundary.py --self-test
 
-      - name: 100a exact-baseline metrics
-        run: |
-          git fetch --no-tags --depth=1 origin faddf39aaae7513943fd337f352de905626120ca
-          python scripts/_100a_codebase_lean_metrics.py \
-            --ref faddf39aaae7513943fd337f352de905626120ca \
-            --output "$RUNNER_TEMP/100a-codebase-lean-metrics.json"
-
-      - name: Upload 100a audit metrics
-        uses: actions/upload-artifact@v4
-        with:
-          name: 100a-codebase-lean-metrics
-          path: ${{ runner.temp }}/100a-codebase-lean-metrics.json
-          retention-days: 7
-
       - name: Install dependencies
         working-directory: backend
         run: |
