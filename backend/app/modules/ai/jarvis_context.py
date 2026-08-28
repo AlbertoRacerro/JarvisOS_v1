@@ -7,6 +7,7 @@ from typing import Protocol
 from app.modules.ai.context_builder import canonical_digest
 from app.modules.ai.jarvis_context_models import (
     JarvisActionClass,
+    JarvisCapabilityDescriptor,
     JarvisContextPreview,
     JarvisContextRefOutcome,
     JarvisContextRequest,
@@ -68,9 +69,30 @@ class JarvisContextAdapterRegistry:
         return resolved
 
 
+class JarvisCapabilityRegistry:
+    def __init__(self) -> None:
+        self._capabilities: dict[str, JarvisCapabilityDescriptor] = {}
+
+    def register(self, capability: JarvisCapabilityDescriptor) -> None:
+        if capability.action_class in {"COMMIT", "EXECUTE"}:
+            raise JarvisContextError("common Jarvis capability registry cannot own COMMIT or EXECUTE")
+        if capability.capability_id in self._capabilities:
+            raise JarvisContextConflictError("Jarvis capability id is already registered")
+        self._capabilities[capability.capability_id] = capability
+
+    def for_route(self, route_id: str) -> list[JarvisCapabilityDescriptor]:
+        return [
+            capability
+            for capability in self._capabilities.values()
+            if capability.route_id == route_id
+        ]
+
+
 # Deliberately empty in production under spec 111. Later domain slices register
-# their own read/context adapters without moving domain write authority here.
+# their own read/context adapters and route-scoped capabilities without moving
+# domain write or execution authority here.
 PRODUCTION_ADAPTER_REGISTRY = JarvisContextAdapterRegistry()
+PRODUCTION_CAPABILITY_REGISTRY = JarvisCapabilityRegistry()
 
 
 def _logical_key(ref: JarvisExactRef) -> tuple[str, str, str, str]:
