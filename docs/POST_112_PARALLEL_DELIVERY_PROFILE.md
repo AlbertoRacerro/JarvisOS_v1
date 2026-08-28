@@ -27,26 +27,23 @@ If disjointness cannot be proved, only the conflicting slices remain serial. Ind
 
 Scheduler identities are generic ChatGPT compute slots. Integration, Knowledge, Development, and Coding are **logical responsibilities acquired dynamically**, not permanent automation identities.
 
-The intended post-112 scheduler topology may use four interchangeable ChatGPT replicas staggered at `:00`, `:15`, `:30`, and `:45` to reduce reaction latency. Multiple writer-capable replicas may be enabled simultaneously **only when the deployed scheduler/control plane has a proved atomic global writer lease shared by every replica**.
+The normal post-112 scheduler topology is four interchangeable ChatGPT replicas staggered at `:00`, `:15`, `:30`, and `:45`. They reduce reaction latency; they do **not** authorize concurrent ChatGPT writers.
 
-The lease must provide all of the following before any GitHub/shared-authority mutation:
+Every replica uses the same global ChatGPT writer-mutex protocol through the automation control plane before any GitHub/shared-authority mutation:
 
-1. one atomic acquire-or-fail operation;
-2. one unambiguous owner identity;
-3. a bounded freshness/expiry rule;
-4. owner-only release;
-5. deterministic stale-owner recovery;
-6. fail-closed behavior when acquisition cannot be proven.
+1. read the live automation topology with `automations.peek`;
+2. if any other JarvisOS Roadmap Builder A/B/C/D title is `[BUSY <UTC-ISO>]` and that timestamp is less than 45 minutes old, exit without mutation;
+3. otherwise rename only itself to its base title plus `[BUSY <UTC-ISO>]`;
+4. immediately re-read the automation topology;
+5. if another fresh A/B/C/D BUSY marker is now present, restore the base title and exit without mutation; otherwise this replica is the sole ChatGPT coordinator/writer for the run;
+6. before returning, always restore its base title, including after a failure path.
 
-A read-then-write convention, `automations.peek` plus title markers, local process state, or a repository workflow concurrency group that does not cover the external scheduler replicas is **not** an atomic mutex and cannot be treated as one.
+No GitHub/shared-authority mutation occurs before the post-rename re-check. A stale BUSY marker older than 45 minutes is not ownership evidence. The four schedulers may all remain enabled; mutual exclusion is achieved by this fail-closed peek/mark/re-peek protocol rather than by fixed lane affinity.
 
-Until an atomic lease satisfying the requirements above is evidenced for the deployed replicas, **at most one ChatGPT writer scheduler may be enabled**. Additional scheduler slots may exist only disabled or as non-mutating observers. This fallback preserves the one-writer invariant without inventing an unproved lock implementation.
-
-When the atomic lease is available:
+While one replica owns the writer role:
 
 - **only one ChatGPT coordinator/writer may mutate GitHub/shared authority at a time**;
-- the lease holder temporarily owns Integration responsibilities and may service any currently authorized lane;
-- a replica that fails lease acquisition exits without mutation;
+- the owner temporarily holds Integration responsibilities and may service any currently authorized lane;
 - logical lane ownership is acquired for the current bounded action and released when that action is complete;
 - no two writers may mutate the same PR/head or shared authority concurrently.
 
@@ -96,19 +93,18 @@ Deterministic repo/runtime evidence and accepted authority outrank all model cla
 
 ## 4. Work-stealing cycle
 
-A ChatGPT writer must:
+A ChatGPT lock holder must:
 
-1. acquire the proved atomic global writer lease before any GitHub/shared-authority mutation; if no such lease is deployed, only the single enabled writer scheduler may mutate;
-2. resolve fresh exact `master`, `STATUS.md`, current PR heads, workflow/review evidence, and terminal/running candidate-worker state;
-3. reject stale model/workflow results whose target head is no longer authoritative;
-4. consume already-terminal safe evidence first;
-5. scan all currently authorized lanes rather than assuming a scheduler-specific lane;
-6. advance an immediately actionable lane one bounded step at a time while preserving lane/shared ownership;
-7. launch the next bounded GLM candidate/repair task when useful and authorized;
-8. continue across other ready lanes while there is immediate safe work;
-9. release the lease if one is deployed and exit when the remaining next actions are only waits for GLM, CI, independent review, provider/external availability, or a future scheduler wake-up.
+1. resolve fresh exact `master`, `STATUS.md`, current PR heads, workflow/review evidence, and terminal/running candidate-worker state;
+2. reject stale model/workflow results whose target head is no longer authoritative;
+3. consume already-terminal safe evidence first;
+4. scan all currently authorized lanes rather than assuming a scheduler-specific lane;
+5. advance an immediately actionable lane one bounded step at a time while preserving lane/shared ownership;
+6. launch the next bounded GLM candidate/repair task when useful and authorized;
+7. continue across other ready lanes while there is immediate safe work;
+8. exit when the remaining next actions are only waits for GLM, CI, independent review, provider/external availability, or a future scheduler wake-up.
 
-The coordinator must **not sleep or poll** merely to consume runtime. When insufficient wall-clock budget remains for a complete safe mutation plus verification, record the exact next action, release any held lease, and exit cleanly.
+The coordinator must **not sleep or poll** merely to consume runtime. When insufficient wall-clock budget remains for a complete safe mutation plus verification, record the exact next action and exit cleanly.
 
 ## 5. Canonical post-112 lanes
 
@@ -140,7 +136,7 @@ After those foundations, `122 JARVIS-DEVELOPMENT-ACTIONS-1` may proceed only whe
 
 `125 SAFE-SELF-UPDATE-1` and `126 LOCAL-TERMINAL-PTY-1` remain separately gated and are not automatically parallelized.
 
-`102` and the later `103–110/093` engineering/Process sequence remain dependency-driven late work under then-current `STATUS.md` authority; this profile does not pull them forward.
+`102 ENGINEERING-EVIDENCE-CONTRACT-1` remains later work. After it is eligible and merged, the engineering/Process sequence is explicitly `103 -> 104 -> 105 -> 106 -> 107 -> 108 -> 109 -> 093 -> 110`, subject to each row's then-current dependencies/readiness and fresh authority. This profile does not pull that sequence forward.
 
 ## 6. Hermes V1 re-derivation gate
 
