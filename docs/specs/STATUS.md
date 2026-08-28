@@ -97,20 +97,35 @@ The binding order is:
 29. 100a CODEBASE-LEAN-AUDIT-1;
 30. 100g FINAL-OPERATOR-UI-REPAIR-1;
 31. 100b CODEBASE-LEAN-CLEANUP-1;
-32. 100c FINAL-PRODUCT-DIRECTION-AUTHORITY-0;
-33. 101 CANONICAL-STATE-WRITE-1;
-34. 102 ENGINEERING-EVIDENCE-CONTRACT-1;
-35. 103 PROCESS-UPSTREAM-BAKEOFF-1;
-36. 104 PROCESS-STACK-STRANGLER-1;
-37. 105 ENGINEERING-DOMAIN-CLEANUP-1;
-38. 106 ENGINEERING-EVALUATOR-1;
-39. 107 PBR-EVALUATOR-1;
-40. 108 DESIGN-STUDY-CONTROLLER-1;
-41. 109 PROCESS-CAD-HANDOFF-1;
-42. 110 MULTIFIDELITY-ENGINEERING-1.
+32. 100c FINAL-PRODUCT-DIRECTION-AUTHORITY-0 definition/queue re-derivation;
+33. 111 JARVIS-CONTEXT-ACTION-FOUNDATION-1;
+34. 112 PROJECT-KNOWLEDGE-CORE-1;
+35. 113 MODEL-DOSSIER-1;
+36. 114 LITERATURE-KNOWLEDGE-1;
+37. 115 PROJECT-SEARCH-1;
+38. 116 ROADMAP-CALENDAR-1;
+39. 117 BRAINSTORM-1;
+40. 118 CODING-REPOSITORY-TRUTH-1;
+41. 119 CODING-RUNTIME-TRUTH-1;
+42. 120 DEVELOPMENT-PIPELINE-STATE-1;
+43. 124 PROVIDER-SETTINGS-GENERIC-1;
+44. 121 JARVIS-PROJECT-KNOWLEDGE-ACTIONS-1;
+45. 122 JARVIS-DEVELOPMENT-ACTIONS-1;
+46. 123 JARVIS-CODING-ACTIONS-1;
+47. 125 SAFE-SELF-UPDATE-1;
+48. 126 LOCAL-TERMINAL-PTY-1;
+49. 102 ENGINEERING-EVIDENCE-CONTRACT-1, freshly re-derived when reached;
+50. 103 PROCESS-UPSTREAM-BAKEOFF-1;
+51. 104 PROCESS-STACK-STRANGLER-1;
+52. 105 ENGINEERING-DOMAIN-CLEANUP-1;
+53. 106 ENGINEERING-EVALUATOR-1;
+54. 107 PBR-EVALUATOR-1;
+55. 108 DESIGN-STUDY-CONTROLLER-1;
+56. 109 PROCESS-CAD-HANDOFF-1;
+57. 093 BLUEREV-SERIAL-TOPOLOGY-0, reordered after 109;
+58. 110 MULTIFIDELITY-ENGINEERING-1.
 
-Items 27–42 are the maintainer-approved post-functional-beta extension registered on
-2026-08-21, amended on 2026-08-27 after the final operator-product preservation packet merged through PR #388, and updated on 2026-08-28 by the maintainer release that inserts 100g before 100b. Item 27 is `merged` through implementation PR #371; item 28 is `merged` through implementation PR #390 under the merged 100f full specification/readiness and the eleven-reference preservation packet. The current release authorizes 100g first, then the frozen 100b C1 runtime cleanup only after 100g is merged and reconciled, then definition-only 100c queue re-derivation. Their order encodes the time-to-useful and zero-sunk-cost rules while preserving the complete canonical frontend fusion before later backend/domain work.
+PR #416 merged the 100c exact-master overlap/ownership audit and queue re-derivation on 2026-08-28. The re-derived order is now binding: Jarvis common context/action contracts first; Project Knowledge; Development; Coding truth and provider settings; incremental Jarvis domain actions; guarded self-update/terminal authority; and only then generalized engineering evidence plus the Process/Design sequence. Every newly allocated 111–126 row remains `planned` until its own definition/full-spec/readiness lifecycle authorizes implementation. Existing BLUECAD authority is preserved, Hermes 066–068 and 080 remain frozen, and Process topology/solver affordances remain truthful unavailable until the late engineering owners land.
 
 The maintainer completed the 062 frontend design decision on 2026-08-17: no permanent
 `Was this useful?` grading control belongs in normal Jarvis chat. Existing 062 backend/evaluation
@@ -135,12 +150,12 @@ it changes. Silent abandonment or substitution is not authorized.
 
 ## Current priority and drafting order
 
-1. 100f FINAL-OPERATOR-FRONTEND-FUSION-1 is `merged` through implementation PR #390 after PR #388 merged the final operator-product preservation packet. The eleven canonical HTML targets remain the production composition authority.
-2. 100a CODEBASE-LEAN-AUDIT-1 is `merged` through implementation PR #405. Its exact audit artifact `docs/audits/100a-codebase-lean-audit-faddf39.md` records zero DELETE dispositions and one bounded cleanup candidate.
-3. 100g FINAL-OPERATOR-UI-REPAIR-1 is `merged` through implementation PR #410 after exact-head CI, BLUECAD proof, and eleven-surface browser evidence on `5ec45f13d44a950a7a0c84617759df5c90ffcede`; the Memory/Development/Coding header dead-space regression and cross-surface peer-tab language inconsistency are closed.
-4. 100b CODEBASE-LEAN-CLEANUP-1 is `merged` through implementation PR #413. Frozen candidate C1 consolidated the final-operator READ adapter into the shared frontend API client while preserving truthful reads, 098 lifecycle fields and 100f/100g composition.
-5. 100c FINAL-PRODUCT-DIRECTION-AUTHORITY-0 is the next authorized definition/queue-rederivation front. It remains definition-only and grants no runtime implementation authority.
-6. Preserve merged 059a/059b, 061a/061b, 075, 076, 077, 079, 082, 094, 070, 083, 084, 085, 086, 087, 088, 035, 089, 054, 090, 091, 029, 096, 071b, 092, 058c, 097, 098, 006b, 058b, 058d, 100, 100f, 100g, and 100b authority boundaries; definition-only 095 remains non-implementation authority. Keep 066–068 and 080 frozen and 062 blocked/deferred.
+1. 100c FINAL-PRODUCT-DIRECTION-AUTHORITY-0 completed its definition/queue re-derivation through PR #416 from exact source master `f50eb0a1f5b246d5e6f6eabab3a033e9a8c5a5c5`. Its merged audit and ownership artifacts are planning authority only; 100c grants no runtime implementation authority.
+2. 111 JARVIS-CONTEXT-ACTION-FOUNDATION-1 is the next binding front. It is `planned`: derive its kernel/full spec/readiness from fresh exact master before any runtime implementation. Jarvis must remain an adapter over the current AI execution/policy spine, with explicit exact context refs and no second orchestration store.
+3. After 111, execute Project Knowledge 112–115, Development 116–117, Coding truth 118–120 plus provider/settings 124, then Jarvis domain adapters 121–123, guarded self-update 125 and security-gated terminal 126. Each row remains independently gated and one implementation front at a time.
+4. Re-derive/reorder 102 only after those operator-domain foundations, then preserve the late 103–110 engineering sequence with 093 after 109. BLUECAD remains preserved; Process topology/solver implementation stays late and cannot be fabricated by frontend state.
+5. 101 is superseded as a standalone row by 112; 055 is superseded as a standalone Project view; 064 and 069 remain trigger-deferred rather than immediate implementation fronts. Keep 066–068 and 080 frozen and 062 blocked/deferred.
+6. Preserve merged 059a/059b, 061a/061b, 075, 076, 077, 079, 082, 094, 070, 083, 084, 085, 086, 087, 088, 035, 089, 054, 090, 091, 029, 096, 071b, 092, 058c, 097, 098, 006b, 058b, 058d, 100, 100f, 100g, and 100b authority boundaries; definition-only 095 and 100c remain planning authority rather than runtime implementation identities.
 
 ## Registry
 
@@ -204,7 +219,7 @@ it changes. Silent abandonment or substitution is not authorized.
 | 052 | merged | [#170](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/170) | CAD-LINK-0: 047 M0 cylinder proxy to BLUECAD | 005, 038, 050, 051, 071 | Convert one fresh successful bundled-047 run with accepted parameter-backed geometry inputs into an idempotent one-`tube_run` BLUECAD candidate, reconcile CAD geometry against 047 volume/area outputs, and return dependency/evidence lineage; full-reactor topology and tube-count semantics remain deferred. |
 | 053 | planned | — | Decision packet and dossier export | 041, 044, 048 | Export recommendations, alternatives, evidence, assumptions, uncertainty, and provenance as a readable decision-to-evidence dossier for thesis, advisor, investor, or later IP/grant workflows. |
 | 054 | merged | [#271](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/271) | Proposal-review UI | 040, 041, 083, 035, 087 | Re-derive as PROPOSAL-REVIEW-1 over the application shell, engineering-data navigation, and lineage overview; preserve explicit promote/reject authority and do not implement the blocked 062 grade surface. |
-| 055 | planned | — | Project view: Mark-1 as one navigable object | 035, 044, 050, 092 | Assemble decisions, calculations, CAD, evidence, and lineage for one workspace without a second store; semantic 3D identity requires the verified 092 binding contract and stores no engineering truth in the view. |
+| 055 | cancelled | — | Project view | 100f, 100g | Superseded as a standalone owner by the final 100f/100g composition plus Project Knowledge owners 112–115; no second project store or peer Project page is authorized. |
 | 056 | merged | [#88](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/88) | BLUECAD property-based geometry testing + determinism canary | 005 | Valid-domain property coverage, same-environment repeatability, and the canonical Linux full-manifest digest canary are merged. |
 | 057 | cancelled | — | SPEC-LEDGER-0 | — | Cancelled after [planning PR #64](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/64): a generated ledger script and parallel handoff file are unnecessary while this canonical registry is sufficient. |
 | 058 | cancelled | — | Unified workspace home layout | — | Cancelled as a monolithic implementation slice. Its product objective is redistributed across 070 UI foundation, 083 application shell, 091 Jarvis sidecar, and 029 Settings. |
@@ -220,12 +235,12 @@ it changes. Silent abandonment or substitution is not authorized.
 | 061b | merged | [#145](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/145) | TOKEN-FLOW-CONTINUATION-0 | 061a | Add exact-length continuation, protected accumulated segments, restart-safe 059b confirmation resume, assembled-output digests, single final record capture, and safe continuation status after 061a is merged. |
 | 062 | blocked | — | GRADE-0 | 021, 059b, 061a, 061b | Backend PRs #166 and #167 remain merged evidence. Maintainer design on 2026-08-17 rejected permanent per-response grading in normal Jarvis chat; any future frontend grade interaction must be separately re-derived as secondary Evaluation/Audit UI and does not block the operator-workstation queue. |
 | 063 | planned | — | CAPTURE-VAULT-0 | 040, 042 | Add a local markdown vault and rebuildable local vector working layer, merged with canonical SQLite retrieval under explicit authority/conflict tags; no vectors over canonical records. |
-| 064 | planned | — | LIT-RAG-0 | 042, 063 | Add corpus-tagged public-literature retrieval to the local working layer with source locators and canonical-over-literature authority; boundary consolidation remains a separately unnumbered planning gap. |
+| 064 | planned | — | LIT-RAG-0 | 114, 115 | Trigger-deferred semantic retrieval extension only after 114/115 literal/structured search evidence proves insufficiency; not an immediate standalone implementation front and no parallel knowledge store. |
 | 065 | planned | — | Provider-family diversification policy hook | 059b | After policy autopilot is proven, add a configurable hook that may separate families of S2/S3-derived content across provider accounts without weakening exact-packet, budget, sensitivity, or audit gates. |
 | 066 | planned | — | HERMES-PASSTHROUGH-0 | 015, 018, 021, 059b, 061a, 061b, 062 | Frozen by maintainer decision on 2026-07-29 and not reopened by 081, 095 or the 2026-08-21 architecture reconciliation. Restart requires explicit maintainer approval and fresh re-derivation from then-current `master`. |
 | 067 | planned | — | JARVIS-MCP-0 | 005, 010, 040, 042, 043, 044, 059a | Frozen by maintainer decision on 2026-07-29 and not reopened by 081, 095 or the 2026-08-21 architecture reconciliation. Restart requires explicit maintainer approval and fresh re-derivation from then-current `master`. |
 | 068 | planned | — | HERMES-CONFIG-0 | 066, 067 | Frozen by maintainer decision on 2026-07-29 and not reopened by 081, 095 or the 2026-08-21 architecture reconciliation. Restart requires explicit maintainer approval and fresh re-derivation from then-current `master`. |
-| 069 | planned | — | MEMORY-CONSOLIDATE-0 | 040, 042, 061a, 061b, 062, 066, 067, 068 | First Hermes dogfood: consolidate bounded accepted records/evidence into MemoryStore proposals with conflict preservation, provenance, grading, and cost evidence; never promote, overwrite, delete, or lower sensitivity. |
+| 069 | planned | — | MEMORY-CONSOLIDATE-0 | 111 | Trigger-deferred while Hermes 066–068 remain frozen; reopen only under explicit Hermes release and reuse canonical MemoryStore/proposal/context contracts rather than another memory authority. |
 | 070 | merged | [#225](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/225) | UI-FOUNDATION-1 | 006, 082, 094 | Ready under [the 2026-08-04 readiness decision](070-readiness-2026-08-04.md) for one bounded implementation of semantic tokens, system/light/dark appearance, five shared primitives, limited migration, accessibility evidence, and the dependency-free UI foundation checker; no 083 shell work. |
 | 071 | merged | [#147](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/147) | MODEL-SCENARIO-DOF-0: editable bindings, scenario runs, and degree-of-freedom inspection | 040, 043, 047 | Preserve the merged immutable input-contract, side-effect-free binding/DOF preview and scenario-run authority. New operator-first Properties/working configuration work is additive under 071b; this historical implementation is not reopened. |
 | 071b | merged | [#298](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/298) | ENGINEERING-PROPERTIES-1 | 071, 096 | Definition PR #295 and [the 2026-08-18 readiness decision](071b-readiness-2026-08-18.md) under PR #296 are merged. Authorize the bounded operator-first implementation of contract-driven Properties, transient working configuration, effective values/provenance, dirty/Undo/Revert state, deterministic preflight/run-start semantics, and the narrow server-owned run-create idempotency seam frozen by readiness; no second engineering store. |
@@ -262,9 +277,9 @@ it changes. Silent abandonment or substitution is not authorized.
 | 100a | merged | [#405](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/405) | CODEBASE-LEAN-AUDIT-1 | 100 | Implementation PR #405 merged the audit-only evidence artifact `docs/audits/100a-codebase-lean-audit-faddf39.md`, audited exact source SHA `faddf39aaae7513943fd337f352de905626120ca`, and found zero DELETE dispositions plus one bounded high-confidence MERGE candidate for fresh 100b derivation; no runtime cleanup or semantic mutation occurred. |
 | 100g | merged | [#410](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/410) | FINAL-OPERATOR-UI-REPAIR-1 | 100f | Full spec `100g-final-operator-ui-repair-1.md` and readiness `100g-readiness-2026-08-28.md` merged through docs-only PR #408. Authorizes exactly two frontend-only repairs: compact horizontal workspace-header composition for Memory/Development/Coding and one neutral/soft-accent peer-tab language across Design, Memory, Development, Coding and Settings, preserving Process/BLUECAD structural semantics and requiring deterministic plus exact-head browser proof. |
 | 100b | merged | [#413](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/413) | CODEBASE-LEAN-CLEANUP-1 | 100a, 100g | Frozen candidate C1 merged the final-operator read adapter into `frontend/src/api/client.ts`, removed the duplicate module, and preserved truthful Requirement/Parameter reads including 098 `value_status`/`lifecycle_state` fields and existing 100f/100g composition. |
-| 100c | planned | — | FINAL-PRODUCT-DIRECTION-AUTHORITY-0 | 100b | Definition-only post-cleanup authority kernel preserved by PR #388. After 100b is merged and reconciled, the 2026-08-28 maintainer release authorizes fresh definition/queue re-derivation from exact master; 100c itself performs no runtime implementation. |
-| 101 | planned | — | CANONICAL-STATE-WRITE-1 | 040, 042, 071b, 098, 100b | Unify legacy modeling CRUD and MemoryStore/canonical record transitions behind one server-owned write-intent/lifecycle/audit boundary; separate Parameter record lifecycle from value/evidence quality and prevent proposed records from entering authoritative context by value-quality alone. |
-| 102 | planned | — | ENGINEERING-EVIDENCE-CONTRACT-1 | 044, 077, 101 | Generalize evaluator/evidence metadata for producer/version, digests, units, fidelity, validity domain, qualification, known exclusions, uncertainty and typed outcomes while preserving current solver-specific evidence and egress lineage. |
+| 100c | planned | — | FINAL-PRODUCT-DIRECTION-AUTHORITY-0 | 100b | Definition/queue re-derivation merged through PR #416. Exact-master overlap audit, capability/interaction ownership map and canonical queue are binding planning authority; 100c has no runtime implementation PR and planned 111 is next. |
+| 101 | cancelled | — | CANONICAL-STATE-WRITE-1 | 040, 042, 071b, 098, 100b | Superseded as a standalone slice by 112 PROJECT-KNOWLEDGE-CORE-1 under merged 100c authority. Valid canonical-write/lifecycle obligations remain mandatory inputs to 112; no parallel write layer. |
+| 102 | planned | — | ENGINEERING-EVIDENCE-CONTRACT-1 | 044, 077 | Re-derive/reorder after the 111–126 operator-domain foundations; preserve existing 044/077 evidence authority and generalize only what later engineering evaluators require. |
 | 103 | planned | — | PROCESS-UPSTREAM-BAKEOFF-1 | 047, 048, 049, 075, 100, 102 | Re-evaluate the custom process stack from zero against current upstreams such as IDAES/Pyomo/WaterTAP, BioSTEAM/QSDsan, CasADi/OpenMDAO, DWSIM/CAPE-OPEN and property libraries; produce explicit KEEP/WRAP/REPLACE/DELETE decisions with license, dynamics/recycle, optimization, diagnostics, Windows/local and qualification evidence. |
 | 104 | planned | — | PROCESS-STACK-STRANGLER-1 | 103 | Execute the 103 decision: migrate only still-useful domain equations/tests/adapters, switch callers to selected upstream boundaries, and delete duplicated generic custom process-solver infrastructure rather than maintaining parallel engines for sunk-cost reasons. |
 | 105 | planned | — | ENGINEERING-DOMAIN-CLEANUP-1 | 104 | Delete or deliberately rebuild the obsolete `app/modules/engineering` placeholder boundary and resolve the dependency/provenance `app/modules/flowsheet` naming collision with real process flowsheets, preserving compatibility only where demonstrably required. |
@@ -273,6 +288,22 @@ it changes. Silent abandonment or substitution is not authorized.
 | 108 | planned | — | DESIGN-STUDY-CONTROLLER-1 | 107 | Add a deterministic/reproducible DesignStudy/StudyController inner loop where DOE/optimizer/search receives every evaluator result directly, with persisted feasibility/failure/Pareto state while Jarvis remains in the outer interpretation/intervention loop. |
 | 109 | planned | — | PROCESS-CAD-HANDOFF-1 | 005, 071b, 108 | Introduce a typed ProcessDesignEnvelope for process-driving geometry/flows/constraints and an explicit handoff to detailed GeometrySpec/CAD, with physical verification able to reopen the study instead of making CAD hidden process authority. |
 | 110 | planned | — | MULTIFIDELITY-ENGINEERING-1 | 108, 109 | Add decision-driven fidelity escalation from analytical/reduced-order evaluators to CFD/FEM/specialist tools only when needed, carrying exact qualification/validity evidence and allowing high-fidelity results to feed back into the same study. |
+| 111 | planned | — | JARVIS-CONTEXT-ACTION-FOUNDATION-1 | 040, 042, 059b, 061a, 061b, 090, 091, 097 | Stable workspace/route/exact-ref context and generic capability/action contracts over the current AI execution/policy spine; explicit removable context, inspected preview/digest/provenance and fail-closed stale refs; no page business logic, Hermes runtime, second orchestration store or domain COMMIT/EXECUTE. |
+| 112 | planned | — | PROJECT-KNOWLEDGE-CORE-1 | 001, 035, 040, 042, 050, 051, 071b, 098, 111 | Canonical Project Basis write/change-set/working-revision, deterministic impact/revalidation and atomic reconciliation over existing engineering-record ownership; no second project/model store. |
+| 113 | planned | — | MODEL-DOSSIER-1 | 050, 051, 077, 112 | Read-only exact model/version/revision dossier over existing modeling/run/evidence/artifact/source owners with bounded disclosures; no canonical model writes. |
+| 114 | planned | — | LITERATURE-KNOWLEDGE-1 | 040, 042, 112 | Structured source/document/import/claim/datum/citation/location/used-by provenance bridged to existing file/source authority, with bounded safe preview/open; research/extraction stays proposal-only. |
+| 115 | planned | — | PROJECT-SEARCH-1 | 112, 113, 114 | Literal/structured project search returning exact owner/type/version/provenance as a read projection only; semantic retrieval remains trigger-deferred. |
+| 116 | planned | — | ROADMAP-CALENDAR-1 | 111 | Stable Roadmap work-item identity with deterministic gates plus separate real Calendar time-allocation entities and exact time-zone/link semantics; no Board store. |
+| 117 | planned | — | BRAINSTORM-1 | 111 | Immutable RAW capture and NEW/DISCUSSED/RECONCILED/SUPERSEDED lineage with explicit promotion proposals to Roadmap/Design/Coding; speech capture remains trigger-deferred. |
+| 118 | planned | — | CODING-REPOSITORY-TRUTH-1 | 111 | Server-side remote repository/ref/SHA/PR/check/review truth plus bounded Repository Inspector search/preview and exact safe GitHub URLs; no frontend GitHub token or duplicate repository truth. |
+| 119 | planned | — | CODING-RUNTIME-TRUTH-1 | 118 | Observe local executed path/ref/SHA/dirty/build/runtime identity and deterministic aligned/local-behind/divergent/unknown state; observation only, no update/restart authority. |
+| 120 | planned | — | DEVELOPMENT-PIPELINE-STATE-1 | 118 | Inspectable exact Proposal→Plan→Implementation→Tests→Independent Review→Reconciliation→Merge state with stale-gate invalidation; no hidden auto-merge or second queue. |
+| 121 | planned | — | JARVIS-PROJECT-KNOWLEDGE-ACTIONS-1 | 111, 112, 113, 114, 115 | Explicit exact context refs and stale-safe CONTEXT/PROPOSE actions over Project Basis, Models and Literature; domain COMMIT remains with Project Knowledge owners. |
+| 122 | planned | — | JARVIS-DEVELOPMENT-ACTIONS-1 | 111, 116, 117 | Explicit Development context basket and scheduling/reconciliation/Roadmap/promotion proposals; browsing remains context-neutral and acceptance stays domain-owned. |
+| 123 | planned | — | JARVIS-CODING-ACTIONS-1 | 111, 118, 119, 120 | Inspect/explain/context and Suggest modification as proposal/diff/plan only through accepted server-side development authority; no direct file mutation. |
+| 124 | planned | — | PROVIDER-SETTINGS-GENERIC-1 | 015, 018, 021, 059b, 061a, 082, 094, 111 | Provider/integration-scoped credential/config/status/test/catalogue/usage/budget/system projections over existing secure storage/provider/egress/policy owners; no model-scoped keys or Hermes claim. |
+| 125 | planned | — | SAFE-SELF-UPDATE-1 | 119, 120 | Guarded exact-target update/restart/rollback authority with dirty refusal, state preservation, migration/build/smoke/health and known-good rollback evidence; separate from observation and PTY. |
+| 126 | planned | — | LOCAL-TERMINAL-PTY-1 | 118, 119, 123 | Security-gated typed local PTY/session authority with validated cwd, scrubbed environment, secret-safe/redacted display boundary and explicit high-risk confirmation; remains unavailable until full security/readiness proof. |
 
 ## Superseded planning aliases and resolved collisions
 
