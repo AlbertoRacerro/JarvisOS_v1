@@ -16,6 +16,8 @@ JarvisOS is a single-user AI engineering workspace. Backend authority is FastAPI
 8. Model output is a proposal until explicit user or deterministic-policy promotion.
 9. Never fabricate outputs, validators, artifacts, metrics, or expected values to satisfy a gate.
 10. Prefer the smallest sufficient change. Do not add infrastructure likely to be removed or replaced.
+11. Deterministic repository/runtime evidence and accepted authority prevail over model claims.
+12. A green workflow alone is not semantic PASS.
 
 If a specification requires violating an invariant, stop and report the conflict.
 
@@ -201,7 +203,7 @@ Do not end with a hypothetical next step.
 | `backend/app/modules/tools/`, `agents/` | registry skeletons only; do not expand without a specification |
 | `backend/tests/` | Pytest suite |
 | `frontend/` | React/Vite operator UI |
-| `docs/` | canonical docs; `ARCHITECTURE.md` and `DECISIONS.md` win conflicts |
+| `docs/` | canonical documentation; use the authority-by-question precedence in `docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md` |
 | `docs/specs/` | work-item specifications and canonical `STATUS.md` |
 | `reports/` | generated evaluation/smoke reports |
 
