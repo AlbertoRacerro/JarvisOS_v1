@@ -28,9 +28,22 @@ This section supersedes earlier cadence, per-step authorization, and human-merge
 - The assigned agent owns the technical merge decision.
 - When deterministic gates are green and no current blocking review finding remains open, merge with an exact-head guard and continue to the next queued item.
 - Do not wait for maintainer confirmation between definition, readiness, implementation, evidence, or registry-reconciliation PRs.
-- Work queue order is binding. Finish, verify, and merge the first item before opening the next implementation front.
+- Work queue order is binding. Finish, verify, and merge the first item before opening the next implementation front, except for the explicitly gated post-112 controlled-parallel profile below.
 - Report only when the queue is exhausted, once per week for a queue longer than one week, or when one of the four interruption reasons below applies.
 - Never enable GitHub auto-merge. The agent performs and verifies each merge explicitly.
+
+### Post-112 controlled-parallel delivery exception — dormant until 112 merges
+
+`docs/POST_112_PARALLEL_DELIVERY_PROFILE.md` is the canonical execution profile for controlled parallel repository delivery after the activation gate below. It changes development mechanics only; `docs/specs/STATUS.md` remains the sole live authority for state, dependencies, queue order, and implementation-PR association.
+
+- Until fresh exact `master` shows `112 PROJECT-KNOWLEDGE-CORE-1` as `merged`, the ordinary one-active-front rule remains absolute for 111 and 112. The parallel profile grants no implementation authority before that point.
+- After 112 is merged, the coordinating agent activates the profile automatically only for candidate lanes whose file, store, schema, migration, and authority boundaries are demonstrated to be sufficiently disjoint. No maintainer checkpoint is required merely to activate a proved-safe lane.
+- The profile permits at most one Integration Coordinator plus three isolated domain builders. The coordinator alone owns shared integration boundaries, merge sequencing, and registry reconciliation; no two writers may mutate one PR/head or one shared authority concurrently.
+- Parallelism never makes a `planned` row implementable, skips a hard dependency, weakens exact-head evidence, or broadens runtime/model/provider authority.
+- A conflict returns only the affected slices to serial execution. Independent lanes may continue if their own dependencies, readiness, and ownership evidence remain valid.
+- The profile does not automatically parallelize the guarded self-update/PTY, generalized engineering-evidence, or late Process/Design sequence; those retain their own gates.
+
+The detailed lane map, shared-file rules, planning-compression criteria, two-speed CI policy, browser-proof relevance, model-economy policy, read-only prework rule, and conflict fallback are defined only in `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md`; do not create a second parallel-delivery policy elsewhere.
 
 ### Only four interruption reasons
 
@@ -86,6 +99,8 @@ Once existing egress policies permit it:
 - cheap external models are the normal compute workhorse;
 - frontier models are reserved for review, strategic documents, and hard tasks;
 - local models are the fallback when safe redaction is impossible or ambiguous.
+
+For repository-development review/allocation, the post-112 profile may impose a stricter resource preference without changing product provider policy. In particular, scarce frontier-review capacity should not be consumed for work the coordinating chat or a cheaper bounded worker can perform safely.
 
 This never weakens the product execution spine or safe defaults.
 
@@ -237,6 +252,8 @@ External review workflows remain bounded by their own specifications. Spec 079 m
 ## Agent autonomy
 
 Within the queued slice, proceed through inspection, definition, evidence, implementation, tests, CI diagnosis, review handling, merge, and status reconciliation without waiting between reversible steps.
+
+After the post-112 profile activates, this autonomy applies independently inside each authorized lane while the Integration Coordinator retains the shared-boundary and merge responsibilities defined by that profile.
 
 This autonomy stops only for the four interruption reasons, destructive actions outside the specification, or a hard safety invariant.
 
