@@ -66,6 +66,17 @@ class JarvisContextAdapterRegistry:
             raise JarvisContextConflictError("context adapter changed the requested exact ref identity")
         if "COMMIT" in resolved.action_classes or "EXECUTE" in resolved.action_classes:
             raise JarvisContextError("context adapter exposed forbidden common COMMIT/EXECUTE authority")
+        try:
+            json.dumps(
+                {"content": resolved.content, "provenance": resolved.provenance},
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            )
+        except (TypeError, ValueError) as exc:
+            raise JarvisContextError(
+                "context adapter returned non-serializable preview evidence"
+            ) from exc
         return resolved
 
 
@@ -121,11 +132,21 @@ def _dedupe_refs(refs: list[JarvisExactRef]) -> list[JarvisExactRef]:
 
 
 def _block_for(resolved: JarvisResolvedRef) -> dict[str, object]:
+    content = json.dumps(
+        {
+            "ref": _canonical_ref(resolved.ref),
+            "content": resolved.content,
+            "provenance": resolved.provenance,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
     return {
-        "kind": "jarvis_exact_ref",
-        "ref": _canonical_ref(resolved.ref),
-        "content": resolved.content,
-        "provenance": resolved.provenance,
+        "source": f"jarvis:{resolved.ref.owner}:{resolved.ref.kind}:{resolved.ref.id}",
+        "type": "jarvis_exact_ref",
+        "id": resolved.ref.id,
+        "content": content,
     }
 
 
