@@ -1,0 +1,61 @@
+name: Temporary 100g registry reconciliation
+
+on:
+  push:
+    branches:
+      - reconcile/100g-merged-after-410
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reconcile registry and remove helper
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path("docs/specs/STATUS.md")
+          text = p.read_text()
+
+          old3 = "3. 100g FINAL-OPERATOR-UI-REPAIR-1 is the sole current runtime front. Full spec `100g-final-operator-ui-repair-1.md` and readiness `100g-readiness-2026-08-28.md` merged through docs-only PR #408. It is `in_review` through implementation PR #410 for only the Memory/Development/Coding header dead-space regression and the cross-surface peer-tab language inconsistency, with exact-head browser proof required."
+          new3 = "3. 100g FINAL-OPERATOR-UI-REPAIR-1 is `merged` through implementation PR #410 after exact-head CI, BLUECAD proof, and eleven-surface browser evidence on `5ec45f13d44a950a7a0c84617759df5c90ffcede`; the Memory/Development/Coding header dead-space regression and cross-surface peer-tab language inconsistency are closed."
+          old4 = "4. 100b CODEBASE-LEAN-CLEANUP-1 remains `ready` but hard-depends on merged 100g before implementation. Its frozen candidate set is exactly C1 from PR #406/#407; the 2026-08-28 maintainer release authorizes that runtime cleanup only after 100g implementation and reconciliation are merged."
+          new4 = "4. 100b CODEBASE-LEAN-CLEANUP-1 is the sole current runtime front and remains `ready`. Its frozen candidate set is exactly C1 from PR #406/#407; implementation authority is limited to that candidate after this 100g reconciliation is merged."
+
+          assert text.count(old3) == 1
+          assert text.count(old4) == 1
+          text = text.replace(old3, new3).replace(old4, new4)
+
+          lines = text.splitlines()
+          hits = 0
+          for i, line in enumerate(lines):
+              if line.startswith("| 100g |"):
+                  parts = [x.strip() for x in line.split("|")]
+                  assert parts[2] == "in_review", parts
+                  assert "#410" in parts[3], parts
+                  parts[2] = "merged"
+                  lines[i] = "| " + " | ".join(parts[1:-1]) + " |"
+                  hits += 1
+          assert hits == 1
+          text = "\n".join(lines) + "\n"
+
+          old_preserve = "006b, 058b, 058d, 100, and 100f authority boundaries"
+          new_preserve = "006b, 058b, 058d, 100, 100f, and 100g authority boundaries"
+          assert text.count(old_preserve) == 1
+          text = text.replace(old_preserve, new_preserve)
+          p.write_text(text)
+          PY
+          rm .github/workflows/_tmp-reconcile-100g.yml
+          git config user.name "JarvisOS Registry Reconciler"
+          git config user.email "actions@github.com"
+          git add docs/specs/STATUS.md .github/workflows/_tmp-reconcile-100g.yml
+          git diff --cached --check
+          git commit -m "Reconcile 100g merged after PR 410"
+          git push origin HEAD
