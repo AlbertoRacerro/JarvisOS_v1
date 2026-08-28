@@ -37,6 +37,7 @@ jobs:
 
       - name: 100a exact-baseline metrics
         run: |
+          git fetch --no-tags --depth=1 origin faddf39aaae7513943fd337f352de905626120ca
           python scripts/_100a_codebase_lean_metrics.py \
             --ref faddf39aaae7513943fd337f352de905626120ca \
             --output "$RUNNER_TEMP/100a-codebase-lean-metrics.json"
@@ -130,6 +131,7 @@ jobs:
           status=${PIPESTATUS[0]}
           elapsed=$SECONDS
           echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "elapsed=$elapsed" >> "$GITHUB_OUTPUT"
           exit 0
 
       - name: Upload bounded canary diagnostics
