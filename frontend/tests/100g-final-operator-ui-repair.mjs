@@ -19,12 +19,14 @@ const bluecadStage = read("src/stages/ModelStage.tsx");
 const settingsSurface = read("src/components/fusion/FinalSettingsSurface.tsx");
 const pkg = JSON.parse(read("package.json"));
 
-// Finding A: final route fragments must stack workspace header above the surface.
+// Finding A: final route fragments must stack workspace header above the real workbench surface.
 assert(shellCss.includes("flex-direction: column;"), "final shell main must stack header and work surface vertically");
 assert(!workspaceCss.includes("min-height: 104px"), "workspace header must not reserve the legacy 104px dead band");
 assert(!workspaceCss.includes("calc(100% - 104px)"), "work surface must not use the legacy fixed-height subtraction");
 assert(workspaceCss.includes("grid-template-columns: minmax(0, 1fr) auto;"), "desktop workspace header must place metadata and peer tabs in one horizontal band");
 assert(workspaceCss.includes('"eyebrow tabs"') && workspaceCss.includes('"title tabs"') && workspaceCss.includes('"description tabs"'), "workspace header must bind peer tabs beside title metadata");
+assert(workspaceCss.includes(".final-fusion__workspace-head + .final-fusion__workbench"), "workspace repair must bind the actual production workbench sibling");
+assert(!workspaceCss.includes(".final-fusion__workspace-head + .final-fusion {"), "workspace repair must not target the obsolete wrapper shape");
 assert(workspaceCss.includes("flex: 1 1 auto;") && workspaceCss.includes("height: auto;"), "work surface must consume the space immediately below the compact header");
 
 // Finding B: all peer navigation uses neutral inactive and soft-accent active states.
