@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -117,6 +116,9 @@ def build_jarvis_context_preview(
     *,
     registry: JarvisContextAdapterRegistry = PRODUCTION_ADAPTER_REGISTRY,
 ) -> JarvisContextPreview:
+    # Validate exact identity conflicts across the complete request first; then
+    # preserve selected-vs-added semantics so selection never implies context.
+    _dedupe_refs([*request.selected_refs, *request.added_context_refs])
     selected_refs = _dedupe_refs(request.selected_refs)
     added_refs = _dedupe_refs(request.added_context_refs)
     for ref in [*selected_refs, *added_refs]:
