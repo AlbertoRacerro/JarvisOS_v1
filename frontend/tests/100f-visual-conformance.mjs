@@ -38,7 +38,7 @@ includesAll(workspaceHeaderCss, [
   ".final-fusion__workspace-head",
   ".final-fusion__peer-tabs",
   ".final-fusion__peer-tabs a.is-active",
-  ".final-fusion__workspace-head + .final-fusion > .final-fusion__surface-head"
+  ".final-fusion__workspace-head + .final-fusion__workbench > .final-fusion__surface-head"
 ], "Workspace heading composition or stale nested-heading suppression missing");
 includesAll(settings, [
   'label: "Appearance"', 'href: "/settings/appearance"',

@@ -8,7 +8,8 @@
     "test:058d": "node tests/058d-process-workspace.mjs",
     "test:100": "node tests/100-visual-identity.mjs",
     "test:100f": "node tests/100f-final-operator-frontend-fusion.mjs && node tests/100f-visual-conformance.mjs",
-    "build": "npm run test:058d && npm run test:100 && npm run test:100f && node tests/100-eyebrow-contrast.mjs && tsc && vite build",
+    "test:100g": "node tests/100g-final-operator-ui-repair.mjs",
+    "build": "npm run test:058d && npm run test:100 && npm run test:100f && npm run test:100g && node tests/100-eyebrow-contrast.mjs && tsc && vite build",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
