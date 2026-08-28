@@ -1,19 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 
 import {
-  listFinalDecisions,
-  listFinalModelSpecs,
-  listFinalParameters,
-  listFinalRequirements,
-  listFinalWorkspaces,
-  readFinalSystemInfo,
-  type FinalDecision,
-  type FinalModelSpec,
-  type FinalParameter,
-  type FinalRequirement,
-  type FinalWorkspace
-} from "../../api/finalOperatorReads";
-import type { SystemInfoResponse } from "../../api/client";
+  getSystemInfo as readFinalSystemInfo,
+  listDecisions as listFinalDecisions,
+  listModelSpecs as listFinalModelSpecs,
+  listParameters as listFinalParameters,
+  listRequirements as listFinalRequirements,
+  listWorkspaces as listFinalWorkspaces,
+  type Decision as FinalDecision,
+  type ModelSpec as FinalModelSpec,
+  type Parameter as FinalParameter,
+  type Requirement as FinalRequirement,
+  type SystemInfoResponse,
+  type Workspace as FinalWorkspace
+} from "../../api/client";
 
 type ReadKind = "project-basis" | "models" | "runtime";
 

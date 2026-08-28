@@ -134,6 +134,18 @@ export type Assumption = {
   status: string;
 };
 
+export type Requirement = {
+  id: string;
+  workspace_id: string;
+  statement: string;
+  rationale?: string | null;
+  status: string;
+  notes?: string | null;
+  schema_version: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Parameter = {
   id: string;
   workspace_id: string;
@@ -141,7 +153,9 @@ export type Parameter = {
   symbol?: string | null;
   value?: string | null;
   unit?: string | null;
+  value_status?: string | null;
   status: string;
+  lifecycle_state?: string | null;
 };
 
 export type SimulationRun = {
@@ -157,6 +171,7 @@ export type Decision = {
   workspace_id: string;
   title: string;
   decision_text: string;
+  rationale?: string | null;
   status: string;
 };
 
@@ -186,6 +201,10 @@ export function listAssumptions(workspaceId: string): Promise<Assumption[]> {
 
 export function createAssumption(workspaceId: string, payload: Record<string, unknown>): Promise<Assumption> {
   return postJson<Assumption>(`/workspaces/${workspaceId}/assumptions`, payload);
+}
+
+export function listRequirements(workspaceId: string): Promise<Requirement[]> {
+  return getJson<Requirement[]>(`/workspaces/${workspaceId}/requirements`);
 }
 
 export function listParameters(workspaceId: string): Promise<Parameter[]> {
