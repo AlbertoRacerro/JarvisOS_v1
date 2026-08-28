@@ -43,7 +43,7 @@ class JarvisRouteDescriptor(BaseModel):
     canonical_path: str = Field(min_length=1, max_length=256)
 
     @model_validator(mode="after")
-    def validate_frozen_pair(self) -> "JarvisRouteDescriptor":
+    def validate_frozen_pair(self) -> JarvisRouteDescriptor:
         if CANONICAL_ROUTE_PAIRS.get(self.route_id) != self.canonical_path:
             raise ValueError("route_id and canonical_path must match one frozen canonical route pair")
         return self
@@ -60,7 +60,7 @@ class JarvisExactRef(BaseModel):
     content_digest: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
 
     @model_validator(mode="after")
-    def require_exact_identity(self) -> "JarvisExactRef":
+    def require_exact_identity(self) -> JarvisExactRef:
         if not any((self.version, self.revision, self.immutable_ref, self.content_digest)):
             raise ValueError("exact context ref requires version, revision, immutable_ref, or content_digest")
         return self
@@ -83,7 +83,7 @@ class JarvisResolvedRef(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
 
     @model_validator(mode="after")
-    def enforce_inert_content(self) -> "JarvisResolvedRef":
+    def enforce_inert_content(self) -> JarvisResolvedRef:
         if self.state != "current" and self.content is not None:
             raise ValueError("non-current exact refs cannot expose context content")
         return self
