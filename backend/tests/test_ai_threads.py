@@ -952,7 +952,14 @@ def test_jarvis_local_safe_route_reuses_ai_execution_and_thread_persistence(
     thread = create_thread(AIThreadCreate(workspace_id=workspace_id))
     request = _jarvis_thread_request(workspace_id)
     digest = "sha256:" + "6" * 64
-    blocks = [{"kind": "jarvis_exact_ref", "content": {"value": "inspected"}}]
+    blocks = [
+        {
+            "source": "jarvis:test-owner:test-kind",
+            "type": "jarvis_exact_ref",
+            "id": "record-1",
+            "content": '{"value":"inspected"}',
+        }
+    ]
     preview_calls = 0
 
     def current_preview(context_request, expected_digest):
@@ -1000,7 +1007,16 @@ def test_jarvis_unchanged_retry_is_durable_and_dispatches_once(
     def current_preview(_request, _digest):
         nonlocal preview_calls
         preview_calls += 1
-        return SimpleNamespace(blocks=[{"kind": "jarvis_exact_ref", "content": "current"}])
+        return SimpleNamespace(
+            blocks=[
+                {
+                    "source": "jarvis:test-owner:test-kind",
+                    "type": "jarvis_exact_ref",
+                    "id": "record-1",
+                    "content": "current",
+                }
+            ]
+        )
 
     monkeypatch.setattr(thread_service, "require_dispatchable_preview", current_preview)
     payload = AIThreadSubmit(
@@ -1047,7 +1063,14 @@ def test_jarvis_request_id_rejects_changed_bound_semantics(
         thread_service,
         "require_dispatchable_preview",
         lambda *_args, **_kwargs: SimpleNamespace(
-            blocks=[{"kind": "jarvis_exact_ref", "content": "current"}]
+            blocks=[
+                {
+                    "source": "jarvis:test-owner:test-kind",
+                    "type": "jarvis_exact_ref",
+                    "id": "record-1",
+                    "content": "current",
+                }
+            ]
         ),
     )
     first_payload = AIThreadSubmit(
