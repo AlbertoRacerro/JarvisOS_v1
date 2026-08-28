@@ -19,15 +19,16 @@ const bluecadStage = read("src/stages/ModelStage.tsx");
 const settingsSurface = read("src/components/fusion/FinalSettingsSurface.tsx");
 const pkg = JSON.parse(read("package.json"));
 
-// Finding A: final route fragments must stack workspace header above the real workbench surface.
+// Finding A: final route fragments must stack a compact workspace header above either truthful production surface root.
 assert(shellCss.includes("flex-direction: column;"), "final shell main must stack header and work surface vertically");
 assert(!workspaceCss.includes("min-height: 104px"), "workspace header must not reserve the legacy 104px dead band");
 assert(!workspaceCss.includes("calc(100% - 104px)"), "work surface must not use the legacy fixed-height subtraction");
 assert(workspaceCss.includes("grid-template-columns: minmax(0, 1fr) auto;"), "desktop workspace header must place metadata and peer tabs in one horizontal band");
 assert(workspaceCss.includes('"eyebrow tabs"') && workspaceCss.includes('"title tabs"') && workspaceCss.includes('"description tabs"'), "workspace header must bind peer tabs beside title metadata");
-assert(workspaceCss.includes(".final-fusion__workspace-head + .final-fusion__workbench"), "workspace repair must bind the actual production workbench sibling");
-assert(!workspaceCss.includes(".final-fusion__workspace-head + .final-fusion {"), "workspace repair must not target the obsolete wrapper shape");
+assert(workspaceCss.includes(".application-shell--final .shell-main > .final-fusion__workspace-head") && workspaceCss.includes("flex: 0 0 auto;"), "workspace header must override the shared shell flex:1 rule");
+assert(workspaceCss.includes(".final-fusion__workspace-head + .final-fusion,") && workspaceCss.includes(".final-fusion__workspace-head + .final-fusion__workbench"), "workspace repair must bind both unavailable wrapper and direct READ workbench roots");
 assert(workspaceCss.includes("flex: 1 1 auto;") && workspaceCss.includes("height: auto;"), "work surface must consume the space immediately below the compact header");
+assert(workspaceCss.includes(".final-fusion__workspace-head + .final-fusion > .final-fusion__surface-head") && workspaceCss.includes(".final-fusion__workspace-head + .final-fusion__workbench > .final-fusion__surface-head"), "duplicate nested headings must remain suppressed on both production roots");
 
 // Finding B: all peer navigation uses neutral inactive and soft-accent active states.
 for (const token of ["#ddd5c8", "#fffefc", "#76a964", "#edf7e7", "#28581a"]) {
