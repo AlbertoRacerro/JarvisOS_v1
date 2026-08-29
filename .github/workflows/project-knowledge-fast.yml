@@ -40,14 +40,18 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: "backend/requirements*.txt"
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
 
       - name: Install backend dependencies
-        run: python -m pip install -r requirements.lock
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Focused Ruff
         run: >-
-          ruff check --output-format=concise
+          python -m ruff check --output-format=concise
           app/core/project_knowledge_schema.py
           app/modules/project_knowledge
           app/modules/memory/project_knowledge_owner.py
@@ -60,7 +64,7 @@ jobs:
 
       - name: Focused Project Knowledge tests
         run: >-
-          pytest -q
+          python -m pytest -q
           tests/test_project_knowledge_core_112.py
           tests/test_project_knowledge_core_112_lifecycle.py
           tests/test_project_knowledge_core_112_semantic_regressions.py
