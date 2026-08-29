@@ -1,0 +1,66 @@
+name: Project Knowledge Fast
+
+# Diagnostic fast-feedback lane only. Full CI, BLUECAD proof, browser proof,
+# and exact-head semantic acceptance remain authoritative.
+on:
+  pull_request:
+    paths:
+      - "backend/app/core/project_knowledge_schema.py"
+      - "backend/app/modules/project_knowledge/**"
+      - "backend/app/modules/memory/project_knowledge_owner.py"
+      - "backend/app/modules/modeling/project_knowledge_owner.py"
+      - "backend/app/modules/modeling/parameter_lifecycle.py"
+      - "backend/app/modules/modeling/service.py"
+      - "backend/tests/test_project_knowledge_core_112.py"
+      - "backend/tests/test_project_knowledge_core_112_lifecycle.py"
+      - "backend/tests/test_project_knowledge_core_112_semantic_regressions.py"
+      - ".github/workflows/project-knowledge-fast.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: project-knowledge-fast-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  project-knowledge-fast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: "backend/requirements*.txt"
+
+      - name: Install backend dependencies
+        run: python -m pip install -r requirements.lock
+
+      - name: Focused Ruff
+        run: >-
+          ruff check --output-format=concise
+          app/core/project_knowledge_schema.py
+          app/modules/project_knowledge
+          app/modules/memory/project_knowledge_owner.py
+          app/modules/modeling/project_knowledge_owner.py
+          app/modules/modeling/parameter_lifecycle.py
+          app/modules/modeling/service.py
+          tests/test_project_knowledge_core_112.py
+          tests/test_project_knowledge_core_112_lifecycle.py
+          tests/test_project_knowledge_core_112_semantic_regressions.py
+
+      - name: Focused Project Knowledge tests
+        run: >-
+          pytest -q
+          tests/test_project_knowledge_core_112.py
+          tests/test_project_knowledge_core_112_lifecycle.py
+          tests/test_project_knowledge_core_112_semantic_regressions.py
