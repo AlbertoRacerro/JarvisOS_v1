@@ -13,7 +13,7 @@ permissions:
 jobs:
   glm-worker:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - name: Checkout worker control plane
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -105,6 +105,7 @@ jobs:
             --output evidence \
             --model glm-5.3-flash \
             --base-url https://api.z.ai/api/coding/paas/v4 \
+            --request-timeout 300 \
             > evidence/harness.stdout.txt \
             2> evidence/harness.stderr.txt
 
