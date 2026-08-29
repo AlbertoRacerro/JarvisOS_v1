@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from pathlib import Path
 
 import glm_worker_harness as harness
@@ -41,6 +42,36 @@ def _bounded_context_file(root: Path, raw_path: str) -> str:
 
 
 harness._read_context_file = _bounded_context_file
+
+
+# `git diff` does not include untracked files. Candidate workers are allowed to
+# create bounded new files, so a final artifact could otherwise claim success
+# while silently omitting most of the candidate. Before the base harness captures
+# its final patch, mark only the worker-created untracked paths as intent-to-add
+# in the *ephemeral* checkout. This changes no repository commit or remote state,
+# but makes ordinary `git diff` include complete new-file patches. Every path is
+# revalidated through the same protected-write boundary before touching the index.
+_original_capture_workspace = harness._capture_workspace
+
+
+def _capture_workspace_with_new_files(root: Path, output_dir: Path) -> tuple[str, str]:
+    raw = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "--others", "--exclude-standard", "-z"],
+        check=True,
+        capture_output=True,
+    ).stdout
+    untracked = [item.decode("utf-8") for item in raw.split(b"\0") if item]
+    for raw_path in untracked:
+        harness._safe_path(root, raw_path, write=True)
+    if untracked:
+        subprocess.run(
+            ["git", "-C", str(root), "add", "--intent-to-add", "--", *untracked],
+            check=True,
+        )
+    return _original_capture_workspace(root, output_dir)
+
+
+harness._capture_workspace = _capture_workspace_with_new_files
 
 
 if __name__ == "__main__":
