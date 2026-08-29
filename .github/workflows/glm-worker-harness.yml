@@ -52,27 +52,51 @@ jobs:
           task_path = Path(tasks[0])
           task = json.loads(task_path.read_text(encoding="utf-8"))
           task_id = str(task.get("task_id", ""))
-          target_ref = str(task.get("target_ref", "master"))
-          if not re.fullmatch(r"[A-Za-z0-9._/-]{1,200}", target_ref) or target_ref.startswith("-"):
-              raise SystemExit("invalid target_ref")
+          target_sha = str(task.get("target_sha", ""))
+          require_ref = str(task.get("require_ref", ""))
+          mode = str(task.get("mode", "analysis"))
           if not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", task_id):
               raise SystemExit("invalid task_id")
+          if not re.fullmatch(r"[0-9a-f]{40}", target_sha):
+              raise SystemExit("target_sha must be an exact 40-character lowercase commit SHA")
+          if require_ref and (not re.fullmatch(r"[A-Za-z0-9._/-]{1,200}", require_ref) or require_ref.startswith("-")):
+              raise SystemExit("invalid require_ref")
           if not isinstance(task.get("instructions"), str) or not task["instructions"].strip():
               raise SystemExit("task instructions are required")
+          if mode == "candidate_patch":
+              allowed = task.get("allowed_paths")
+              if not isinstance(allowed, list) or not allowed or len(allowed) > 24 or not all(isinstance(p, str) and p.strip() for p in allowed):
+                  raise SystemExit("candidate_patch requires allowed_paths with 1..24 non-empty repository paths")
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
               out.write(f"task_path={task_path.as_posix()}\n")
               out.write(f"task_id={task_id}\n")
-              out.write(f"target_ref={target_ref}\n")
+              out.write(f"target_sha={target_sha}\n")
+              out.write(f"require_ref={require_ref}\n")
           PY
 
       - name: Checkout exact task target
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ steps.task.outputs.target_ref }}
+          ref: ${{ steps.task.outputs.target_sha }}
           path: workspace
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Reject stale guarded target
+        if: steps.task.outputs.require_ref != ''
+        working-directory: workspace
+        env:
+          REQUIRE_REF: ${{ steps.task.outputs.require_ref }}
+          TARGET_SHA: ${{ steps.task.outputs.target_sha }}
+        run: |
+          set -euo pipefail
+          remote_sha="$(git ls-remote origin "refs/heads/$REQUIRE_REF" | awk '{print $1}')"
+          test -n "$remote_sha"
+          if [ "$remote_sha" != "$TARGET_SHA" ]; then
+            echo "stale target: $REQUIRE_REF is $remote_sha, task requires $TARGET_SHA" >&2
+            exit 1
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
@@ -82,12 +106,19 @@ jobs:
       - name: Install pinned temporary harness dependency
         run: python -m pip install --disable-pip-version-check "openai-agents==0.21.0"
 
+      - name: Run deterministic harness self-tests
+        run: python control/tools/glm_worker_selftest.py
+
       - name: Record exact target SHA
         id: target
         working-directory: workspace
+        env:
+          EXPECTED_SHA: ${{ steps.task.outputs.target_sha }}
         run: |
           set -euo pipefail
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$EXPECTED_SHA"
+          echo "sha=$actual" >> "$GITHUB_OUTPUT"
           test -z "$(git status --porcelain)"
 
       - name: Run bounded GLM-5.3-Flash worker
@@ -109,7 +140,7 @@ jobs:
             > evidence/harness.stdout.txt \
             2> evidence/harness.stderr.txt
 
-      - name: Prove target identity and bound evidence
+      - name: Prove target identity and artifact truth
         if: always()
         env:
           EXPECTED_SHA: ${{ steps.target.outputs.sha }}
@@ -119,13 +150,15 @@ jobs:
           test "$(git -C workspace rev-parse HEAD)" = "$EXPECTED_SHA"
           git -C workspace diff --check
           python - <<'PY'
+          import hashlib
+          import json
           import os
           from pathlib import Path
 
-          secret = os.environ.get("GLM_API_KEY", "")
           evidence = Path("evidence")
           if not evidence.exists():
               raise SystemExit("evidence directory missing")
+          secret = os.environ.get("GLM_API_KEY", "")
           for path in evidence.rglob("*"):
               if not path.is_file():
                   continue
@@ -134,6 +167,36 @@ jobs:
               text = path.read_text(encoding="utf-8", errors="replace")
               if secret and secret in text:
                   raise SystemExit(f"secret leaked into evidence: {path}")
+
+          required = ["candidate.patch", "status.txt", "artifact_manifest.json", "terminal_state.json", "usage.json", "diagnostic.json"]
+          missing = [name for name in required if not (evidence / name).is_file()]
+          if missing:
+              raise SystemExit(f"missing required evidence: {missing}")
+
+          manifest = json.loads((evidence / "artifact_manifest.json").read_text(encoding="utf-8"))
+          if manifest.get("target_sha") != os.environ["EXPECTED_SHA"]:
+              raise SystemExit("artifact manifest target SHA mismatch")
+          for name, key in [("candidate.patch", "candidate_patch_sha256"), ("status.txt", "status_sha256")]:
+              actual = hashlib.sha256((evidence / name).read_bytes()).hexdigest()
+              if manifest.get(key) != actual:
+                  raise SystemExit(f"artifact digest mismatch: {name}")
+          if not manifest.get("patch_apply_to_exact_target", {}).get("clean"):
+              raise SystemExit("candidate.patch does not apply cleanly to exact target")
+
+          for item in manifest.get("files", []):
+              path = Path("workspace") / item["path"]
+              if item.get("exists"):
+                  if not path.is_file():
+                      raise SystemExit(f"manifest says file exists but workspace does not: {item['path']}")
+                  digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                  if digest != item.get("sha256"):
+                      raise SystemExit(f"workspace digest mismatch: {item['path']}")
+              elif path.exists():
+                  raise SystemExit(f"manifest says path deleted but it exists: {item['path']}")
+
+          terminal = json.loads((evidence / "terminal_state.json").read_text(encoding="utf-8"))
+          if terminal.get("state") not in {"candidate_ready", "model_failure", "harness_failure"}:
+              raise SystemExit("invalid terminal classification")
           PY
 
       - name: Upload worker evidence
