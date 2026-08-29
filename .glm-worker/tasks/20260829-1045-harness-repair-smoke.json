@@ -1,0 +1,19 @@
+{
+  "task_id": "20260829-1045-harness-repair-smoke",
+  "target_sha": "eccfb3cb07cd87398a2faf95ff384ea6aa54ee98",
+  "base_ref": "eccfb3cb07cd87398a2faf95ff384ea6aa54ee98",
+  "mode": "candidate_patch",
+  "max_turns": 28,
+  "allowed_paths": [
+    "tools/glm_worker_selftest.py"
+  ],
+  "context_files": [
+    "tools/glm_worker_selftest.py"
+  ],
+  "instructions": "REPAIR ONLY QUALIFICATION SMOKE. This is not product work. Treat the prior smoke candidate as having one precise review finding: its marker placement was not the requested repaired placement. Against this exact clean target, modify only `tools/glm_worker_selftest.py`. Immediately before the exact line `if __name__ == \"__main__\":`, insert exactly one line `# glm-smoke-repair-qualified`. Do not add `# glm-smoke-existing-modification`, do not change any other content, and touch no other path. Then run the safe checks `git_diff_check` and `python_compile_changed`, inspect the candidate diff, and submit a concise result. This task exists only to prove a bounded REPAIR ONLY round and artifact packaging.",
+  "metadata": {
+    "qualification_case": "repair_only",
+    "prior_pass_run_id": 33247526563,
+    "prior_pass_artifact_id": 9713329718
+  }
+}
