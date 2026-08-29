@@ -58,6 +58,83 @@ def _digest(value: object) -> str:
     return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
 
 
+def _decode_snapshot_json(raw: object, *, label: str) -> object:
+    if not isinstance(raw, str):
+        raise ProjectKnowledgeError("snapshot_manifest_invalid", f"Reconciled {label} snapshot manifest is malformed.")
+    try:
+        return json.loads(raw)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise ProjectKnowledgeError("snapshot_manifest_invalid", f"Reconciled {label} snapshot manifest is malformed.") from exc
+
+
+def _decode_snapshot_owner_manifest(raw: object) -> list[dict[str, object]]:
+    decoded = _decode_snapshot_json(raw, label="owner")
+    if not isinstance(decoded, list):
+        raise ProjectKnowledgeError("snapshot_manifest_invalid", "Reconciled owner snapshot manifest is malformed.")
+    manifest: list[dict[str, object]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in decoded:
+        if not isinstance(item, dict):
+            raise ProjectKnowledgeError("snapshot_manifest_invalid", "Reconciled owner snapshot manifest is malformed.")
+        kind = item.get("kind")
+        owner_id = item.get("id")
+        token = item.get("owner_revision_token")
+        state = item.get("state")
+        state_digest = item.get("state_digest")
+        if (
+            not isinstance(kind, str)
+            or not kind
+            or not isinstance(owner_id, str)
+            or not owner_id
+            or not isinstance(token, str)
+            or not token
+            or not isinstance(state, dict)
+            or not isinstance(state_digest, str)
+            or not state_digest
+        ):
+            raise ProjectKnowledgeError("snapshot_manifest_invalid", "Reconciled owner snapshot manifest is malformed.")
+        identity = (kind, owner_id)
+        if identity in seen:
+            raise ProjectKnowledgeError("snapshot_manifest_invalid", "Reconciled owner snapshot contains duplicate owner identities.")
+        if _digest(state) != state_digest:
+            raise ProjectKnowledgeError("snapshot_manifest_invalid", "Reconciled owner snapshot state digest is invalid.")
+        seen.add(identity)
+        manifest.append(item)
+    return manifest
+
+
+def _decode_snapshot_edge_manifest(raw: object) -> list[dict[str, object]]:
+    decoded = _decode_snapshot_json(raw, label="graph")
+    if not isinstance(decoded, list):
+        raise ProjectKnowledgeError("snapshot_manifest_invalid", "Reconciled graph snapshot manifest is malformed.")
+    manifest: list[dict[str, object]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    for item in decoded:
+        if not isinstance(item, dict):
+            raise ProjectKnowledgeError("snapshot_manifest_invalid", "Reconciled graph snapshot manifest is malformed.")
+        values = tuple(item.get(key) for key in ("upstream_ref", "downstream_ref", "relation", "edge_class"))
+        if any(not isinstance(value, str) or not value for value in values):
+            raise ProjectKnowledgeError("snapshot_manifest_invalid", "Reconciled graph snapshot manifest is malformed.")
+        identity = (str(values[0]), str(values[1]), str(values[2]), str(values[3]))
+        if identity in seen:
+            raise ProjectKnowledgeError("snapshot_manifest_invalid", "Reconciled graph snapshot contains duplicate edge identities.")
+        seen.add(identity)
+        manifest.append(item)
+    return manifest
+
+
+def _decode_snapshot_canonical_id_map(raw: object) -> dict[str, str]:
+    decoded = _decode_snapshot_json(raw, label="canonical id map")
+    if not isinstance(decoded, dict):
+        raise ProjectKnowledgeError("snapshot_manifest_invalid", "Reconciled canonical id map is malformed.")
+    result: dict[str, str] = {}
+    for key, value in decoded.items():
+        if not isinstance(key, str) or not key or not isinstance(value, str) or not value:
+            raise ProjectKnowledgeError("snapshot_manifest_invalid", "Reconciled canonical id map is malformed.")
+        result[key] = value
+    return result
+
+
 def _workspace_exists(connection: sqlite3.Connection, workspace_id: str) -> bool:
     return connection.execute("SELECT id FROM workspaces WHERE id = ?", (workspace_id,)).fetchone() is not None
 
@@ -290,7 +367,7 @@ def _base_edges(
             raise ProjectKnowledgeError("snapshot_missing", "Reconciled base snapshot is missing.")
         if str(snapshot["manifest_version"]) != SNAPSHOT_MANIFEST_VERSION:
             raise ProjectKnowledgeError("snapshot_version_unsupported", "Reconciled snapshot manifest version is unsupported.")
-        edge_manifest = json.loads(snapshot["edge_manifest_json"])
+        edge_manifest = _decode_snapshot_edge_manifest(snapshot["edge_manifest_json"])
         if _digest(edge_manifest) != snapshot["graph_digest"]:
             raise ProjectKnowledgeError("snapshot_digest_mismatch", "Reconciled graph snapshot digest is invalid.")
         edges = {
@@ -353,22 +430,16 @@ def _historical_snapshot_owner_basis(
         raise ProjectKnowledgeError("snapshot_missing", "Reconciled base snapshot is missing.")
     if str(snapshot["manifest_version"]) != SNAPSHOT_MANIFEST_VERSION:
         raise ProjectKnowledgeError("snapshot_version_unsupported", "Reconciled snapshot manifest version is unsupported.")
-    owner_manifest = json.loads(snapshot["owner_manifest_json"])
+    owner_manifest = _decode_snapshot_owner_manifest(snapshot["owner_manifest_json"])
     if _digest(owner_manifest) != snapshot["owner_manifest_digest"]:
         raise ProjectKnowledgeError("snapshot_digest_mismatch", "Reconciled owner snapshot digest is invalid.")
     owner_tokens: dict[str, str] = {}
     owner_refs: set[str] = set()
     for item in owner_manifest:
-        if not isinstance(item, dict):
-            raise ProjectKnowledgeError("snapshot_manifest_invalid", "Reconciled owner snapshot manifest is malformed.")
-        kind = item.get("kind")
-        owner_id = item.get("id")
-        token = item.get("owner_revision_token")
-        if not isinstance(kind, str) or not kind or not isinstance(owner_id, str) or not owner_id or not isinstance(token, str) or not token:
-            raise ProjectKnowledgeError("snapshot_manifest_invalid", "Reconciled owner snapshot manifest is malformed.")
+        kind = str(item["kind"])
+        owner_id = str(item["id"])
+        token = str(item["owner_revision_token"])
         owner_ref = f"{kind}:{owner_id}"
-        if owner_ref in owner_tokens:
-            raise ProjectKnowledgeError("snapshot_manifest_invalid", "Reconciled owner snapshot contains duplicate owner identities.")
         owner_tokens[owner_ref] = token
         owner_refs.add(owner_ref)
     return owner_tokens, owner_refs
@@ -1659,10 +1730,11 @@ def get_snapshot(workspace_id: str, snapshot_id: str) -> SnapshotRead:
         raise ProjectKnowledgeError("snapshot_missing", "Reconciled snapshot was not found.")
     if str(row["manifest_version"]) != SNAPSHOT_MANIFEST_VERSION:
         raise ProjectKnowledgeError("snapshot_version_unsupported", "Reconciled snapshot manifest version is unsupported.")
-    owner_manifest = json.loads(row["owner_manifest_json"])
-    edge_manifest = json.loads(row["edge_manifest_json"])
+    owner_manifest = _decode_snapshot_owner_manifest(row["owner_manifest_json"])
+    edge_manifest = _decode_snapshot_edge_manifest(row["edge_manifest_json"])
     if _digest(owner_manifest) != row["owner_manifest_digest"] or _digest(edge_manifest) != row["graph_digest"]:
         raise ProjectKnowledgeError("snapshot_digest_mismatch", "Reconciled snapshot digest is invalid.")
+    canonical_id_map = _decode_snapshot_canonical_id_map(row["canonical_id_map_json"])
     return SnapshotRead(
         id=str(row["id"]),
         workspace_id=str(row["workspace_id"]),
@@ -1674,7 +1746,7 @@ def get_snapshot(workspace_id: str, snapshot_id: str) -> SnapshotRead:
         edge_manifest=edge_manifest,
         graph_digest=str(row["graph_digest"]),
         graph_complete=bool(row["graph_complete"]),
-        canonical_id_map=json.loads(row["canonical_id_map_json"]),
+        canonical_id_map=canonical_id_map,
         selected_validation_set_digest=str(row["selected_validation_set_digest"]),
         created_at=str(row["created_at"]),
     )
