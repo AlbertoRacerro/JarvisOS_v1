@@ -60,7 +60,7 @@ function App() {
         content = <><FinalWorkspaceHeader group="memory" active="project-basis" navigate={navigate} /><FinalOperatorReadSurface kind="project-basis" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /><ProjectKnowledgePanel workspaceId={workspaceId} /></>;
         break;
       case "memory-models":
-        content = <><FinalWorkspaceHeader group="memory" active="models" navigate={navigate} /><FinalOperatorReadSurface kind="models" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
+        content = <><FinalWorkspaceHeader group="memory" active="models" navigate={navigate} /><FinalOperatorReadSurface kind="models" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /><ProjectKnowledgePanel workspaceId={workspaceId} readOnly /></>;
         break;
       case "memory-literature":
         content = <><FinalWorkspaceHeader group="memory" active="literature" navigate={navigate} /><FinalOperatorUnavailableSurface kind="literature" title="Literature" description="The approved compact list and inline-preview composition is present, but no bounded literature corpus/read owner exists yet. Reference fixture citations are not production facts." navigate={navigate} /></>;
