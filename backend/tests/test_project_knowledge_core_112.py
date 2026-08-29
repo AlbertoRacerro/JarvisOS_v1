@@ -42,13 +42,17 @@ def _requirement_create(statement: str = "Maximum pressure must be bounded") -> 
     )
 
 
-def _approved_requirement_revision() -> tuple[str, str]:
-    draft = create_draft(DraftCreate(workspace_id="bluerev", operations=[_requirement_create()]))
+def _approved_requirement_revision(
+    *,
+    approval_key: str = "approve-1",
+    statement: str = "Maximum pressure must be bounded",
+) -> tuple[str, str]:
+    draft = create_draft(DraftCreate(workspace_id="bluerev", operations=[_requirement_create(statement)]))
     preview = preview_impact("bluerev", draft.id)
     approval = approve_draft(
         ApprovalRequest(
             workspace_id="bluerev",
-            approval_request_key="approve-1",
+            approval_request_key=approval_key,
             draft_id=draft.id,
             expected_draft_revision_token=draft.revision_token,
             expected_preview_digest=preview.digest,
@@ -161,6 +165,27 @@ def test_approval_retry_is_idempotent_and_rebinding_conflicts() -> None:
     assert exc_info.value.code == "approval_idempotency_conflict"
 
 
+def test_failed_approval_retry_reuses_bound_terminal_failure() -> None:
+    _initialize()
+    draft = create_draft(DraftCreate(workspace_id="bluerev", operations=[_requirement_create()]))
+    payload = ApprovalRequest(
+        workspace_id="bluerev",
+        approval_request_key="approve-failed-retry",
+        draft_id=draft.id,
+        expected_draft_revision_token=draft.revision_token,
+        expected_preview_digest="0" * 64,
+    )
+
+    with pytest.raises(ProjectKnowledgeError) as exc_info:
+        approve_draft(payload)
+    assert exc_info.value.code == "preview_stale"
+
+    retry = approve_draft(payload)
+    assert retry.state == "failed"
+    assert retry.failure_code == "preview_stale"
+    assert retry.working_revision_id is None
+
+
 def test_reconciliation_commits_requirement_snapshot_and_exact_retry_once() -> None:
     _initialize()
     revision_id, target_digest = _approved_requirement_revision()
@@ -231,6 +256,55 @@ def test_reconciliation_same_key_changed_binding_conflicts_without_replay() -> N
         assert connection.execute(
             "SELECT COUNT(*) AS count FROM requirements WHERE workspace_id = 'bluerev'"
         ).fetchone()["count"] == 1
+
+
+def test_second_root_reconciliation_cannot_overwrite_newer_reconciled_target() -> None:
+    _initialize()
+    revision_a, digest_a = _approved_requirement_revision(
+        approval_key="approve-root-a",
+        statement="Root A",
+    )
+    revision_b, digest_b = _approved_requirement_revision(
+        approval_key="approve-root-b",
+        statement="Root B",
+    )
+    validation_a = revalidation_status("bluerev", revision_a)
+    validation_b = revalidation_status("bluerev", revision_b)
+
+    first = reconcile(
+        ReconcileRequest(
+            workspace_id="bluerev",
+            idempotency_key="reconcile-root-a",
+            working_revision_id=revision_a,
+            expected_target_snapshot_id=None,
+            expected_target_digest=digest_a,
+            expected_selected_validation_set_digest=validation_a.selected_validation_set_digest,
+        )
+    )
+    assert first.state == "success"
+    assert first.resulting_snapshot_id is not None
+
+    stale_payload = ReconcileRequest(
+        workspace_id="bluerev",
+        idempotency_key="reconcile-root-b",
+        working_revision_id=revision_b,
+        expected_target_snapshot_id=None,
+        expected_target_digest=digest_b,
+        expected_selected_validation_set_digest=validation_b.selected_validation_set_digest,
+    )
+    with pytest.raises(ProjectKnowledgeError) as exc_info:
+        reconcile(stale_payload)
+    assert exc_info.value.code == "target_snapshot_stale"
+
+    retry = reconcile(stale_payload)
+    assert retry.state == "failed"
+    assert retry.failure_code == "target_snapshot_stale"
+
+    with open_sqlite_connection() as connection:
+        rows = connection.execute(
+            "SELECT statement FROM requirements WHERE workspace_id = 'bluerev' ORDER BY statement"
+        ).fetchall()
+        assert [row["statement"] for row in rows] == ["Root A"]
 
 
 def test_applicability_uniqueness_is_enforced_by_schema() -> None:
