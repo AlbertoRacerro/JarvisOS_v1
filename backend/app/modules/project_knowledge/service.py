@@ -8,7 +8,11 @@ from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
 from app.modules.events.service import utc_now
-from app.modules.flowsheet.service import build_flowsheet_graph_from_connection
+from app.modules.flowsheet.service import (
+    FlowsheetError,
+    build_flowsheet_graph_from_connection,
+    resolve_flowsheet_node_from_connection,
+)
 from app.modules.project_knowledge.apply import ProjectBasisApplyError, ProjectBasisApplyService
 from app.modules.project_knowledge.models import (
     ApprovalRead,
@@ -334,9 +338,69 @@ def _owner_token(connection: sqlite3.Connection, workspace_id: str, kind: str, o
     return str(row["updated_at"])
 
 
+def _historical_snapshot_owner_basis(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    reconciled_base_revision_id: str | None,
+) -> tuple[dict[str, str], set[str]]:
+    if reconciled_base_revision_id is None:
+        return {}, set()
+    snapshot = connection.execute(
+        "SELECT * FROM project_knowledge_reconciled_snapshots WHERE workspace_id = ? AND reconciled_revision_id = ?",
+        (workspace_id, reconciled_base_revision_id),
+    ).fetchone()
+    if snapshot is None:
+        raise ProjectKnowledgeError("snapshot_missing", "Reconciled base snapshot is missing.")
+    if str(snapshot["manifest_version"]) != SNAPSHOT_MANIFEST_VERSION:
+        raise ProjectKnowledgeError("snapshot_version_unsupported", "Reconciled snapshot manifest version is unsupported.")
+    owner_manifest = json.loads(snapshot["owner_manifest_json"])
+    if _digest(owner_manifest) != snapshot["owner_manifest_digest"]:
+        raise ProjectKnowledgeError("snapshot_digest_mismatch", "Reconciled owner snapshot digest is invalid.")
+    owner_tokens: dict[str, str] = {}
+    owner_refs: set[str] = set()
+    for item in owner_manifest:
+        if not isinstance(item, dict):
+            raise ProjectKnowledgeError("snapshot_manifest_invalid", "Reconciled owner snapshot manifest is malformed.")
+        kind = item.get("kind")
+        owner_id = item.get("id")
+        token = item.get("owner_revision_token")
+        if not isinstance(kind, str) or not kind or not isinstance(owner_id, str) or not owner_id or not isinstance(token, str) or not token:
+            raise ProjectKnowledgeError("snapshot_manifest_invalid", "Reconciled owner snapshot manifest is malformed.")
+        owner_ref = f"{kind}:{owner_id}"
+        if owner_ref in owner_tokens:
+            raise ProjectKnowledgeError("snapshot_manifest_invalid", "Reconciled owner snapshot contains duplicate owner identities.")
+        owner_tokens[owner_ref] = token
+        owner_refs.add(owner_ref)
+    return owner_tokens, owner_refs
+
+
+def _validate_projected_dependency_ref(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    node_ref: str,
+    *,
+    provisional_refs: set[str],
+    snapshot_owner_refs: set[str],
+) -> None:
+    if node_ref in provisional_refs or node_ref in snapshot_owner_refs:
+        return
+    try:
+        resolve_flowsheet_node_from_connection(connection, workspace_id, node_ref)
+    except FlowsheetError as exc:
+        raise ProjectKnowledgeError(
+            "dependency_ref_unresolved",
+            "Proposed dependency endpoint does not resolve to an exact projected node.",
+        ) from exc
+
+
 def _apply_edge_deltas(
+    connection: sqlite3.Connection,
+    workspace_id: str,
     edges: set[tuple[str, str, str, str]],
     operation: ProjectKnowledgeOperation,
+    *,
+    provisional_refs: set[str],
+    snapshot_owner_refs: set[str],
 ) -> None:
     for upstream, downstream, relation in operation.dependency_remove:
         matches = [edge for edge in edges if edge[0] == upstream and edge[1] == downstream and edge[2] == relation]
@@ -345,6 +409,20 @@ def _apply_edge_deltas(
         for edge in matches:
             edges.remove(edge)
     for upstream, downstream, relation in operation.dependency_add:
+        _validate_projected_dependency_ref(
+            connection,
+            workspace_id,
+            upstream,
+            provisional_refs=provisional_refs,
+            snapshot_owner_refs=snapshot_owner_refs,
+        )
+        _validate_projected_dependency_ref(
+            connection,
+            workspace_id,
+            downstream,
+            provisional_refs=provisional_refs,
+            snapshot_owner_refs=snapshot_owner_refs,
+        )
         edges.add((upstream, downstream, relation, "dependency"))
 
 
@@ -356,6 +434,11 @@ def _impact_from_connection(connection: sqlite3.Connection, draft: DraftRead) ->
         draft.parent_revision_id,
     )
     edges, base_digest, graph_complete, diagnostics = _base_edges(connection, draft.workspace_id, reconciled_base)
+    snapshot_owner_tokens, snapshot_owner_refs = _historical_snapshot_owner_basis(
+        connection,
+        draft.workspace_id,
+        reconciled_base,
+    )
     accepted_ops: list[ProjectKnowledgeOperation] = []
     ancestor_ids: list[str] = []
     for revision in chain:
@@ -375,11 +458,20 @@ def _impact_from_connection(connection: sqlite3.Connection, draft: DraftRead) ->
                 if owner_id not in provisional_refs:
                     raise ProjectKnowledgeError("provisional_ref_unresolved", "Provisional owner reference is not in the accepted chain.")
             else:
-                token = _owner_token(connection, draft.workspace_id, operation.owner_kind, owner_id)
+                owner_ref = f"{operation.owner_kind}:{owner_id}"
+                if reconciled_base is None:
+                    token = _owner_token(connection, draft.workspace_id, operation.owner_kind, owner_id)
+                else:
+                    token = snapshot_owner_tokens.get(owner_ref)
+                    if token is None:
+                        raise ProjectKnowledgeError(
+                            "snapshot_owner_missing",
+                            "Existing owner is absent from the exact reconciled parent snapshot.",
+                        )
                 if operation.expected_updated_at != token:
-                    raise ProjectKnowledgeError("owner_stale", "Canonical owner token changed since draft capture.")
-                owner_tokens[f"{operation.owner_kind}:{owner_id}"] = token
-                changed_refs.add(f"{operation.owner_kind}:{owner_id}")
+                    raise ProjectKnowledgeError("owner_stale", "Owner token changed since draft capture.")
+                owner_tokens[owner_ref] = token
+                changed_refs.add(owner_ref)
         elif operation.operation_kind == "create" and operation.provisional_ref:
             changed_refs.add(operation.provisional_ref)
         if operation.owner_kind == "requirement_applicability":
@@ -390,7 +482,14 @@ def _impact_from_connection(connection: sqlite3.Connection, draft: DraftRead) ->
                     raise ProjectKnowledgeError("applicability_stale", "Applicability relation changed since draft capture.")
                 owner_tokens[f"requirement_applicability:{relation_id}"] = token
             applicability_refs.add(relation_id or operation.operation_id or "proposed")
-        _apply_edge_deltas(edges, operation)
+        _apply_edge_deltas(
+            connection,
+            draft.workspace_id,
+            edges,
+            operation,
+            provisional_refs=provisional_refs,
+            snapshot_owner_refs=snapshot_owner_refs,
+        )
 
     adjacency: dict[str, set[str]] = {}
     for upstream, downstream, _relation, edge_class in edges:
