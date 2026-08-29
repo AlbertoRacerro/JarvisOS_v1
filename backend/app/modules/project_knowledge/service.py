@@ -35,6 +35,8 @@ CRITERION_RULE_VERSION = "scalar-v1"
 VALIDATOR_ID = "project-knowledge-scalar"
 VALIDATOR_VERSION = "1"
 SNAPSHOT_MANIFEST_VERSION = "1"
+SCALAR_EXTRACTOR_ID = "project-knowledge-json-scalar"
+SCALAR_EXTRACTOR_VERSION = "1"
 
 
 class ProjectKnowledgeError(ValueError):
@@ -234,6 +236,7 @@ def _working_chain(
     chain: list[sqlite3.Row] = []
     seen: set[str] = set()
     current_id: str | None = parent_revision_id
+    descendant_id: str | None = None
     reconciled_base: str | None = None
     while current_id is not None:
         if len(chain) >= MAX_ANCESTORS:
@@ -247,14 +250,21 @@ def _working_chain(
         ).fetchone()
         if row is None:
             raise ProjectKnowledgeError("ancestor_missing", "Working ancestor revision is missing.")
-        if row["state"] != "working":
-            raise ProjectKnowledgeError("ancestor_invalid", "Working ancestor is discarded, superseded, or already consumed.")
+        row_state = str(row["state"])
+        exact_superseded_parent = (
+            row_state == "superseded"
+            and descendant_id is not None
+            and str(row["superseded_by_revision_id"] or "") == descendant_id
+        )
+        if row_state != "working" and not exact_superseded_parent:
+            raise ProjectKnowledgeError("ancestor_invalid", "Working ancestor is discarded, superseded by another branch, or already consumed.")
         chain.append(row)
         if row["parent_kind"] == "reconciled":
             reconciled_base = row["parent_revision_id"]
             if reconciled_base is not None:
                 _validate_parent(connection, workspace_id, "reconciled", str(reconciled_base))
             break
+        descendant_id = str(row["id"])
         current_id = row["parent_revision_id"]
         if current_id is None:
             raise ProjectKnowledgeError("ancestor_missing", "Working ancestor chain has a missing parent.")
@@ -274,6 +284,8 @@ def _base_edges(
         ).fetchone()
         if snapshot is None:
             raise ProjectKnowledgeError("snapshot_missing", "Reconciled base snapshot is missing.")
+        if str(snapshot["manifest_version"]) != SNAPSHOT_MANIFEST_VERSION:
+            raise ProjectKnowledgeError("snapshot_version_unsupported", "Reconciled snapshot manifest version is unsupported.")
         edge_manifest = json.loads(snapshot["edge_manifest_json"])
         if _digest(edge_manifest) != snapshot["graph_digest"]:
             raise ProjectKnowledgeError("snapshot_digest_mismatch", "Reconciled graph snapshot digest is invalid.")
@@ -638,14 +650,39 @@ def list_revisions(workspace_id: str) -> list[WorkingRevisionRead]:
     return [_revision_from_row(row) for row in rows]
 
 
-def admit_scalar_result(payload: ScalarAdmissionRequest) -> ScalarResultRead:
+def _extract_scalar_from_run_payload(output_payload: str | None, output_name: str) -> tuple[str, str]:
+    if not output_payload:
+        raise ProjectKnowledgeError("scalar_source_unavailable", "Run output payload is unavailable for deterministic extraction.")
     try:
-        value = Decimal(payload.value)
+        decoded = json.loads(output_payload)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise ProjectKnowledgeError("scalar_source_invalid", "Run output payload is not valid JSON scalar evidence.") from exc
+    if not isinstance(decoded, dict) or output_name not in decoded:
+        raise ProjectKnowledgeError("scalar_output_missing", "Requested scalar output is not present in the run payload.")
+    raw = decoded[output_name]
+    unit = ""
+    if isinstance(raw, dict):
+        if "value" not in raw:
+            raise ProjectKnowledgeError("scalar_source_invalid", "Scalar object evidence must contain a value field.")
+        raw_value = raw["value"]
+        raw_unit = raw.get("unit", "")
+        if not isinstance(raw_unit, str):
+            raise ProjectKnowledgeError("scalar_source_invalid", "Scalar object unit evidence must be a string.")
+        unit = raw_unit.strip()
+    else:
+        raw_value = raw
+    if isinstance(raw_value, bool):
+        raise ProjectKnowledgeError("scalar_non_numeric", "Scalar result value is not numeric.")
+    try:
+        value = Decimal(str(raw_value))
     except InvalidOperation as exc:
         raise ProjectKnowledgeError("scalar_non_numeric", "Scalar result value is not numeric.") from exc
     if not value.is_finite():
         raise ProjectKnowledgeError("scalar_non_finite", "Scalar result value must be finite.")
-    normalized = format(value, "f")
+    return format(value, "f"), unit
+
+
+def admit_scalar_result(payload: ScalarAdmissionRequest) -> ScalarResultRead:
     with open_sqlite_connection() as connection:
         connection.execute("BEGIN IMMEDIATE")
         try:
@@ -658,6 +695,17 @@ def admit_scalar_result(payload: ScalarAdmissionRequest) -> ScalarResultRead:
             actual_digest = hashlib.sha256((run["output_payload"] or "").encode("utf-8")).hexdigest()
             if actual_digest != payload.source_payload_digest:
                 raise ProjectKnowledgeError("scalar_source_digest_mismatch", "Run output payload digest does not match admission request.")
+            extracted_value, extracted_unit = _extract_scalar_from_run_payload(run["output_payload"], payload.output_name)
+            try:
+                requested_value = Decimal(payload.value)
+            except InvalidOperation as exc:
+                raise ProjectKnowledgeError("scalar_non_numeric", "Scalar result value is not numeric.") from exc
+            if not requested_value.is_finite():
+                raise ProjectKnowledgeError("scalar_non_finite", "Scalar result value must be finite.")
+            if format(requested_value, "f") != extracted_value:
+                raise ProjectKnowledgeError("scalar_value_unproven", "Scalar value does not match deterministic run-output evidence.")
+            if payload.unit.strip() != extracted_unit:
+                raise ProjectKnowledgeError("scalar_unit_unproven", "Scalar unit does not match deterministic run-output evidence.")
             scalar_id = str(uuid4())
             now = utc_now()
             connection.execute(
@@ -671,11 +719,11 @@ def admit_scalar_result(payload: ScalarAdmissionRequest) -> ScalarResultRead:
                     scalar_id,
                     payload.run_id,
                     payload.output_name,
-                    normalized,
-                    payload.unit.strip(),
+                    extracted_value,
+                    extracted_unit,
                     payload.source_payload_digest,
-                    payload.extractor_id,
-                    payload.extractor_version,
+                    SCALAR_EXTRACTOR_ID,
+                    SCALAR_EXTRACTOR_VERSION,
                     now,
                 ),
             )
@@ -687,11 +735,11 @@ def admit_scalar_result(payload: ScalarAdmissionRequest) -> ScalarResultRead:
         id=scalar_id,
         run_id=payload.run_id,
         output_name=payload.output_name,
-        value=normalized,
-        unit=payload.unit.strip(),
+        value=extracted_value,
+        unit=extracted_unit,
         source_payload_digest=payload.source_payload_digest,
-        extractor_id=payload.extractor_id,
-        extractor_version=payload.extractor_version,
+        extractor_id=SCALAR_EXTRACTOR_ID,
+        extractor_version=SCALAR_EXTRACTOR_VERSION,
         created_at=now,
     )
 
@@ -798,15 +846,8 @@ def _run_binding_matches_revision(
     working_revision_id: str,
     working_basis_digest: str,
 ) -> bool:
-    if not run_revision_id:
-        return False
-    if run_revision_id == working_revision_id:
-        return True
-    row = connection.execute(
-        "SELECT projected_state_digest FROM project_knowledge_revisions WHERE id = ? AND workspace_id = ?",
-        (run_revision_id, workspace_id),
-    ).fetchone()
-    return row is not None and str(row["projected_state_digest"]) == working_basis_digest
+    del connection, workspace_id, working_basis_digest
+    return bool(run_revision_id) and run_revision_id == working_revision_id
 
 
 def evaluate_requirement(payload: ValidationRequest) -> ValidationRead:
@@ -1374,6 +1415,8 @@ def reconcile(payload: ReconcileRequest) -> ReconcileRead:
             revalidation = revalidation_status_from_connection(connection, payload.workspace_id, payload.working_revision_id)
             if revalidation.selected_validation_set_digest != payload.expected_selected_validation_set_digest:
                 raise ProjectKnowledgeError("validation_set_stale", "Current validation evidence changed since reconciliation was prepared.")
+            if revalidation.diagnostics:
+                raise ProjectKnowledgeError("validation_integrity_invalid", "Validation evidence contains unresolved integrity diagnostics.")
             unresolved = set(revalidation.blocking_requirement_ids)
             known_fail = set(revalidation.known_fail_requirement_ids)
             if unresolved:
@@ -1515,6 +1558,8 @@ def get_snapshot(workspace_id: str, snapshot_id: str) -> SnapshotRead:
         ).fetchone()
     if row is None:
         raise ProjectKnowledgeError("snapshot_missing", "Reconciled snapshot was not found.")
+    if str(row["manifest_version"]) != SNAPSHOT_MANIFEST_VERSION:
+        raise ProjectKnowledgeError("snapshot_version_unsupported", "Reconciled snapshot manifest version is unsupported.")
     owner_manifest = json.loads(row["owner_manifest_json"])
     edge_manifest = json.loads(row["edge_manifest_json"])
     if _digest(owner_manifest) != row["owner_manifest_digest"] or _digest(edge_manifest) != row["graph_digest"]:
