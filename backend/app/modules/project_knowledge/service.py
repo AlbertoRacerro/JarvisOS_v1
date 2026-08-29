@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import math
 import sqlite3
 from decimal import Decimal, InvalidOperation
 from uuid import uuid4
@@ -65,7 +64,7 @@ def _require_workspace(connection: sqlite3.Connection, workspace_id: str) -> Non
 def _normalize_operations(draft_id: str, operations: list[ProjectKnowledgeOperation]) -> list[ProjectKnowledgeOperation]:
     normalized: list[ProjectKnowledgeOperation] = []
     seen: set[str] = set()
-    for index, operation in enumerate(operations):
+    for operation in operations:
         operation_id = operation.operation_id or str(uuid4())
         if operation_id in seen:
             raise ProjectKnowledgeError("operation_id_duplicate", "Draft operation ids must be unique.")
@@ -80,8 +79,6 @@ def _normalize_operations(draft_id: str, operations: list[ProjectKnowledgeOperat
         elif operation.provisional_ref and not operation.provisional_ref.startswith(f"draft:{draft_id}:op:"):
             raise ProjectKnowledgeError("provisional_ref_invalid", "Provisional reference belongs to another draft.")
         normalized.append(ProjectKnowledgeOperation.model_validate(data))
-        if index >= 127:
-            break
     return normalized
 
 
@@ -449,6 +446,7 @@ def get_draft_from_connection(connection: sqlite3.Connection, workspace_id: str,
 
 def approve_draft(payload: ApprovalRequest) -> ApprovalRead:
     failure: tuple[str, str] | None = None
+    request_digest: str | None = None
     request_id = str(uuid4())
     with open_sqlite_connection() as connection:
         connection.execute("BEGIN IMMEDIATE")
@@ -584,7 +582,8 @@ def approve_draft(payload: ApprovalRequest) -> ApprovalRead:
                         payload.approval_request_key,
                         payload.draft_id,
                         payload.expected_draft_revision_token,
-                        _digest({"draft": payload.draft_id, "token": payload.expected_draft_revision_token}),
+                        request_digest
+                        or _digest({"draft": payload.draft_id, "token": payload.expected_draft_revision_token}),
                         failure[0],
                         failure[1],
                         utc_now(),
@@ -791,6 +790,25 @@ def _append_validation(
     )
 
 
+def _run_binding_matches_revision(
+    connection: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    run_revision_id: str | None,
+    working_revision_id: str,
+    working_basis_digest: str,
+) -> bool:
+    if not run_revision_id:
+        return False
+    if run_revision_id == working_revision_id:
+        return True
+    row = connection.execute(
+        "SELECT projected_state_digest FROM project_knowledge_revisions WHERE id = ? AND workspace_id = ?",
+        (run_revision_id, workspace_id),
+    ).fetchone()
+    return row is not None and str(row["projected_state_digest"]) == working_basis_digest
+
+
 def evaluate_requirement(payload: ValidationRequest) -> ValidationRead:
     with open_sqlite_connection() as connection:
         connection.execute("BEGIN IMMEDIATE")
@@ -801,6 +819,15 @@ def evaluate_requirement(payload: ValidationRequest) -> ValidationRead:
             ).fetchone()
             if revision is None:
                 raise ProjectKnowledgeError("working_revision_missing", "Working revision is not current.")
+            if payload.validated_basis_digest != str(revision["projected_state_digest"]):
+                raise ProjectKnowledgeError("validation_basis_stale", "Validation basis does not match the exact working revision.")
+            _required, current_applicability_digest, applicability_diagnostics = _applicable_required_requirements(
+                connection, payload.workspace_id, payload.working_revision_id
+            )
+            if applicability_diagnostics:
+                raise ProjectKnowledgeError("applicability_ambiguous", "Requirement applicability is ambiguous.")
+            if payload.applicability_set_digest != current_applicability_digest:
+                raise ProjectKnowledgeError("applicability_stale", "Requirement applicability changed since validation was prepared.")
             requirement = connection.execute(
                 "SELECT * FROM requirements WHERE id = ? AND workspace_id = ?",
                 (payload.requirement_id, payload.workspace_id),
@@ -891,13 +918,20 @@ def evaluate_requirement(payload: ValidationRequest) -> ValidationRead:
                     connection,
                     payload=payload,
                     requirement=requirement,
-                    outcome="not_evaluable",
+                    outcome="recomputation_required",
                     reason_code="missing_target",
                     source_run_id=payload.source_run_id,
                     source_scalar_id=None,
                     source_payload_digest=None,
                     observed=None,
-                    expected={"operator": operator, "value": str(expected), "unit": expected_unit or ""},
+                    expected={
+                        "operator": operator,
+                        "value": str(expected),
+                        "unit": expected_unit or "",
+                        "required_domain": "Process",
+                        "working_revision_id": payload.working_revision_id,
+                        "missing_output": str(output_name),
+                    },
                 )
                 connection.commit()
                 return result
@@ -907,7 +941,13 @@ def evaluate_requirement(payload: ValidationRequest) -> ValidationRead:
                 reason = "stale_target"
                 outcome = "not_evaluable"
                 observed = None
-            elif scalar["project_knowledge_revision_id"] not in {None, payload.working_revision_id}:
+            elif not _run_binding_matches_revision(
+                connection,
+                workspace_id=payload.workspace_id,
+                run_revision_id=scalar["project_knowledge_revision_id"],
+                working_revision_id=payload.working_revision_id,
+                working_basis_digest=str(revision["projected_state_digest"]),
+            ):
                 reason = "wrong_working_revision"
                 outcome = "not_evaluable"
                 observed = None
@@ -947,18 +987,37 @@ def evaluate_requirement(payload: ValidationRequest) -> ValidationRead:
             raise
 
 
+def _cumulative_operations(
+    connection: sqlite3.Connection,
+    workspace_id: str,
+    terminal_revision_id: str,
+) -> tuple[list[ProjectKnowledgeOperation], list[str], str | None]:
+    terminal = connection.execute(
+        "SELECT * FROM project_knowledge_revisions WHERE id = ? AND workspace_id = ?",
+        (terminal_revision_id, workspace_id),
+    ).fetchone()
+    if terminal is None or terminal["state"] != "working":
+        raise ProjectKnowledgeError("working_revision_missing", "Terminal working revision is not current.")
+    chain, reconciled_base = _working_chain(
+        connection,
+        workspace_id,
+        "working",
+        terminal_revision_id,
+    )
+    operations: list[ProjectKnowledgeOperation] = []
+    ids: list[str] = []
+    for row in chain:
+        ids.append(str(row["id"]))
+        operations.extend(ProjectKnowledgeOperation.model_validate(item) for item in json.loads(row["change_set_json"]))
+    return operations, ids, reconciled_base
+
+
 def _applicable_required_requirements(
     connection: sqlite3.Connection,
     workspace_id: str,
     working_revision_id: str,
 ) -> tuple[list[str], str, list[str]]:
-    revision = connection.execute(
-        "SELECT * FROM project_knowledge_revisions WHERE id = ? AND workspace_id = ?",
-        (working_revision_id, workspace_id),
-    ).fetchone()
-    if revision is None:
-        raise ProjectKnowledgeError("working_revision_missing", "Working revision was not found.")
-    operations = [ProjectKnowledgeOperation.model_validate(item) for item in json.loads(revision["change_set_json"])]
+    operations, _ids, _base = _cumulative_operations(connection, workspace_id, working_revision_id)
     model_refs = {op.owner_id for op in operations if op.owner_kind == "model_spec" and op.owner_id}
     model_versions = {
         str(row["id"])
@@ -1051,83 +1110,133 @@ def _current_validations(
     return current, diagnostics
 
 
-def revalidation_status(workspace_id: str, working_revision_id: str) -> RevalidationRead:
-    with open_sqlite_connection() as connection:
-        required, applicability_digest, diagnostics = _applicable_required_requirements(connection, workspace_id, working_revision_id)
-        current, validation_diagnostics = _current_validations(connection, working_revision_id)
-        diagnostics.extend(validation_diagnostics)
-        current_by_requirement = {str(row["requirement_id"]): row for row in current}
-        blocking: list[str] = []
-        known_fail: list[str] = []
-        recompute: list[str] = []
-        selected: list[dict[str, object]] = []
-        for requirement_id in required:
-            row = current_by_requirement.get(requirement_id)
-            if row is None:
-                blocking.append(requirement_id)
-                continue
-            selected.append(
-                {
-                    "id": row["id"],
-                    "requirement_id": row["requirement_id"],
-                    "rule_version": row["rule_version"],
-                    "basis": row["validated_basis_digest"],
-                    "source_run_id": row["source_run_id"],
-                    "source_payload_digest": row["source_payload_digest"],
-                    "outcome": row["outcome"],
-                    "validator": [row["validator_id"], row["validator_version"]],
-                    "supersedes": row["supersedes_validation_id"],
-                }
-            )
-            if row["outcome"] == "fail":
-                known_fail.append(requirement_id)
-            elif row["outcome"] == "recomputation_required":
-                recompute.append(requirement_id)
-                blocking.append(requirement_id)
-            elif row["outcome"] != "pass":
-                blocking.append(requirement_id)
-        selected_digest = _digest(
-            {
-                "applicability_digest": applicability_digest,
-                "rows": sorted(selected, key=lambda item: str(item["id"])),
-            }
-        )
-        return RevalidationRead(
-            working_revision_id=working_revision_id,
-            complete=not diagnostics and not blocking,
-            mandatory_requirement_ids=required,
-            current_validation_ids=sorted(str(row["id"]) for row in current if str(row["requirement_id"]) in required),
-            blocking_requirement_ids=sorted(set(blocking)),
-            known_fail_requirement_ids=sorted(set(known_fail)),
-            recomputation_required=sorted(set(recompute)),
-            selected_validation_set_digest=selected_digest,
-            diagnostics=sorted(set(diagnostics)),
-        )
+def _validation_row_admissible(
+    connection: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    revision: sqlite3.Row,
+    applicability_digest: str,
+    row: sqlite3.Row,
+) -> bool:
+    requirement = connection.execute(
+        "SELECT * FROM requirements WHERE id = ? AND workspace_id = ?",
+        (row["requirement_id"], workspace_id),
+    ).fetchone()
+    if requirement is None:
+        return False
+    expected_rule_version = str(requirement["criterion_rule_version"] or "free-text")
+    if (
+        str(row["requirement_updated_at"]) != str(requirement["updated_at"])
+        or str(row["rule_version"]) != expected_rule_version
+        or str(row["validated_basis_digest"]) != str(revision["projected_state_digest"])
+        or str(row["applicability_set_digest"]) != applicability_digest
+        or str(row["validator_id"]) != VALIDATOR_ID
+        or str(row["validator_version"]) != VALIDATOR_VERSION
+    ):
+        return False
+    if row["source_run_id"] is None:
+        return row["outcome"] in {"not_evaluable", "recomputation_required", "no_material_effect"}
+    source = connection.execute(
+        """
+        SELECT r.project_knowledge_revision_id, r.output_payload, s.source_payload_digest
+        FROM simulation_runs r
+        JOIN simulation_run_scalar_results s ON s.run_id = r.id AND s.id = ?
+        WHERE r.id = ? AND r.workspace_id = ?
+        """,
+        (row["source_scalar_id"], row["source_run_id"], workspace_id),
+    ).fetchone()
+    if source is None:
+        return False
+    actual_digest = hashlib.sha256((source["output_payload"] or "").encode("utf-8")).hexdigest()
+    if actual_digest != str(row["source_payload_digest"]) or actual_digest != str(source["source_payload_digest"]):
+        return False
+    return _run_binding_matches_revision(
+        connection,
+        workspace_id=workspace_id,
+        run_revision_id=source["project_knowledge_revision_id"],
+        working_revision_id=str(revision["id"]),
+        working_basis_digest=str(revision["projected_state_digest"]),
+    )
 
 
-def _cumulative_operations(
+def revalidation_status_from_connection(
     connection: sqlite3.Connection,
     workspace_id: str,
-    terminal_revision_id: str,
-) -> tuple[list[ProjectKnowledgeOperation], list[str], str | None]:
-    terminal = connection.execute(
-        "SELECT * FROM project_knowledge_revisions WHERE id = ? AND workspace_id = ?",
-        (terminal_revision_id, workspace_id),
+    working_revision_id: str,
+) -> RevalidationRead:
+    revision = connection.execute(
+        "SELECT * FROM project_knowledge_revisions WHERE id = ? AND workspace_id = ? AND state = 'working'",
+        (working_revision_id, workspace_id),
     ).fetchone()
-    if terminal is None or terminal["state"] != "working":
-        raise ProjectKnowledgeError("working_revision_missing", "Terminal working revision is not current.")
-    chain, reconciled_base = _working_chain(
-        connection,
-        workspace_id,
-        "working",
-        terminal_revision_id,
+    if revision is None:
+        raise ProjectKnowledgeError("working_revision_missing", "Working revision is not current.")
+    required, applicability_digest, diagnostics = _applicable_required_requirements(connection, workspace_id, working_revision_id)
+    current, validation_diagnostics = _current_validations(connection, working_revision_id)
+    diagnostics.extend(validation_diagnostics)
+    current_by_requirement: dict[str, sqlite3.Row] = {}
+    for row in current:
+        requirement_id = str(row["requirement_id"])
+        if not _validation_row_admissible(
+            connection,
+            workspace_id=workspace_id,
+            revision=revision,
+            applicability_digest=applicability_digest,
+            row=row,
+        ):
+            diagnostics.append(f"validation_stale:{requirement_id}:{row['id']}")
+            continue
+        current_by_requirement[requirement_id] = row
+    blocking: list[str] = []
+    known_fail: list[str] = []
+    recompute: list[str] = []
+    selected: list[dict[str, object]] = []
+    for requirement_id in required:
+        row = current_by_requirement.get(requirement_id)
+        if row is None:
+            blocking.append(requirement_id)
+            continue
+        selected.append(
+            {
+                "id": row["id"],
+                "requirement_id": row["requirement_id"],
+                "rule_version": row["rule_version"],
+                "basis": row["validated_basis_digest"],
+                "source_run_id": row["source_run_id"],
+                "source_payload_digest": row["source_payload_digest"],
+                "outcome": row["outcome"],
+                "validator": [row["validator_id"], row["validator_version"]],
+                "supersedes": row["supersedes_validation_id"],
+            }
+        )
+        if row["outcome"] == "fail":
+            known_fail.append(requirement_id)
+        elif row["outcome"] == "recomputation_required":
+            recompute.append(requirement_id)
+            blocking.append(requirement_id)
+        elif row["outcome"] != "pass":
+            blocking.append(requirement_id)
+    selected_digest = _digest(
+        {
+            "applicability_digest": applicability_digest,
+            "rows": sorted(selected, key=lambda item: str(item["id"])),
+        }
     )
-    operations: list[ProjectKnowledgeOperation] = []
-    ids: list[str] = []
-    for row in chain:
-        ids.append(str(row["id"]))
-        operations.extend(ProjectKnowledgeOperation.model_validate(item) for item in json.loads(row["change_set_json"]))
-    return operations, ids, reconciled_base
+    return RevalidationRead(
+        working_revision_id=working_revision_id,
+        complete=not diagnostics and not blocking,
+        mandatory_requirement_ids=required,
+        current_validation_ids=sorted(str(row["id"]) for row in current_by_requirement.values() if str(row["requirement_id"]) in required),
+        blocking_requirement_ids=sorted(set(blocking)),
+        known_fail_requirement_ids=sorted(set(known_fail)),
+        recomputation_required=sorted(set(recompute)),
+        selected_validation_set_digest=selected_digest,
+        diagnostics=sorted(set(diagnostics)),
+    )
+
+
+def revalidation_status(workspace_id: str, working_revision_id: str) -> RevalidationRead:
+    with open_sqlite_connection() as connection:
+        return revalidation_status_from_connection(connection, workspace_id, working_revision_id)
 
 
 def _snapshot_owner_manifest(connection: sqlite3.Connection, workspace_id: str) -> list[dict[str, object]]:
@@ -1170,8 +1279,23 @@ def _snapshot_edges(connection: sqlite3.Connection, workspace_id: str) -> tuple[
     return manifest, complete
 
 
+def _current_snapshot(connection: sqlite3.Connection, workspace_id: str) -> sqlite3.Row | None:
+    return connection.execute(
+        """
+        SELECT s.*
+        FROM project_knowledge_reconciled_snapshots s
+        JOIN project_knowledge_reconciliation_requests r ON r.resulting_snapshot_id = s.id
+        WHERE s.workspace_id = ? AND r.state = 'success'
+        ORDER BY r.completed_at DESC, r.id DESC
+        LIMIT 1
+        """,
+        (workspace_id,),
+    ).fetchone()
+
+
 def reconcile(payload: ReconcileRequest) -> ReconcileRead:
     request_id = str(uuid4())
+    request_digest: str | None = None
     with open_sqlite_connection() as connection:
         connection.execute("BEGIN IMMEDIATE")
         try:
@@ -1233,6 +1357,20 @@ def reconcile(payload: ReconcileRequest) -> ReconcileRead:
             assert terminal is not None
             if str(terminal["projected_state_digest"]) != payload.expected_target_digest:
                 raise ProjectKnowledgeError("target_digest_stale", "Working target digest changed since review.")
+            current_snapshot = _current_snapshot(connection, payload.workspace_id)
+            current_snapshot_id = None if current_snapshot is None else str(current_snapshot["id"])
+            if current_snapshot_id != payload.expected_target_snapshot_id:
+                raise ProjectKnowledgeError("target_snapshot_stale", "Reconciled target changed since reconciliation was prepared.")
+            if reconciled_base is None:
+                if current_snapshot_id is not None:
+                    raise ProjectKnowledgeError("target_snapshot_stale", "Root working revision no longer targets the current reconciled state.")
+            else:
+                base_snapshot = connection.execute(
+                    "SELECT id FROM project_knowledge_reconciled_snapshots WHERE workspace_id = ? AND reconciled_revision_id = ?",
+                    (payload.workspace_id, reconciled_base),
+                ).fetchone()
+                if base_snapshot is None or str(base_snapshot["id"]) != current_snapshot_id:
+                    raise ProjectKnowledgeError("target_snapshot_stale", "Working branch is based on a stale reconciled snapshot.")
             revalidation = revalidation_status_from_connection(connection, payload.workspace_id, payload.working_revision_id)
             if revalidation.selected_validation_set_digest != payload.expected_selected_validation_set_digest:
                 raise ProjectKnowledgeError("validation_set_stale", "Current validation evidence changed since reconciliation was prepared.")
@@ -1274,6 +1412,8 @@ def reconcile(payload: ReconcileRequest) -> ReconcileRead:
             )
             owner_manifest = _snapshot_owner_manifest(connection, payload.workspace_id)
             edge_manifest, graph_complete = _snapshot_edges(connection, payload.workspace_id)
+            if not graph_complete:
+                raise ProjectKnowledgeError("snapshot_graph_incomplete", "Canonical graph is incomplete after proposed reconciliation.")
             snapshot_id = str(uuid4())
             owner_digest = _digest(owner_manifest)
             graph_digest = _digest(edge_manifest)
@@ -1296,7 +1436,7 @@ def reconcile(payload: ReconcileRequest) -> ReconcileRead:
                     owner_digest,
                     _canonical_json(edge_manifest),
                     graph_digest,
-                    1 if graph_complete else 0,
+                    1,
                     _canonical_json(apply_result.canonical_id_map),
                     payload.expected_selected_validation_set_digest,
                     now,
@@ -1353,7 +1493,7 @@ def reconcile(payload: ReconcileRequest) -> ReconcileRead:
                     payload.expected_target_digest,
                     payload.known_fail_acknowledgement,
                     payload.policy_identity,
-                    _digest({"working_revision_id": payload.working_revision_id, "failed": True}),
+                    request_digest or _digest({"working_revision_id": payload.working_revision_id, "failed": True}),
                     payload.expected_selected_validation_set_digest,
                     code,
                     message,
@@ -1365,58 +1505,6 @@ def reconcile(payload: ReconcileRequest) -> ReconcileRead:
         except Exception:
             failure_connection.rollback()
     raise ProjectKnowledgeError(code, message)
-
-
-def revalidation_status_from_connection(
-    connection: sqlite3.Connection,
-    workspace_id: str,
-    working_revision_id: str,
-) -> RevalidationRead:
-    required, applicability_digest, diagnostics = _applicable_required_requirements(connection, workspace_id, working_revision_id)
-    current, validation_diagnostics = _current_validations(connection, working_revision_id)
-    diagnostics.extend(validation_diagnostics)
-    current_by_requirement = {str(row["requirement_id"]): row for row in current}
-    blocking: list[str] = []
-    known_fail: list[str] = []
-    recompute: list[str] = []
-    selected: list[dict[str, object]] = []
-    for requirement_id in required:
-        row = current_by_requirement.get(requirement_id)
-        if row is None:
-            blocking.append(requirement_id)
-            continue
-        selected.append(
-            {
-                "id": row["id"],
-                "requirement_id": row["requirement_id"],
-                "rule_version": row["rule_version"],
-                "basis": row["validated_basis_digest"],
-                "source_run_id": row["source_run_id"],
-                "source_payload_digest": row["source_payload_digest"],
-                "outcome": row["outcome"],
-                "validator": [row["validator_id"], row["validator_version"]],
-                "supersedes": row["supersedes_validation_id"],
-            }
-        )
-        if row["outcome"] == "fail":
-            known_fail.append(requirement_id)
-        elif row["outcome"] == "recomputation_required":
-            recompute.append(requirement_id)
-            blocking.append(requirement_id)
-        elif row["outcome"] != "pass":
-            blocking.append(requirement_id)
-    selected_digest = _digest({"applicability_digest": applicability_digest, "rows": sorted(selected, key=lambda item: str(item["id"]))})
-    return RevalidationRead(
-        working_revision_id=working_revision_id,
-        complete=not diagnostics and not blocking,
-        mandatory_requirement_ids=required,
-        current_validation_ids=sorted(str(row["id"]) for row in current if str(row["requirement_id"]) in required),
-        blocking_requirement_ids=sorted(set(blocking)),
-        known_fail_requirement_ids=sorted(set(known_fail)),
-        recomputation_required=sorted(set(recompute)),
-        selected_validation_set_digest=selected_digest,
-        diagnostics=sorted(set(diagnostics)),
-    )
 
 
 def get_snapshot(workspace_id: str, snapshot_id: str) -> SnapshotRead:
