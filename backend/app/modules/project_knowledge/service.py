@@ -937,6 +937,61 @@ def _append_validation(
     )
 
 
+def _revision_change_set_is_intact(row: sqlite3.Row) -> bool:
+    raw = row["change_set_json"]
+    if not isinstance(raw, str):
+        return False
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest() == str(row["change_set_digest"])
+
+
+def _revision_changes_validation_only(row: sqlite3.Row) -> bool:
+    if not _revision_change_set_is_intact(row):
+        return False
+    try:
+        operations = [ProjectKnowledgeOperation.model_validate(item) for item in json.loads(row["change_set_json"])]
+    except (TypeError, json.JSONDecodeError, ValueError):
+        return False
+    return all(
+        operation.owner_kind in {"requirement", "requirement_applicability"}
+        and not operation.dependency_add
+        and not operation.dependency_remove
+        for operation in operations
+    )
+
+
+def _exact_parent_basis_is_intact(
+    connection: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    parent_kind: str,
+    parent_revision_id: str,
+) -> bool:
+    if parent_kind == "working":
+        parent = connection.execute(
+            "SELECT * FROM project_knowledge_revisions WHERE id = ? AND workspace_id = ?",
+            (parent_revision_id, workspace_id),
+        ).fetchone()
+        return parent is not None and _revision_change_set_is_intact(parent)
+    if parent_kind != "reconciled":
+        return False
+    snapshot = connection.execute(
+        "SELECT * FROM project_knowledge_reconciled_snapshots WHERE workspace_id = ? AND reconciled_revision_id = ?",
+        (workspace_id, parent_revision_id),
+    ).fetchone()
+    if snapshot is None or str(snapshot["manifest_version"]) != SNAPSHOT_MANIFEST_VERSION:
+        return False
+    try:
+        owner_manifest = json.loads(snapshot["owner_manifest_json"])
+        edge_manifest = json.loads(snapshot["edge_manifest_json"])
+    except (TypeError, json.JSONDecodeError):
+        return False
+    return (
+        _digest(owner_manifest) == str(snapshot["owner_manifest_digest"])
+        and _digest(edge_manifest) == str(snapshot["graph_digest"])
+        and bool(snapshot["graph_complete"])
+    )
+
+
 def _run_binding_matches_revision(
     connection: sqlite3.Connection,
     *,
@@ -945,8 +1000,44 @@ def _run_binding_matches_revision(
     working_revision_id: str,
     working_basis_digest: str,
 ) -> bool:
-    del connection, workspace_id, working_basis_digest
-    return bool(run_revision_id) and run_revision_id == working_revision_id
+    if not run_revision_id:
+        return False
+    source = connection.execute(
+        "SELECT * FROM project_knowledge_revisions WHERE id = ? AND workspace_id = ?",
+        (run_revision_id, workspace_id),
+    ).fetchone()
+    target = connection.execute(
+        "SELECT * FROM project_knowledge_revisions WHERE id = ? AND workspace_id = ? AND state = 'working'",
+        (working_revision_id, workspace_id),
+    ).fetchone()
+    if source is None or target is None:
+        return False
+    if str(target["projected_state_digest"]) != working_basis_digest:
+        return False
+    if not _revision_change_set_is_intact(source) or not _revision_change_set_is_intact(target):
+        return False
+    if run_revision_id == working_revision_id:
+        return True
+
+    source_parent_id = source["parent_revision_id"]
+    target_parent_id = target["parent_revision_id"]
+    source_parent_kind = str(source["parent_kind"])
+    target_parent_kind = str(target["parent_kind"])
+    if (
+        source_parent_id is None
+        or target_parent_id is None
+        or str(source_parent_id) != str(target_parent_id)
+        or source_parent_kind != target_parent_kind
+    ):
+        return False
+    if not _revision_changes_validation_only(source) or not _revision_changes_validation_only(target):
+        return False
+    return _exact_parent_basis_is_intact(
+        connection,
+        workspace_id=workspace_id,
+        parent_kind=source_parent_kind,
+        parent_revision_id=str(source_parent_id),
+    )
 
 
 def evaluate_requirement(payload: ValidationRequest) -> ValidationRead:
