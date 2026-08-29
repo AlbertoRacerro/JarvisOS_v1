@@ -16,13 +16,18 @@ from app.modules.project_knowledge.models import (
     ReconcileRead,
     ReconcileRequest,
     RevalidationRead,
+    RevisionStateCommand,
+    ScalarAdmissionRequest,
+    ScalarResultRead,
     SnapshotRead,
     ValidationRead,
     ValidationRequest,
     WorkingRevisionRead,
 )
+from app.modules.project_knowledge.revision_lifecycle import change_revision_state
 from app.modules.project_knowledge.service import (
     ProjectKnowledgeError,
+    admit_scalar_result,
     approve_draft,
     create_draft,
     evaluate_requirement,
@@ -51,7 +56,11 @@ def _http_error(exc: Exception) -> HTTPException:
         "validation_predecessor_stale",
         "validation_set_stale",
         "target_digest_stale",
+        "target_snapshot_stale",
         "applicability_stale",
+        "revision_stale",
+        "revision_not_working",
+        "supersede_successor_not_direct",
     }
     missing_codes = {
         "workspace_not_found",
@@ -61,6 +70,7 @@ def _http_error(exc: Exception) -> HTTPException:
         "snapshot_missing",
         "owner_not_found",
         "parameter_not_found",
+        "scalar_run_missing",
     }
     status_code = 409 if code in conflict_codes else 404 if code in missing_codes else 400
     if isinstance(exc, sqlite3.IntegrityError):
@@ -132,6 +142,22 @@ def list_revisions_endpoint(workspace_id: str) -> list[WorkingRevisionRead]:
 def get_revision_endpoint(workspace_id: str, revision_id: str) -> WorkingRevisionRead:
     try:
         return get_revision(workspace_id, revision_id)
+    except _DOMAIN_ERRORS as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post("/revisions/{revision_id}/state", response_model=WorkingRevisionRead)
+def change_revision_state_endpoint(revision_id: str, payload: RevisionStateCommand) -> WorkingRevisionRead:
+    try:
+        return change_revision_state(revision_id, payload)
+    except _DOMAIN_ERRORS as exc:
+        raise _http_error(exc) from exc
+
+
+@router.post("/scalars", response_model=ScalarResultRead, status_code=201)
+def admit_scalar_result_endpoint(payload: ScalarAdmissionRequest) -> ScalarResultRead:
+    try:
+        return admit_scalar_result(payload)
     except _DOMAIN_ERRORS as exc:
         raise _http_error(exc) from exc
 
