@@ -1,0 +1,15 @@
+{
+  "task_id": "20260829-1019-harness-newfile-smoke",
+  "target_sha": "42ced8f139f1b015573f665c17db0bf637dc7efa",
+  "base_ref": "42ced8f139f1b015573f665c17db0bf637dc7efa",
+  "mode": "candidate_patch",
+  "max_turns": 28,
+  "allowed_paths": [
+    "tools/glm_worker_selftest.py",
+    "tools/glm_smoke_new.txt"
+  ],
+  "context_files": [
+    "tools/glm_worker_selftest.py"
+  ],
+  "instructions": "QUALIFICATION SMOKE ONLY. Do not inspect product code. Make exactly two candidate changes in the ephemeral checkout: (1) append the single line `# glm-smoke-existing-modification` to `tools/glm_worker_selftest.py` if it is not already present; (2) create `tools/glm_smoke_new.txt` with exactly `glm smoke new file` followed by one newline. Touch no other path. Then run the safe checks `git_diff_check` and `python_compile_changed`, inspect the candidate diff, and submit a concise result. This is artifact-packaging evidence only; do not broaden or improve anything else."
+}
