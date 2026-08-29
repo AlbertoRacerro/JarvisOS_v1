@@ -89,99 +89,122 @@ def _event_payload(*, operation: str, prior: dict[str, Any], result: dict[str, A
     return payload
 
 
-def update_parameter(parameter_id: str, payload: ParameterUpdate) -> ParameterRead:
+def update_parameter_in_transaction(
+    connection: sqlite3.Connection,
+    parameter_id: str,
+    payload: ParameterUpdate,
+    *,
+    allow_dependency_change: bool = False,
+) -> ParameterRead:
     updates = payload.model_dump(exclude_unset=True, exclude={"workspace_id", "expected_updated_at"})
+    row = _parameter_row(connection, payload.workspace_id, parameter_id)
     if not updates:
-        with open_sqlite_connection() as connection:
-            return row_to_model(_parameter_row(connection, payload.workspace_id, parameter_id), ParameterRead)
+        return row_to_model(row, ParameterRead)
+    if row["updated_at"] != payload.expected_updated_at:
+        raise ParameterLifecycleError("parameter_stale", "Parameter changed since it was reviewed.")
+    if row["lifecycle_state"] != "active":
+        raise ParameterLifecycleError("parameter_not_active", "Only an active Parameter may be edited in V0.")
+    changed_authority = _AUTHORITY_FIELDS.intersection(updates)
+    if (
+        not allow_dependency_change
+        and changed_authority
+        and any(row[field] != updates[field] for field in changed_authority)
+    ):
+        _require_no_downstream_dependents(connection, payload.workspace_id, parameter_id)
 
+    merged_min = updates.get("value_min", row["value_min"])
+    merged_max = updates.get("value_max", row["value_max"])
+    if merged_min is not None and merged_max is not None and merged_min > merged_max:
+        raise ParameterLifecycleError("parameter_invalid_bounds", "value_min must be <= value_max.")
+
+    changed = {field: value for field, value in updates.items() if row[field] != value}
+    if not changed:
+        return row_to_model(row, ParameterRead)
+
+    now = utc_now()
+    assignments = ", ".join(f"{field} = ?" for field in changed)
+    cursor = connection.execute(
+        f"UPDATE parameters SET {assignments}, updated_at = ? WHERE id = ? AND workspace_id = ? AND updated_at = ?",
+        (*changed.values(), now, parameter_id, payload.workspace_id, payload.expected_updated_at),
+    )
+    if cursor.rowcount != 1:
+        raise ParameterLifecycleError("parameter_stale", "Parameter changed before commit.")
+    prior = {field: row[field] for field in changed}
+    log_event(
+        connection,
+        event_type="ParameterCanonicalEdited",
+        actor="local-user",
+        target_type="Parameter",
+        target_id=parameter_id,
+        workspace_id=payload.workspace_id,
+        payload=_event_payload(operation="edit", prior=prior, result=changed),
+    )
+    return row_to_model(_parameter_row(connection, payload.workspace_id, parameter_id), ParameterRead)
+
+
+def update_parameter(parameter_id: str, payload: ParameterUpdate) -> ParameterRead:
     with open_sqlite_connection() as connection:
         connection.execute("BEGIN IMMEDIATE")
         try:
-            row = _parameter_row(connection, payload.workspace_id, parameter_id)
-            if row["updated_at"] != payload.expected_updated_at:
-                raise ParameterLifecycleError("parameter_stale", "Parameter changed since it was reviewed.")
-            if row["lifecycle_state"] != "active":
-                raise ParameterLifecycleError("parameter_not_active", "Only an active Parameter may be edited in V0.")
-            changed_authority = _AUTHORITY_FIELDS.intersection(updates)
-            if changed_authority and any(row[field] != updates[field] for field in changed_authority):
-                _require_no_downstream_dependents(connection, payload.workspace_id, parameter_id)
-
-            merged_min = updates.get("value_min", row["value_min"])
-            merged_max = updates.get("value_max", row["value_max"])
-            if merged_min is not None and merged_max is not None and merged_min > merged_max:
-                raise ParameterLifecycleError("parameter_invalid_bounds", "value_min must be <= value_max.")
-
-            changed = {field: value for field, value in updates.items() if row[field] != value}
-            if not changed:
-                connection.rollback()
-                return row_to_model(row, ParameterRead)
-
-            now = utc_now()
-            assignments = ", ".join(f"{field} = ?" for field in changed)
-            cursor = connection.execute(
-                f"UPDATE parameters SET {assignments}, updated_at = ? WHERE id = ? AND workspace_id = ? AND updated_at = ?",
-                (*changed.values(), now, parameter_id, payload.workspace_id, payload.expected_updated_at),
-            )
-            if cursor.rowcount != 1:
-                raise ParameterLifecycleError("parameter_stale", "Parameter changed before commit.")
-            prior = {field: row[field] for field in changed}
-            log_event(
-                connection,
-                event_type="ParameterCanonicalEdited",
-                actor="local-user",
-                target_type="Parameter",
-                target_id=parameter_id,
-                workspace_id=payload.workspace_id,
-                payload=_event_payload(operation="edit", prior=prior, result=changed),
-            )
+            result = update_parameter_in_transaction(connection, parameter_id, payload)
             connection.commit()
-            return row_to_model(_parameter_row(connection, payload.workspace_id, parameter_id), ParameterRead)
+            return result
         except Exception:
             connection.rollback()
             raise
+
+
+def transition_parameter_in_transaction(
+    connection: sqlite3.Connection,
+    parameter_id: str,
+    payload: ParameterLifecycleCommand,
+    *,
+    allow_dependency_change: bool = False,
+) -> ParameterRead:
+    row = _parameter_row(connection, payload.workspace_id, parameter_id)
+    current = row["lifecycle_state"]
+    if row["updated_at"] != payload.expected_updated_at or current != payload.expected_lifecycle_state:
+        raise ParameterLifecycleError("parameter_stale", "Parameter lifecycle changed since it was reviewed.")
+    target = _TARGETS[payload.action].get(current)
+    if target is None:
+        raise ParameterLifecycleError(
+            "parameter_lifecycle_transition_invalid",
+            f"Transition {payload.action} is not valid from {current}.",
+        )
+    if not allow_dependency_change and current == "active" and target != "active":
+        _require_no_downstream_dependents(connection, payload.workspace_id, parameter_id)
+
+    now = utc_now()
+    cursor = connection.execute(
+        "UPDATE parameters SET lifecycle_state = ?, updated_at = ? WHERE id = ? AND workspace_id = ? AND updated_at = ? AND lifecycle_state = ?",
+        (target, now, parameter_id, payload.workspace_id, payload.expected_updated_at, current),
+    )
+    if cursor.rowcount != 1:
+        raise ParameterLifecycleError("parameter_stale", "Parameter lifecycle changed before commit.")
+    log_event(
+        connection,
+        event_type="ParameterLifecycleChanged",
+        actor="local-user",
+        target_type="Parameter",
+        target_id=parameter_id,
+        workspace_id=payload.workspace_id,
+        payload=_event_payload(
+            operation=payload.action,
+            prior={"lifecycle_state": current},
+            result={"lifecycle_state": target},
+            reason=payload.reason,
+        ),
+    )
+    return row_to_model(_parameter_row(connection, payload.workspace_id, parameter_id), ParameterRead)
 
 
 def transition_parameter(parameter_id: str, payload: ParameterLifecycleCommand) -> ParameterRead:
     with open_sqlite_connection() as connection:
         connection.execute("BEGIN IMMEDIATE")
         try:
-            row = _parameter_row(connection, payload.workspace_id, parameter_id)
-            current = row["lifecycle_state"]
-            if row["updated_at"] != payload.expected_updated_at or current != payload.expected_lifecycle_state:
-                raise ParameterLifecycleError("parameter_stale", "Parameter lifecycle changed since it was reviewed.")
-            target = _TARGETS[payload.action].get(current)
-            if target is None:
-                raise ParameterLifecycleError(
-                    "parameter_lifecycle_transition_invalid",
-                    f"Transition {payload.action} is not valid from {current}.",
-                )
-            if current == "active" and target != "active":
-                _require_no_downstream_dependents(connection, payload.workspace_id, parameter_id)
-
-            now = utc_now()
-            cursor = connection.execute(
-                "UPDATE parameters SET lifecycle_state = ?, updated_at = ? WHERE id = ? AND workspace_id = ? AND updated_at = ? AND lifecycle_state = ?",
-                (target, now, parameter_id, payload.workspace_id, payload.expected_updated_at, current),
-            )
-            if cursor.rowcount != 1:
-                raise ParameterLifecycleError("parameter_stale", "Parameter lifecycle changed before commit.")
-            log_event(
-                connection,
-                event_type="ParameterLifecycleChanged",
-                actor="local-user",
-                target_type="Parameter",
-                target_id=parameter_id,
-                workspace_id=payload.workspace_id,
-                payload=_event_payload(
-                    operation=payload.action,
-                    prior={"lifecycle_state": current},
-                    result={"lifecycle_state": target},
-                    reason=payload.reason,
-                ),
-            )
+            result = transition_parameter_in_transaction(connection, parameter_id, payload)
             connection.commit()
-            return row_to_model(_parameter_row(connection, payload.workspace_id, parameter_id), ParameterRead)
+            return result
         except Exception:
             connection.rollback()
             raise
