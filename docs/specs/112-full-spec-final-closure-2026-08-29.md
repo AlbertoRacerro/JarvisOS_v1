@@ -8,6 +8,8 @@ Exact-master audit used for this closure additionally confirmed:
 - `backend/app/modules/memory/service.py::_transition()` owns ordinary proposal lifecycle transition but opens/commits its own connection;
 - `backend/app/modules/memory/service.py::promote_parameter_replacement()` owns replacement validation, supersession/lifecycle, freshness invalidation and audit, also under its own transaction;
 - `requirements` and `decisions` currently have mutable in-place rows with `updated_at` and no immutable owner-version history;
+- `RequirementCreate`/`RequirementUpdate` already use `requirements.status = draft | active | retired` as Requirement lifecycle; V0 MUST reuse that field rather than add a competing Requirement lifecycle column;
+- the human-readable Requirement/acceptance-criterion prose is `requirements.statement` with optional `rationale`; there is no current `requirements.acceptance_criteria` column;
 - `simulation_runs.output_payload` is opaque and the prior scalar projection contract must not entangle immutable observed results with one consumer working revision.
 
 This amendment closes the remaining material P1 gaps without creating a second live Project/model/dependency/run truth store.
@@ -99,14 +101,42 @@ For `basis_kind=acceptance_criterion`, V0 adds one bounded Requirement-owned fie
 `reconciliation_gate = required | advisory`
 
 Semantics:
-- `required`: criterion belongs to the mandatory validation set whenever the proposed-state impact says it is applicable to the working revision; ordinary final reconciliation requires terminal admissible evidence for it. Machine-evaluable required criteria require `pass`, except the separately specified explicit known-FAIL acknowledgement path. `not_evaluable` remains unresolved and blocks ordinary reconciliation.
+- `required`: criterion belongs to the mandatory validation set whenever the exact canonical applicability relation says it applies to the working revision's proposed model/version scope. Ordinary final reconciliation requires terminal admissible evidence for it. Machine-evaluable required criteria require `pass`, except the separately specified explicit known-FAIL acknowledgement path. `not_evaluable` remains unresolved and blocks ordinary reconciliation.
 - `advisory`: criterion may be evaluated and displayed but its absence/failure alone does not block reconciliation.
 
 The field is updated only through the same workspace-scoped stale-protected Requirement CAS/audit owner seam. It is included in owner revision identity, impact/validation digests and reconciled snapshot history. A working change that alters this field invalidates previous criterion-set/validation evidence.
 
 Migration/default rule: historical Requirement rows default to `advisory`; the migration MUST NOT invent new blocking policy from old prose. A fresh readiness audit MUST identify any already-accepted repository authority that explicitly marks an existing criterion mandatory and migrate only such proven cases deliberately. Newly created or newly classified `basis_kind=acceptance_criterion` records MUST provide `reconciliation_gate` explicitly; the server does not infer it.
 
-The mandatory set for one working revision is deterministic: exact active Requirement rows with `basis_kind=acceptance_criterion`, `reconciliation_gate=required`, and applicable membership under the exact proposed-state impact/revision basis. Retired criteria are excluded only through the retirement contract below; stale/incomplete applicability fails closed rather than silently dropping a required criterion.
+### Canonical Requirement applicability relation
+
+The exact head has no Requirement-to-model/version applicability owner, while the maintainer-approved interaction contract requires model versions to reference applicable Project Basis records rather than duplicate them. V0 therefore authorizes the minimum canonical **relationship seam**, not a duplicate Requirement store:
+
+`requirement_applicability`
+
+Each immutable/current relation row MUST contain:
+- `id`, `workspace_id`;
+- exact `requirement_id` referencing the existing canonical Requirement;
+- `target_kind = workspace | model_spec | model_version`;
+- exact `target_id` (`workspace_id` for workspace-global applicability, otherwise the canonical `model_specs.id` or `model_versions.id`);
+- `created_at`, `updated_at` or an equivalent exact revision token;
+- lifecycle/current-state needed to support stale-protected add/remove without physical history loss;
+- immutable audit evidence for add/remove/retire transitions.
+
+The relation owns applicability only. Requirement prose, gate policy and other Requirement fields remain on `requirements`; model/model-version truth remains on `model_specs`/`model_versions`. No copied Requirement payload is stored in the relation.
+
+Applicability semantics are deterministic:
+- `workspace` applies to every affected model/version in that workspace and to genuinely project-global reconciliation gates;
+- `model_spec` applies to that exact model specification and its exact versions unless a narrower `model_version` relation overrides/supersedes applicability through an explicit proposed relation delta;
+- `model_version` applies only to the exact canonical version id;
+- absent applicability is **not** inferred from prose, title, UI grouping, or mere workspace co-residence;
+- a `required` criterion with stale, ambiguous, missing, or incomplete applicability evidence fails the reconciliation-gate calculation closed rather than being silently dropped or applied to every unrelated model.
+
+The proposed-state impact preview MUST include applicability additions/removals/retirements in the same ephemeral parent + cumulative accepted-ancestor + draft projection used for dependency edges. A child working revision inherits the exact applicability projection of its accepted parent chain before applying its own delta. Preview and validation digests bind the exact applicability relation revision/delta set. Any relation drift after preview invalidates the preview/criterion set.
+
+The mandatory set for one working revision is therefore deterministic: exact active Requirement rows with `basis_kind=acceptance_criterion`, `reconciliation_gate=required`, and an exact applicable relation in the proposed-state model/version impact scope. Requirement applicability is part of the 050-style projected impact input but remains owned by the Requirement/model relationship seam above; it is not synthesized as an unowned graph edge.
+
+Requirement human-readable criterion content is the existing `requirements.statement` field, with optional `requirements.rationale`. V0 MUST NOT read or invent a non-existent `requirements.acceptance_criteria` prose column. Typed comparator fields defined by the earlier closure supplement `statement`; they do not replace it as the canonical human-readable Requirement text.
 
 Mandatory tests:
 - required PASS satisfies its gate;
@@ -115,31 +145,44 @@ Mandatory tests:
 - advisory missing/FAIL is preserved but not itself blocking;
 - historical row migration does not become required without explicit accepted evidence;
 - gate classification change invalidates prior validation digest;
-- stale Requirement revision cannot change required/advisory state.
+- stale Requirement revision cannot change required/advisory state;
+- workspace-global, model-spec and exact-model-version applicability each produce the expected mandatory set;
+- two unrelated model versions in one workspace do not inherit each other's model-specific required criteria;
+- add/remove applicability in a parent working revision remains effective in a child preview even when the child changes an unrelated field;
+- stale applicability relation after preview invalidates the criterion set and reconciliation.
 
 ## 5. Existing Project Basis removal is retirement, never physical deletion
 
 Project Basis CRUD removal of an already-canonical Requirement or Global Decision is represented in V0 as a stale-protected **retire** operation. Physical deletion of an accepted canonical owner is not authorized.
 
-Requirements and Decisions gain the minimum owner-owned current-lifecycle field:
+### Requirements reuse their existing lifecycle
+
+For Requirements, V0 MUST reuse the exact existing `requirements.status` lifecycle (`draft | active | retired`). It MUST NOT add `basis_lifecycle_state` or any second Requirement lifecycle field.
+
+A draft `retire` operation against an existing Requirement carries workspace, canonical Requirement id, exact expected `updated_at` owner token and bounded reason/provenance. Final reconciliation invokes the transaction-aware Requirement owner primitive, CAS-checks the exact row and requires current `status=active`, then transitions the same canonical field to `status=retired`, updates `updated_at`, and writes immutable audit evidence inside the caller-owned reconciliation transaction. A reactivation, if readiness includes it, is the explicit stale-protected transition `retired -> active`; otherwise it remains unavailable.
+
+Existing readers/projections MUST use that same status field for current-vs-history filtering. No synchronisation between competing lifecycle columns is permitted because no competing Requirement lifecycle column is introduced.
+
+### Decisions need a distinct accepted-record lifecycle
+
+Current `decisions.status` participates in the Decision/proposal-state vocabulary and is not frozen by exact-head evidence as the same accepted-record lifecycle contract used by Requirements. For an already-accepted Global Decision, V0 may therefore add the minimum owner-owned:
 
 `basis_lifecycle_state = active | retired`
 
-with default/migration `active` for existing rows and a nullable immutable-audit timestamp/reason if current repository conventions require it. This lifecycle is distinct from MemoryStore proposal `status`; retiring an accepted record must not masquerade as proposal rejection/supersession.
+with default/migration `active` for existing accepted Decision rows and a nullable audit reason/timestamp only if current conventions require it. This lifecycle is distinct from MemoryStore proposal status and MUST be mutated through the same connection-taking Decision owner seam used by final reconciliation. Readiness MUST prove the exact interaction with existing `decisions.status` so proposal lifecycle and accepted-record retirement cannot contradict one another; if it cannot, Decision retirement remains not-ready rather than inventing synchronisation semantics.
 
-A draft `retire` operation against an existing Requirement/Decision MUST carry workspace, canonical owner id, exact expected owner revision token and bounded reason/provenance. Approval only records the working intent. Final reconciliation invokes the canonical Requirement/Decision connection-taking owner primitive inside `ProjectBasisApplyService`, CAS-checks the still-active row, marks it retired, updates owner revision/audit, and commits that change with the complete cumulative plan and snapshot.
-
-Effects:
-- retired rows remain immutable-addressable history and are excluded from the current active Project Basis projection/search/edit set unless history is requested;
+For both owner kinds, retirement effects are identical:
+- retired records remain immutable-addressable history and are excluded from the current active Project Basis projection/search/edit set unless history is requested;
 - dependent/impact semantics are recomputed through the accepted proposed-state graph/freshness path; retirement never silently drops required dependency impact;
 - exact historical reconciled snapshots preserve whether the owner was active or retired at that revision;
-- a later reactivation is not implicitly authorized by `update`; it requires an explicit stale-protected `reactivate` operation if readiness includes it, otherwise remains a future extension;
 - removing a provisional create before reconciliation still cancels/supersedes the provisional operation and creates no canonical owner.
 
 Mandatory tests:
-- retire each Requirement-backed Project Basis class and Global Decision with workspace/CAS protection;
+- Requirement retirement changes only `requirements.status` from active to retired under workspace/CAS protection and existing readers report it consistently;
+- no `basis_lifecycle_state` is added or consulted for Requirements;
+- Global Decision retirement uses its separately accepted lifecycle seam without conflating MemoryStore proposal status;
 - wrong workspace/stale token/already-retired conflict fails closed;
-- retirement participates in projected dependency impact and mandatory-criterion set calculation;
+- retirement participates in projected dependency/applicability impact and mandatory-criterion set calculation;
 - failed multi-owner reconciliation leaves the existing row active;
 - successful retirement remains inspectable in historical snapshot and is excluded from current active projection;
 - no implementation path physically deletes accepted Requirement/Decision rows.
@@ -151,8 +194,8 @@ PR #429 remains planning-only. 112 cannot become `ready` until fresh exact-maste
 1. immutable reconciled snapshot manifests are transactionally reconstructable and are historical evidence rather than a second live truth store;
 2. MemoryStore ordinary proposal promotion and Parameter replacement promotion have named connection-taking owner primitives preserving current eligibility/lifecycle/freshness/audit semantics inside `ProjectBasisApplyService`;
 3. scalar-result admission is revision-neutral while every validation use is exactly target-working-revision/basis bound;
-4. Requirement-owned `reconciliation_gate` deterministically defines required vs advisory acceptance criteria without prose inference;
-5. existing Requirement/Decision removal is stale-protected retirement, not physical deletion, and remains distinct from proposal lifecycle;
+4. Requirement-owned `reconciliation_gate` and the canonical `requirement_applicability` relation deterministically define required vs advisory criterion membership without prose/UI inference; Requirement prose remains `statement`/optional `rationale`;
+5. existing Requirement removal reuses `requirements.status=retired`, while Decision retirement has a separately proven accepted-record lifecycle and neither path physically deletes accepted canonical rows or conflates proposal lifecycle;
 6. all earlier cumulative-chain, approval-idempotency, create/provisional-id, criterion evaluator, atomic success/failure and proposed-state impact obligations remain satisfied.
 
-If any proof would require duplicate current truth, hidden provider/solver work, weakened CAS/proposal/lifecycle semantics, or unreconstructable historical revisions, readiness must remain not-ready and name the exact gap rather than weakening the contract.
+If any proof would require duplicate current truth, hidden provider/solver work, weakened CAS/proposal/lifecycle semantics, ambiguous criterion applicability, or unreconstructable historical revisions, readiness must remain not-ready and name the exact gap rather than weakening the contract.
