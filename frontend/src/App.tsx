@@ -15,6 +15,7 @@ import FinalOperatorReadSurface from "./components/fusion/FinalOperatorReadSurfa
 import FinalOperatorUnavailableSurface from "./components/fusion/FinalOperatorUnavailableSurface";
 import FinalSettingsSurface from "./components/fusion/FinalSettingsSurface";
 import FinalWorkspaceHeader from "./components/fusion/FinalWorkspaceHeader";
+import ProjectKnowledgePanel from "./components/fusion/ProjectKnowledgePanel";
 import LegacyDiagnosticSurface from "./components/shell/LegacyDiagnosticSurface";
 import MigrationPendingSurface from "./components/shell/MigrationPendingSurface";
 import AIDraft from "./pages/AIDraft";
@@ -56,7 +57,7 @@ function App() {
   } else {
     switch (route.id) {
       case "memory-project-basis":
-        content = <><FinalWorkspaceHeader group="memory" active="project-basis" navigate={navigate} /><FinalOperatorReadSurface kind="project-basis" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
+        content = <><FinalWorkspaceHeader group="memory" active="project-basis" navigate={navigate} /><FinalOperatorReadSurface kind="project-basis" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /><ProjectKnowledgePanel workspaceId={workspaceId} /></>;
         break;
       case "memory-models":
         content = <><FinalWorkspaceHeader group="memory" active="models" navigate={navigate} /><FinalOperatorReadSurface kind="models" workspaceId={workspaceId} onWorkspaceChange={setWorkspaceId} /></>;
