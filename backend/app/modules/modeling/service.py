@@ -20,6 +20,10 @@ from app.modules.modeling.models import (
     SimulationRunCreate,
     SimulationRunRead,
 )
+from app.modules.modeling.project_knowledge_owner import (
+    create_decision_in_transaction,
+    create_requirement_in_transaction,
+)
 
 
 def _workspace_exists(connection: sqlite3.Connection, workspace_id: str) -> bool:
@@ -386,39 +390,10 @@ def list_parameters(workspace_id: str) -> list[ParameterRead]:
 
 
 def create_requirement(workspace_id: str, payload: RequirementCreate) -> RequirementRead:
-    now = utc_now()
-    record_id = str(uuid4())
     with open_sqlite_connection() as connection:
         _require_workspace(connection, workspace_id)
-        connection.execute(
-            """
-            INSERT INTO requirements (
-                id, workspace_id, statement, rationale, status, notes,
-                schema_version, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                record_id,
-                workspace_id,
-                payload.statement,
-                payload.rationale,
-                payload.status,
-                payload.notes,
-                1,
-                now,
-                now,
-            ),
-        )
-        _log_creation(
-            connection,
-            event_type="RequirementCreated",
-            target_type="Requirement",
-            target_id=record_id,
-            workspace_id=workspace_id,
-            payload={"statement": payload.statement[:160], "status": payload.status},
-        )
+        row = create_requirement_in_transaction(connection, workspace_id, payload)
         connection.commit()
-        row = connection.execute("SELECT * FROM requirements WHERE id = ?", (record_id,)).fetchone()
     return row_to_model(row, RequirementRead)
 
 
@@ -462,13 +437,23 @@ def create_simulation_run(workspace_id: str, payload: SimulationRunCreate) -> Si
     created_at = utc_now()
     with open_sqlite_connection() as connection:
         _require_workspace(connection, workspace_id)
+        if payload.project_knowledge_revision_id is not None:
+            revision = connection.execute(
+                """
+                SELECT id FROM project_knowledge_revisions
+                WHERE id = ? AND workspace_id = ? AND state = 'working'
+                """,
+                (payload.project_knowledge_revision_id, workspace_id),
+            ).fetchone()
+            if revision is None:
+                raise ValueError("Project Knowledge working revision not found in workspace.")
         connection.execute(
             """
             INSERT INTO simulation_runs (
                 id, workspace_id, model_version_id, run_label, status,
                 input_payload, parameter_payload, output_payload, started_at,
-                completed_at, created_at, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                completed_at, created_at, notes, project_knowledge_revision_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record_id,
@@ -483,6 +468,7 @@ def create_simulation_run(workspace_id: str, payload: SimulationRunCreate) -> Si
                 payload.completed_at,
                 created_at,
                 payload.notes,
+                payload.project_knowledge_revision_id,
             ),
         )
         _log_creation(
@@ -491,7 +477,11 @@ def create_simulation_run(workspace_id: str, payload: SimulationRunCreate) -> Si
             target_type="SimulationRun",
             target_id=record_id,
             workspace_id=workspace_id,
-            payload={"run_label": payload.run_label, "status": payload.status},
+            payload={
+                "run_label": payload.run_label,
+                "status": payload.status,
+                "project_knowledge_revision_id": payload.project_knowledge_revision_id,
+            },
         )
         connection.commit()
         row = connection.execute("SELECT * FROM simulation_runs WHERE id = ?", (record_id,)).fetchone()
@@ -509,40 +499,10 @@ def list_simulation_runs(workspace_id: str) -> list[SimulationRunRead]:
 
 
 def create_decision(workspace_id: str, payload: DecisionCreate) -> DecisionRead:
-    now = utc_now()
-    record_id = str(uuid4())
     with open_sqlite_connection() as connection:
         _require_workspace(connection, workspace_id)
-        connection.execute(
-            """
-            INSERT INTO decisions (
-                id, workspace_id, title, decision_text, rationale, status,
-                linked_run_id, created_at, updated_at, notes
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                record_id,
-                workspace_id,
-                payload.title,
-                payload.decision_text,
-                payload.rationale,
-                payload.status,
-                payload.linked_run_id,
-                now,
-                now,
-                payload.notes,
-            ),
-        )
-        _log_creation(
-            connection,
-            event_type="DecisionCreated",
-            target_type="Decision",
-            target_id=record_id,
-            workspace_id=workspace_id,
-            payload={"title": payload.title, "status": payload.status},
-        )
+        row = create_decision_in_transaction(connection, workspace_id, payload)
         connection.commit()
-        row = connection.execute("SELECT * FROM decisions WHERE id = ?", (record_id,)).fetchone()
     return row_to_model(row, DecisionRead)
 
 
