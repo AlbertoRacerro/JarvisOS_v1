@@ -23,6 +23,14 @@ type FutureTool = Readonly<{
   icon: typeof CursorClick;
 }>;
 
+type ProjectKnowledgeHandoff = Readonly<{
+  valid: boolean;
+  revisionId?: string;
+  basisDigest?: string;
+  validationSetDigest?: string;
+  requirementIds?: string[];
+}>;
+
 const futureTools: readonly FutureTool[] = [
   { label: "Select", icon: CursorClick },
   { label: "Pan", icon: Hand },
@@ -49,8 +57,22 @@ const equipmentGroups = [
   ["Separation", "Separator", "Column"]
 ] as const;
 
+function readProjectKnowledgeHandoff(): ProjectKnowledgeHandoff | null {
+  const params = new URLSearchParams(window.location.search);
+  const hasHandoff = Array.from(params.keys()).some((key) => key.startsWith("project_knowledge_"));
+  if (!hasHandoff) return null;
+
+  const revisionId = params.get("project_knowledge_revision_id")?.trim();
+  const basisDigest = params.get("project_knowledge_basis_digest")?.trim();
+  const validationSetDigest = params.get("project_knowledge_validation_set_digest")?.trim();
+  const requirementIds = params.getAll("project_knowledge_requirement_id").map((value) => value.trim()).filter(Boolean);
+  if (!revisionId || !basisDigest || !validationSetDigest || requirementIds.length === 0) return { valid: false };
+  return { valid: true, revisionId, basisDigest, validationSetDigest, requirementIds };
+}
+
 function ProcessStage({ navigate }: PrimaryStageProps) {
   const unavailableReason = "Future Process authoring control — unavailable until server-owned topology/evaluator authority is integrated.";
+  const handoff = readProjectKnowledgeHandoff();
 
   return (
     <section className="process-stage design-stage" aria-labelledby="process-stage-title">
@@ -70,6 +92,16 @@ function ProcessStage({ navigate }: PrimaryStageProps) {
           <button type="button" onClick={() => navigate("/design/bluecad")}>BLUECAD</button>
         </nav>
       </header>
+
+      {handoff && (
+        <div className="final-fusion__context-strip" role="status" aria-label="Project Knowledge recomputation handoff">
+          {handoff.valid ? (
+            <>Project Knowledge recomputation request context · revision {handoff.revisionId} · basis {handoff.basisDigest} · validation set {handoff.validationSetDigest} · requirements {handoff.requirementIds?.join(", ")}. Context is inspectable only; Process recomputation remains unavailable until its server owner exists.</>
+          ) : (
+            <>Incomplete Project Knowledge recomputation handoff ignored. No Process action is authorized from partial local URL context.</>
+          )}
+        </div>
+      )}
 
       <div className="process-stage__workbench">
         <div className="process-stage__toolbar" aria-label="Process tools">
