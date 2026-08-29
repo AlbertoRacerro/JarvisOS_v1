@@ -57,6 +57,15 @@ _ALLOWED_PARAMETER_FIELDS = {
     "notes",
 }
 
+_OWNER_TABLES = {
+    "requirement": "requirements",
+    "decision": "decisions",
+    "assumption": "assumptions",
+    "parameter": "parameters",
+    "model_spec": "model_specs",
+    "requirement_applicability": "requirement_applicability",
+}
+
 
 class ProjectBasisApplyService:
     """Dispatch a prevalidated cumulative mutation plan to canonical owners.
@@ -73,10 +82,24 @@ class ProjectBasisApplyService:
         workspace_id: str,
         operations: list[ProjectKnowledgeOperation],
     ) -> ApplyResult:
+        # Every operation against an already-canonical owner must still be bound to
+        # the exact owner token that existed when the working chain was approved.
+        # Validate all of those base tokens before the first mutation. Once a prior
+        # operation in this same BEGIN IMMEDIATE transaction advances updated_at,
+        # later cumulative operations may safely rebind only to that transaction-
+        # local token; no external writer can intervene between the two checks.
+        self._preflight_existing_tokens(connection, workspace_id, operations)
+
         canonical_id_map: dict[str, str] = {}
         touched: list[str] = []
         for operation in operations:
             resolved = self._resolve_operation(operation, canonical_id_map)
+            resolved = self._rebind_transaction_token(
+                connection,
+                workspace_id=workspace_id,
+                original=operation,
+                resolved=resolved,
+            )
             if resolved.operation_kind == "create":
                 owner_id = self._create(connection, workspace_id, resolved)
                 provisional = operation.provisional_ref
@@ -96,6 +119,92 @@ class ProjectBasisApplyService:
             else:
                 raise ProjectBasisApplyError("operation_unsupported", "Operation kind is not supported by 112 V0.")
         return ApplyResult(canonical_id_map=canonical_id_map, touched_refs=tuple(touched))
+
+    def _preflight_existing_tokens(
+        self,
+        connection: sqlite3.Connection,
+        workspace_id: str,
+        operations: list[ProjectKnowledgeOperation],
+    ) -> None:
+        checked: dict[tuple[str, str], str] = {}
+        for operation in operations:
+            if operation.operation_kind not in {"update", "retire", "retire_applicability"}:
+                continue
+            owner_id = operation.owner_id
+            expected = operation.expected_updated_at
+            if not owner_id or owner_id.startswith("draft:"):
+                continue
+            if expected is None:
+                raise ProjectBasisApplyError("owner_identity_missing", "Existing-owner operation has no revision token.")
+            table = _OWNER_TABLES.get(operation.owner_kind)
+            if table is None:
+                raise ProjectBasisApplyError("owner_kind_unsupported", "Owner kind has no canonical revision token.")
+            key = (operation.owner_kind, owner_id)
+            prior_expected = checked.get(key)
+            if prior_expected is not None and prior_expected != expected:
+                raise ProjectBasisApplyError(
+                    "owner_token_inconsistent",
+                    "Cumulative operations for one owner are bound to different base revision tokens.",
+                )
+            row = connection.execute(
+                f"SELECT updated_at FROM {table} WHERE id = ? AND workspace_id = ?",
+                (owner_id, workspace_id),
+            ).fetchone()
+            if row is None:
+                raise ProjectBasisApplyError("owner_not_found", "Canonical owner was not found in workspace.")
+            if str(row["updated_at"]) != expected:
+                raise ProjectBasisApplyError("owner_stale", "Canonical owner changed since the working chain was approved.")
+            checked[key] = expected
+
+    def _current_owner_token(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        workspace_id: str,
+        owner_kind: str,
+        owner_id: str,
+    ) -> str:
+        table = _OWNER_TABLES.get(owner_kind)
+        if table is None:
+            raise ProjectBasisApplyError("owner_kind_unsupported", "Owner kind has no canonical revision token.")
+        row = connection.execute(
+            f"SELECT updated_at FROM {table} WHERE id = ? AND workspace_id = ?",
+            (owner_id, workspace_id),
+        ).fetchone()
+        if row is None:
+            raise ProjectBasisApplyError("owner_not_found", "Canonical owner was not found in workspace.")
+        return str(row["updated_at"])
+
+    def _rebind_transaction_token(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        workspace_id: str,
+        original: ProjectKnowledgeOperation,
+        resolved: ProjectKnowledgeOperation,
+    ) -> ProjectKnowledgeOperation:
+        if resolved.operation_kind not in {"update", "retire", "retire_applicability"}:
+            return resolved
+        owner_id = resolved.owner_id
+        if owner_id is None:
+            return resolved
+        current = self._current_owner_token(
+            connection,
+            workspace_id=workspace_id,
+            owner_kind=resolved.owner_kind,
+            owner_id=owner_id,
+        )
+        # A provisional owner did not exist in canonical truth at approval time;
+        # its immutable ancestor create operation is the authority. Once created in
+        # this same transaction, bind its child operation to the generated token.
+        # For canonical owners, preflight above already proved the original base
+        # token. A changed token here can therefore only be from an earlier local
+        # operation in this transaction.
+        if original.owner_id and original.owner_id.startswith("draft:") or resolved.expected_updated_at != current:
+            data = resolved.model_dump()
+            data["expected_updated_at"] = current
+            return ProjectKnowledgeOperation.model_validate(data)
+        return resolved
 
     def _resolve_operation(
         self,
