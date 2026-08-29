@@ -4,151 +4,91 @@ Authority: binding amendment to `docs/specs/112-project-knowledge-core-1.md` for
 
 Reviewed full-spec head: `50a3792cd822e9a6b8d0a1b45f2fbcfbb1a2d9b2`.
 
-This closure resolves the four material review findings on PR #429 without broadening 112 beyond the merged definition or creating a second project/model/engineering truth store.
+This closure resolves the material review findings on PR #429 without broadening 112 beyond the merged definition or creating a second project/model/engineering truth store.
 
 ## 1. Proposed-state impact includes the accepted working ancestor chain
 
-The full spec's proposed dependency projection is amended as follows.
+A draft whose exact parent is an accepted working revision MUST project the complete accepted ancestor chain before applying the child's delta. Approval does not mutate the canonical 050 graph, so starting from reconciled truth plus only the child delta would lose accepted-but-unreconciled changes.
 
-A draft whose exact parent is an accepted working revision MUST NOT start from the current reconciled 050 graph and apply only the child's edge delta. Approval does not mutate the reconciled graph, so doing that would lose accepted-but-unreconciled ancestor changes.
-
-The projection basis is instead the exact cumulative working state for the selected parent:
-
+The projection basis is:
 1. load the bounded exact current reconciled 050 graph under one read snapshot;
 2. resolve the selected parent and walk its immutable parent chain back to the exact reconciled ancestor, rejecting cycles, missing parents, wrong-workspace refs, discarded/superseded invalid bases, or bound exhaustion;
-3. replay, in ancestor-to-descendant order, every accepted working ancestor's exact ordered dependency/source-binding deltas onto an in-memory projection; equivalently, an implementation may load a persisted immutable cumulative digest/materialization only if readiness proves it is derivable from and exactly bound to that same chain and is not a second dependency truth store;
-4. verify the resulting cumulative-parent digest, parent identity, owner revision tokens and proposed-edge basis;
-5. derive and apply the current draft's explicit edge delta;
-6. traverse the resulting projected graph with existing 050 canonical-ref semantics and bounds;
-7. return affected refs, validation/recomputation contracts, diagnostics, completeness, and a digest bound to the reconciled base + complete accepted ancestor chain + current draft revision token + owner tokens + all applied edge deltas.
+3. replay ancestor-to-descendant every accepted working ancestor's exact ordered dependency/source-binding deltas onto an in-memory projection; an immutable cumulative materialization is acceptable only if readiness proves it is derivable from and exactly bound to that chain and is not a second dependency truth store;
+4. verify cumulative-parent digest, parent identity, owner revision tokens and proposed-edge basis;
+5. apply the current draft's explicit edge delta;
+6. traverse the projected graph with existing 050 canonical-ref semantics and bounds;
+7. return affected refs, validation/recomputation contracts, diagnostics, completeness, and a digest bound to reconciled base + complete ancestor chain + current draft token + owner tokens + applied deltas.
 
-Approval and final reconciliation reject any preview when the reconciled base, ancestor chain, selected parent, owner token, or cumulative digest has drifted.
+Approval and final reconciliation reject any preview when the reconciled base, ancestor chain, selected parent, owner token, or cumulative digest drifted.
 
-Additional mandatory deterministic tests:
-
-- parent accepted revision changes dependency `A -> B`, child makes an unrelated edit: child preview preserves `B` as current projected truth and does not resurrect `A`;
-- two accepted ancestors each change different edges: child preview includes both deltas in exact lineage order;
-- deliberate branch from an older accepted parent excludes changes that exist only on a sibling branch;
-- missing/cyclic/wrong-workspace/over-bound ancestor chain fails closed as incomplete/rejected, never as `no impact`.
-
-This amendment supersedes the original proposed-impact algorithm wherever that algorithm could be read as applying only the current draft delta to the reconciled graph.
+Mandatory tests include parent `A -> B` plus unrelated child edit, two accepted ancestors with distinct edge changes, deliberate branch from an older parent excluding sibling-only changes, and missing/cyclic/wrong-workspace/over-bound chains failing closed.
 
 ## 2. Complete V0 disposition for every accepted Project Basis field class
 
-The accepted operator interaction contract assigns Project Basis ownership of:
-
-- project objective/question;
-- requirements;
-- acceptance criteria;
-- stable constraints;
-- global decisions;
-- boundary conditions;
-- standards/regulations;
-- resource/capability constraints.
-
-The full spec is amended to dispose every class explicitly. V0 MUST use existing canonical owners and the minimum additive fields/seams below; it may not defer these accepted classes to unspecified future work.
+V0 uses existing canonical owners and minimum additive seams:
 
 | Accepted Project Basis class | Canonical V0 owner / minimum seam |
 | --- | --- |
-| Project objective/question | existing `requirements` canonical table, with one additive bounded `basis_kind` discriminator; no peer objective table |
+| Project objective/question | existing `requirements` plus bounded `basis_kind`; no peer objective table |
 | Requirement | existing `requirements`, `basis_kind=requirement`; protected workspace/CAS/audit mutation seam |
-| Acceptance criterion | existing `requirements`, `basis_kind=acceptance_criterion`; protected workspace/CAS/audit mutation seam; deterministic rule/target representation must reuse current fields where sufficient or add only the minimum typed metadata required by readiness |
-| Stable constraint | existing `requirements`, `basis_kind=stable_constraint`; protected workspace/CAS/audit mutation seam |
-| Boundary condition | existing `requirements`, `basis_kind=boundary_condition`; protected workspace/CAS/audit mutation seam |
-| Standard/regulation | existing `requirements`, `basis_kind=standard_regulation`; protected workspace/CAS/audit mutation seam; source/provenance remains required where the canonical owner supports or readiness minimally extends it |
-| Resource/capability constraint | existing `requirements`, `basis_kind=resource_capability_constraint`; protected workspace/CAS/audit mutation seam |
-| Global decision | existing `decisions` canonical table; add the minimum workspace-scoped stale-protected CAS/audit internal update seam needed by 112; no `project_decisions` table |
+| Acceptance criterion | existing `requirements`, `basis_kind=acceptance_criterion`; protected workspace/CAS/audit seam and minimum typed criterion metadata only if current fields are insufficient |
+| Stable constraint | existing `requirements`, `basis_kind=stable_constraint`; protected workspace/CAS/audit seam |
+| Boundary condition | existing `requirements`, `basis_kind=boundary_condition`; protected workspace/CAS/audit seam |
+| Standard/regulation | existing `requirements`, `basis_kind=standard_regulation`; protected workspace/CAS/audit seam with provenance where supported/minimally extended |
+| Resource/capability constraint | existing `requirements`, `basis_kind=resource_capability_constraint`; protected workspace/CAS/audit seam |
+| Global decision | existing `decisions`; minimum workspace-scoped stale-protected CAS/audit internal update seam; no peer decision table |
 
-`basis_kind` is an additive classification on the existing Requirement identity, not a second truth store. Existing historical Requirement rows may default/migrate to `requirement`; readiness must choose the additive migration shape and prove compatibility with existing callers and tests.
+`basis_kind` classifies the existing Requirement identity and does not create a second truth store. Historical rows default/migrate compatibly to `requirement`. Readiness must prove the migration, caller compatibility, transaction-capable Decision mutation, frontend mapping, and stale/wrong-workspace/concurrent tests for every mutable class.
 
-The existing `DecisionCreate`/`DecisionRead` identity remains canonical. Because current code has no Decision update model/seam, readiness must prove the minimum transaction-capable `Decision` mutation primitive with workspace scope, expected owner revision token, immutable audit evidence, and caller-owned transaction support before 112 can become `ready`.
-
-The model-specific field classes already covered by the full spec remain unchanged:
-
-- Parameter values/units/metadata -> existing `parameters` + 098;
-- Assumptions -> existing `assumptions` + minimum CAS/audit seam;
-- Model definition/engineering question/scope/summaries/method-bearing configuration -> existing `model_specs` + minimum CAS/audit/version seam;
-- transient run working configuration -> 071b, not 112;
-- Literature -> 114;
-- dossier/search -> 113/115.
-
-Readiness checklist item 9 is strengthened: readiness MUST verify that every accepted Project Basis class in the table above has its exact canonical owner, additive representation, mutation/CAS/audit route, transaction composition route, frontend field mapping, and deterministic tests named. Any missing class keeps 112 `planned`/not ready.
-
-Required deterministic tests are extended to cover stale/wrong-workspace/concurrent mutation for each mutable Requirement `basis_kind` and Global Decision, plus migration/read compatibility for historical requirements.
-
-This amendment supersedes the earlier `Remaining Project Basis field classes` table insofar as that table omitted accepted classes or treated Global Decisions as read-only.
+Model-specific classes remain: Parameters -> existing `parameters` + 098; Assumptions -> existing `assumptions` + minimum CAS/audit seam; model definition/question/scope/summaries/method-bearing configuration -> existing `model_specs` + minimum CAS/audit/version seam; transient run config -> 071b; Literature -> 114; dossier/search -> 113/115.
 
 ## 3. Approval has a persistent unique retry identity
 
-The full spec's claim that an identical approval retry returns the existing working revision is amended with an explicit persistence contract.
+Add one coordination-only immutable/idempotent approval request/outcome record (repository-conventional SQL name permitted) containing server-owned request key, workspace, exact draft id/token, exact parent id/kind, request digest over ordered operations and owner tokens, state/outcome, nullable resulting working revision, timestamps, and bounded non-secret failure detail.
 
-Add one coordination-only immutable/idempotent approval request/outcome record, preferably `project_knowledge_approval_requests` (SQL naming may change only for repository convention without semantic change).
+One exact `(workspace, draft_id, draft_revision_token, approval_request_key)` identity is unique. Same key + same digest returns the recorded terminal outcome and same working revision; conflicting reuse fails closed. Successful approval atomically creates/locks the request, materializes exactly one working revision, records success/result id, and commits. Failed approval preserves an immutable failure outcome outside the rolled-back mutation transaction or via an equivalently proven savepoint design.
 
-Required fields:
-
-- server-owned approval request/idempotency key;
-- workspace id;
-- exact draft id;
-- exact draft revision token;
-- exact parent revision id/kind;
-- request digest covering the exact ordered draft operations and bound owner tokens;
-- state/outcome;
-- resulting working revision id nullable;
-- created/completed timestamps;
-- failure code/detail sufficient for deterministic retry/audit without secrets.
-
-Required uniqueness/idempotency semantics:
-
-- one exact `(workspace, draft_id, draft_revision_token, approval_request_key)` identity is unique;
-- same key + same exact request digest returns the already-recorded terminal outcome and, on success, the same working revision id;
-- same key with a different request digest fails closed;
-- the successful approval transaction creates/locks the approval request, materializes exactly one working revision, records the request's successful terminal outcome and resulting revision id, and commits them atomically;
-- a response loss after commit therefore cannot create a duplicate working revision on retry;
-- a failed approval that rolls back working-revision creation records an immutable failed request outcome outside the rolled-back mutation transaction, or through an equivalently proven savepoint pattern, so retry behavior is deterministic.
-
-Additional mandatory tests:
-
-- response lost after successful approval commit -> retry returns the same working revision id;
-- concurrent identical approval requests -> at most one working revision is created;
-- conflicting key reuse -> rejected;
-- failed stale approval -> no working revision is created and exact retry returns the recorded failure unless a new request/rebase is deliberately issued.
-
-This approval-request table stores coordination/idempotency only and does not duplicate canonical Project Basis values.
+Mandatory tests cover response loss after success, concurrent identical approvals producing at most one revision, conflicting key reuse, and deterministic stale-failure retry.
 
 ## 4. Successful final reconciliation records request outcome atomically
 
-The full spec's final-reconciliation transaction contract is amended so successful request completion is part of the same canonical transaction.
-
 The normative success path is:
-
-1. create/read and lock the immutable reconciliation request; verify exact idempotency key/digest and reject conflicting reuse;
-2. open/hold the one SQLite `BEGIN IMMEDIATE` coordination transaction;
-3. reread all owner rows, lifecycle/replacement/proposal eligibility, exact working parent/target identity and validation bindings;
-4. call transaction-capable canonical owner primitives for every supported Parameter, Requirement, Assumption, ModelSpec and Global Decision mutation; do not call protected HTTP routes;
+1. create/read and lock the immutable reconciliation request and verify exact key/digest;
+2. open/hold one SQLite `BEGIN IMMEDIATE` coordination transaction;
+3. reread owner rows, lifecycle/replacement/proposal eligibility, exact working parent/target identity and validation bindings;
+4. call transaction-capable canonical owner primitives for supported Parameter, Requirement, Assumption, ModelSpec and Global Decision mutations, never protected HTTP routes;
 5. apply required canonical audit/replacement/freshness effects using current owners;
 6. mark the exact 112 working revision reconciled;
-7. mark the same reconciliation request terminal `success`, bind its resulting reconciled revision/target identity or digest, and record completion timestamp;
+7. mark the same reconciliation request terminal `success`, bind resulting reconciled target identity/digest, and record completion time;
 8. commit steps 3-7 atomically;
-9. only after that commit may the response be returned.
+9. only then return the response.
 
-On any exception before commit, all canonical success effects, working-revision reconciliation state, and success-request outcome roll back together. The immutable failed-request outcome is then persisted outside the rolled-back transaction (or by an equivalently proven savepoint design), as already required by the full spec.
+Any pre-commit exception rolls back canonical effects, working-revision reconciliation state, and success-request outcome together. Failed-request evidence is persisted outside that rollback (or equivalent savepoint). Mandatory tests inject failures before/after success-request update, test response loss after committed success, and prove canonical truth cannot commit while its request remains pending/unknown.
 
-Additional mandatory tests:
+## 5. Final reconciliation applies the complete accepted working chain
 
-- injected crash/failure after owner mutations but before request-success update -> transaction rolls back all canonical mutations;
-- injected failure after request-success update but before commit -> transaction rolls back request success and canonical mutations together;
-- response loss after committed success -> retry reads the already-terminal success outcome and does not reapply canonical mutations;
-- no state exists in which canonical truth is committed while the corresponding reconciliation request remains pending/unknown.
+A terminal working revision whose parent is another unreconciled accepted working revision represents the cumulative accepted working state, not only its own local delta. Final reconciliation MUST therefore derive and apply the same exact ancestor-to-descendant working chain that was used to establish proposed-state impact and validation.
 
-This amendment supersedes the original success transaction step that could be read as committing immediately after marking only the working revision reconciled.
+Before canonical mutation, the reconciliation transaction MUST:
+1. resolve the terminal working revision and walk its immutable accepted parent chain back to the exact reconciled ancestor under the same bounded/cycle/workspace validity rules used by impact projection;
+2. verify that the exact reconciled base, complete ancestor sequence, each revision token/change-set digest, owner tokens, projected-state digest, and mandatory validation evidence still match the terminal validated state;
+3. flatten/replay the ordered operations from oldest accepted ancestor through the terminal child into one deterministic cumulative mutation plan, preserving operation order and explicit supersession semantics;
+4. reject ambiguous/conflicting duplicate operations that cannot be deterministically resolved by the accepted ordered-change semantics rather than silently choosing a value;
+5. apply that cumulative plan exactly once through the transaction-capable canonical owner primitives inside the atomic success transaction in section 4;
+6. mark every chain member consumed by that successful reconciliation with immutable lineage/outcome evidence sufficient to prove that its changes are represented in the reconciled result, without rewriting historical working revisions.
+
+A deliberate branch reconciles only the selected terminal revision's ancestor chain; sibling-only changes are not imported. A chain member that is discarded, superseded as an invalid base, missing, cyclic, wrong-workspace, over-bound, or whose exact digest/token no longer matches causes reconciliation to fail closed before canonical mutation.
+
+Additional mandatory deterministic tests:
+- accepted parent changes dependency/value `A -> B`, child makes an unrelated accepted change, terminal-child reconciliation commits both parent and child effects atomically;
+- two accepted ancestors modify different canonical owners and the terminal child adds a third change: all three appear exactly once after reconciliation;
+- child explicitly supersedes an ancestor operation on the same owner/field: deterministic ordered semantics produce the child value without double-application;
+- reconciling one branch excludes sibling-only accepted changes;
+- stale/missing/cyclic/wrong-workspace/over-bound ancestor chain rejects with zero canonical partial effect;
+- response loss after cumulative-chain success retries to the same terminal request outcome without replaying any ancestor mutation.
+
+This section supersedes any earlier wording that could be read as applying only the terminal working revision's local change set during final reconciliation.
 
 ## Readiness consequence
 
-PR #429 remains planning-only. Before readiness may accept 112, the fresh exact-master audit must explicitly verify all four closure areas above in addition to the original full-spec checklist:
-
-1. cumulative accepted-ancestor projection is implementable with current 050/ref bounds without persisting a second graph;
-2. every accepted Project Basis field class has the exact non-duplicate owner/additive seam and transaction-capable protected mutation route stated above;
-3. approval request/outcome persistence can guarantee response-loss idempotency and exactly-one working revision;
-4. reconciliation request success can be committed atomically with canonical owner mutations and revision reconciliation state.
-
-If any proof fails, 112 remains not ready and the readiness record must name the exact gap rather than weakening the contract.
+PR #429 remains planning-only. Before readiness may accept 112, the fresh exact-master audit must verify all closure obligations together: cumulative accepted-ancestor projection; complete Project Basis owner/additive seams; approval response-loss idempotency; atomic reconciliation-request success; and cumulative ancestor-chain reconciliation through current canonical owner primitives. If any proof fails, 112 remains not ready and readiness names the exact gap rather than weakening the contract.
