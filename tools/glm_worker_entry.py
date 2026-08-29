@@ -10,11 +10,11 @@ import glm_worker_harness as harness
 # The original harness remains the safety/authority implementation. This thin
 # development-only entrypoint only reduces request/context size and shifts
 # candidate_patch budget from broad exploration toward coding/verification.
-# 112 candidate attempts proved that large preloads and large read-tool outputs
-# can time out before the model reaches its first write.
+# 112 candidate attempts proved that large preloads and repeated read-tool
+# outputs can time out before the model reaches its first write.
 harness.MAX_EVIDENCE_PACKET = 70_000
-harness.MAX_TOOL_OUTPUT = 12_000
-harness.MODE_EXPLORATION_LIMIT["candidate_patch"] = 4
+harness.MAX_TOOL_OUTPUT = 8_000
+harness.MODE_EXPLORATION_LIMIT["candidate_patch"] = 1
 harness.MODE_WRITE_LIMIT["candidate_patch"] = 16
 harness.MODE_VERIFICATION_LIMIT["candidate_patch"] = 10
 
