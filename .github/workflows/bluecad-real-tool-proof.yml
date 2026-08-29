@@ -14,6 +14,10 @@ on:
       - "docs/specs/021b-alpha-gate-completion.md"
       - "docs/specs/STATUS.md"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   strict-alpha-proof:
     runs-on: ubuntu-24.04
