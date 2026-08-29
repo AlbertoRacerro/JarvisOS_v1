@@ -177,11 +177,13 @@ class ProjectBasisApplyService:
             if unsupported:
                 raise ProjectBasisApplyError("parameter_field_unsupported", f"Unsupported Parameter fields: {unsupported}")
             row = connection.execute(
-                "SELECT supersedes_parameter_id, status, origin FROM parameters WHERE id = ? AND workspace_id = ?",
+                "SELECT supersedes_parameter_id, status, origin, updated_at FROM parameters WHERE id = ? AND workspace_id = ?",
                 (owner_id, workspace_id),
             ).fetchone()
             if row is None:
                 raise ProjectBasisApplyError("owner_not_found", "Parameter not found in workspace.")
+            if str(row["updated_at"]) != expected:
+                raise ProjectBasisApplyError("owner_stale", "Parameter changed since the working revision was approved.")
             if operation.proposal_id:
                 if operation.proposal_id != owner_id:
                     raise ProjectBasisApplyError("proposal_owner_mismatch", "Proposal identity does not match Parameter owner.")
@@ -204,7 +206,10 @@ class ProjectBasisApplyService:
                 expected_updated_at=expected,
                 **operation.fields,
             )
-            update_parameter_in_transaction(connection, owner_id, payload, allow_dependency_change=True)
+            # Preserve the canonical 098 dependency protection. A dependency-bearing
+            # authority change must use an explicit replacement/freshness path rather
+            # than silently bypassing the owner invariant during 112 reconciliation.
+            update_parameter_in_transaction(connection, owner_id, payload, allow_dependency_change=False)
         else:
             raise ProjectBasisApplyError("update_owner_unsupported", "V0 update owner is unsupported.")
 
@@ -291,11 +296,9 @@ class ProjectBasisApplyService:
             ).fetchone()
             if active is not None:
                 raise ProjectBasisApplyError("applicability_conflict", "An active applicability relation already exists at this specificity.")
-            now = fields.get("now")
-            if not isinstance(now, str):
-                from app.modules.events.service import utc_now
+            from app.modules.events.service import utc_now
 
-                now = utc_now()
+            now = utc_now()
             connection.execute(
                 """
                 INSERT INTO requirement_applicability (
@@ -307,8 +310,8 @@ class ProjectBasisApplyService:
             )
             return
 
-        relation_id = operation.owner_id or fields.get("relation_id")
-        expected = operation.expected_updated_at or fields.get("expected_updated_at")
+        relation_id = operation.owner_id
+        expected = operation.expected_updated_at
         if not isinstance(relation_id, str) or not isinstance(expected, str):
             raise ProjectBasisApplyError("applicability_identity_missing", "Retiring applicability requires relation id and revision token.")
         row = connection.execute(
