@@ -46,9 +46,9 @@ Model-specific classes remain: Parameters -> existing `parameters` + 098; Assump
 
 Add one coordination-only immutable/idempotent approval request/outcome record (repository-conventional SQL name permitted) containing server-owned request key, workspace, exact draft id/token, exact parent id/kind, request digest over ordered operations and owner tokens, state/outcome, nullable resulting working revision, timestamps, and bounded non-secret failure detail.
 
-One exact `(workspace, draft_id, draft_revision_token, approval_request_key)` identity is unique. Same key + same digest returns the recorded terminal outcome and same working revision; conflicting reuse fails closed. Successful approval atomically creates/locks the request, materializes exactly one working revision, records success/result id, and commits. Failed approval preserves an immutable failure outcome outside the rolled-back mutation transaction or via an equivalently proven savepoint design.
+The request key is independently unique within its workspace: `UNIQUE(workspace_id, approval_request_key)` is required. Draft id, draft revision token, parent identity and request digest are stored values checked on reuse, not part of the uniqueness scope. Reuse of the same workspace/key with the same exact draft/token/parent/digest returns the recorded terminal outcome and same working revision; reuse with any different bound value fails closed. Successful approval atomically creates/locks the request, materializes exactly one working revision, records success/result id, and commits. Failed approval preserves an immutable failure outcome outside the rolled-back mutation transaction or via an equivalently proven savepoint design.
 
-Mandatory tests cover response loss after success, concurrent identical approvals producing at most one revision, conflicting key reuse, and deterministic stale-failure retry.
+Mandatory tests cover response loss after success, concurrent identical approvals producing at most one revision, same key against a different draft or draft revision failing closed, same key with a different digest failing closed, and deterministic stale-failure retry.
 
 ## 4. Successful final reconciliation records request outcome atomically
 
@@ -138,6 +138,50 @@ For a mandatory typed acceptance criterion, only `pass` satisfies the gate. `fai
 
 Mandatory tests include all five operators; equality with no tolerance; missing/non-numeric/non-finite targets; exact unit match; whitespace-only unit normalization; same-dimension-but-different unit strings rejecting as `unit_mismatch`; wrong sibling working revision; stale target/rule/requirement revision; unsupported/free-text rules never executing; and `not_evaluable` blocking ordinary reconciliation.
 
+## 8. Freeze Project Basis create operations and provisional references
+
+The accepted Project Basis CRUD/write scope includes creation; a draft operation cannot require an existing canonical owner id for every operation. V0 therefore supports an explicit `create` operation for the 112-owned Project Basis classes that are canonically represented by `requirements` and `decisions`.
+
+A create operation MUST contain:
+- server-generated immutable `operation_id` scoped to the draft;
+- `owner_kind` (`requirement` or `decision` in this Project Basis create subset);
+- `operation_kind=create`;
+- no canonical owner id and no expected owner revision token;
+- bounded typed create payload accepted by the canonical owner, including the exact Requirement `basis_kind` for Requirement-backed Project Basis classes;
+- source/provenance/proposal origin required by the canonical owner;
+- any dependency/source-binding delta expressible before canonical id allocation;
+- a server-owned provisional reference exactly scoped to the draft operation, semantically `draft:<draft_id>:op:<operation_id>`. The concrete serialization may follow repository conventions, but it is never a canonical 050 ref and cannot escape as current canonical identity.
+
+Draft update/delete/supersession of another create in the same draft or accepted ancestor chain addresses that provisional operation identity. Impact projection may resolve provisional refs only inside the bounded projected working state. Approval persists the ordered create intent unchanged; it still does not create a canonical Requirement or Decision.
+
+Final reconciliation allocates the real canonical owner id exactly once inside the same `ProjectBasisApplyService` transaction by invoking the canonical owner's transaction-aware create primitive. The transaction maintains an in-memory/provenance mapping from provisional operation identity to resulting canonical id so later operations in the same cumulative plan can target the created owner deterministically. The resulting mapping is recorded in immutable reconciliation/working-chain outcome evidence and is included in the reconciled snapshot manifest; it is not a peer identity store.
+
+For retry/idempotency, the same reconciliation request MUST return/reuse the canonical id mapping committed by the successful request and MUST NOT allocate another owner. A failed transaction exposes no canonical id or partially-created owner. Requirements created for objective/question, requirement, acceptance criterion, stable constraint, boundary condition, standard/regulation, or resource/capability constraint all use the existing `requirements` owner with their bounded `basis_kind`; global decisions use the existing `decisions` owner. No `project_*` peer owner table is authorized.
+
+Mandatory deterministic tests include: create each accepted Requirement-backed `basis_kind`; create a Global Decision; two create operations followed by a same-plan update/reference; stale/failed reconciliation leaves zero created owners; response-loss retry returns the same canonical ids; conflicting provisional refs fail closed; and a provisional ref is rejected anywhere a current canonical ref is required.
+
+## 9. Freeze the persisted scalar-result lookup seam
+
+The audited runtime's `simulation_runs.output_payload` is opaque/domain-specific and does not by itself provide a canonical `output_name -> {value, unit}` lookup. V0 therefore adds one minimum **immutable admitted scalar projection** for zero-rerun criterion evaluation; the evaluator MUST NOT parse arbitrary `output_payload` ad hoc.
+
+The additive child relation is semantically `simulation_run_scalar_results` (repository-conventional SQL naming may differ, semantics may not) with one immutable row per admitted scalar result and:
+- `run_id` referencing the existing canonical simulation run;
+- exact `output_name`, non-empty and unique within the run: `UNIQUE(run_id, output_name)`;
+- finite numeric `value` in the same canonical decimal representation used by the criterion evaluator;
+- `unit`, either a non-empty exact unit string or explicit unitless representation;
+- exact `project_knowledge_revision_id` required for rows admitted for 112 validation;
+- `source_payload_digest` of the exact canonical run output payload from which this scalar was admitted;
+- bounded `extractor_id` and `extractor_version` identifying the trusted deterministic run-kind adapter/schema that admitted the scalar;
+- immutable creation timestamp.
+
+This relation is a materialized typed projection of an existing immutable run result, not a second mutable run/result authority. It has no general update API and no browser/client write path. New rows may be created only by a trusted server-side deterministic adapter at run-result persistence/finalization, or by an explicitly invoked deterministic admission operation that proves the exact immutable source payload digest, run kind/schema, workspace, working-revision binding, finite numeric value and unit. Historical runs without such an admitted row remain history but are `not_evaluable/missing_target`; they are never heuristically backfilled from opaque payloads.
+
+The V0 criterion target `{run_id, output_name}` resolves **only** through this admitted scalar relation. Lookup additionally verifies same workspace, exact `project_knowledge_revision_id`, exact immutable run/result/source digest, extractor identity/version, and current validation input/source bindings. Missing row, duplicate/corrupt identity, wrong working revision, stale/digest mismatch, unsupported extractor, non-finite value, or malformed unit fails closed as `not_evaluable` with the bounded reason code family from section 7. No wildcard/latest-run lookup is allowed.
+
+The admitted scalar row and its source run remain immutable. If a future run/result schema supports an equivalent already-canonical typed scalar record, a later fresh spec may reuse it; readiness for this V0 may adjust the SQL/module name only, not replace this contract with arbitrary payload parsing.
+
+Mandatory tests include: exact run/name lookup; same output name on different runs remains distinct; duplicate same-run/name rejected; wrong workspace/revision rejected; payload digest drift rejected; unsupported extractor rejected; historical opaque-only run returns `missing_target`; unitless and exact-unit cases; NaN/Inf admission rejected; and no frontend/API path can author or mutate an admitted scalar row directly.
+
 ## Readiness consequence
 
-PR #429 remains planning-only. Before readiness may accept 112, the fresh exact-master audit must verify all closure obligations together: cumulative accepted-ancestor projection; complete Project Basis owner/additive seams; approval response-loss idempotency; atomic reconciliation-request success; cumulative ancestor-chain reconciliation; the explicit `ProjectBasisApplyService` transaction/owner-primitive contract; and the exact V0 scalar criterion evaluator/result semantics above. If any proof fails, 112 remains not ready and readiness names the exact gap rather than weakening the contract.
+PR #429 remains planning-only. Before readiness may accept 112, the fresh exact-master audit must verify all closure obligations together: cumulative accepted-ancestor projection; complete Project Basis owner/additive seams; independently unique approval retry keys; transaction-safe Project Basis create/provisional-reference semantics; approval response-loss idempotency; atomic reconciliation-request success; cumulative ancestor-chain reconciliation; the explicit `ProjectBasisApplyService` transaction/owner-primitive contract; and the exact V0 scalar criterion evaluator plus admitted scalar-result lookup semantics above. If any proof fails, 112 remains not ready and readiness names the exact gap rather than weakening the contract.
