@@ -89,6 +89,55 @@ Additional mandatory deterministic tests:
 
 This section supersedes any earlier wording that could be read as applying only the terminal working revision's local change set during final reconciliation.
 
+## 6. Freeze the 112-owned atomic apply seam
+
+The phrase `transaction-capable canonical owner primitives` is now made executable rather than aspirational. V0 MUST introduce one 112-owned orchestration service boundary, `ProjectBasisApplyService` (repository-conventional class/module naming may differ, semantics may not), that owns **only** the final multi-owner transaction and dispatch. It is not a new truth store and may not implement owner business rules itself.
+
+For one reconciliation request the service MUST:
+1. receive the already-derived exact cumulative mutation plan plus exact workspace, target/revision/digest and idempotency identities;
+2. open one caller-owned SQLite `BEGIN IMMEDIATE` transaction and retain the same connection for every owner mutation and 112 success-state mutation;
+3. rerun the exact owner-token, lifecycle/replacement, proposal-eligibility and validation-binding checks inside that transaction;
+4. dispatch each supported operation to a transaction-aware internal primitive owned by the canonical domain, passing the caller connection explicitly;
+5. let each owner primitive perform its existing CAS/business/lifecycle/audit/freshness rules; the 112 service may sequence and aggregate but may not duplicate or weaken those rules;
+6. update working-chain consumption plus the reconciliation-request terminal success in the same transaction;
+7. commit once, only after every owner operation and success marker succeeds; any exception rolls back the whole mutation set.
+
+Where an accepted current owner helper commits internally, implementation MUST perform the minimum refactor needed to expose a connection-taking primitive and preserve the existing public helper as a compatibility wrapper that opens/commits its own transaction. In particular, Parameter replacement/promotion behavior currently encapsulated by MemoryStore/098 may not be called through an auto-committing wrapper from `ProjectBasisApplyService`; its validation, replacement lineage, lifecycle transition, proposal lineage, audit and freshness effects must execute through an owner-owned transaction-aware primitive on the caller connection. Requirement, Assumption, ModelSpec and Global Decision receive the same minimum connection-taking CAS/audit seam where no such primitive exists today.
+
+Proposal-origin operations remain proposal-governed: their current eligibility and lineage checks run inside this same transaction and proposal state cannot be committed separately before the rest of the cumulative plan succeeds. No protected HTTP call, nested independent commit, provider/solver/filesystem/network side effect, or best-effort compensating rollback is allowed in the canonical apply path.
+
+Readiness MUST name the exact owner functions/files to be added or extracted from then-current master and prove a fault-injection test in which an earlier owner mutation has executed in-memory/inside the transaction, a later owner mutation fails, and **all** canonical owner rows, proposal/lifecycle/audit/freshness success effects, working-chain consumption and request-success state remain uncommitted after rollback. Existing public single-owner behavior must remain regression-covered.
+
+## 7. Freeze the V0 machine-evaluable acceptance-criterion subset
+
+Free-text `requirements.acceptance_criteria` remains human-readable evidence and MUST NOT be parsed heuristically into executable policy. A criterion participates in zero-rerun deterministic gating only when the existing Requirement identity is accompanied by explicit bounded typed metadata owned with that Requirement. The minimum typed V0 rule is a **single scalar comparison over one exact persisted run result**; there is no expression DSL.
+
+Normative typed fields/semantics:
+- criterion owner identity: exact `requirement_id` plus its exact owner revision token; no peer criterion identity is required for V0;
+- target: exact persisted result selected by `run_id` + `output_name`, with exact working-revision/provenance binding required by the full spec;
+- operator: exactly one of `<`, `<=`, `>`, `>=`, `==`;
+- expected value: finite numeric decimal serialized in canonical JSON number/string form chosen by readiness, parsed by one deterministic server implementation; NaN/Inf are forbidden;
+- expected unit: required non-empty unit string when the target result is unit-bearing, otherwise both sides must be explicitly unitless;
+- rule version: one server-owned constant/version included in validation evidence so semantic changes invalidate older evidence.
+
+**Unit semantics for V0 are deliberately strict.** Exact-master audit found no accepted generic unit-conversion/normalization authority that 112 can safely reuse. Therefore V0 performs only deterministic textual normalization of unit identity: trim surrounding ASCII whitespace and require the resulting expected-unit string to equal the persisted result unit after the same trim. No case folding, alias map, dimensional inference, scale conversion, offset conversion or implicit SI conversion is authorized. A non-identical unit is `not_evaluable/unit_mismatch`, never PASS/FAIL. Introducing real conversion requires a separately accepted canonical unit authority or a fresh spec amendment; 112 must not invent one during implementation.
+
+The evaluator returns one immutable result shape bound into `project_knowledge_validation`:
+- `requirement_id` and exact requirement revision token;
+- `rule_version`;
+- exact target `{run_id, output_name}` plus producing working-revision/source/run provenance required by the full spec;
+- observed `{value, unit}` exactly as admitted from persisted result evidence;
+- expected `{operator, value, unit}`;
+- `status`: exactly `pass`, `fail`, or `not_evaluable` for this evaluator;
+- `reason_code`: deterministic bounded enum; at minimum `comparison_true`, `comparison_false`, `missing_target`, `stale_target`, `wrong_working_revision`, `unsupported_rule`, `non_finite_or_non_numeric`, `unit_mismatch`;
+- validator identity/version and validated-input digest already required by the full spec.
+
+Comparison is numeric and deterministic after the accepted parser has produced finite values. `==` is exact numeric equality under that representation; V0 defines no tolerance/epsilon. Approximate/tolerance criteria remain non-machine-evaluable until a later explicit rule version defines them. Boolean combinations, arithmetic expressions, wildcard/latest-run selection, cross-result formulas, string comparisons, user-supplied code and prose parsing are out of scope.
+
+For a mandatory typed acceptance criterion, only `pass` satisfies the gate. `fail` preserves the known-FAIL path already defined by the full spec; `not_evaluable` is unresolved/missing evidence and blocks ordinary final reconciliation rather than being silently treated as failure or success. A free-text-only acceptance criterion has no machine PASS claim; when it is mandatory for reconciliation, readiness/UI must require explicit human resolution or an accepted typed rule rather than fabricate deterministic evaluation.
+
+Mandatory tests include all five operators; equality with no tolerance; missing/non-numeric/non-finite targets; exact unit match; whitespace-only unit normalization; same-dimension-but-different unit strings rejecting as `unit_mismatch`; wrong sibling working revision; stale target/rule/requirement revision; unsupported/free-text rules never executing; and `not_evaluable` blocking ordinary reconciliation.
+
 ## Readiness consequence
 
-PR #429 remains planning-only. Before readiness may accept 112, the fresh exact-master audit must verify all closure obligations together: cumulative accepted-ancestor projection; complete Project Basis owner/additive seams; approval response-loss idempotency; atomic reconciliation-request success; and cumulative ancestor-chain reconciliation through current canonical owner primitives. If any proof fails, 112 remains not ready and readiness names the exact gap rather than weakening the contract.
+PR #429 remains planning-only. Before readiness may accept 112, the fresh exact-master audit must verify all closure obligations together: cumulative accepted-ancestor projection; complete Project Basis owner/additive seams; approval response-loss idempotency; atomic reconciliation-request success; cumulative ancestor-chain reconciliation; the explicit `ProjectBasisApplyService` transaction/owner-primitive contract; and the exact V0 scalar criterion evaluator/result semantics above. If any proof fails, 112 remains not ready and readiness names the exact gap rather than weakening the contract.
