@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 
 import pytest
 
@@ -228,3 +230,53 @@ def test_dependency_add_rejects_unresolvable_projected_endpoints() -> None:
 
     with pytest.raises(ProjectKnowledgeError):
         preview_impact("bluerev", draft.id)
+
+
+def test_concurrent_reconciliation_first_use_returns_one_persisted_request_identity() -> None:
+    """R27: two simultaneous first uses of one workspace/key converge on one committed identity."""
+    initialize_storage(seed_default=True)
+    revision_id = _approve(key="semantic-concurrent-reconcile-source")
+    revision = get_revision("bluerev", revision_id)
+    validation = revalidation_status("bluerev", revision_id)
+    payload = ReconcileRequest(
+        workspace_id="bluerev",
+        idempotency_key="semantic-concurrent-reconcile",
+        working_revision_id=revision_id,
+        expected_target_snapshot_id=None,
+        expected_target_digest=revision.projected_state_digest,
+        expected_selected_validation_set_digest=validation.selected_validation_set_digest,
+    )
+    start = Barrier(2)
+
+    def attempt():
+        start.wait(timeout=5)
+        return reconcile(payload)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(attempt) for _ in range(2)]
+        results = [future.result(timeout=10) for future in futures]
+
+    first, second = results
+    assert first.state == "success"
+    assert second.state == "success"
+    assert second == first
+    assert first.resulting_snapshot_id is not None
+
+    with open_sqlite_connection() as connection:
+        request_rows = connection.execute(
+            "SELECT id, state, resulting_snapshot_id FROM project_knowledge_reconciliation_requests "
+            "WHERE workspace_id = ? AND idempotency_key = ?",
+            ("bluerev", payload.idempotency_key),
+        ).fetchall()
+        assert len(request_rows) == 1
+        assert request_rows[0]["id"] == first.request_id
+        assert request_rows[0]["state"] == "success"
+        assert request_rows[0]["resulting_snapshot_id"] == first.resulting_snapshot_id
+        assert connection.execute(
+            "SELECT COUNT(*) AS count FROM project_knowledge_reconciled_snapshots "
+            "WHERE workspace_id = ? AND id = ?",
+            ("bluerev", first.resulting_snapshot_id),
+        ).fetchone()["count"] == 1
+        assert connection.execute(
+            "SELECT COUNT(*) AS count FROM requirements WHERE workspace_id = 'bluerev'"
+        ).fetchone()["count"] == 1
