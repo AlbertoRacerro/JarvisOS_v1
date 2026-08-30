@@ -20,8 +20,8 @@ SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_ID = "0012_model_input_contract"
 SCHEMA_MODEL_INPUT_CONTRACT_MIGRATION_NAME = "Model-version input contracts and scenario DOF metadata"
 SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_ID = "0013_freshness_invalidation"
 SCHEMA_FRESHNESS_INVALIDATION_MIGRATION_NAME = "Parameter replacement and freshness invalidation overlay"
-CURRENT_SCHEMA_MIGRATION_ID = "0016_parameter_lifecycle"
-CURRENT_SCHEMA_MIGRATION_NAME = "Parameter lifecycle state"
+CURRENT_SCHEMA_MIGRATION_ID = "0017_project_knowledge_core"
+CURRENT_SCHEMA_MIGRATION_NAME = "Project Knowledge working revisions and reconciliation"
 
 SCHEMA_MIGRATION_RECORDS = [
     {

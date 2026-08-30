@@ -3,6 +3,17 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 ParameterLifecycleState = Literal["active", "inactive", "superseded", "archived", "deleted"]
+RequirementBasisKind = Literal[
+    "project_objective",
+    "requirement",
+    "acceptance_criterion",
+    "stable_constraint",
+    "boundary_condition",
+    "standard_regulation",
+    "resource_capability_constraint",
+]
+RequirementGate = Literal["required", "advisory"]
+CriterionOperator = Literal["<", "<=", ">", ">=", "=="]
 
 
 class ModelSpecCreate(BaseModel):
@@ -25,6 +36,20 @@ class ModelSpecRead(ModelSpecCreate):
     updated_at: str
 
 
+class ModelSpecProjectUpdate(BaseModel):
+    workspace_id: str
+    expected_updated_at: str
+    title: str | None = Field(default=None, min_length=1)
+    engineering_question: str | None = Field(default=None, min_length=1)
+    scope: str | None = None
+    status: str | None = None
+    maturity_status: str | None = None
+    assumptions_summary: str | None = None
+    inputs_summary: str | None = None
+    outputs_summary: str | None = None
+    raw_payload: str | None = None
+
+
 class AssumptionCreate(BaseModel):
     statement: str = Field(min_length=1)
     scope: str | None = None
@@ -39,6 +64,17 @@ class AssumptionRead(AssumptionCreate):
     workspace_id: str
     created_at: str
     updated_at: str
+
+
+class AssumptionProjectUpdate(BaseModel):
+    workspace_id: str
+    expected_updated_at: str
+    statement: str | None = Field(default=None, min_length=1)
+    scope: str | None = None
+    confidence: Literal["low", "medium", "high"] | None = None
+    status: Literal["proposed", "accepted", "rejected", "superseded"] | None = None
+    source_ref: str | None = None
+    notes: str | None = None
 
 
 class ParameterCreate(BaseModel):
@@ -106,6 +142,29 @@ class RequirementCreate(BaseModel):
     rationale: str | None = None
     status: Literal["draft", "active", "retired"] = "draft"
     notes: str | None = None
+    basis_kind: RequirementBasisKind = "requirement"
+    reconciliation_gate: RequirementGate = "advisory"
+    criterion_output_name: str | None = None
+    criterion_operator: CriterionOperator | None = None
+    criterion_expected_value: str | None = None
+    criterion_expected_unit: str | None = None
+    criterion_rule_version: str | None = None
+
+    @model_validator(mode="after")
+    def validate_criterion_metadata(self) -> "RequirementCreate":
+        fields = (
+            self.criterion_output_name,
+            self.criterion_operator,
+            self.criterion_expected_value,
+            self.criterion_expected_unit,
+            self.criterion_rule_version,
+        )
+        if self.basis_kind != "acceptance_criterion" and any(value is not None for value in fields):
+            raise ValueError("Typed criterion metadata is only valid for acceptance criteria.")
+        if self.basis_kind == "acceptance_criterion" and any(value is not None for value in fields):
+            if any(value is None for value in fields):
+                raise ValueError("Typed acceptance criteria require output, operator, value, unit, and rule version together.")
+        return self
 
 
 class RequirementUpdate(BaseModel):
@@ -113,6 +172,18 @@ class RequirementUpdate(BaseModel):
     rationale: str | None = None
     status: Literal["draft", "active", "retired"] | None = None
     notes: str | None = None
+    basis_kind: RequirementBasisKind | None = None
+    reconciliation_gate: RequirementGate | None = None
+    criterion_output_name: str | None = None
+    criterion_operator: CriterionOperator | None = None
+    criterion_expected_value: str | None = None
+    criterion_expected_unit: str | None = None
+    criterion_rule_version: str | None = None
+
+
+class RequirementProjectUpdate(RequirementUpdate):
+    workspace_id: str
+    expected_updated_at: str
 
 
 class RequirementRead(RequirementCreate):
@@ -133,6 +204,7 @@ class SimulationRunCreate(BaseModel):
     started_at: str | None = None
     completed_at: str | None = None
     notes: str | None = None
+    project_knowledge_revision_id: str | None = None
 
 
 class SimulationRunRead(SimulationRunCreate):
@@ -148,6 +220,7 @@ class DecisionCreate(BaseModel):
     status: str = "draft"
     linked_run_id: str | None = None
     notes: str | None = None
+    basis_lifecycle_state: Literal["active", "retired"] = "active"
 
 
 class DecisionRead(DecisionCreate):
@@ -155,3 +228,14 @@ class DecisionRead(DecisionCreate):
     workspace_id: str
     created_at: str
     updated_at: str
+
+
+class DecisionProjectUpdate(BaseModel):
+    workspace_id: str
+    expected_updated_at: str
+    title: str | None = Field(default=None, min_length=1)
+    decision_text: str | None = Field(default=None, min_length=1)
+    rationale: str | None = None
+    linked_run_id: str | None = None
+    notes: str | None = None
+    basis_lifecycle_state: Literal["active", "retired"] | None = None

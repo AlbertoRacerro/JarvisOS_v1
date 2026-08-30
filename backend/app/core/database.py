@@ -26,6 +26,12 @@ from app.core.grade_schema import (
     GRADE_SCHEMA_STATEMENTS,
 )
 from app.core.paths import build_paths
+from app.core.project_knowledge_schema import (
+    PROJECT_KNOWLEDGE_INDEX_STATEMENTS,
+    PROJECT_KNOWLEDGE_MIGRATION_RECORD,
+    PROJECT_KNOWLEDGE_MIGRATION_STATEMENTS,
+    PROJECT_KNOWLEDGE_SCHEMA_STATEMENTS,
+)
 from app.core.schema import (
     CONTEXT_RECORDS_FTS_BACKFILL_STATEMENT,
     SCHEMA_FTS_STATEMENTS,
@@ -97,9 +103,6 @@ def open_sqlite_connection() -> Iterator[sqlite3.Connection]:
     connection = sqlite3.connect(database_path)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
-    # Wait instead of failing immediately when another writer holds the lock,
-    # and use WAL so readers and a writer do not block each other. Both reduce
-    # spurious "database is locked" errors under concurrent requests.
     connection.execute("PRAGMA busy_timeout = 5000")
     connection.execute("PRAGMA journal_mode = WAL")
     try:
@@ -124,11 +127,14 @@ def initialize_database() -> DatabaseInfo:
             connection.execute(statement)
         for statement in AI_THREAD_SCHEMA_STATEMENTS:
             connection.execute(statement)
+        for statement in PROJECT_KNOWLEDGE_SCHEMA_STATEMENTS:
+            connection.execute(statement)
         for statement in [
             *SCHEMA_MIGRATION_STATEMENTS,
             *EGRESS_SCHEMA_MIGRATION_STATEMENTS,
             *TOKEN_FLOW_SCHEMA_MIGRATION_STATEMENTS,
             *RUNNER_CREATE_REQUEST_MIGRATION_STATEMENTS,
+            *PROJECT_KNOWLEDGE_MIGRATION_STATEMENTS,
         ]:
             try:
                 connection.execute(statement)
@@ -151,6 +157,8 @@ def initialize_database() -> DatabaseInfo:
         for statement in AI_THREAD_SCHEMA_INDEX_STATEMENTS:
             connection.execute(statement)
         for statement in RUNNER_CREATE_REQUEST_INDEX_STATEMENTS:
+            connection.execute(statement)
+        for statement in PROJECT_KNOWLEDGE_INDEX_STATEMENTS:
             connection.execute(statement)
         if _sqlite_fts5_available(connection):
             for statement in SCHEMA_FTS_STATEMENTS:
@@ -202,6 +210,14 @@ def is_database_initialized() -> bool:
         "egress_attempts",
         "sanitizer_audit_items",
         "workspace_egress_policy",
+        "project_knowledge_drafts",
+        "project_knowledge_revisions",
+        "project_knowledge_approval_requests",
+        "requirement_applicability",
+        "simulation_run_scalar_results",
+        "project_knowledge_validation",
+        "project_knowledge_reconciled_snapshots",
+        "project_knowledge_reconciliation_requests",
     }
     with open_sqlite_connection() as connection:
         rows = connection.execute(
@@ -280,6 +296,7 @@ def _record_schema_migrations(connection: sqlite3.Connection) -> None:
         GRADE_SCHEMA_MIGRATION_RECORD,
         AI_THREAD_SCHEMA_MIGRATION_RECORD,
         PARAMETER_LIFECYCLE_MIGRATION_RECORD,
+        PROJECT_KNOWLEDGE_MIGRATION_RECORD,
     ]
     for record in records:
         connection.execute(

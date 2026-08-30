@@ -17,6 +17,7 @@ from app.modules.flowsheet.routes import router as flowsheet_router
 from app.modules.local_ai.runtime.lifecycle import create_local_ai_runtime_lifecycle_from_env
 from app.modules.memory.routes import router as memory_router
 from app.modules.modeling.routes import router as modeling_router
+from app.modules.project_knowledge.routes import router as project_knowledge_router
 from app.modules.runner.routes import router as runner_router
 from app.modules.secrets.routes import router as secrets_router
 from app.modules.workspaces.routes import router as workspaces_router
@@ -68,10 +69,8 @@ def create_app() -> FastAPI:
     app.include_router(memory_router)
     app.include_router(runner_router)
     app.include_router(flowsheet_router)
+    app.include_router(project_knowledge_router)
 
-    # Serve the built frontend (single-process desktop launch) when present.
-    # API routers are registered first and their literal top-level roots remain
-    # reserved so an API/static miss can never become a successful HTML shell.
     frontend_dist = _frontend_dist_path()
     if frontend_dist.is_dir():
         reserved_roots = derive_reserved_roots(app.routes)

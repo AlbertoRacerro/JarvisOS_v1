@@ -18,7 +18,7 @@ def test_grade_schema_remains_registered_after_cad_link_migration() -> None:
     assert first.ready is True
     assert second.ready is True
     assert get_current_schema_migration().migration_id == CURRENT_SCHEMA_MIGRATION_ID
-    assert count_schema_migrations() == 17
+    assert count_schema_migrations() == 18
 
     with open_sqlite_connection() as connection:
         migrations = {
