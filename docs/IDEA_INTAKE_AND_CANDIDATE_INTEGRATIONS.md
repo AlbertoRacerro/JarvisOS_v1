@@ -2,7 +2,7 @@
 
 Status: canonical intake register; **not implementation authority**  
 Created: 2026-08-19  
-Last audit update: 2026-08-25  
+Last audit update: 2026-08-30  
 Owner: repository maintainer
 
 This is the compact canonical register for external projects, papers, products, repositories, architectural patterns, engineering ideas, hardware concepts and other material that may be useful to JarvisOS, BLUECAD or BlueRev.
@@ -123,6 +123,7 @@ Value grades: `S`, `A`, `B`, `C`, `D`; grade is reference/integration value, not
 | REF-061 | antirez / Salvatore Sanfilippo editing and QA patterns | stale-write prevention / diff-aware QA | CODE-FIRST | A+ | CANDIDATE | compare-and-set/version identity for edits plus adversarial exact-diff review layered above deterministic tests |
 | REF-062 | RizzoClaw | simple agent memory negative reference | CODE-FIRST | C | PARKED | useful negative evidence: Markdown project memory can leak sensitive context/provenance concerns; keep memory classes/sensitivity explicit |
 | REF-063 | Bioo + Heirloom + AIR COMPANY + Linear + Raycast + Recursion + Vercel + Instrument typography + Phosphor Icons | visual identity / frontend design system | DOCS-FIRST | A+ | PROMOTED | maintainer-selected living-engineering visual direction; open Instrument/Plex typography candidates, Phosphor generic icons, bounded accent theming and reference-only external brand cues; promoted into the 100 design-authority pack |
+| REF-064 | `AlbertoRacerro/jarvis-pr-attention` V1.11 PR #16 @ `c544e2885a69173c58feb2355bb53e8866e627eb` | PR evidence / review attention | CODE-FIRST | A | CANDIDATE | exact-head read-only evidence cycle with compact continuity/findings and fail-closed stale/tampered evidence; JarvisOS may consume it only as advisory/stateless evidence after 128, never as semantic acceptance, approval/comment, merge, queue, persistence or source-of-truth authority |
 
 ---
 
@@ -190,6 +191,7 @@ Core software/runtime:
 - `docs/audits/CORE_SOFTWARE_ECOSYSTEM_AUDIT_CONTINUATION_5_2026-08-20.md`
 - `docs/audits/CORE_SOFTWARE_ECOSYSTEM_AUDIT_CONTINUATION_6_2026-08-20.md`
 - `docs/audits/CORE_SOFTWARE_ECOSYSTEM_AUDIT_CONTINUATION_7_2026-08-20.md`
+- `docs/audits/JARVIS_PR_ATTENTION_V1_11_AUDIT_2026-08-30.md`
 
 Architecture/safety research:
 
