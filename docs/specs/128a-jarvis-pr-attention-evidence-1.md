@@ -5,7 +5,7 @@ Exact JarvisOS planning base: `73094eb54f6650b8dd8d18e4e0e95a6d768284e6`
 Hard dependency: `128 ARCHITECTURE-ENFORCEMENT-GATE-1` merged through implementation PR #441 and registry reconciliation on the planning base.
 Upstream candidate: `AlbertoRacerro/jarvis-pr-attention`
 Pinned inspected upstream head: `c544e2885a69173c58feb2355bb53e8866e627eb`
-Upstream release PR at planning time: #16 (`Release 0.13.1 compact V1.11 cycle`), open/draft because of the known connector Draft/Ready regression.
+Upstream release PR at planning time: #16 (`Release 0.13.1 compact V1.11 cycle`), open and ready (`draft=false`) after maintainer transition; exact audited head unchanged.
 Direct upstream license at the inspected head: MIT.
 
 This document is the complete low-risk definition/full-spec/readiness packet for one independently removable JarvisOS repository-development integration of the already-audited `jarvis-pr-attention` V1.11 strict cycle. It does not itself authorize implementation while the live `docs/specs/STATUS.md` row is absent or not `ready`.
@@ -34,7 +34,7 @@ Fresh planning inspection of that exact upstream head confirms:
 - a naked accepted-head claim does not establish semantic authority in strict mode;
 - the upstream release PR remains unmerged at planning time, so JarvisOS MUST pin the immutable inspected commit SHA rather than a mutable branch/tag/release name.
 
-The upstream PR's draft transport state is not a JarvisOS semantic blocker. The pin is to the exact audited Git commit, not to the GitHub PR state.
+The upstream PR's transport state is not JarvisOS semantic authority. The pin is to the exact audited Git commit, not to the GitHub PR state.
 
 ## 3. Goal
 
