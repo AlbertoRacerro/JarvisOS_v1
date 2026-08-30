@@ -4,6 +4,7 @@ Status: canonical operational profile, dormant until activation gate
 Authorized: 2026-08-28
 Maintainer acceleration amendment: 2026-08-28
 Final role-split reconciliation: 2026-08-28
+Maintainer hardening-priority amendment: 2026-08-30
 
 This document defines the minimum controlled-parallel delivery exception to the repository's normal serial execution rule. It changes repository-development mechanics only. It does not change JarvisOS runtime authority, provider policy, product architecture, credentials, egress, schemas, or model-promotion rules.
 
@@ -22,6 +23,27 @@ Before that condition is true:
 At the first coordinating cycle after 112 is merged, ChatGPT re-reads exact `master`, `AGENTS.md`, `docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md`, `docs/specs/STATUS.md`, candidate specs/readiness, current PRs/evidence, and current ownership. Activation is automatic only for lanes whose file, store, schema, migration, and authority boundaries are demonstrated to be sufficiently disjoint.
 
 If disjointness cannot be proved, only the conflicting slices remain serial. Independent lanes may proceed. Maintainer interruption is required only for the four canonical classes in `AGENTS.md`.
+
+### 1A. Temporary hardening-first priority — 2026-08-30
+
+The maintainer has temporarily overridden normal post-112 lane scheduling order to front-load architecture/reliability hardening before the broader 113–126 roadmap resumes. This is a **scheduling priority override only**: it does not convert a `planned` row into implementation authority and it does not invalidate an already accepted readiness decision.
+
+At the time of this amendment, PR #434 is the only active JarvisOS PR. Finish and reconcile that already-started planning work first. Do not resurrect stale branches merely because they predate this amendment.
+
+After #434 closes cleanly, the first new front is `128 ARCHITECTURE-ENFORCEMENT-GATE-1`, which must complete its normal definition/full-spec/readiness/implementation lifecycle. After 128 is accepted and merged, the next priority is one separately accepted JarvisOS integration slice for `jarvis-pr-attention` V1.11, preserving the tool as read-only, advisory, stateless exact-head evidence only and never as semantic acceptance, approval/comment, merge, queue, persistence, or source-of-truth authority.
+
+After that integration is accepted, continue hardening in this order:
+
+`127 -> (129 / 130 / 132 when fresh disjointness permits) -> 131 -> 133 -> 134`
+
+Until `134 MERGE-AUTHORITY-HARDENING-1` is merged:
+
+- do not start 113 implementation;
+- do not start new 114–126 planning or implementation fronts;
+- 113 may remain technically `ready`, but that readiness is intentionally held by this scheduling priority;
+- the hardening sequence above overrides the normal Knowledge/Development/Coding/provider lane scheduling priority.
+
+After 134 merges, this temporary hold is lifted automatically. Resume 113 plus 114+ and the other canonical post-112 lanes in controlled parallel according to then-current `STATUS.md`, dependencies, accepted readiness, disjointness, and exact-head evidence.
 
 ## 2. Scheduler identities, logical locks, and global writer mutex
 
@@ -108,7 +130,7 @@ The coordinator must **not sleep or poll** merely to consume runtime. When insuf
 
 ## 5. Canonical post-112 lanes
 
-Inside each lane, work remains sequential and normal dependency/readiness rules apply.
+Inside each lane, work remains sequential and normal dependency/readiness rules apply. While section 1A is active, its temporary hardening-first hold overrides the scheduling order in this section without changing the underlying lane definitions.
 
 ### Knowledge
 
@@ -130,7 +152,7 @@ After those foundations, `122 JARVIS-DEVELOPMENT-ACTIONS-1` may proceed only whe
 
 ### Provider/settings owner
 
-`124 PROVIDER-SETTINGS-GENERIC-1` is an independent provider/settings owner once its dependencies and readiness are satisfied. It may be scheduled post-112 without blocking unrelated Knowledge/Development/Coding work.
+`124 PROVIDER-SETTINGS-GENERIC-1` is an independent provider/settings owner once its dependencies and readiness are satisfied. It may be scheduled post-112 without blocking unrelated Knowledge/Development/Coding work when section 1A is not holding those lanes.
 
 ### Separately gated later work
 
@@ -157,7 +179,7 @@ Hermes remains an untrusted advisory orchestrator/runtime. It must not become a 
 
 Suggested code changes remain candidate proposals until accepted development authority validates/applies them. The temporary GLM harness remains rollback until Hermes parity is evidenced for the work it replaces.
 
-Knowledge and Development do not wait for Hermes when their own lanes are independently ready.
+Knowledge and Development do not wait for Hermes when their own lanes are independently ready and section 1A is no longer active.
 
 ## 7. Parallel status and merge coordination
 
@@ -212,7 +234,7 @@ Do not remove a gate/review/audit that closes a real security, scientific, migra
 
 A conflict involving a shared owner, schema/migration sequencing, security/egress authority, cross-lane invariant, or overlapping runtime boundary returns **only the affected slices** to serial execution until resolved.
 
-Independent lanes remain eligible if their own dependencies, readiness, and ownership audits remain green.
+Independent lanes remain eligible if their own dependencies, readiness, and ownership audits remain green and section 1A is not holding them.
 
 If safe resolution requires one of the four maintainer interruption classes, stop and contact the maintainer. Otherwise ChatGPT chooses the least-cost reversible route within accepted authority.
 
