@@ -1,0 +1,60 @@
+{
+  "exceptions": [
+    {
+      "rule_id": "AE001",
+      "exact_match": "backend/app/core/database.py::open_sqlite_connection",
+      "classification": "accepted_owner",
+      "owner_or_removal_spec": "core database boundary",
+      "rationale": "single accepted raw SQLite connection chokepoint"
+    },
+    {
+      "rule_id": "AE002",
+      "exact_match": "backend/app/modules/ai/deepseek_provider_smoke.py::run_provider_smoke",
+      "classification": "legacy_product_dispatch_debt",
+      "owner_or_removal_spec": "129",
+      "rationale": "direct provider smoke dispatch retained only until 129"
+    },
+    {
+      "rule_id": "AE002",
+      "exact_match": "backend/app/modules/ai/supervisor_public_test.py::run_supervisor_public_test",
+      "classification": "legacy_product_dispatch_debt",
+      "owner_or_removal_spec": "129",
+      "rationale": "direct supervisor public-test dispatch retained only until 129"
+    },
+    {
+      "rule_id": "AE003",
+      "exact_match": "backend/app/modules/modeling/service.py::create_model_spec",
+      "classification": "legacy_modeling_mutation_debt",
+      "owner_or_removal_spec": "127",
+      "rationale": "legacy direct canonical model_specs insert"
+    },
+    {
+      "rule_id": "AE003",
+      "exact_match": "backend/app/modules/modeling/service.py::create_assumption",
+      "classification": "legacy_modeling_mutation_debt",
+      "owner_or_removal_spec": "127",
+      "rationale": "legacy direct canonical assumptions insert"
+    },
+    {
+      "rule_id": "AE003",
+      "exact_match": "backend/app/modules/modeling/service.py::create_parameter",
+      "classification": "legacy_modeling_mutation_debt",
+      "owner_or_removal_spec": "127",
+      "rationale": "legacy direct canonical parameters insert"
+    },
+    {
+      "rule_id": "AE003",
+      "exact_match": "backend/app/modules/modeling/service.py::update_requirement",
+      "classification": "legacy_modeling_mutation_debt",
+      "owner_or_removal_spec": "127",
+      "rationale": "legacy requirements update outside 112 CAS/reconciliation seam"
+    },
+    {
+      "rule_id": "AE003",
+      "exact_match": "backend/app/modules/modeling/service.py::create_simulation_run",
+      "classification": "legacy_modeling_mutation_debt",
+      "owner_or_removal_spec": "127",
+      "rationale": "legacy run/evidence insert pending ownership classification"
+    }
+  ]
+}
