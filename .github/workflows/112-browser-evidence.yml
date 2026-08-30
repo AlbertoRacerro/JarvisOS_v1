@@ -59,6 +59,8 @@ jobs:
           sed -i '/112 · server-owned.*waitFor/d' evidence/112-browser.mjs
           # The UI intentionally labels the impact digest; match the rendered contract, not raw digest text.
           sed -i 's/getByText("impact-digest-browser-proof", { exact: true })/getByText("Impact digest · impact-digest-browser-proof", { exact: true })/' evidence/112-browser.mjs
+          # Project Basis retains a disabled legacy affordance; scope the enabled 112 action to its owning region.
+          sed -i 's/page.getByRole("button", { name: "Approve all", exact: true }).click()/page.getByLabel("Project Knowledge", { exact: true }).getByRole("button", { name: "Approve all", exact: true }).click()/' evidence/112-browser.mjs
           node evidence/112-browser.mjs
 
       - uses: actions/upload-artifact@v4
