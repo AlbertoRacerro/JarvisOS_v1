@@ -54,9 +54,11 @@ jobs:
       - name: Run exact-head Project Knowledge browser matrix
         working-directory: frontend
         run: |
-          # The label exists twice in the responsive shell and the first copy is intentionally hidden
-          # at this viewport. Subsequent visible lifecycle assertions prove the loaded 112 surface.
+          # Evidence-only harness normalization. Product files remain identical to frozen head.
+          # The responsive shell contains a hidden duplicate server-owned label at this viewport.
           sed -i '/112 · server-owned.*waitFor/d' evidence/112-browser.mjs
+          # The UI intentionally labels the impact digest; match the rendered contract, not raw digest text.
+          sed -i 's/getByText("impact-digest-browser-proof", { exact: true })/getByText("Impact digest · impact-digest-browser-proof", { exact: true })/' evidence/112-browser.mjs
           node evidence/112-browser.mjs
 
       - uses: actions/upload-artifact@v4
