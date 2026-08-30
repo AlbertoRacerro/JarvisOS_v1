@@ -136,7 +136,7 @@ Implementation is accepted only when all of the following are true on one frozen
 5. The first integration supplies no accepted-head/review-result/continuity semantic authority inputs.
 6. Tool outputs are published only as advisory CI evidence/artifacts/summary and have no mutation consumer.
 7. Focused deterministic anti-authority tests contain both positive and synthetic negative fixtures for mutable pin, write permission, `pull_request_target`, missing exact-head binding and a synthetic merge-candidate→mutation misuse.
-8. `python scripts/check_architecture_boundaries.py` (or the exact then-current 128 gate command) passes on the implementation head.
+8. `python scripts/check_architecture_enforcement.py` passes on the implementation head.
 9. `python scripts/check_spec_status.py --self-test` passes.
 10. Full backend test and Ruff gates required by `AGENTS.md` pass on the frozen head; no browser proof is required because this slice has no visible frontend delta.
 11. The integration is independently removable: deleting its workflow/checker/test surfaces leaves JarvisOS canonical/runtime truth and merge authority intact.
@@ -197,7 +197,7 @@ Focused moving-head checks:
 ```bash
 python scripts/check_pr_attention_integration.py
 python -m pytest -q backend/tests/test_pr_attention_integration_contract.py
-python scripts/check_architecture_boundaries.py
+python scripts/check_architecture_enforcement.py
 python scripts/check_spec_status.py --self-test
 ```
 
@@ -211,7 +211,7 @@ python -m pytest -q
 python -m ruff check app tests
 cd ..
 python scripts/check_spec_status.py --self-test
-python scripts/check_architecture_boundaries.py
+python scripts/check_architecture_enforcement.py
 python scripts/check_pr_attention_integration.py
 ```
 
