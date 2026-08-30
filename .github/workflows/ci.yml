@@ -45,6 +45,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
+      - name: Architecture enforcement gate
+        run: |
+          python scripts/check_architecture_enforcement.py --self-test
+          python scripts/check_architecture_enforcement.py
+
       - name: BLUECAD license-boundary import gate
         run: |
           python - <<'PY'
@@ -76,6 +81,7 @@ jobs:
           python -m ruff check app tests ../scripts/check_spec_status.py
           ../scripts/cheap_review.py ../scripts/manual_review.py
           ../scripts/check_review_secret_boundary.py
+          ../scripts/check_architecture_enforcement.py
 
       - name: Pytest
         working-directory: backend
