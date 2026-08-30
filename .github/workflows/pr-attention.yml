@@ -22,7 +22,7 @@ jobs:
           repository: ${{ github.repository }}
           pr-number: ${{ github.event.pull_request.number }}
           expected-head: ${{ github.event.pull_request.head.sha }}
-          github-token: ${{ github.token }}
+          token: ${{ github.token }}
       - name: Verify observed head
         shell: bash
         run: |
