@@ -150,12 +150,15 @@ def _scan_python(path: Path, root: Path, exceptions: set[tuple[str, str]]) -> li
     aliases = _aliases(tree)
     provider_import = any(target.startswith("app.modules.ai.providers") or target.startswith("backend.app.modules.ai.providers") for target in aliases.values())
     findings: list[Finding] = []
+    mutation_calls: list[tuple[str, str]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
         symbol = _enclosing_symbol(tree, node)
         exact = f"{rel}::{symbol}"
         call = _call_name(node, aliases)
+        if call.rsplit(".", 1)[-1] in MUTATION_WORDS:
+            mutation_calls.append((symbol, call))
         if call == "sqlite3.connect" and ("AE001", exact) not in exceptions:
             findings.append(Finding("AE001", rel, symbol, f"raw SQLite connection via {call}"))
         external = ((call.startswith(("httpx.", "requests.")) and call.rsplit(".", 1)[-1] in {"get", "post", "put", "patch", "delete", "request", "stream"}) or (provider_import and call.endswith(".complete")))
@@ -166,8 +169,9 @@ def _scan_python(path: Path, root: Path, exceptions: set[tuple[str, str]]) -> li
         accepted_mutation_owner = (rel.startswith("backend/app/core/") or rel.startswith("backend/app/modules/project_knowledge/") or rel == "backend/app/modules/modeling/project_knowledge_owner.py" or rel == "backend/app/modules/modeling/parameter_lifecycle.py" or rel == "backend/app/modules/memory/service.py")
         if sql and _mutates_protected_table(sql) and not accepted_mutation_owner and ("AE003", exact) not in exceptions:
             findings.append(Finding("AE003", rel, symbol, "direct protected canonical SQL mutation"))
-    if any(marker in source for marker in V2_MARKERS) and any(word in source for word in MUTATION_WORDS):
-        findings.append(Finding("AE004", rel, "<module>", "V2 coordination content is coupled to repository mutation"))
+    if any(marker in source for marker in V2_MARKERS) and mutation_calls:
+        symbol, call = mutation_calls[0]
+        findings.append(Finding("AE004", rel, symbol, f"V2 coordination content reaches repository mutation call {call}"))
     return findings
 
 
@@ -219,7 +223,7 @@ def _self_test() -> int:
         (root / "configs").mkdir()
         (root / "configs/architecture_enforcement.json").write_text('{"exceptions":[]}', encoding="utf-8")
         (root / "backend/app/x/bad.py").write_text("import sqlite3 as s\nimport httpx as h\ndef f(c):\n    s.connect('x')\n    h.post('https://example.invalid')\n    c.execute('UPDATE requirements SET statement = ?')\n", encoding="utf-8")
-        (root / "scripts/v2_apply.py").write_text("MARKER='JARVIS_COORD_V2 CANDIDATE_PATCH'\nACTION='update_file'\n", encoding="utf-8")
+        (root / "scripts/v2_apply.py").write_text("MARKER='JARVIS_COORD_V2 CANDIDATE_PATCH'\ndef apply():\n    update_file()\n", encoding="utf-8")
         (root / ".github/workflows/bad.yml").write_text("name: bad\non:\n  issue_comment:\njobs: {}\n", encoding="utf-8")
         ids = {f.rule_id for f in scan(root, root / "configs/architecture_enforcement.json")}
         if ids != RULE_IDS:
