@@ -1,0 +1,64 @@
+name: 112 Browser Evidence
+
+on:
+  push:
+    branches: [evidence/112-browser-e4921cd]
+
+permissions:
+  contents: read
+
+jobs:
+  browser-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Prove product tree matches frozen 112 head
+        run: |
+          git fetch --no-tags --depth=1 origin e4921cdbff74a390aa03123f28f048aea283064e
+          git diff --exit-code e4921cdbff74a390aa03123f28f048aea283064e -- frontend ':!frontend/evidence/112-browser.mjs' backend docs/specs/STATUS.md
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install exact frontend dependencies
+        working-directory: frontend
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Production build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Install evidence-only Playwright
+        working-directory: frontend
+        run: |
+          npm install --no-save --package-lock=false playwright@1.55.0
+          npx playwright install --with-deps chromium firefox
+
+      - name: Start frozen production preview
+        run: |
+          (cd frontend && npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/jarvisos-112-vite.log 2>&1) &
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4173/memory/project-basis >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/jarvisos-112-vite.log || true
+          exit 1
+
+      - name: Run exact-head Project Knowledge browser matrix
+        working-directory: frontend
+        run: node evidence/112-browser.mjs
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 112-browser-evidence-e4921cd
+          path: frontend/evidence/112-artifacts
+          if-no-files-found: warn
+          retention-days: 14
