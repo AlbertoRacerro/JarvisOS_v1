@@ -8,7 +8,10 @@ import sys
 
 
 def is_docs_only(paths: list[str]) -> bool:
-    normalized = [path.strip() for path in paths if path.strip()]
+    # Paths are evidence from git, not user prose: preserve every character.
+    # Lossy whitespace normalization could turn a non-doc path such as
+    # " docs/a.md" into an apparent docs/ path.
+    normalized = [path for path in paths if path]
     return bool(normalized) and all(path.startswith("docs/") for path in normalized)
 
 
@@ -19,6 +22,8 @@ def self_test() -> None:
     assert not is_docs_only(["README.md"])
     assert not is_docs_only(["docs/a.md", "scripts/check_spec_status.py"])
     assert not is_docs_only([".github/workflows/ci.yml"])
+    assert not is_docs_only([" docs/a.md"])
+    assert not is_docs_only(["\tdocs/a.md"])
     print("ci-scope: self-test OK")
 
 
