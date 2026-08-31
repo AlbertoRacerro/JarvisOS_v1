@@ -61,9 +61,9 @@ def _fail_if_deepseek_provider_called(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _mock_canonical_deepseek_success(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
+    from app.modules.ai import deepseek_provider_smoke
     from app.modules.ai.contracts import AIResponse, AIUsage, AIUsageSource, RoutingDecision
     from app.modules.ai.execution import AiTaskOutcome
-    from app.modules.ai import deepseek_provider_smoke
 
     captured: dict[str, object] = {}
 
