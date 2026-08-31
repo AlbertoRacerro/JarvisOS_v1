@@ -4,9 +4,12 @@ on:
   pull_request:
   push:
     branches: [master]
+  workflow_dispatch:
+  schedule:
+    - cron: "17 2 * * *"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -28,13 +31,16 @@ jobs:
         id: scope
         shell: bash
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+          PUSH_HEAD_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           python3 scripts/classify_ci_scope.py --self-test
-          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+
+          emit_full() {
             {
               echo "docs_only=false"
               echo "run_backend=true"
@@ -42,12 +48,35 @@ jobs:
               echo "run_bluecad=true"
               echo "full_required=true"
             } >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # Keep checkout shallow, but make both exact PR endpoints available.
-          # The pull/<n>/head ref works for same-repo and fork pull requests.
-          git fetch --no-tags --depth=1 origin "$BASE_SHA"
-          git fetch --no-tags --depth=1 origin "refs/pull/${PR_NUMBER}/head"
+          }
+
+          case "$GITHUB_EVENT_NAME" in
+            pull_request)
+              BASE_SHA="$PR_BASE_SHA"
+              HEAD_SHA="$PR_HEAD_SHA"
+              # Keep checkout shallow, but make both exact PR endpoints available.
+              # The pull/<n>/head ref works for same-repo and fork pull requests.
+              git fetch --no-tags --depth=1 origin "$BASE_SHA"
+              git fetch --no-tags --depth=1 origin "refs/pull/${PR_NUMBER}/head"
+              ;;
+            push)
+              BASE_SHA="$PUSH_BASE_SHA"
+              HEAD_SHA="$PUSH_HEAD_SHA"
+              # A missing/all-zero before SHA can occur on unusual ref creation or
+              # rewritten history. Fail closed rather than infer a partial domain.
+              if [ -z "$BASE_SHA" ] || [[ "$BASE_SHA" =~ ^0+$ ]]; then
+                emit_full
+                exit 0
+              fi
+              git fetch --no-tags --depth=1 origin "$BASE_SHA"
+              ;;
+            *)
+              # Scheduled/manual runs are the explicit repository-wide regression.
+              emit_full
+              exit 0
+              ;;
+          esac
+
           git cat-file -e "${BASE_SHA}^{commit}"
           git cat-file -e "${HEAD_SHA}^{commit}"
           # Disable rename collapsing so a move across execution domains is
@@ -122,7 +151,7 @@ jobs:
       - name: Docs-only fast path
         if: needs.classify.outputs.docs_only == 'true'
         run: |
-          echo "docs/**-only PR: governance gates passed; executable suites remain unchanged and full master-push CI is preserved."
+          echo "docs/**-only change: governance gates passed; unrelated runtime domains are intentionally skipped."
 
       - name: Install backend dependencies
         if: needs.classify.outputs.run_backend == 'true'
@@ -148,7 +177,8 @@ jobs:
           ../scripts/check_pr_attention_integration.py
           ../scripts/classify_ci_scope.py
 
-  backend-tests:
+  backend-core-tests:
+    name: backend-tests (${{ matrix.group }})
     needs: classify
     if: needs.classify.outputs.run_backend == 'true'
     runs-on: ubuntu-latest
@@ -156,7 +186,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [core-a, core-b, bluecad-a, bluecad-b]
+        group: [core-a, core-b]
     steps:
       - uses: actions/checkout@v4
 
@@ -174,21 +204,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Run backend test shard
+      - name: Run backend core test shard
         working-directory: backend
         shell: bash
         env:
           TEST_GROUP: ${{ matrix.group }}
         run: |
           set -euo pipefail
-          if [[ "$TEST_GROUP" == core-* ]]; then
-            if [ "$TEST_GROUP" = "core-a" ]; then
-              export CORE_SHARD=0
-            else
-              export CORE_SHARD=1
-            fi
+          if [ "$TEST_GROUP" = "core-a" ]; then
+            export CORE_SHARD=0
+          else
+            export CORE_SHARD=1
+          fi
 
-            mapfile -t test_files < <(python - <<'PY'
+          mapfile -t test_files < <(python - <<'PY'
           import os
           from pathlib import Path
 
@@ -206,12 +235,44 @@ jobs:
           for path in assigned[shard]:
               print(path)
           PY
-            )
-            test "${#test_files[@]}" -gt 0
-            python -m pytest -q "${test_files[@]}"
-            exit 0
-          fi
+          )
+          test "${#test_files[@]}" -gt 0
+          python -m pytest -q "${test_files[@]}"
 
+  backend-bluecad-tests:
+    name: backend-tests (${{ matrix.group }})
+    needs: classify
+    if: needs.classify.outputs.run_bluecad == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [bluecad-a, bluecad-b]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run BLUECAD test shard
+        working-directory: backend
+        shell: bash
+        env:
+          TEST_GROUP: ${{ matrix.group }}
+        run: |
+          set -euo pipefail
           if [ "$TEST_GROUP" = "bluecad-a" ]; then
             export BLUECAD_SHARD=0
           else
@@ -233,9 +294,12 @@ jobs:
               for path in Path("tests/bluecad").rglob("test_*.py")
               if path not in canary_owned
           )
-          for index, path in enumerate(files):
-              if index % 2 == shard:
-                  print(path)
+          assigned = [files[0::2], files[1::2]]
+          assert files
+          assert sorted(assigned[0] + assigned[1]) == files
+          assert set(assigned[0]).isdisjoint(assigned[1])
+          for path in assigned[shard]:
+              print(path)
           PY
           )
           test "${#test_files[@]}" -gt 0
