@@ -55,7 +55,7 @@ Once fresh exact `master` shows 112 as `merged`, `docs/POST_112_PARALLEL_DELIVER
 - **Knowledge:** `113 -> 114 -> 115`, then `121` when its hard dependencies are merged and its own readiness authorizes implementation.
 - **Development:** `116 -> 117`, then `122` when its hard dependencies are merged and its own readiness authorizes implementation.
 - **Coding acceleration:** `118 -> 119 -> 120 -> 123 -> fresh Hermes V1 re-derivation/release gate`.
-- **Provider/settings:** `124` is an independent provider/settings owner when its dependencies and readiness are satisfied and may be scheduled post-112 without blocking unrelated lanes.
+- **Provider/settings:** `124` is an independent owner when its dependencies and readiness are satisfied and may be scheduled post-112 without blocking unrelated lanes.
 - **Separately gated:** `125` and `126` are not automatically parallelized.
 - **Later engineering/Process:** `102`, then `103 -> 104 -> 105 -> 106 -> 107 -> 108 -> 109 -> 093 -> 110`, subject to each row's then-current dependencies/readiness and fresh authority.
 
