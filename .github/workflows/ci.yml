@@ -223,16 +223,10 @@ jobs:
 
           shard = int(os.environ["CORE_SHARD"])
           bluecad_root = Path("tests/bluecad")
-          bluecad_specialist_tests = {
-              Path("tests/test_cad_link.py"),
-              Path("tests/test_cad_link_boundaries.py"),
-          }
           files = sorted(
               path
               for path in Path("tests").rglob("test_*.py")
-              if path.is_file()
-              and not path.is_relative_to(bluecad_root)
-              and path not in bluecad_specialist_tests
+              if path.is_file() and not path.is_relative_to(bluecad_root)
           )
           assigned = [files[0::2], files[1::2]]
           assert files
@@ -298,18 +292,10 @@ jobs:
               Path("tests/bluecad/test_geometry_property_invariants.py"),
               Path("tests/bluecad/test_capped_manifold.py"),
           }
-          specialist_owned = {
-              Path("tests/test_cad_link.py"),
-              Path("tests/test_cad_link_boundaries.py"),
-          }
-          assert all(path.is_file() for path in specialist_owned)
           files = sorted(
-              [
-                  path
-                  for path in Path("tests/bluecad").rglob("test_*.py")
-                  if path not in canary_owned
-              ]
-              + list(specialist_owned)
+              path
+              for path in Path("tests/bluecad").rglob("test_*.py")
+              if path not in canary_owned
           )
           assigned = [files[0::2], files[1::2]]
           assert files
