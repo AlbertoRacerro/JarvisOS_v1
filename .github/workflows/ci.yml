@@ -79,11 +79,13 @@ jobs:
           pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Architecture enforcement gate
+        if: needs.classify.outputs.docs_only != 'true'
         run: |
           python scripts/check_architecture_enforcement.py --self-test
           python scripts/check_architecture_enforcement.py
 
       - name: BLUECAD license-boundary import gate
+        if: needs.classify.outputs.docs_only != 'true'
         run: |
           python - <<'PY'
           import re
@@ -111,7 +113,7 @@ jobs:
       - name: Docs-only fast path
         if: needs.classify.outputs.docs_only == 'true'
         run: |
-          echo "docs/**-only PR: deterministic governance gates passed; dependency install, Ruff and full Pytest are deferred to master push CI."
+          echo "docs/**-only PR: deterministic governance gates passed; runtime/import/lint/test suites are deferred to full master-push CI."
 
       - name: Ruff
         if: needs.classify.outputs.docs_only != 'true'
