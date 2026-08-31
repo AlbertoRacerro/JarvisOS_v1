@@ -1,0 +1,80 @@
+name: PR Attention Evidence
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: read
+
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect exact-head advisory evidence
+        id: attention
+        uses: AlbertoRacerro/jarvis-pr-attention/cycle@c544e2885a69173c58feb2355bb53e8866e627eb
+        with:
+          repository: ${{ github.repository }}
+          pr-number: ${{ github.event.pull_request.number }}
+          expected-head: ${{ github.event.pull_request.head.sha }}
+          token: ${{ github.token }}
+      - name: Validate advisory evidence
+        shell: bash
+        env:
+          MANIFEST: ${{ steps.attention.outputs.manifest-file }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          OBSERVED_HEAD: ${{ steps.attention.outputs.head-sha }}
+          ATTENTION: ${{ steps.attention.outputs.attention }}
+          GATE_STATUS: ${{ steps.attention.outputs.gate-status }}
+          SEMANTIC_STATUS: ${{ steps.attention.outputs.semantic-status }}
+          SAFETY_STATUS: ${{ steps.attention.outputs.safety-status }}
+          MERGE_CANDIDATE: ${{ steps.attention.outputs.merge-candidate }}
+        run: |
+          set -euo pipefail
+          test -n "$MANIFEST"
+          test -s "$MANIFEST"
+          python3 - "$MANIFEST" "$EXPECTED_HEAD" "$OBSERVED_HEAD" "$ATTENTION" "$GATE_STATUS" "$SEMANTIC_STATUS" "$SAFETY_STATUS" "$MERGE_CANDIDATE" <<'PY'
+          import json
+          import sys
+
+          path, expected, observed, attention, gate, semantic, safety, merge_candidate = sys.argv[1:]
+          with open(path, encoding="utf-8") as handle:
+              manifest = json.load(handle)
+          if manifest.get("head_sha") != expected or observed != expected:
+              raise SystemExit("PR attention evidence head mismatch")
+          domains = {
+              "attention": ({"READY", "PENDING", "BLOCKED", "STALE", "UNKNOWN"}, attention),
+              "gate_status": ({"READY_TO_MERGE", "WAIT_FOR_GATES", "BLOCKED", "NOT_RUN"}, gate),
+              "semantic_status": ({"VALID_PASS", "VALID_FAIL", "INVALID", "NOT_RUN"}, semantic),
+              "safety_status": ({"SAFE_TO_MERGE_ADVISORY", "SAFE_TO_REVIEW", "REPAIR_REQUIRED", "WAIT_FOR_GATES", "BLOCKED", "NO_MERGE_SIGNAL"}, safety),
+          }
+          for key, (allowed, output) in domains.items():
+              value = manifest.get(key)
+              if value not in allowed or output not in allowed or value != output:
+                  raise SystemExit(f"invalid or inconsistent {key}: manifest={value!r} output={output!r}")
+          manifest_merge = manifest.get("merge_candidate")
+          if not isinstance(manifest_merge, bool) or merge_candidate not in {"true", "false"}:
+              raise SystemExit("invalid merge_candidate domain")
+          if str(manifest_merge).lower() != merge_candidate:
+              raise SystemExit("merge_candidate output does not match manifest")
+          PY
+      - name: Publish advisory summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            printf '%s\n' '## PR attention evidence (advisory only)' ''
+            printf 'Exact event head: %s\n' '${{ github.event.pull_request.head.sha }}'
+            printf 'Observed head: %s\n' '${{ steps.attention.outputs.head-sha }}'
+            printf 'Attention: %s\n' '${{ steps.attention.outputs.attention }}'
+            printf 'Gate status: %s\n' '${{ steps.attention.outputs.gate-status }}'
+            printf 'Semantic status: %s\n' '${{ steps.attention.outputs.semantic-status }}'
+            printf 'Safety status: %s\n' '${{ steps.attention.outputs.safety-status }}'
+            printf 'Merge candidate: %s\n' '${{ steps.attention.outputs.merge-candidate }}'
+            printf '%s\n' '' 'These values are evidence only. JarvisOS semantic acceptance, queue state and merge authority remain external to this workflow.'
+          } >> "$GITHUB_STEP_SUMMARY"

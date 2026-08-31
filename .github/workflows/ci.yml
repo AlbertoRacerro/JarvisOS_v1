@@ -39,6 +39,11 @@ jobs:
           python scripts/manual_review.py --self-test
           python scripts/check_review_secret_boundary.py --self-test
 
+      - name: PR attention anti-authority gate
+        run: |
+          python scripts/check_pr_attention_integration.py --self-test
+          python scripts/check_pr_attention_integration.py
+
       - name: Install dependencies
         working-directory: backend
         run: |
@@ -82,6 +87,7 @@ jobs:
           ../scripts/cheap_review.py ../scripts/manual_review.py
           ../scripts/check_review_secret_boundary.py
           ../scripts/check_architecture_enforcement.py
+          ../scripts/check_pr_attention_integration.py
 
       - name: Pytest
         working-directory: backend
