@@ -33,7 +33,9 @@ jobs:
             echo "docs_only=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > "$RUNNER_TEMP/changed-files.txt"
+          # Disable rename collapsing so a move from an executable path into docs/
+          # is observed as delete+add and therefore fails closed to full CI.
+          git diff --name-only --no-renames "$BASE_SHA" "$HEAD_SHA" > "$RUNNER_TEMP/changed-files.txt"
           python3 scripts/classify_ci_scope.py < "$RUNNER_TEMP/changed-files.txt" >> "$GITHUB_OUTPUT"
 
   backend:
