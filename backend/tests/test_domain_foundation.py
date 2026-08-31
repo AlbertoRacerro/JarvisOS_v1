@@ -293,7 +293,15 @@ def test_requirement_crud(client: TestClient) -> None:
     assert list_response.status_code == 200
     assert any(item["id"] == created["id"] for item in list_response.json())
 
-    update_response = client.patch(f"/requirements/{created['id']}", json={"status": "active"})
+    update_response = client.patch(
+        f"/requirements/{created['id']}",
+        json={
+            "workspace_id": "bluerev",
+            "expected_updated_at": created["updated_at"],
+            "rationale": "Updated safety rationale.",
+        },
+    )
     assert update_response.status_code == 200
-    assert update_response.json()["status"] == "active"
+    assert update_response.json()["status"] == "draft"
+    assert update_response.json()["rationale"] == "Updated safety rationale."
     assert _event_count("RequirementCreated") == 1

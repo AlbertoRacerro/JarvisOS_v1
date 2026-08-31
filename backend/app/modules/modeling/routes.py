@@ -14,8 +14,8 @@ from app.modules.modeling.models import (
     ParameterRead,
     ParameterUpdate,
     RequirementCreate,
+    RequirementProjectUpdate,
     RequirementRead,
-    RequirementUpdate,
     SimulationRunCreate,
     SimulationRunRead,
 )
@@ -24,6 +24,10 @@ from app.modules.modeling.parameter_lifecycle import (
     list_lifecycle_parameters,
     transition_parameter,
     update_parameter,
+)
+from app.modules.modeling.project_knowledge_owner import ProjectKnowledgeOwnerError
+from app.modules.modeling.project_knowledge_owner import (
+    update_requirement as update_requirement_canonical,
 )
 from app.modules.modeling.service import (
     create_assumption,
@@ -39,7 +43,6 @@ from app.modules.modeling.service import (
     list_model_specs,
     list_requirements,
     list_simulation_runs,
-    update_requirement,
 )
 
 router = APIRouter(tags=["modeling"])
@@ -53,6 +56,9 @@ def _domain_error(exc: Exception) -> HTTPException:
             "parameter_lifecycle_transition_invalid",
             "parameter_not_active",
         } else 404 if exc.code == "parameter_not_found" else 400
+        return HTTPException(status_code=status, detail={"code": exc.code, "message": exc.message})
+    if isinstance(exc, ProjectKnowledgeOwnerError):
+        status = 409 if exc.code == "owner_stale" else 404 if exc.code == "owner_not_found" else 422
         return HTTPException(status_code=status, detail={"code": exc.code, "message": exc.message})
     if isinstance(exc, ValueError):
         return HTTPException(status_code=404, detail=str(exc))
@@ -158,11 +164,11 @@ def get_requirement_endpoint(requirement_id: str) -> RequirementRead:
 
 
 @router.patch("/requirements/{requirement_id}", response_model=RequirementRead)
-def update_requirement_endpoint(requirement_id: str, payload: RequirementUpdate) -> RequirementRead:
-    requirement = update_requirement(requirement_id, payload)
-    if requirement is None:
-        raise HTTPException(status_code=404, detail="Requirement not found.")
-    return requirement
+def update_requirement_endpoint(requirement_id: str, payload: RequirementProjectUpdate) -> RequirementRead:
+    try:
+        return update_requirement_canonical(requirement_id, payload)
+    except (ProjectKnowledgeOwnerError, sqlite3.IntegrityError) as exc:
+        raise _domain_error(exc) from exc
 
 
 @router.post("/workspaces/{workspace_id}/simulation-runs", response_model=SimulationRunRead, status_code=201)
