@@ -156,7 +156,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [core, bluecad-a, bluecad-b]
+        group: [core-a, core-b, bluecad-a, bluecad-b]
     steps:
       - uses: actions/checkout@v4
 
@@ -181,8 +181,34 @@ jobs:
           TEST_GROUP: ${{ matrix.group }}
         run: |
           set -euo pipefail
-          if [ "$TEST_GROUP" = "core" ]; then
-            python -m pytest -q tests --ignore=tests/bluecad
+          if [[ "$TEST_GROUP" == core-* ]]; then
+            if [ "$TEST_GROUP" = "core-a" ]; then
+              export CORE_SHARD=0
+            else
+              export CORE_SHARD=1
+            fi
+
+            mapfile -t test_files < <(python - <<'PY'
+          import os
+          from pathlib import Path
+
+          shard = int(os.environ["CORE_SHARD"])
+          bluecad_root = Path("tests/bluecad")
+          files = sorted(
+              path
+              for path in Path("tests").rglob("test_*.py")
+              if path.is_file() and not path.is_relative_to(bluecad_root)
+          )
+          assigned = [files[0::2], files[1::2]]
+          assert files
+          assert sorted(assigned[0] + assigned[1]) == files
+          assert set(assigned[0]).isdisjoint(assigned[1])
+          for path in assigned[shard]:
+              print(path)
+          PY
+            )
+            test "${#test_files[@]}" -gt 0
+            python -m pytest -q "${test_files[@]}"
             exit 0
           fi
 
