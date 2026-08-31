@@ -49,15 +49,18 @@ def classify_scope(paths: list[str]) -> dict[str, bool]:
         }
 
     run_backend = any(path.startswith("backend/") for path in changed)
-    run_frontend = any(path.startswith("frontend/") for path in changed)
+    frontend_changed = any(path.startswith("frontend/") for path in changed)
 
     return {
         "docs_only": False,
         "run_backend": run_backend,
-        "run_frontend": run_frontend,
+        # Backend contracts are still mirrored manually in the frontend until
+        # the accepted contract-codegen hardening lands. Preserve frontend build
+        # as a cheap parallel regression gate for every backend change.
+        "run_frontend": run_backend or frontend_changed,
         # Backend is treated conservatively as a possible BLUECAD dependency.
         # This avoids fragile source->test impact inference while still allowing
-        # frontend-only work to skip the CAD/runtime lane entirely.
+        # frontend-only work to skip the backend/CAD runtime lanes entirely.
         "run_bluecad": run_backend,
         "full_required": False,
     }
@@ -71,10 +74,17 @@ def self_test() -> None:
         "run_bluecad": False,
         "full_required": False,
     }
-    assert classify_scope(["frontend/src/App.tsx"])["run_frontend"]
-    assert not classify_scope(["frontend/src/App.tsx"])["run_backend"]
-    assert classify_scope(["backend/app/main.py"])["run_backend"]
-    assert classify_scope(["backend/app/main.py"])["run_bluecad"]
+
+    frontend = classify_scope(["frontend/src/App.tsx"])
+    assert frontend["run_frontend"]
+    assert not frontend["run_backend"]
+    assert not frontend["run_bluecad"]
+
+    backend = classify_scope(["backend/app/main.py"])
+    assert backend["run_backend"]
+    assert backend["run_frontend"]
+    assert backend["run_bluecad"]
+
     mixed = classify_scope(["docs/a.md", "backend/app/main.py", "frontend/src/App.tsx"])
     assert mixed["run_backend"] and mixed["run_frontend"] and mixed["run_bluecad"]
     assert not mixed["full_required"]
