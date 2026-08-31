@@ -86,7 +86,7 @@ providers:
     models:
       deepseek-v4-pro:
         provider_model_name: deepseek-v4-pro
-        route_classes: [external:cheap]
+        route_classes: [external:cheap, external:deepseek]
         # Conservative accepted JarvisOS bound, not a live-provider capability claim.
         context_window_tokens: 8192
         max_output_tokens: 512

@@ -1,7 +1,6 @@
 import json
 from collections.abc import Iterator
 
-import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -85,34 +84,115 @@ def _fail_if_deepseek_provider_called(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.modules.ai.providers.deepseek import DeepSeekProvider
 
     def fail(self: DeepSeekProvider, *, prompt: str, estimated_output_tokens: int) -> object:
-        raise AssertionError("DeepSeek provider should not have been called.")
+        raise AssertionError("Legacy DeepSeek provider should not have been called.")
 
     monkeypatch.setattr(DeepSeekProvider, "create_live_console_completion", fail)
 
 
-def _mock_deepseek_provider(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    from app.modules.ai.providers.deepseek import DeepSeekChatResult, DeepSeekProvider
+def _mock_canonical_success(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    provider_id: str = "deepseek",
+    model_id: str = "mock-deepseek-model",
+    input_tokens: int = 12,
+    output_tokens: int = 9,
+    response_text: str = "The exponential equation assumes constant growth rate and unlimited resources.",
+) -> dict[str, object]:
+    from app.modules.ai import supervisor_public_test
+    from app.modules.ai.contracts import AIResponse, AIUsage, AIUsageSource, RoutingDecision
+    from app.modules.ai.execution import AiTaskOutcome
 
-    prompts: list[str] = []
+    captured: dict[str, object] = {}
 
-    def fake_completion(self: DeepSeekProvider, *, prompt: str, estimated_output_tokens: int) -> DeepSeekChatResult:
-        prompts.append(prompt)
-        assert estimated_output_tokens == 180
-        return DeepSeekChatResult(
-            provider_name="deepseek",
-            model="mock-deepseek-model",
-            mode="strong_provider_smoke",
-            external_call_attempted=True,
-            external_call_succeeded=True,
-            response_text="The exponential equation assumes constant growth rate and unlimited resources.",
-            reported_input_tokens=12,
-            reported_output_tokens=9,
-            reported_total_tokens=21,
-            sanitized_metadata={"implementation": "mock", "usage_returned": True, "finish_reason": "stop"},
+    def fake_run_ai_task(**kwargs: object) -> AiTaskOutcome:
+        captured.update(kwargs)
+        response = AIResponse(
+            provider_id=provider_id,
+            model_id=model_id,
+            usage=AIUsage(
+                provider_id=provider_id,
+                model_id=model_id,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                usage_source=AIUsageSource.actual,
+            ),
+            request_id="canonical-supervisor-request",
+            correlation_id="canonical-supervisor-correlation",
+            text=response_text,
+            content=response_text,
+            finish_reason="stop",
+            raw_provider_metadata={
+                "external_call_attempted": True,
+                "implementation": "mock-canonical",
+                "usage_returned": True,
+            },
+        )
+        return AiTaskOutcome(
+            status="success",
+            ledger_id="canonical-supervisor-ledger",
+            selected_route_class=str(kwargs["route_class"]),
+            decision=RoutingDecision(
+                provider_id=provider_id,
+                model_id=model_id,
+                decision_reason=f"bound:{kwargs['route_class']}",
+            ),
+            response=response,
         )
 
-    monkeypatch.setattr(DeepSeekProvider, "create_live_console_completion", fake_completion)
-    return prompts
+    monkeypatch.setattr(supervisor_public_test, "run_ai_task", fake_run_ai_task)
+    return captured
+
+
+def _mock_canonical_provider_error(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
+    from app.modules.ai import supervisor_public_test
+    from app.modules.ai.contracts import (
+        AIProviderError,
+        AIProviderErrorCode,
+        AIResponse,
+        AIUsage,
+        AIUsageSource,
+        RoutingDecision,
+    )
+    from app.modules.ai.execution import AiTaskOutcome
+
+    captured: dict[str, object] = {}
+
+    def fake_run_ai_task(**kwargs: object) -> AiTaskOutcome:
+        captured.update(kwargs)
+        response = AIResponse(
+            provider_id="deepseek",
+            model_id="deepseek-v4-pro",
+            usage=AIUsage(
+                provider_id="deepseek",
+                model_id="deepseek-v4-pro",
+                input_tokens=0,
+                output_tokens=0,
+                usage_source=AIUsageSource.estimated,
+            ),
+            request_id="canonical-supervisor-error-request",
+            text=None,
+            error=AIProviderError(
+                code=AIProviderErrorCode.provider_timeout,
+                message="provider timeout",
+                retryable=True,
+            ),
+            raw_provider_metadata={"external_call_attempted": True},
+        )
+        return AiTaskOutcome(
+            status="provider_error",
+            ledger_id="canonical-supervisor-error-ledger",
+            selected_route_class="external:deepseek",
+            decision=RoutingDecision(
+                provider_id="deepseek",
+                model_id="deepseek-v4-pro",
+                decision_reason="bound:external:deepseek",
+            ),
+            response=response,
+            error_type="provider_timeout",
+        )
+
+    monkeypatch.setattr(supervisor_public_test, "run_ai_task", fake_run_ai_task)
+    return captured
 
 
 def test_supervisor_rejects_empty_prompt_before_provider(client: TestClient, monkeypatch) -> None:
@@ -140,14 +220,14 @@ def test_supervisor_bounds_prompt_length_before_provider(client: TestClient, mon
     assert response.json()["external_call_attempted"] is False
 
 
-def test_supervisor_fast_dev_allows_public_internal_toy_prompt_with_deepseek(
+def test_supervisor_fast_dev_maps_deepseek_success_from_canonical_execution(
     client: TestClient,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     raw_key = "ds-test-secret-1234abcd"
     monkeypatch.setenv("DEEPSEEK_API_KEY", raw_key)
     _enable_deepseek_supervisor(client)
-    prompts = _mock_deepseek_provider(monkeypatch)
+    captured = _mock_canonical_success(monkeypatch)
 
     response = client.post(
         "/ai/supervisor/public-test",
@@ -175,9 +255,12 @@ def test_supervisor_fast_dev_allows_public_internal_toy_prompt_with_deepseek(
     assert body["request_id"]
     assert body["correlation_id"]
     assert body["limitations"]
+    assert captured["route_class"] == "external:deepseek"
+    assert captured["task_kind"] == "test"
+    assert captured["max_output_tokens"] == 180
+    assert "Task type: equation_review" in str(captured["user_prompt"])
     assert raw_key not in json.dumps(body)
     assert "Authorization" not in json.dumps(body)
-    assert "Task type: equation_review" in prompts[0]
 
     completed_payload = _latest_event_payload("AISupervisorPublicTestCompleted")
     payload_text = json.dumps(completed_payload)
@@ -207,7 +290,7 @@ def test_supervisor_request_cannot_force_provider_or_model(client: TestClient, m
 def test_supervisor_metadata_cannot_force_provider_or_model(client: TestClient, monkeypatch) -> None:
     monkeypatch.setenv("DEEPSEEK_API_KEY", "ds-test-secret-1234abcd")
     _enable_deepseek_supervisor(client)
-    _mock_deepseek_provider(monkeypatch)
+    captured = _mock_canonical_success(monkeypatch)
 
     response = client.post(
         "/ai/supervisor/public-test",
@@ -224,6 +307,7 @@ def test_supervisor_metadata_cannot_force_provider_or_model(client: TestClient, 
     body = response.json()
     assert body["provider_id"] == "deepseek"
     assert body["model_id"] == "mock-deepseek-model"
+    assert captured["route_class"] == "external:deepseek"
 
 
 def test_supervisor_returns_provider_unavailable_when_no_provider_configured(client: TestClient, monkeypatch) -> None:
@@ -262,16 +346,13 @@ def test_supervisor_blocks_structural_secret_without_provider_call(client: TestC
     assert "Authorization" not in payload_text
 
 
-def test_supervisor_normalizes_provider_error(client: TestClient, monkeypatch) -> None:
-    from app.modules.ai.providers.deepseek import DeepSeekProvider
-
+def test_supervisor_maps_canonical_provider_error_without_legacy_adapter_bypass(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("DEEPSEEK_API_KEY", "ds-test-secret-1234abcd")
     _enable_deepseek_supervisor(client)
-
-    def fail(self: DeepSeekProvider, *, prompt: str, estimated_output_tokens: int) -> object:
-        raise httpx.TimeoutException("timeout")
-
-    monkeypatch.setattr(DeepSeekProvider, "create_live_console_completion", fail)
+    captured = _mock_canonical_provider_error(monkeypatch)
 
     response = client.post(
         "/ai/supervisor/public-test",
@@ -281,35 +362,29 @@ def test_supervisor_normalizes_provider_error(client: TestClient, monkeypatch) -
     assert response.status_code == 200
     body = response.json()
     assert body["provider_id"] == "deepseek"
-    assert body["blocked_reason"] == "deepseek_live_call_failed"
+    assert body["blocked_reason"] == "provider_timeout"
     assert body["safety_status"] == "blocked"
     assert body["external_call_attempted"] is True
     assert body["external_call_succeeded"] is False
+    assert captured["route_class"] == "external:deepseek"
     failed_payload = _latest_event_payload("AISupervisorPublicTestProviderFailed")
     assert failed_payload["error_code"] == "provider_timeout"
 
 
-def test_supervisor_falls_back_to_scaleway_when_explicitly_configured(client: TestClient, monkeypatch) -> None:
-    from app.modules.ai.providers.scaleway import ScalewayChatResult, ScalewayProvider
-
+def test_supervisor_scaleway_mode_maps_only_to_canonical_scaleway_route(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("SCALEWAY_API_KEY", "test-only-scaleway-key")
     _enable_scaleway_supervisor(client)
-
-    def fake_completion(self: ScalewayProvider, *, prompt: str, estimated_output_tokens: int) -> ScalewayChatResult:
-        return ScalewayChatResult(
-            provider_name="scaleway",
-            model="mock-scaleway-model",
-            mode="live_smoke_console",
-            external_call_attempted=True,
-            external_call_succeeded=True,
-            response_text="The runner error suggests checking input parameters.",
-            reported_input_tokens=7,
-            reported_output_tokens=5,
-            reported_total_tokens=12,
-            sanitized_metadata={"implementation": "mock", "usage_returned": True, "finish_reason": "stop"},
-        )
-
-    monkeypatch.setattr(ScalewayProvider, "create_live_console_completion", fake_completion)
+    captured = _mock_canonical_success(
+        monkeypatch,
+        provider_id="scaleway",
+        model_id="mock-scaleway-model",
+        input_tokens=7,
+        output_tokens=5,
+        response_text="The runner error suggests checking input parameters.",
+    )
 
     response = client.post(
         "/ai/supervisor/public-test",
@@ -322,9 +397,32 @@ def test_supervisor_falls_back_to_scaleway_when_explicitly_configured(client: Te
     assert body["model_id"] == "mock-scaleway-model"
     assert body["usage"]["input_tokens"] == 7
     assert body["usage"]["output_tokens"] == 5
+    assert captured["route_class"] == "external:scaleway"
+
+    # 129 removes the Supervisor-owned accounting path. A stubbed canonical
+    # executor must not cause the wrapper to mutate the legacy counters itself.
     settings = client.get("/ai/settings").json()
-    assert settings["scaleway_input_tokens_month_to_date"] == 7
-    assert settings["scaleway_output_tokens_month_to_date"] == 5
+    assert settings["scaleway_input_tokens_month_to_date"] == 0
+    assert settings["scaleway_output_tokens_month_to_date"] == 0
+
+
+def test_supervisor_unstubbed_external_request_requires_canonical_confirmation(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "ds-test-secret-1234abcd")
+    _enable_deepseek_supervisor(client)
+    _fail_if_deepseek_provider_called(monkeypatch)
+
+    response = client.post(
+        "/ai/supervisor/public-test",
+        json={"prompt": "Explain what a mass balance is."},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["blocked_reason"] == "confirmation_required"
+    assert body["external_call_attempted"] is False
 
 
 def test_supervisor_non_fast_dev_policy_blocks_without_provider(client: TestClient, monkeypatch) -> None:
@@ -358,7 +456,7 @@ def test_supervisor_rejects_file_path_prompt_before_provider(client: TestClient,
 def test_supervisor_events_do_not_store_prompt_text(client: TestClient, monkeypatch) -> None:
     monkeypatch.setenv("DEEPSEEK_API_KEY", "ds-test-secret-1234abcd")
     _enable_deepseek_supervisor(client)
-    _mock_deepseek_provider(monkeypatch)
+    _mock_canonical_success(monkeypatch)
 
     prompt = "Summarize what an AI provider adapter does."
     response = client.post("/ai/supervisor/public-test", json={"prompt": prompt})
