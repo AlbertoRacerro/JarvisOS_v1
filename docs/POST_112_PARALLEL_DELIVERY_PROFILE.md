@@ -7,6 +7,7 @@ Final role-split reconciliation: 2026-08-28
 Maintainer hardening-priority amendment: 2026-08-30
 Delivery-efficiency amendment: 2026-08-31
 Affected-domain master gating amendment: 2026-08-31
+Direct-implementation role amendment: 2026-08-31
 
 This document defines the minimum controlled-parallel delivery exception to the repository's normal serial execution rule. It changes repository-development mechanics only. It does not change JarvisOS runtime authority, provider policy, product architecture, credentials, egress, schemas, or model-promotion rules.
 
@@ -80,37 +81,38 @@ A domain lane that needs a shared mutation produces a bounded integration reques
 
 ## 3. Normative model-role split
 
-The only current live repository-development pipeline is:
+The current repository-development pipeline is direct-first:
 
-`ChatGPT spec/plan/packet -> GLM candidate implementation -> ChatGPT acceptance -> GLM REPAIR ONLY when needed -> Claude independent terminal review when required/useful -> ChatGPT exact-head merge/reconcile`
+`ChatGPT spec/plan/readiness -> ChatGPT direct implementation/repair -> independent review when required/useful -> ChatGPT exact-head merge/reconcile`
 
-### ChatGPT — Tech Lead / Architect / Maintainer
+Optional external/model helpers may contribute bounded proposal-only work in parallel when they have a concrete throughput or risk-reduction advantage. They are never a mandatory hop.
 
-ChatGPT owns fresh repo/context reading, architecture/ownership, definition/full spec/readiness, implementation packets, scope/non-goals/acceptance criteria, semantic candidate review, integration, shared authority, `STATUS.md`, exact-head merge, and reconciliation.
+### ChatGPT — default direct implementer / Tech Lead / Architect / Maintainer
 
-### GLM-5.3-Flash — default bounded coding and repair implementer
+ChatGPT owns fresh repo/context reading, architecture/ownership, definition/full spec/readiness, direct implementation and repair of authorized READY work by default, scope/non-goals/acceptance criteria, semantic exact-diff review, integration, shared authority, `STATUS.md`, exact-head merge, and reconciliation.
 
-For non-trivial READY code slices, GLM-5.3-Flash is the default bounded coding implementer. Each task receives exact target/base SHA, allowed paths/boundaries, preloaded authority/context, required behavior, non-goals, and acceptance tests/checks.
+### External/model workers — optional bounded proposal-only helpers
 
-GLM:
+GLM, Codex, Claude, or another model worker may be used only when fresh authority permits a genuinely bounded/disjoint task and delegation has a concrete throughput or risk-reduction advantage. Each helper task receives exact target/base SHA, allowed paths/boundaries, preloaded authority/context, required behavior, non-goals, acceptance tests/checks, and any required tool/authority restrictions.
 
-- writes candidate patches only in an ephemeral checkout;
-- owns no GitHub write, merge, queue, spec, architecture, policy, provider, credential, promotion, or shared-authority role;
-- is not the default broad/general/adversarial reviewer;
-- may run in parallel with other GLM candidate workers only on demonstrably disjoint exact-head tasks/lanes;
-- should normally have at most one active candidate worker per lane/head unless a fresh disjointness/value proof justifies more.
+External/model helpers:
 
-Completion-first applies: give a bounded task enough budget to complete instead of preferring a cheap failed attempt, while keeping path, exploration, tool, and authority scope narrow.
+- produce proposal-only candidate patches or evidence;
+- own no GitHub write, merge, queue, spec, architecture, policy, provider, credential, promotion, or shared-authority role;
+- do not duplicate the active implementation;
+- do not replace direct progress that ChatGPT can safely make;
+- do not become a wait or stop condition;
+- may run in parallel only on demonstrably disjoint exact-head tasks/lanes.
 
-### ChatGPT acceptance and GLM repair
+A useful already-terminal candidate may be consumed if it remains exact-head relevant; otherwise ChatGPT proceeds directly.
 
-After GLM output, ChatGPT reviews diff, scope, semantics, invariants, and test evidence. Workflow green alone is not semantic PASS. If materially fixable, ChatGPT normally issues a narrow GLM `REPAIR ONLY` packet with numbered findings rather than discard/reimplement the candidate.
+### ChatGPT acceptance and repair
 
-ChatGPT codes directly only for trivial/mechanical fixes, minimal delivery plumbing, or proven GLM failure where another delegation is not worthwhile.
+ChatGPT reviews diff, scope, semantics, invariants, and test evidence. Workflow green alone is not semantic PASS. ChatGPT repairs directly by default. If an already-terminal external candidate is materially useful, ChatGPT may minimally repair and integrate it rather than discard it, but no external repair round is required before progress continues.
 
 ### Claude — independent terminal reviewer
 
-Claude is the normal independent terminal reviewer when required by the accepted slice/policy or materially useful for risk reduction. Claude is a reviewer, not the default implementer.
+Claude is an independent terminal reviewer when required by the accepted slice/policy or materially useful for risk reduction. Claude is a reviewer, not a required implementation hop.
 
 ### Codex — scarce specialist/high-risk reserve
 
@@ -122,17 +124,18 @@ Deterministic repo/runtime evidence and accepted authority outrank all model cla
 
 A ChatGPT lock holder must:
 
-1. resolve fresh exact `master`, `STATUS.md`, current PR heads, workflow/review evidence, and terminal/running candidate-worker state;
+1. resolve fresh exact `master`, `STATUS.md`, current PR heads, workflow/review evidence, and relevant terminal/running optional-helper state;
 2. reject stale model/workflow results whose target head is no longer authoritative;
 3. consume already-terminal safe evidence first, using an exact-current-head validated `PR Attention Evidence` manifest/artifact as the first compact **mechanical index** when available;
 4. fetch raw GitHub state wherever semantic review, unresolved findings/threads, missing fields, mutation verification, or a canonical gate requires it; the helper artifact never substitutes for those decisions;
 5. scan all currently authorized lanes rather than assuming a scheduler-specific lane;
 6. advance an immediately actionable lane one bounded step at a time while preserving lane/shared ownership;
-7. launch the next bounded GLM candidate/repair task when useful and authorized;
+7. implement or repair directly by default; launch an optional bounded external/model helper only when useful, authorized, non-duplicative, and throughput- or risk-reduction-positive;
 8. continue across other ready lanes while there is immediate safe work;
-9. exit when the remaining next actions are only waits for GLM, CI, independent review, provider/external availability, or a future scheduler wake-up.
+9. when CI/checks/required review are non-terminal, keep the active session useful with semantic review, failure diagnosis, exact repair preparation, dependency/readiness validation, or disjoint authorized work, and re-check at a reasonable cadence until terminal when session time permits;
+10. exit only when no useful autonomous work remains, the session has insufficient budget for another complete safe action plus verification, or a genuine canonical external/human blocker applies. Optional-helper availability or completion is never by itself an exit condition.
 
-The coordinator must **not sleep or poll** merely to consume runtime. When insufficient wall-clock budget remains for a complete safe mutation plus verification, record the exact next action and exit cleanly.
+The coordinator must **not sleep or poll merely to consume runtime**. This does not permit abandoning ordinary active CI/review prematurely: use useful non-conflicting work between checks and consume terminal evidence promptly. When insufficient wall-clock budget remains for a complete safe mutation plus verification, record the exact next action and exit cleanly.
 
 A `PR Attention Evidence` artifact is advisory and exact-head-bound. It may eliminate repeated mechanical collection, but it may not establish semantic PASS, queue/readiness state, review/approval authority, or merge permission. If the artifact predates terminal required gates, the writer may refresh/recollect gate state once when terminal rather than repeatedly polling it.
 
@@ -185,7 +188,7 @@ The first Hermes release must preserve JarvisOS ownership of:
 
 Hermes remains an untrusted advisory orchestrator/runtime. It must not become a second authority process, receive provider credentials directly, bypass the JarvisOS model gateway, own unrestricted repository/database/data-root access, or invent page-specific parallel action stores.
 
-Suggested code changes remain candidate proposals until accepted development authority validates/applies them. The temporary GLM harness remains rollback until Hermes parity is evidenced for the work it replaces.
+Suggested code changes remain candidate proposals until accepted development authority validates/applies them. Any temporary external-model harness remains rollback until Hermes parity is evidenced for the work it replaces.
 
 Knowledge and Development do not wait for Hermes when their own lanes are independently ready and section 1A is no longer active.
 
