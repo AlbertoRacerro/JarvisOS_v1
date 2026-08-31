@@ -10,7 +10,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  classify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.scope.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Classify CI scope
+        id: scope
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          python3 scripts/classify_ci_scope.py --self-test
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > "$RUNNER_TEMP/changed-files.txt"
+          python3 scripts/classify_ci_scope.py < "$RUNNER_TEMP/changed-files.txt" >> "$GITHUB_OUTPUT"
+
   backend:
+    needs: classify
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -44,12 +71,6 @@ jobs:
           python scripts/check_pr_attention_integration.py --self-test
           python scripts/check_pr_attention_integration.py
 
-      - name: Install dependencies
-        working-directory: backend
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt -r requirements-dev.txt
-
       - name: Architecture enforcement gate
         run: |
           python scripts/check_architecture_enforcement.py --self-test
@@ -80,7 +101,19 @@ jobs:
               sys.exit(1)
           PY
 
+      - name: Docs-only fast path
+        if: needs.classify.outputs.docs_only == 'true'
+        run: echo "docs/**-only PR: deterministic governance gates passed; dependency install, Ruff and full Pytest are deferred to master push CI."
+
+      - name: Install dependencies
+        if: needs.classify.outputs.docs_only != 'true'
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
       - name: Ruff
+        if: needs.classify.outputs.docs_only != 'true'
         working-directory: backend
         run: >-
           python -m ruff check app tests ../scripts/check_spec_status.py
@@ -88,40 +121,58 @@ jobs:
           ../scripts/check_review_secret_boundary.py
           ../scripts/check_architecture_enforcement.py
           ../scripts/check_pr_attention_integration.py
+          ../scripts/classify_ci_scope.py
 
       - name: Pytest
+        if: needs.classify.outputs.docs_only != 'true'
         working-directory: backend
         run: python -m pytest -q
 
   frontend-build:
+    needs: classify
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Docs-only fast path
+        if: needs.classify.outputs.docs_only == 'true'
+        run: echo "docs/**-only PR: frontend source unchanged; full build remains required on master push CI."
+
       - uses: actions/checkout@v4
+        if: needs.classify.outputs.docs_only != 'true'
 
       - uses: actions/setup-node@v4
+        if: needs.classify.outputs.docs_only != 'true'
         with:
           node-version: "24"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend dependencies
+        if: needs.classify.outputs.docs_only != 'true'
         working-directory: frontend
         run: npm ci
 
       - name: Build frontend
+        if: needs.classify.outputs.docs_only != 'true'
         working-directory: frontend
         run: npm run build
 
   bluecad-geometry-canary:
+    needs: classify
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       JARVISOS_BLUECAD_CANARY_PROFILE: ubuntu24-py311
     steps:
+      - name: Docs-only fast path
+        if: needs.classify.outputs.docs_only == 'true'
+        run: echo "docs/**-only PR: BLUECAD source unchanged; full canary remains required on master push CI."
+
       - uses: actions/checkout@v4
+        if: needs.classify.outputs.docs_only != 'true'
 
       - uses: actions/setup-python@v5
+        if: needs.classify.outputs.docs_only != 'true'
         with:
           python-version: "3.11"
           cache: pip
@@ -130,12 +181,14 @@ jobs:
             backend/requirements-dev.txt
 
       - name: Install dependencies
+        if: needs.classify.outputs.docs_only != 'true'
         working-directory: backend
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Run canonical canary, bounded property suite, and capped-manifold kernel proof
+        if: needs.classify.outputs.docs_only != 'true'
         id: property
         working-directory: backend
         shell: bash
@@ -157,7 +210,7 @@ jobs:
           exit 0
 
       - name: Upload bounded canary diagnostics
-        if: always()
+        if: needs.classify.outputs.docs_only != 'true' && always()
         uses: actions/upload-artifact@v4
         with:
           name: bluecad-property-canary
@@ -168,7 +221,7 @@ jobs:
           retention-days: 14
 
       - name: Enforce property and time gates
-        if: always()
+        if: needs.classify.outputs.docs_only != 'true' && always()
         shell: bash
         run: |
           test "${{ steps.property.outputs.status }}" = "0"
