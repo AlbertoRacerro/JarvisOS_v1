@@ -42,7 +42,7 @@ This section supersedes earlier cadence, per-step authorization, and human-merge
 - After 112 is merged, the coordinating agent activates the profile automatically only for candidate lanes whose file, store, schema, migration, and authority boundaries are demonstrated to be sufficiently disjoint. No maintainer checkpoint is required merely to activate a proved-safe lane.
 - Scheduler identities are generic ChatGPT compute slots; logical Integration/Knowledge/Development/Coding responsibilities are dynamic locks, not permanent automation identities.
 - Only one ChatGPT coordinator/writer may own GitHub/shared-authority mutation at a time. The coordinator alone owns shared integration boundaries, merge sequencing, and registry reconciliation.
-- GLM candidate workers may run in parallel only on demonstrably disjoint exact-head tasks/lanes and own no GitHub, merge, queue, or shared-authority role.
+- Optional external/model helpers may run in parallel only on demonstrably disjoint exact-head tasks/lanes, remain proposal-only, and own no GitHub, merge, queue, or shared-authority role.
 - Parallelism never makes a `planned` row implementable, skips a hard dependency, weakens exact-head evidence, or broadens runtime/model/provider authority.
 - A conflict returns only the affected slices to serial execution. Independent lanes may continue if their own dependencies, readiness, and ownership evidence remain valid.
 - The profile does not automatically parallelize guarded self-update/PTY or other separately gated work.
@@ -100,15 +100,15 @@ Review, finding, correction, and re-review behavior belongs only to separate spe
 
 The current normative delivery split is:
 
-1. **ChatGPT — Tech Lead / Architect / Maintainer.** Resolve fresh repo/context, choose architecture and ownership, author definition/full spec/readiness, issue precise implementation packets, define scope/non-goals/acceptance criteria, review candidate diffs semantically, integrate, own `STATUS.md` and shared authority, and perform exact-head merge/reconciliation.
-2. **GLM-5.3-Flash — default bounded coding implementer and repair implementer for non-trivial READY code slices.** Give it exact target/base SHA, allowed paths, preloaded authority/context, required behavior, non-goals, and acceptance tests/checks. It writes candidate patches only in an ephemeral checkout. It owns no GitHub, merge, queue, architecture, policy, or shared-authority decision. Broad/general/adversarial review is not its default role.
-3. **ChatGPT acceptance and repair loop.** After GLM output, ChatGPT checks diff, scope, semantics, and tests. When materially fixable, prefer a narrow GLM `REPAIR ONLY` packet over discarding or reimplementing the patch. ChatGPT codes directly only for trivial/mechanical fixes, minimal delivery plumbing, or proven GLM failure where another delegation is not worthwhile.
-4. **Claude — normal independent terminal reviewer** when independent review is required or materially useful. Claude is a reviewer, not the default implementer.
+1. **ChatGPT — default direct implementer / Tech Lead / Architect / Maintainer.** Resolve fresh repo/context, choose architecture and ownership, author definition/full spec/readiness, implement and repair authorized READY work directly by default, define scope/non-goals/acceptance criteria, review exact diffs semantically, integrate, own `STATUS.md` and shared authority, and perform exact-head merge/reconciliation.
+2. **External/model workers — optional proposal-only helpers.** GLM, Codex, Claude, or another coding model may be used only when fresh authority permits a genuinely bounded/disjoint task and delegation has a concrete throughput or risk-reduction advantage. They own no GitHub write, merge, queue, architecture, policy, provider, credential, promotion, or shared-authority decision. Delegation must not duplicate the active implementation, replace direct progress that ChatGPT can safely make, or create a wait/stop condition.
+3. **ChatGPT acceptance and repair loop.** ChatGPT owns semantic acceptance and repairs directly by default. A useful already-terminal external candidate may be consumed and repaired rather than discarded, but no external candidate is required before ChatGPT proceeds.
+4. **Claude — independent terminal reviewer** when independent review is required by the accepted slice/policy or materially useful for risk reduction. Claude is a reviewer, not a required implementation hop.
 5. **Codex — scarce specialist/high-risk reserve** only where a concrete material advantage or unresolved high-risk need justifies it. Do not use Codex routinely for docs/planning/reconciliation, small PRs, ordinary UI polish, or duplicate review.
 
-Deterministic repository/runtime evidence and accepted authority always outrank model claims. Workflow green alone is not semantic PASS. For GLM, prefer a sufficiently budgeted completed bounded task over a cheap failed attempt while keeping path, exploration, tool, and authority scope narrow.
+Deterministic repository/runtime evidence and accepted authority always outrank model claims. Workflow green alone is not semantic PASS. External workers are optional acceleration/risk-reduction tools, never pipeline prerequisites.
 
-Detailed packet, review, repair, exact-head, and post-112 mechanics are canonical only in `docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md` and, after its activation gate, `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md`.
+Detailed implementation, review, repair, exact-head, and post-112 mechanics are canonical only in `docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md` and, after its activation gate, `docs/POST_112_PARALLEL_DELIVERY_PROFILE.md`.
 
 This role split never weakens the product execution spine, provider policy, or safe defaults.
 
