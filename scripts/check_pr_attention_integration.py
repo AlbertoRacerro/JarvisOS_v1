@@ -26,6 +26,7 @@ MUTATING_RUN = re.compile(
 )
 MUTATING_USES = re.compile(r"(?:merge|comment|label|review|status|dispatch|push)", re.IGNORECASE)
 UNSAFE_SUMMARY = re.compile(r'echo\s+"[^"\n]*`\$\{\{')
+BLOCK_SCALARS = {"|", ">", "|-", ">-", "|+", ">+"}
 
 
 def _unquote(value: str) -> str:
@@ -74,7 +75,13 @@ def _steps(lines: list[str]) -> list[dict[str, str]]:
             collecting_run = False
             pair = _key_value(line)
             if pair:
-                current[pair[0]] = pair[1]
+                key, value = pair
+                if key == "run" and value in BLOCK_SCALARS:
+                    collecting_run = True
+                    run_indent = indent
+                    current["run"] = ""
+                else:
+                    current[key] = value
             continue
         if current is None:
             continue
@@ -85,7 +92,7 @@ def _steps(lines: list[str]) -> list[dict[str, str]]:
         pair = _key_value(line)
         if pair and indent >= 8:
             key, value = pair
-            if key == "run" and value in {"|", ">", "|-", ">-"}:
+            if key == "run" and value in BLOCK_SCALARS:
                 collecting_run = True
                 run_indent = indent
                 current["run"] = ""
