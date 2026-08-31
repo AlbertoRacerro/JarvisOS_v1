@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 ParameterLifecycleState = Literal["active", "inactive", "superseded", "archived", "deleted"]
 RequirementBasisKind = Literal[
@@ -181,9 +181,21 @@ class RequirementUpdate(BaseModel):
     criterion_rule_version: str | None = None
 
 
-class RequirementProjectUpdate(RequirementUpdate):
+class RequirementProjectUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     workspace_id: str
     expected_updated_at: str
+    statement: str | None = Field(default=None, min_length=1)
+    rationale: str | None = None
+    notes: str | None = None
+    basis_kind: RequirementBasisKind | None = None
+    reconciliation_gate: RequirementGate | None = None
+    criterion_output_name: str | None = None
+    criterion_operator: CriterionOperator | None = None
+    criterion_expected_value: str | None = None
+    criterion_expected_unit: str | None = None
+    criterion_rule_version: str | None = None
 
 
 class RequirementRead(RequirementCreate):
