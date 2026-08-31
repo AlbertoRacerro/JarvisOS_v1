@@ -2,7 +2,7 @@
 
 Status: canonical operational process
 Effective date: 2026-08-05
-Amended: 2026-08-28 — final repository-development role split and post-112 mechanics
+Amended: 2026-08-31 — ChatGPT direct implementation default and non-blocking optional model helpers
 
 This document defines JarvisOS repository delivery, external model collaboration, exact-head evidence, finding closure, merge/reconciliation, and the controlled post-112 delivery exception. It governs repository-development actors only; it does not broaden JarvisOS runtime authority, provider policy, credentials, budgets, egress, schemas, or product behavior.
 
@@ -74,25 +74,25 @@ After exact `master` shows 112 merged, `docs/POST_112_PARALLEL_DELIVERY_PROFILE.
 
 ## 6. Normative repository-development role split
 
-This is the only current live external model pipeline for normal repository delivery:
+This is the only current live external-model collaboration policy for normal repository delivery:
 
-### ChatGPT — Tech Lead / Architect / Maintainer
+### ChatGPT — default direct implementer / Tech Lead / Architect / Maintainer
 
 ChatGPT owns:
 
 - fresh repo/context reading;
 - architecture and ownership decisions;
 - definition, full spec, and readiness;
-- precise implementation packets;
+- direct implementation and repair of authorized READY work by default;
 - acceptance criteria, scope, non-goals, invariants, and required checks;
-- semantic acceptance review of candidate diffs;
+- semantic review of exact diffs and candidate evidence;
 - integration, shared authority, `STATUS.md`, exact-head merge, and registry reconciliation.
 
-ChatGPT does not delegate governance/spec/queue authority to coding models.
+ChatGPT does not delegate governance/spec/queue authority to coding models and does not require an external candidate before implementing or repairing work it can safely complete itself.
 
-### GLM-5.3-Flash — default bounded coding implementer
+### External/model workers — optional proposal-only helpers
 
-For a non-trivial READY code slice, GLM-5.3-Flash is the default coding implementer and repair implementer. Its packet must include, as applicable:
+GLM, Codex, Claude, or another model worker may be used only when fresh authority permits a genuinely bounded/disjoint task and delegation has a concrete throughput or risk-reduction advantage. A helper packet must include, as applicable:
 
 - exact target SHA and exact base SHA;
 - allowed paths/boundaries;
@@ -102,19 +102,17 @@ For a non-trivial READY code slice, GLM-5.3-Flash is the default coding implemen
 - acceptance tests/checks;
 - any path, tool, exploration, or authority restrictions.
 
-GLM writes only candidate patches in an ephemeral checkout. It owns no GitHub write, merge, shared-authority, queue, spec, architecture, provider, credential, policy, or promotion decision. Broad/general/adversarial review is not its default role.
+External/model workers produce proposal-only candidate evidence or patches. They own no GitHub write, merge, shared-authority, queue, spec, architecture, provider, credential, policy, or promotion decision. Delegation must not duplicate the active implementation, replace direct progress that ChatGPT can safely make, or become a session wait/stop condition.
 
-Completion-first applies: prefer a sufficiently budgeted bounded task that completes over a cheaper attempt that predictably fails, while keeping exploration and authority narrow.
+### ChatGPT acceptance and repair
 
-### ChatGPT acceptance -> GLM repair
+ChatGPT reviews exact diff, scope, semantics, invariants, and test evidence. A green worker workflow alone is not semantic PASS.
 
-After GLM returns a candidate, ChatGPT reviews exact diff, scope, semantics, invariants, and test evidence. A green worker workflow alone is not semantic PASS.
-
-If the patch is materially fixable, ChatGPT should normally issue a narrow GLM `REPAIR ONLY` packet with numbered findings rather than discard/reimplement the patch. ChatGPT codes directly only for trivial/mechanical fixes, minimal delivery plumbing, or proven GLM failure where another delegation is not worthwhile.
+ChatGPT repairs directly by default. If a useful external candidate is already terminal, ChatGPT may consume and minimally repair it rather than discard it, but no external candidate or repair hop is required before direct progress continues.
 
 ### Claude — independent terminal reviewer
 
-Claude is the normal independent terminal reviewer when independent review is required by the accepted slice/policy or materially useful for risk reduction. Claude is reviewer, not default implementer.
+Claude is an independent terminal reviewer when independent review is required by the accepted slice/policy or materially useful for risk reduction. Claude is reviewer, not a required implementation hop.
 
 ### Codex — scarce specialist/high-risk reserve
 
@@ -128,9 +126,9 @@ Deterministic repository/runtime evidence and accepted authority outrank every m
 
 After 112 merges, scheduler identities are generic ChatGPT compute slots. Integration/Knowledge/Development/Coding are logical responsibilities acquired dynamically under the post-112 profile, not permanent automation identities.
 
-Only one ChatGPT coordinator/writer may own GitHub/shared-authority mutation at a time. GLM candidate workers may execute concurrently only on demonstrably disjoint exact-head tasks/lanes and remain proposal-only. Shared boundaries remain Integration-owned.
+Only one ChatGPT coordinator/writer may own GitHub/shared-authority mutation at a time. Optional external/model helpers may execute concurrently only on demonstrably disjoint exact-head tasks/lanes and remain proposal-only. Shared boundaries remain Integration-owned.
 
-The coordinator consumes terminal evidence, advances immediately actionable work, launches bounded candidate work when useful, and exits when only external waits remain. It must not sleep or poll merely to consume runtime.
+The coordinator consumes terminal evidence, advances immediately actionable work directly, and may launch bounded optional helper work when useful. Active non-terminal CI/checks/reviews are normal in-session waits: the coordinator uses that interval for useful non-conflicting work and re-checks them at a reasonable cadence until terminal when the session remains active. External/model-worker availability or completion never blocks direct work that can otherwise proceed. The coordinator does not sleep or poll merely to consume runtime, but it also does not treat an ordinary active CI/review wait as an automatic session exit while useful in-session progress or timely terminal consumption remains possible.
 
 ## 8. Spec 079 boundary
 
