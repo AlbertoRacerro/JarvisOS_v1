@@ -10,19 +10,56 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  backend:
+  classify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 3
+    outputs:
+      docs_only: ${{ steps.scope.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Classify deterministic change scope
+        id: scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          docs_only=false
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            base='${{ github.event.pull_request.base.sha }}'
+            head='${{ github.event.pull_request.head.sha }}'
+          else
+            base='${{ github.event.before }}'
+            head='${{ github.sha }}'
+          fi
+
+          if [ -n "$base" ] && ! printf '%s' "$base" | grep -Eq '^0+$'; then
+            mapfile -t changed < <(git diff --name-only "$base" "$head")
+            if [ "${#changed[@]}" -gt 0 ]; then
+              docs_only=true
+              for path in "${changed[@]}"; do
+                case "$path" in
+                  *.md) ;;
+                  *) docs_only=false; break ;;
+                esac
+              done
+            fi
+          fi
+
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+          echo "docs_only=$docs_only"
+
+  governance:
+    needs: classify
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
-          cache-dependency-path: |
-            backend/requirements.txt
-            backend/requirements-dev.txt
 
       - name: Spec status registry gate
         run: |
@@ -43,6 +80,25 @@ jobs:
         run: |
           python scripts/check_pr_attention_integration.py --self-test
           python scripts/check_pr_attention_integration.py
+
+      - name: Report fast-path decision
+        run: echo "docs_only=${{ needs.classify.outputs.docs_only }}"
+
+  backend:
+    needs: [classify, governance]
+    if: needs.classify.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
 
       - name: Install dependencies
         working-directory: backend
@@ -94,6 +150,8 @@ jobs:
         run: python -m pytest -q
 
   frontend-build:
+    needs: [classify, governance]
+    if: needs.classify.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -114,6 +172,8 @@ jobs:
         run: npm run build
 
   bluecad-geometry-canary:
+    needs: [classify, governance]
+    if: needs.classify.outputs.docs_only != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
