@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +26,38 @@ FIXTURE_PATHS = (
 )
 EXPECTED_SCHEMA_VERSION = "bluecad_property_geometry_expected_v0_1"
 DIAGNOSTIC_ENV = "JARVISOS_BLUECAD_CANARY_ACTUAL"
+HASHSEED_RUNNER_MODULE = "tests.bluecad.hashseed_determinism_runner"
+HASHSEED_META_FIXTURE = "chain_tube_bend_joint.json"
+
+
+def _run_hashseed_parent(seed: str) -> dict[str, Any]:
+    env = dict(os.environ)
+    env["PYTHONHASHSEED"] = seed
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            HASHSEED_RUNNER_MODULE,
+            "parent",
+            HASHSEED_META_FIXTURE,
+        ],
+        cwd=Path(__file__).parents[2],
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    payload = json.loads(completed.stdout)
+    assert payload["parent_hash_seed"] == seed
+    assert payload["child"]["hash_seed"] == "0"
+    return payload["child"]
+
+
+def test_cross_process_manifest_determinism_pins_child_hash_seed() -> None:
+    first = _run_hashseed_parent("1")
+    second = _run_hashseed_parent("777")
+    assert first == second
 
 
 def test_canonical_full_manifest_digest_canary() -> None:
