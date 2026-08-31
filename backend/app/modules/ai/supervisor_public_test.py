@@ -1,34 +1,29 @@
 """Backend-only Supervisor public-test slice.
 
 This module backs the existing /ai/supervisor/public-test route and is not the
-full Supervisor AI product, chat, memory, retrieval, or routing layer.
+full Supervisor AI product, chat, memory, retrieval, or routing layer. External
+dispatch is owned by run_ai_task.
 """
 
-from dataclasses import dataclass
 from uuid import uuid4
 
 from app.core.database import open_sqlite_connection
-from app.modules.ai.contracts import (
-    AIPolicyMode,
-    AIPrivacyClass,
-    AIRequest,
-    AIResponse,
-    AITaskType,
-    AIUsage,
-    AIUsageSource,
-)
+from app.modules.ai.contracts import AIPolicyMode, AITaskType, AIUsage, AIUsageSource
+from app.modules.ai.execution import AiTaskOutcome, run_ai_task
 from app.modules.ai.models import AISettingsRead, SupervisorPublicTestRequest, SupervisorPublicTestResponse
 from app.modules.ai.privacy import PrivacyPolicyEngine
-from app.modules.ai.providers.deepseek_adapter import DeepSeekProviderAdapter
-from app.modules.ai.providers.scaleway_adapter import ScalewayProviderAdapter
-from app.modules.ai.settings import get_ai_settings, record_scaleway_token_usage
-from app.modules.ai.token_guard import estimate_tokens, evaluate_token_guard
+from app.modules.ai.settings import get_ai_settings
+from app.modules.ai.token_guard import estimate_tokens
 from app.modules.events.service import log_event, utc_now
 
 SUPERVISOR_PUBLIC_TEST_MODE = "supervisor_public_test"
 SUPERVISOR_DEFAULT_OUTPUT_TOKENS = 180
 SUPERVISOR_MAX_OUTPUT_TOKENS = 240
 SUPERVISOR_MAX_PROMPT_LENGTH = 2000
+SUPERVISOR_ROUTE_BY_PROVIDER_MODE = {
+    "deepseek": "external:deepseek",
+    "scaleway": "external:scaleway",
+}
 SUPERVISOR_ALLOWED_TASK_TYPES = {
     AITaskType.smoke_console_test,
     AITaskType.assumption_review,
@@ -40,15 +35,8 @@ SUPERVISOR_ALLOWED_TASK_TYPES = {
 SUPERVISOR_LIMITATIONS = [
     "Narrow public/internal technical test endpoint only.",
     "No chat history, memory, file upload, source grounding, runner execution, or BlueRev proprietary workflow.",
-    "Provider choice is temporary and internal; DeepSeek is preferred when configured, Scaleway is fallback only when explicitly configured.",
+    "Operator provider choice maps only to canonical provider-specific execution routes.",
 ]
-
-
-@dataclass(frozen=True)
-class ProviderSelection:
-    provider_id: str
-    model_id: str
-    adapter: object
 
 
 def run_supervisor_public_test(request: SupervisorPublicTestRequest) -> SupervisorPublicTestResponse:
@@ -127,15 +115,15 @@ def run_supervisor_public_test(request: SupervisorPublicTestRequest) -> Supervis
             estimated_output_tokens=estimated_output_tokens,
         )
 
-    selection, blocked_reason = _select_provider(settings, prompt=prompt, estimated_output_tokens=estimated_output_tokens)
-    if selection is None:
+    route_class, route_block = _provider_route(settings)
+    if route_class is None:
         return _blocked_response(
             settings=settings,
             request=request,
             task_type=task_type,
             request_id=request_id,
             correlation_id=correlation_id,
-            blocked_reason=blocked_reason or "provider_unavailable",
+            blocked_reason=route_block or "provider_unavailable",
             privacy_class=policy_decision.privacy_class,
             event_type="AISupervisorPublicTestBlocked",
             estimated_input_tokens=estimated_input_tokens,
@@ -146,8 +134,8 @@ def run_supervisor_public_test(request: SupervisorPublicTestRequest) -> Supervis
         "AISupervisorPublicTestProviderSelected",
         settings=settings,
         workspace_id=request.workspace_id,
-        provider_id=selection.provider_id,
-        model_id=selection.model_id,
+        provider_id=settings.provider_mode,
+        model_id=None,
         task_type=task_type,
         privacy_class=policy_decision.privacy_class,
         blocked_reason=None,
@@ -159,91 +147,23 @@ def run_supervisor_public_test(request: SupervisorPublicTestRequest) -> Supervis
         correlation_id=correlation_id,
     )
 
-    ai_response = selection.adapter.complete(
-        AIRequest(
-            task_type=AITaskType.smoke_console_test,
-            privacy_class=AIPrivacyClass(policy_decision.privacy_class),
-            prompt=_supervisor_prompt(task_type, prompt),
-            workspace_id=request.workspace_id,
-            model_preference=selection.model_id,
-            max_output_tokens=estimated_output_tokens,
-            metadata={
-                "mode": SUPERVISOR_PUBLIC_TEST_MODE,
-                "supervisor_task_type": task_type.value,
-            },
-            request_id=request_id,
-            correlation_id=correlation_id,
-        )
-    )
-    if ai_response.error:
-        event_id = _log_supervisor_event(
-            "AISupervisorPublicTestProviderFailed",
-            settings=settings,
-            workspace_id=request.workspace_id,
-            provider_id=ai_response.provider_id,
-            model_id=ai_response.model_id,
-            task_type=task_type,
-            privacy_class=policy_decision.privacy_class,
-            blocked_reason=ai_response.blocked_reason or "provider_call_failed",
-            external_call_attempted=bool(ai_response.raw_provider_metadata.get("external_call_attempted", True)),
-            external_call_succeeded=False,
-            usage=ai_response.usage,
-            prompt_length=len(prompt),
-            request_id=request_id,
-            correlation_id=correlation_id,
-            error_code=ai_response.error.code.value,
-        )
-        return SupervisorPublicTestResponse(
-            answer=None,
-            task_type=task_type,
-            policy_mode=settings.policy_mode,
-            provider_id=ai_response.provider_id,
-            model_id=ai_response.model_id,
-            usage=ai_response.usage,
-            safety_status="blocked",
-            blocked_reason=ai_response.blocked_reason or "provider_call_failed",
-            event_id=event_id,
-            request_id=request_id,
-            correlation_id=correlation_id,
-            external_call_attempted=bool(ai_response.raw_provider_metadata.get("external_call_attempted", True)),
-            external_call_succeeded=False,
-            limitations=SUPERVISOR_LIMITATIONS,
-        )
-
-    if ai_response.provider_id == "scaleway":
-        _record_scaleway_supervisor_usage(settings, ai_response)
-
-    event_id = _log_supervisor_event(
-        "AISupervisorPublicTestCompleted",
-        settings=settings,
+    outcome = run_ai_task(
+        user_prompt=_supervisor_prompt(task_type, prompt),
+        task_kind="test",
+        route_class=route_class,
+        max_output_tokens=estimated_output_tokens,
         workspace_id=request.workspace_id,
-        provider_id=ai_response.provider_id,
-        model_id=ai_response.model_id,
-        task_type=task_type,
-        privacy_class=policy_decision.privacy_class,
-        blocked_reason=None,
-        external_call_attempted=True,
-        external_call_succeeded=True,
-        usage=ai_response.usage,
-        prompt_length=len(prompt),
-        request_id=request_id,
-        correlation_id=correlation_id,
     )
-    return SupervisorPublicTestResponse(
-        answer=ai_response.text,
+    return _response_from_outcome(
+        outcome,
+        settings=settings,
+        request=request,
         task_type=task_type,
-        policy_mode=settings.policy_mode,
-        provider_id=ai_response.provider_id,
-        model_id=ai_response.model_id,
-        usage=ai_response.usage,
-        safety_status="allowed",
-        blocked_reason=None,
-        event_id=event_id,
         request_id=request_id,
         correlation_id=correlation_id,
-        external_call_attempted=True,
-        external_call_succeeded=True,
-        limitations=SUPERVISOR_LIMITATIONS,
+        privacy_class=policy_decision.privacy_class,
+        estimated_input_tokens=estimated_input_tokens,
+        estimated_output_tokens=estimated_output_tokens,
     )
 
 
@@ -269,59 +189,130 @@ def _preflight_block(
     return None
 
 
-def _select_provider(
-    settings: AISettingsRead,
-    *,
-    prompt: str,
-    estimated_output_tokens: int,
-) -> tuple[ProviderSelection | None, str | None]:
-    deepseek = DeepSeekProviderAdapter()
-    deepseek_status = deepseek.provider.status()
-    budget_reason = _budget_gate(settings)
-    if settings.provider_mode == "deepseek":
-        if budget_reason:
-            return None, budget_reason
-        if not deepseek_status.configured:
-            return None, "deepseek_api_key_missing"
-        return ProviderSelection("deepseek", deepseek_status.model, deepseek), None
-
+def _provider_route(settings: AISettingsRead) -> tuple[str | None, str | None]:
+    route_class = SUPERVISOR_ROUTE_BY_PROVIDER_MODE.get(settings.provider_mode)
+    if route_class is None:
+        return None, "provider_unavailable"
     if settings.provider_mode == "scaleway":
-        scaleway = ScalewayProviderAdapter()
-        scaleway_status = scaleway.provider.status()
-        scaleway_reason = _scaleway_gate(settings, scaleway_configured=scaleway_status.configured)
-        if scaleway_reason:
-            return None, scaleway_reason
-        token_decision = evaluate_token_guard(settings, input_text=prompt, estimated_output_tokens=estimated_output_tokens)
-        if not token_decision.allowed:
-            return None, token_decision.reason or "scaleway_monthly_token_cap_exceeded"
-        return ProviderSelection("scaleway", scaleway_status.model, scaleway), None
-
-    return None, "provider_unavailable"
+        if not settings.scaleway_enabled:
+            return None, "scaleway_disabled"
+        if not settings.scaleway_smoke_test_enabled:
+            return None, "scaleway_smoke_test_disabled"
+        if not settings.scaleway_live_smoke_test_enabled:
+            return None, "scaleway_live_smoke_test_disabled"
+    return route_class, None
 
 
-def _budget_gate(settings: AISettingsRead) -> str | None:
-    if not settings.paid_ai_enabled:
-        return "paid_ai_disabled"
-    if settings.monthly_api_budget_usd <= 0:
-        return "monthly_budget_zero"
-    if settings.api_spend_month_to_date_usd >= settings.monthly_api_budget_usd:
-        return "monthly_budget_exhausted"
-    return None
+def _response_from_outcome(
+    outcome: AiTaskOutcome,
+    *,
+    settings: AISettingsRead,
+    request: SupervisorPublicTestRequest,
+    task_type: AITaskType,
+    request_id: str,
+    correlation_id: str,
+    privacy_class: str,
+    estimated_input_tokens: int,
+    estimated_output_tokens: int,
+) -> SupervisorPublicTestResponse:
+    ai_response = outcome.response
+    provider_id = ai_response.provider_id if ai_response is not None else outcome.decision.provider_id
+    model_id = ai_response.model_id if ai_response is not None else outcome.decision.model_id
+    usage = (
+        ai_response.usage
+        if ai_response is not None
+        else AIUsage(
+            provider_id=provider_id or "none",
+            model_id=model_id or "none",
+            input_tokens=estimated_input_tokens,
+            output_tokens=estimated_output_tokens,
+            usage_source=AIUsageSource.estimated,
+        )
+    )
+    attempted = bool(
+        ai_response is not None
+        and ai_response.raw_provider_metadata.get("external_call_attempted", True)
+    )
+
+    if outcome.status != "success" or ai_response is None or ai_response.error is not None:
+        blocked_reason = _outcome_blocked_reason(outcome)
+        event_id = _log_supervisor_event(
+            "AISupervisorPublicTestProviderFailed",
+            settings=settings,
+            workspace_id=request.workspace_id,
+            provider_id=provider_id,
+            model_id=model_id,
+            task_type=task_type,
+            privacy_class=privacy_class,
+            blocked_reason=blocked_reason,
+            external_call_attempted=attempted,
+            external_call_succeeded=False,
+            usage=usage,
+            prompt_length=len(request.prompt.strip()),
+            request_id=request_id,
+            correlation_id=correlation_id,
+            error_code=(ai_response.error.code.value if ai_response is not None and ai_response.error else outcome.error_type),
+        )
+        return SupervisorPublicTestResponse(
+            answer=None,
+            task_type=task_type,
+            policy_mode=settings.policy_mode,
+            provider_id=provider_id,
+            model_id=model_id,
+            usage=usage,
+            safety_status="blocked",
+            blocked_reason=blocked_reason,
+            event_id=event_id,
+            request_id=request_id,
+            correlation_id=correlation_id,
+            external_call_attempted=attempted,
+            external_call_succeeded=False,
+            limitations=SUPERVISOR_LIMITATIONS,
+        )
+
+    event_id = _log_supervisor_event(
+        "AISupervisorPublicTestCompleted",
+        settings=settings,
+        workspace_id=request.workspace_id,
+        provider_id=provider_id,
+        model_id=model_id,
+        task_type=task_type,
+        privacy_class=privacy_class,
+        blocked_reason=None,
+        external_call_attempted=attempted,
+        external_call_succeeded=True,
+        usage=usage,
+        prompt_length=len(request.prompt.strip()),
+        request_id=request_id,
+        correlation_id=correlation_id,
+    )
+    return SupervisorPublicTestResponse(
+        answer=ai_response.text,
+        task_type=task_type,
+        policy_mode=settings.policy_mode,
+        provider_id=provider_id,
+        model_id=model_id,
+        usage=usage,
+        safety_status="allowed",
+        blocked_reason=None,
+        event_id=event_id,
+        request_id=request_id,
+        correlation_id=correlation_id,
+        external_call_attempted=attempted,
+        external_call_succeeded=True,
+        limitations=SUPERVISOR_LIMITATIONS,
+    )
 
 
-def _scaleway_gate(settings: AISettingsRead, *, scaleway_configured: bool) -> str | None:
-    budget_reason = _budget_gate(settings)
-    if budget_reason:
-        return budget_reason
-    if not settings.scaleway_enabled:
-        return "scaleway_disabled"
-    if not settings.scaleway_smoke_test_enabled:
-        return "scaleway_smoke_test_disabled"
-    if not settings.scaleway_live_smoke_test_enabled:
-        return "scaleway_live_smoke_test_disabled"
-    if not scaleway_configured:
-        return "scaleway_api_key_missing"
-    return None
+def _outcome_blocked_reason(outcome: AiTaskOutcome) -> str:
+    if outcome.response is not None and outcome.response.blocked_reason:
+        return outcome.response.blocked_reason
+    return (
+        outcome.egress_reason_code
+        or outcome.decision.blocked_reason
+        or outcome.error_type
+        or f"canonical_execution_{outcome.status}"
+    )
 
 
 def _supervisor_prompt(task_type: AITaskType, prompt: str) -> str:
@@ -339,15 +330,6 @@ def _looks_like_file_path_request(prompt: str) -> bool:
     file_markers = ("c:\\", "/", "\\", ".csv", ".xlsx", ".pdf", ".docx", ".py")
     file_verbs = ("open ", "read ", "load ", "parse ", "upload ", "attach ")
     return any(marker in lowered for marker in file_markers) and any(verb in lowered for verb in file_verbs)
-
-
-def _record_scaleway_supervisor_usage(settings: AISettingsRead, response: AIResponse) -> None:
-    input_tokens = _reported_token(response.raw_provider_metadata.get("reported_input_tokens"))
-    output_tokens = _reported_token(response.raw_provider_metadata.get("reported_output_tokens"))
-    record_scaleway_token_usage(
-        input_tokens=input_tokens if input_tokens is not None else response.usage.input_tokens,
-        output_tokens=output_tokens if output_tokens is not None else response.usage.output_tokens,
-    )
 
 
 def _blocked_response(
@@ -452,12 +434,3 @@ def _log_supervisor_event(
         )
         connection.commit()
     return event_id
-
-
-def _reported_token(value: object) -> int | None:
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
