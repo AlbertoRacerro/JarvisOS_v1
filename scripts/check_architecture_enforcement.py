@@ -120,17 +120,23 @@ def _call_name(node: ast.Call, aliases: dict[str, str]) -> str:
     return dotted(node.func)
 
 
-def _enclosing_symbol(tree: ast.AST, target: ast.AST) -> str:
+def _function_ranges(tree: ast.AST) -> list[tuple[int, int, str]]:
+    ranges: list[tuple[int, int, str]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            ranges.append((node.lineno, getattr(node, "end_lineno", node.lineno), node.name))
+    return ranges
+
+
+def _enclosing_symbol(function_ranges: Iterable[tuple[int, int, str]], target: ast.AST) -> str:
     best = "<module>"
     best_span = None
     line = getattr(target, "lineno", 0)
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            end = getattr(node, "end_lineno", node.lineno)
-            if node.lineno <= line <= end:
-                span = end - node.lineno
-                if best_span is None or span < best_span:
-                    best, best_span = node.name, span
+    for start, end, name in function_ranges:
+        if start <= line <= end:
+            span = end - start
+            if best_span is None or span < best_span:
+                best, best_span = name, span
     return best
 
 
@@ -158,6 +164,7 @@ def _scan_python(path: Path, root: Path, exceptions: set[tuple[str, str]]) -> li
     except (OSError, SyntaxError) as exc:
         return [Finding("AE001", rel, "<parse>", f"covered Python source did not parse: {exc}")]
     aliases = _aliases(tree)
+    function_ranges = _function_ranges(tree)
     provider_import = any(
         target.startswith("app.modules.ai.providers")
         or target.startswith("backend.app.modules.ai.providers")
@@ -168,7 +175,7 @@ def _scan_python(path: Path, root: Path, exceptions: set[tuple[str, str]]) -> li
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
-        symbol = _enclosing_symbol(tree, node)
+        symbol = _enclosing_symbol(function_ranges, node)
         exact = f"{rel}::{symbol}"
         call = _call_name(node, aliases)
         method = call.rsplit(".", 1)[-1]
@@ -250,6 +257,33 @@ def scan(root: Path, config_path: Path) -> list[Finding]:
 
 
 def _self_test() -> int:
+    symbol_tree = ast.parse(
+        "outside()\n"
+        "def outer():\n"
+        "    first()\n"
+        "    def inner():\n"
+        "        second()\n"
+        "    third()\n"
+    )
+    function_ranges = _function_ranges(symbol_tree)
+    actual_symbols = {
+        node.func.id: _enclosing_symbol(function_ranges, node)
+        for node in ast.walk(symbol_tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    expected_symbols = {
+        "outside": "<module>",
+        "first": "outer",
+        "second": "inner",
+        "third": "outer",
+    }
+    if actual_symbols != expected_symbols:
+        print(
+            f"self-test enclosing-symbol mismatch: expected {expected_symbols}, got {actual_symbols}",
+            file=sys.stderr,
+        )
+        return 1
+
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         (root / "backend/app/x").mkdir(parents=True)
