@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Classify whether a pull-request diff is safe for the docs-only CI fast path."""
+"""Classify a pull-request diff into conservative CI execution domains."""
 
 from __future__ import annotations
 
@@ -7,23 +7,93 @@ import argparse
 import sys
 
 
-def is_docs_only(paths: list[str]) -> bool:
-    # Paths are evidence from git, not user prose: preserve every character.
-    # Lossy whitespace normalization could turn a non-doc path such as
-    # " docs/a.md" into an apparent docs/ path.
-    normalized = [path for path in paths if path]
-    return bool(normalized) and all(path.startswith("docs/") for path in normalized)
+def classify_scope(paths: list[str]) -> dict[str, bool]:
+    # Paths are Git evidence, not user prose: preserve every character.
+    # Lossy normalization could turn a non-doc path such as " docs/a.md"
+    # into an apparent docs/ path and incorrectly grant a fast path.
+    changed = [path for path in paths if path]
+
+    # Empty/unknown input fails closed to the complete suite.
+    if not changed:
+        return {
+            "docs_only": False,
+            "run_backend": True,
+            "run_frontend": True,
+            "run_bluecad": True,
+            "full_required": True,
+        }
+
+    if all(path.startswith("docs/") for path in changed):
+        return {
+            "docs_only": True,
+            "run_backend": False,
+            "run_frontend": False,
+            "run_bluecad": False,
+            "full_required": False,
+        }
+
+    # Only docs/backend/frontend are independently classifiable. Root files,
+    # workflows, scripts, dependency/control files outside those trees, or any
+    # unfamiliar path force the complete suite. Rename collapsing is disabled
+    # by the workflow so moves across these boundaries are observed fail-closed.
+    known = all(
+        path.startswith(("docs/", "backend/", "frontend/")) for path in changed
+    )
+    if not known:
+        return {
+            "docs_only": False,
+            "run_backend": True,
+            "run_frontend": True,
+            "run_bluecad": True,
+            "full_required": True,
+        }
+
+    run_backend = any(path.startswith("backend/") for path in changed)
+    run_frontend = any(path.startswith("frontend/") for path in changed)
+
+    return {
+        "docs_only": False,
+        "run_backend": run_backend,
+        "run_frontend": run_frontend,
+        # Backend is treated conservatively as a possible BLUECAD dependency.
+        # This avoids fragile source->test impact inference while still allowing
+        # frontend-only work to skip the CAD/runtime lane entirely.
+        "run_bluecad": run_backend,
+        "full_required": False,
+    }
 
 
 def self_test() -> None:
-    assert is_docs_only(["docs/specs/STATUS.md"])
-    assert is_docs_only(["docs/a.md", "docs/specs/b.md"])
-    assert not is_docs_only([])
-    assert not is_docs_only(["README.md"])
-    assert not is_docs_only(["docs/a.md", "scripts/check_spec_status.py"])
-    assert not is_docs_only([".github/workflows/ci.yml"])
-    assert not is_docs_only([" docs/a.md"])
-    assert not is_docs_only(["\tdocs/a.md"])
+    assert classify_scope(["docs/specs/STATUS.md"]) == {
+        "docs_only": True,
+        "run_backend": False,
+        "run_frontend": False,
+        "run_bluecad": False,
+        "full_required": False,
+    }
+    assert classify_scope(["frontend/src/App.tsx"])["run_frontend"]
+    assert not classify_scope(["frontend/src/App.tsx"])["run_backend"]
+    assert classify_scope(["backend/app/main.py"])["run_backend"]
+    assert classify_scope(["backend/app/main.py"])["run_bluecad"]
+    mixed = classify_scope(["docs/a.md", "backend/app/main.py", "frontend/src/App.tsx"])
+    assert mixed["run_backend"] and mixed["run_frontend"] and mixed["run_bluecad"]
+    assert not mixed["full_required"]
+
+    for paths in (
+        [],
+        ["README.md"],
+        [".github/workflows/ci.yml"],
+        ["scripts/check_spec_status.py"],
+        [" docs/a.md"],
+        ["\tdocs/a.md"],
+        ["docs/a.md", "scripts/check_spec_status.py"],
+    ):
+        scope = classify_scope(paths)
+        assert scope["full_required"]
+        assert scope["run_backend"]
+        assert scope["run_frontend"]
+        assert scope["run_bluecad"]
+
     print("ci-scope: self-test OK")
 
 
@@ -35,8 +105,9 @@ def main() -> int:
         self_test()
         return 0
 
-    paths = sys.stdin.read().splitlines()
-    print(f"docs_only={'true' if is_docs_only(paths) else 'false'}")
+    scope = classify_scope(sys.stdin.read().splitlines())
+    for key in ("docs_only", "run_backend", "run_frontend", "run_bluecad", "full_required"):
+        print(f"{key}={'true' if scope[key] else 'false'}")
     return 0
 
 
