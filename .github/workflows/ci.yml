@@ -208,7 +208,7 @@ jobs:
           PY
             )
             test "${#test_files[@]}" -gt 0
-            python -m pytest -q "${test_files[@]}"
+            python -m pytest -q --durations=40 "${test_files[@]}"
             exit 0
           fi
 
