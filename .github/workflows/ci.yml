@@ -103,7 +103,8 @@ jobs:
 
       - name: Docs-only fast path
         if: needs.classify.outputs.docs_only == 'true'
-        run: echo "docs/**-only PR: deterministic governance gates passed; dependency install, Ruff and full Pytest are deferred to master push CI."
+        run: |
+          echo "docs/**-only PR: deterministic governance gates passed; dependency install, Ruff and full Pytest are deferred to master push CI."
 
       - name: Install dependencies
         if: needs.classify.outputs.docs_only != 'true'
@@ -135,7 +136,8 @@ jobs:
     steps:
       - name: Docs-only fast path
         if: needs.classify.outputs.docs_only == 'true'
-        run: echo "docs/**-only PR: frontend source unchanged; full build remains required on master push CI."
+        run: |
+          echo "docs/**-only PR: frontend source unchanged; full build remains required on master push CI."
 
       - uses: actions/checkout@v4
         if: needs.classify.outputs.docs_only != 'true'
@@ -166,7 +168,8 @@ jobs:
     steps:
       - name: Docs-only fast path
         if: needs.classify.outputs.docs_only == 'true'
-        run: echo "docs/**-only PR: BLUECAD source unchanged; full canary remains required on master push CI."
+        run: |
+          echo "docs/**-only PR: BLUECAD source unchanged; full canary remains required on master push CI."
 
       - uses: actions/checkout@v4
         if: needs.classify.outputs.docs_only != 'true'
