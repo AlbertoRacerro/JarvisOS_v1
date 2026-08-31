@@ -114,7 +114,8 @@ jobs:
 
       - name: Docs-only fast path
         if: needs.classify.outputs.docs_only == 'true'
-        run: echo "docs/**-only PR: governance gates passed; executable suites remain unchanged and full master-push CI is preserved."
+        run: |
+          echo "docs/**-only PR: governance gates passed; executable suites remain unchanged and full master-push CI is preserved."
 
       - name: Install backend dependencies
         if: needs.classify.outputs.run_backend == 'true'
