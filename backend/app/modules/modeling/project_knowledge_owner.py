@@ -3,6 +3,10 @@ from __future__ import annotations
 import sqlite3
 from uuid import uuid4
 
+from pydantic import ValidationError
+
+from app.core.database import open_sqlite_connection
+from app.core.repository import row_to_model
 from app.modules.events.service import log_event, utc_now
 from app.modules.modeling.models import (
     AssumptionProjectUpdate,
@@ -11,6 +15,7 @@ from app.modules.modeling.models import (
     ModelSpecProjectUpdate,
     RequirementCreate,
     RequirementProjectUpdate,
+    RequirementRead,
 )
 
 
@@ -130,7 +135,17 @@ def update_requirement_in_transaction(
     requirement_id: str,
     payload: RequirementProjectUpdate,
 ) -> sqlite3.Row:
+    current = _row(connection, "requirements", payload.workspace_id, requirement_id)
     updates = payload.model_dump(exclude_unset=True, exclude={"workspace_id", "expected_updated_at"})
+    candidate = {field: current[field] for field in RequirementCreate.model_fields}
+    candidate.update(updates)
+    try:
+        RequirementCreate.model_validate(candidate)
+    except ValidationError as exc:
+        raise ProjectKnowledgeOwnerError(
+            "requirement_invalid",
+            "Requirement update would violate canonical invariants.",
+        ) from exc
     return _cas_update(
         connection,
         table="requirements",
@@ -141,6 +156,16 @@ def update_requirement_in_transaction(
         expected_updated_at=payload.expected_updated_at,
         updates=updates,
     )
+
+
+def update_requirement(
+    requirement_id: str,
+    payload: RequirementProjectUpdate,
+) -> RequirementRead:
+    with open_sqlite_connection() as connection:
+        row = update_requirement_in_transaction(connection, requirement_id, payload)
+        connection.commit()
+    return row_to_model(row, RequirementRead)
 
 
 def retire_requirement_in_transaction(
