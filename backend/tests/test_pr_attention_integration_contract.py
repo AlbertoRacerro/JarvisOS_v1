@@ -22,10 +22,30 @@ def test_negative_contract_fixtures_fail_closed() -> None:
     cases = [
         source.replace(checker.PIN, "AlbertoRacerro/jarvis-pr-attention/cycle@main"),
         source.replace("contents: read", "contents: write"),
+        source.replace("contents: read", 'contents: "write"'),
+        source.replace("checks: read", "checks: 'admin'"),
         source.replace("pull_request:", "pull_request_target:", 1),
-        source.replace(checker.EXPECTED_HEAD, "expected-head: arbitrary"),
+        source.replace(checker.EXPECTED_HEAD_VALUE, "arbitrary", 1),
         source + "\n      - run: gh pr merge 999\n",
-        source.replace("token: ${{ github.token }}", "accepted-head: deadbeef"),
+        source.replace("token: ${{ github.token }}", "accepted-head: deadbeef\n          token: ${{ github.token }}"),
+        source.replace(
+            "printf 'Observed head: %s\\n' '${{ steps.attention.outputs.head-sha }}'",
+            'echo "Observed head: `${{ steps.attention.outputs.head-sha }}`"',
+        ),
     ]
     for candidate in cases:
         assert checker.validate_text(candidate)
+
+
+def test_evidence_validation_is_fail_closed() -> None:
+    source = WORKFLOW.read_text(encoding="utf-8")
+    required_fragments = (
+        'test -n "$MANIFEST"',
+        'test -s "$MANIFEST"',
+        'json.load(handle)',
+        'manifest.get("head_sha") != expected',
+        'manifest.get("merge_candidate")',
+        'merge_candidate not in {"true", "false"}',
+    )
+    for fragment in required_fragments:
+        assert fragment in source
