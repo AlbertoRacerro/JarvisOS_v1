@@ -66,7 +66,7 @@ jobs:
       - name: Upload exact-head advisory manifest
         uses: actions/upload-artifact@v4
         with:
-          name: pr-attention-evidence-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          name: pr-attention-evidence-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}-attempt-${{ github.run_attempt }}
           path: ${{ steps.attention.outputs.manifest-file }}
           if-no-files-found: error
           retention-days: 3
@@ -83,6 +83,6 @@ jobs:
             printf 'Semantic status: %s\n' '${{ steps.attention.outputs.semantic-status }}'
             printf 'Safety status: %s\n' '${{ steps.attention.outputs.safety-status }}'
             printf 'Merge candidate: %s\n' '${{ steps.attention.outputs.merge-candidate }}'
-            printf 'Artifact: %s\n' 'pr-attention-evidence-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}'
+            printf 'Artifact: %s\n' 'pr-attention-evidence-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}-attempt-${{ github.run_attempt }}'
             printf '%s\n' '' 'These values are evidence only. JarvisOS semantic acceptance, queue state and merge authority remain external to this workflow.'
           } >> "$GITHUB_STEP_SUMMARY"
