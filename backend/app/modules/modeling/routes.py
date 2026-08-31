@@ -25,8 +25,8 @@ from app.modules.modeling.parameter_lifecycle import (
     transition_parameter,
     update_parameter,
 )
+from app.modules.modeling.project_knowledge_owner import ProjectKnowledgeOwnerError
 from app.modules.modeling.project_knowledge_owner import (
-    ProjectKnowledgeOwnerError,
     update_requirement as update_requirement_canonical,
 )
 from app.modules.modeling.service import (
