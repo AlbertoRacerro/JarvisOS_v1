@@ -10,9 +10,48 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  backend:
+  classify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.scope.outputs.docs_only }}
+      run_backend: ${{ steps.scope.outputs.run_backend }}
+      run_frontend: ${{ steps.scope.outputs.run_frontend }}
+      run_bluecad: ${{ steps.scope.outputs.run_bluecad }}
+      full_required: ${{ steps.scope.outputs.full_required }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Classify CI scope
+        id: scope
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          python3 scripts/classify_ci_scope.py --self-test
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            {
+              echo "docs_only=false"
+              echo "run_backend=true"
+              echo "run_frontend=true"
+              echo "run_bluecad=true"
+              echo "full_required=true"
+            } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Disable rename collapsing so a move across execution domains is
+          # observed as delete+add and therefore cannot gain a narrower lane.
+          git diff --name-only --no-renames "$BASE_SHA" "$HEAD_SHA" > "$RUNNER_TEMP/changed-files.txt"
+          python3 scripts/classify_ci_scope.py < "$RUNNER_TEMP/changed-files.txt" >> "$GITHUB_OUTPUT"
+
+  backend:
+    needs: classify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -44,18 +83,8 @@ jobs:
           python scripts/check_pr_attention_integration.py --self-test
           python scripts/check_pr_attention_integration.py
 
-      - name: Install dependencies
-        working-directory: backend
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt -r requirements-dev.txt
-
-      - name: Architecture enforcement gate
-        run: |
-          python scripts/check_architecture_enforcement.py --self-test
-          python scripts/check_architecture_enforcement.py
-
       - name: BLUECAD license-boundary import gate
+        if: needs.classify.outputs.run_backend == 'true' || needs.classify.outputs.run_frontend == 'true'
         run: |
           python - <<'PY'
           import re
@@ -63,10 +92,13 @@ jobs:
           from pathlib import Path
 
           pattern = re.compile(r"^\s*(?:import\s+(?:gmsh|FreeCAD|calculix)\b|from\s+(?:gmsh|FreeCAD|calculix)\b)")
-          paths = list(Path("backend/app").rglob("*.py"))
-          src_root = Path("frontend/src")
-          if src_root.exists():
-              paths.extend(path for path in src_root.rglob("*") if path.suffix in {".ts", ".tsx"})
+          paths = []
+          if "${{ needs.classify.outputs.run_backend }}" == "true":
+              paths.extend(Path("backend/app").rglob("*.py"))
+          if "${{ needs.classify.outputs.run_frontend }}" == "true":
+              src_root = Path("frontend/src")
+              if src_root.exists():
+                  paths.extend(path for path in src_root.rglob("*") if path.suffix in {".ts", ".tsx"})
 
           violations = []
           for path in paths:
@@ -80,7 +112,26 @@ jobs:
               sys.exit(1)
           PY
 
+      - name: Docs-only fast path
+        if: needs.classify.outputs.docs_only == 'true'
+        run: |
+          echo "docs/**-only PR: governance gates passed; executable suites remain unchanged and full master-push CI is preserved."
+
+      - name: Install backend dependencies
+        if: needs.classify.outputs.run_backend == 'true'
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Architecture enforcement gate
+        if: needs.classify.outputs.run_backend == 'true'
+        run: |
+          python scripts/check_architecture_enforcement.py --self-test
+          python scripts/check_architecture_enforcement.py
+
       - name: Ruff
+        if: needs.classify.outputs.run_backend == 'true'
         working-directory: backend
         run: >-
           python -m ruff check app tests ../scripts/check_spec_status.py
@@ -88,12 +139,78 @@ jobs:
           ../scripts/check_review_secret_boundary.py
           ../scripts/check_architecture_enforcement.py
           ../scripts/check_pr_attention_integration.py
+          ../scripts/classify_ci_scope.py
 
-      - name: Pytest
+  backend-tests:
+    needs: classify
+    if: needs.classify.outputs.run_backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [core, bluecad-a, bluecad-b]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install dependencies
         working-directory: backend
-        run: python -m pytest -q
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run backend test shard
+        working-directory: backend
+        shell: bash
+        env:
+          TEST_GROUP: ${{ matrix.group }}
+        run: |
+          set -euo pipefail
+          if [ "$TEST_GROUP" = "core" ]; then
+            python -m pytest -q tests --ignore=tests/bluecad
+            exit 0
+          fi
+
+          if [ "$TEST_GROUP" = "bluecad-a" ]; then
+            export BLUECAD_SHARD=0
+          else
+            export BLUECAD_SHARD=1
+          fi
+
+          mapfile -t test_files < <(python - <<'PY'
+          import os
+          from pathlib import Path
+
+          shard = int(os.environ["BLUECAD_SHARD"])
+          canary_owned = {
+              Path("tests/bluecad/test_manifest_determinism_canary.py"),
+              Path("tests/bluecad/test_geometry_property_invariants.py"),
+              Path("tests/bluecad/test_capped_manifold.py"),
+          }
+          files = sorted(
+              path
+              for path in Path("tests/bluecad").rglob("test_*.py")
+              if path not in canary_owned
+          )
+          for index, path in enumerate(files):
+              if index % 2 == shard:
+                  print(path)
+          PY
+          )
+          test "${#test_files[@]}" -gt 0
+          python -m pytest -q "${test_files[@]}"
 
   frontend-build:
+    needs: classify
+    if: needs.classify.outputs.run_frontend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -114,6 +231,8 @@ jobs:
         run: npm run build
 
   bluecad-geometry-canary:
+    needs: classify
+    if: needs.classify.outputs.run_bluecad == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:

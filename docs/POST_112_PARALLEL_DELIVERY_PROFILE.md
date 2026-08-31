@@ -5,6 +5,7 @@ Authorized: 2026-08-28
 Maintainer acceleration amendment: 2026-08-28
 Final role-split reconciliation: 2026-08-28
 Maintainer hardening-priority amendment: 2026-08-30
+Delivery-efficiency amendment: 2026-08-31
 
 This document defines the minimum controlled-parallel delivery exception to the repository's normal serial execution rule. It changes repository-development mechanics only. It does not change JarvisOS runtime authority, provider policy, product architecture, credentials, egress, schemas, or model-promotion rules.
 
@@ -54,13 +55,16 @@ The normal post-112 scheduler topology is four interchangeable ChatGPT replicas 
 Every replica uses the same global ChatGPT writer-mutex protocol through the automation control plane before any GitHub/shared-authority mutation:
 
 1. read the live automation topology with `automations.peek`;
-2. if any other JarvisOS Roadmap Builder A/B/C/D title is `[BUSY <UTC-ISO>]` and that timestamp is less than 45 minutes old, exit without mutation;
+2. if any other JarvisOS Roadmap Builder A/B/C/D title is `[BUSY <UTC-ISO>]` and that timestamp is less than **20 minutes** old, do not mutate shared authority;
 3. otherwise rename only itself to its base title plus `[BUSY <UTC-ISO>]`;
 4. immediately re-read the automation topology;
-5. if another fresh A/B/C/D BUSY marker is now present, restore the base title and exit without mutation; otherwise this replica is the sole ChatGPT coordinator/writer for the run;
-6. before returning, always restore its base title, including after a failure path.
+5. if another fresh A/B/C/D BUSY marker is now present, restore the base title and exit mutation mode; otherwise this replica is the sole ChatGPT coordinator/writer for the run;
+6. before every later mutation boundary, if the replica has held the lease for **10 minutes or more** since the timestamp currently in its title, refresh only its own BUSY timestamp and immediately re-peek; if a competing fresh writer now exists, restore the base title and abort the mutation;
+7. before returning, always restore its base title, including after a failure path.
 
-No GitHub/shared-authority mutation occurs before the post-rename re-check. A stale BUSY marker older than 45 minutes is not ownership evidence. The four schedulers may all remain enabled; mutual exclusion is achieved by this fail-closed peek/mark/re-peek protocol rather than by fixed lane affinity.
+No GitHub/shared-authority mutation occurs before the post-rename re-check. A BUSY marker **20 minutes or older is stale and is not ownership evidence**. A writer that resumes after a stall may not rely on its previous title: before any new mutation it must refresh its own timestamp and re-peek, so a safe takeover that happened during the stall wins. This bounds a crashed/stalled writer's normal throughput penalty while preserving fail-closed exclusion at every mutation boundary.
+
+The title lease remains an anti-waste coordination mechanism only. Exact SHA/CAS, current branch/head state, and revalidation remain correctness. The four schedulers may all remain enabled; mutual exclusion is achieved by this peek/mark/re-peek/heartbeat protocol rather than by fixed lane affinity.
 
 While one replica owns the writer role:
 
@@ -119,14 +123,17 @@ A ChatGPT lock holder must:
 
 1. resolve fresh exact `master`, `STATUS.md`, current PR heads, workflow/review evidence, and terminal/running candidate-worker state;
 2. reject stale model/workflow results whose target head is no longer authoritative;
-3. consume already-terminal safe evidence first;
-4. scan all currently authorized lanes rather than assuming a scheduler-specific lane;
-5. advance an immediately actionable lane one bounded step at a time while preserving lane/shared ownership;
-6. launch the next bounded GLM candidate/repair task when useful and authorized;
-7. continue across other ready lanes while there is immediate safe work;
-8. exit when the remaining next actions are only waits for GLM, CI, independent review, provider/external availability, or a future scheduler wake-up.
+3. consume already-terminal safe evidence first, using an exact-current-head validated `PR Attention Evidence` manifest/artifact as the first compact **mechanical index** when available;
+4. fetch raw GitHub state wherever semantic review, unresolved findings/threads, missing fields, mutation verification, or a canonical gate requires it; the helper artifact never substitutes for those decisions;
+5. scan all currently authorized lanes rather than assuming a scheduler-specific lane;
+6. advance an immediately actionable lane one bounded step at a time while preserving lane/shared ownership;
+7. launch the next bounded GLM candidate/repair task when useful and authorized;
+8. continue across other ready lanes while there is immediate safe work;
+9. exit when the remaining next actions are only waits for GLM, CI, independent review, provider/external availability, or a future scheduler wake-up.
 
 The coordinator must **not sleep or poll** merely to consume runtime. When insufficient wall-clock budget remains for a complete safe mutation plus verification, record the exact next action and exit cleanly.
+
+A `PR Attention Evidence` artifact is advisory and exact-head-bound. It may eliminate repeated mechanical collection, but it may not establish semantic PASS, queue/readiness state, review/approval authority, or merge permission. If the artifact predates terminal required gates, the writer may refresh/recollect gate state once when terminal rather than repeatedly polling it.
 
 ## 5. Canonical post-112 lanes
 
@@ -210,9 +217,29 @@ High-risk security/credentials/egress, Hermes isolation/model-call closure, PTY,
 
 `planned` never becomes implementation authority through compression.
 
+### 8A. Atomic readiness registry transition
+
+A separate `planned -> ready` reconciliation PR is **not required by ceremony** after an accepted readiness decision. A post-112 readiness PR may atomically include both the readiness artifact and that same spec's sole `STATUS.md` transition from `planned` or `blocked` to `ready` when all are true:
+
+- the readiness evidence and decision are explicitly inspectable in that PR;
+- the changed registry row is the same spec and contains no implementation PR association;
+- the deterministic spec-status definition gate accepts the resulting registry;
+- no unrelated registry, dependency, queue, product, schema, provider, or authority change is bundled;
+- the readiness decision itself satisfies the active spec and canonical dependency/ownership rules.
+
+Until that PR merges, remote `STATUS.md` remains non-ready and implementation remains forbidden. After it merges, the readiness decision and registry authority become current atomically, eliminating a redundant follow-up PR without weakening the lifecycle.
+
+This compression does **not** apply to the later `in_review -> merged` transition, which necessarily depends on a verified exact implementation merge and therefore remains a post-merge mechanical reconciliation unless a future canonical mechanism makes that transition atomic without predeclaring success.
+
 ## 9. Two-speed deterministic gating and browser proof
 
 While a PR head moves, use focused deterministic tests and minimum relevant gates. On the frozen candidate merge head, run every gate/proof required by repository policy, the active spec, and affected boundaries. Any later head mutation invalidates affected head-specific evidence.
+
+For a pull request whose deterministic changed-path classifier proves that **every changed repository path is under `docs/`**, CI may use a governance-only terminal fast path and skip dependency installation, architecture/runtime/import gates, backend lint/tests, frontend build, and BLUECAD runtime canaries. The fast path must still run the deterministic registry/spec gate and repository-development governance/anti-authority self-tests that require only the standard-library environment. It fails closed to normal CI for an empty/unknown diff, classifier failure, any changed path outside `docs/`, or any non-PR event.
+
+Pushes to `master` always run full CI, including after a docs-only merge. The PR fast path therefore removes redundant pre-merge runtime work without eliminating the repository-wide regression pass on the resulting master commit.
+
+This docs-only fast path is evidence economy, not a correctness waiver: no executable, workflow, configuration, schema, fixture, or product/runtime file changed on the pull request, while the executable tree is identical to the already validated base. Any non-`docs/` change receives normal required terminal gates.
 
 Browser/screenshot proof is required for visible frontend/layout/interaction deltas or explicit spec requirements. It is not required by ceremony for docs-only/backend-only/schema-only changes with no visible delta.
 
@@ -226,7 +253,9 @@ Prework may not mutate product/runtime authority, start a `planned` implementati
 
 Avoid PRs, comments, checkpoint artifacts, screenshot passes, or repeated gates that add no authority, evidence, or risk reduction.
 
-Post-merge registry reconciliation may be applied mechanically when merge SHA is exact and verified, the transition is deterministic, no new product direction is invented, and `STATUS.md` remains the sole live work-state authority.
+Prefer the atomic readiness transition in section 8A whenever its fail-closed conditions hold. Do not create a second PR merely to copy an already accepted readiness decision into `STATUS.md`.
+
+Post-merge registry reconciliation may be applied mechanically when merge SHA is exact and verified, the transition is deterministic, no new product direction is invented, and `STATUS.md` remains the sole live work-state authority. A docs-only reconciliation should use the section 9 PR governance fast path rather than rerunning unrelated runtime suites before merge; the resulting master push still receives full CI.
 
 Do not remove a gate/review/audit that closes a real security, scientific, migration, authority, regression, or acceptance risk merely to reduce elapsed time.
 
