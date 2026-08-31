@@ -55,30 +55,56 @@ def _fail_if_deepseek_provider_called(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.modules.ai.providers.deepseek import DeepSeekProvider
 
     def fail(self: DeepSeekProvider, *, prompt: str, estimated_output_tokens: int) -> object:
-        raise AssertionError("DeepSeek provider should not have been called.")
+        raise AssertionError("Legacy DeepSeek provider should not have been called.")
 
     monkeypatch.setattr(DeepSeekProvider, "create_live_console_completion", fail)
 
 
-def _mock_deepseek_provider(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.modules.ai.providers.deepseek import DeepSeekChatResult, DeepSeekProvider
+def _mock_canonical_deepseek_success(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
+    from app.modules.ai.contracts import AIResponse, AIUsage, AIUsageSource, RoutingDecision
+    from app.modules.ai.execution import AiTaskOutcome
+    from app.modules.ai import deepseek_provider_smoke
 
-    def fake_completion(self: DeepSeekProvider, *, prompt: str, estimated_output_tokens: int) -> DeepSeekChatResult:
-        assert estimated_output_tokens == 120
-        return DeepSeekChatResult(
-            provider_name="deepseek",
-            model="mock-deepseek-model",
-            mode="strong_provider_smoke",
-            external_call_attempted=True,
-            external_call_succeeded=True,
-            response_text="A mass balance compares inputs, outputs, and accumulation.",
-            reported_input_tokens=10,
-            reported_output_tokens=8,
-            reported_total_tokens=18,
-            sanitized_metadata={"implementation": "mock", "usage_returned": True, "finish_reason": "stop"},
+    captured: dict[str, object] = {}
+
+    def fake_run_ai_task(**kwargs: object) -> AiTaskOutcome:
+        captured.update(kwargs)
+        response = AIResponse(
+            provider_id="deepseek",
+            model_id="mock-deepseek-model",
+            usage=AIUsage(
+                provider_id="deepseek",
+                model_id="mock-deepseek-model",
+                input_tokens=10,
+                output_tokens=8,
+                usage_source=AIUsageSource.actual,
+            ),
+            request_id="provider-smoke-request",
+            text="A mass balance compares inputs, outputs, and accumulation.",
+            content="A mass balance compares inputs, outputs, and accumulation.",
+            finish_reason="stop",
+            raw_provider_metadata={
+                "external_call_attempted": True,
+                "implementation": "mock-canonical",
+                "usage_returned": True,
+                "reported_input_tokens": 10,
+                "reported_output_tokens": 8,
+            },
+        )
+        return AiTaskOutcome(
+            status="success",
+            ledger_id="provider-smoke-ledger",
+            selected_route_class="external:deepseek",
+            decision=RoutingDecision(
+                provider_id="deepseek",
+                model_id="deepseek-v4-pro",
+                decision_reason="bound:external:deepseek",
+            ),
+            response=response,
         )
 
-    monkeypatch.setattr(DeepSeekProvider, "create_live_console_completion", fake_completion)
+    monkeypatch.setattr(deepseek_provider_smoke, "run_ai_task", fake_run_ai_task)
+    return captured
 
 
 def test_provider_smoke_default_state_blocks_without_provider_call(client: TestClient, monkeypatch) -> None:
@@ -110,7 +136,7 @@ def test_provider_smoke_rejects_provider_or_model_override_fields(client: TestCl
     assert response.status_code == 422
 
 
-def test_provider_smoke_missing_key_blocks_without_network(client: TestClient, monkeypatch) -> None:
+def test_provider_smoke_missing_key_fails_closed_through_canonical_gate(client: TestClient, monkeypatch) -> None:
     _enable_deepseek_provider(client)
     _fail_if_deepseek_provider_called(monkeypatch)
 
@@ -118,12 +144,13 @@ def test_provider_smoke_missing_key_blocks_without_network(client: TestClient, m
 
     assert response.status_code == 200
     body = response.json()
-    assert body["blocked_reason"] == "deepseek_api_key_missing"
-    assert body["privacy_class"] == "not_evaluated"
+    assert body["blocked_reason"] == "provider_gate_blocked"
     assert body["external_call_attempted"] is False
 
 
-def test_provider_smoke_paid_ai_disabled_blocks_without_network(client: TestClient, monkeypatch) -> None:
+def test_provider_smoke_paid_ai_disabled_fails_closed_through_canonical_gate(
+    client: TestClient, monkeypatch
+) -> None:
     monkeypatch.setenv("DEEPSEEK_API_KEY", "ds-test-secret-1234abcd")
     _enable_deepseek_provider(client, paid_ai_enabled=False)
     _fail_if_deepseek_provider_called(monkeypatch)
@@ -131,23 +158,21 @@ def test_provider_smoke_paid_ai_disabled_blocks_without_network(client: TestClie
     response = client.post("/ai/provider-smoke/run", json={"prompt": "Explain mass balance."})
 
     assert response.status_code == 200
-    assert response.json()["blocked_reason"] == "paid_ai_disabled"
+    assert response.json()["blocked_reason"] == "provider_gate_blocked"
     assert response.json()["external_call_attempted"] is False
 
 
-def test_provider_smoke_fast_dev_allows_public_internal_technical_prompt(
+def test_provider_smoke_fast_dev_maps_success_from_canonical_execution(
     client: TestClient,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     raw_key = "ds-test-secret-1234abcd"
     monkeypatch.setenv("DEEPSEEK_API_KEY", raw_key)
     _enable_deepseek_provider(client)
-    _mock_deepseek_provider(monkeypatch)
+    captured = _mock_canonical_deepseek_success(monkeypatch)
 
-    response = client.post(
-        "/ai/provider-smoke/run",
-        json={"prompt": "Explain what a mass balance is in one paragraph."},
-    )
+    prompt = "Explain what a mass balance is in one paragraph."
+    response = client.post("/ai/provider-smoke/run", json={"prompt": prompt})
 
     assert response.status_code == 200
     body = response.json()
@@ -160,6 +185,10 @@ def test_provider_smoke_fast_dev_allows_public_internal_technical_prompt(
     assert body["actual_input_tokens"] == 10
     assert body["actual_output_tokens"] == 8
     assert body["usage_source"] == "actual"
+    assert captured["route_class"] == "external:deepseek"
+    assert captured["task_kind"] == "test"
+    assert captured["max_output_tokens"] == 120
+    assert captured["user_prompt"] == prompt
     body_text = json.dumps(body)
     assert raw_key not in body_text
     assert "Authorization" not in body_text
@@ -173,13 +202,13 @@ def test_provider_smoke_fast_dev_allows_public_internal_technical_prompt(
     assert "mass balance" not in event_text
 
 
-def test_provider_smoke_fast_dev_allows_generic_bluerev_public_physics_wording(
+def test_provider_smoke_generic_public_physics_uses_same_canonical_deepseek_route(
     client: TestClient,
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("DEEPSEEK_API_KEY", "ds-test-secret-1234abcd")
     _enable_deepseek_provider(client)
-    _mock_deepseek_provider(monkeypatch)
+    captured = _mock_canonical_deepseek_success(monkeypatch)
 
     response = client.post(
         "/ai/provider-smoke/run",
@@ -189,6 +218,42 @@ def test_provider_smoke_fast_dev_allows_generic_bluerev_public_physics_wording(
     assert response.status_code == 200
     assert response.json()["blocked_reason"] is None
     assert response.json()["external_call_attempted"] is True
+    assert captured["route_class"] == "external:deepseek"
+
+
+def test_provider_smoke_unstubbed_external_request_requires_canonical_confirmation(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "ds-test-secret-1234abcd")
+    _enable_deepseek_provider(client)
+    _fail_if_deepseek_provider_called(monkeypatch)
+
+    response = client.post("/ai/provider-smoke/run", json={"prompt": "Explain mass balance."})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["blocked_reason"] == "confirmation_required"
+    assert body["external_call_attempted"] is False
+
+
+def test_provider_specific_deepseek_route_has_no_cross_provider_fallback() -> None:
+    from app.modules.ai.execution import resolve_binding
+    from app.modules.ai.provider_registry import load_default_provider_registry
+
+    binding, decision = resolve_binding("external:deepseek")
+    assert binding is not None
+    assert decision.blocked is False
+    assert binding.provider_id == "deepseek"
+    assert binding.model_id == "deepseek-v4-pro"
+
+    registry = load_default_provider_registry()
+    assert registry.fallback_chains.get("external:deepseek") is None
+    cheap_chain = registry.fallback_chains["external:cheap"]
+    assert [(entry.provider_id, entry.model_id) for entry in cheap_chain] == [
+        ("deepseek", "deepseek-v4-pro"),
+        ("glm", "glm-5.2"),
+    ]
 
 
 def test_provider_smoke_structural_secret_blocks_before_provider(client: TestClient, monkeypatch) -> None:
