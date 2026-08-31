@@ -131,51 +131,37 @@ jobs:
 
   frontend-build:
     needs: classify
+    if: needs.classify.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Docs-only fast path
-        if: needs.classify.outputs.docs_only == 'true'
-        run: |
-          echo "docs/**-only PR: frontend source unchanged; full build remains required on master push CI."
-
       - uses: actions/checkout@v4
-        if: needs.classify.outputs.docs_only != 'true'
 
       - uses: actions/setup-node@v4
-        if: needs.classify.outputs.docs_only != 'true'
         with:
           node-version: "24"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend dependencies
-        if: needs.classify.outputs.docs_only != 'true'
         working-directory: frontend
         run: npm ci
 
       - name: Build frontend
-        if: needs.classify.outputs.docs_only != 'true'
         working-directory: frontend
         run: npm run build
 
   bluecad-geometry-canary:
     needs: classify
+    if: needs.classify.outputs.docs_only != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       JARVISOS_BLUECAD_CANARY_PROFILE: ubuntu24-py311
     steps:
-      - name: Docs-only fast path
-        if: needs.classify.outputs.docs_only == 'true'
-        run: |
-          echo "docs/**-only PR: BLUECAD source unchanged; full canary remains required on master push CI."
-
       - uses: actions/checkout@v4
-        if: needs.classify.outputs.docs_only != 'true'
 
       - uses: actions/setup-python@v5
-        if: needs.classify.outputs.docs_only != 'true'
         with:
           python-version: "3.11"
           cache: pip
@@ -184,14 +170,12 @@ jobs:
             backend/requirements-dev.txt
 
       - name: Install dependencies
-        if: needs.classify.outputs.docs_only != 'true'
         working-directory: backend
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Run canonical canary, bounded property suite, and capped-manifold kernel proof
-        if: needs.classify.outputs.docs_only != 'true'
         id: property
         working-directory: backend
         shell: bash
@@ -213,7 +197,7 @@ jobs:
           exit 0
 
       - name: Upload bounded canary diagnostics
-        if: needs.classify.outputs.docs_only != 'true' && always()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: bluecad-property-canary
@@ -224,7 +208,7 @@ jobs:
           retention-days: 14
 
       - name: Enforce property and time gates
-        if: needs.classify.outputs.docs_only != 'true' && always()
+        if: always()
         shell: bash
         run: |
           test "${{ steps.property.outputs.status }}" = "0"
