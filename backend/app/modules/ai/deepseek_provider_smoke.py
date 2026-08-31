@@ -1,23 +1,20 @@
 """DeepSeek-only provider smoke path.
 
 This is a diagnostic smoke surface, not provider routing or a general AI
-gateway policy implementation.
+gateway policy implementation. External dispatch is owned by run_ai_task.
 """
 
 from app.core.database import open_sqlite_connection
-from app.modules.ai.contracts import AIPolicyMode, AIPrivacyClass, AIRequest, AITaskType
+from app.modules.ai.contracts import AIPolicyMode
+from app.modules.ai.execution import AiTaskOutcome, resolve_binding, run_ai_task
 from app.modules.ai.models import AISettingsRead, ProviderSmokeRequest, ProviderSmokeResponse
 from app.modules.ai.privacy import PrivacyPolicyEngine
-from app.modules.ai.providers.deepseek_adapter import (
-    DEEPSEEK_ADAPTER_INTERFACE,
-    DEEPSEEK_PROVIDER_ID,
-    DeepSeekProviderAdapter,
-)
 from app.modules.ai.settings import get_ai_settings
 from app.modules.ai.token_guard import estimate_tokens
 from app.modules.events.service import log_event, utc_now
 
 PROVIDER_SMOKE_MODE = "strong_provider_smoke"
+PROVIDER_SMOKE_ROUTE_CLASS = "external:deepseek"
 PROVIDER_SMOKE_DEFAULT_OUTPUT_TOKENS = 120
 PROVIDER_SMOKE_MAX_OUTPUT_TOKENS = 160
 PROVIDER_SMOKE_MAX_PROMPT_LENGTH = 1000
@@ -25,10 +22,7 @@ PROVIDER_SMOKE_MAX_PROMPT_LENGTH = 1000
 
 def run_provider_smoke(request: ProviderSmokeRequest) -> ProviderSmokeResponse:
     settings = get_ai_settings()
-    adapter = DeepSeekProviderAdapter()
-    provider_status = adapter.provider.status()
-    provider = adapter.provider_id
-    model = provider_status.model
+    provider, model = _route_identity()
     prompt = request.prompt.strip()
     requested_output_tokens = request.max_output_tokens or PROVIDER_SMOKE_DEFAULT_OUTPUT_TOKENS
     estimated_output_tokens = min(requested_output_tokens, PROVIDER_SMOKE_MAX_OUTPUT_TOKENS)
@@ -52,7 +46,7 @@ def run_provider_smoke(request: ProviderSmokeRequest) -> ProviderSmokeResponse:
         prompt_length=len(prompt),
     )
 
-    gate_reason = _provider_smoke_gate(settings, key_configured=provider_status.configured)
+    gate_reason = _provider_smoke_gate(settings)
     if gate_reason:
         return _blocked_response(
             settings=settings,
@@ -144,88 +138,135 @@ def run_provider_smoke(request: ProviderSmokeRequest) -> ProviderSmokeResponse:
             prompt_length=len(prompt),
         )
 
-    live_response = adapter.complete(
-        AIRequest(
-            task_type=AITaskType.smoke_console_test,
-            privacy_class=AIPrivacyClass(policy_decision.privacy_class),
-            prompt=prompt,
-            workspace_id=request.workspace_id,
-            model_preference=model,
-            max_output_tokens=estimated_output_tokens,
-            metadata={"mode": PROVIDER_SMOKE_MODE},
-        )
+    outcome = run_ai_task(
+        user_prompt=prompt,
+        task_kind="test",
+        route_class=PROVIDER_SMOKE_ROUTE_CLASS,
+        max_output_tokens=estimated_output_tokens,
+        workspace_id=request.workspace_id,
     )
-    if live_response.error:
+    return _response_from_outcome(
+        outcome,
+        settings=settings,
+        workspace_id=request.workspace_id,
+        privacy_class=policy_decision.privacy_class,
+        default_provider=provider,
+        default_model=model,
+        estimated_input_tokens=estimated_input_tokens,
+        estimated_output_tokens=estimated_output_tokens,
+        prompt_length=len(prompt),
+    )
+
+
+def _route_identity() -> tuple[str, str]:
+    binding, _ = resolve_binding(PROVIDER_SMOKE_ROUTE_CLASS)
+    if binding is None:
+        return "deepseek", "deepseek-v4-pro"
+    return binding.provider_id, binding.model_id
+
+
+def _provider_smoke_gate(settings: AISettingsRead) -> str | None:
+    if settings.policy_mode == AIPolicyMode.DISABLED:
+        return "ai_policy_disabled"
+    if settings.provider_mode != "deepseek":
+        return "deepseek_provider_mode_required"
+    return None
+
+
+def _response_from_outcome(
+    outcome: AiTaskOutcome,
+    *,
+    settings: AISettingsRead,
+    workspace_id: str | None,
+    privacy_class: str,
+    default_provider: str,
+    default_model: str,
+    estimated_input_tokens: int,
+    estimated_output_tokens: int,
+    prompt_length: int,
+) -> ProviderSmokeResponse:
+    ai_response = outcome.response
+    provider = ai_response.provider_id if ai_response is not None else outcome.decision.provider_id or default_provider
+    model = ai_response.model_id if ai_response is not None else outcome.decision.model_id or default_model
+    attempted = bool(
+        ai_response is not None
+        and ai_response.raw_provider_metadata.get("external_call_attempted", True)
+    )
+    usage_source = ai_response.usage.usage_source.value if ai_response is not None else "estimated"
+
+    if outcome.status != "success" or ai_response is None or ai_response.error is not None:
+        blocked_reason = _outcome_blocked_reason(outcome)
         return _blocked_response(
             settings=settings,
-            workspace_id=request.workspace_id,
-            provider=live_response.provider_id,
-            model=live_response.model_id,
-            privacy_class=policy_decision.privacy_class,
-            blocked_reason=live_response.blocked_reason or "deepseek_live_call_failed",
-            external_call_attempted=bool(live_response.raw_provider_metadata.get("external_call_attempted", True)),
-            estimated_input_tokens=live_response.usage.input_tokens,
-            estimated_output_tokens=live_response.usage.output_tokens,
-            usage_source=live_response.usage.usage_source.value,
-            prompt_length=len(prompt),
-            error_type=_optional_string(live_response.error.safe_metadata.get("error_type")),
+            workspace_id=workspace_id,
+            provider=provider,
+            model=model,
+            privacy_class=privacy_class,
+            blocked_reason=blocked_reason,
+            external_call_attempted=attempted,
+            estimated_input_tokens=(
+                ai_response.usage.input_tokens if ai_response is not None else estimated_input_tokens
+            ),
+            estimated_output_tokens=(
+                ai_response.usage.output_tokens if ai_response is not None else estimated_output_tokens
+            ),
+            usage_source=usage_source,
+            prompt_length=prompt_length,
+            error_type=outcome.error_type,
         )
 
     response = ProviderSmokeResponse(
-        response_text=live_response.text,
-        provider=live_response.provider_id,
-        model=live_response.model_id,
+        response_text=ai_response.text,
+        provider=provider,
+        model=model,
         mode=PROVIDER_SMOKE_MODE,
-        privacy_class=policy_decision.privacy_class,
+        privacy_class=privacy_class,
         blocked_reason=None,
-        external_call_attempted=True,
+        external_call_attempted=attempted,
         external_call_succeeded=True,
         estimated_input_tokens=estimated_input_tokens,
         estimated_output_tokens=estimated_output_tokens,
-        actual_input_tokens=_reported_token(live_response.raw_provider_metadata.get("reported_input_tokens")),
-        actual_output_tokens=_reported_token(live_response.raw_provider_metadata.get("reported_output_tokens")),
-        usage_source=live_response.usage.usage_source.value,
+        actual_input_tokens=_reported_token(ai_response.raw_provider_metadata.get("reported_input_tokens")),
+        actual_output_tokens=_reported_token(ai_response.raw_provider_metadata.get("reported_output_tokens")),
+        usage_source=usage_source,
         provider_metadata={
-            "adapter_interface": live_response.raw_provider_metadata.get("adapter_interface"),
-            "implementation": live_response.raw_provider_metadata.get("implementation"),
-            "usage_returned": live_response.raw_provider_metadata.get("usage_returned"),
-            "finish_reason": live_response.finish_reason,
+            "adapter_interface": ai_response.raw_provider_metadata.get("adapter_interface"),
+            "implementation": ai_response.raw_provider_metadata.get("implementation"),
+            "usage_returned": ai_response.raw_provider_metadata.get("usage_returned"),
+            "finish_reason": ai_response.finish_reason,
+            "ledger_id": outcome.ledger_id,
+            "selected_route_class": outcome.selected_route_class,
         },
     )
     _log_provider_smoke_event(
         "AIProviderSmokeCompleted",
         settings=settings,
-        workspace_id=request.workspace_id,
+        workspace_id=workspace_id,
         provider=response.provider,
         model=response.model,
         privacy_class=response.privacy_class,
         blocked_reason=None,
-        external_call_attempted=True,
+        external_call_attempted=response.external_call_attempted,
         external_call_succeeded=True,
         estimated_input_tokens=response.estimated_input_tokens,
         estimated_output_tokens=response.estimated_output_tokens,
         actual_input_tokens=response.actual_input_tokens,
         actual_output_tokens=response.actual_output_tokens,
         usage_source=response.usage_source,
-        prompt_length=len(prompt),
+        prompt_length=prompt_length,
     )
     return response
 
 
-def _provider_smoke_gate(settings: AISettingsRead, *, key_configured: bool) -> str | None:
-    if settings.policy_mode == AIPolicyMode.DISABLED:
-        return "ai_policy_disabled"
-    if settings.provider_mode != DEEPSEEK_PROVIDER_ID:
-        return "deepseek_provider_mode_required"
-    if not settings.paid_ai_enabled:
-        return "paid_ai_disabled"
-    if settings.monthly_api_budget_usd <= 0:
-        return "monthly_budget_zero"
-    if settings.api_spend_month_to_date_usd >= settings.monthly_api_budget_usd:
-        return "monthly_budget_exhausted"
-    if not key_configured:
-        return "deepseek_api_key_missing"
-    return None
+def _outcome_blocked_reason(outcome: AiTaskOutcome) -> str:
+    if outcome.response is not None and outcome.response.blocked_reason:
+        return outcome.response.blocked_reason
+    return (
+        outcome.egress_reason_code
+        or outcome.decision.blocked_reason
+        or outcome.error_type
+        or f"canonical_execution_{outcome.status}"
+    )
 
 
 def _blocked_response(
@@ -305,7 +346,7 @@ def _log_provider_smoke_event(
         "provider_id": provider,
         "model": model,
         "model_id": model,
-        "adapter_interface": DEEPSEEK_ADAPTER_INTERFACE,
+        "adapter_interface": "canonical_execution",
         "mode": PROVIDER_SMOKE_MODE,
         "policy_mode": settings.policy_mode.value,
         "privacy_class": privacy_class,
@@ -332,12 +373,6 @@ def _log_provider_smoke_event(
             payload=payload,
         )
         connection.commit()
-
-
-def _optional_string(value: object) -> str | None:
-    if value is None:
-        return None
-    return str(value)
 
 
 def _reported_token(value: object) -> int | None:
