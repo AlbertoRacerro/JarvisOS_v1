@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-"""Classify a repository diff into conservative CI execution domains."""
-
 from __future__ import annotations
 
 import argparse
 import sys
-
 
 FULL_SCOPE = {
     "docs_only": False,
