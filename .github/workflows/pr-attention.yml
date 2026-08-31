@@ -2,7 +2,7 @@ name: PR Attention Evidence
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
@@ -63,6 +63,14 @@ jobs:
           if str(manifest_merge).lower() != merge_candidate:
               raise SystemExit("merge_candidate output does not match manifest")
           PY
+          cp "$MANIFEST" "$RUNNER_TEMP/pr-attention-evidence.json"
+      - name: Upload validated advisory evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-attention-evidence-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/pr-attention-evidence.json
+          if-no-files-found: error
+          retention-days: 2
       - name: Publish advisory summary
         if: always()
         shell: bash
