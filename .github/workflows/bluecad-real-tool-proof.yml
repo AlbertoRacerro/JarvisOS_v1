@@ -12,7 +12,6 @@ on:
       - "configs/bluecad_tools.yaml"
       - "docs/runbooks/bluecad-real-tool-proof.md"
       - "docs/specs/021b-alpha-gate-completion.md"
-      - "docs/specs/STATUS.md"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -39,8 +38,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Run offline regression suite
+      - name: Run offline regression suite for standalone dispatch
         id: offline
+        if: github.event_name == 'workflow_dispatch'
         working-directory: backend
         shell: bash
         run: |
@@ -198,5 +198,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          test "${{ steps.offline.outputs.status }}" = "0"
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            test "${{ steps.offline.outputs.status }}" = "0"
+          fi
           test "${{ steps.strict.outputs.status }}" = "0"
