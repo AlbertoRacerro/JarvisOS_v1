@@ -1,323 +1,323 @@
 <h1 align="center">JarvisOS</h1>
 
-<h3 align="center">A personal, local-first AI engineering workspace</h3>
+<h3 align="center">An experimental AI-assisted engineering workspace</h3>
 
-<p align="center"><strong>Can AI help assemble a serious engineering workspace without becoming the source of engineering truth?</strong></p>
+<p align="center"><strong>What can one chemical-engineering-minded person build with strong AI tools, careful verification and ordinary engineering common sense?</strong></p>
 
-<p align="center"><code>local-first</code> · <code>evidence-first</code> · <code>upstream-first</code> · <code>source-available</code></p>
+<p align="center"><code>personal R&D</code> · <code>local-first</code> · <code>evidence-first</code> · <code>source-available</code></p>
 
-<p align="center"><a href="#what-is-jarvisos">What it is</a> · <a href="#how-it-works">How it works</a> · <a href="#what-works-today">What works</a> · <a href="#engineering-backends">Engineering backends</a> · <a href="#microalgae-photobioreactor-project">PBR project</a> · <a href="#roadmap">Roadmap</a> · <a href="#technical-details">Technical details</a> · <a href="#licensing-and-collaboration">License</a></p>
+<p align="center"><a href="#the-short-version">Short version</a> · <a href="#why-i-am-building-this">Why</a> · <a href="#the-microalgae-project">Microalgae project</a> · <a href="#what-i-want-the-workspace-to-feel-like">AI cowork</a> · <a href="#what-jarvisos-is-not">What it is not</a> · <a href="#what-exists-today">Current state</a> · <a href="#technical-details">Technical details</a> · <a href="#licensing-and-collaboration">License</a></p>
 
-> **Short version:** JarvisOS connects AI, project knowledge, engineering records, numerical tools, CAD/CAE, runs and evidence in one controlled workspace. AI can reason, propose and use authorized capabilities; canonical engineering state changes only through explicit JarvisOS-owned transitions.
+> **Important:** JarvisOS is a personal experiment, not a commercial engineering suite and not a claim of software-development expertise. I come from chemical engineering, not software development. I am using modern AI tools to see how far a serious engineering project can be pushed by one person who is willing to study, test, compare results, accept mistakes and keep the system honest about what it can and cannot do.
 
 > **License note:** this repository is publicly source-available for inspection and evaluation, but JarvisOS is **not currently distributed under an open-source software license**. See [Licensing and collaboration](#licensing-and-collaboration).
 
-This README is the public front door. The exact live implementation queue is [`docs/specs/STATUS.md`](docs/specs/STATUS.md); the canonical architecture is [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+The exact live implementation queue is [`docs/specs/STATUS.md`](docs/specs/STATUS.md). The canonical architecture is [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ---
 
-# What is JarvisOS?
+# The short version
 
-JarvisOS is a personal engineering workspace built around a strict separation of responsibilities:
+JarvisOS is an attempt to build one personal R&D workspace where an engineer can:
+
+- keep project knowledge, assumptions, requirements, models, runs and evidence together;
+- work with AI assistants that can discuss a problem, challenge assumptions, explain results, suggest changes and help write or inspect code;
+- connect different calculation tools, numerical models, CAD/CAE tools and eventually commercial engineering software through controlled interfaces;
+- run as much as practical locally;
+- decide explicitly when information may leave the machine and reach an external AI provider;
+- preserve traceability between a design decision and the calculations, files and assumptions behind it.
+
+The long-term idea is less “build a new super-software that replaces everything” and more:
+
+> **build a useful engineering desk where different specialist tools and AI assistants can work together around one project without silently taking ownership of the engineering decision.**
+
+The human engineer remains responsible for the engineering. JarvisOS is supposed to help organize the work, connect tools, preserve evidence and make AI collaboration more useful and less opaque.
+
+---
+
+# Why I am building this
+
+I started JarvisOS from the point of view of someone interested in engineering R&D, not from the point of view of an experienced software architect.
+
+That is part of the experiment.
+
+The question is not whether I can personally reinvent the software industry. I cannot, and that is not the objective. The question is whether current AI systems can reduce the software barrier enough that an engineer with no formal software-development background can still assemble a useful, technically disciplined tool for a real project.
+
+My approach is roughly:
+
+1. define the engineering problem;
+2. ask AI for help designing or implementing a bounded solution;
+3. inspect what was produced;
+4. test it aggressively;
+5. compare it against known equations, independent implementations, documentation or trusted software when possible;
+6. remove or replace custom code when a stronger existing project already solves the problem better;
+7. keep going only when the result survives those checks.
+
+This repository therefore contains both useful working software and the evidence of a learning process. Some designs have already been replaced. Some experiments are intentionally retained only as references. Some future ideas may never be worth implementing.
+
+That is preferable to pretending every early decision was correct.
+
+## A practical motivation: engineering outside the university environment
+
+Engineering students and researchers often have access to excellent commercial software through university licenses. That access may disappear, become expensive or become impractical outside the university environment.
+
+For the kind of R&D work I want to continue, I would like a platform that can use strong open, local or low-cost tools where they are good enough, while still leaving room to connect commercial tools when they are genuinely necessary.
+
+This does **not** mean pretending that an open-source library is automatically equivalent to Aspen HYSYS, ANSYS, Fusion, STAR-CCM+ or another mature industrial package. If a commercial tool is the right tool for a decision, the architecture should be able to use it.
+
+The goal is to avoid making the whole project dependent on one expensive license before that dependency is actually justified.
+
+## A second motivation: control over sensitive R&D data
+
+The other concern is AI.
+
+Cloud AI systems are extremely useful, but real engineering projects can contain confidential company information, unpublished research, design details, experimental data, intellectual property and other material that should not be sent casually to third-party services.
+
+JarvisOS is therefore designed **local-first**, not because cloud AI is inherently unacceptable, but because data egress should be a deliberate engineering and security decision.
+
+The intended pattern is:
 
 ```text
-Engineer      = final engineering responsibility
-JarvisOS      = software authority boundary, state, policy, provenance and execution identity
-AI / agents   = reasoning, proposals, explanations and tool intents
-Tools         = replaceable engineering or software backends
-Evidence      = results + provenance + fidelity / qualification context
+local project state
+      ↓
+select only the required context
+      ↓
+apply policy / sensitivity / budget checks
+      ↓
+use a local model when adequate
+      OR
+explicitly authorize an external provider when useful
 ```
 
-The core rule is simple:
-
-> **AI output is not canonical state, and tool output is not automatically accepted engineering truth.**
-
-The goal is not to build one giant model that “does engineering”. The goal is a controlled workstation where an engineer can describe a task, assemble bounded context, ask AI for help, execute deterministic or specialist tools, inspect exact outputs and evidence, and deliberately promote only the information that should become authoritative.
-
-JarvisOS is deliberately **upstream-first**. If a qualified external project already solves a generic numerical or infrastructure problem better, the default is to integrate, wrap or replace rather than preserve weaker in-house code because it already exists.
+Local-first is a design preference, not a claim that the current system is a formally certified secure environment. Security, isolation and provider policy are still engineering problems that must be tested like everything else.
 
 ---
 
-# Why build it?
+# The microalgae project
 
-Engineering work is often fragmented across modeling software, numerical tools, CAD/CAE, spreadsheets, documents, project notes and increasingly cloud AI systems. JarvisOS is an experiment in making those boundaries easier to cross without hiding them.
+The first serious engineering use case behind JarvisOS is a **microalgae photobioreactor R&D project**.
 
-| Keep control | Reuse strong tools | Verify results |
-| --- | --- | --- |
-| Prefer local execution when practical and explicitly control external egress. | Give existing code zero sunk-cost privilege when a stronger upstream exists. | Keep runs, inputs, artifacts, provenance, model limits and acceptance criteria inspectable. |
+The problem is naturally multidisciplinary. A useful design can involve:
 
-“Local-first” is not an anti-commercial rule. If a real engineering problem needs Aspen HYSYS, ANSYS, Fusion, STAR-CCM+ or another specialist package, the long-term architecture should allow that package to sit behind a controlled adapter without becoming the owner of JarvisOS state.
+- biology and productivity;
+- light availability and optical attenuation;
+- gas transfer and CO₂ supply;
+- mixing and shear;
+- hydraulics and pressure drop;
+- pumps and energy demand;
+- reactor geometry;
+- buoyancy and structural considerations;
+- process economics;
+- CAD, meshing, CFD or FEM when higher fidelity is actually needed.
+
+In a conventional workflow these questions can end up spread across spreadsheets, Python or MATLAB scripts, process simulators, CAD packages, reports, papers and many separate AI chats.
+
+The JarvisOS idea is to make them parts of one traceable project.
+
+![Microalgae photobioreactor design loop](docs/assets/readme/photobioreactor-process-loop.svg)
+
+The intended workflow is roughly:
+
+```text
+Engineer + AI assistants
+        ↓
+goals · assumptions · questions · alternatives
+        ↓
+project knowledge + typed engineering data
+        ↓
+calculation / process / CAD / CAE evaluators
+        ↓
+results + evidence + limitations
+        ↓
+comparison / optimization / discussion
+        ↓
+engineering decision
+```
+
+The integrated predictive PBR model does **not** exist end to end today. Current process work consists of bounded screening models and experiments. That distinction matters.
 
 ---
 
-# How it works
+# What I want the workspace to feel like
+
+The interaction goal is closer to having a small group of useful collaborators around the same engineering desk than to using a chatbot in a separate browser tab.
+
+Different AI systems may be useful for different jobs: discussing an idea, criticizing assumptions, reading documentation, inspecting code, planning an experiment, explaining a solver failure or drafting a change.
+
+I sometimes think of that experience as having colleagues, friends or specialists available to discuss the work with. That is a **workflow metaphor**, not a claim that AI systems are people or that their answers carry professional authority.
+
+A good AI assistant in JarvisOS should be able to say things such as:
+
+- “this assumption is inconsistent with the accepted project basis”;
+- “this result depends on a stale parameter”;
+- “these two models disagree here”;
+- “this calculation is outside its validity range”;
+- “I can suggest this change, but I cannot commit it without the proper owner transition”;
+- “there is already an upstream library that probably solves this better than our custom code.”
+
+That is more useful to me than an assistant that confidently produces an answer without exposing how it relates to the rest of the project.
+
+---
+
+# What JarvisOS is not
+
+JarvisOS is **not**:
+
+- a replacement for Aspen HYSYS, ANSYS, Fusion, OpenFOAM, MATLAB or every other engineering package;
+- a new frontier AI model;
+- a replacement for Claude Code, Codex, Hermes or other software/agent systems;
+- evidence that one person with AI has suddenly become an expert software-development team;
+- a certified engineering platform;
+- a guarantee that every model in the repository is scientifically valid for every use case;
+- an attempt to hide the fact that much of the software was built with substantial AI assistance.
+
+Where those tools are strong, I would rather integrate or learn from them than imitate them badly.
+
+The interesting experiment is the **integration layer and engineering workflow**: can different tools and AI systems cooperate around one controlled project state, while keeping assumptions, evidence, authority and data handling explicit?
+
+---
+
+# What exists today
+
+JarvisOS is still under active development, but it is no longer only a mock-up.
+
+| Area | Current reality |
+| --- | --- |
+| Operator application | A React/TypeScript engineering workstation exists with shared navigation, project surfaces, Jarvis sidecar, runs, engineering data, lineage, analysis and BLUECAD views. |
+| Project knowledge | Backend-owned Project Basis change sets, working revisions, impact/revalidation and reconciliation foundations exist. |
+| Engineering records | Typed records, lifecycle state, provenance, freshness and CAS-style guarded updates exist for supported paths. Some legacy write surfaces are still being consolidated. |
+| AI execution | Local/external routing, provider configuration, budget/accounting and controlled egress foundations exist. |
+| Context for AI | Exact project/context references and deterministic bounded context assembly exist. |
+| CAD | Parametric B-Rep geometry uses build123d/OCP/OpenCascade for the supported vocabulary. |
+| Meshing | Gmsh is connected through a controlled external-tool adapter. |
+| Static FEM | CalculiX is connected through a controlled adapter with verification foundations. |
+| CAD → mesh → FEM | A bounded end-to-end physical-design path exists with artifacts and evidence. |
+| Process/PBR calculations | Several useful screening models and process-kernel experiments exist, but not a complete predictive PBR simulator. |
+| CI / architecture checks | Automated tests and architecture guards try to stop accidental new state, provider or database side channels from appearing. |
+| Hermes / MCP-style runtime | Possible future integration area, not a current claim or required runtime. |
+
+For exact spec state and implementation status, use [`docs/specs/STATUS.md`](docs/specs/STATUS.md). This README intentionally stays higher level.
+
+---
+
+# The design principles in plain language
+
+## 1. The AI is allowed to be useful, not magical
+
+AI can reason, propose, explain and call authorized capabilities. Its text is not automatically engineering truth.
+
+## 2. One important fact should have one real owner
+
+Project parameters, requirements, runs, evidence and other durable state should not be silently editable through multiple unrelated paths.
+
+## 3. Results should come with receipts
+
+Important calculations should retain inputs, units, model identity, artifacts, provenance and enough context to understand where the result came from.
+
+## 4. Use existing software when it is better
+
+Custom code gets no special protection just because time was spent writing it. If BioSTEAM, IDAES, Pyomo, OpenMDAO, Gmsh, CalculiX, OpenFOAM or another project is better for a generic problem, JarvisOS should wrap or reuse it where practical.
+
+## 5. Use expensive fidelity only when the decision needs it
+
+Not every question needs CFD. Not every geometry needs FEM. Cheap analytical or reduced-order models should solve the easy part first; higher-fidelity tools should be used when they can actually change a decision.
+
+## 6. Local-first, not local-only
+
+Keep sensitive context and ordinary work local when practical. External AI or commercial software can still be used deliberately when their value justifies it.
+
+---
+
+# Technical details
+
+The rest of this README is for readers who want a more software-oriented description.
+
+## High-level architecture
 
 ![JarvisOS high-level architecture](docs/assets/readme/architecture-overview.svg)
 
-The governing boundary is:
+A simplified ownership model is:
 
-> **The engineer owns the engineering decision. JarvisOS owns software-side commit authority. AI and agents propose. Policy authorizes capabilities and egress. Tools execute. Results and evidence return.**
+```text
+Engineer
+  owns the engineering decision
 
-## AI, policy and state
+JarvisOS
+  owns application state, identity, policy, provenance and controlled transitions
+
+AI / agent runtimes
+  reason, propose, explain and request capabilities
+
+Engineering tools
+  calculate, simulate, build or inspect
+
+Evidence
+  records what ran, with what inputs, assumptions and limitations
+```
+
+The central rule is:
+
+> **AI output is not canonical state, and numerical output is not automatically accepted engineering truth.**
+
+## AI and authority
 
 ![JarvisOS AI authority flow](docs/assets/readme/ai-authority.svg)
 
-Provider calls, local runtimes and future agent runtimes remain below JarvisOS-owned routing, policy, credential, budget and egress controls. A response can become a proposal or tool intent; it cannot silently become project truth.
+Provider calls, local models and future agent runtimes remain below JarvisOS-owned routing, policy, credential, budget and egress controls.
 
-## Project knowledge, context and memory
+A model response can create a proposal or request a capability. Durable domain state is intended to change only through the accepted domain owner and its validation/reconciliation path.
+
+## Project knowledge, context and evidence
 
 ![JarvisOS control and memory layers](docs/assets/readme/memory-control.svg)
 
-JarvisOS deliberately separates:
+JarvisOS separates several things that are easy to blur together:
 
-- **canonical project and engineering state** — accepted Project Basis facts, requirements, parameters, assumptions, decisions and typed records;
-- **working revisions / change sets** — explicit bounded edits before reconciliation into canonical owners;
-- **runs, artifacts and evidence** — exact execution identity, inputs, outputs, manifests, diagnostics, provenance and qualification context;
-- **derived retrieval** — rebuildable search/index layers that never outrank canonical state;
-- **external documents and notes** — source material, not automatic truth;
-- **context assembly** — bounded, inspectable context passed to AI or agent runtimes.
+| Layer | Meaning |
+| --- | --- |
+| Canonical Project Basis / engineering records | Accepted project state after an authorized transition. |
+| Working revisions / change sets | Proposed or staged edits that are not yet canonical. |
+| Runs / artifacts | What actually executed and what files/results it produced. |
+| Engineering evidence | Results plus provenance, fidelity, validity and qualification context. |
+| Derived search / retrieval | Rebuildable indexes used to find context; not the source of truth. |
+| External documents / notes | Sources and working material; not automatically accepted facts. |
 
-The repository already has deterministic context assembly, exact references, provenance manifests and Project Knowledge foundations. Future retrieval layers remain derived and non-authoritative.
+The current architecture still contains some legacy mutation debt. Those paths are being forced either through accepted canonical owners/CAS/reconciliation semantics or toward explicit rejection rather than permanent parallel write authority.
 
-## Canonical write authority
+## Engineering backends
 
-Project Basis changes now have an explicit backend-owned change-set / working-revision / reconciliation path over existing engineering-record ownership.
-
-One architecture debt remains intentionally visible: some legacy modeling mutation surfaces still predate that canonical owner boundary. Those paths must either delegate to accepted owner/CAS/reconciliation semantics or explicitly reject caller-supplied authority. JarvisOS is not intended to keep a permanent second write authority for compatibility.
-
----
-
-# What works today?
-
-JarvisOS is still under active development, but the repository is well beyond a UI mockup.
-
-| Capability | Current maturity | Meaning |
-| --- | --- | --- |
-| Operator workstation + shared visual identity | **Working / evolving** | The main application shell, operator surfaces, contextual sidecars and current visual system are integrated; product behavior still evolves behind explicit authority boundaries. |
-| Project Knowledge / Project Basis | **Working foundation** | Canonical Project Basis change sets, working revisions, impact/revalidation and reconciliation exist over current engineering-record owners. |
-| Engineering records, lifecycle, provenance and freshness | **Working** | Backend-owned durable records, lifecycle/CAS behavior, lineage and stale propagation exist. Some legacy modeling mutation entry points still require canonical-path closure. |
-| Jarvis context and action contracts | **Working foundation** | Stable exact context references and generic capability/action contracts exist without giving Jarvis domain commit authority. |
-| AI routing, budget, egress and provider policy | **Working** | Local-first routing and explicit external-provider controls share server-owned policy and accounting boundaries. |
-| Architecture-enforcement CI | **Working** | Deterministic checks guard against new raw-SQLite, provider and domain side-channel ownership and track accepted architectural debt explicitly. |
-| Bounded deterministic runner | **Working** | Reviewed deterministic models can execute with persisted runs and artifacts. It is **not** a hostile-code sandbox. |
-| Semantic parametric CAD | **Working** | `GeometrySpec` plus deterministic build123d/OCP construction and stable artifacts exist for the bounded vocabulary. |
-| STEP / STL / GLB export | **Working** | Geometry artifacts, manifests and digests are generated within the supported path. |
-| Gmsh meshing | **Implemented; qualification separate** | Registry-bound adapter and evidence path exist; host/executable/scientific qualification remains use-case-specific. |
-| CalculiX static FEM | **Implemented; qualification separate** | Deterministic deck/result handling and verification foundations exist; this is not a claim of general multiphysics coverage. |
-| CAD → mesh → FEM → evidence → UI | **Implemented, opt-in** | A real physical-design path exists, including bounded evidence-guided repair. |
-| Process / PBR screening experiments | **Working experiments** | Hydraulics, biomass/nutrient bookkeeping, harvesting, buoyancy, optical proxies and an acyclic process-kernel experiment exist. They are not an integrated predictive PBR simulator. |
-| Common engineering-evaluator / evidence architecture | **Partial foundation** | Existing typed CAD/mesh/FEM/run evidence informs the future common evaluator and qualification boundary. |
-| Hermes / MCP-style AgentRuntime layer | **Not a current runtime dependency** | Any future integration must be freshly qualified below JarvisOS-owned context, policy, credentials, egress, budget and commit authority. |
-
-The exact implementation state is intentionally **not duplicated here**. See [`docs/specs/STATUS.md`](docs/specs/STATUS.md).
-
-### One implemented physical-design path
-
-![Current CAD-to-FEM engineering chain](docs/assets/readme/current-engineering-chain.svg)
-
-This is one production-shaped path in the repository, not a claim that every engineering workflow starts from CAD.
-
----
-
-# Engineering backends
-
-JarvisOS should own evaluator identity, typed inputs, units, run/evidence identity and acceptance boundaries while numerical kernels remain replaceable.
+JarvisOS is intended to make numerical backends replaceable instead of burying engineering logic inside one monolith.
 
 ![JarvisOS engineering backends](docs/assets/readme/engineering-backends.svg)
 
-The target pattern is:
+Target pattern:
 
 ```text
 EvaluationRequest
       ↓
 EngineeringEvaluator adapter
       ↓
-upstream / custom specialist backend
+open-source / custom / commercial specialist backend
       ↓
 EvaluationResult
-outputs · failure state · artifacts · provenance · fidelity · qualification
+outputs · failures · artifacts · provenance · fidelity · qualification
 ```
 
-There is intentionally no claim that every current backend implements one universal interface yet. A common contract must preserve solver-specific semantics rather than flatten incompatible analyses.
+Current and candidate ecosystems include:
 
-## Current and candidate ecosystems
-
-| Area | Current relationship / candidates |
+| Area | Relationship |
 | --- | --- |
 | Parametric CAD | **build123d + OCP / OpenCascade** are current dependencies. |
 | Meshing | **Gmsh** has a current registry-bound adapter. |
 | Static FEM | **CalculiX** has a current registry-bound adapter. |
-| Properties / transport | CoolProp, thermo, chemicals and fluids are upstream candidates/building blocks. |
-| Bio/process simulation | BioSTEAM, QSDsan, IDAES, Pyomo, WaterTAP and DWSIM/CAPE-OPEN are important upstream candidates/references. |
-| Optimization / multidisciplinary studies | CasADi and OpenMDAO are candidates for later deterministic study-control work. |
-| Higher-fidelity CFD | OpenFOAM is a candidate evaluator when a real decision cannot be resolved by cheaper models. |
-| Agent runtime / capability interfaces | Hermes and MCP-style interfaces are candidates only; neither owns JarvisOS state. |
-| Derived retrieval / code intelligence | Graph/semantic memory systems and language-server/code-intelligence tools may become rebuildable context sources, never canonical owners. |
+| Properties / transport | CoolProp, thermo, chemicals and fluids are useful upstream building blocks/candidates. |
+| Bio/process simulation | BioSTEAM, QSDsan, IDAES, Pyomo, WaterTAP and DWSIM/CAPE-OPEN are important candidates/references. |
+| Optimization | CasADi and OpenMDAO are candidates for study-control work. |
+| Higher-fidelity CFD | OpenFOAM is a candidate when cheaper models cannot resolve the engineering decision. |
+| Commercial engineering software | Future adapters may connect packages such as Aspen HYSYS or other specialist tools when access and licensing permit. |
+| Agent runtimes / tool protocols | Hermes and MCP-style systems are candidates below JarvisOS-owned state/policy boundaries, not replacements for them. |
 
-The fuller candidate audit is in [`docs/IDEA_INTAKE_AND_CANDIDATE_INTEGRATIONS.md`](docs/IDEA_INTAKE_AND_CANDIDATE_INTEGRATIONS.md).
-
----
-
-# Microalgae photobioreactor project
-
-One of the first real engineering problems targeted by JarvisOS is a **microalgae photobioreactor design study**.
-
-The important question is not simply “how do I draw the reactor?”. It is:
-
-> **Given the biology, light, mixing, gas transfer, shear, pressure drop and energy demand, which operating conditions and reactor dimensions actually make sense?**
-
-![Microalgae photobioreactor design loop](docs/assets/readme/photobioreactor-process-loop.svg)
-
-The integrated predictive model does **not** exist end to end yet. Current process code is a set of bounded screening experiments and an acyclic custom kernel, not a general recycle/dynamic PBR simulator.
-
-## Jarvis belongs in the outer loop
-
-A numerical optimizer should not require an LLM decision between every candidate.
-
-```text
-Engineer ⇄ Jarvis
- goals · constraints · interpretation · intervention
-                    ⇅
-             typed DesignStudy
-                    ⇅
-             StudyController
-                    ⇅
-          DOE / optimizer / search
-                    ⇅
-       EngineeringEvaluator(s)
-                    ⇅
- EvaluationResult + evidence + failure state
-```
-
-The optimizer receives deterministic evaluation results directly. Jarvis helps define goals, interpret evidence and intervene at explicit boundaries rather than spending model calls inside the tight numerical loop.
-
-## Process design before detailed CAD
-
-Tube diameter, length, loop count and similar quantities may be geometric variables before a detailed CAD object exists.
-
-```text
-process variables + operating variables
-        ↓
-ProcessDesignEnvelope
-        ↓
-selected feasible design
-        ↓
-DetailedGeometrySpec / CAD realization
-        ↓
-mesh / CFD / FEM / manufacturability when required
-        ↓
-feedback to the study if physical verification invalidates an assumption
-```
-
-CFD is a fidelity choice, not merely the “last step after CAD”. It may become an evaluator inside the study when a lower-cost model cannot resolve the decision.
-
----
-
-# Roadmap
-
-The public roadmap is intentionally architectural rather than a duplicate of the live spec queue.
-
-```text
-CURRENT OPERATOR + PROJECT-KNOWLEDGE FOUNDATION
-        ↓
-CANONICAL AUTHORITY CONVERGENCE
-close legacy write/side-channel debt · preserve one owner per state transition
-        ↓
-KNOWLEDGE / DEVELOPMENT / CODING TRUTH SURFACES
-exact project knowledge · repository/runtime truth · explicit proposal/review state
-        ↓
-ENGINEERING EVIDENCE CONTRACT
-common fidelity · validity · qualification · uncertainty semantics where justified
-        ↓
-PROCESS UPSTREAM REVALIDATION
-zero-sunk-cost bake-off · keep / wrap / replace / delete
-        ↓
-COMMON ENGINEERING EVALUATOR BOUNDARY
-replaceable process / CAD / CAE / CFD / commercial adapters
-        ↓
-INTEGRATED PBR EVALUATOR
-biology · light · mixing/shear · gas transfer · control · hydraulics · energy
-        ↓
-DESIGN STUDY CONTROLLER
-DOE · optimization · feasibility · failure taxonomy · Pareto / uncertainty
-        ↓
-PROCESS-DESIGN → CAD HANDOFF
-        ↓
-MULTI-FIDELITY PHYSICAL VERIFICATION
-mesh · CFD · FEM · manufacturability when the decision requires them
-        ↓
-REAL MICROALGAE CASES + DOMAIN QUALIFICATION
-```
-
-The principle remains:
-
-> **Use what already works, make authority explicit, remove duplicated infrastructure, qualify the engineering boundary, and solve a real problem.**
-
-For exact dependencies, readiness and implementation state, use [`docs/specs/STATUS.md`](docs/specs/STATUS.md).
-
----
-
-# Technical details
-
-## Current application stack
-
-### Backend
-
-- **Python**
-- **FastAPI**
-- **Pydantic**
-- **Pint** for units
-- **SQLite**-backed durable application state
-- **httpx** and explicit provider/runtime adapters
-- **PyYAML** for bounded configuration surfaces
-
-Pinned dependencies: [`backend/requirements.txt`](backend/requirements.txt).
-
-### Frontend
-
-- **React 18**
-- **TypeScript**
-- **Vite**
-- **Three.js** for 3D engineering inspection
-
-Pinned dependencies: [`frontend/package.json`](frontend/package.json).
-
-### Current engineering stack
-
-- **build123d / OCP / OpenCascade** for deterministic B-Rep geometry;
-- **Gmsh** through a registry-bound external-tool adapter;
-- **CalculiX** through a registry-bound static-FEM adapter;
-- bounded process/PBR screening calculations and runner experiments;
-- typed simulation runs, artifacts, manifests, digests and engineering evidence.
-
-An adapter being implemented is not the same as a solver being scientifically qualified for every use case.
-
-## Architectural ownership
-
-JarvisOS owns or is intended to own:
-
-- canonical project and engineering state;
-- lifecycle, change-set and reconciliation semantics;
-- engineering identity, units, provenance and freshness;
-- AI route, budget, credential and egress policy;
-- capability grants and software-side commit boundaries;
-- run/artifact/evidence identity;
-- evaluator contracts that keep numerical backends replaceable.
-
-External systems may own replaceable mechanics such as inference, agent loops, retrieval indexes, CAD/mesh/CFD/FEM kernels, process solvers, optimizers, sandbox implementations and telemetry transport.
-
-> **JarvisOS should own engineering intent, controlled state transitions and evidence identity; numerical kernels receive no sunk-cost privilege.**
-
-## Memory, context and evidence
-
-| Layer | Authority |
-| --- | --- |
-| Canonical Project Basis / engineering records | **Authoritative after accepted JarvisOS-owned transition** |
-| Working revisions / change sets | **Non-canonical until reconciled** |
-| Runs / artifacts | **Execution record** |
-| Typed engineering evidence | **Evidence scoped by fidelity, validity and qualification** |
-| Derived search / semantic retrieval | **Non-authoritative and rebuildable** |
-| External notes / documents | **Source material** |
+More candidate/upstream notes live in [`docs/IDEA_INTAKE_AND_CANDIDATE_INTEGRATIONS.md`](docs/IDEA_INTAKE_AND_CANDIDATE_INTEGRATIONS.md).
 
 ## Current physical-design chain
 
@@ -329,39 +329,78 @@ CAD candidate + GeometrySpec
 build123d / OCP
         ├── STEP / STL / GLB + manifests / digests
         ↓
-registry-bound Gmsh
+Gmsh
         ├── mesh + physical groups + quality evidence
         ↓
-registry-bound CalculiX
+CalculiX
         ├── solver outputs + parsed result summary
         ↓
-SimulationRun + artifacts + typed evidence + acceptance criteria
+SimulationRun + artifacts + typed evidence
         ↓
 FastAPI read models → operator UI
 ```
 
-When bounded repair is enabled, failed criteria may produce an evidence-grounded repair proposal and a new candidate. The proposal still does not own final engineering truth.
+This is one implemented engineering path, not a claim that every problem should begin with CAD or end with FEM.
 
 ## Current process-model reality
 
-The current process stack should be read as a set of useful experiments, not as a finished simulator:
+The present process/PBR stack should be read as a set of useful experiments rather than a finished simulator:
 
-- productivity is still an input in the biomass/nutrient/harvest screening path rather than an emergent result of coupled biology/light/transport;
-- the optical path is a bounded transmission proxy, not a complete radiation/photosynthesis model;
-- the custom `process_kernel` executes acyclic typed block graphs and is not a general recycle, nonlinear-equation, ODE or DAE solver;
-- the historical dependency/provenance module named `flowsheet` is conceptually lineage, not a process flowsheet.
-
-Generic process-solver expansion should follow a fresh upstream comparison, not extend the current kernel by inertia.
+- productivity is still an input in parts of the biomass/nutrient/harvest path rather than an emergent result of a complete biology/light/transport model;
+- the optical path is a bounded transmission proxy, not a full radiation/photosynthesis model;
+- the custom process kernel handles bounded acyclic typed calculations and is not a general recycle/nonlinear/ODE/DAE simulator;
+- future process work is explicitly being compared against stronger upstream ecosystems before more generic custom solver infrastructure is added.
 
 ## Engineering qualification philosophy
 
-A numerical tool is not accepted because it is popular, open source or produces a plausible plot.
+A numerical tool is not accepted merely because it is popular, open source or produces a plausible plot.
 
-For a real engineering decision, qualification may compare selected evaluators against analytical solutions, trusted correlations, literature or experimental data, independent numerical implementations and commercial engineering software when that comparison is meaningful.
+For real decisions, useful checks may include comparison against:
 
-> **For the decisions I need to make, are the selected evaluators accurate, robust, reproducible, appropriately qualified and traceable enough to be useful?**
+- analytical solutions;
+- trusted engineering correlations;
+- literature or experimental data;
+- independent numerical implementations;
+- established commercial software when a comparison is available and meaningful.
 
-Provenance is necessary, but provenance alone does not make a model scientifically valid.
+The useful question is:
+
+> **For the decision I need to make, is this model accurate, robust, reproducible, appropriately qualified and traceable enough?**
+
+Provenance is necessary. It is not the same thing as scientific validity.
+
+## Application stack
+
+### Backend
+
+- Python
+- FastAPI
+- Pydantic
+- Pint
+- SQLite-backed durable application state
+- httpx and explicit provider/runtime adapters
+- PyYAML for bounded configuration surfaces
+
+Pinned dependencies: [`backend/requirements.txt`](backend/requirements.txt).
+
+### Frontend
+
+- React 18
+- TypeScript
+- Vite
+- Three.js for 3D engineering inspection
+
+Pinned dependencies: [`frontend/package.json`](frontend/package.json).
+
+### Engineering stack already used in the repository
+
+- build123d / OCP / OpenCascade;
+- Gmsh;
+- CalculiX;
+- bounded process/PBR calculations;
+- typed runs, artifacts, manifests, digests and evidence.
+
+An adapter existing in the repository is **not** a claim that its solver has been qualified for every engineering use case.
 
 ## Repository map
 
@@ -379,9 +418,9 @@ Important documentation entry points:
 - [`docs/specs/STATUS.md`](docs/specs/STATUS.md) — **sole live implementation/queue authority**;
 - [`AGENTS.md`](AGENTS.md) — hard repository invariants for coding agents;
 - [`docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md`](docs/AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md) — exact-head delivery and automation rules;
-- [`docs/POST_112_PARALLEL_DELIVERY_PROFILE.md`](docs/POST_112_PARALLEL_DELIVERY_PROFILE.md) — controlled parallel delivery after the Project Knowledge Core milestone;
+- [`docs/POST_112_PARALLEL_DELIVERY_PROFILE.md`](docs/POST_112_PARALLEL_DELIVERY_PROFILE.md) — current controlled-parallel delivery profile;
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — canonical architecture and known debt;
-- [`docs/IDEA_INTAKE_AND_CANDIDATE_INTEGRATIONS.md`](docs/IDEA_INTAKE_AND_CANDIDATE_INTEGRATIONS.md) — candidate/upstream audit register.
+- [`docs/IDEA_INTAKE_AND_CANDIDATE_INTEGRATIONS.md`](docs/IDEA_INTAKE_AND_CANDIDATE_INTEGRATIONS.md) — upstream/candidate audit register.
 
 ## Running the development build
 
@@ -442,16 +481,16 @@ Third-party packages, tools, reference projects and external software retain the
 
 ## Collaboration
 
-I am especially interested in criticism or collaboration around:
+Useful criticism is welcome, especially around:
 
 - photobioreactors, microalgae and biochemical/process systems engineering;
 - process modeling, transport phenomena, hydrodynamics and mass transfer;
 - scientific Python and numerical methods;
 - CAD/CAE, meshing, CFD/FEM and engineering interoperability;
 - local AI runtimes, agent infrastructure, sandboxing and tool protocols;
-- engineering validation, provenance and reproducible computational workflows.
+- engineering validation, provenance, cybersecurity and reproducible computational workflows.
 
-A useful contribution is often **not more code**. Sometimes the best contribution is pointing to an existing project that already solves a problem better than something JarvisOS was about to build.
+A useful contribution is often **not more code**. Pointing out that an existing project already solves a problem better, identifying a bad assumption, finding a validation gap or explaining why an architecture is unnecessarily complicated can be more valuable.
 
 If you want to discuss the project, suggest an upstream, contribute substantially, explore research collaboration or talk about licensing, contact me through GitHub.
 
@@ -459,4 +498,6 @@ If you want to discuss the project, suggest an upstream, contribute substantiall
 
 ## Final note
 
-This README is intentionally descriptive rather than authoritative about the live queue. The project should be judged by the code, tests, exact evidence and real engineering decisions it can support — not by how polished the README sounds.
+JarvisOS should be judged by what it can actually demonstrate: code that runs, tests that pass for the right reasons, engineering models with known limits, traceable evidence and eventually useful decisions on a real microalgae project.
+
+A polished README is not evidence that those goals have been achieved.
