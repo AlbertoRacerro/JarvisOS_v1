@@ -2,6 +2,7 @@ import sqlite3
 
 from fastapi import APIRouter, HTTPException
 
+from app.core.errors import workspace_not_found_http_error
 from app.modules.workspaces.models import WorkspaceCreate, WorkspaceRead
 from app.modules.workspaces.service import create_workspace, get_workspace, list_workspaces
 
@@ -25,5 +26,5 @@ def list_workspaces_endpoint() -> list[WorkspaceRead]:
 def get_workspace_endpoint(workspace_id: str) -> WorkspaceRead:
     workspace = get_workspace(workspace_id)
     if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found.")
+        raise workspace_not_found_http_error()
     return workspace
