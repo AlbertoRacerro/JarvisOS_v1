@@ -165,8 +165,6 @@ def _ruleset_evidence(policy: dict[str, Any], snapshot: dict[str, Any]) -> tuple
         if bypass == []:
             pass
         elif isinstance(bypass, list):
-            # Any configured bypass needs actor-specific proof before it can be
-            # called compliant with the V1 normal-owner no-bypass requirement.
             bypass_state = None
         else:
             bypass_state = None
@@ -194,7 +192,7 @@ def _ruleset_evidence(policy: dict[str, Any], snapshot: dict[str, Any]) -> tuple
     if not saw_applicable:
         if relevance_unknown:
             return None, None, "applicable ruleset cannot be established safely"
-        return set(), False, "no active readable ruleset applies to master"
+        return None, False, "no active readable ruleset applies to master"
     if relevance_unknown:
         return required_contexts or None, bypass_state, "applicable ruleset evidence is partially unreadable"
     return required_contexts, bypass_state, "active ruleset evidence readable"
