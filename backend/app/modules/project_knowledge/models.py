@@ -92,7 +92,13 @@ _ALLOWED_FIELDS: dict[tuple[str, str], set[str]] = {
 
 def _bounded_json_size(value: object, *, limit: int, message: str) -> None:
     try:
-        encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+        encoded = json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        ).encode("utf-8")
     except (TypeError, ValueError) as exc:
         raise ValueError("Project Knowledge operation fields must be JSON-serializable.") from exc
     if len(encoded) > limit:
@@ -220,6 +226,8 @@ class ImpactPreview(BaseModel):
 
 
 class ApprovalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     workspace_id: str
     approval_request_key: str = Field(min_length=1, max_length=200)
     draft_id: str
@@ -261,6 +269,8 @@ class ApplicabilityMutation(BaseModel):
 
 
 class ScalarAdmissionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     workspace_id: str
     run_id: str
     output_name: str = Field(min_length=1, max_length=200)
@@ -284,6 +294,8 @@ class ScalarResultRead(BaseModel):
 
 
 class ValidationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     workspace_id: str
     working_revision_id: str
     requirement_id: str
@@ -320,6 +332,8 @@ class RevalidationRead(BaseModel):
 
 
 class ReconcileRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     workspace_id: str
     idempotency_key: str = Field(min_length=1, max_length=200)
     working_revision_id: str
@@ -356,6 +370,8 @@ class SnapshotRead(BaseModel):
 
 
 class RevisionStateCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     workspace_id: str
     action: Literal["discard", "supersede"]
     superseded_by_revision_id: str | None = None
