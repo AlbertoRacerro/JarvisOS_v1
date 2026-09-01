@@ -111,6 +111,95 @@ def _required_contexts_from_branch(branch: dict[str, Any]) -> tuple[set[str] | N
     return contexts, "required status-check summary readable"
 
 
+def _ruleset_applies_to_master(ruleset: dict[str, Any], branch: str) -> bool | None:
+    if ruleset.get("target") != "branch" or ruleset.get("enforcement") != "active":
+        return False
+    conditions = ruleset.get("conditions")
+    if not isinstance(conditions, dict):
+        return None
+    ref_name = conditions.get("ref_name")
+    if not isinstance(ref_name, dict):
+        return None
+    include = ref_name.get("include")
+    exclude = ref_name.get("exclude", [])
+    if not isinstance(include, list) or not isinstance(exclude, list):
+        return None
+    exact = f"refs/heads/{branch}"
+    known_targets = {exact, "~DEFAULT_BRANCH", "~ALL"}
+    if any(not isinstance(v, str) for v in include + exclude):
+        return None
+    if any(v not in known_targets for v in include + exclude):
+        return None
+    if exact in exclude or "~DEFAULT_BRANCH" in exclude or "~ALL" in exclude:
+        return False
+    return bool(known_targets.intersection(include))
+
+
+def _ruleset_evidence(policy: dict[str, Any], snapshot: dict[str, Any]) -> tuple[set[str] | None, bool | None, str]:
+    details = snapshot.get("ruleset_details")
+    if details is None:
+        return None, None, "ruleset details unavailable"
+    if not isinstance(details, list):
+        return None, None, "ruleset details malformed"
+
+    required_contexts: set[str] = set()
+    saw_applicable = False
+    relevance_unknown = False
+    bypass_state: bool | None = True
+    for item in details:
+        if not isinstance(item, dict):
+            relevance_unknown = True
+            continue
+        if _error_status(item):
+            relevance_unknown = True
+            continue
+        applies = _ruleset_applies_to_master(item, policy["branch"])
+        if applies is None:
+            relevance_unknown = True
+            continue
+        if not applies:
+            continue
+        saw_applicable = True
+
+        bypass = item.get("bypass_actors")
+        if bypass == []:
+            pass
+        elif isinstance(bypass, list):
+            # Any configured bypass needs actor-specific proof before it can be
+            # called compliant with the V1 normal-owner no-bypass requirement.
+            bypass_state = None
+        else:
+            bypass_state = None
+
+        rules = item.get("rules")
+        if not isinstance(rules, list):
+            relevance_unknown = True
+            continue
+        for rule in rules:
+            if not isinstance(rule, dict) or rule.get("type") != "required_status_checks":
+                continue
+            params = rule.get("parameters")
+            checks = params.get("required_status_checks") if isinstance(params, dict) else None
+            if not isinstance(checks, list):
+                relevance_unknown = True
+                continue
+            for check in checks:
+                if isinstance(check, dict) and isinstance(check.get("context"), str):
+                    required_contexts.add(check["context"])
+                elif isinstance(check, str):
+                    required_contexts.add(check)
+                else:
+                    relevance_unknown = True
+
+    if not saw_applicable:
+        if relevance_unknown:
+            return None, None, "applicable ruleset cannot be established safely"
+        return set(), False, "no active readable ruleset applies to master"
+    if relevance_unknown:
+        return required_contexts or None, bypass_state, "applicable ruleset evidence is partially unreadable"
+    return required_contexts, bypass_state, "active ruleset evidence readable"
+
+
 def classify(policy: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, Any]:
     findings: list[dict[str, str]] = []
     if not isinstance(snapshot, dict):
@@ -138,7 +227,11 @@ def classify(policy: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, Any]
         else:
             findings.append(finding("auto_merge", "VERIFIED", "deferred auto-merge is disabled"))
 
+    ruleset_contexts, ruleset_bypass, ruleset_reason = _ruleset_evidence(policy, snapshot)
+
     protected: bool | None = None
+    branch_contexts: set[str] | None = None
+    branch_context_reason = "branch metadata unavailable"
     if not isinstance(branch, dict):
         findings.append(finding("branch", "ERROR", "branch metadata missing or malformed"))
     else:
@@ -156,19 +249,23 @@ def classify(policy: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, Any]
                 findings.append(finding("protection", "VERIFIED", "branch reports protected=true"))
         else:
             findings.append(finding("protection", "UNKNOWN", "branch protected flag unreadable"))
+        branch_contexts, branch_context_reason = _required_contexts_from_branch(branch)
 
-        contexts, context_reason = _required_contexts_from_branch(branch)
-        required = set(policy["required_check_contexts"])
-        if protected is False:
-            findings.append(finding("required_status_checks", "MISMATCH", context_reason))
-        elif contexts is None:
-            findings.append(finding("required_status_checks", "UNKNOWN", context_reason))
+    required = set(policy["required_check_contexts"])
+    if protected is False:
+        findings.append(finding("required_status_checks", "MISMATCH", branch_context_reason))
+    else:
+        branch_ok = branch_contexts is not None and not (required - branch_contexts)
+        ruleset_ok = ruleset_contexts is not None and not (required - ruleset_contexts)
+        if branch_ok:
+            findings.append(finding("required_status_checks", "VERIFIED", f"required contexts present in branch protection: {sorted(required)}"))
+        elif ruleset_ok:
+            findings.append(finding("required_status_checks", "VERIFIED", f"required contexts present in active ruleset: {sorted(required)}"))
+        elif branch_contexts is not None or ruleset_contexts is not None:
+            seen = (branch_contexts or set()) | (ruleset_contexts or set())
+            findings.append(finding("required_status_checks", "MISMATCH", f"missing required contexts: {sorted(required - seen)}"))
         else:
-            missing = sorted(required - contexts)
-            if missing:
-                findings.append(finding("required_status_checks", "MISMATCH", f"missing required contexts: {missing}"))
-            else:
-                findings.append(finding("required_status_checks", "VERIFIED", f"required contexts present: {sorted(required)}"))
+            findings.append(finding("required_status_checks", "UNKNOWN", f"{branch_context_reason}; {ruleset_reason}"))
 
     if isinstance(rulesets, list):
         findings.append(finding("rulesets.visibility", "VERIFIED", f"readable ruleset count={len(rulesets)}"))
@@ -185,14 +282,20 @@ def classify(policy: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, Any]
             findings.append(finding("normal_merge_owner_bypass", "VERIFIED", "classic protection enforce_admins=true"))
         elif enabled is False:
             findings.append(finding("normal_merge_owner_bypass", "MISMATCH", "classic protection enforce_admins=false"))
+        elif ruleset_bypass is True:
+            findings.append(finding("normal_merge_owner_bypass", "VERIFIED", "applicable active ruleset has no bypass actors"))
         else:
-            findings.append(finding("normal_merge_owner_bypass", "UNKNOWN", "admin enforcement detail unreadable"))
+            findings.append(finding("normal_merge_owner_bypass", "UNKNOWN", "classic admin enforcement and ruleset bypass detail are insufficient"))
     elif protected is False:
         findings.append(finding("normal_merge_owner_bypass", "MISMATCH", "unprotected branch cannot enforce normal-owner gates"))
+    elif ruleset_bypass is True:
+        findings.append(finding("normal_merge_owner_bypass", "VERIFIED", "applicable active ruleset has no bypass actors"))
+    elif ruleset_bypass is None and ruleset_contexts is not None:
+        findings.append(finding("normal_merge_owner_bypass", "UNKNOWN", "active ruleset has bypass actors or unreadable bypass detail"))
     elif detail_error:
-        findings.append(finding("normal_merge_owner_bypass", "UNKNOWN", f"detailed protection HTTP {detail_error}"))
+        findings.append(finding("normal_merge_owner_bypass", "UNKNOWN", f"detailed protection HTTP {detail_error}; {ruleset_reason}"))
     else:
-        findings.append(finding("normal_merge_owner_bypass", "UNKNOWN", "detailed protection unavailable"))
+        findings.append(finding("normal_merge_owner_bypass", "UNKNOWN", f"detailed protection unavailable; {ruleset_reason}"))
 
     merge_methods = snapshot.get("merge_methods")
     if isinstance(merge_methods, dict):
@@ -242,6 +345,15 @@ def live_snapshot(policy: dict[str, Any], token: str | None = None) -> dict[str,
     branch_data = _request_json(f"{base}/branches/{branch}", token)
     rulesets = _request_json(f"{base}/rulesets", token)
     detailed = _request_json(f"{base}/branches/{branch}/protection", token)
+    ruleset_details: list[Any] | None = None
+    if isinstance(rulesets, list):
+        ruleset_details = []
+        for item in rulesets:
+            ruleset_id = item.get("id") if isinstance(item, dict) else None
+            if isinstance(ruleset_id, int):
+                ruleset_details.append(_request_json(f"{base}/rulesets/{ruleset_id}", token))
+            else:
+                ruleset_details.append({"_error_status": 599, "_error_type": "MissingRulesetId"})
     merge_methods: dict[str, bool] | None = None
     if isinstance(repo_data, dict) and _error_status(repo_data) is None:
         merge_methods = {
@@ -253,6 +365,7 @@ def live_snapshot(policy: dict[str, Any], token: str | None = None) -> dict[str,
         "repository": repo_data,
         "branch": branch_data,
         "rulesets": rulesets,
+        "ruleset_details": ruleset_details,
         "detailed_protection": detailed,
         "merge_methods": merge_methods,
     }
@@ -289,9 +402,29 @@ def _base_snapshot(*, protected: bool = True, auto_merge: bool = False) -> dict[
             },
         },
         "rulesets": [],
+        "ruleset_details": [],
         "detailed_protection": {"enforce_admins": {"enabled": True}} if protected else {"_error_status": 403},
         "merge_methods": {"merge_commit": True, "squash": True, "rebase": True},
     }
+
+
+def _ruleset_snapshot() -> dict[str, Any]:
+    snapshot = _base_snapshot()
+    snapshot["branch"]["protection"] = {"enabled": True}
+    snapshot["detailed_protection"] = {"_error_status": 403}
+    snapshot["rulesets"] = [{"id": 7, "name": "master minimum"}]
+    snapshot["ruleset_details"] = [{
+        "id": 7,
+        "target": "branch",
+        "enforcement": "active",
+        "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
+        "bypass_actors": [],
+        "rules": [{
+            "type": "required_status_checks",
+            "parameters": {"required_status_checks": [{"context": "backend"}, {"context": "evidence"}]},
+        }],
+    }]
+    return snapshot
 
 
 def self_test() -> None:
@@ -306,6 +439,17 @@ def self_test() -> None:
     unknown["detailed_protection"] = {"_error_status": 403}
     assert classify(policy, unknown)["state"] == "UNKNOWN"
 
+    assert classify(policy, _ruleset_snapshot())["state"] == "VERIFIED"
+    ruleset_missing = _ruleset_snapshot()
+    ruleset_missing["ruleset_details"][0]["rules"][0]["parameters"]["required_status_checks"] = [{"context": "backend"}]
+    assert classify(policy, ruleset_missing)["state"] == "MISMATCH"
+    ruleset_bypass = _ruleset_snapshot()
+    ruleset_bypass["ruleset_details"][0]["bypass_actors"] = [{"actor_type": "User", "actor_id": 1, "bypass_mode": "always"}]
+    assert classify(policy, ruleset_bypass)["state"] == "UNKNOWN"
+    ruleset_pattern = _ruleset_snapshot()
+    ruleset_pattern["ruleset_details"][0]["conditions"]["ref_name"]["include"] = ["refs/heads/release/*"]
+    assert classify(policy, ruleset_pattern)["state"] == "UNKNOWN"
+
     auto = _base_snapshot(auto_merge=True)
     assert classify(policy, auto)["state"] == "MISMATCH"
 
@@ -315,6 +459,7 @@ def self_test() -> None:
 
     mixed = _base_snapshot(protected=False)
     mixed["rulesets"] = {"_error_status": 403}
+    mixed["ruleset_details"] = None
     assert classify(policy, mixed)["state"] == "MISMATCH", "MISMATCH must outrank UNKNOWN"
 
     malformed = _base_snapshot()
