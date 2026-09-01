@@ -17,7 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = REPO_ROOT / "backend"
 DEFAULT_BASELINE = BACKEND_ROOT / "mypy-baseline.json"
 SCHEMA_VERSION = 1
-ERROR_RE = re.compile(r"^(?P<path>.+):(?P<line>\d+)(?::(?P<column>\d+))?: error: ")
+ERROR_RE = re.compile(r"^(?P<path>.+?):(?P<line>\d+)(?::(?P<column>\d+))?: error: ")
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
@@ -183,7 +183,7 @@ def self_test() -> None:
         "app/a.py:10: error: bad [assignment]\n"
         "app/a.py:12:3: error: worse [arg-type]\n"
         "app/a.py:12: note: context\n"
-        "backend\\app\\b.py:7: error: bad [name-defined]\n"
+        "C:\\repo\\backend\\app\\b.py:7: error: bad [name-defined]\n"
     )
     assert parse_error_counts(sample) == {"app/a.py": 2, "app/b.py": 1}
     assert compare_counts({"app/a.py": 2}, {"app/a.py": 2}) == []
