@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from fastapi import HTTPException
 
+from fastapi import HTTPException
 
 WORKSPACE_NOT_FOUND_CODE = "workspace_not_found"
 WORKSPACE_NOT_FOUND_MESSAGE = "Workspace not found."
