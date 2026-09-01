@@ -250,20 +250,19 @@ def classify(policy: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, Any]
         branch_contexts, branch_context_reason = _required_contexts_from_branch(branch)
 
     required = set(policy["required_check_contexts"])
+    branch_ok = branch_contexts is not None and not (required - branch_contexts)
+    ruleset_ok = ruleset_contexts is not None and not (required - ruleset_contexts)
     if protected is False:
         findings.append(finding("required_status_checks", "MISMATCH", branch_context_reason))
+    elif branch_ok:
+        findings.append(finding("required_status_checks", "VERIFIED", f"required contexts present in branch protection: {sorted(required)}"))
+    elif ruleset_ok:
+        findings.append(finding("required_status_checks", "VERIFIED", f"required contexts present in active ruleset: {sorted(required)}"))
+    elif branch_contexts is not None or ruleset_contexts is not None:
+        seen = (branch_contexts or set()) | (ruleset_contexts or set())
+        findings.append(finding("required_status_checks", "MISMATCH", f"missing required contexts: {sorted(required - seen)}"))
     else:
-        branch_ok = branch_contexts is not None and not (required - branch_contexts)
-        ruleset_ok = ruleset_contexts is not None and not (required - ruleset_contexts)
-        if branch_ok:
-            findings.append(finding("required_status_checks", "VERIFIED", f"required contexts present in branch protection: {sorted(required)}"))
-        elif ruleset_ok:
-            findings.append(finding("required_status_checks", "VERIFIED", f"required contexts present in active ruleset: {sorted(required)}"))
-        elif branch_contexts is not None or ruleset_contexts is not None:
-            seen = (branch_contexts or set()) | (ruleset_contexts or set())
-            findings.append(finding("required_status_checks", "MISMATCH", f"missing required contexts: {sorted(required - seen)}"))
-        else:
-            findings.append(finding("required_status_checks", "UNKNOWN", f"{branch_context_reason}; {ruleset_reason}"))
+        findings.append(finding("required_status_checks", "UNKNOWN", f"{branch_context_reason}; {ruleset_reason}"))
 
     if isinstance(rulesets, list):
         findings.append(finding("rulesets.visibility", "VERIFIED", f"readable ruleset count={len(rulesets)}"))
@@ -273,27 +272,44 @@ def classify(policy: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, Any]
         findings.append(finding("rulesets.visibility", "UNKNOWN", "rulesets response unavailable"))
 
     detail_error = _error_status(detailed)
+    classic_bypass: bool | None = None
     if isinstance(detailed, dict) and detail_error is None:
         enforce_admins = detailed.get("enforce_admins")
         enabled = enforce_admins.get("enabled") if isinstance(enforce_admins, dict) else None
         if enabled is True:
-            findings.append(finding("normal_merge_owner_bypass", "VERIFIED", "classic protection enforce_admins=true"))
+            classic_bypass = True
         elif enabled is False:
-            findings.append(finding("normal_merge_owner_bypass", "MISMATCH", "classic protection enforce_admins=false"))
-        elif ruleset_bypass is True:
-            findings.append(finding("normal_merge_owner_bypass", "VERIFIED", "applicable active ruleset has no bypass actors"))
-        else:
-            findings.append(finding("normal_merge_owner_bypass", "UNKNOWN", "classic admin enforcement and ruleset bypass detail are insufficient"))
-    elif protected is False:
+            classic_bypass = False
+
+    if protected is False:
         findings.append(finding("normal_merge_owner_bypass", "MISMATCH", "unprotected branch cannot enforce normal-owner gates"))
-    elif ruleset_bypass is True:
-        findings.append(finding("normal_merge_owner_bypass", "VERIFIED", "applicable active ruleset has no bypass actors"))
-    elif ruleset_bypass is None and ruleset_contexts is not None:
-        findings.append(finding("normal_merge_owner_bypass", "UNKNOWN", "active ruleset has bypass actors or unreadable bypass detail"))
+    elif branch_ok and classic_bypass is True:
+        findings.append(finding("normal_merge_owner_bypass", "VERIFIED", "branch protection supplies required checks and enforce_admins=true"))
+    elif ruleset_ok and ruleset_bypass is True:
+        findings.append(finding("normal_merge_owner_bypass", "VERIFIED", "active ruleset supplies required checks and has no bypass actors"))
+    elif branch_ok and classic_bypass is False and not ruleset_ok:
+        findings.append(finding("normal_merge_owner_bypass", "MISMATCH", "branch protection supplies required checks but enforce_admins=false"))
+    elif branch_ok or ruleset_ok:
+        reasons: list[str] = []
+        if branch_ok:
+            if detail_error:
+                reasons.append(f"branch protection supplies required checks but detailed protection HTTP {detail_error}")
+            elif classic_bypass is False:
+                reasons.append("branch protection supplies required checks but enforce_admins=false")
+            else:
+                reasons.append("branch protection supplies required checks but admin enforcement is unreadable")
+        if ruleset_ok:
+            if ruleset_bypass is None:
+                reasons.append("active ruleset supplies required checks but bypass actors are present or unreadable")
+            elif ruleset_bypass is False:
+                reasons.append("active ruleset bypass evidence is inconsistent")
+            else:
+                reasons.append(ruleset_reason)
+        findings.append(finding("normal_merge_owner_bypass", "UNKNOWN", "; ".join(reasons)))
     elif detail_error:
-        findings.append(finding("normal_merge_owner_bypass", "UNKNOWN", f"detailed protection HTTP {detail_error}; {ruleset_reason}"))
+        findings.append(finding("normal_merge_owner_bypass", "UNKNOWN", f"no enforcing mechanism with required checks is established; detailed protection HTTP {detail_error}; {ruleset_reason}"))
     else:
-        findings.append(finding("normal_merge_owner_bypass", "UNKNOWN", f"detailed protection unavailable; {ruleset_reason}"))
+        findings.append(finding("normal_merge_owner_bypass", "UNKNOWN", f"no enforcing mechanism with required checks is established; {ruleset_reason}"))
 
     merge_methods = snapshot.get("merge_methods")
     if isinstance(merge_methods, dict):
@@ -444,6 +460,10 @@ def self_test() -> None:
     ruleset_bypass = _ruleset_snapshot()
     ruleset_bypass["ruleset_details"][0]["bypass_actors"] = [{"actor_type": "User", "actor_id": 1, "bypass_mode": "always"}]
     assert classify(policy, ruleset_bypass)["state"] == "UNKNOWN"
+    mixed_mechanisms = _ruleset_snapshot()
+    mixed_mechanisms["detailed_protection"] = {"enforce_admins": {"enabled": True}}
+    mixed_mechanisms["ruleset_details"][0]["bypass_actors"] = [{"actor_type": "User", "actor_id": 1, "bypass_mode": "always"}]
+    assert classify(policy, mixed_mechanisms)["state"] == "UNKNOWN", "bypass evidence must come from the mechanism supplying required checks"
     ruleset_pattern = _ruleset_snapshot()
     ruleset_pattern["ruleset_details"][0]["conditions"]["ref_name"]["include"] = ["refs/heads/release/*"]
     assert classify(policy, ruleset_pattern)["state"] == "UNKNOWN"
