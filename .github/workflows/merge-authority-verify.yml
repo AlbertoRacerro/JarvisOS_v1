@@ -1,6 +1,11 @@
 name: Merge Authority Verify
 
 on:
+  pull_request:
+    paths:
+      - ".github/merge-authority-policy.json"
+      - ".github/workflows/merge-authority-verify.yml"
+      - "scripts/verify_merge_authority.py"
   workflow_dispatch:
 
 permissions:
@@ -8,7 +13,24 @@ permissions:
   actions: read
 
 jobs:
-  verify:
+  offline:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout PR head without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Validate declaration and verifier fixtures
+        run: |
+          python scripts/verify_merge_authority.py --self-test
+          python -c "from scripts.verify_merge_authority import load_policy; load_policy()"
+
+  live:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -19,8 +41,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - name: Offline verifier self-test
-        run: python scripts/verify_merge_authority.py --self-test
+      - name: Validate trusted declaration and verifier
+        run: |
+          python scripts/verify_merge_authority.py --self-test
+          python -c "from scripts.verify_merge_authority import load_policy; load_policy()"
 
       - name: Live merge-authority verification
         id: verify
