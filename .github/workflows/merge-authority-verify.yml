@@ -6,6 +6,13 @@ on:
       - ".github/merge-authority-policy.json"
       - ".github/workflows/merge-authority-verify.yml"
       - "scripts/verify_merge_authority.py"
+  push:
+    branches:
+      - master
+    paths:
+      - ".github/merge-authority-policy.json"
+      - ".github/workflows/merge-authority-verify.yml"
+      - "scripts/verify_merge_authority.py"
   workflow_dispatch:
 
 permissions:
@@ -30,7 +37,7 @@ jobs:
           python -c "from scripts.verify_merge_authority import load_policy; load_policy()"
 
   live:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
