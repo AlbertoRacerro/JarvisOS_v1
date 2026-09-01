@@ -247,13 +247,22 @@ Automated and model reviews are advisory evidence. For each finding, reproduce o
 
 Merge requirements:
 
-1. exact current PR head verified;
-2. required deterministic gates green on that head;
-3. no unresolved current P0/P1 or other blocking review finding;
-4. no scope, dependency, secret, spending, or security conflict;
-5. PR body includes the minimum-necessary test when required.
+1. exact current PR head verified immediately before merge;
+2. every required CI/check is terminal and green on that exact head, with no required check silently missing;
+3. no unresolved blocker, requested change, failing acceptance criterion, security/egress concern, stale evidence, dependency violation, or material semantic finding remains;
+4. required independent review, when the accepted slice/policy requires it, is terminal and acceptable for that exact head;
+5. scope matches the accepted spec/readiness and no unrelated authority or behavior change is bundled;
+6. merge uses the expected-head SHA/CAS and the chosen merge method preserves repository correctness.
 
-When all five hold, merge immediately with the expected-head SHA and verify `master`. The merge owner then reconciles `STATUS.md` and continues according to the live registry and applicable delivery profile.
+Before autonomous merge, apply the bounded **PROUD gate**: ask whether you would be comfortable signing your name to this exact diff as production-quality work for the accepted scope. PASS when the accepted behavior is complete, understandable enough to maintain, appropriately tested, architecturally consistent, and no known material defect or shortcut introduced by the slice remains. This is not permission to expand scope or chase elegance. Do not invent speculative refactors, extra abstractions, unrelated cleanup, additional tests without material risk coverage, redesign, performance work, or documentation polish merely to make already-correct work prettier.
+
+Classify review observations before the merge decision:
+
+- **FIX** — material correctness, security, maintainability, scope, or acceptance defects inside the current correctness envelope. Repair the smallest causal issue before merge; a material defect may not be parked.
+- **PARK** — concrete, independently useful improvements genuinely outside the accepted scope. Preserve them in `docs/FUTURE_IMPROVEMENTS.md` only under its advisory-only rules when worth keeping; they do not block merge.
+- **DROP** — vague ideas, cosmetic preferences, speculative refactors, or elegance-only thoughts. Do not create registry noise.
+
+When the objective exact-head requirements and bounded PROUD gate pass, merge immediately with the expected-head SHA. Do not wait for a separate maintainer click and do not use deferred/queued GitHub auto-merge. Direct ChatGPT merge authority is distinct from authority to mutate repository branch-protection/ruleset settings: the latter remains separately permissioned and must not be inferred from merge authority. After merge, verify fresh `master`, reconcile `STATUS.md`, inspect the README progress mirror, and continue according to the live registry and applicable delivery profile.
 
 External review workflows remain bounded by their own specifications. Spec 079 may continue implementation only. Spec 080, if later promoted, owns its narrower repository-internal review/fix/re-review automation and is not broadened by the external delivery pipeline.
 
