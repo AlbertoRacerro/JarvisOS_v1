@@ -97,7 +97,6 @@ def _bounded_json_size(value: object, *, limit: int, message: str) -> None:
             sort_keys=True,
             separators=(",", ":"),
             ensure_ascii=True,
-            allow_nan=False,
         ).encode("utf-8")
     except (TypeError, ValueError) as exc:
         raise ValueError("Project Knowledge operation fields must be JSON-serializable.") from exc
