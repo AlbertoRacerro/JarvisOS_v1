@@ -51,7 +51,13 @@ class ProjectKnowledgeError(ValueError):
 
 
 def _canonical_json(value: object) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    try:
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
+    except ValueError as exc:
+        raise ProjectKnowledgeError(
+            "canonical_json_non_finite",
+            "Project Knowledge canonical JSON requires finite numeric values.",
+        ) from exc
 
 
 def _digest(value: object) -> str:
@@ -639,7 +645,6 @@ def approve_draft(payload: ApprovalRequest) -> ApprovalRead:
                 (payload.workspace_id, payload.approval_request_key),
             ).fetchone()
             draft = get_draft_from_connection(connection, payload.workspace_id, payload.draft_id)
-            preview = _impact_from_connection(connection, draft)
             request_digest = _digest(
                 {
                     "draft_id": draft.id,
@@ -675,8 +680,18 @@ def approve_draft(payload: ApprovalRequest) -> ApprovalRead:
                     working_revision_id=existing["working_revision_id"],
                     failure_code=existing["failure_code"],
                 )
+            approved = connection.execute(
+                """
+                SELECT id FROM project_knowledge_approval_requests
+                WHERE workspace_id = ? AND draft_id = ? AND state = 'success'
+                """,
+                (payload.workspace_id, draft.id),
+            ).fetchone()
+            if approved is not None:
+                raise ProjectKnowledgeError("draft_already_approved", "An approved draft is immutable.")
             if draft.revision_token != payload.expected_draft_revision_token:
                 raise ProjectKnowledgeError("draft_stale", "Draft changed since approval was prepared.")
+            preview = _impact_from_connection(connection, draft)
             if preview.digest != payload.expected_preview_digest:
                 raise ProjectKnowledgeError("preview_stale", "Impact preview changed since approval was prepared.")
             now = utc_now()
