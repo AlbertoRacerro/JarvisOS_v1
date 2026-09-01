@@ -2,6 +2,7 @@ import sqlite3
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.core.errors import WORKSPACE_NOT_FOUND_MESSAGE, workspace_not_found_http_error
 from app.modules.modeling.models import (
     AssumptionCreate,
     AssumptionRead,
@@ -60,6 +61,8 @@ def _domain_error(exc: Exception) -> HTTPException:
     if isinstance(exc, ProjectKnowledgeOwnerError):
         status = 409 if exc.code == "owner_stale" else 404 if exc.code == "owner_not_found" else 422
         return HTTPException(status_code=status, detail={"code": exc.code, "message": exc.message})
+    if isinstance(exc, ValueError) and str(exc) == WORKSPACE_NOT_FOUND_MESSAGE:
+        return workspace_not_found_http_error()
     if isinstance(exc, ValueError):
         return HTTPException(status_code=404, detail=str(exc))
     if isinstance(exc, sqlite3.IntegrityError):
