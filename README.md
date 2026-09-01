@@ -107,7 +107,7 @@ This is the development direction at a glance. The exact live spec state changes
 | Stage | Direction |
 | --- | --- |
 | ✅ **Working foundation** | Operator workstation, Jarvis sidecar, Project Basis/change sets, typed engineering records and provenance, runs/evidence, AI provider gateway and egress controls, BLUECAD parametric CAD, Gmsh meshing, CalculiX static FEM, CAD → mesh → FEM evidence path. |
-| 🔧 **Architecture hardening — current focus (127–134)** | Close legacy write and egress side-channels, harden runner determinism, unify first error contracts, ratchet typing, generate selected frontend contracts and make merge governance mechanically verifiable. |
+| 🔧 **Post-hardening repair gate — current focus** | Architecture hardening 127–134 is implemented; re-derive and close the bounded post-134 correctness/enforcement/determinism/resilience repair findings before starting the Coding lane. |
 | ⏳ **Project knowledge & R&D workspace (113–126)** | Model dossiers, literature/provenance, project search, roadmap/calendar, brainstorm capture, repository/runtime truth, inspectable development pipeline, Jarvis knowledge/development/coding actions, generic provider settings and separately gated safe update/terminal capabilities. |
 | ⏳ **Agent-runtime evaluation** | After the Coding foundations: fresh Hermes V1 evaluation/re-derivation, bounded MCP/tool access, model passthrough and comparison with other useful orchestration approaches while JarvisOS retains authority over project state, policy, credentials, egress and budget. |
 | ⏳ **Common engineering evidence (102)** | Generalize the evidence contract only as much as replaceable engineering evaluators actually need. |
