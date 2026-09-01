@@ -160,6 +160,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
+      - name: Typecheck debt ratchet
+        if: needs.classify.outputs.run_backend == 'true'
+        working-directory: backend
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          python ../scripts/check_typecheck_ratchet.py --self-test
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            git fetch --no-tags --depth=1 origin "$PR_BASE_SHA"
+            python ../scripts/check_typecheck_ratchet.py --base-sha "$PR_BASE_SHA"
+          else
+            python ../scripts/check_typecheck_ratchet.py
+          fi
+
       - name: Architecture enforcement gate
         if: needs.classify.outputs.run_backend == 'true'
         run: |
@@ -176,6 +192,7 @@ jobs:
           ../scripts/check_architecture_enforcement.py
           ../scripts/check_pr_attention_integration.py
           ../scripts/classify_ci_scope.py
+          ../scripts/check_typecheck_ratchet.py
 
   backend-core-tests:
     name: backend-tests (${{ matrix.group }})
