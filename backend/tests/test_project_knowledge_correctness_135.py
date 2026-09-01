@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import hashlib
+import threading
 
 import pytest
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.core.bootstrap import initialize_storage
 from app.core.database import open_sqlite_connection
+from app.main import create_app
 from app.modules.project_knowledge import service as project_knowledge_service
 from app.modules.project_knowledge.models import (
     ApprovalRequest,
@@ -71,6 +74,61 @@ def test_different_key_cannot_create_second_working_revision_for_approved_draft(
         approve_draft(payload.model_copy(update={"approval_request_key": "approve-second"}))
     assert exc_info.value.code == "draft_already_approved"
 
+    with open_sqlite_connection() as connection:
+        revision_count = connection.execute(
+            "SELECT COUNT(*) AS count FROM project_knowledge_revisions WHERE workspace_id = ?",
+            (payload.workspace_id,),
+        ).fetchone()["count"]
+    assert revision_count == 1
+
+
+def test_concurrent_different_keys_serialize_to_one_working_revision(monkeypatch: pytest.MonkeyPatch) -> None:
+    _initialize()
+    payload = _approval_payload(key="approve-concurrent-a")
+    payload_b = payload.model_copy(update={"approval_request_key": "approve-concurrent-b"})
+    original_impact = project_knowledge_service._impact_from_connection
+    impact_entered = threading.Event()
+    release_first = threading.Event()
+    start = threading.Barrier(3)
+    impact_lock = threading.Lock()
+    first_impact = True
+    successes: list[str] = []
+    errors: list[str] = []
+
+    def hold_first_impact(*args: object, **kwargs: object) -> object:
+        nonlocal first_impact
+        with impact_lock:
+            should_hold = first_impact
+            first_impact = False
+        if should_hold:
+            impact_entered.set()
+            assert release_first.wait(timeout=5), "timed out while holding the first approval transaction"
+        return original_impact(*args, **kwargs)
+
+    def approve(candidate: ApprovalRequest) -> None:
+        start.wait(timeout=5)
+        try:
+            result = approve_draft(candidate)
+            assert result.working_revision_id is not None
+            successes.append(result.working_revision_id)
+        except ProjectKnowledgeError as exc:
+            errors.append(exc.code)
+
+    monkeypatch.setattr(project_knowledge_service, "_impact_from_connection", hold_first_impact)
+    first = threading.Thread(target=approve, args=(payload,))
+    second = threading.Thread(target=approve, args=(payload_b,))
+    first.start()
+    second.start()
+    start.wait(timeout=5)
+    assert impact_entered.wait(timeout=5), "neither approval reached impact computation"
+    assert first.is_alive() and second.is_alive(), "both contenders must overlap while the write transaction is held"
+    release_first.set()
+    first.join(timeout=5)
+    second.join(timeout=5)
+    assert not first.is_alive() and not second.is_alive()
+
+    assert len(successes) == 1
+    assert errors == ["draft_already_approved"]
     with open_sqlite_connection() as connection:
         revision_count = connection.execute(
             "SELECT COUNT(*) AS count FROM project_knowledge_revisions WHERE workspace_id = ?",
@@ -152,3 +210,19 @@ def test_finite_canonical_json_and_digest_bytes_remain_stable() -> None:
 def test_api_bound_request_models_reject_unknown_fields(model: type, payload: dict[str, object]) -> None:
     with pytest.raises(ValidationError):
         model.model_validate({**payload, "unexpected": "rejected"})
+
+
+def test_approval_route_rejects_unknown_field_with_422() -> None:
+    client = TestClient(create_app())
+    response = client.post(
+        "/project-knowledge/approvals",
+        json={
+            "workspace_id": "bluerev",
+            "approval_request_key": "http-extra-field",
+            "draft_id": "draft-does-not-need-to-exist",
+            "expected_draft_revision_token": "token",
+            "expected_preview_digest": "digest",
+            "unexpected": "rejected",
+        },
+    )
+    assert response.status_code == 422
