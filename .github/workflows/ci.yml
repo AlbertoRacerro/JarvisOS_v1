@@ -160,6 +160,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
+      - name: Frontend contract codegen drift gate
+        if: needs.classify.outputs.run_backend == 'true'
+        run: |
+          python scripts/generate_frontend_contracts.py --self-test
+          python scripts/generate_frontend_contracts.py --check
+
       - name: Typecheck debt ratchet
         if: needs.classify.outputs.run_backend == 'true'
         working-directory: backend
@@ -193,6 +199,7 @@ jobs:
           ../scripts/check_pr_attention_integration.py
           ../scripts/classify_ci_scope.py
           ../scripts/check_typecheck_ratchet.py
+          ../scripts/generate_frontend_contracts.py
 
   backend-core-tests:
     name: backend-tests (${{ matrix.group }})

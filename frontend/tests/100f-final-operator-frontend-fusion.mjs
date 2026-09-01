@@ -11,6 +11,7 @@ const main = read("src/main.tsx");
 const fusion = read("src/components/fusion/FinalOperatorUnavailableSurface.tsx");
 const readFusion = read("src/components/fusion/FinalOperatorReadSurface.tsx");
 const readApi = read("src/api/client.ts");
+const generatedModeling = read("src/api/generated/modeling.ts");
 const fusionCss = read("src/styles/final-fusion.css");
 const shellOverlay = read("src/styles/final-fusion-shell-overrides.css");
 const canonicalOverlay = read("src/styles/final-fusion-canonical-overrides.css");
@@ -91,9 +92,14 @@ includesAll(readApi, [
   "/decisions",
   "getSystemInfo",
   "export type Requirement = {",
-  "value_status?: string | null;",
-  "lifecycle_state?: string | null;"
+  'import type { ParameterRead } from "./generated/modeling";',
+  "export type Parameter = ParameterRead;"
 ], "accepted existing backend READ binding missing");
+includesAll(generatedModeling, [
+  "export type ParameterRead = {",
+  'value_status: "candidate" | "literature" | "measured" | "validated" | "accepted";',
+  'lifecycle_state: "active" | "inactive" | "superseded" | "archived" | "deleted";'
+], "generated Parameter READ contract missing");
 check(!/github\.com|api\.github|localStorage|sessionStorage|child_process|powershell|cmd\.exe/i.test(readApi), "shared final read client crossed frontend authority boundary");
 
 includesAll(layout, [

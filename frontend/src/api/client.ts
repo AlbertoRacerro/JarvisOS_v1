@@ -1,3 +1,5 @@
+import type { ParameterRead } from "./generated/modeling";
+
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 export type HealthResponse = {
@@ -146,17 +148,7 @@ export type Requirement = {
   updated_at: string;
 };
 
-export type Parameter = {
-  id: string;
-  workspace_id: string;
-  name: string;
-  symbol?: string | null;
-  value?: string | null;
-  unit?: string | null;
-  value_status?: string | null;
-  status: string;
-  lifecycle_state?: string | null;
-};
+export type Parameter = ParameterRead;
 
 export type SimulationRun = {
   id: string;
