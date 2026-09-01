@@ -154,6 +154,24 @@ def test_finite_canonical_json_and_digest_bytes_remain_stable() -> None:
     assert project_knowledge_service._digest(value) == hashlib.sha256(expected.encode("utf-8")).hexdigest()
 
 
+@pytest.mark.parametrize("token", ["NaN", "Infinity", "-Infinity"])
+def test_draft_route_returns_typed_client_error_for_non_finite_operation_value(token: str) -> None:
+    _initialize()
+    client = TestClient(create_app())
+    response = client.post(
+        "/project-knowledge/drafts",
+        content=(
+            '{"workspace_id":"bluerev","operations":[{"owner_kind":"requirement",'
+            '"operation_kind":"create","fields":{"statement":"bounded","notes":'
+            + token
+            + "}}]}"
+        ),
+        headers={"content-type": "application/json"},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "canonical_json_non_finite"
+
+
 @pytest.mark.parametrize(
     ("model", "payload"),
     [
