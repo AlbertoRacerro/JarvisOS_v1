@@ -59,6 +59,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
+          set -o pipefail
           python scripts/verify_merge_authority.py --live --json | tee "$RUNNER_TEMP/merge-authority.json"
 
       - name: Publish truthful state
