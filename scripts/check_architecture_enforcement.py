@@ -60,6 +60,7 @@ class ImportFacts:
     ]
     full_modules: frozenset[str]
     full_targets: frozenset[str]
+    function_scopes: frozenset[tuple[int, int, str]]
 
 
 def _load_config(path: Path) -> list[dict[str, str]]:
@@ -189,6 +190,7 @@ def _import_facts(
     ] = {}
     full_modules: set[str] = set()
     full_targets: set[str] = set()
+    function_scopes = frozenset(_function_ranges(tree))
 
     for node in sorted(ast.walk(tree), key=_position):
         if not isinstance(node, (ast.Import, ast.ImportFrom)):
@@ -225,6 +227,7 @@ def _import_facts(
         scoped_aliases=scoped_aliases,
         full_modules=frozenset(full_modules),
         full_targets=frozenset(full_targets),
+        function_scopes=function_scopes,
     )
 
 
@@ -234,11 +237,28 @@ def _aliases_at(
     position: tuple[int, int],
 ) -> dict[str, str]:
     aliases = dict(import_facts.aliases) if scope != MODULE_SCOPE else {}
-    for (event_scope, name), events in import_facts.scoped_aliases.items():
-        if event_scope != scope:
-            continue
-        previous = [target for event_position, target in events if event_position < position]
-        aliases[name] = previous[-1] if previous else f"{IMPORT_UNBOUND_PREFIX}{name}"
+    scope_chain: list[tuple[int, int, str]] = []
+    if scope != MODULE_SCOPE:
+        scope_chain.extend(
+            sorted(
+                (
+                    candidate
+                    for candidate in import_facts.function_scopes
+                    if candidate != scope
+                    and candidate[0] <= scope[0]
+                    and scope[1] <= candidate[1]
+                ),
+                key=lambda candidate: (candidate[1] - candidate[0], -candidate[0]),
+                reverse=True,
+            )
+        )
+    scope_chain.append(scope)
+    for active_scope in scope_chain:
+        for (event_scope, name), events in import_facts.scoped_aliases.items():
+            if event_scope != active_scope:
+                continue
+            previous = [target for event_position, target in events if event_position < position]
+            aliases[name] = previous[-1] if previous else f"{IMPORT_UNBOUND_PREFIX}{name}"
     return aliases
 
 
