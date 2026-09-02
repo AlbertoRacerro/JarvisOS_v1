@@ -2,7 +2,7 @@ import time
 
 from app.core.database import open_sqlite_connection
 from app.modules.ai.budget import evaluate_ai_status
-from app.modules.ai.execution import resolve_binding
+from app.modules.ai.execution import resolve_binding, resolve_effective_route_class
 from app.modules.ai.models import (
     AIMetadata,
     AITaskRunRequest,
@@ -65,7 +65,10 @@ class AIGateway:
         )
         from app.modules.ai.execution import run_ai_task
 
-        selected_route_class = request.route_class or "local:fake"
+        selected_route_class = resolve_effective_route_class(
+            task_kind=request.task_kind,
+            route_class=request.route_class,
+        )
         external_blocked_reason = None
         requested_workspace_id = (request.workspace_id or "bluerev") if request.include_project_context else None
 
