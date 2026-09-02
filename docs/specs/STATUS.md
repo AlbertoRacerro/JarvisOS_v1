@@ -59,7 +59,7 @@ Once fresh exact `master` shows 112 as `merged`, `docs/POST_112_PARALLEL_DELIVER
 - **Separately gated:** `125` and `126` are not automatically parallelized.
 - **Later engineering/Process:** `102`, then `103 -> 104 -> 105 -> 106 -> 107 -> 108 -> 109 -> 093 -> 110`, subject to each row's then-current dependencies/readiness and fresh authority.
 
-Old 066–068 and 080 remain frozen. After 123, Hermes requires fresh derivation from then-current exact `master`; legacy Hermes specs are not direct implementation authority. Any fresh Hermes release must preserve JarvisOS-owned context, policy, credentials, sensitivity, egress, budget, ledger, promotion, repository, database, service, and domain authority.
+Old 066–068 and 080 remain frozen. After 123, Hermes requires a fresh derivation from then-current exact `master` before implementation. The derivation must use accepted 111/118/119/120/123 contracts, the live AI execution/egress/budget spine, the pinned Hermes identity actually selected, and current evidence.
 
 Historical sequential queue prose predating this reconciliation is non-normative provenance only. `STATUS.md` rows, dependencies, accepted spec/readiness artifacts, and the activated post-112 profile are the live authority.
 
@@ -233,7 +233,7 @@ The queue is binding but not immutable. If a slice proves non-implementable with
 | 133 | merged | [#490](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/490) | FRONTEND-CONTRACT-CODEGEN-1 | — | Generate a bounded set of drift-prone frontend API types deterministically from backend contracts with exact-head drift checks; fresh inventory selects the first real surface and no whole-client rewrite is authorized. |
 | 134 | merged | [#496](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/496) | MERGE-AUTHORITY-HARDENING-1 | 004, 079 | Make merge governance mechanically verifiable through a permission-safe declaration→verification→enforcement bootstrap; unreadable live settings are explicit non-blocking UNKNOWN until minimum read permission and a green verification are proven, after which required protection may be tightened. No auto-merge. |
 | 135 | merged | [#500](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/500) | PROJECT-KNOWLEDGE-CORRECTNESS-1 | 112, 134 | Bounded post-134 Project Knowledge correctness repair: one race-safe working revision per approved draft; fail-closed request/command unknown fields; reject non-finite canonical JSON while preserving finite digest bytes. |
-| 136 | in_review | [#504](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/504) | ROUTE-DEFAULT-CONSISTENCY-1 | 111, 134 | Centralize effective route resolution on the existing task-kind defaults so exact-ref admission, gateway preflight, and execution agree for omitted routes while preserving explicit route and `auto` semantics. |
+| 136 | merged | [#504](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/504) | ROUTE-DEFAULT-CONSISTENCY-1 | 111, 134 | Centralize effective route resolution on the existing task-kind defaults so exact-ref admission, gateway preflight, and execution agree for omitted routes while preserving explicit route and `auto` semantics. |
 
 ## Superseded planning aliases and resolved collisions
 
