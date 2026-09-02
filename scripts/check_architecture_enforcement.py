@@ -6,6 +6,7 @@ import ast
 import json
 import sys
 import tempfile
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +29,16 @@ EXACT_CANONICAL_MUTATION_OWNER_FILES = {
     "backend/app/modules/modeling/parameter_lifecycle.py",
 }
 
+HTTP_MODULE_METHODS = {"get", "post", "put", "patch", "delete", "head", "options", "request", "stream"}
+HTTP_CLIENT_METHODS = HTTP_MODULE_METHODS | {"send"}
+REQUESTS_SESSION_METHODS = {"get", "post", "put", "patch", "delete", "head", "options", "request", "send"}
+AIOHTTP_SESSION_METHODS = {"get", "post", "put", "patch", "delete", "head", "options", "request", "ws_connect"}
+HTTP_CLIENT_LOW_LEVEL_METHODS = {"connect", "request", "send", "endheaders"}
+URLLIB3_POOL_METHODS = {"request", "urlopen"}
+SOCKET_INSTANCE_METHODS = {"connect", "connect_ex", "sendto"}
+MODULE_SCOPE = (0, sys.maxsize, "<module>")
+IMPORT_UNBOUND_PREFIX = "__ae002_local_unbound__."
+
 
 @dataclass(frozen=True, order=True)
 class Finding:
@@ -40,13 +51,25 @@ class Finding:
         return f"{self.rule_id} {self.path}::{self.symbol} - {self.detail}"
 
 
+@dataclass(frozen=True)
+class ImportFacts:
+    aliases: dict[str, str]
+    scoped_aliases: dict[
+        tuple[tuple[int, int, str], str],
+        tuple[tuple[tuple[int, int], str], ...],
+    ]
+    full_modules: frozenset[str]
+    full_targets: frozenset[str]
+    function_scopes: frozenset[tuple[int, int, str]]
+
+
 def _load_config(path: Path) -> list[dict[str, str]]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"invalid architecture config: {exc}") from exc
     if not isinstance(data, dict) or set(data) != {"exceptions"}:
-        raise ValueError("config must be exactly {'exceptions': [...]}")
+        raise ValueError("config must be exactly {'exceptions': [...]}" )
     entries = data["exceptions"]
     if not isinstance(entries, list):
         raise ValueError("exceptions must be a list")
@@ -78,46 +101,50 @@ def _validate_exception_targets(root: Path, config: list[dict[str, str]]) -> Non
         path = root / rel
         if not path.is_file():
             raise ValueError(f"stale exception path: {entry['exact_match']}")
-        if path.suffix == ".py":
-            try:
-                tree = ast.parse(path.read_text(encoding="utf-8"), filename=rel)
-            except (OSError, SyntaxError) as exc:
-                raise ValueError(f"cannot validate exception target {rel}: {exc}") from exc
-            names = {
-                node.name
-                for node in ast.walk(tree)
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-            }
-            if symbol not in names:
-                raise ValueError(f"stale exception symbol: {entry['exact_match']}")
+        if path.suffix != ".py":
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=rel)
+        except (OSError, SyntaxError) as exc:
+            raise ValueError(f"cannot validate exception target {rel}: {exc}") from exc
+        names = [
+            node.name
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        ]
+        count = Counter(names)[symbol]
+        if count == 0:
+            raise ValueError(f"stale exception symbol: {entry['exact_match']}")
+        if count > 1:
+            raise ValueError(f"ambiguous exception symbol: {entry['exact_match']}")
 
 
 def _exception_set(config: list[dict[str, str]]) -> set[tuple[str, str]]:
     return {(e["rule_id"], e["exact_match"]) for e in config}
 
 
-def _aliases(tree: ast.AST) -> dict[str, str]:
-    aliases: dict[str, str] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for item in node.names:
-                aliases[item.asname or item.name.split(".")[0]] = item.name
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            for item in node.names:
-                aliases[item.asname or item.name] = f"{node.module}.{item.name}"
-    return aliases
+def _dotted(expr: ast.AST, aliases: dict[str, str]) -> str:
+    if isinstance(expr, ast.Name):
+        return aliases.get(expr.id, expr.id)
+    if isinstance(expr, ast.Attribute):
+        base = _dotted(expr.value, aliases)
+        return f"{base}.{expr.attr}" if base else expr.attr
+    return ""
+
+
+def _root_name(expr: ast.AST) -> str | None:
+    current = expr
+    while isinstance(current, ast.Attribute):
+        current = current.value
+    return current.id if isinstance(current, ast.Name) else None
+
+
+def _position(node: ast.AST) -> tuple[int, int]:
+    return (getattr(node, "lineno", 0), getattr(node, "col_offset", 0))
 
 
 def _call_name(node: ast.Call, aliases: dict[str, str]) -> str:
-    def dotted(expr: ast.AST) -> str:
-        if isinstance(expr, ast.Name):
-            return aliases.get(expr.id, expr.id)
-        if isinstance(expr, ast.Attribute):
-            base = dotted(expr.value)
-            return f"{base}.{expr.attr}" if base else expr.attr
-        return ""
-
-    return dotted(node.func)
+    return _dotted(node.func, aliases)
 
 
 def _function_ranges(tree: ast.AST) -> list[tuple[int, int, str]]:
@@ -128,16 +155,381 @@ def _function_ranges(tree: ast.AST) -> list[tuple[int, int, str]]:
     return ranges
 
 
-def _enclosing_symbol(function_ranges: Iterable[tuple[int, int, str]], target: ast.AST) -> str:
-    best = "<module>"
-    best_span = None
+def _lexical_ranges(tree: ast.AST) -> list[tuple[int, int, str]]:
+    return [
+        (node.lineno, getattr(node, "end_lineno", node.lineno), node.name)
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+    ]
+
+
+def _enclosing_scope(function_ranges: Iterable[tuple[int, int, str]], target: ast.AST) -> tuple[int, int, str]:
+    best = MODULE_SCOPE
+    best_span: int | None = None
     line = getattr(target, "lineno", 0)
     for start, end, name in function_ranges:
         if start <= line <= end:
             span = end - start
             if best_span is None or span < best_span:
-                best, best_span = name, span
+                best, best_span = (start, end, name), span
     return best
+
+
+def _enclosing_symbol(function_ranges: Iterable[tuple[int, int, str]], target: ast.AST) -> str:
+    return _enclosing_scope(function_ranges, target)[2]
+
+
+def _import_facts(
+    tree: ast.AST,
+    function_ranges: list[tuple[int, int, str]],
+) -> ImportFacts:
+    aliases: dict[str, str] = {}
+    scoped: dict[
+        tuple[tuple[int, int, str], str],
+        list[tuple[tuple[int, int], str]],
+    ] = {}
+    full_modules: set[str] = set()
+    full_targets: set[str] = set()
+    function_scopes = frozenset(_function_ranges(tree))
+
+    for node in sorted(ast.walk(tree), key=_position):
+        if not isinstance(node, (ast.Import, ast.ImportFrom)):
+            continue
+        scope = _enclosing_scope(function_ranges, node)
+        position = _position(node)
+        if isinstance(node, ast.Import):
+            for item in node.names:
+                full_modules.add(item.name)
+                bound = item.asname or item.name.split(".")[0]
+                target = item.name if item.asname else bound
+                full_targets.add(item.name)
+                scoped.setdefault((scope, bound), []).append((position, target))
+                if scope == MODULE_SCOPE:
+                    aliases[bound] = target
+        elif node.module:
+            full_modules.add(node.module)
+            for item in node.names:
+                if item.name == "*":
+                    continue
+                bound = item.asname or item.name
+                target = f"{node.module}.{item.name}"
+                full_targets.add(target)
+                scoped.setdefault((scope, bound), []).append((position, target))
+                if scope == MODULE_SCOPE:
+                    aliases[bound] = target
+
+    scoped_aliases = {
+        key: tuple(sorted(events, key=lambda event: event[0]))
+        for key, events in scoped.items()
+    }
+    return ImportFacts(
+        aliases=aliases,
+        scoped_aliases=scoped_aliases,
+        full_modules=frozenset(full_modules),
+        full_targets=frozenset(full_targets),
+        function_scopes=function_scopes,
+    )
+
+
+def _aliases_at(
+    import_facts: ImportFacts,
+    scope: tuple[int, int, str],
+    position: tuple[int, int],
+) -> dict[str, str]:
+    aliases = dict(import_facts.aliases) if scope != MODULE_SCOPE else {}
+    scope_chain: list[tuple[int, int, str]] = []
+    if scope != MODULE_SCOPE:
+        scope_chain.extend(
+            sorted(
+                (
+                    candidate
+                    for candidate in import_facts.function_scopes
+                    if candidate != scope
+                    and candidate[0] <= scope[0]
+                    and scope[1] <= candidate[1]
+                ),
+                key=lambda candidate: (candidate[1] - candidate[0], -candidate[0]),
+                reverse=True,
+            )
+        )
+    scope_chain.append(scope)
+    for active_scope in scope_chain:
+        for (event_scope, name), events in import_facts.scoped_aliases.items():
+            if event_scope != active_scope:
+                continue
+            visible = (
+                [target for _, target in events]
+                if active_scope != scope
+                else [target for event_position, target in events if event_position < position]
+            )
+            aliases[name] = visible[-1] if visible else f"{IMPORT_UNBOUND_PREFIX}{name}"
+    return aliases
+
+
+def _binding_kind(constructor: str) -> str | None:
+    mapping = {
+        "httpx.Client": "httpx_client",
+        "httpx.AsyncClient": "httpx_client",
+        "requests.Session": "requests_session",
+        "requests.session": "requests_session",
+        "urllib3.PoolManager": "urllib3_pool",
+        "urllib3.ProxyManager": "urllib3_pool",
+        "aiohttp.ClientSession": "aiohttp_session",
+        "http.client.HTTPConnection": "http_client_connection",
+        "http.client.HTTPSConnection": "http_client_connection",
+        "socket.socket": "socket",
+        "urllib.request.build_opener": "urllib_opener",
+    }
+    return mapping.get(constructor)
+
+
+def _local_history_event(
+    history: dict[
+        tuple[tuple[int, int, str], str],
+        list[tuple[tuple[int, int], frozenset[str], bool]],
+    ],
+    scope: tuple[int, int, str],
+    name: str,
+    position: tuple[int, int],
+) -> tuple[bool, frozenset[str]]:
+    events = history.get((scope, name), [])
+    previous = [event for event in events if event[0] < position]
+    if not previous:
+        return False, frozenset()
+    possible: set[str] = set()
+    for _, kinds, non_definite in reversed(previous):
+        possible.update(kinds)
+        if not non_definite:
+            break
+    return True, frozenset(possible)
+
+
+def _constructor_kind(
+    expr: ast.AST,
+    aliases: dict[str, str],
+    history: dict[
+        tuple[tuple[int, int, str], str],
+        list[tuple[tuple[int, int], frozenset[str], bool]],
+    ] | None = None,
+    scope: tuple[int, int, str] = MODULE_SCOPE,
+    position: tuple[int, int] = (0, 0),
+) -> frozenset[str]:
+    if not isinstance(expr, ast.Call):
+        return frozenset()
+    root = _root_name(expr.func)
+    if history is not None and root and scope != MODULE_SCOPE:
+        locally_bound, _ = _local_history_event(history, scope, root, position)
+        if locally_bound:
+            return frozenset()
+    kind = _binding_kind(_call_name(expr, aliases))
+    return frozenset({kind}) if kind else frozenset()
+
+
+def _record_binding(
+    history: dict[
+        tuple[tuple[int, int, str], str],
+        list[tuple[tuple[int, int], frozenset[str], bool]],
+    ],
+    *,
+    target: ast.AST | None,
+    value: ast.AST | None,
+    aliases: dict[str, str],
+    scope: tuple[int, int, str],
+    position: tuple[int, int],
+    non_definite: bool,
+) -> None:
+    if not isinstance(target, ast.Name) or value is None:
+        return
+    history.setdefault((scope, target.id), []).append(
+        (position, _constructor_kind(value, aliases, history, scope, position), non_definite)
+    )
+
+
+def _binding_history(
+    tree: ast.AST,
+    import_facts: ImportFacts,
+    function_ranges: list[tuple[int, int, str]],
+) -> dict[
+    tuple[tuple[int, int, str], str],
+    list[tuple[tuple[int, int], frozenset[str], bool]],
+]:
+    history: dict[
+        tuple[tuple[int, int, str], str],
+        list[tuple[tuple[int, int], frozenset[str], bool]],
+    ] = {}
+    parents = {child: parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)}
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        scope = (node.lineno, getattr(node, "end_lineno", node.lineno), node.name)
+        parameters = [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
+        if node.args.vararg is not None:
+            parameters.append(node.args.vararg)
+        if node.args.kwarg is not None:
+            parameters.append(node.args.kwarg)
+        for parameter in parameters:
+            history.setdefault((scope, parameter.arg), []).append(
+                ((node.lineno, -1), frozenset(), False)
+            )
+
+    for node in sorted(ast.walk(tree), key=_position):
+        scope = _enclosing_scope(function_ranges, node)
+        position = _position(node)
+        aliases = _aliases_at(import_facts, scope, position)
+        parent = parents.get(node)
+        non_definite = False
+        while parent is not None and not isinstance(
+            parent, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        ):
+            if isinstance(
+                parent,
+                (ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try, ast.TryStar, ast.Match),
+            ):
+                non_definite = True
+                break
+            parent = parents.get(parent)
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                _record_binding(
+                    history,
+                    target=target,
+                    value=node.value,
+                    aliases=aliases,
+                    scope=scope,
+                    position=position,
+                    non_definite=non_definite,
+                )
+        elif isinstance(node, ast.AnnAssign):
+            _record_binding(
+                history,
+                target=node.target,
+                value=node.value,
+                aliases=aliases,
+                scope=scope,
+                position=position,
+                non_definite=non_definite,
+            )
+        elif isinstance(node, ast.NamedExpr):
+            _record_binding(
+                history,
+                target=node.target,
+                value=node.value,
+                aliases=aliases,
+                scope=scope,
+                position=position,
+                non_definite=non_definite,
+            )
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            for item in node.items:
+                _record_binding(
+                    history,
+                    target=item.optional_vars,
+                    value=item.context_expr,
+                    aliases=aliases,
+                    scope=scope,
+                    position=position,
+                    non_definite=non_definite,
+                )
+    for events in history.values():
+        events.sort(key=lambda event: event[0])
+    return history
+
+
+def _history_kind(
+    history: dict[
+        tuple[tuple[int, int, str], str],
+        list[tuple[tuple[int, int], frozenset[str], bool]],
+    ],
+    scope: tuple[int, int, str],
+    name: str,
+    position: tuple[int, int],
+) -> frozenset[str]:
+    locally_bound, local_kind = _local_history_event(history, scope, name, position)
+    if locally_bound:
+        return local_kind
+    if scope != MODULE_SCOPE:
+        module_bound, module_kind = _local_history_event(history, MODULE_SCOPE, name, position)
+        if module_bound:
+            return module_kind
+    return frozenset()
+
+
+def _bound_kind(
+    expr: ast.AST,
+    aliases: dict[str, str],
+    history: dict[
+        tuple[tuple[int, int, str], str],
+        list[tuple[tuple[int, int], frozenset[str], bool]],
+    ],
+    scope: tuple[int, int, str],
+    position: tuple[int, int],
+) -> frozenset[str]:
+    if isinstance(expr, ast.Name):
+        return _history_kind(history, scope, expr.id, position)
+    return _constructor_kind(expr, aliases, history, scope, position)
+
+
+def _is_destination_bearing_sendmsg(node: ast.Call) -> bool:
+    return len(node.args) >= 4 or any(keyword.arg == "address" for keyword in node.keywords)
+
+
+def _network_dispatch(
+    node: ast.Call,
+    import_facts: ImportFacts,
+    history: dict[
+        tuple[tuple[int, int, str], str],
+        list[tuple[tuple[int, int], frozenset[str], bool]],
+    ],
+    scope: tuple[int, int, str],
+) -> str | None:
+    position = _position(node)
+    aliases = _aliases_at(import_facts, scope, position)
+    call = _call_name(node, aliases)
+    method = call.rsplit(".", 1)[-1]
+    root = _root_name(node.func)
+    root_is_shadowed = False
+    if root and scope != MODULE_SCOPE:
+        root_is_shadowed, _ = _local_history_event(history, scope, root, position)
+
+    if not root_is_shadowed:
+        if call.startswith(("httpx.", "requests.")) and method in HTTP_MODULE_METHODS:
+            return call
+        if call == "urllib.request.urlopen":
+            return call
+        if call == "urllib3.request":
+            return call
+        if call == "socket.create_connection":
+            return call
+        if call in {
+            "websockets.connect",
+            "websockets.sync.client.connect",
+            "websockets.asyncio.client.connect",
+        }:
+            return call
+        if call == "aiohttp.request":
+            return call
+
+    if not isinstance(node.func, ast.Attribute):
+        return None
+    kinds = _bound_kind(node.func.value, aliases, history, scope, position)
+    if "httpx_client" in kinds and method in HTTP_CLIENT_METHODS:
+        return call or f"httpx.Client.{method}"
+    if "requests_session" in kinds and method in REQUESTS_SESSION_METHODS:
+        return call or f"requests.Session.{method}"
+    if "urllib3_pool" in kinds and method in URLLIB3_POOL_METHODS:
+        return call or f"urllib3.PoolManager.{method}"
+    if "aiohttp_session" in kinds and method in AIOHTTP_SESSION_METHODS:
+        return call or f"aiohttp.ClientSession.{method}"
+    if "http_client_connection" in kinds and method in HTTP_CLIENT_LOW_LEVEL_METHODS:
+        return call or f"http.client.HTTPConnection.{method}"
+    if "urllib_opener" in kinds and method == "open":
+        return call or "urllib.request.OpenerDirector.open"
+    if "socket" in kinds:
+        if method in SOCKET_INSTANCE_METHODS:
+            return call or f"socket.socket.{method}"
+        if method == "sendmsg" and _is_destination_bearing_sendmsg(node):
+            return call or "socket.socket.sendmsg"
+    return None
 
 
 def _literal_sql(call: ast.Call) -> str | None:
@@ -163,19 +555,22 @@ def _scan_python(path: Path, root: Path, exceptions: set[tuple[str, str]]) -> li
         tree = ast.parse(source, filename=rel)
     except (OSError, SyntaxError) as exc:
         return [Finding("AE001", rel, "<parse>", f"covered Python source did not parse: {exc}")]
-    aliases = _aliases(tree)
-    function_ranges = _function_ranges(tree)
+    lexical_ranges = _lexical_ranges(tree)
+    import_facts = _import_facts(tree, lexical_ranges)
+    binding_history = _binding_history(tree, import_facts, lexical_ranges)
     provider_import = any(
         target.startswith("app.modules.ai.providers")
         or target.startswith("backend.app.modules.ai.providers")
-        for target in aliases.values()
+        for target in import_facts.full_modules | import_facts.full_targets
     )
     findings: list[Finding] = []
     mutation_calls: list[tuple[str, str]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
-        symbol = _enclosing_symbol(function_ranges, node)
+        scope = _enclosing_scope(lexical_ranges, node)
+        aliases = _aliases_at(import_facts, scope, _position(node))
+        symbol = scope[2]
         exact = f"{rel}::{symbol}"
         call = _call_name(node, aliases)
         method = call.rsplit(".", 1)[-1]
@@ -183,15 +578,13 @@ def _scan_python(path: Path, root: Path, exceptions: set[tuple[str, str]]) -> li
             mutation_calls.append((symbol, call))
         if call == "sqlite3.connect" and ("AE001", exact) not in exceptions:
             findings.append(Finding("AE001", rel, symbol, f"raw SQLite connection via {call}"))
-        external = (
-            call.startswith(("httpx.", "requests."))
-            and method in {"get", "post", "put", "patch", "delete", "request", "stream"}
-        ) or (provider_import and call.endswith(".complete"))
+        dispatch = _network_dispatch(node, import_facts, binding_history, scope)
+        external = dispatch is not None or (provider_import and call.endswith(".complete"))
         accepted_external_owner = rel.startswith("backend/app/modules/ai/providers/") or rel.startswith(
             "backend/app/modules/local_ai/"
         )
         if external and not accepted_external_owner and ("AE002", exact) not in exceptions:
-            findings.append(Finding("AE002", rel, symbol, f"direct external dispatch via {call}"))
+            findings.append(Finding("AE002", rel, symbol, f"direct external dispatch via {dispatch or call}"))
         sql = _literal_sql(node) if method in SQL_EXECUTION_METHODS else None
         accepted_mutation_owner = rel in EXACT_CANONICAL_MUTATION_OWNER_FILES
         if (
@@ -280,6 +673,50 @@ def _self_test() -> int:
     if actual_symbols != expected_symbols:
         print(
             f"self-test enclosing-symbol mismatch: expected {expected_symbols}, got {actual_symbols}",
+            file=sys.stderr,
+        )
+        return 1
+
+    binding_tree = ast.parse(
+        "import httpx\n"
+        "import requests\n"
+        "import aiohttp\n"
+        "def bindings():\n"
+        "    first = second = httpx.Client()\n"
+        "    first.get('https://example.invalid')\n"
+        "    second.send(req)\n"
+        "    with requests.Session() as session:\n"
+        "        session.post('https://example.invalid')\n"
+        "    if (walrus := httpx.Client()):\n"
+        "        walrus.request('GET', 'https://example.invalid')\n"
+        "async def async_bindings():\n"
+        "    async with aiohttp.ClientSession() as client:\n"
+        "        await client.ws_connect('https://example.invalid')\n"
+    )
+    binding_ranges = _function_ranges(binding_tree)
+    binding_imports = _import_facts(binding_tree, binding_ranges)
+    binding_history = _binding_history(binding_tree, binding_imports, binding_ranges)
+    dispatches = {
+        _network_dispatch(
+            node,
+            binding_imports,
+            binding_history,
+            _enclosing_scope(binding_ranges, node),
+        )
+        for node in ast.walk(binding_tree)
+        if isinstance(node, ast.Call)
+    }
+    expected_binding_dispatches = {
+        "first.get",
+        "second.send",
+        "session.post",
+        "walrus.request",
+        "client.ws_connect",
+    }
+    missing_binding_dispatches = expected_binding_dispatches - dispatches
+    if missing_binding_dispatches:
+        print(
+            f"self-test binding provenance missed {sorted(missing_binding_dispatches)}",
             file=sys.stderr,
         )
         return 1

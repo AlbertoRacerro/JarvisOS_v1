@@ -7,10 +7,12 @@ data, call external providers, or approve any runtime behavior.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -371,6 +373,36 @@ def parse_model_content(raw_response: dict[str, Any]) -> tuple[dict[str, Any] | 
     return parsed, None
 
 
+class _RejectRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001, ANN201
+        return None
+
+
+def _validate_ollama_url(url: str) -> None:
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme != "http":
+        raise ValueError("Ollama endpoint must use http")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("Ollama endpoint must not include userinfo")
+    host = parsed.hostname
+    if not host:
+        raise ValueError("Ollama endpoint must include a host")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("Ollama endpoint has an invalid port") from exc
+    if port is None:
+        raise ValueError("Ollama endpoint must include a port")
+    if host.lower() == "localhost":
+        return
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError as exc:
+        raise ValueError("Ollama endpoint host must be literal localhost or a loopback IP") from exc
+    if not address.is_loopback:
+        raise ValueError("Ollama endpoint host must be loopback")
+
+
 def call_ollama_chat(
     *,
     model: str,
@@ -379,6 +411,7 @@ def call_ollama_chat(
     timeout_seconds: int,
     url: str = DEFAULT_OLLAMA_URL,
 ) -> dict[str, Any]:
+    _validate_ollama_url(url)
     payload = {
         "model": model,
         "stream": False,
@@ -399,9 +432,13 @@ def call_ollama_chat(
         headers={"Content-Type": "application/json"},
         method="POST",
     )
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        _RejectRedirectHandler(),
+    )
     started = time.monotonic()
     try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+        with opener.open(request, timeout=timeout_seconds) as response:
             body = response.read().decode("utf-8")
             return {
                 "ok": True,
