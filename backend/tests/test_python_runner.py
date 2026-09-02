@@ -137,7 +137,7 @@ def test_runner_creates_and_executes_batch_growth_successfully(client: TestClien
     assert "should-not-enter-runner" not in json.dumps(body)
     assert body["runner_job"]["command_metadata"]["shell"] is False
     assert body["runner_job"]["environment_metadata"]["inherited_environment"] is False
-    assert body["runner_job"]["environment_metadata"]["allowlisted_keys"] == ["PYTHONIOENCODING"]
+    assert body["runner_job"]["environment_metadata"]["allowlisted_keys"] == ["PYTHONHASHSEED", "PYTHONIOENCODING"]
 
     detail_response = client.get(f"/workspaces/bluerev/simulation-runs/{simulation_run['id']}")
     assert detail_response.status_code == 200
@@ -578,9 +578,47 @@ def test_local_python_executor_does_not_use_shell_or_inherit_secret_env(monkeypa
 
     kwargs = captured["kwargs"]
     assert kwargs["shell"] is False
-    assert kwargs["env"] == {"PYTHONIOENCODING": "utf-8"}
+    assert kwargs["env"] == {"PYTHONHASHSEED": "0", "PYTHONIOENCODING": "utf-8"}
     assert "SCALEWAY_API_KEY" not in json.dumps(result.environment_metadata)
     assert result.stdout == "ok"
+
+
+def test_local_python_executor_pins_hashseed_across_independent_processes(tmp_path) -> None:
+    from app.modules.runner.local_python import execute_python_script
+
+    script_path = tmp_path / "hashseed_probe.py"
+    script_path.write_text(
+        """
+import os
+
+print(f"{os.environ['PYTHONHASHSEED']}:{hash('jarvisos-hashseed-proof')}")
+""".strip(),
+        encoding="utf-8",
+    )
+    input_file = tmp_path / "input.json"
+    input_file.write_text("{}", encoding="utf-8")
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+
+    def run_probe():
+        return execute_python_script(
+            script_path=script_path,
+            input_file=input_file,
+            output_dir=output_dir,
+            working_dir=tmp_path,
+            timeout_seconds=5,
+            max_stdout_bytes=1024,
+            max_stderr_bytes=1024,
+        )
+
+    first = run_probe()
+    second = run_probe()
+
+    assert first.return_code == 0
+    assert second.return_code == 0
+    assert first.stdout == second.stdout
+    assert first.stdout.startswith("0:")
+    assert first.environment_metadata["allowlisted_keys"] == ["PYTHONHASHSEED", "PYTHONIOENCODING"]
 
 
 def test_runner_job_atomic_claim_runs_only_once(client: TestClient) -> None:
