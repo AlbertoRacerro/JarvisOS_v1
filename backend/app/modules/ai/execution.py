@@ -67,9 +67,7 @@ from app.modules.ai.token_flow_service import (
     transition_flow_state,
     validate_existing_flow_for_execution,
 )
-from app.modules.ai.token_flow_terminalization import (
-    terminalize_assembled_output,
-)
+from app.modules.ai.token_flow_terminalization import terminalize_assembled_output
 from app.modules.ai.token_flow_transaction import record_attempt_evidence_in_transaction
 from app.modules.events.service import utc_now
 from app.modules.memory.models import MemoryProposalCreate
@@ -112,7 +110,7 @@ TASK_KIND_DEFAULT_ROUTE: dict[str, str] = {
 
 def resolve_effective_route_class(*, task_kind: str, route_class: str | None) -> str:
     """Resolve omitted routes through the execution-owned task-kind defaults."""
-    if route_class is not None:
+    if route_class:
         return route_class
     return TASK_KIND_DEFAULT_ROUTE.get(task_kind, "local:fake")
 
@@ -590,9 +588,7 @@ _LOCAL_CONTINUATION_SENSITIVITY = "S4"
 
 
 def _assembled_local_response(response: AIResponse, body_text: str) -> AIResponse:
-    return response.model_copy(
-        update={"text": body_text, "content": body_text}
-    )
+    return response.model_copy(update={"text": body_text, "content": body_text})
 
 
 def _run_local_continuations(
@@ -613,9 +609,7 @@ def _run_local_continuations(
     bindings: dict[str, ProviderBinding] | None,
     workspace_id: str | None,
 ) -> AiTaskOutcome:
-    from app.modules.ai.token_flow_local_continuation import (
-        plan_local_continuation,
-    )
+    from app.modules.ai.token_flow_local_continuation import plan_local_continuation
 
     current_attempt_id = initial_attempt_id
     current_response = initial_response
@@ -637,9 +631,7 @@ def _run_local_continuations(
                 workspace_id=flow_workspace_id,
                 expected_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
             )
-            current_outcome.response = _assembled_local_response(
-                current_response, assembled.body_text
-            )
+            current_outcome.response = _assembled_local_response(current_response, assembled.body_text)
             return current_outcome
 
         if requested_output_tokens is None or requested_output_tokens <= 0:
@@ -651,9 +643,7 @@ def _run_local_continuations(
                 workspace_id=flow_workspace_id,
                 expected_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
             )
-            current_outcome.response = _assembled_local_response(
-                current_response, assembled.body_text
-            )
+            current_outcome.response = _assembled_local_response(current_response, assembled.body_text)
             return current_outcome
 
         plan = plan_local_continuation(
@@ -675,9 +665,7 @@ def _run_local_continuations(
                 workspace_id=flow_workspace_id,
                 expected_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
             )
-            current_outcome.response = _assembled_local_response(
-                current_response, assembled.body_text
-            )
+            current_outcome.response = _assembled_local_response(current_response, assembled.body_text)
             return current_outcome
 
         binding = plan.binding
@@ -692,9 +680,7 @@ def _run_local_continuations(
             "continuation_flow_id": flow_id,
             "continuation_parent_attempt_id": continuation.parent_attempt_id,
             "continuation_index": continuation.next_continuation_index,
-            "continuation_segment_count": request.metadata.get(
-                "continuation_segment_count"
-            ),
+            "continuation_segment_count": request.metadata.get("continuation_segment_count"),
         }
         if adapter is None:
             evidence = apply_continuation_lineage(
@@ -714,9 +700,7 @@ def _run_local_continuations(
                 requested_route_class=requested_route_class,
                 selected_route_class=binding.route_class,
                 decision=route_decision,
-                prompt_digest=canonical_digest(
-                    {"prompt": request.prompt or ""}
-                ),
+                prompt_digest=canonical_digest({"prompt": request.prompt or ""}),
                 context_digest=context_digest,
                 context_sources=context_sources,
                 response=None,
@@ -742,9 +726,7 @@ def _run_local_continuations(
                     ledger_id,
                     binding.route_class,
                     route_decision,
-                    response=_assembled_local_response(
-                        current_response, assembled.body_text
-                    ),
+                    response=_assembled_local_response(current_response, assembled.body_text),
                     error_type="config_error",
                     context_digest=context_digest,
                     context_sources_count=context_sources_count,
@@ -771,9 +753,7 @@ def _run_local_continuations(
                 requested_route_class=requested_route_class,
                 selected_route_class=binding.route_class,
                 decision=route_decision,
-                prompt_digest=canonical_digest(
-                    {"prompt": request.prompt or ""}
-                ),
+                prompt_digest=canonical_digest({"prompt": request.prompt or ""}),
                 context_digest=context_digest,
                 context_sources=context_sources,
                 response=None,
@@ -801,9 +781,7 @@ def _run_local_continuations(
                     ledger_id,
                     binding.route_class,
                     route_decision,
-                    response=_assembled_local_response(
-                        current_response, assembled.body_text
-                    ),
+                    response=_assembled_local_response(current_response, assembled.body_text),
                     error_type=type(exc).__name__,
                     context_digest=context_digest,
                     context_sources_count=context_sources_count,
@@ -830,9 +808,7 @@ def _run_local_continuations(
             requested_route_class=requested_route_class,
             selected_route_class=binding.route_class,
             decision=route_decision,
-            prompt_digest=canonical_digest(
-                {"prompt": request.prompt or ""}
-            ),
+            prompt_digest=canonical_digest({"prompt": request.prompt or ""}),
             context_digest=context_digest,
             context_sources=context_sources,
             response=response,
@@ -859,9 +835,7 @@ def _run_local_continuations(
                     ledger_id,
                     binding.route_class,
                     route_decision,
-                    response=_assembled_local_response(
-                        current_response, assembled.body_text
-                    ),
+                    response=_assembled_local_response(current_response, assembled.body_text),
                     error_type=error_type,
                     context_digest=context_digest,
                     context_sources_count=context_sources_count,
@@ -876,10 +850,7 @@ def _run_local_continuations(
             effective_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
             workspace_id=flow_workspace_id,
         )
-        normalized_finish = normalize_finish_reason(
-            response.finish_reason,
-            failed=False,
-        )
+        normalized_finish = normalize_finish_reason(response.finish_reason, failed=False)
         current_attempt_id = ledger_id
         current_response = response
         current_outcome = _outcome_with_flow(
@@ -897,13 +868,9 @@ def _run_local_continuations(
         if normalized_finish == "length":
             continue
 
-        final_state = (
-            "complete" if normalized_finish == "stop" else "partial_terminal"
-        )
+        final_state = "complete" if normalized_finish == "stop" else "partial_terminal"
         terminal_reason = (
-            "completed"
-            if normalized_finish == "stop"
-            else f"continuation_finish_{normalized_finish}"
+            "completed" if normalized_finish == "stop" else f"continuation_finish_{normalized_finish}"
         )
         _, assembled = terminalize_assembled_output(
             flow_id=flow_id,
@@ -913,9 +880,7 @@ def _run_local_continuations(
             workspace_id=flow_workspace_id,
             expected_sensitivity_level=_LOCAL_CONTINUATION_SENSITIVITY,
         )
-        assembled_response = _assembled_local_response(
-            response, assembled.body_text
-        )
+        assembled_response = _assembled_local_response(response, assembled.body_text)
         current_outcome.response = assembled_response
         if normalized_finish == "stop":
             proposed_ids, parse_error = _create_proposed_records_from_response(
@@ -1420,14 +1385,8 @@ def run_ai_task(
             prior_retryable_error_code = retryable_error_code
             continue
 
-        normalized_finish = normalize_finish_reason(
-            response.finish_reason, failed=False
-        )
-        if (
-            status == "success"
-            and normalized_finish == "length"
-            and bool(response.text)
-        ):
+        normalized_finish = normalize_finish_reason(response.finish_reason, failed=False)
+        if status == "success" and normalized_finish == "length" and bool(response.text):
             store_protected_segment(
                 flow_id=flow_id,
                 originating_attempt_id=ledger_id,
