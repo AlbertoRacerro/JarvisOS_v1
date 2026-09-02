@@ -44,6 +44,8 @@ The local structured-output probe is not currently safe to classify as localhost
 
 The router-policy local responder already validates its configured endpoint as localhost-only before invoking `_stdlib_json_post_client`, but both this client and the structured-output probe use standard `urllib.request` behavior, which may automatically follow an HTTP redirect from a validated loopback URL to an external `Location`. Initial-URL validation alone therefore does not make either exact exception truthful. Before either localhost-tool exception is valid, the implementation must deterministically reject redirects before following them, or enforce an equivalently fail-closed per-hop loopback check. The minimum authorized design is redirect rejection at the two existing urllib transport boundaries; no generic redirect/policy framework is authorized.
 
+A redirect-safe urllib implementation normally uses a custom opener/redirect handler and dispatches through `OpenerDirector.open` rather than the convenience `urlopen`. That safe transport change must not create a new AE002 blind spot. Therefore this slice also freezes concrete `urllib.request` opener dispatch (`build_opener(...)`/bound opener `.open`) into the classifier and hostile fixture surface when used outside accepted/exact-exempted owners. The two retained localhost functions remain exact exceptions even if their internal dispatch changes from `urlopen` to an opener.
+
 The existing exception schema is exact `path::symbol`, validates that the target symbol exists, and forbids wildcards. These ten narrow retained-owner declarations therefore do not suppress sibling functions or future call sites. No directory-wide owner, wildcard, generic `urlopen` exemption, or new runtime egress owner is authorized.
 
 If implementation exposes any additional pre-existing newly-detected dispatch outside these ten exact symbols, it must stop and re-derive that call site rather than silently widening the exception list.
@@ -57,13 +59,13 @@ Implementation authority exists only after an accepted readiness decision and `S
 ## Required behavior
 
 1. Extend the existing AST-based AE002 classifier to cover concrete first-party direct-dispatch families:
-   - `urllib.request`: at least `urlopen`, including module alias and from-import forms;
+   - `urllib.request`: `urlopen` plus concrete opener dispatch reached through `build_opener(...)` / a same-file bound opener `.open`, including module alias and from-import forms;
    - `urllib3`: direct/module request calls and `PoolManager`/equivalent constructor-bound `.request` dispatch;
    - `socket`: `create_connection` and constructor-bound `socket(...).connect` / `connect_ex` / `sendto`, plus destination-bearing `sendmsg(..., address)` on platforms that expose it; `sendto` and destination-bearing `sendmsg` are required because datagram egress can transmit to an external destination without a prior connect;
    - `aiohttp`: module/session request methods (`request`, `get`, `post`, `put`, `patch`, `delete`, `head`, `options`) when reached through a concrete `ClientSession` binding or direct module API;
    - `websockets`: `connect` dispatch, including alias/from-import forms;
    - `http.client`: constructor-bound HTTP/HTTPS connection `.request` and `.connect` dispatch.
-2. Reuse and correct the current import-alias resolver. Unaliased dotted imports must resolve according to Python binding semantics (`import urllib.request` binds `urllib`, while `import urllib.request as ur` binds `ur` to the full module). Preserve a separate full imported-module inventory so existing provider-import `.complete()` detection remains effective for unaliased dotted provider imports. Add only the minimum bounded local call-target/binding normalization needed to identify constructor-bound network objects in the same Python source file.
+2. Reuse and correct the current import-alias resolver. Unaliased dotted imports must resolve according to Python binding semantics (`import urllib.request` binds `urllib`, while `import urllib.request as ur` binds `ur` to the full module). Preserve a separate full imported-module inventory so existing provider-import `.complete()` detection remains effective for unaliased dotted provider imports. Add only the minimum bounded same-file call-target/binding normalization needed to identify frozen constructor-returned network objects, including urllib request openers used by the redirect-safe retained transports.
 3. Preserve accepted external owners exactly as today: `backend/app/modules/ai/providers/` and `backend/app/modules/local_ai/`.
 4. Preserve exact exception semantics and stable diagnostics. Add only the ten inventoried exact AE002 retained-owner entries above. The two localhost-tool symbols may be exempted only together with the fail-closed destination boundaries below. No other config broadening is authorized by this readiness packet.
 5. Constrain `scripts/local_model_structured_output_probe.py::call_ollama_chat` to deterministic loopback destinations before its retained-owner exception applies. Parse the supplied URL without DNS/network lookup; accept `localhost` or an IP address for which Python's standard-library IP classification is loopback; reject malformed/missing hosts, user-info ambiguity, and non-loopback hosts before constructing or sending the request. Preserve the current default localhost behavior.
@@ -89,7 +91,7 @@ The focused test surface must prove at least:
 
 | Family | Required hostile fixture |
 | --- | --- |
-| urllib.request | unaliased dotted module import, alias import, and from-import `urlopen` outside accepted owner -> AE002 |
+| urllib.request | unaliased dotted module import, alias/from-import `urlopen`, and `build_opener(...)` / same-file bound opener `.open` outside accepted owner -> AE002 |
 | urllib3 | module/alias request and constructor-bound `PoolManager().request` -> AE002 |
 | socket | `create_connection` plus constructor-bound `.connect`/`.connect_ex`/`.sendto` and destination-bearing `.sendmsg(..., address)` -> AE002 |
 | aiohttp | `ClientSession` binding and request verb/session `.request` dispatch -> AE002 |
@@ -97,7 +99,7 @@ The focused test surface must prove at least:
 | http.client | HTTP/HTTPS connection binding followed by `.request`/`.connect` -> AE002 |
 | provider regression | unaliased dotted `app.modules.ai.providers...` import followed by `.complete()` outside accepted owner still -> AE002 |
 | exact accepted owner | the same concrete dispatch patterns under an accepted owner remain non-findings |
-| ten retained symbols | full-tree scan remains green only because the ten inventoried existing call sites are exact symbol-scoped exceptions, with both localhost transports guarded before their exceptions are valid |
+| ten retained symbols | full-tree scan remains green only because the ten inventoried existing call sites are exact symbol-scoped exceptions, with both localhost transports guarded before their exceptions are valid, including if they use redirect-safe urllib opener dispatch |
 | local probe boundary | default/explicit loopback URL accepted; representative external host, malformed/missing host, and user-info ambiguity rejected before dispatch |
 | localhost redirect escape | for both localhost urllib transports, a validated loopback request receiving a redirect with an external `Location` is rejected before any follow-up request; focused proof must not dispatch to the external destination |
 | exact exception | one exact symbol exemption does not cover a sibling symbol |
@@ -116,12 +118,13 @@ Alias coverage must include ordinary `import X as Y` and `from X import Y as Z` 
 ## Failure modes to prevent
 
 - apparent coverage added only for simple dotted calls while constructor-bound calls still bypass AE002;
+- redirect-safe implementation replaces `urlopen` with `OpenerDirector.open` and accidentally creates a new unscanned urllib dispatch path;
 - datagram `socket.sendto` or destination-bearing `socket.sendmsg` remains a direct egress bypass because neither needs a prior connection;
 - alias normalization duplicates dotted module components and causes false negatives for `import urllib.request`;
 - alias normalization fixes `urllib.request` but silently disables existing unaliased dotted provider `.complete()` detection;
 - the local structured-output probe is exempted as "localhost-only" while still accepting arbitrary external URLs;
 - a validated localhost URL is allowed to redirect through urllib to an external destination inside either exact-exempted localhost symbol;
-- a broad method-name rule flags unrelated `.connect()` / `.request()` calls as external dispatch;
+- a broad method-name rule flags unrelated `.open()` / `.connect()` / `.request()` calls as external dispatch;
 - accepted-owner behavior changes unintentionally;
 - newly detected legacy calls are hidden by broad exceptions instead of exact audited dispositions;
 - scanner becomes a broad data-flow/taint framework beyond the bounded concrete patterns;
@@ -140,4 +143,4 @@ Alias coverage must include ordinary `import X as Y` and `from X import Y as Z` 
 
 ## Minimum-necessary test
 
-The gap is inside one existing static scanner and one focused deterministic test surface. Extending those owners with bounded call-target/binding recognition, preserving provider-import detection, adding ten exact pre-existing owner dispositions, and making the two exact-exempted localhost urllib transports fail closed against arbitrary destination/redirect escape is the smallest corrective action that closes the named bypasses without turning current sanctioned control/local tooling into surprise gate debt. A new policy service, runtime instrumentation, dependency graph, directory-wide allowlist, broad redirect framework, or broad linter framework would be disproportionate and is not authorized.
+The gap is inside one existing static scanner and one focused deterministic test surface. Extending those owners with bounded call-target/binding recognition, preserving provider-import detection, adding ten exact pre-existing owner dispositions, keeping redirect-safe urllib opener dispatch visible to AE002, and making the two exact-exempted localhost urllib transports fail closed against arbitrary destination/redirect escape is the smallest corrective action that closes the named bypasses without turning current sanctioned control/local tooling into surprise gate debt. A new policy service, runtime instrumentation, dependency graph, directory-wide allowlist, broad redirect framework, or broad linter framework would be disproportionate and is not authorized.
