@@ -141,6 +141,17 @@ def _dotted(expr: ast.AST, aliases: dict[str, str]) -> str:
     return ""
 
 
+def _root_name(expr: ast.AST) -> str | None:
+    current = expr
+    while isinstance(current, ast.Attribute):
+        current = current.value
+    return current.id if isinstance(current, ast.Name) else None
+
+
+def _position(node: ast.AST) -> tuple[int, int]:
+    return (getattr(node, "lineno", 0), getattr(node, "col_offset", 0))
+
+
 def _call_name(node: ast.Call, aliases: dict[str, str]) -> str:
     return _dotted(node.func, aliases)
 
@@ -186,9 +197,33 @@ def _binding_kind(constructor: str) -> str | None:
     return mapping.get(constructor)
 
 
-def _constructor_kind(expr: ast.AST, aliases: dict[str, str]) -> str | None:
+def _local_history_event(
+    history: dict[tuple[tuple[int, int, str], str], list[tuple[tuple[int, int], str | None]]],
+    scope: tuple[int, int, str],
+    name: str,
+    position: tuple[int, int],
+) -> tuple[bool, str | None]:
+    events = history.get((scope, name), [])
+    previous = [(event_position, kind) for event_position, kind in events if event_position < position]
+    if not previous:
+        return False, None
+    return True, previous[-1][1]
+
+
+def _constructor_kind(
+    expr: ast.AST,
+    aliases: dict[str, str],
+    history: dict[tuple[tuple[int, int, str], str], list[tuple[tuple[int, int], str | None]]] | None = None,
+    scope: tuple[int, int, str] = MODULE_SCOPE,
+    position: tuple[int, int] = (0, 0),
+) -> str | None:
     if not isinstance(expr, ast.Call):
         return None
+    root = _root_name(expr.func)
+    if history is not None and root and scope != MODULE_SCOPE:
+        locally_bound, _ = _local_history_event(history, scope, root, position)
+        if locally_bound:
+            return None
     return _binding_kind(_call_name(expr, aliases))
 
 
@@ -196,9 +231,23 @@ def _binding_history(
     tree: ast.AST,
     aliases: dict[str, str],
     function_ranges: list[tuple[int, int, str]],
-) -> dict[tuple[tuple[int, int, str], str], list[tuple[int, str | None]]]:
-    history: dict[tuple[tuple[int, int, str], str], list[tuple[int, str | None]]] = {}
-    for node in sorted(ast.walk(tree), key=lambda item: getattr(item, "lineno", 0)):
+) -> dict[tuple[tuple[int, int, str], str], list[tuple[tuple[int, int], str | None]]]:
+    history: dict[
+        tuple[tuple[int, int, str], str], list[tuple[tuple[int, int], str | None]]
+    ] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        scope = (node.lineno, getattr(node, "end_lineno", node.lineno), node.name)
+        parameters = [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
+        if node.args.vararg is not None:
+            parameters.append(node.args.vararg)
+        if node.args.kwarg is not None:
+            parameters.append(node.args.kwarg)
+        for parameter in parameters:
+            history.setdefault((scope, parameter.arg), []).append(((node.lineno, -1), None))
+
+    for node in sorted(ast.walk(tree), key=_position):
         target: ast.expr | None = None
         value: ast.AST | None = None
         if isinstance(node, ast.Assign) and len(node.targets) == 1:
@@ -208,36 +257,41 @@ def _binding_history(
         if not isinstance(target, ast.Name) or value is None:
             continue
         scope = _enclosing_scope(function_ranges, node)
+        position = _position(node)
         history.setdefault((scope, target.id), []).append(
-            (getattr(node, "lineno", 0), _constructor_kind(value, aliases))
+            (position, _constructor_kind(value, aliases, history, scope, position))
         )
+    for events in history.values():
+        events.sort(key=lambda event: event[0])
     return history
 
 
 def _history_kind(
-    history: dict[tuple[tuple[int, int, str], str], list[tuple[int, str | None]]],
+    history: dict[tuple[tuple[int, int, str], str], list[tuple[tuple[int, int], str | None]]],
     scope: tuple[int, int, str],
     name: str,
-    line: int,
+    position: tuple[int, int],
 ) -> str | None:
-    for candidate_scope in (scope, MODULE_SCOPE):
-        events = history.get((candidate_scope, name), [])
-        previous = [kind for event_line, kind in events if event_line < line]
-        if previous:
-            return previous[-1]
+    locally_bound, local_kind = _local_history_event(history, scope, name, position)
+    if locally_bound:
+        return local_kind
+    if scope != MODULE_SCOPE:
+        module_bound, module_kind = _local_history_event(history, MODULE_SCOPE, name, position)
+        if module_bound:
+            return module_kind
     return None
 
 
 def _bound_kind(
     expr: ast.AST,
     aliases: dict[str, str],
-    history: dict[tuple[tuple[int, int, str], str], list[tuple[int, str | None]]],
+    history: dict[tuple[tuple[int, int, str], str], list[tuple[tuple[int, int], str | None]]],
     scope: tuple[int, int, str],
-    line: int,
+    position: tuple[int, int],
 ) -> str | None:
     if isinstance(expr, ast.Name):
-        return _history_kind(history, scope, expr.id, line)
-    return _constructor_kind(expr, aliases)
+        return _history_kind(history, scope, expr.id, position)
+    return _constructor_kind(expr, aliases, history, scope, position)
 
 
 def _is_destination_bearing_sendmsg(node: ast.Call) -> bool:
@@ -247,28 +301,34 @@ def _is_destination_bearing_sendmsg(node: ast.Call) -> bool:
 def _network_dispatch(
     node: ast.Call,
     aliases: dict[str, str],
-    history: dict[tuple[tuple[int, int, str], str], list[tuple[int, str | None]]],
+    history: dict[tuple[tuple[int, int, str], str], list[tuple[tuple[int, int], str | None]]],
     scope: tuple[int, int, str],
 ) -> str | None:
     call = _call_name(node, aliases)
     method = call.rsplit(".", 1)[-1]
+    position = _position(node)
+    root = _root_name(node.func)
+    root_is_shadowed = False
+    if root and scope != MODULE_SCOPE:
+        root_is_shadowed, _ = _local_history_event(history, scope, root, position)
 
-    if call.startswith(("httpx.", "requests.")) and method in HTTP_MODULE_METHODS:
-        return call
-    if call == "urllib.request.urlopen":
-        return call
-    if call == "urllib3.request":
-        return call
-    if call == "socket.create_connection":
-        return call
-    if call == "websockets.connect":
-        return call
-    if call == "aiohttp.request":
-        return call
+    if not root_is_shadowed:
+        if call.startswith(("httpx.", "requests.")) and method in HTTP_MODULE_METHODS:
+            return call
+        if call == "urllib.request.urlopen":
+            return call
+        if call == "urllib3.request":
+            return call
+        if call == "socket.create_connection":
+            return call
+        if call == "websockets.connect":
+            return call
+        if call == "aiohttp.request":
+            return call
 
     if not isinstance(node.func, ast.Attribute):
         return None
-    kind = _bound_kind(node.func.value, aliases, history, scope, getattr(node, "lineno", 0))
+    kind = _bound_kind(node.func.value, aliases, history, scope, position)
     if kind == "httpx_client" and method in HTTP_CLIENT_METHODS:
         return call or f"httpx.Client.{method}"
     if kind == "requests_session" and method in REQUESTS_SESSION_METHODS:
