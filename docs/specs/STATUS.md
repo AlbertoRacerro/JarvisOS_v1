@@ -59,7 +59,7 @@ Once fresh exact `master` shows 112 as `merged`, `docs/POST_112_PARALLEL_DELIVER
 - **Separately gated:** `125` and `126` are not automatically parallelized.
 - **Later engineering/Process:** `102`, then `103 -> 104 -> 105 -> 106 -> 107 -> 108 -> 109 -> 093 -> 110`, subject to each row's then-current dependencies/readiness and fresh authority.
 
-Old 066–068 and 080 remain frozen. After 123, Hermes requires a fresh derivation from then-current exact `master` before implementation. The derivation must use accepted 111/118/119/120/123 contracts, the live AI execution/egress/budget spine, the pinned Hermes identity actually selected, and current evidence.
+Old 066–068 and 080 remain frozen. After 123, Hermes requires fresh derivation from then-current exact `master`; legacy Hermes specs are not direct implementation authority. Any fresh Hermes release must preserve JarvisOS-owned context, policy, credentials, sensitivity, egress, budget, ledger, promotion, repository, database, service, and domain authority.
 
 Historical sequential queue prose predating this reconciliation is non-normative provenance only. `STATUS.md` rows, dependencies, accepted spec/readiness artifacts, and the activated post-112 profile are the live authority.
 
