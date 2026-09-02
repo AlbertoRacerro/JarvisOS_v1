@@ -190,6 +190,102 @@ def test_ae002_binding_provenance_is_lexical_and_source_ordered(tmp_path: Path) 
     assert "AE002 backend/app/scoped.py::second" not in result.stdout
 
 
+def test_ae002_class_namespace_aliases_do_not_leak_into_methods(tmp_path: Path) -> None:
+    source = tmp_path / "backend/app/class_scopes.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "import httpx\n"
+        "class Namespace:\n"
+        "    import unrelated as httpx\n"
+        "    httpx.get('safe')\n"
+        "    def method(self):\n"
+        "        httpx.get('https://example.invalid')\n"
+        "class NetworkNamespace:\n"
+        "    import requests as transport\n"
+        "    transport.get('https://example.invalid')\n",
+        encoding="utf-8",
+    )
+    result = _run(tmp_path, _write_config(tmp_path))
+    assert result.returncode == 1
+    assert "AE002 backend/app/class_scopes.py::method" in result.stdout
+    assert "AE002 backend/app/class_scopes.py::NetworkNamespace" in result.stdout
+    assert "class_scopes.py::Namespace" not in result.stdout
+
+
+def test_ae002_retains_heterogeneous_possible_clients_across_control_flow(tmp_path: Path) -> None:
+    source = tmp_path / "backend/app/possible_clients.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "import aiohttp\nimport http.client\nimport httpx\nimport requests\nimport urllib3\n"
+        "def conditional(flag):\n"
+        "    if flag:\n        client = httpx.Client()\n"
+        "    else:\n        client = requests.Session()\n"
+        "    client.get('https://example.invalid')\n"
+        "def loop(items):\n"
+        "    client = urllib3.PoolManager()\n"
+        "    for item in items:\n        client = aiohttp.ClientSession()\n"
+        "    client.request('GET', 'https://example.invalid')\n"
+        "async def async_loop(items):\n"
+        "    client = httpx.AsyncClient()\n"
+        "    async for item in items:\n        client = object()\n"
+        "    client.get('https://example.invalid')\n"
+        "def repeated(flag):\n"
+        "    client = requests.Session()\n"
+        "    while flag:\n        client = object()\n"
+        "    client.get('https://example.invalid')\n"
+        "def guarded():\n"
+        "    try:\n        client = http.client.HTTPConnection('example.invalid')\n"
+        "    except Exception:\n        client = urllib3.PoolManager()\n"
+        "    client.request('GET', '/')\n"
+        "def grouped():\n"
+        "    try:\n        raise ExceptionGroup('x', [ValueError()])\n"
+        "    except* ValueError:\n        client = httpx.Client()\n"
+        "    client.get('https://example.invalid')\n"
+        "def matched(value):\n"
+        "    match value:\n"
+        "        case 1:\n            client = aiohttp.ClientSession()\n"
+        "        case _:\n            client = object()\n"
+        "    client.get('https://example.invalid')\n"
+        "def definite():\n"
+        "    client = httpx.Client()\n"
+        "    client = object()\n"
+        "    client.get('safe')\n",
+        encoding="utf-8",
+    )
+    result = _run(tmp_path, _write_config(tmp_path))
+    assert result.returncode == 1
+    for symbol in (
+        "conditional",
+        "loop",
+        "async_loop",
+        "repeated",
+        "guarded",
+        "grouped",
+        "matched",
+    ):
+        assert f"AE002 backend/app/possible_clients.py::{symbol}" in result.stdout
+    assert "possible_clients.py::definite" not in result.stdout
+
+
+def test_ae002_recognizes_only_public_websockets_connect_paths(tmp_path: Path) -> None:
+    source = tmp_path / "backend/app/websocket_paths.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "import websockets.sync.client as sync_ws\n"
+        "from websockets.asyncio.client import connect as async_connect\n"
+        "import unrelated\n"
+        "def sync_dispatch():\n    sync_ws.connect('wss://example.invalid')\n"
+        "def async_dispatch():\n    async_connect('wss://example.invalid')\n"
+        "def unrelated_dispatch():\n    unrelated.client.connect('safe')\n",
+        encoding="utf-8",
+    )
+    result = _run(tmp_path, _write_config(tmp_path))
+    assert result.returncode == 1
+    assert "AE002 backend/app/websocket_paths.py::sync_dispatch" in result.stdout
+    assert "AE002 backend/app/websocket_paths.py::async_dispatch" in result.stdout
+    assert "websocket_paths.py::unrelated_dispatch" not in result.stdout
+
+
 def test_ae002_ambiguous_exact_owner_fails_closed(tmp_path: Path) -> None:
     source = tmp_path / "backend/app/owner.py"
     source.parent.mkdir(parents=True)

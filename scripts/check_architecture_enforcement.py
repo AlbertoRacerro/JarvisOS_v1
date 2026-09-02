@@ -154,6 +154,14 @@ def _function_ranges(tree: ast.AST) -> list[tuple[int, int, str]]:
     return ranges
 
 
+def _lexical_ranges(tree: ast.AST) -> list[tuple[int, int, str]]:
+    return [
+        (node.lineno, getattr(node, "end_lineno", node.lineno), node.name)
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+    ]
+
+
 def _enclosing_scope(function_ranges: Iterable[tuple[int, int, str]], target: ast.AST) -> tuple[int, int, str]:
     best = MODULE_SCOPE
     best_span: int | None = None
@@ -252,48 +260,64 @@ def _binding_kind(constructor: str) -> str | None:
 
 
 def _local_history_event(
-    history: dict[tuple[tuple[int, int, str], str], list[tuple[tuple[int, int], str | None]]],
+    history: dict[
+        tuple[tuple[int, int, str], str],
+        list[tuple[tuple[int, int], frozenset[str], bool]],
+    ],
     scope: tuple[int, int, str],
     name: str,
     position: tuple[int, int],
-) -> tuple[bool, str | None]:
+) -> tuple[bool, frozenset[str]]:
     events = history.get((scope, name), [])
-    previous = [(event_position, kind) for event_position, kind in events if event_position < position]
+    previous = [event for event in events if event[0] < position]
     if not previous:
-        return False, None
-    return True, previous[-1][1]
+        return False, frozenset()
+    possible: set[str] = set()
+    for _, kinds, non_definite in reversed(previous):
+        possible.update(kinds)
+        if not non_definite:
+            break
+    return True, frozenset(possible)
 
 
 def _constructor_kind(
     expr: ast.AST,
     aliases: dict[str, str],
-    history: dict[tuple[tuple[int, int, str], str], list[tuple[tuple[int, int], str | None]]] | None = None,
+    history: dict[
+        tuple[tuple[int, int, str], str],
+        list[tuple[tuple[int, int], frozenset[str], bool]],
+    ] | None = None,
     scope: tuple[int, int, str] = MODULE_SCOPE,
     position: tuple[int, int] = (0, 0),
-) -> str | None:
+) -> frozenset[str]:
     if not isinstance(expr, ast.Call):
-        return None
+        return frozenset()
     root = _root_name(expr.func)
     if history is not None and root and scope != MODULE_SCOPE:
         locally_bound, _ = _local_history_event(history, scope, root, position)
         if locally_bound:
-            return None
-    return _binding_kind(_call_name(expr, aliases))
+            return frozenset()
+    kind = _binding_kind(_call_name(expr, aliases))
+    return frozenset({kind}) if kind else frozenset()
 
 
 def _record_binding(
-    history: dict[tuple[tuple[int, int, str], str], list[tuple[tuple[int, int], str | None]]],
+    history: dict[
+        tuple[tuple[int, int, str], str],
+        list[tuple[tuple[int, int], frozenset[str], bool]],
+    ],
     *,
     target: ast.AST | None,
     value: ast.AST | None,
     aliases: dict[str, str],
     scope: tuple[int, int, str],
     position: tuple[int, int],
+    non_definite: bool,
 ) -> None:
     if not isinstance(target, ast.Name) or value is None:
         return
     history.setdefault((scope, target.id), []).append(
-        (position, _constructor_kind(value, aliases, history, scope, position))
+        (position, _constructor_kind(value, aliases, history, scope, position), non_definite)
     )
 
 
@@ -301,10 +325,15 @@ def _binding_history(
     tree: ast.AST,
     import_facts: ImportFacts,
     function_ranges: list[tuple[int, int, str]],
-) -> dict[tuple[tuple[int, int, str], str], list[tuple[tuple[int, int], str | None]]]:
+) -> dict[
+    tuple[tuple[int, int, str], str],
+    list[tuple[tuple[int, int], frozenset[str], bool]],
+]:
     history: dict[
-        tuple[tuple[int, int, str], str], list[tuple[tuple[int, int], str | None]]
+        tuple[tuple[int, int, str], str],
+        list[tuple[tuple[int, int], frozenset[str], bool]],
     ] = {}
+    parents = {child: parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)}
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
@@ -315,12 +344,26 @@ def _binding_history(
         if node.args.kwarg is not None:
             parameters.append(node.args.kwarg)
         for parameter in parameters:
-            history.setdefault((scope, parameter.arg), []).append(((node.lineno, -1), None))
+            history.setdefault((scope, parameter.arg), []).append(
+                ((node.lineno, -1), frozenset(), False)
+            )
 
     for node in sorted(ast.walk(tree), key=_position):
         scope = _enclosing_scope(function_ranges, node)
         position = _position(node)
         aliases = _aliases_at(import_facts, scope, position)
+        parent = parents.get(node)
+        non_definite = False
+        while parent is not None and not isinstance(
+            parent, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        ):
+            if isinstance(
+                parent,
+                (ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try, ast.TryStar, ast.Match),
+            ):
+                non_definite = True
+                break
+            parent = parents.get(parent)
         if isinstance(node, ast.Assign):
             for target in node.targets:
                 _record_binding(
@@ -330,6 +373,7 @@ def _binding_history(
                     aliases=aliases,
                     scope=scope,
                     position=position,
+                    non_definite=non_definite,
                 )
         elif isinstance(node, ast.AnnAssign):
             _record_binding(
@@ -339,6 +383,7 @@ def _binding_history(
                 aliases=aliases,
                 scope=scope,
                 position=position,
+                non_definite=non_definite,
             )
         elif isinstance(node, ast.NamedExpr):
             _record_binding(
@@ -348,6 +393,7 @@ def _binding_history(
                 aliases=aliases,
                 scope=scope,
                 position=position,
+                non_definite=non_definite,
             )
         elif isinstance(node, (ast.With, ast.AsyncWith)):
             for item in node.items:
@@ -358,6 +404,7 @@ def _binding_history(
                     aliases=aliases,
                     scope=scope,
                     position=position,
+                    non_definite=non_definite,
                 )
     for events in history.values():
         events.sort(key=lambda event: event[0])
@@ -365,11 +412,14 @@ def _binding_history(
 
 
 def _history_kind(
-    history: dict[tuple[tuple[int, int, str], str], list[tuple[tuple[int, int], str | None]]],
+    history: dict[
+        tuple[tuple[int, int, str], str],
+        list[tuple[tuple[int, int], frozenset[str], bool]],
+    ],
     scope: tuple[int, int, str],
     name: str,
     position: tuple[int, int],
-) -> str | None:
+) -> frozenset[str]:
     locally_bound, local_kind = _local_history_event(history, scope, name, position)
     if locally_bound:
         return local_kind
@@ -377,16 +427,19 @@ def _history_kind(
         module_bound, module_kind = _local_history_event(history, MODULE_SCOPE, name, position)
         if module_bound:
             return module_kind
-    return None
+    return frozenset()
 
 
 def _bound_kind(
     expr: ast.AST,
     aliases: dict[str, str],
-    history: dict[tuple[tuple[int, int, str], str], list[tuple[tuple[int, int], str | None]]],
+    history: dict[
+        tuple[tuple[int, int, str], str],
+        list[tuple[tuple[int, int], frozenset[str], bool]],
+    ],
     scope: tuple[int, int, str],
     position: tuple[int, int],
-) -> str | None:
+) -> frozenset[str]:
     if isinstance(expr, ast.Name):
         return _history_kind(history, scope, expr.id, position)
     return _constructor_kind(expr, aliases, history, scope, position)
@@ -399,7 +452,10 @@ def _is_destination_bearing_sendmsg(node: ast.Call) -> bool:
 def _network_dispatch(
     node: ast.Call,
     import_facts: ImportFacts,
-    history: dict[tuple[tuple[int, int, str], str], list[tuple[tuple[int, int], str | None]]],
+    history: dict[
+        tuple[tuple[int, int, str], str],
+        list[tuple[tuple[int, int], frozenset[str], bool]],
+    ],
     scope: tuple[int, int, str],
 ) -> str | None:
     position = _position(node)
@@ -420,27 +476,31 @@ def _network_dispatch(
             return call
         if call == "socket.create_connection":
             return call
-        if call == "websockets.connect":
+        if call in {
+            "websockets.connect",
+            "websockets.sync.client.connect",
+            "websockets.asyncio.client.connect",
+        }:
             return call
         if call == "aiohttp.request":
             return call
 
     if not isinstance(node.func, ast.Attribute):
         return None
-    kind = _bound_kind(node.func.value, aliases, history, scope, position)
-    if kind == "httpx_client" and method in HTTP_CLIENT_METHODS:
+    kinds = _bound_kind(node.func.value, aliases, history, scope, position)
+    if "httpx_client" in kinds and method in HTTP_CLIENT_METHODS:
         return call or f"httpx.Client.{method}"
-    if kind == "requests_session" and method in REQUESTS_SESSION_METHODS:
+    if "requests_session" in kinds and method in REQUESTS_SESSION_METHODS:
         return call or f"requests.Session.{method}"
-    if kind == "urllib3_pool" and method in URLLIB3_POOL_METHODS:
+    if "urllib3_pool" in kinds and method in URLLIB3_POOL_METHODS:
         return call or f"urllib3.PoolManager.{method}"
-    if kind == "aiohttp_session" and method in AIOHTTP_SESSION_METHODS:
+    if "aiohttp_session" in kinds and method in AIOHTTP_SESSION_METHODS:
         return call or f"aiohttp.ClientSession.{method}"
-    if kind == "http_client_connection" and method in HTTP_CLIENT_LOW_LEVEL_METHODS:
+    if "http_client_connection" in kinds and method in HTTP_CLIENT_LOW_LEVEL_METHODS:
         return call or f"http.client.HTTPConnection.{method}"
-    if kind == "urllib_opener" and method == "open":
+    if "urllib_opener" in kinds and method == "open":
         return call or "urllib.request.OpenerDirector.open"
-    if kind == "socket":
+    if "socket" in kinds:
         if method in SOCKET_INSTANCE_METHODS:
             return call or f"socket.socket.{method}"
         if method == "sendmsg" and _is_destination_bearing_sendmsg(node):
@@ -471,9 +531,9 @@ def _scan_python(path: Path, root: Path, exceptions: set[tuple[str, str]]) -> li
         tree = ast.parse(source, filename=rel)
     except (OSError, SyntaxError) as exc:
         return [Finding("AE001", rel, "<parse>", f"covered Python source did not parse: {exc}")]
-    function_ranges = _function_ranges(tree)
-    import_facts = _import_facts(tree, function_ranges)
-    binding_history = _binding_history(tree, import_facts, function_ranges)
+    lexical_ranges = _lexical_ranges(tree)
+    import_facts = _import_facts(tree, lexical_ranges)
+    binding_history = _binding_history(tree, import_facts, lexical_ranges)
     provider_import = any(
         target.startswith("app.modules.ai.providers")
         or target.startswith("backend.app.modules.ai.providers")
@@ -484,7 +544,7 @@ def _scan_python(path: Path, root: Path, exceptions: set[tuple[str, str]]) -> li
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
-        scope = _enclosing_scope(function_ranges, node)
+        scope = _enclosing_scope(lexical_ranges, node)
         aliases = _aliases_at(import_facts, scope, _position(node))
         symbol = scope[2]
         exact = f"{rel}::{symbol}"
