@@ -93,7 +93,9 @@ class _RedirectHTTPHandler(urllib.request.HTTPHandler):
         self._seen.append(request.full_url)
         headers = Message()
         headers["Location"] = self._location
-        return urllib.response.addinfourl(io.BytesIO(b""), headers, request.full_url, 302)
+        response = urllib.response.addinfourl(io.BytesIO(b""), headers, request.full_url, 302)
+        response.msg = "Found"
+        return response
 
 
 def _install_redirect_transport(
