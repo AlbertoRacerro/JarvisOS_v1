@@ -50,3 +50,19 @@ def test_ae002_nested_local_import_still_shadows_enclosing_alias(tmp_path: Path)
     )
     result = _run(tmp_path)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_ae002_nested_function_sees_enclosing_import_executed_after_definition(tmp_path: Path) -> None:
+    source = tmp_path / "backend/app/nested_late_outer_import.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "def outer():\n"
+        "    def inner():\n"
+        "        transport.post('https://example.invalid')\n"
+        "    import httpx as transport\n"
+        "    return inner\n",
+        encoding="utf-8",
+    )
+    result = _run(tmp_path)
+    assert result.returncode == 1
+    assert "AE002 backend/app/nested_late_outer_import.py::inner" in result.stdout
