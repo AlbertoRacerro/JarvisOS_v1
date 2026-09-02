@@ -5,6 +5,7 @@ import httpx
 import pytest
 
 from app.modules.local_ai.contracts import MICRO_CONTRACT_SCHEMA_VERSION, TaskClassificationOutput, TaskType
+from app.modules.local_ai_eval import probe_micro_contracts
 from app.modules.local_ai_eval.probe_micro_contracts import (
     TASK_CLASSIFICATION_FLAT_SCHEMA,
     ProbeCase,
@@ -17,6 +18,8 @@ from app.modules.local_ai_eval.probe_micro_contracts import (
     run_probe_suite,
     validate_native_endpoint,
 )
+
+_REAL_HTTPX_CLIENT = httpx.Client
 
 
 def _task_case() -> ProbeCase:
@@ -44,7 +47,11 @@ def _native_client_for_message(content: str, *, thinking: str = "", done_reason:
             request=request,
         )
 
-    return httpx.Client(transport=httpx.MockTransport(handler))
+    return _REAL_HTTPX_CLIENT(transport=httpx.MockTransport(handler))
+
+
+def _patch_probe_client(monkeypatch: pytest.MonkeyPatch, client: httpx.Client) -> None:
+    monkeypatch.setattr(probe_micro_contracts, "_probe_client", lambda _timeout: client)
 
 
 def test_flat_schema_contains_no_refs_defs_or_anyof() -> None:
@@ -85,7 +92,40 @@ def test_native_endpoint_validation_rejects_external_or_wrong_urls(url: str) -> 
         validate_native_endpoint(url)
 
 
-def test_probe_case_parses_valid_native_response_with_thinking_fields() -> None:
+def test_probe_case_validates_endpoint_before_client_creation(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        probe_micro_contracts,
+        "_probe_client",
+        lambda _timeout: pytest.fail("client must not be constructed for rejected endpoint"),
+    )
+    with pytest.raises(ProbeConfigurationError):
+        run_probe_case(
+            _task_case(),
+            model_name="gemma4:12b-it-qat",
+            endpoint_url="http://api.example.com/api/chat",
+            timeout_seconds=10,
+            num_predict=512,
+        )
+
+
+def test_probe_client_is_structurally_proxy_and_redirect_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+    fake_client = _native_client_for_message("{}")
+
+    def factory(**kwargs):
+        captured.update(kwargs)
+        return fake_client
+
+    monkeypatch.setattr(probe_micro_contracts.httpx, "Client", factory)
+    client = probe_micro_contracts._probe_client(10)
+    assert client is fake_client
+    assert captured["timeout"] == 10
+    assert captured["trust_env"] is False
+    assert captured["follow_redirects"] is False
+    fake_client.close()
+
+
+def test_probe_case_parses_valid_native_response_with_thinking_fields(monkeypatch: pytest.MonkeyPatch) -> None:
     content = json.dumps(
         {
             "task_type": "code_change",
@@ -98,6 +138,7 @@ def test_probe_case_parses_valid_native_response_with_thinking_fields() -> None:
             "schema_version": MICRO_CONTRACT_SCHEMA_VERSION,
         }
     )
+    _patch_probe_client(monkeypatch, _native_client_for_message(content, thinking="plan then answer"))
 
     result = run_probe_case(
         _task_case(),
@@ -105,7 +146,6 @@ def test_probe_case_parses_valid_native_response_with_thinking_fields() -> None:
         endpoint_url="http://localhost:11434/api/chat",
         timeout_seconds=10,
         num_predict=512,
-        client=_native_client_for_message(content, thinking="plan then answer"),
     )
 
     assert result.valid_json is True
@@ -116,14 +156,14 @@ def test_probe_case_parses_valid_native_response_with_thinking_fields() -> None:
     assert result.eval_count == 7
 
 
-def test_probe_case_counts_thinking_budget_exhausted() -> None:
+def test_probe_case_counts_thinking_budget_exhausted(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_probe_client(monkeypatch, _native_client_for_message("", thinking="long chain of thought", done_reason="length"))
     result = run_probe_case(
         _task_case(),
         model_name="gemma4:12b-it-qat",
         endpoint_url="http://localhost:11434/api/chat",
         timeout_seconds=10,
         num_predict=512,
-        client=_native_client_for_message("", thinking="long chain of thought", done_reason="length"),
     )
 
     assert result.failure_code == "thinking_budget_exhausted"
@@ -131,28 +171,28 @@ def test_probe_case_counts_thinking_budget_exhausted() -> None:
     assert result.message_thinking_empty is False
 
 
-def test_probe_case_counts_invalid_json_when_not_budget_exhausted() -> None:
+def test_probe_case_counts_invalid_json_when_not_budget_exhausted(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_probe_client(monkeypatch, _native_client_for_message("not json", thinking=""))
     result = run_probe_case(
         _task_case(),
         model_name="gemma4:12b-it-qat",
         endpoint_url="http://localhost:11434/api/chat",
         timeout_seconds=10,
         num_predict=512,
-        client=_native_client_for_message("not json", thinking=""),
     )
 
     assert result.failure_code == "invalid_json"
     assert result.valid_json is False
 
 
-def test_probe_case_counts_schema_invalid() -> None:
+def test_probe_case_counts_schema_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_probe_client(monkeypatch, _native_client_for_message(json.dumps({"task_type": "code_change"})))
     result = run_probe_case(
         _task_case(),
         model_name="gemma4:12b-it-qat",
         endpoint_url="http://localhost:11434/api/chat",
         timeout_seconds=10,
         num_predict=512,
-        client=_native_client_for_message(json.dumps({"task_type": "code_change"})),
     )
 
     assert result.failure_code == "schema_invalid"
@@ -160,23 +200,23 @@ def test_probe_case_counts_schema_invalid() -> None:
     assert result.schema_valid is False
 
 
-def test_probe_case_counts_timeout() -> None:
+def test_probe_case_counts_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ReadTimeout("too slow", request=request)
 
+    _patch_probe_client(monkeypatch, _REAL_HTTPX_CLIENT(transport=httpx.MockTransport(handler)))
     result = run_probe_case(
         _task_case(),
         model_name="gemma4:12b-it-qat",
         endpoint_url="http://localhost:11434/api/chat",
         timeout_seconds=10,
         num_predict=512,
-        client=httpx.Client(transport=httpx.MockTransport(handler)),
     )
 
     assert result.failure_code == "timeout"
 
 
-def test_report_aggregation_counts_failures() -> None:
+def test_report_aggregation_counts_failures(monkeypatch: pytest.MonkeyPatch) -> None:
     valid_content = json.dumps(
         {
             "task_type": "code_change",
@@ -189,21 +229,21 @@ def test_report_aggregation_counts_failures() -> None:
             "schema_version": MICRO_CONTRACT_SCHEMA_VERSION,
         }
     )
+    _patch_probe_client(monkeypatch, _native_client_for_message(valid_content))
     valid = run_probe_case(
         _task_case(),
         model_name="gemma4:12b-it-qat",
         endpoint_url="http://localhost:11434/api/chat",
         timeout_seconds=10,
         num_predict=512,
-        client=_native_client_for_message(valid_content),
     )
+    _patch_probe_client(monkeypatch, _native_client_for_message("", thinking="still thinking", done_reason="length"))
     exhausted = run_probe_case(
         _task_case(),
         model_name="gemma4:12b-it-qat",
         endpoint_url="http://localhost:11434/api/chat",
         timeout_seconds=10,
         num_predict=512,
-        client=_native_client_for_message("", thinking="still thinking", done_reason="length"),
     )
 
     report = aggregate_report(
@@ -219,7 +259,7 @@ def test_report_aggregation_counts_failures() -> None:
     assert report.thinking_budget_exhausted_count == 1
 
 
-def test_probe_suite_uses_mocked_client_without_network() -> None:
+def test_probe_suite_uses_module_owned_mocked_client_without_network(monkeypatch: pytest.MonkeyPatch) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)
         assert payload["format"]
@@ -229,8 +269,12 @@ def test_probe_suite_uses_mocked_client_without_network() -> None:
         }
         return httpx.Response(200, json={"message": {"content": json.dumps(content), "thinking": ""}}, request=request)
 
+    monkeypatch.setattr(
+        probe_micro_contracts,
+        "_probe_client",
+        lambda _timeout: _REAL_HTTPX_CLIENT(transport=httpx.MockTransport(handler)),
+    )
     report = run_probe_suite(
-        client=httpx.Client(transport=httpx.MockTransport(handler)),
         timeout_seconds=10,
         run_heavy_comparison=False,
     )
