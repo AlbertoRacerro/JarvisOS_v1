@@ -11,7 +11,7 @@ from app.modules.ai.context_builder import (
     build_workspace_context_bundle,
     canonical_digest,
 )
-from app.modules.ai.execution import run_ai_task
+from app.modules.ai.execution import resolve_effective_route_class, run_ai_task
 from app.modules.ai.jarvis_context import (
     JarvisContextConflictError,
     require_dispatchable_preview,
@@ -301,8 +301,12 @@ def _context_blocks_for_new_submit(workspace_id: str, payload: AIThreadSubmit) -
     if payload.jarvis_context is not None:
         if payload.jarvis_context.workspace_id != workspace_id:
             raise AIThreadConflictError("Jarvis context workspace does not match thread workspace")
-        if payload.jarvis_context.added_context_refs and payload.route_class is not None:
-            if not payload.route_class.startswith("local:"):
+        if payload.jarvis_context.added_context_refs:
+            effective_route_class = resolve_effective_route_class(
+                task_kind=payload.task_kind,
+                route_class=payload.route_class,
+            )
+            if not effective_route_class.startswith("local:"):
                 raise AIThreadConflictError(
                     "exact-ref Jarvis context is unavailable for external routes in spec 111"
                 )
