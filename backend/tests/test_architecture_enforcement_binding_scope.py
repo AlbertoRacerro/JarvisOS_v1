@@ -1,0 +1,73 @@
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "check_architecture_enforcement.py"
+
+
+def _run(root: Path) -> subprocess.CompletedProcess[str]:
+    config = root / "configs" / "architecture_enforcement.json"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_text(json.dumps({"exceptions": []}), encoding="utf-8")
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), "--root", str(root), "--config", str(config)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_ae002_constructor_binding_preserves_same_line_source_order(tmp_path: Path) -> None:
+    source = tmp_path / "backend/app/same_line.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "import httpx\nimport requests\n"
+        "def dispatch():\n"
+        "    h = httpx.Client(); h.send(None)\n"
+        "    r = requests.Session(); r.send(None)\n",
+        encoding="utf-8",
+    )
+    result = _run(tmp_path)
+    assert result.returncode == 1
+    assert result.stdout.count("AE002 backend/app/same_line.py::dispatch") == 2
+
+
+def test_ae002_parameters_and_local_shadows_kill_import_and_module_provenance(tmp_path: Path) -> None:
+    source = tmp_path / "backend/app/shadowed.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "import httpx\nfrom requests import Session as RS\n"
+        "class Other:\n"
+        "    def get(self, *args): pass\n"
+        "    def send(self, *args): pass\n"
+        "def parameter(httpx, client, /, *, RS):\n"
+        "    httpx.get('https://example.invalid')\n"
+        "    client.send(None)\n"
+        "    RS().send(None)\n"
+        "def reassigned():\n"
+        "    httpx = Other()\n"
+        "    httpx.get('https://example.invalid')\n"
+        "    RS = Other\n"
+        "    RS().send(None)\n",
+        encoding="utf-8",
+    )
+    result = _run(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_ae002_constructor_alias_still_detects_when_not_shadowed(tmp_path: Path) -> None:
+    source = tmp_path / "backend/app/aliases.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from httpx import Client as HC\nfrom requests import Session as RS\n"
+        "def dispatch():\n"
+        "    h = HC(); h.send(None)\n"
+        "    r = RS(); r.send(None)\n",
+        encoding="utf-8",
+    )
+    result = _run(tmp_path)
+    assert result.returncode == 1
+    assert result.stdout.count("AE002 backend/app/aliases.py::dispatch") == 2
