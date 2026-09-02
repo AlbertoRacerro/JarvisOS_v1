@@ -37,6 +37,7 @@ HTTP_CLIENT_LOW_LEVEL_METHODS = {"connect", "request", "send", "endheaders"}
 URLLIB3_POOL_METHODS = {"request", "urlopen"}
 SOCKET_INSTANCE_METHODS = {"connect", "connect_ex", "sendto"}
 MODULE_SCOPE = (0, sys.maxsize, "<module>")
+IMPORT_UNBOUND_PREFIX = "__ae002_local_unbound__."
 
 
 @dataclass(frozen=True, order=True)
@@ -53,7 +54,12 @@ class Finding:
 @dataclass(frozen=True)
 class ImportFacts:
     aliases: dict[str, str]
+    scoped_aliases: dict[
+        tuple[tuple[int, int, str], str],
+        tuple[tuple[tuple[int, int], str], ...],
+    ]
     full_modules: frozenset[str]
+    full_targets: frozenset[str]
 
 
 def _load_config(path: Path) -> list[dict[str, str]]:
@@ -116,22 +122,6 @@ def _exception_set(config: list[dict[str, str]]) -> set[tuple[str, str]]:
     return {(e["rule_id"], e["exact_match"]) for e in config}
 
 
-def _import_facts(tree: ast.AST) -> ImportFacts:
-    aliases: dict[str, str] = {}
-    full_modules: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for item in node.names:
-                full_modules.add(item.name)
-                bound = item.asname or item.name.split(".")[0]
-                aliases[bound] = item.name if item.asname else bound
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            full_modules.add(node.module)
-            for item in node.names:
-                aliases[item.asname or item.name] = f"{node.module}.{item.name}"
-    return ImportFacts(aliases=aliases, full_modules=frozenset(full_modules))
-
-
 def _dotted(expr: ast.AST, aliases: dict[str, str]) -> str:
     if isinstance(expr, ast.Name):
         return aliases.get(expr.id, expr.id)
@@ -178,6 +168,70 @@ def _enclosing_scope(function_ranges: Iterable[tuple[int, int, str]], target: as
 
 def _enclosing_symbol(function_ranges: Iterable[tuple[int, int, str]], target: ast.AST) -> str:
     return _enclosing_scope(function_ranges, target)[2]
+
+
+def _import_facts(
+    tree: ast.AST,
+    function_ranges: list[tuple[int, int, str]],
+) -> ImportFacts:
+    aliases: dict[str, str] = {}
+    scoped: dict[
+        tuple[tuple[int, int, str], str],
+        list[tuple[tuple[int, int], str]],
+    ] = {}
+    full_modules: set[str] = set()
+    full_targets: set[str] = set()
+
+    for node in sorted(ast.walk(tree), key=_position):
+        if not isinstance(node, (ast.Import, ast.ImportFrom)):
+            continue
+        scope = _enclosing_scope(function_ranges, node)
+        position = _position(node)
+        if isinstance(node, ast.Import):
+            for item in node.names:
+                full_modules.add(item.name)
+                bound = item.asname or item.name.split(".")[0]
+                target = item.name if item.asname else bound
+                full_targets.add(item.name)
+                scoped.setdefault((scope, bound), []).append((position, target))
+                if scope == MODULE_SCOPE:
+                    aliases[bound] = target
+        elif node.module:
+            full_modules.add(node.module)
+            for item in node.names:
+                if item.name == "*":
+                    continue
+                bound = item.asname or item.name
+                target = f"{node.module}.{item.name}"
+                full_targets.add(target)
+                scoped.setdefault((scope, bound), []).append((position, target))
+                if scope == MODULE_SCOPE:
+                    aliases[bound] = target
+
+    scoped_aliases = {
+        key: tuple(sorted(events, key=lambda event: event[0]))
+        for key, events in scoped.items()
+    }
+    return ImportFacts(
+        aliases=aliases,
+        scoped_aliases=scoped_aliases,
+        full_modules=frozenset(full_modules),
+        full_targets=frozenset(full_targets),
+    )
+
+
+def _aliases_at(
+    import_facts: ImportFacts,
+    scope: tuple[int, int, str],
+    position: tuple[int, int],
+) -> dict[str, str]:
+    aliases = dict(import_facts.aliases) if scope != MODULE_SCOPE else {}
+    for (event_scope, name), events in import_facts.scoped_aliases.items():
+        if event_scope != scope:
+            continue
+        previous = [target for event_position, target in events if event_position < position]
+        aliases[name] = previous[-1] if previous else f"{IMPORT_UNBOUND_PREFIX}{name}"
+    return aliases
 
 
 def _binding_kind(constructor: str) -> str | None:
@@ -245,7 +299,7 @@ def _record_binding(
 
 def _binding_history(
     tree: ast.AST,
-    aliases: dict[str, str],
+    import_facts: ImportFacts,
     function_ranges: list[tuple[int, int, str]],
 ) -> dict[tuple[tuple[int, int, str], str], list[tuple[tuple[int, int], str | None]]]:
     history: dict[
@@ -266,6 +320,7 @@ def _binding_history(
     for node in sorted(ast.walk(tree), key=_position):
         scope = _enclosing_scope(function_ranges, node)
         position = _position(node)
+        aliases = _aliases_at(import_facts, scope, position)
         if isinstance(node, ast.Assign):
             for target in node.targets:
                 _record_binding(
@@ -343,13 +398,14 @@ def _is_destination_bearing_sendmsg(node: ast.Call) -> bool:
 
 def _network_dispatch(
     node: ast.Call,
-    aliases: dict[str, str],
+    import_facts: ImportFacts,
     history: dict[tuple[tuple[int, int, str], str], list[tuple[tuple[int, int], str | None]]],
     scope: tuple[int, int, str],
 ) -> str | None:
+    position = _position(node)
+    aliases = _aliases_at(import_facts, scope, position)
     call = _call_name(node, aliases)
     method = call.rsplit(".", 1)[-1]
-    position = _position(node)
     root = _root_name(node.func)
     root_is_shadowed = False
     if root and scope != MODULE_SCOPE:
@@ -415,14 +471,13 @@ def _scan_python(path: Path, root: Path, exceptions: set[tuple[str, str]]) -> li
         tree = ast.parse(source, filename=rel)
     except (OSError, SyntaxError) as exc:
         return [Finding("AE001", rel, "<parse>", f"covered Python source did not parse: {exc}")]
-    import_facts = _import_facts(tree)
-    aliases = import_facts.aliases
     function_ranges = _function_ranges(tree)
-    binding_history = _binding_history(tree, aliases, function_ranges)
+    import_facts = _import_facts(tree, function_ranges)
+    binding_history = _binding_history(tree, import_facts, function_ranges)
     provider_import = any(
         target.startswith("app.modules.ai.providers")
         or target.startswith("backend.app.modules.ai.providers")
-        for target in import_facts.full_modules | frozenset(aliases.values())
+        for target in import_facts.full_modules | import_facts.full_targets
     )
     findings: list[Finding] = []
     mutation_calls: list[tuple[str, str]] = []
@@ -430,6 +485,7 @@ def _scan_python(path: Path, root: Path, exceptions: set[tuple[str, str]]) -> li
         if not isinstance(node, ast.Call):
             continue
         scope = _enclosing_scope(function_ranges, node)
+        aliases = _aliases_at(import_facts, scope, _position(node))
         symbol = scope[2]
         exact = f"{rel}::{symbol}"
         call = _call_name(node, aliases)
@@ -438,7 +494,7 @@ def _scan_python(path: Path, root: Path, exceptions: set[tuple[str, str]]) -> li
             mutation_calls.append((symbol, call))
         if call == "sqlite3.connect" and ("AE001", exact) not in exceptions:
             findings.append(Finding("AE001", rel, symbol, f"raw SQLite connection via {call}"))
-        dispatch = _network_dispatch(node, aliases, binding_history, scope)
+        dispatch = _network_dispatch(node, import_facts, binding_history, scope)
         external = dispatch is not None or (provider_import and call.endswith(".complete"))
         accepted_external_owner = rel.startswith("backend/app/modules/ai/providers/") or rel.startswith(
             "backend/app/modules/local_ai/"
@@ -553,8 +609,8 @@ def _self_test() -> int:
         "    async with aiohttp.ClientSession() as client:\n"
         "        await client.ws_connect('https://example.invalid')\n"
     )
-    binding_imports = _import_facts(binding_tree).aliases
     binding_ranges = _function_ranges(binding_tree)
+    binding_imports = _import_facts(binding_tree, binding_ranges)
     binding_history = _binding_history(binding_tree, binding_imports, binding_ranges)
     dispatches = {
         _network_dispatch(
