@@ -125,14 +125,6 @@ def assert_flat_schema(schema: JsonSchema) -> None:
             raise ProbeConfigurationError(f"Flat schema must not contain {forbidden}.")
 
 
-def _probe_client(timeout_seconds: float) -> httpx.Client:
-    return httpx.Client(
-        timeout=timeout_seconds,
-        trust_env=False,
-        follow_redirects=False,
-    )
-
-
 def run_probe_suite(
     *,
     primary_model_name: str = DEFAULT_MODEL_NAME,
@@ -140,43 +132,53 @@ def run_probe_suite(
     endpoint_url: str = DEFAULT_NATIVE_ENDPOINT,
     timeout_seconds: float = 180,
     num_predict: int = DEFAULT_NUM_PREDICT,
+    client: httpx.Client | None = None,
     run_heavy_comparison: bool = True,
 ) -> MicroContractProbeReport:
     endpoint_url = validate_native_endpoint(endpoint_url)
+    owns_client = client is None
+    http_client = client or httpx.Client(timeout=timeout_seconds)
     results: list[MicroContractProbeResult] = []
-    for case in build_primary_probe_cases():
-        first = run_probe_case(
-            case,
-            model_name=primary_model_name,
-            endpoint_url=endpoint_url,
-            timeout_seconds=timeout_seconds,
-            num_predict=num_predict,
-            attempt="first",
-        )
-        results.append(first)
-        if first.content_passed:
-            results.append(
-                run_probe_case(
-                    case,
-                    model_name=primary_model_name,
-                    endpoint_url=endpoint_url,
-                    timeout_seconds=timeout_seconds,
-                    num_predict=num_predict,
-                    attempt="repeat",
-                )
+    try:
+        for case in build_primary_probe_cases():
+            first = run_probe_case(
+                case,
+                model_name=primary_model_name,
+                endpoint_url=endpoint_url,
+                timeout_seconds=timeout_seconds,
+                num_predict=num_predict,
+                client=http_client,
+                attempt="first",
             )
-    if run_heavy_comparison and heavy_model_name:
-        for case in build_heavy_probe_cases():
-            results.append(
-                run_probe_case(
-                    case,
-                    model_name=heavy_model_name,
-                    endpoint_url=endpoint_url,
-                    timeout_seconds=timeout_seconds,
-                    num_predict=num_predict,
-                    attempt="limited_comparison",
+            results.append(first)
+            if first.content_passed:
+                results.append(
+                    run_probe_case(
+                        case,
+                        model_name=primary_model_name,
+                        endpoint_url=endpoint_url,
+                        timeout_seconds=timeout_seconds,
+                        num_predict=num_predict,
+                        client=http_client,
+                        attempt="repeat",
+                    )
                 )
-            )
+        if run_heavy_comparison and heavy_model_name:
+            for case in build_heavy_probe_cases():
+                results.append(
+                    run_probe_case(
+                        case,
+                        model_name=heavy_model_name,
+                        endpoint_url=endpoint_url,
+                        timeout_seconds=timeout_seconds,
+                        num_predict=num_predict,
+                        client=http_client,
+                        attempt="limited_comparison",
+                    )
+                )
+    finally:
+        if owns_client:
+            http_client.close()
     return aggregate_report(
         endpoint_url=endpoint_url,
         primary_model_name=primary_model_name,
@@ -192,16 +194,15 @@ def run_probe_case(
     endpoint_url: str,
     timeout_seconds: float,
     num_predict: int,
+    client: httpx.Client,
     attempt: str = "first",
 ) -> MicroContractProbeResult:
-    endpoint_url = validate_native_endpoint(endpoint_url)
     payload = build_native_payload(case, model_name=model_name, num_predict=num_predict)
     started = time.perf_counter()
     try:
-        with _probe_client(timeout_seconds) as client:
-            response = client.post(endpoint_url, json=payload, timeout=timeout_seconds)
-            response.raise_for_status()
-            response_json = response.json()
+        response = client.post(endpoint_url, json=payload, timeout=timeout_seconds)
+        response.raise_for_status()
+        response_json = response.json()
         message = response_json.get("message") if isinstance(response_json.get("message"), dict) else {}
         content = message.get("content", "") if isinstance(message, dict) else ""
         thinking = message.get("thinking", "") if isinstance(message, dict) else ""
