@@ -36,6 +36,7 @@ AIOHTTP_SESSION_METHODS = {"get", "post", "put", "patch", "delete", "head", "opt
 HTTP_CLIENT_LOW_LEVEL_METHODS = {"connect", "request", "send", "endheaders"}
 URLLIB3_POOL_METHODS = {"request", "urlopen"}
 SOCKET_INSTANCE_METHODS = {"connect", "connect_ex", "sendto"}
+MODULE_SCOPE = (0, sys.maxsize, "<module>")
 
 
 @dataclass(frozen=True, order=True)
@@ -122,7 +123,6 @@ def _import_facts(tree: ast.AST) -> ImportFacts:
         if isinstance(node, ast.Import):
             for item in node.names:
                 full_modules.add(item.name)
-                # Python binds only the top-level name for an unaliased dotted import.
                 bound = item.asname or item.name.split(".")[0]
                 aliases[bound] = item.name if item.asname else bound
         elif isinstance(node, ast.ImportFrom) and node.module:
@@ -153,16 +153,20 @@ def _function_ranges(tree: ast.AST) -> list[tuple[int, int, str]]:
     return ranges
 
 
-def _enclosing_symbol(function_ranges: Iterable[tuple[int, int, str]], target: ast.AST) -> str:
-    best = "<module>"
-    best_span = None
+def _enclosing_scope(function_ranges: Iterable[tuple[int, int, str]], target: ast.AST) -> tuple[int, int, str]:
+    best = MODULE_SCOPE
+    best_span: int | None = None
     line = getattr(target, "lineno", 0)
     for start, end, name in function_ranges:
         if start <= line <= end:
             span = end - start
             if best_span is None or span < best_span:
-                best, best_span = name, span
+                best, best_span = (start, end, name), span
     return best
+
+
+def _enclosing_symbol(function_ranges: Iterable[tuple[int, int, str]], target: ast.AST) -> str:
+    return _enclosing_scope(function_ranges, target)[2]
 
 
 def _binding_kind(constructor: str) -> str | None:
@@ -188,10 +192,12 @@ def _constructor_kind(expr: ast.AST, aliases: dict[str, str]) -> str | None:
     return _binding_kind(_call_name(expr, aliases))
 
 
-def _bindings(tree: ast.AST, aliases: dict[str, str]) -> dict[str, str]:
-    result: dict[str, str] = {}
-    # This is deliberately same-file and name-bound only. Reassignment invalidates
-    # a proven binding rather than trying to become an interprocedural data-flow engine.
+def _binding_history(
+    tree: ast.AST,
+    aliases: dict[str, str],
+    function_ranges: list[tuple[int, int, str]],
+) -> dict[tuple[tuple[int, int, str], str], list[tuple[int, str | None]]]:
+    history: dict[tuple[tuple[int, int, str], str], list[tuple[int, str | None]]] = {}
     for node in sorted(ast.walk(tree), key=lambda item: getattr(item, "lineno", 0)):
         target: ast.expr | None = None
         value: ast.AST | None = None
@@ -201,17 +207,36 @@ def _bindings(tree: ast.AST, aliases: dict[str, str]) -> dict[str, str]:
             target, value = node.target, node.value
         if not isinstance(target, ast.Name) or value is None:
             continue
-        kind = _constructor_kind(value, aliases)
-        if kind is not None:
-            result[target.id] = kind
-        else:
-            result.pop(target.id, None)
-    return result
+        scope = _enclosing_scope(function_ranges, node)
+        history.setdefault((scope, target.id), []).append(
+            (getattr(node, "lineno", 0), _constructor_kind(value, aliases))
+        )
+    return history
 
 
-def _bound_kind(expr: ast.AST, aliases: dict[str, str], bindings: dict[str, str]) -> str | None:
+def _history_kind(
+    history: dict[tuple[tuple[int, int, str], str], list[tuple[int, str | None]]],
+    scope: tuple[int, int, str],
+    name: str,
+    line: int,
+) -> str | None:
+    for candidate_scope in (scope, MODULE_SCOPE):
+        events = history.get((candidate_scope, name), [])
+        previous = [kind for event_line, kind in events if event_line < line]
+        if previous:
+            return previous[-1]
+    return None
+
+
+def _bound_kind(
+    expr: ast.AST,
+    aliases: dict[str, str],
+    history: dict[tuple[tuple[int, int, str], str], list[tuple[int, str | None]]],
+    scope: tuple[int, int, str],
+    line: int,
+) -> str | None:
     if isinstance(expr, ast.Name):
-        return bindings.get(expr.id)
+        return _history_kind(history, scope, expr.id, line)
     return _constructor_kind(expr, aliases)
 
 
@@ -219,7 +244,12 @@ def _is_destination_bearing_sendmsg(node: ast.Call) -> bool:
     return len(node.args) >= 4 or any(keyword.arg == "address" for keyword in node.keywords)
 
 
-def _network_dispatch(node: ast.Call, aliases: dict[str, str], bindings: dict[str, str]) -> str | None:
+def _network_dispatch(
+    node: ast.Call,
+    aliases: dict[str, str],
+    history: dict[tuple[tuple[int, int, str], str], list[tuple[int, str | None]]],
+    scope: tuple[int, int, str],
+) -> str | None:
     call = _call_name(node, aliases)
     method = call.rsplit(".", 1)[-1]
 
@@ -238,7 +268,7 @@ def _network_dispatch(node: ast.Call, aliases: dict[str, str], bindings: dict[st
 
     if not isinstance(node.func, ast.Attribute):
         return None
-    kind = _bound_kind(node.func.value, aliases, bindings)
+    kind = _bound_kind(node.func.value, aliases, history, scope, getattr(node, "lineno", 0))
     if kind == "httpx_client" and method in HTTP_CLIENT_METHODS:
         return call or f"httpx.Client.{method}"
     if kind == "requests_session" and method in REQUESTS_SESSION_METHODS:
@@ -284,8 +314,8 @@ def _scan_python(path: Path, root: Path, exceptions: set[tuple[str, str]]) -> li
         return [Finding("AE001", rel, "<parse>", f"covered Python source did not parse: {exc}")]
     import_facts = _import_facts(tree)
     aliases = import_facts.aliases
-    bindings = _bindings(tree, aliases)
     function_ranges = _function_ranges(tree)
+    binding_history = _binding_history(tree, aliases, function_ranges)
     provider_import = any(
         target.startswith("app.modules.ai.providers")
         or target.startswith("backend.app.modules.ai.providers")
@@ -296,7 +326,8 @@ def _scan_python(path: Path, root: Path, exceptions: set[tuple[str, str]]) -> li
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
-        symbol = _enclosing_symbol(function_ranges, node)
+        scope = _enclosing_scope(function_ranges, node)
+        symbol = scope[2]
         exact = f"{rel}::{symbol}"
         call = _call_name(node, aliases)
         method = call.rsplit(".", 1)[-1]
@@ -304,7 +335,7 @@ def _scan_python(path: Path, root: Path, exceptions: set[tuple[str, str]]) -> li
             mutation_calls.append((symbol, call))
         if call == "sqlite3.connect" and ("AE001", exact) not in exceptions:
             findings.append(Finding("AE001", rel, symbol, f"raw SQLite connection via {call}"))
-        dispatch = _network_dispatch(node, aliases, bindings)
+        dispatch = _network_dispatch(node, aliases, binding_history, scope)
         external = dispatch is not None or (provider_import and call.endswith(".complete"))
         accepted_external_owner = rel.startswith("backend/app/modules/ai/providers/") or rel.startswith(
             "backend/app/modules/local_ai/"
