@@ -6,6 +6,7 @@ import ast
 import json
 import sys
 import tempfile
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +29,14 @@ EXACT_CANONICAL_MUTATION_OWNER_FILES = {
     "backend/app/modules/modeling/parameter_lifecycle.py",
 }
 
+HTTP_MODULE_METHODS = {"get", "post", "put", "patch", "delete", "head", "options", "request", "stream"}
+HTTP_CLIENT_METHODS = HTTP_MODULE_METHODS | {"send"}
+REQUESTS_SESSION_METHODS = {"get", "post", "put", "patch", "delete", "head", "options", "request", "send"}
+AIOHTTP_SESSION_METHODS = {"get", "post", "put", "patch", "delete", "head", "options", "request", "ws_connect"}
+HTTP_CLIENT_LOW_LEVEL_METHODS = {"connect", "request", "send", "endheaders"}
+URLLIB3_POOL_METHODS = {"request", "urlopen"}
+SOCKET_INSTANCE_METHODS = {"connect", "connect_ex", "sendto"}
+
 
 @dataclass(frozen=True, order=True)
 class Finding:
@@ -40,13 +49,19 @@ class Finding:
         return f"{self.rule_id} {self.path}::{self.symbol} - {self.detail}"
 
 
+@dataclass(frozen=True)
+class ImportFacts:
+    aliases: dict[str, str]
+    full_modules: frozenset[str]
+
+
 def _load_config(path: Path) -> list[dict[str, str]]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"invalid architecture config: {exc}") from exc
     if not isinstance(data, dict) or set(data) != {"exceptions"}:
-        raise ValueError("config must be exactly {'exceptions': [...]}")
+        raise ValueError("config must be exactly {'exceptions': [...]}" )
     entries = data["exceptions"]
     if not isinstance(entries, list):
         raise ValueError("exceptions must be a list")
@@ -78,46 +93,56 @@ def _validate_exception_targets(root: Path, config: list[dict[str, str]]) -> Non
         path = root / rel
         if not path.is_file():
             raise ValueError(f"stale exception path: {entry['exact_match']}")
-        if path.suffix == ".py":
-            try:
-                tree = ast.parse(path.read_text(encoding="utf-8"), filename=rel)
-            except (OSError, SyntaxError) as exc:
-                raise ValueError(f"cannot validate exception target {rel}: {exc}") from exc
-            names = {
-                node.name
-                for node in ast.walk(tree)
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-            }
-            if symbol not in names:
-                raise ValueError(f"stale exception symbol: {entry['exact_match']}")
+        if path.suffix != ".py":
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=rel)
+        except (OSError, SyntaxError) as exc:
+            raise ValueError(f"cannot validate exception target {rel}: {exc}") from exc
+        names = [
+            node.name
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        ]
+        count = Counter(names)[symbol]
+        if count == 0:
+            raise ValueError(f"stale exception symbol: {entry['exact_match']}")
+        if count > 1:
+            raise ValueError(f"ambiguous exception symbol: {entry['exact_match']}")
 
 
 def _exception_set(config: list[dict[str, str]]) -> set[tuple[str, str]]:
     return {(e["rule_id"], e["exact_match"]) for e in config}
 
 
-def _aliases(tree: ast.AST) -> dict[str, str]:
+def _import_facts(tree: ast.AST) -> ImportFacts:
     aliases: dict[str, str] = {}
+    full_modules: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for item in node.names:
-                aliases[item.asname or item.name.split(".")[0]] = item.name
+                full_modules.add(item.name)
+                # Python binds only the top-level name for an unaliased dotted import.
+                bound = item.asname or item.name.split(".")[0]
+                aliases[bound] = item.name if item.asname else bound
         elif isinstance(node, ast.ImportFrom) and node.module:
+            full_modules.add(node.module)
             for item in node.names:
                 aliases[item.asname or item.name] = f"{node.module}.{item.name}"
-    return aliases
+    return ImportFacts(aliases=aliases, full_modules=frozenset(full_modules))
+
+
+def _dotted(expr: ast.AST, aliases: dict[str, str]) -> str:
+    if isinstance(expr, ast.Name):
+        return aliases.get(expr.id, expr.id)
+    if isinstance(expr, ast.Attribute):
+        base = _dotted(expr.value, aliases)
+        return f"{base}.{expr.attr}" if base else expr.attr
+    return ""
 
 
 def _call_name(node: ast.Call, aliases: dict[str, str]) -> str:
-    def dotted(expr: ast.AST) -> str:
-        if isinstance(expr, ast.Name):
-            return aliases.get(expr.id, expr.id)
-        if isinstance(expr, ast.Attribute):
-            base = dotted(expr.value)
-            return f"{base}.{expr.attr}" if base else expr.attr
-        return ""
-
-    return dotted(node.func)
+    return _dotted(node.func, aliases)
 
 
 def _function_ranges(tree: ast.AST) -> list[tuple[int, int, str]]:
@@ -138,6 +163,100 @@ def _enclosing_symbol(function_ranges: Iterable[tuple[int, int, str]], target: a
             if best_span is None or span < best_span:
                 best, best_span = name, span
     return best
+
+
+def _binding_kind(constructor: str) -> str | None:
+    mapping = {
+        "httpx.Client": "httpx_client",
+        "httpx.AsyncClient": "httpx_client",
+        "requests.Session": "requests_session",
+        "requests.session": "requests_session",
+        "urllib3.PoolManager": "urllib3_pool",
+        "urllib3.ProxyManager": "urllib3_pool",
+        "aiohttp.ClientSession": "aiohttp_session",
+        "http.client.HTTPConnection": "http_client_connection",
+        "http.client.HTTPSConnection": "http_client_connection",
+        "socket.socket": "socket",
+        "urllib.request.build_opener": "urllib_opener",
+    }
+    return mapping.get(constructor)
+
+
+def _constructor_kind(expr: ast.AST, aliases: dict[str, str]) -> str | None:
+    if not isinstance(expr, ast.Call):
+        return None
+    return _binding_kind(_call_name(expr, aliases))
+
+
+def _bindings(tree: ast.AST, aliases: dict[str, str]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    # This is deliberately same-file and name-bound only. Reassignment invalidates
+    # a proven binding rather than trying to become an interprocedural data-flow engine.
+    for node in sorted(ast.walk(tree), key=lambda item: getattr(item, "lineno", 0)):
+        target: ast.expr | None = None
+        value: ast.AST | None = None
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target, value = node.targets[0], node.value
+        elif isinstance(node, ast.AnnAssign):
+            target, value = node.target, node.value
+        if not isinstance(target, ast.Name) or value is None:
+            continue
+        kind = _constructor_kind(value, aliases)
+        if kind is not None:
+            result[target.id] = kind
+        else:
+            result.pop(target.id, None)
+    return result
+
+
+def _bound_kind(expr: ast.AST, aliases: dict[str, str], bindings: dict[str, str]) -> str | None:
+    if isinstance(expr, ast.Name):
+        return bindings.get(expr.id)
+    return _constructor_kind(expr, aliases)
+
+
+def _is_destination_bearing_sendmsg(node: ast.Call) -> bool:
+    return len(node.args) >= 4 or any(keyword.arg == "address" for keyword in node.keywords)
+
+
+def _network_dispatch(node: ast.Call, aliases: dict[str, str], bindings: dict[str, str]) -> str | None:
+    call = _call_name(node, aliases)
+    method = call.rsplit(".", 1)[-1]
+
+    if call.startswith(("httpx.", "requests.")) and method in HTTP_MODULE_METHODS:
+        return call
+    if call == "urllib.request.urlopen":
+        return call
+    if call == "urllib3.request":
+        return call
+    if call == "socket.create_connection":
+        return call
+    if call == "websockets.connect":
+        return call
+    if call == "aiohttp.request":
+        return call
+
+    if not isinstance(node.func, ast.Attribute):
+        return None
+    kind = _bound_kind(node.func.value, aliases, bindings)
+    if kind == "httpx_client" and method in HTTP_CLIENT_METHODS:
+        return call or f"httpx.Client.{method}"
+    if kind == "requests_session" and method in REQUESTS_SESSION_METHODS:
+        return call or f"requests.Session.{method}"
+    if kind == "urllib3_pool" and method in URLLIB3_POOL_METHODS:
+        return call or f"urllib3.PoolManager.{method}"
+    if kind == "aiohttp_session" and method in AIOHTTP_SESSION_METHODS:
+        return call or f"aiohttp.ClientSession.{method}"
+    if kind == "http_client_connection" and method in HTTP_CLIENT_LOW_LEVEL_METHODS:
+        return call or f"http.client.HTTPConnection.{method}"
+    if kind == "urllib_opener" and method == "open":
+        return call or "urllib.request.OpenerDirector.open"
+    if kind == "socket":
+        if method in SOCKET_INSTANCE_METHODS:
+            return call or f"socket.socket.{method}"
+        if method == "sendmsg" and _is_destination_bearing_sendmsg(node):
+            return call or "socket.socket.sendmsg"
+    return None
 
 
 def _literal_sql(call: ast.Call) -> str | None:
@@ -163,12 +282,14 @@ def _scan_python(path: Path, root: Path, exceptions: set[tuple[str, str]]) -> li
         tree = ast.parse(source, filename=rel)
     except (OSError, SyntaxError) as exc:
         return [Finding("AE001", rel, "<parse>", f"covered Python source did not parse: {exc}")]
-    aliases = _aliases(tree)
+    import_facts = _import_facts(tree)
+    aliases = import_facts.aliases
+    bindings = _bindings(tree, aliases)
     function_ranges = _function_ranges(tree)
     provider_import = any(
         target.startswith("app.modules.ai.providers")
         or target.startswith("backend.app.modules.ai.providers")
-        for target in aliases.values()
+        for target in import_facts.full_modules | frozenset(aliases.values())
     )
     findings: list[Finding] = []
     mutation_calls: list[tuple[str, str]] = []
@@ -183,15 +304,13 @@ def _scan_python(path: Path, root: Path, exceptions: set[tuple[str, str]]) -> li
             mutation_calls.append((symbol, call))
         if call == "sqlite3.connect" and ("AE001", exact) not in exceptions:
             findings.append(Finding("AE001", rel, symbol, f"raw SQLite connection via {call}"))
-        external = (
-            call.startswith(("httpx.", "requests."))
-            and method in {"get", "post", "put", "patch", "delete", "request", "stream"}
-        ) or (provider_import and call.endswith(".complete"))
+        dispatch = _network_dispatch(node, aliases, bindings)
+        external = dispatch is not None or (provider_import and call.endswith(".complete"))
         accepted_external_owner = rel.startswith("backend/app/modules/ai/providers/") or rel.startswith(
             "backend/app/modules/local_ai/"
         )
         if external and not accepted_external_owner and ("AE002", exact) not in exceptions:
-            findings.append(Finding("AE002", rel, symbol, f"direct external dispatch via {call}"))
+            findings.append(Finding("AE002", rel, symbol, f"direct external dispatch via {dispatch or call}"))
         sql = _literal_sql(node) if method in SQL_EXECUTION_METHODS else None
         accepted_mutation_owner = rel in EXACT_CANONICAL_MUTATION_OWNER_FILES
         if (
