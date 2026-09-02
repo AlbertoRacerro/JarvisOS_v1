@@ -109,6 +109,14 @@ TASK_KIND_DEFAULT_ROUTE: dict[str, str] = {
     "architecture_review": "local:fake",
 }
 
+
+def resolve_effective_route_class(*, task_kind: str, route_class: str | None) -> str:
+    """Resolve omitted routes through the execution-owned task-kind defaults."""
+    if route_class is not None:
+        return route_class
+    return TASK_KIND_DEFAULT_ROUTE.get(task_kind, "local:fake")
+
+
 RECORD_CAPTURE_TASK_KINDS = {"decision_support"}
 
 _TASK_KIND_TO_AI_TASK_TYPE: dict[str, AITaskType] = {
@@ -943,7 +951,10 @@ def run_ai_task(
     started = time.perf_counter()
     adapters = adapters if adapters is not None else _default_adapters()
     requested_route_class = route_class
-    selected_route_class = route_class or TASK_KIND_DEFAULT_ROUTE.get(task_kind, "local:fake")
+    selected_route_class = resolve_effective_route_class(
+        task_kind=task_kind,
+        route_class=route_class,
+    )
     prompt_digest = canonical_digest({"prompt": user_prompt})
 
     early_binding, _early_decision = resolve_binding(selected_route_class, bindings)
