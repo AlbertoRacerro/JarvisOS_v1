@@ -53,7 +53,7 @@ Implementation authority exists only after an accepted readiness decision and `S
 1. Extend the existing AST-based AE002 classifier to cover concrete first-party direct-dispatch families:
    - `urllib.request`: at least `urlopen`, including module alias and from-import forms;
    - `urllib3`: direct/module request calls and `PoolManager`/equivalent constructor-bound `.request` dispatch;
-   - `socket`: `create_connection` and constructor-bound `socket(...).connect` / `connect_ex` / `sendto`; `sendto` is required because datagram egress can transmit to an external destination without a prior connect;
+   - `socket`: `create_connection` and constructor-bound `socket(...).connect` / `connect_ex` / `sendto`, plus destination-bearing `sendmsg(..., address)` on platforms that expose it; `sendto` and destination-bearing `sendmsg` are required because datagram egress can transmit to an external destination without a prior connect;
    - `aiohttp`: module/session request methods (`request`, `get`, `post`, `put`, `patch`, `delete`, `head`, `options`) when reached through a concrete `ClientSession` binding or direct module API;
    - `websockets`: `connect` dispatch, including alias/from-import forms;
    - `http.client`: constructor-bound HTTP/HTTPS connection `.request` and `.connect` dispatch.
@@ -80,7 +80,7 @@ The focused test surface must prove at least:
 | --- | --- |
 | urllib.request | unaliased dotted module import, alias import, and from-import `urlopen` outside accepted owner -> AE002 |
 | urllib3 | module/alias request and constructor-bound `PoolManager().request` -> AE002 |
-| socket | `create_connection` plus constructor-bound `.connect`/`.connect_ex`/`.sendto` -> AE002 |
+| socket | `create_connection` plus constructor-bound `.connect`/`.connect_ex`/`.sendto` and destination-bearing `.sendmsg(..., address)` -> AE002 |
 | aiohttp | `ClientSession` binding and request verb/session `.request` dispatch -> AE002 |
 | websockets | module alias and from-import `connect` -> AE002 |
 | http.client | HTTP/HTTPS connection binding followed by `.request`/`.connect` -> AE002 |
@@ -101,7 +101,7 @@ Alias coverage must include ordinary `import X as Y` and `from X import Y as Z` 
 ## Failure modes to prevent
 
 - apparent coverage added only for simple dotted calls while constructor-bound calls still bypass AE002;
-- datagram `socket.sendto` remains a direct egress bypass because it needs no prior connection;
+- datagram `socket.sendto` or destination-bearing `socket.sendmsg` remains a direct egress bypass because neither needs a prior connection;
 - alias normalization duplicates dotted module components and causes false negatives for `import urllib.request`;
 - a broad method-name rule flags unrelated `.connect()` / `.request()` calls as external dispatch;
 - accepted-owner behavior changes unintentionally;
