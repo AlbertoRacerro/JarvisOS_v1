@@ -97,6 +97,7 @@ def test_registration_preview_and_two_real_runner_jobs_are_stable(client: TestCl
     assert first_run["runner_job"]["environment_metadata"]["inherited_environment"] is False
     assert first_run["runner_job"]["environment_metadata"]["allowlisted_keys"] == [
         "PYTHONDONTWRITEBYTECODE",
+        "PYTHONHASHSEED",
         "PYTHONIOENCODING",
     ]
     assert not (model_dir / "process_kernel" / "__pycache__").exists()
