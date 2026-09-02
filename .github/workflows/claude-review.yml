@@ -64,4 +64,4 @@ jobs:
               evaluation. Do not request an automated fix.
             - If APPROVE, state "LGTM — advisory expert review complete". Do not add
               a readiness label; CI and the human maintainer decide merge readiness.
-          claude_args: "--max-turns 40 --model claude-opus-4-8 --permission-mode bypassPermissions"
+          claude_args: "--max-turns 40 --model claude-opus-5 --permission-mode bypassPermissions"
