@@ -6,23 +6,33 @@ This amendment closes the two material exact-head review findings raised against
 
 ## Delta 1 — constructor-bound httpx dispatch
 
-Fresh review proved an existing concrete blind spot not covered by the earlier constructor families: `backend/app/modules/local_ai_eval/probe_micro_contracts.py` constructs an `httpx.Client` and later dispatches through the bound client (`client.post(...)`). The current scanner can reduce that call to a generic `client.post`, so the F5 repair would still permit a first-party direct network dispatcher to remain invisible.
+Fresh review proved an existing concrete blind spot not covered by the earlier constructor families: `backend/app/modules/local_ai_eval/probe_micro_contracts.py::run_probe_case` dispatches through a bound `httpx.Client` (`client.post(...)`). The current scanner reduces that call to a generic `client.post`, so the F5 repair would still permit a first-party direct network dispatcher to remain invisible.
 
-The implementation MUST therefore extend the same bounded same-file constructor/binding normalization already authorized by 137 to `httpx.Client` / `httpx.AsyncClient` instances and classify their concrete request methods (`request`, `get`, `post`, `put`, `patch`, `delete`, `head`, `options`, `stream`, as applicable to the concrete client API) as AE002 outside accepted/exact-exempted owners. This is not a generic method-name rule and does not authorize broad interprocedural data-flow analysis.
+The implementation MUST extend the same bounded same-file constructor/binding normalization already authorized by 137 to `httpx.Client` and `httpx.AsyncClient` instances and classify their concrete request methods (`request`, `get`, `post`, `put`, `patch`, `delete`, `head`, `options`, `stream`, where present on the concrete client API) as AE002 outside accepted/exact-exempted owners. This is not a generic method-name rule and does not authorize broad interprocedural data-flow analysis.
+
+The current-tree dispatcher is now explicitly classified rather than deferred: `backend/app/modules/local_ai_eval/probe_micro_contracts.py::run_probe_case` is an evaluation-only local-model transport owner, but its direct callable boundary currently accepts a caller-supplied endpoint. Before its exact AE002 retained-owner exception becomes valid, this slice MUST invoke the already-existing `validate_native_endpoint(endpoint_url)` inside `run_probe_case` before request construction/dispatch. This is the same defense-in-depth rule already applied by 137 to `_stdlib_json_post_client`: reuse the existing local endpoint contract at the exact-exempted transport boundary; do not invent another policy.
+
+This review delta therefore authorizes one additional exact AE002 retained-owner entry:
+
+- `backend/app/modules/local_ai_eval/probe_micro_contracts.py::run_probe_case` — classification `accepted_owner`; owner/rationale: local micro-contract evaluation transport, valid only after its own existing `validate_native_endpoint` guard is enforced.
+
+This is the eleventh and final inventoried exact AE002 entry authorized by 137. No twelfth exception, directory-wide owner, wildcard, or broad `local_ai_eval` exemption is authorized without fresh re-derivation. The allowed implementation paths are correspondingly expanded only to `backend/app/modules/local_ai_eval/probe_micro_contracts.py::run_probe_case` and focused no-network tests for that exact boundary; no other `backend/app/**` mutation is authorized.
 
 Deterministic acceptance MUST include at least:
 
 - a same-file `httpx.Client()` binding followed by `.post(...)` outside an accepted owner -> AE002;
-- an `httpx.AsyncClient()` binding followed by a representative request method outside an accepted owner -> AE002 when the frozen scanner handles that concrete constructor;
-- the existing module/alias `httpx` cases remain detected;
+- an `httpx.AsyncClient()` binding followed by a representative request method outside an accepted owner -> AE002;
+- existing module/alias `httpx` cases remain detected;
 - unrelated objects exposing `.post`, `.request`, or `.stream` remain non-findings;
-- the full-tree scan accounts for the current `local_ai_eval/probe_micro_contracts.py` dispatcher through the existing accepted-owner/exception policy rather than silently leaving it invisible. If widening detection exposes any further previously unclassified current-tree httpx client dispatcher, implementation stops for exact-site disposition rather than adding a broad exception.
+- direct `run_probe_case(..., endpoint_url=<external-or-malformed>)` fails through the existing endpoint validator before mocked client dispatch, while the current valid localhost endpoint reaches only the mocked transport seam;
+- the full-tree scan is green only with the exact `run_probe_case` retained-owner entry plus the ten previously inventoried entries;
+- if widened detection exposes any further current-tree httpx client dispatcher, implementation stops for exact-site disposition rather than adding another exception.
 
-No new runtime owner, network library, directory-wide exception, or application behavior is authorized.
+No new runtime owner, network library, broad exception, or product-provider behavior is authorized.
 
 ## Delta 2 — proxy escape at exact-exempted localhost urllib transports
 
-Fresh review also proved that initial loopback validation plus redirect rejection is insufficient with standard urllib behavior. If `HTTP_PROXY`/`HTTPS_PROXY` is configured and the environment does not bypass the loopback host, urllib may dispatch the validated localhost request to an external proxy. `build_opener(...)` also installs proxy handling by default unless it is explicitly disabled.
+Fresh review also proved that initial loopback validation plus redirect rejection is insufficient with standard urllib behavior. If `HTTP_PROXY`/`HTTPS_PROXY` is configured and the environment does not bypass the loopback host, urllib may dispatch the validated localhost request to an external proxy. `build_opener(...)` also installs proxy handling by default unless explicitly disabled.
 
 Before either localhost transport may receive its exact AE002 exception, the implementation MUST make proxy escape fail closed at both existing boundaries:
 
@@ -34,17 +44,13 @@ The minimum authorized design is a local transport opener that disables environm
 Deterministic no-network acceptance MUST include, for both transports:
 
 - hostile proxy environment variables pointing to a representative external proxy while the target URL is valid loopback;
-- proof that the configured proxy handler/path is not used and no request is emitted to the proxy;
+- proof that the configured proxy path is not used and no request is emitted to the proxy;
 - the valid loopback request still reaches only the mocked local transport seam;
 - redirect rejection remains effective and no external follow-up request occurs;
 - redirect-safe/proxy-disabled opener `.open` dispatch remains mechanically visible to AE002 outside the two exact-exempted owner symbols.
 
 ## Frozen implementation impact
 
-These deltas do not expand the previously authorized file boundary. They affect only:
-
-- `scripts/check_architecture_enforcement.py` and its focused scanner tests for constructor-bound httpx detection;
-- the two already-authorized localhost urllib transport symbols and their focused no-network tests for proxy-disable proof;
-- exact current-tree AE002 disposition/config only if the widened scanner exposes a concrete pre-existing dispatcher that must be classified under existing exact-owner rules. No broad or wildcard exception is authorized.
+The only file-boundary expansion from the previously accepted packet is the exact `probe_micro_contracts.py::run_probe_case` validation/test seam required to make the newly detected current-tree `httpx.Client` owner truthful. Otherwise these deltas remain within the existing scanner/config and two localhost urllib transport boundaries.
 
 All prior 137 non-goals, exact-exception constraints, provider-import regression coverage, socket datagram coverage, redirect requirements, stable diagnostics, full-tree gate, independent exact-head semantic review, and PROUD gate remain binding.
