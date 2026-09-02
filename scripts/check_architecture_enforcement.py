@@ -227,6 +227,22 @@ def _constructor_kind(
     return _binding_kind(_call_name(expr, aliases))
 
 
+def _record_binding(
+    history: dict[tuple[tuple[int, int, str], str], list[tuple[tuple[int, int], str | None]]],
+    *,
+    target: ast.AST | None,
+    value: ast.AST | None,
+    aliases: dict[str, str],
+    scope: tuple[int, int, str],
+    position: tuple[int, int],
+) -> None:
+    if not isinstance(target, ast.Name) or value is None:
+        return
+    history.setdefault((scope, target.id), []).append(
+        (position, _constructor_kind(value, aliases, history, scope, position))
+    )
+
+
 def _binding_history(
     tree: ast.AST,
     aliases: dict[str, str],
@@ -248,19 +264,46 @@ def _binding_history(
             history.setdefault((scope, parameter.arg), []).append(((node.lineno, -1), None))
 
     for node in sorted(ast.walk(tree), key=_position):
-        target: ast.expr | None = None
-        value: ast.AST | None = None
-        if isinstance(node, ast.Assign) and len(node.targets) == 1:
-            target, value = node.targets[0], node.value
-        elif isinstance(node, ast.AnnAssign):
-            target, value = node.target, node.value
-        if not isinstance(target, ast.Name) or value is None:
-            continue
         scope = _enclosing_scope(function_ranges, node)
         position = _position(node)
-        history.setdefault((scope, target.id), []).append(
-            (position, _constructor_kind(value, aliases, history, scope, position))
-        )
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                _record_binding(
+                    history,
+                    target=target,
+                    value=node.value,
+                    aliases=aliases,
+                    scope=scope,
+                    position=position,
+                )
+        elif isinstance(node, ast.AnnAssign):
+            _record_binding(
+                history,
+                target=node.target,
+                value=node.value,
+                aliases=aliases,
+                scope=scope,
+                position=position,
+            )
+        elif isinstance(node, ast.NamedExpr):
+            _record_binding(
+                history,
+                target=node.target,
+                value=node.value,
+                aliases=aliases,
+                scope=scope,
+                position=position,
+            )
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            for item in node.items:
+                _record_binding(
+                    history,
+                    target=item.optional_vars,
+                    value=item.context_expr,
+                    aliases=aliases,
+                    scope=scope,
+                    position=position,
+                )
     for events in history.values():
         events.sort(key=lambda event: event[0])
     return history
@@ -490,6 +533,50 @@ def _self_test() -> int:
     if actual_symbols != expected_symbols:
         print(
             f"self-test enclosing-symbol mismatch: expected {expected_symbols}, got {actual_symbols}",
+            file=sys.stderr,
+        )
+        return 1
+
+    binding_tree = ast.parse(
+        "import httpx\n"
+        "import requests\n"
+        "import aiohttp\n"
+        "def bindings():\n"
+        "    first = second = httpx.Client()\n"
+        "    first.get('https://example.invalid')\n"
+        "    second.send(req)\n"
+        "    with requests.Session() as session:\n"
+        "        session.post('https://example.invalid')\n"
+        "    if (walrus := httpx.Client()):\n"
+        "        walrus.request('GET', 'https://example.invalid')\n"
+        "async def async_bindings():\n"
+        "    async with aiohttp.ClientSession() as client:\n"
+        "        await client.ws_connect('https://example.invalid')\n"
+    )
+    binding_imports = _import_facts(binding_tree).aliases
+    binding_ranges = _function_ranges(binding_tree)
+    binding_history = _binding_history(binding_tree, binding_imports, binding_ranges)
+    dispatches = {
+        _network_dispatch(
+            node,
+            binding_imports,
+            binding_history,
+            _enclosing_scope(binding_ranges, node),
+        )
+        for node in ast.walk(binding_tree)
+        if isinstance(node, ast.Call)
+    }
+    expected_binding_dispatches = {
+        "first.get",
+        "second.send",
+        "session.post",
+        "walrus.request",
+        "client.ws_connect",
+    }
+    missing_binding_dispatches = expected_binding_dispatches - dispatches
+    if missing_binding_dispatches:
+        print(
+            f"self-test binding provenance missed {sorted(missing_binding_dispatches)}",
             file=sys.stderr,
         )
         return 1
