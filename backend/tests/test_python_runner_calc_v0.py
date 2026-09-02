@@ -149,7 +149,7 @@ def test_calc_v0_success_persists_result_artifact_and_parameter_proposals(client
     assert "should-not-enter-runner" not in json.dumps(body)
     assert body["runner_job"]["environment_metadata"] == {
         "inherited_environment": False,
-        "allowlisted_keys": ["PYTHONIOENCODING"],
+        "allowlisted_keys": ["PYTHONHASHSEED", "PYTHONIOENCODING"],
     }
 
     artifacts = client.get(
