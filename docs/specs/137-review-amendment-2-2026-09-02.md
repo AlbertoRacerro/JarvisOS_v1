@@ -62,10 +62,31 @@ Deterministic no-live-network acceptance MUST include:
 
 The allowed backend mutation boundary remains only `run_probe_case` and the minimum adjacent `run_probe_suite` client-construction/injection seam required to make both proxy and redirect safety structural.
 
+## Delta 10 — close the complete arbitrary-client routing bypass family
+
+Fresh exact-head review of Delta 9 proves that `trust_env=False` plus `follow_redirects=False` is still not a sufficient safety proof for a caller-supplied `httpx.Client`. Public HTTPX routing controls can independently redirect dispatch through an explicit `proxy=`, proxy-bearing `mounts`, or a caller-selected `transport`; an injected subclass/wrapper can likewise own the dispatch method itself. All of these are the same causal failure mode: an arbitrary network-capable object crosses the exact-exempted `run_probe_case` boundary and can route a validated loopback URL somewhere else.
+
+The bounded sibling sweep for this causal class is therefore frozen here. Before the exact `run_probe_case` AE002 exception is valid, arbitrary `httpx.Client` / `AsyncClient` / compatible network-client injection MUST NOT reach its dispatch boundary. The production path MUST own construction of the concrete HTTPX client used for this localhost probe with environment proxy inheritance disabled and redirects disabled. It MUST NOT accept caller-controlled explicit proxy configuration, proxy mounts, custom network transports, client subclasses/wrappers, or another general-purpose dispatch object at that retained-owner boundary.
+
+For deterministic no-live-network testing, use a separate seam that cannot itself choose network routing. The smallest acceptable shapes are monkeypatching the module-owned HTTPX construction/dispatch in tests, or a narrowly typed response/test hook whose contract cannot carry proxy, mounts, transport, destination, or a general-purpose request method. Do not preserve arbitrary client injection merely for test convenience, and do not introspect private/undocumented HTTPX fields to try to prove an injected client safe.
+
+This delta deliberately resolves the sibling family in one step rather than enumerating only the literal `proxy=` example. It covers the current first-party `run_probe_suite -> run_probe_case` path and direct calls to `run_probe_case`; it does not create a generic HTTPX policy framework or change unrelated application clients.
+
+Deterministic acceptance MUST prove all of the following without live network access:
+
+- the normal probe path constructs/uses only the module-owned client with proxy inheritance disabled and redirects disabled;
+- the former arbitrary-client injection path is absent or fails closed before `run_probe_case` dispatch;
+- representative explicit proxy, proxy-mount, custom-transport, and client-subclass/wrapper attempts cannot reach the retained-owner dispatch through a caller-controlled network client;
+- hostile environment proxy variables still cannot affect dispatch;
+- a loopback-to-external redirect still cannot trigger a follow-up request;
+- valid loopback execution remains testable through the non-routing test seam and preserves existing probe result semantics.
+
+The allowed backend mutation boundary remains `run_probe_case` plus the minimum adjacent `run_probe_suite` construction/signature/test seam required to remove arbitrary network-client injection. No provider, runtime routing, global egress, schema/store, workflow, frontend, or generic client abstraction change is authorized.
+
 ## Frozen completion condition
 
 The eleven exact retained-owner entries remain the complete authorized exception set. No twelfth exception, wildcard, directory owner, new runtime network owner, generic data-flow engine, or network-policy subsystem is authorized.
 
-The 137 implementation is complete only when the full-tree deterministic gate proves the complete frozen concrete family set from the original 137 packet plus both review amendments, including: provider regression coverage; urllib/urllib3; socket connect/datagram paths; aiohttp including `ws_connect`; websockets; http.client including low-level dispatch; module- and constructor-bound httpx/requests including HEAD/OPTIONS and send; exact unambiguous retained-owner identity; strict loopback validation; proxy-disabled and redirect-safe retained local transports; stable fail-closed diagnostics; and no live-network dependency in tests.
+The 137 implementation is complete only when the full-tree deterministic gate proves the complete frozen concrete family set from the original 137 packet plus both review amendments, including: provider regression coverage; urllib/urllib3; socket connect/datagram paths; aiohttp including `ws_connect`; websockets; http.client including low-level dispatch; module- and constructor-bound httpx/requests including HEAD/OPTIONS and send; exact unambiguous retained-owner identity; strict loopback validation; proxy-disabled and redirect-safe retained local transports; no arbitrary network-capable client injection at `run_probe_case`; stable fail-closed diagnostics; and no live-network dependency in tests.
 
 Any newly exposed current-tree dispatcher not already one of the eleven exact retained owners requires fresh exact-site disposition before implementation merge; it does not authorize automatic exception growth.
