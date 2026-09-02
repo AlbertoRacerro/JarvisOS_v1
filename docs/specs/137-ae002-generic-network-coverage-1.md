@@ -21,6 +21,23 @@ The existing focused tests in `backend/tests/test_architecture_enforcement_gate.
 
 The current `_call_name` resolver handles names/attributes and import aliases but loses constructor/instance provenance for expressions such as `urllib3.PoolManager().request(...)`, `aiohttp.ClientSession().get(...)`, and `http.client.HTTPConnection(...).request(...)`. Therefore merely adding string prefixes to the existing `external` expression is insufficient.
 
+### Existing dispatch inventory that the widened scanner will expose
+
+Fresh exact-master inspection also proves six retained `urllib.request.urlopen` owners under `scripts/**`. They are not accidental bypasses and must not be discovered only after implementation makes the full-tree gate red:
+
+| Exact symbol | Existing purpose | Frozen disposition |
+| --- | --- | --- |
+| `scripts/cheap_review.py::gh_request` | repository review/control-plane GitHub API request | retain as one exact AE002 exception; repository review tooling only |
+| `scripts/daily_development_continuation.py::_request` | 079 continuation control-plane GitHub API read | retain as one exact AE002 exception; owner 079 |
+| `scripts/verify_merge_authority.py::_request_json` | 134 read-only GitHub merge-authority verification | retain as one exact AE002 exception; owner 134 |
+| `scripts/codex_pr_autopush.py::gh_request` | bounded 022/Codex PR actuator GitHub API request | retain as one exact AE002 exception; owner 022 |
+| `scripts/local_model_structured_output_probe.py::call_ollama_chat` | evaluation-only localhost Ollama probe | retain as one exact AE002 exception; localhost-only evaluation tooling |
+| `scripts/router_policy_local_responder.py::_stdlib_json_post_client` | localhost-only Ollama responder behind endpoint validation | retain as one exact AE002 exception; localhost-only routing evaluation tooling |
+
+The existing exception schema is exact `path::symbol`, validates that the target symbol exists, forbids wildcards, and therefore supports these six narrow retained-owner declarations without weakening detection for sibling functions or future call sites. No directory-wide owner, wildcard, generic `urlopen` exemption, or new runtime egress owner is authorized.
+
+If implementation exposes any additional pre-existing newly-detected dispatch outside these six exact symbols, it must stop and re-derive that call site rather than silently widening the exception list.
+
 ## Authority and dependencies
 
 Depends on merged 128 and 134. 128 remains the owner of AE002 semantics. This slice is a corrective extension of that accepted rule family, not a second network policy engine.
@@ -32,13 +49,13 @@ Implementation authority exists only after an accepted readiness decision and `S
 1. Extend the existing AST-based AE002 classifier to cover concrete first-party direct-dispatch families:
    - `urllib.request`: at least `urlopen`, including module alias and from-import forms;
    - `urllib3`: direct/module request calls and `PoolManager`/equivalent constructor-bound `.request` dispatch;
-   - `socket`: `create_connection` and constructor-bound `socket(...).connect` / `connect_ex`;
+   - `socket`: `create_connection` and constructor-bound `socket(...).connect` / `connect_ex` / `sendto`; `sendto` is required because datagram egress can transmit to an external destination without a prior connect;
    - `aiohttp`: module/session request methods (`request`, `get`, `post`, `put`, `patch`, `delete`, `head`, `options`) when reached through a concrete `ClientSession` binding or direct module API;
    - `websockets`: `connect` dispatch, including alias/from-import forms;
    - `http.client`: constructor-bound HTTP/HTTPS connection `.request` and `.connect` dispatch.
 2. Reuse the current import-alias resolver. Add only the minimum bounded local call-target/binding normalization needed to identify constructor-bound network objects in the same Python source file.
 3. Preserve accepted external owners exactly as today: `backend/app/modules/ai/providers/` and `backend/app/modules/local_ai/`.
-4. Preserve exact exception semantics and stable diagnostics. Do not broaden `configs/architecture_enforcement.json` merely to keep the gate green.
+4. Preserve exact exception semantics and stable diagnostics. Add only the six inventoried exact AE002 retained-owner entries above; no other config broadening is authorized by this readiness packet.
 5. Unknown or unresolvable dynamic calls are not to be guessed into semantic authority. The implementation should cover the frozen concrete patterns above and document residual dynamic-dispatch risk rather than invent a generic taint engine.
 6. No source-text/regex-only substitute for AST ownership classification.
 
@@ -46,7 +63,7 @@ Implementation authority exists only after an accepted readiness decision and `S
 
 - `scripts/check_architecture_enforcement.py`
 - `backend/tests/test_architecture_enforcement_gate.py`
-- `configs/architecture_enforcement.json` only if fresh exact evidence proves an existing retained debt entry is required; broadening is not expected.
+- `configs/architecture_enforcement.json` only for the six exact inventoried AE002 retained-owner entries above; any seventh new AE002 exception requires fresh authority.
 - normal lifecycle bookkeeping in `docs/specs/STATUS.md`.
 
 No runtime `backend/app/**`, frontend, workflow, provider, database, schema/migration, or product code mutation is authorized.
@@ -59,11 +76,12 @@ The focused test surface must prove at least:
 | --- | --- |
 | urllib.request | module import, alias import, and from-import `urlopen` outside accepted owner -> AE002 |
 | urllib3 | module/alias request and constructor-bound `PoolManager().request` -> AE002 |
-| socket | `create_connection` plus constructor-bound `.connect`/`.connect_ex` -> AE002 |
+| socket | `create_connection` plus constructor-bound `.connect`/`.connect_ex`/`.sendto` -> AE002 |
 | aiohttp | `ClientSession` binding and request verb/session `.request` dispatch -> AE002 |
 | websockets | module alias and from-import `connect` -> AE002 |
 | http.client | HTTP/HTTPS connection binding followed by `.request`/`.connect` -> AE002 |
 | exact accepted owner | the same concrete dispatch patterns under an accepted owner remain non-findings |
+| six retained symbols | full-tree scan remains green only because the six inventoried existing call sites are exact symbol-scoped exceptions |
 | exact exception | one exact symbol exemption does not cover a sibling symbol |
 | stability | repeated scan of identical fixture tree yields identical diagnostics |
 
@@ -79,10 +97,11 @@ Alias coverage must include ordinary `import X as Y` and `from X import Y as Z` 
 ## Failure modes to prevent
 
 - apparent coverage added only for simple dotted calls while constructor-bound calls still bypass AE002;
+- datagram `socket.sendto` remains a direct egress bypass because it needs no prior connection;
 - alias normalization maps `import urllib.request` incorrectly and causes false negatives;
 - a broad method-name rule flags unrelated `.connect()` / `.request()` calls as external dispatch;
 - accepted-owner behavior changes unintentionally;
-- new exceptions are added instead of fixing detection;
+- newly detected legacy calls are hidden by broad exceptions instead of exact audited dispositions;
 - scanner becomes a broad data-flow/taint framework beyond the bounded concrete patterns;
 - nondeterministic binding resolution changes diagnostics between scans.
 
@@ -98,4 +117,4 @@ Alias coverage must include ordinary `import X as Y` and `from X import Y as Z` 
 
 ## Minimum-necessary test
 
-The gap is inside one existing static scanner and one focused deterministic test surface. Extending those two owners with bounded call-target/binding recognition is the smallest corrective action that actually prevents the named bypasses. A new policy service, runtime instrumentation, dependency graph, or broad linter framework would be disproportionate and is not authorized.
+The gap is inside one existing static scanner and one focused deterministic test surface. Extending those two owners with bounded call-target/binding recognition plus six exact pre-existing owner dispositions is the smallest corrective action that actually prevents the named bypasses without turning current sanctioned control/local tooling into surprise gate debt. A new policy service, runtime instrumentation, dependency graph, directory-wide allowlist, or broad linter framework would be disproportionate and is not authorized.
