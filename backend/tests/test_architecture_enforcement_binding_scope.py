@@ -111,3 +111,71 @@ def test_ae002_context_manager_and_walrus_bindings_preserve_provenance(tmp_path:
     assert result.returncode == 1
     assert result.stdout.count("AE002 backend/app/contextual.py::sync_dispatch") == 2
     assert result.stdout.count("AE002 backend/app/contextual.py::async_dispatch") == 1
+
+
+def test_ae002_sibling_local_import_does_not_overwrite_module_alias(tmp_path: Path) -> None:
+    source = tmp_path / "backend/app/sibling_shadow.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "import httpx\n"
+        "def network():\n"
+        "    httpx.get('https://example.invalid')\n"
+        "def shadow():\n"
+        "    import custom_transport as httpx\n"
+        "    httpx.get('not-network')\n",
+        encoding="utf-8",
+    )
+    result = _run(tmp_path)
+    assert result.returncode == 1
+    assert result.stdout.count("AE002 backend/app/sibling_shadow.py::network") == 1
+    assert "AE002 backend/app/sibling_shadow.py::shadow" not in result.stdout
+
+
+def test_ae002_reverse_sibling_network_import_does_not_contaminate_other_scope(tmp_path: Path) -> None:
+    source = tmp_path / "backend/app/reverse_shadow.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "import custom_transport as httpx\n"
+        "def safe():\n"
+        "    httpx.get('not-network')\n"
+        "def network():\n"
+        "    import httpx\n"
+        "    httpx.get('https://example.invalid')\n",
+        encoding="utf-8",
+    )
+    result = _run(tmp_path)
+    assert result.returncode == 1
+    assert "AE002 backend/app/reverse_shadow.py::safe" not in result.stdout
+    assert result.stdout.count("AE002 backend/app/reverse_shadow.py::network") == 1
+
+
+def test_ae002_local_from_import_shadows_module_constructor_alias(tmp_path: Path) -> None:
+    source = tmp_path / "backend/app/from_shadow.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "from httpx import Client as HC\n"
+        "def safe():\n"
+        "    from custom_transport import Client as HC\n"
+        "    HC().send(None)\n"
+        "def network():\n"
+        "    HC().send(None)\n",
+        encoding="utf-8",
+    )
+    result = _run(tmp_path)
+    assert result.returncode == 1
+    assert "AE002 backend/app/from_shadow.py::safe" not in result.stdout
+    assert result.stdout.count("AE002 backend/app/from_shadow.py::network") == 1
+
+
+def test_ae002_late_local_import_kills_global_alias_before_import(tmp_path: Path) -> None:
+    source = tmp_path / "backend/app/late_import.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "import httpx\n"
+        "def invalid_runtime_reference():\n"
+        "    httpx.get('https://example.invalid')\n"
+        "    import custom_transport as httpx\n",
+        encoding="utf-8",
+    )
+    result = _run(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
