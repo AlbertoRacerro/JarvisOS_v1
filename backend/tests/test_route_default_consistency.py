@@ -8,11 +8,7 @@ from app.modules.ai import execution, gateway, thread_service
 from app.modules.ai.contracts import RoutingDecision
 from app.modules.ai.execution import TASK_KIND_DEFAULT_ROUTE, resolve_effective_route_class
 from app.modules.ai.execution_types import ProviderBinding
-from app.modules.ai.jarvis_context_models import (
-    JarvisContextRequest,
-    JarvisExactRef,
-    JarvisRouteDescriptor,
-)
+from app.modules.ai.jarvis_context_models import JarvisContextRequest, JarvisExactRef, JarvisRouteDescriptor
 from app.modules.ai.models import AITaskRunRequest
 from app.modules.ai.thread_models import AIThreadSubmit
 
