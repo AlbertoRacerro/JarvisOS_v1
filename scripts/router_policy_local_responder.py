@@ -44,6 +44,13 @@ class LocalResponderResponseError(LocalResponderError):
     """Raised when localhost response content is malformed."""
 
 
+class _RejectRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Keep the localhost transport on its validated origin."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001, ANN201
+        return None
+
+
 def _validate_endpoint(endpoint: str) -> None:
     if not isinstance(endpoint, str):
         raise LocalResponderPolicyError("endpoint must be a string")
@@ -106,9 +113,7 @@ def _build_generate_payload(
     keep_alive: str | None,
     num_predict: int | None,
 ) -> dict[str, Any]:
-    options: dict[str, Any] = {
-        "temperature": 0,
-    }
+    options: dict[str, Any] = {"temperature": 0}
     normalized_num_predict = _normalize_num_predict(num_predict)
     if normalized_num_predict is not None:
         options["num_predict"] = normalized_num_predict
@@ -140,6 +145,7 @@ def _raw_has_timing_metadata(raw: dict[str, Any]) -> bool:
 
 
 def _stdlib_json_post_client(endpoint: str, payload: dict, timeout_s: float) -> dict:
+    _validate_endpoint(endpoint)
     encoded = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
         endpoint,
@@ -147,8 +153,12 @@ def _stdlib_json_post_client(endpoint: str, payload: dict, timeout_s: float) -> 
         headers={"Content-Type": "application/json"},
         method="POST",
     )
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        _RejectRedirectHandler(),
+    )
     try:
-        with urllib.request.urlopen(request, timeout=timeout_s) as response:
+        with opener.open(request, timeout=timeout_s) as response:
             status = getattr(response, "status", response.getcode())
             if status < 200 or status >= 300:
                 raise LocalResponderTransportError(f"localhost Ollama returned HTTP {status}")
