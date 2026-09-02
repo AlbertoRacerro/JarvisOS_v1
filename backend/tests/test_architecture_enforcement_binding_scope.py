@@ -71,3 +71,43 @@ def test_ae002_constructor_alias_still_detects_when_not_shadowed(tmp_path: Path)
     result = _run(tmp_path)
     assert result.returncode == 1
     assert result.stdout.count("AE002 backend/app/aliases.py::dispatch") == 2
+
+
+def test_ae002_chained_assignment_preserves_constructor_provenance(tmp_path: Path) -> None:
+    source = tmp_path / "backend/app/chained.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "import httpx\nimport requests\n"
+        "def dispatch():\n"
+        "    first = second = httpx.Client()\n"
+        "    first.get('https://example.invalid')\n"
+        "    second.send(None)\n"
+        "    left = right = requests.Session()\n"
+        "    left.post('https://example.invalid')\n"
+        "    right.send(None)\n",
+        encoding="utf-8",
+    )
+    result = _run(tmp_path)
+    assert result.returncode == 1
+    assert result.stdout.count("AE002 backend/app/chained.py::dispatch") == 4
+
+
+def test_ae002_context_manager_and_walrus_bindings_preserve_provenance(tmp_path: Path) -> None:
+    source = tmp_path / "backend/app/contextual.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "import aiohttp\nimport httpx\nimport requests\n"
+        "def sync_dispatch():\n"
+        "    with requests.Session() as session:\n"
+        "        session.post('https://example.invalid')\n"
+        "    if (client := httpx.Client()):\n"
+        "        client.request('GET', 'https://example.invalid')\n"
+        "async def async_dispatch():\n"
+        "    async with aiohttp.ClientSession() as session:\n"
+        "        await session.ws_connect('https://example.invalid')\n",
+        encoding="utf-8",
+    )
+    result = _run(tmp_path)
+    assert result.returncode == 1
+    assert result.stdout.count("AE002 backend/app/contextual.py::sync_dispatch") == 2
+    assert result.stdout.count("AE002 backend/app/contextual.py::async_dispatch") == 1
