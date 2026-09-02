@@ -257,8 +257,12 @@ def _aliases_at(
         for (event_scope, name), events in import_facts.scoped_aliases.items():
             if event_scope != active_scope:
                 continue
-            previous = [target for event_position, target in events if event_position < position]
-            aliases[name] = previous[-1] if previous else f"{IMPORT_UNBOUND_PREFIX}{name}"
+            visible = (
+                [target for _, target in events]
+                if active_scope != scope
+                else [target for event_position, target in events if event_position < position]
+            )
+            aliases[name] = visible[-1] if visible else f"{IMPORT_UNBOUND_PREFIX}{name}"
     return aliases
 
 
