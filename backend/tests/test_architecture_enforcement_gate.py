@@ -127,6 +127,84 @@ def test_ae002_exact_exception_does_not_cover_sibling_symbol(tmp_path: Path) -> 
     assert "execution.py::run_ai_task" not in result.stdout
 
 
+def test_ae002_detects_frozen_concrete_network_families(tmp_path: Path) -> None:
+    source = tmp_path / "backend/app/network_families.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "import aiohttp\nimport http.client\nimport httpx\nimport requests\nimport socket\nimport urllib.request\nimport urllib3\nimport websockets\n"
+        "def dispatch():\n"
+        "    httpx.head('https://example.invalid')\n"
+        "    requests.options('https://example.invalid')\n"
+        "    urllib.request.urlopen('https://example.invalid')\n"
+        "    urllib3.request('GET', 'https://example.invalid')\n"
+        "    socket.create_connection(('example.invalid', 443))\n"
+        "    websockets.connect('wss://example.invalid')\n"
+        "    aiohttp.request('GET', 'https://example.invalid')\n",
+        encoding="utf-8",
+    )
+    result = _run(tmp_path, _write_config(tmp_path))
+    assert result.returncode == 1
+    assert result.stdout.count("AE002 backend/app/network_families.py::dispatch") == 7
+
+
+def test_ae002_detects_constructor_bound_methods_and_ignores_unrelated_names(tmp_path: Path) -> None:
+    source = tmp_path / "backend/app/bound_network.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "import aiohttp\nimport http.client\nimport httpx\nimport requests\nimport socket\nimport urllib.request\nimport urllib3\n"
+        "class Other:\n"
+        "    def send(self): pass\n"
+        "    def urlopen(self): pass\n"
+        "    def ws_connect(self): pass\n"
+        "def dispatch():\n"
+        "    h = httpx.Client(); h.send(None)\n"
+        "    r = requests.Session(); r.send(None)\n"
+        "    p = urllib3.PoolManager(); p.urlopen('GET', 'https://example.invalid')\n"
+        "    a = aiohttp.ClientSession(); a.ws_connect('https://example.invalid')\n"
+        "    c = http.client.HTTPConnection('example.invalid'); c.send(b'x'); c.endheaders()\n"
+        "    s = socket.socket(); s.connect(('example.invalid', 443)); s.sendto(b'x', ('example.invalid', 443))\n"
+        "    o = urllib.request.build_opener(); o.open('https://example.invalid')\n"
+        "    x = Other(); x.send(); x.urlopen(); x.ws_connect()\n",
+        encoding="utf-8",
+    )
+    result = _run(tmp_path, _write_config(tmp_path))
+    assert result.returncode == 1
+    assert result.stdout.count("AE002 backend/app/bound_network.py::dispatch") == 9
+
+
+def test_ae002_binding_provenance_is_lexical_and_source_ordered(tmp_path: Path) -> None:
+    source = tmp_path / "backend/app/scoped.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "import httpx\n"
+        "class Other:\n    def send(self, value): return value\n"
+        "def first():\n    c = httpx.Client()\n    c.send(None)\n"
+        "def second():\n    c = Other()\n    c.send(None)\n"
+        "def third():\n    c = Other()\n    c.send(None)\n    c = httpx.Client()\n    c.send(None)\n",
+        encoding="utf-8",
+    )
+    result = _run(tmp_path, _write_config(tmp_path))
+    assert result.returncode == 1
+    assert "AE002 backend/app/scoped.py::first" in result.stdout
+    assert "AE002 backend/app/scoped.py::third" in result.stdout
+    assert "AE002 backend/app/scoped.py::second" not in result.stdout
+
+
+def test_ae002_ambiguous_exact_owner_fails_closed(tmp_path: Path) -> None:
+    source = tmp_path / "backend/app/owner.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "import httpx\n"
+        "def accepted():\n    httpx.get('https://example.invalid')\n"
+        "class Wrapper:\n    def accepted(self):\n        httpx.get('https://example.invalid')\n",
+        encoding="utf-8",
+    )
+    config = _write_config(tmp_path, [_exception("AE002", "backend/app/owner.py::accepted")])
+    result = _run(tmp_path, config)
+    assert result.returncode == 2
+    assert "ambiguous exception symbol" in result.stderr
+
+
 def test_ae003_preserves_exact_debt_and_rejects_new_canonical_sql(tmp_path: Path) -> None:
     debt = tmp_path / "backend/app/modules/modeling/service.py"
     debt.parent.mkdir(parents=True)
