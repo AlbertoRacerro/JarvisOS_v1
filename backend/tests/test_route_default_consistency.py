@@ -17,7 +17,20 @@ from app.modules.ai.models import AITaskRunRequest
 from app.modules.ai.thread_models import AIThreadSubmit
 
 
-@pytest.mark.parametrize("task_kind, expected", list(TASK_KIND_DEFAULT_ROUTE.items()))
+EXPECTED_TASK_KIND_DEFAULT_ROUTES = {
+    "general": "local:fake",
+    "test": "local:fake",
+    "synthesis": "local:fake",
+    "code_review": "local:fake",
+    "architecture_review": "local:fake",
+}
+
+
+def test_task_kind_default_route_table_matches_canonical_contract() -> None:
+    assert TASK_KIND_DEFAULT_ROUTE == EXPECTED_TASK_KIND_DEFAULT_ROUTES
+
+
+@pytest.mark.parametrize("task_kind, expected", list(EXPECTED_TASK_KIND_DEFAULT_ROUTES.items()))
 def test_resolve_effective_route_uses_every_task_kind_default_when_omitted(
     task_kind: str,
     expected: str,
