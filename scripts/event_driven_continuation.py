@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 API_ROOT = "https://api.github.com"
-TARGET_WORKFLOW = ".github/workflows/daily-development-continuation.yml"
+TARGET_WORKFLOW = "daily-development-continuation.yml"
 SUPPORTED_WORKFLOWS = {"CI", "Manual Expert Review"}
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 MARKER_RE = re.compile(
@@ -171,7 +171,7 @@ class GitHubClient:
 
     def dispatch(self) -> None:
         self.request(
-            f"/actions/workflows/{TARGET_WORKFLOW.replace('/', '%2F')}/dispatches",
+            f"/actions/workflows/{TARGET_WORKFLOW}/dispatches",
             method="POST",
             payload={"ref": "master"},
         )
