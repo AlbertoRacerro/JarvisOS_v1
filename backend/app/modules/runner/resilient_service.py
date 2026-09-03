@@ -14,7 +14,7 @@ from app.modules.runner.local_python import (
 )
 from app.modules.runner.models import RunnerJobRunResponse
 from app.modules.runner.recovery import reconcile_stranded_runner_jobs
-from app.modules.runner.safety import RunnerSafetyError
+from app.modules.runner.safety import RunnerSafetyError, validate_run_paths
 
 OWNER_FAILURE_RECHECK_SECONDS = 0.25
 
@@ -50,13 +50,23 @@ def _start_owner_failure_followup(working_dir: Path) -> None:
 def run_runner_job(runner_job_id: str) -> RunnerJobRunResponse:
     with open_sqlite_connection() as connection:
         row = connection.execute(
-            "SELECT working_dir FROM runner_jobs WHERE id = ?",
+            """
+            SELECT workspace_id, simulation_run_id, working_dir, input_file, output_dir
+            FROM runner_jobs
+            WHERE id = ?
+            """,
             (runner_job_id,),
         ).fetchone()
     if row is None:
         raise RunnerSafetyError("runner_job_not_found", "Runner job not found.")
 
-    working_dir = Path(str(row["working_dir"]))
+    working_dir, _, _ = validate_run_paths(
+        str(row["workspace_id"]),
+        str(row["simulation_run_id"]),
+        working_dir=str(row["working_dir"]),
+        input_file=str(row["input_file"]),
+        output_dir=str(row["output_dir"]),
+    )
     owner_entered = False
     try:
         with prepare_execution_owner(working_dir):
