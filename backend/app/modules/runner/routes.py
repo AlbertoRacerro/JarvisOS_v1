@@ -15,7 +15,6 @@ from app.modules.runner.guarded_service import (
     register_bundled_bluerev_process2,
     register_bundled_bluerev_topology_m1,
     register_bundled_process_kernel,
-    run_runner_job,
 )
 from app.modules.runner.models import (
     BindingPreviewRequest,
@@ -30,6 +29,7 @@ from app.modules.runner.models import (
 )
 from app.modules.runner.origin import require_runner_origin
 from app.modules.runner.public_models import PublicModelImplementationCreate
+from app.modules.runner.resilient_service import run_runner_job
 from app.modules.runner.safety import RunnerSafetyError
 
 router = APIRouter(tags=["runner"])
