@@ -4,7 +4,11 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
+
+
+CHILD_READY_TIMEOUT_SECONDS = 5.0
 
 
 def _lock_file(path: Path):
@@ -73,6 +77,69 @@ def _emit(payload: dict[str, object]) -> bool:
         return False
 
 
+def _wait_until_child_owns_lock(process: subprocess.Popen[str], ready_path: Path) -> None:
+    deadline = time.monotonic() + CHILD_READY_TIMEOUT_SECONDS
+    while not ready_path.exists():
+        return_code = process.poll()
+        if return_code is not None:
+            stderr = process.stderr.read() if process.stderr is not None else ""
+            raise RuntimeError(
+                f"Runner execution child exited before acquiring ownership: {stderr.strip()}"
+            )
+        if time.monotonic() >= deadline:
+            process.kill()
+            process.wait(timeout=5)
+            raise RuntimeError("Runner execution child did not acquire ownership in time.")
+        time.sleep(0.01)
+
+
+def _run_owned_child(
+    *,
+    owner_lock_path: Path,
+    command: list[str],
+    env: dict[str, str],
+    cwd: str,
+    timeout_seconds: int,
+) -> tuple[int | None, bool, str, str]:
+    child_script = Path(__file__).with_name("_execution_child.py")
+    child_lock_path = owner_lock_path.with_name(f"{owner_lock_path.name}.child")
+    ready_path = child_lock_path.with_name(f"{child_lock_path.name}.ready")
+    ready_path.unlink(missing_ok=True)
+
+    child_command = [
+        sys.executable,
+        str(child_script),
+        str(child_lock_path),
+        str(ready_path),
+        command[1],
+        command[2],
+        command[3],
+    ]
+    process = subprocess.Popen(
+        child_command,
+        cwd=cwd,
+        env=env,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        _wait_until_child_owns_lock(process, ready_path)
+        try:
+            stdout, stderr = process.communicate("run\n", timeout=timeout_seconds)
+            return process.returncode, False, stdout, stderr
+        except subprocess.TimeoutExpired:
+            process.kill()
+            stdout, stderr = process.communicate()
+            return None, True, stdout, stderr
+    finally:
+        ready_path.unlink(missing_ok=True)
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         return 2
@@ -99,46 +166,30 @@ def main() -> int:
         max_stdout_bytes = int(request["max_stdout_bytes"])
         max_stderr_bytes = int(request["max_stderr_bytes"])
 
-        try:
-            completed = subprocess.run(
-                command,
-                cwd=cwd,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds,
-                shell=False,
-                check=False,
-            )
-            stdout, stdout_truncated = _bounded_text(completed.stdout, max_stdout_bytes)
-            stderr, stderr_truncated = _bounded_text(completed.stderr, max_stderr_bytes)
-            result = {
-                "state": "completed",
-                "return_code": completed.returncode,
-                "timed_out": False,
-                "stdout": stdout,
-                "stderr": stderr,
-                "stdout_truncated": stdout_truncated,
-                "stderr_truncated": stderr_truncated,
-            }
-        except subprocess.TimeoutExpired as exc:
-            stdout, stdout_truncated = _bounded_text(exc.stdout or "", max_stdout_bytes)
-            stderr, stderr_truncated = _bounded_text(exc.stderr or "", max_stderr_bytes)
-            result = {
-                "state": "completed",
-                "return_code": None,
-                "timed_out": True,
-                "stdout": stdout,
-                "stderr": stderr,
-                "stdout_truncated": stdout_truncated,
-                "stderr_truncated": stderr_truncated,
-            }
+        return_code, timed_out, raw_stdout, raw_stderr = _run_owned_child(
+            owner_lock_path=lock_path,
+            command=command,
+            env=env,
+            cwd=cwd,
+            timeout_seconds=timeout_seconds,
+        )
+        stdout, stdout_truncated = _bounded_text(raw_stdout, max_stdout_bytes)
+        stderr, stderr_truncated = _bounded_text(raw_stderr, max_stderr_bytes)
+        result = {
+            "state": "completed",
+            "return_code": return_code,
+            "timed_out": timed_out,
+            "stdout": stdout,
+            "stderr": stderr,
+            "stdout_truncated": stdout_truncated,
+            "stderr_truncated": stderr_truncated,
+        }
 
         if not _emit(result):
             return 0
 
         # Keep ownership alive through the caller's durable result/failure commit.
-        # If the caller dies, pipe EOF releases the lock after child completion.
+        # If the caller dies, pipe EOF releases the owner lock after child completion.
         sys.stdin.readline()
         return 0
     finally:
