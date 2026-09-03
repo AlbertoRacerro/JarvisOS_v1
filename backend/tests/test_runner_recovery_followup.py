@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -88,3 +89,23 @@ def test_startup_live_owner_that_becomes_unknown_fails_closed(monkeypatch) -> No
     )
 
     assert reconciliations == []
+
+
+def test_startup_live_owner_retries_after_transient_database_failure(monkeypatch) -> None:
+    attempts = 0
+    monkeypatch.setattr(main, "execution_ownership_state", lambda _path: "gone")
+
+    def _reconcile() -> int:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise sqlite3.OperationalError("database is locked")
+        return 1
+
+    monkeypatch.setattr(main, "reconcile_stranded_runner_jobs", _reconcile)
+
+    asyncio.run(
+        main._reconcile_after_live_owners_exit((Path("/orphan"),), poll_seconds=0.0)
+    )
+
+    assert attempts == 2
