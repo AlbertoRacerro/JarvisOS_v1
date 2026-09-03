@@ -235,6 +235,7 @@ The queue is binding but not immutable. If a slice proves non-implementable with
 | 136 | merged | [#504](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/504) | ROUTE-DEFAULT-CONSISTENCY-1 | 111, 134 | Centralize effective route resolution on the existing task-kind defaults so exact-ref admission, gateway preflight, and execution agree for omitted routes while preserving explicit route and `auto` semantics. |
 | 137 | merged | [#507](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/507) | AE002-GENERIC-NETWORK-COVERAGE-1 | 128, 134 | Extend the existing deterministic AE002 AST gate to concrete generic Python network-dispatch families with alias/from-import and constructor-bound coverage while preserving accepted owners/exact exceptions; no runtime egress behavior change. |
 | 138 | merged | [#512](https://github.com/AlbertoRacerro/JarvisOS_v1/pull/512) | PYTHON-RUNNER-HASHSEED-DETERMINISM-1 | 130, 137 | Bounded post-134 F6 repair: pin `PYTHONHASHSEED=0` in the existing isolated production Python-runner child environment and prove stable hash-dependent output across independent real runner subprocesses; no generic determinism or sandbox expansion. |
+| 139 | ready | — | RUNNER-STRANDED-RECOVERY-1 | 138 | Planning/full-spec/readiness authority merged through PR #515; bounded post-134 F8 repair: prove live-child versus abandoned execution before idempotent stranded-running recovery, preserve evidence, and avoid generic lease/heartbeat/process-supervisor expansion. |
 
 ## Superseded planning aliases and resolved collisions
 
