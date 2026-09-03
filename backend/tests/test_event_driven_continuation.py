@@ -54,13 +54,9 @@ class FakeClient:
         self,
         pulls: list[dict],
         comments: list[object] | None = None,
-        *,
-        review_ran: bool = True,
     ) -> None:
         self.pulls = list(pulls)
         self._comments = list(comments or [])
-        self.review_ran = review_ran
-        self.review_checks: list[tuple[int, int]] = []
         self.dispatches: list[tuple[int, str]] = []
         self.recorded: list[tuple[int, str]] = []
 
@@ -74,10 +70,6 @@ class FakeClient:
         assert number == 77
         return self._comments
 
-    def review_job_ran(self, run_id: int, run_attempt: int) -> bool:
-        self.review_checks.append((run_id, run_attempt))
-        return self.review_ran
-
     def dispatch(self, pr_number: int, head_sha: str) -> None:
         self.dispatches.append((pr_number, head_sha))
 
@@ -89,31 +81,19 @@ def bot_comment(body: str) -> dict:
     return {"body": body, "user": {"login": "github-actions[bot]"}}
 
 
-def test_parse_terminal_ci_and_review_events() -> None:
-    ci = mod.parse_event(event())
-    review = mod.parse_event(event(workflow="Manual Expert Review"))
-    assert ci == mod.WakeRequest("CI", 123, 2, 77, HEAD)
-    assert review == mod.WakeRequest("Manual Expert Review", 123, 2, 77, HEAD)
+def test_parse_terminal_ci_event() -> None:
+    assert mod.parse_event(event()) == mod.WakeRequest("CI", 123, 2, 77, HEAD)
 
 
 def test_non_pr_and_unrelated_workflow_noop() -> None:
     assert mod.parse_event(event(pulls=[])) is None
+    assert mod.parse_event(event(workflow="Manual Expert Review")) is None
     assert mod.parse_event(event(workflow="Daily Development Continuation")) is None
 
 
-def test_manual_review_without_executed_review_job_noops() -> None:
-    client = FakeClient([pull()], review_ran=False)
-    result = mod.run(event(workflow="Manual Expert Review"), repository=REPOSITORY, client=client)
-    assert result == "noop:review_not_run"
-    assert client.review_checks == [(123, 2)]
-    assert client.dispatches == []
-    assert client.recorded == []
-
-
-def test_ci_does_not_require_manual_review_job_probe() -> None:
-    client = FakeClient([pull(), pull()], review_ran=False)
+def test_ci_dispatches_bound_exact_head() -> None:
+    client = FakeClient([pull(), pull()])
     assert mod.run(event(), repository=REPOSITORY, client=client) == "dispatched"
-    assert client.review_checks == []
     assert client.dispatches == [(77, HEAD)]
 
 
