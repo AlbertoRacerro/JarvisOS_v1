@@ -191,11 +191,14 @@ def execution_ownership_state(working_dir: Path) -> str:
         if os.name == "nt":
             import msvcrt
 
+            locking = getattr(msvcrt, "locking")
+            lk_nblck = getattr(msvcrt, "LK_NBLCK")
+            lk_unlck = getattr(msvcrt, "LK_UNLCK")
             try:
-                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                locking(handle.fileno(), lk_nblck, 1)
             except OSError:
                 return "live"
-            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            locking(handle.fileno(), lk_unlck, 1)
             return "gone"
         import fcntl
 
