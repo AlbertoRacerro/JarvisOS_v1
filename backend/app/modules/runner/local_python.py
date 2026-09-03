@@ -38,12 +38,13 @@ class _ExecutionOwnerSession:
         self.executed = False
 
     def start(self) -> None:
-        self.working_dir.mkdir(parents=True, exist_ok=True)
+        owner_dir = self.working_dir.parent
+        owner_dir.mkdir(parents=True, exist_ok=True)
         owner_script = Path(__file__).with_name("_execution_owner.py")
         owner_env = {"PYTHONHASHSEED": "0", "PYTHONIOENCODING": "utf-8"}
         process = subprocess.Popen(
             [sys.executable, str(owner_script), str(self.lock_path)],
-            cwd=str(self.working_dir),
+            cwd=str(owner_dir),
             env=owner_env,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -156,7 +157,8 @@ _sessions_lock = threading.Lock()
 
 
 def ownership_lock_path(working_dir: Path) -> Path:
-    return working_dir / OWNER_LOCK_NAME
+    resolved = working_dir.resolve()
+    return resolved.parent / f".{resolved.name}{OWNER_LOCK_NAME}"
 
 
 @contextmanager

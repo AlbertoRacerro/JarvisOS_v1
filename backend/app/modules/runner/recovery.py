@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 from app.core.database import open_sqlite_connection
@@ -15,21 +16,31 @@ def reconcile_stranded_runner_jobs() -> int:
     """Fail only coherently-running jobs whose runner-specific owner is provably gone."""
 
     with open_sqlite_connection() as connection:
-        rows = connection.execute(
-            """
-            SELECT
-                rj.id AS runner_job_id,
-                rj.workspace_id,
-                rj.simulation_run_id,
-                rj.status AS runner_status,
-                rj.working_dir,
-                sr.status AS simulation_status
-            FROM runner_jobs rj
-            JOIN simulation_runs sr ON sr.id = rj.simulation_run_id
-            WHERE rj.status = 'running' OR sr.status = 'running'
-            ORDER BY rj.created_at ASC, rj.id ASC
-            """
-        ).fetchall()
+        try:
+            rows = connection.execute(
+                """
+                SELECT
+                    rj.id AS runner_job_id,
+                    rj.workspace_id,
+                    rj.simulation_run_id,
+                    rj.status AS runner_status,
+                    rj.working_dir,
+                    sr.status AS simulation_status
+                FROM runner_jobs rj
+                JOIN simulation_runs sr ON sr.id = rj.simulation_run_id
+                WHERE rj.status = 'running' OR sr.status = 'running'
+                ORDER BY rj.created_at ASC, rj.id ASC
+                """
+            ).fetchall()
+        except sqlite3.OperationalError as exc:
+            message = str(exc).lower()
+            if "no such table:" in message and (
+                "runner_jobs" in message or "simulation_runs" in message
+            ):
+                # Startup may legitimately run before the application database has
+                # been bootstrapped. Recovery must never bootstrap/migrate implicitly.
+                return 0
+            raise
 
     recovered = 0
     for row in rows:
