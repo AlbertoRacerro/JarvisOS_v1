@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Mapping
 from pathlib import Path
 
 
@@ -68,7 +69,7 @@ def _bounded_text(value: str | bytes, max_bytes: int) -> tuple[str, bool]:
     return encoded[:max_bytes].decode("utf-8", errors="ignore"), True
 
 
-def _emit(payload: dict[str, object]) -> bool:
+def _emit(payload: Mapping[str, object]) -> bool:
     try:
         sys.stdout.write(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
         sys.stdout.flush()
