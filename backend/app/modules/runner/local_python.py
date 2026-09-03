@@ -10,7 +10,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-
 OWNER_LOCK_NAME = ".jarvis-runner-owner.lock"
 
 
@@ -193,9 +192,9 @@ def _lock_state(lock_path: Path) -> str:
         if os.name == "nt":
             import msvcrt
 
-            locking = getattr(msvcrt, "locking")
-            lk_nblck = getattr(msvcrt, "LK_NBLCK")
-            lk_unlck = getattr(msvcrt, "LK_UNLCK")
+            locking = msvcrt.locking  # type: ignore[attr-defined]
+            lk_nblck = msvcrt.LK_NBLCK  # type: ignore[attr-defined]
+            lk_unlck = msvcrt.LK_UNLCK  # type: ignore[attr-defined]
             try:
                 locking(handle.fileno(), lk_nblck, 1)
             except OSError:
