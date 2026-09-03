@@ -42,4 +42,11 @@ Each entry must contain:
 
 ## Entries
 
-_No parked improvements recorded yet._
+### F10 — calc_v0 artifact/proposal partial-finalization — PARK
+
+- **Origin:** fresh master `23bee946c06307ef77087ce7f3212424033fa831`; accepted spec 043 / merged PR #52.
+- **Observation:** `backend/app/modules/runner/service.py` intentionally registers and commits the validated `result.json` run artifact before calling the spec-040 batch facade that creates calc-origin Parameter proposals. If that later facade call fails, `_finish_failed(...)` marks the runner job and simulation run failed while the already-registered artifact remains queryable for that exact run.
+- **Disposition:** PARK / non-blocking. This is the ordering explicitly frozen by spec 043: artifact registration precedes the memory-facade call, while the all-or-nothing guarantee applies to Parameter proposal creation. Fresh evidence does not prove a current accepted-requirement violation, current in-scope bypass, regression, or material P0/P1 correctness/security defect beyond that accepted ordering.
+- **Expected benefit if revisited:** a future product requirement could choose stronger finalization/visibility semantics for failed calc runs, but that would be a new contract rather than a repair of accepted 043 behavior.
+- **Likely surface:** `backend/app/modules/runner/service.py`, calc-run artifact visibility, and focused `backend/tests/test_python_runner_calc_v0.py` failure fixtures.
+- **Freshness invalidators:** reopen only if a concrete consumer treats failed-run artifacts as successful/authoritative output, a new accepted contract requires transactional artifact+proposal finalization, or evidence shows stale artifacts can cross an existing authority/promotion boundary.
