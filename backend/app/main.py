@@ -18,6 +18,7 @@ from app.modules.local_ai.runtime.lifecycle import create_local_ai_runtime_lifec
 from app.modules.memory.routes import router as memory_router
 from app.modules.modeling.routes import router as modeling_router
 from app.modules.project_knowledge.routes import router as project_knowledge_router
+from app.modules.runner.recovery import reconcile_stranded_runner_jobs
 from app.modules.runner.routes import router as runner_router
 from app.modules.secrets.routes import router as secrets_router
 from app.modules.workspaces.routes import router as workspaces_router
@@ -29,6 +30,7 @@ async def lifespan(app: FastAPI):
     app.state.local_ai_runtime_lifecycle = lifecycle
     try:
         await lifecycle.startup()
+        reconcile_stranded_runner_jobs()
         yield
     finally:
         await lifecycle.shutdown()
