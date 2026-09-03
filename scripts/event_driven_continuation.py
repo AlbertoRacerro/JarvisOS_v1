@@ -170,8 +170,10 @@ class GitHubClient:
                 return rows
         raise WakeError("comment pagination did not terminate")
 
-    def review_job_ran(self, run_id: int) -> bool:
-        payload = self.request(f"/actions/runs/{run_id}/jobs?filter=latest&per_page={MAX_JOBS}")
+    def review_job_ran(self, run_id: int, run_attempt: int) -> bool:
+        payload = self.request(
+            f"/actions/runs/{run_id}/attempts/{run_attempt}/jobs?per_page={MAX_JOBS}"
+        )
         if not isinstance(payload, dict):
             raise WakeError("review jobs response is invalid")
         total, jobs = payload.get("total_count"), payload.get("jobs")
@@ -185,7 +187,8 @@ class GitHubClient:
         job = review_jobs[0]
         conclusion = job.get("conclusion")
         return bool(
-            job.get("status") == "completed"
+            job.get("run_attempt") == run_attempt
+            and job.get("status") == "completed"
             and isinstance(conclusion, str)
             and conclusion
             and conclusion != "skipped"
@@ -216,7 +219,9 @@ def run(payload: object, *, repository: str, client: GitHubClient) -> str:
     request = parse_event(payload)
     if request is None:
         return "noop:not_actionable"
-    if request.workflow == "Manual Expert Review" and not client.review_job_ran(request.run_id):
+    if request.workflow == "Manual Expert Review" and not client.review_job_ran(
+        request.run_id, request.run_attempt
+    ):
         return "noop:review_not_run"
     pull = client.pull(request.pr_number)
     if not current_pr_matches(request, pull, repository):

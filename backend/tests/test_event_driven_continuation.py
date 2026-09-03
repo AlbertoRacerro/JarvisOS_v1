@@ -51,7 +51,7 @@ class FakeClient:
         self.pulls = list(pulls)
         self._comments = list(comments or [])
         self.review_ran = review_ran
-        self.review_checks = 0
+        self.review_checks: list[tuple[int, int]] = []
         self.dispatches: list[tuple[int, str]] = []
         self.recorded: list[tuple[int, str]] = []
 
@@ -65,9 +65,8 @@ class FakeClient:
         assert number == 77
         return self._comments
 
-    def review_job_ran(self, run_id: int) -> bool:
-        assert run_id == 123
-        self.review_checks += 1
+    def review_job_ran(self, run_id: int, run_attempt: int) -> bool:
+        self.review_checks.append((run_id, run_attempt))
         return self.review_ran
 
     def dispatch(self, pr_number: int, head_sha: str) -> None:
@@ -97,7 +96,7 @@ def test_manual_review_without_executed_review_job_noops() -> None:
     client = FakeClient([pull()], review_ran=False)
     result = mod.run(event(workflow="Manual Expert Review"), repository=REPOSITORY, client=client)
     assert result == "noop:review_not_run"
-    assert client.review_checks == 1
+    assert client.review_checks == [(123, 2)]
     assert client.dispatches == []
     assert client.recorded == []
 
@@ -105,7 +104,7 @@ def test_manual_review_without_executed_review_job_noops() -> None:
 def test_ci_does_not_require_manual_review_job_probe() -> None:
     client = FakeClient([pull(), pull()], review_ran=False)
     assert mod.run(event(), repository=REPOSITORY, client=client) == "dispatched"
-    assert client.review_checks == 0
+    assert client.review_checks == []
     assert client.dispatches == [(77, HEAD)]
 
 
