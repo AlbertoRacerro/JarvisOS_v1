@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 import threading
 import time
 from pathlib import Path
@@ -29,7 +30,11 @@ def _reconcile_after_owned_invocation_exit(
             time.sleep(poll_seconds)
             continue
         if state == "gone":
-            reconcile_stranded_runner_jobs()
+            try:
+                reconcile_stranded_runner_jobs()
+            except sqlite3.OperationalError:
+                time.sleep(poll_seconds)
+                continue
         return
 
 

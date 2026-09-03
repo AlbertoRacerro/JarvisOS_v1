@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -31,6 +32,31 @@ def test_owned_invocation_failure_reconciles_after_child_ownership_is_gone(monke
     )
 
     assert reconciliations == ["reconciled"]
+
+
+def test_owned_invocation_failure_retries_transient_reconcile_lock(monkeypatch) -> None:
+    attempts: list[str] = []
+
+    monkeypatch.setattr(
+        resilient_service,
+        "execution_ownership_state",
+        lambda _path: "gone",
+    )
+    monkeypatch.setattr(resilient_service.time, "sleep", lambda _seconds: None)
+
+    def _reconcile() -> int:
+        attempts.append("attempt")
+        if len(attempts) == 1:
+            raise sqlite3.OperationalError("database is locked")
+        return 1
+
+    monkeypatch.setattr(resilient_service, "reconcile_stranded_runner_jobs", _reconcile)
+
+    resilient_service._reconcile_after_owned_invocation_exit(
+        Path("/owned-run"), poll_seconds=0.0
+    )
+
+    assert attempts == ["attempt", "attempt"]
 
 
 def test_owned_invocation_failure_with_unknown_ownership_fails_closed(monkeypatch) -> None:
