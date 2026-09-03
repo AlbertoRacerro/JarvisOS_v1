@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
+import sys
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -13,6 +16,15 @@ from app.modules.runner.local_python import (
     execution_ownership_state,
     prepare_execution_owner,
 )
+
+
+def _wait_until(predicate, *, timeout_seconds: float = 10.0) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        time.sleep(0.05)
+    raise AssertionError("Timed out waiting for runner ownership test condition.")
 
 
 def test_execution_owner_is_live_through_child_completion(tmp_path: Path) -> None:
@@ -45,6 +57,68 @@ def test_execution_owner_is_live_through_child_completion(tmp_path: Path) -> Non
         assert execution_ownership_state(working_dir) == "live"
 
     assert execution_ownership_state(working_dir) == "gone"
+
+
+def test_execution_owner_survives_abrupt_parent_until_model_child_exits(tmp_path: Path) -> None:
+    working_dir = tmp_path / "run"
+    working_dir.mkdir()
+    input_file = working_dir / "input.json"
+    input_file.write_text("{}", encoding="utf-8")
+    output_dir = working_dir / "output"
+    output_dir.mkdir()
+    started = output_dir / "child-started"
+    completed = output_dir / "child-completed"
+    script = working_dir / "slow.py"
+    script.write_text(
+        "from pathlib import Path\n"
+        "import sys\n"
+        "import time\n"
+        "out = Path(sys.argv[2])\n"
+        "(out / 'child-started').write_text('started', encoding='utf-8')\n"
+        "time.sleep(4)\n"
+        "(out / 'child-completed').write_text('completed', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+
+    parent_code = """
+from pathlib import Path
+import sys
+from app.modules.runner.local_python import execute_python_script, prepare_execution_owner
+working_dir = Path(sys.argv[1])
+with prepare_execution_owner(working_dir):
+    execute_python_script(
+        script_path=working_dir / 'slow.py',
+        input_file=working_dir / 'input.json',
+        output_dir=working_dir / 'output',
+        working_dir=working_dir,
+        timeout_seconds=10,
+        max_stdout_bytes=4096,
+        max_stderr_bytes=4096,
+    )
+"""
+    backend_root = Path(__file__).resolve().parents[1]
+    parent = subprocess.Popen(
+        [sys.executable, "-c", parent_code, str(working_dir)],
+        cwd=str(backend_root),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        _wait_until(started.exists)
+        assert execution_ownership_state(working_dir) == "live"
+
+        parent.kill()
+        parent.wait(timeout=5)
+
+        # The execution-owner child, not the killed server-side caller, owns
+        # the lock while the real model child remains active.
+        assert execution_ownership_state(working_dir) == "live"
+        _wait_until(completed.exists)
+        _wait_until(lambda: execution_ownership_state(working_dir) == "gone")
+    finally:
+        if parent.poll() is None:
+            parent.kill()
+            parent.wait(timeout=5)
 
 
 def test_recovery_requires_coherent_running_pair_and_proven_owner_loss(monkeypatch) -> None:
