@@ -93,10 +93,19 @@ jobs:
                       payload = json.loads(line[len(marker_prefix):].strip())
                   except json.JSONDecodeError:
                       continue
+                  if not isinstance(payload, dict):
+                      continue
+                  marker_run_id = payload.get("run_id")
+                  if isinstance(marker_run_id, bool):
+                      continue
+                  try:
+                      marker_run_id = int(marker_run_id)
+                  except (TypeError, ValueError):
+                      continue
                   if (
                       payload.get("schema") == "jarvis.claude-review.v3.2"
                       and payload.get("head_sha") == sha
-                      and int(payload.get("run_id", -1)) in successful_run_ids
+                      and marker_run_id in successful_run_ids
                       and payload.get("verdict") in {"APPROVE", "REQUEST_CHANGES"}
                       and isinstance(payload.get("findings"), list)
                   ):
