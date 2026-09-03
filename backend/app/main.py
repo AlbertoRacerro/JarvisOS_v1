@@ -97,29 +97,35 @@ def create_app() -> FastAPI:
         description="Local-first architecture spine for JarvisOS.",
         lifespan=lifespan,
     )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_headers=["*"],
+    )
+
     app.include_router(health_router)
     app.include_router(system_router)
     app.include_router(dev_message_route_router)
     app.include_router(ai_router)
     app.include_router(sensitivity_router)
     app.include_router(bluecad_router)
-    app.include_router(flowsheet_router)
-    app.include_router(memory_router)
-    app.include_router(modeling_router)
-    app.include_router(project_knowledge_router)
-    app.include_router(runner_router)
     app.include_router(secrets_router)
     app.include_router(workspaces_router)
+    app.include_router(modeling_router)
+    app.include_router(memory_router)
+    app.include_router(runner_router)
+    app.include_router(flowsheet_router)
+    app.include_router(project_knowledge_router)
 
     frontend_dist = _frontend_dist_path()
-    if frontend_dist.exists():
+    if frontend_dist.is_dir():
+        reserved_roots = derive_reserved_roots(app.routes)
         app.mount(
             "/",
-            SpaStaticFiles(
-                directory=str(frontend_dist),
-                html=True,
-                reserved_roots=derive_reserved_roots(app),
-            ),
+            SpaStaticFiles(directory=frontend_dist, reserved_roots=reserved_roots),
             name="frontend",
         )
 
