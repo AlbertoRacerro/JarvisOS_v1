@@ -197,8 +197,12 @@ jobs:
             Modify the checked-out working tree only. Do not commit, push, comment,
             merge, enable auto-merge, change labels, dispatch another agent, or
             invoke another provider. Never modify .github/**, AGENTS.md, CODEOWNERS,
-            scripts/daily_development_continuation.py, or
-            backend/tests/test_daily_development_continuation.py. STATUS.md may
+            scripts/daily_development_continuation.py,
+            scripts/event_bound_continuation_plan.py,
+            scripts/event_driven_continuation.py,
+            backend/tests/test_daily_development_continuation.py,
+            backend/tests/test_event_bound_continuation_plan.py, or
+            backend/tests/test_event_driven_continuation.py. STATUS.md may
             change only in the row for spec ${{ needs.plan.outputs.spec_id }}.
             Never touch secrets, credentials, token files, environment files, or
             unrelated specifications. Stop with no changes when the remaining work
