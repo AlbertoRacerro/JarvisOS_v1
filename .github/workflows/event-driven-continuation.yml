@@ -4,7 +4,6 @@ on:
   workflow_run:
     workflows:
       - CI
-      - Manual Expert Review
     types: [completed]
 
 # Duplicate deliveries for one terminal upstream run/attempt serialize here. The
