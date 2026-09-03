@@ -13,6 +13,8 @@ For repository work, use the current exact GitHub state rather than cached hando
 5. Run the deterministic gates in `AGENTS.md`, `python scripts/check_spec_status.py --self-test`, and all selected-slice gates. A green workflow or self-authored test is evidence, never semantic acceptance by itself.
 6. Merge only under the exact-head/CAS rules in `AGENTS.md` and the execution protocol; GitHub auto-merge is prohibited. Verify fresh `master` and perform only the required mechanical registry reconciliation.
 
+Current post-134 scheduling preference is **Coding → Knowledge → Development**, not unrestricted multi-lane implementation. This is scheduling priority, not a dependency override: use fresh `STATUS.md` dependencies and lane composition, and if the preferred lane head is still `planned`/not `ready`, carry that same item through its normal definition/spec/readiness lifecycle rather than jumping lanes.
+
 Detailed authority precedence, implementation/recovery mechanics, merge rules, interruption classes, and model roles live in `AGENTS.md` and `../AGENT_EXECUTION_AND_AUTOMATION_PROTOCOL.md`. Post-112 lane/mutex mechanics live only in `../POST_112_PARALLEL_DELIVERY_PROFILE.md`. Do not copy those policies or live queue order here.
 
 ## V3.2 material-review boundary
