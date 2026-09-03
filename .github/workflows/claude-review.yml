@@ -87,9 +87,9 @@ jobs:
                       f"conclusion={latest.get('conclusion')} sha={sha}"
                   )
 
-          # A marker is trusted for deduplication only when its run_id belongs
-          # to a previously successful invocation of this workflow on this exact
-          # SHA. A copied/pre-seeded PR comment therefore cannot suppress review.
+          # A marker is trusted for deduplication only when it was published by
+          # GitHub Actions and its run_id belongs to a previously successful
+          # invocation of this workflow on this exact SHA.
           runs = api_pages(
               "/actions/workflows/claude-review.yml/runs?event=pull_request",
               item_key="workflow_runs",
@@ -103,6 +103,8 @@ jobs:
           }
           comments = api_pages(f"/issues/{pr}/comments")
           for comment in comments:
+              if (comment.get("user") or {}).get("login") != "github-actions[bot]":
+                  continue
               for line in (comment.get("body") or "").splitlines():
                   if not line.startswith(marker_prefix):
                       continue
