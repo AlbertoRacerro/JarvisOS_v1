@@ -4,6 +4,15 @@ on:
   schedule:
     - cron: "17 4 * * *"
   workflow_dispatch:
+    inputs:
+      e1_pr_number:
+        description: "Optional E1 event-bound PR number"
+        required: false
+        type: string
+      e1_head_sha:
+        description: "Optional E1 event-bound exact PR head"
+        required: false
+        type: string
 
 concurrency:
   group: jarvis-development-continuation
@@ -47,7 +56,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           JARVISOS_CONTINUATION_MODE: ${{ vars.JARVISOS_CONTINUATION_MODE || 'OFF' }}
           CLAUDE_TOKEN_PRESENT: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
-        run: python scripts/daily_development_continuation.py plan
+          E1_PR_NUMBER: ${{ inputs.e1_pr_number || '' }}
+          E1_HEAD_SHA: ${{ inputs.e1_head_sha || '' }}
+        shell: bash
+        run: |
+          if [ -n "$E1_PR_NUMBER" ] || [ -n "$E1_HEAD_SHA" ]; then
+            python scripts/event_bound_continuation_plan.py
+          else
+            python scripts/daily_development_continuation.py plan
+          fi
 
       - name: Record OFF or SHADOW result
         if: ${{ steps.plan.outputs.action == 'noop' || steps.plan.outputs.action == 'shadow' }}

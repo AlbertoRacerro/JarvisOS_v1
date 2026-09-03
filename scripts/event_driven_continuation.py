@@ -4,8 +4,8 @@
 This module owns no roadmap, implementation, review, or merge authority. It only
 validates a terminal workflow_run against the current PR exact head, collapses an
 already-recorded identical wake, and dispatches the existing spec-079
-continuation workflow. The downstream continuation control plane reconstructs
-its own authority from fresh GitHub state.
+continuation workflow with the validated PR/head binding. The downstream
+continuation control plane reconstructs its own authority from fresh GitHub state.
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ MARKER_RE = re.compile(
     r"head=(?P<head>[0-9a-f]{40}) -->"
 )
 MAX_COMMENTS = 1000
+MAX_JOBS = 100
 
 
 class WakeError(ValueError):
@@ -169,11 +170,38 @@ class GitHubClient:
                 return rows
         raise WakeError("comment pagination did not terminate")
 
-    def dispatch(self) -> None:
+    def review_job_ran(self, run_id: int) -> bool:
+        payload = self.request(f"/actions/runs/{run_id}/jobs?filter=latest&per_page={MAX_JOBS}")
+        if not isinstance(payload, dict):
+            raise WakeError("review jobs response is invalid")
+        total, jobs = payload.get("total_count"), payload.get("jobs")
+        if not isinstance(total, int) or not isinstance(jobs, list) or total != len(jobs):
+            raise WakeError("review jobs response is incomplete")
+        if total > MAX_JOBS or any(not isinstance(job, dict) for job in jobs):
+            raise WakeError("review jobs response exceeds the E1 bound")
+        review_jobs = [job for job in jobs if job.get("name") == "review"]
+        if len(review_jobs) != 1:
+            return False
+        job = review_jobs[0]
+        conclusion = job.get("conclusion")
+        return bool(
+            job.get("status") == "completed"
+            and isinstance(conclusion, str)
+            and conclusion
+            and conclusion != "skipped"
+        )
+
+    def dispatch(self, pr_number: int, head_sha: str) -> None:
         self.request(
             f"/actions/workflows/{TARGET_WORKFLOW}/dispatches",
             method="POST",
-            payload={"ref": "master"},
+            payload={
+                "ref": "master",
+                "inputs": {
+                    "e1_pr_number": str(pr_number),
+                    "e1_head_sha": head_sha,
+                },
+            },
         )
 
     def record(self, number: int, body: str) -> None:
@@ -188,6 +216,8 @@ def run(payload: object, *, repository: str, client: GitHubClient) -> str:
     request = parse_event(payload)
     if request is None:
         return "noop:not_actionable"
+    if request.workflow == "Manual Expert Review" and not client.review_job_ran(request.run_id):
+        return "noop:review_not_run"
     pull = client.pull(request.pr_number)
     if not current_pr_matches(request, pull, repository):
         return "noop:stale_head"
@@ -201,9 +231,9 @@ def run(payload: object, *, repository: str, client: GitHubClient) -> str:
         return "noop:stale_head"
     # At-least-once dispatch comes before the durable marker. If marker creation
     # later fails, a rerun may dispatch again; the downstream 079 control plane
-    # is independently exact-head/checkpoint-idempotent, so duplicate wake-ups do
-    # not create duplicate authority or bypass CAS.
-    client.dispatch()
+    # is independently checkpoint-idempotent and now receives the exact PR/head
+    # binding, so duplicate wake-ups do not create duplicate authority or bypass CAS.
+    client.dispatch(request.pr_number, request.head_sha)
     client.record(request.pr_number, marker_text(request))
     return "dispatched"
 
