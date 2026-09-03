@@ -5,10 +5,10 @@ import os
 import subprocess
 import sys
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
 
 
 OWNER_LOCK_NAME = ".jarvis-runner-owner.lock"
@@ -161,6 +161,11 @@ def ownership_lock_path(working_dir: Path) -> Path:
     return resolved.parent / f".{resolved.name}{OWNER_LOCK_NAME}"
 
 
+def child_ownership_lock_path(working_dir: Path) -> Path:
+    owner_lock_path = ownership_lock_path(working_dir)
+    return owner_lock_path.with_name(f"{owner_lock_path.name}.child")
+
+
 @contextmanager
 def prepare_execution_owner(working_dir: Path) -> Iterator[None]:
     key = working_dir.resolve()
@@ -179,10 +184,7 @@ def prepare_execution_owner(working_dir: Path) -> Iterator[None]:
         session.release()
 
 
-def execution_ownership_state(working_dir: Path) -> str:
-    """Return live, gone, or unknown from runner-specific OS lock evidence."""
-
-    lock_path = ownership_lock_path(working_dir)
+def _lock_state(lock_path: Path) -> str:
     if not lock_path.exists():
         return "unknown"
     handle = lock_path.open("r+b")
@@ -210,6 +212,21 @@ def execution_ownership_state(working_dir: Path) -> str:
         return "gone"
     finally:
         handle.close()
+
+
+def execution_ownership_state(working_dir: Path) -> str:
+    """Return live, gone, or unknown from runner-specific OS lock evidence."""
+
+    owner_state = _lock_state(ownership_lock_path(working_dir))
+    if owner_state == "live":
+        return "live"
+
+    child_state = _lock_state(child_ownership_lock_path(working_dir))
+    if child_state == "live":
+        return "live"
+    if owner_state == "gone" or child_state == "gone":
+        return "gone"
+    return "unknown"
 
 
 def execute_python_script(
