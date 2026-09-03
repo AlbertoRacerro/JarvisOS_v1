@@ -1,5 +1,6 @@
 import asyncio
 import sqlite3
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
@@ -61,7 +62,7 @@ async def _reconcile_after_live_owners_exit(
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     lifecycle = create_local_ai_runtime_lifecycle_from_env()
     app.state.local_ai_runtime_lifecycle = lifecycle
     recovery_task: asyncio.Task[None] | None = None
