@@ -2,8 +2,8 @@
 """Fail-closed event bridge for V3.2 E1 continuation wake-ups.
 
 This module owns no roadmap, implementation, review, or merge authority. It only
-validates a terminal workflow_run against the current PR exact head, collapses an
-already-recorded identical wake, and dispatches the existing spec-079
+validates a terminal CI workflow_run against the current PR exact head, collapses
+an already-recorded identical wake, and dispatches the existing spec-079
 continuation workflow with the validated PR/head binding. The downstream
 continuation control plane reconstructs its own authority from fresh GitHub state.
 """
@@ -21,7 +21,7 @@ from pathlib import Path
 
 API_ROOT = "https://api.github.com"
 TARGET_WORKFLOW = "daily-development-continuation.yml"
-SUPPORTED_WORKFLOWS = {"CI", "Manual Expert Review"}
+SUPPORTED_WORKFLOWS = {"CI"}
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 MARKER_RE = re.compile(
     r"<!-- jarvis-e1-wake:v1 workflow=(?P<workflow>[A-Za-z0-9 _.-]+) "
@@ -29,7 +29,6 @@ MARKER_RE = re.compile(
     r"head=(?P<head>[0-9a-f]{40}) -->"
 )
 MAX_COMMENTS = 1000
-MAX_JOBS = 100
 
 
 class WakeError(ValueError):
@@ -170,30 +169,6 @@ class GitHubClient:
                 return rows
         raise WakeError("comment pagination did not terminate")
 
-    def review_job_ran(self, run_id: int, run_attempt: int) -> bool:
-        payload = self.request(
-            f"/actions/runs/{run_id}/attempts/{run_attempt}/jobs?per_page={MAX_JOBS}"
-        )
-        if not isinstance(payload, dict):
-            raise WakeError("review jobs response is invalid")
-        total, jobs = payload.get("total_count"), payload.get("jobs")
-        if not isinstance(total, int) or not isinstance(jobs, list) or total != len(jobs):
-            raise WakeError("review jobs response is incomplete")
-        if total > MAX_JOBS or any(not isinstance(job, dict) for job in jobs):
-            raise WakeError("review jobs response exceeds the E1 bound")
-        review_jobs = [job for job in jobs if job.get("name") == "review"]
-        if len(review_jobs) != 1:
-            return False
-        job = review_jobs[0]
-        conclusion = job.get("conclusion")
-        return bool(
-            job.get("run_attempt") == run_attempt
-            and job.get("status") == "completed"
-            and isinstance(conclusion, str)
-            and conclusion
-            and conclusion != "skipped"
-        )
-
     def dispatch(self, pr_number: int, head_sha: str) -> None:
         self.request(
             f"/actions/workflows/{TARGET_WORKFLOW}/dispatches",
@@ -219,10 +194,6 @@ def run(payload: object, *, repository: str, client: GitHubClient) -> str:
     request = parse_event(payload)
     if request is None:
         return "noop:not_actionable"
-    if request.workflow == "Manual Expert Review" and not client.review_job_ran(
-        request.run_id, request.run_attempt
-    ):
-        return "noop:review_not_run"
     pull = client.pull(request.pr_number)
     if not current_pr_matches(request, pull, repository):
         return "noop:stale_head"
