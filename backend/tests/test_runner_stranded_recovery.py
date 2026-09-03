@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import subprocess
 import sys
 import time
@@ -10,7 +11,7 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from app import main
-from app.modules.runner import recovery
+from app.modules.runner import local_python, recovery
 from app.modules.runner.local_python import (
     execute_python_script,
     execution_ownership_state,
@@ -110,8 +111,6 @@ with prepare_execution_owner(working_dir):
         parent.kill()
         parent.wait(timeout=5)
 
-        # The execution-owner child, not the killed server-side caller, owns
-        # the lock while the real model child remains active.
         assert execution_ownership_state(working_dir) == "live"
         _wait_until(completed.exists)
         _wait_until(lambda: execution_ownership_state(working_dir) == "gone")
@@ -119,6 +118,72 @@ with prepare_execution_owner(working_dir):
         if parent.poll() is None:
             parent.kill()
             parent.wait(timeout=5)
+
+
+def test_execution_child_keeps_liveness_after_owner_helper_death(tmp_path: Path) -> None:
+    working_dir = tmp_path / "run"
+    working_dir.mkdir()
+    input_file = working_dir / "input.json"
+    input_file.write_text("{}", encoding="utf-8")
+    output_dir = working_dir / "output"
+    output_dir.mkdir()
+    started = output_dir / "child-started"
+    completed = output_dir / "child-completed"
+    script = working_dir / "slow.py"
+    script.write_text(
+        "from pathlib import Path\n"
+        "import sys\n"
+        "import time\n"
+        "out = Path(sys.argv[2])\n"
+        "(out / 'child-started').write_text('started', encoding='utf-8')\n"
+        "time.sleep(4)\n"
+        "(out / 'child-completed').write_text('completed', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+
+    owner_script = Path(local_python.__file__).with_name("_execution_owner.py")
+    lock_path = local_python.ownership_lock_path(working_dir)
+    owner = subprocess.Popen(
+        [sys.executable, str(owner_script), str(lock_path)],
+        cwd=str(working_dir.parent),
+        env={"PYTHONHASHSEED": "0", "PYTHONIOENCODING": "utf-8"},
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+    try:
+        assert owner.stdout is not None
+        assert json.loads(owner.stdout.readline()) == {"state": "ready"}
+        assert owner.stdin is not None
+        request = {
+            "action": "run",
+            "command": [sys.executable, str(script), str(input_file), str(output_dir)],
+            "env": {"PYTHONHASHSEED": "0", "PYTHONIOENCODING": "utf-8"},
+            "cwd": str(working_dir),
+            "timeout_seconds": 10,
+            "max_stdout_bytes": 4096,
+            "max_stderr_bytes": 4096,
+        }
+        owner.stdin.write(json.dumps(request, sort_keys=True, separators=(",", ":")) + "\n")
+        owner.stdin.flush()
+
+        _wait_until(started.exists)
+        assert execution_ownership_state(working_dir) == "live"
+
+        owner.kill()
+        owner.wait(timeout=5)
+
+        # The actual execution process retains its own OS lock, so helper
+        # failure cannot turn live work into a false abandoned signal.
+        assert execution_ownership_state(working_dir) == "live"
+        _wait_until(completed.exists)
+        _wait_until(lambda: execution_ownership_state(working_dir) == "gone")
+    finally:
+        if owner.poll() is None:
+            owner.kill()
+            owner.wait(timeout=5)
 
 
 def test_recovery_requires_coherent_running_pair_and_proven_owner_loss(monkeypatch) -> None:
