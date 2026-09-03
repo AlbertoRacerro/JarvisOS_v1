@@ -9,6 +9,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import BinaryIO
 
 OWNER_LOCK_NAME = ".jarvis-runner-owner.lock"
 
@@ -33,39 +34,46 @@ class _ExecutionOwnerSession:
     def __init__(self, working_dir: Path) -> None:
         self.working_dir = working_dir.resolve()
         self.lock_path = ownership_lock_path(self.working_dir)
+        self.caller_lock_path = caller_ownership_lock_path(self.working_dir)
+        self.caller_lock_handle: BinaryIO | None = None
         self.process: subprocess.Popen[str] | None = None
         self.executed = False
 
     def start(self) -> None:
         owner_dir = self.working_dir.parent
         owner_dir.mkdir(parents=True, exist_ok=True)
+        self.caller_lock_handle = _acquire_process_lock(self.caller_lock_path)
         owner_script = Path(__file__).with_name("_execution_owner.py")
         owner_env = {"PYTHONHASHSEED": "0", "PYTHONIOENCODING": "utf-8"}
-        process = subprocess.Popen(
-            [sys.executable, str(owner_script), str(self.lock_path)],
-            cwd=str(owner_dir),
-            env=owner_env,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-        )
-        self.process = process
-        assert process.stdout is not None
-        line = process.stdout.readline()
-        if not line:
-            stderr = process.stderr.read() if process.stderr is not None else ""
-            process.wait(timeout=5)
-            raise RuntimeError(f"Runner execution owner failed to start: {stderr.strip()}")
-        payload = json.loads(line)
-        if payload.get("state") == "busy":
-            process.wait(timeout=5)
-            raise ExecutionOwnerBusy("Runner execution ownership is already held.")
-        if payload.get("state") != "ready":
-            process.terminate()
-            process.wait(timeout=5)
-            raise RuntimeError("Runner execution owner returned an invalid readiness state.")
+        try:
+            process = subprocess.Popen(
+                [sys.executable, str(owner_script), str(self.lock_path)],
+                cwd=str(owner_dir),
+                env=owner_env,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+            )
+            self.process = process
+            assert process.stdout is not None
+            line = process.stdout.readline()
+            if not line:
+                stderr = process.stderr.read() if process.stderr is not None else ""
+                process.wait(timeout=5)
+                raise RuntimeError(f"Runner execution owner failed to start: {stderr.strip()}")
+            payload = json.loads(line)
+            if payload.get("state") == "busy":
+                process.wait(timeout=5)
+                raise ExecutionOwnerBusy("Runner execution ownership is already held.")
+            if payload.get("state") != "ready":
+                process.terminate()
+                process.wait(timeout=5)
+                raise RuntimeError("Runner execution owner returned an invalid readiness state.")
+        except Exception:
+            self._release_caller_lock()
+            raise
 
     def execute(
         self,
@@ -128,27 +136,35 @@ class _ExecutionOwnerSession:
 
     def release(self) -> None:
         process = self.process
-        if process is None:
-            return
         try:
-            if process.poll() is None and process.stdin is not None:
+            if process is not None:
                 try:
-                    process.stdin.write("release\n")
-                    process.stdin.flush()
-                    process.stdin.close()
-                except (BrokenPipeError, OSError):
-                    pass
-            if process.poll() is None:
-                process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=5)
+                    if process.poll() is None and process.stdin is not None:
+                        try:
+                            process.stdin.write("release\n")
+                            process.stdin.flush()
+                            process.stdin.close()
+                        except (BrokenPipeError, OSError):
+                            pass
+                    if process.poll() is None:
+                        process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait(timeout=5)
         finally:
             self.process = None
+            self._release_caller_lock()
+
+    def _release_caller_lock(self) -> None:
+        handle = self.caller_lock_handle
+        if handle is None:
+            return
+        self.caller_lock_handle = None
+        _release_process_lock(handle)
 
 
 _sessions: dict[Path, _ExecutionOwnerSession] = {}
@@ -160,9 +176,62 @@ def ownership_lock_path(working_dir: Path) -> Path:
     return resolved.parent / f".{resolved.name}{OWNER_LOCK_NAME}"
 
 
+def caller_ownership_lock_path(working_dir: Path) -> Path:
+    owner_lock_path = ownership_lock_path(working_dir)
+    return owner_lock_path.with_name(f"{owner_lock_path.name}.caller")
+
+
 def child_ownership_lock_path(working_dir: Path) -> Path:
     owner_lock_path = ownership_lock_path(working_dir)
     return owner_lock_path.with_name(f"{owner_lock_path.name}.child")
+
+
+def _acquire_process_lock(lock_path: Path) -> BinaryIO:
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    handle = lock_path.open("a+b")
+    try:
+        handle.seek(0, os.SEEK_END)
+        if handle.tell() == 0:
+            handle.write(b"0")
+            handle.flush()
+        handle.seek(0)
+        if os.name == "nt":
+            import msvcrt
+
+            locking = msvcrt.locking  # type: ignore[attr-defined]
+            lk_nblck = msvcrt.LK_NBLCK  # type: ignore[attr-defined]
+            try:
+                locking(handle.fileno(), lk_nblck, 1)
+            except OSError as exc:
+                raise ExecutionOwnerBusy("Runner execution ownership is already held.") from exc
+            return handle
+        import fcntl
+
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise ExecutionOwnerBusy("Runner execution ownership is already held.") from exc
+        return handle
+    except Exception:
+        handle.close()
+        raise
+
+
+def _release_process_lock(handle: BinaryIO) -> None:
+    try:
+        handle.seek(0)
+        if os.name == "nt":
+            import msvcrt
+
+            locking = msvcrt.locking  # type: ignore[attr-defined]
+            lk_unlck = msvcrt.LK_UNLCK  # type: ignore[attr-defined]
+            locking(handle.fileno(), lk_unlck, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    finally:
+        handle.close()
 
 
 @contextmanager
@@ -220,10 +289,14 @@ def execution_ownership_state(working_dir: Path) -> str:
     if owner_state == "live":
         return "live"
 
+    caller_state = _lock_state(caller_ownership_lock_path(working_dir))
+    if caller_state == "live":
+        return "live"
+
     child_state = _lock_state(child_ownership_lock_path(working_dir))
     if child_state == "live":
         return "live"
-    if owner_state == "gone" or child_state == "gone":
+    if owner_state == "gone" or caller_state == "gone" or child_state == "gone":
         return "gone"
     return "unknown"
 
