@@ -1,4 +1,5 @@
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -18,21 +19,57 @@ from app.modules.local_ai.runtime.lifecycle import create_local_ai_runtime_lifec
 from app.modules.memory.routes import router as memory_router
 from app.modules.modeling.routes import router as modeling_router
 from app.modules.project_knowledge.routes import router as project_knowledge_router
-from app.modules.runner.recovery import reconcile_stranded_runner_jobs
+from app.modules.runner.local_python import execution_ownership_state
+from app.modules.runner.recovery import (
+    live_stranded_runner_working_dirs,
+    reconcile_stranded_runner_jobs,
+)
 from app.modules.runner.routes import router as runner_router
 from app.modules.secrets.routes import router as secrets_router
 from app.modules.workspaces.routes import router as workspaces_router
+
+RUNNER_RECOVERY_RECHECK_SECONDS = 0.25
+
+
+async def _reconcile_after_live_owners_exit(
+    working_dirs: tuple[Path, ...], *, poll_seconds: float = RUNNER_RECOVERY_RECHECK_SECONDS
+) -> None:
+    """Recheck only startup-observed live owners until each becomes non-live."""
+
+    pending = set(working_dirs)
+    while pending:
+        await asyncio.sleep(poll_seconds)
+        owner_lost = False
+        for working_dir in tuple(pending):
+            state = execution_ownership_state(working_dir)
+            if state == "live":
+                continue
+            pending.remove(working_dir)
+            if state == "gone":
+                owner_lost = True
+        if owner_lost:
+            reconcile_stranded_runner_jobs()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     lifecycle = create_local_ai_runtime_lifecycle_from_env()
     app.state.local_ai_runtime_lifecycle = lifecycle
+    recovery_task: asyncio.Task[None] | None = None
     try:
         await lifecycle.startup()
+        live_working_dirs = live_stranded_runner_working_dirs()
         reconcile_stranded_runner_jobs()
+        if live_working_dirs:
+            recovery_task = asyncio.create_task(
+                _reconcile_after_live_owners_exit(live_working_dirs)
+            )
         yield
     finally:
+        if recovery_task is not None:
+            recovery_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await recovery_task
         await lifecycle.shutdown()
 
 

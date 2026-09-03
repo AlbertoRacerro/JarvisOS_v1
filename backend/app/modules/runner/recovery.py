@@ -12,12 +12,10 @@ RECOVERY_ERROR_CODE = "runner_execution_interrupted"
 RECOVERY_ERROR_MESSAGE = "Runner execution ownership ended before durable completion."
 
 
-def reconcile_stranded_runner_jobs() -> int:
-    """Fail only coherently-running jobs whose runner-specific owner is provably gone."""
-
+def _load_running_rows() -> list[sqlite3.Row]:
     with open_sqlite_connection() as connection:
         try:
-            rows = connection.execute(
+            return connection.execute(
                 """
                 SELECT
                     rj.id AS runner_job_id,
@@ -39,11 +37,28 @@ def reconcile_stranded_runner_jobs() -> int:
             ):
                 # Startup may legitimately run before the application database has
                 # been bootstrapped. Recovery must never bootstrap/migrate implicitly.
-                return 0
+                return []
             raise
 
+
+def live_stranded_runner_working_dirs() -> tuple[Path, ...]:
+    """Return coherent startup candidates whose runner-specific owner is still live."""
+
+    live_paths: list[Path] = []
+    for row in _load_running_rows():
+        if row["runner_status"] != "running" or row["simulation_status"] != "running":
+            continue
+        working_dir = Path(str(row["working_dir"]))
+        if execution_ownership_state(working_dir) == "live":
+            live_paths.append(working_dir)
+    return tuple(live_paths)
+
+
+def reconcile_stranded_runner_jobs() -> int:
+    """Fail only coherently-running jobs whose runner-specific owner is provably gone."""
+
     recovered = 0
-    for row in rows:
+    for row in _load_running_rows():
         if row["runner_status"] != "running" or row["simulation_status"] != "running":
             # Inconsistent pairs have no safe automatic recovery interpretation.
             continue
