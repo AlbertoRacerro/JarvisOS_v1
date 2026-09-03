@@ -14,6 +14,15 @@ mod = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = mod
 SPEC.loader.exec_module(mod)
 
+DAILY_SCRIPT = ROOT / "scripts" / "daily_development_continuation.py"
+DAILY_SPEC = importlib.util.spec_from_file_location(
+    "daily_development_continuation_for_e1", DAILY_SCRIPT
+)
+assert DAILY_SPEC and DAILY_SPEC.loader
+daily = importlib.util.module_from_spec(DAILY_SPEC)
+sys.modules[DAILY_SPEC.name] = daily
+DAILY_SPEC.loader.exec_module(daily)
+
 REPOSITORY = "AlbertoRacerro/JarvisOS_v1"
 HEAD = "a" * 40
 
@@ -148,3 +157,17 @@ def test_dispatch_preserves_validated_pr_and_exact_head() -> None:
 def test_malformed_exact_head_fails_closed() -> None:
     with pytest.raises(mod.WakeError, match="exact head"):
         mod.parse_event(event(head="not-a-sha"))
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "scripts/event_bound_continuation_plan.py",
+        "scripts/event_driven_continuation.py",
+        "backend/tests/test_event_bound_continuation_plan.py",
+        "backend/tests/test_event_driven_continuation.py",
+    ],
+)
+def test_e1_control_paths_are_immutable_under_spec_079(path: str) -> None:
+    with pytest.raises(daily.ContinuationError, match="protected path"):
+        daily.validate_changed_paths([path], "079")
