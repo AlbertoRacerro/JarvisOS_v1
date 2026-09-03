@@ -1,0 +1,39 @@
+name: Event Driven Continuation Wake
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+      - Manual Expert Review
+    types: [completed]
+
+# Duplicate deliveries for one terminal upstream run/attempt serialize here. The
+# Python gate also records an exact-head marker on the PR for durable dedupe.
+concurrency:
+  group: e1-wake-${{ github.event.workflow_run.id }}-${{ github.event.workflow_run.run_attempt }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+  actions: write
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate exact event and wake existing continuation control plane
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/event_driven_continuation.py
