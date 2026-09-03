@@ -17,8 +17,8 @@ def _lock_file(path: Path):
     if os.name == "nt":
         import msvcrt
 
-        locking = getattr(msvcrt, "locking")
-        lk_nblck = getattr(msvcrt, "LK_NBLCK")
+        locking = msvcrt.locking  # type: ignore[attr-defined]
+        lk_nblck = msvcrt.LK_NBLCK  # type: ignore[attr-defined]
         try:
             locking(handle.fileno(), lk_nblck, 1)
         except OSError:
@@ -41,8 +41,8 @@ def _unlock_file(handle) -> None:
         if os.name == "nt":
             import msvcrt
 
-            locking = getattr(msvcrt, "locking")
-            lk_unlck = getattr(msvcrt, "LK_UNLCK")
+            locking = msvcrt.locking  # type: ignore[attr-defined]
+            lk_unlck = msvcrt.LK_UNLCK  # type: ignore[attr-defined]
             locking(handle.fileno(), lk_unlck, 1)
         else:
             import fcntl
