@@ -1,4 +1,5 @@
 import asyncio
+import sqlite3
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
@@ -39,16 +40,24 @@ async def _reconcile_after_live_owners_exit(
     pending = set(working_dirs)
     while pending:
         await asyncio.sleep(poll_seconds)
-        owner_lost = False
+        gone_paths: set[Path] = set()
         for working_dir in tuple(pending):
             state = execution_ownership_state(working_dir)
             if state == "live":
                 continue
-            pending.remove(working_dir)
             if state == "gone":
-                owner_lost = True
-        if owner_lost:
+                gone_paths.add(working_dir)
+            else:
+                pending.remove(working_dir)
+        if not gone_paths:
+            continue
+        try:
             reconcile_stranded_runner_jobs()
+        except sqlite3.OperationalError:
+            # A transient SQLite lock must not discard the only follow-up for a
+            # now-abandoned owner. Keep the gone paths pending and retry.
+            continue
+        pending.difference_update(gone_paths)
 
 
 @asynccontextmanager
@@ -87,35 +96,29 @@ def create_app() -> FastAPI:
         description="Local-first architecture spine for JarvisOS.",
         lifespan=lifespan,
     )
-
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE"],
-        allow_headers=["*"],
-    )
-
     app.include_router(health_router)
     app.include_router(system_router)
     app.include_router(dev_message_route_router)
     app.include_router(ai_router)
     app.include_router(sensitivity_router)
     app.include_router(bluecad_router)
+    app.include_router(flowsheet_router)
+    app.include_router(memory_router)
+    app.include_router(modeling_router)
+    app.include_router(project_knowledge_router)
+    app.include_router(runner_router)
     app.include_router(secrets_router)
     app.include_router(workspaces_router)
-    app.include_router(modeling_router)
-    app.include_router(memory_router)
-    app.include_router(runner_router)
-    app.include_router(flowsheet_router)
-    app.include_router(project_knowledge_router)
 
     frontend_dist = _frontend_dist_path()
-    if frontend_dist.is_dir():
-        reserved_roots = derive_reserved_roots(app.routes)
+    if frontend_dist.exists():
         app.mount(
             "/",
-            SpaStaticFiles(directory=frontend_dist, reserved_roots=reserved_roots),
+            SpaStaticFiles(
+                directory=str(frontend_dist),
+                html=True,
+                reserved_roots=derive_reserved_roots(app),
+            ),
             name="frontend",
         )
 
