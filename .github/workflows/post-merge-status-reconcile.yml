@@ -1,0 +1,158 @@
+name: Post-merge STATUS reconciliation
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  reconcile:
+    if: ${{ github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'master' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      REPO: ${{ github.repository }}
+      MERGED_PR: ${{ github.event.pull_request.number }}
+      MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+      PR_BODY: ${{ github.event.pull_request.body }}
+      RECONCILER_TOKEN: ${{ secrets.JARVIS_RECONCILER_TOKEN }}
+    steps:
+      - name: Create exact mechanical reconciliation PR
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import re
+          import sys
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+
+          repo = os.environ["REPO"]
+          merged_pr = int(os.environ["MERGED_PR"])
+          merge_sha = os.environ["MERGE_SHA"]
+          body = os.environ.get("PR_BODY") or ""
+          token = os.environ.get("RECONCILER_TOKEN") or ""
+
+          gate = re.search(r"(?m)^\*\*Spec gate:\*\*\s*implementation\s+([0-9]{3}[a-z]?)\s*$", body)
+          if not gate:
+              print("not a spec implementation PR; no reconciliation required")
+              raise SystemExit(0)
+          spec = gate.group(1)
+
+          if not token:
+              raise SystemExit(
+                  "JARVIS_RECONCILER_TOKEN is not configured. Install a narrow GitHub App/token "
+                  "with repository Contents:read/write and Pull requests:read/write only, then store "
+                  "its token as this Actions secret. No Administration or ruleset bypass is required."
+              )
+
+          def request(method, path, payload=None):
+              data = None if payload is None else json.dumps(payload).encode()
+              req = urllib.request.Request(
+                  f"https://api.github.com/repos/{repo}{path}",
+                  data=data,
+                  method=method,
+                  headers={
+                      "Accept": "application/vnd.github+json",
+                      "Authorization": f"Bearer {token}",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as response:
+                      return json.load(response) if response.length != 0 else None
+              except urllib.error.HTTPError as exc:
+                  detail = exc.read().decode(errors="replace")
+                  raise SystemExit(f"GitHub API {method} {path} failed: {exc.code} {detail}") from exc
+
+          # Re-read master after the merge. The event merge SHA must be an ancestor/current point;
+          # reconciliation always branches from the fresh default-branch head and never pushes master.
+          master = request("GET", "/git/ref/heads/master")["object"]["sha"]
+          commit = request("GET", f"/commits/{urllib.parse.quote(merge_sha, safe='')}")
+          if commit.get("sha") != merge_sha:
+              raise SystemExit("merge SHA could not be verified")
+
+          status_path = "docs/specs/STATUS.md"
+          status_obj = request("GET", f"/contents/{status_path}?ref={master}")
+          status = base64.b64decode(status_obj["content"]).decode("utf-8")
+
+          row_re = re.compile(
+              rf"(?m)^\|\s*{re.escape(spec)}\s*\|\s*in_review\s*\|\s*\[#({merged_pr})\]\(https://github\.com/{re.escape(repo)}/pull/{merged_pr}\)\s*\|"
+          )
+          matches = list(row_re.finditer(status))
+          if len(matches) != 1:
+              # Idempotent no-op if another lawful reconciliation already landed.
+              merged_re = re.compile(
+                  rf"(?m)^\|\s*{re.escape(spec)}\s*\|\s*merged\s*\|\s*\[#{merged_pr}\]\(https://github\.com/{re.escape(repo)}/pull/{merged_pr}\)\s*\|"
+              )
+              if len(list(merged_re.finditer(status))) == 1:
+                  print("STATUS already reconciled; no-op")
+                  raise SystemExit(0)
+              raise SystemExit(
+                  f"refusing semantic inference: expected exactly one STATUS row for spec {spec}, "
+                  f"state in_review, implementation PR #{merged_pr}; found {len(matches)}"
+              )
+
+          updated = status[: matches[0].start()] + matches[0].group(0).replace("| in_review |", "| merged |", 1) + status[matches[0].end():]
+          if updated == status:
+              raise SystemExit("mechanical STATUS transition produced no change")
+
+          branch = f"reconcile/spec-{spec}-pr-{merged_pr}-{merge_sha[:8]}"
+          encoded_branch = urllib.parse.quote(branch, safe="")
+          try:
+              request("GET", f"/git/ref/heads/{encoded_branch}")
+              print(f"reconciliation branch already exists: {branch}")
+          except SystemExit:
+              # request() intentionally converts 404 to SystemExit; create only this deterministic branch.
+              request("POST", "/git/refs", {"ref": f"refs/heads/{branch}", "sha": master})
+
+          # Re-fetch branch STATUS so a retry never overwrites a moved branch/file.
+          branch_status = request("GET", f"/contents/{status_path}?ref={urllib.parse.quote(branch, safe='')}")
+          branch_text = base64.b64decode(branch_status["content"]).decode("utf-8")
+          if branch_text == updated:
+              print("reconciliation content already materialized")
+          elif branch_text != status:
+              raise SystemExit("reconciliation branch moved or contains unexpected STATUS changes")
+          else:
+              request(
+                  "PUT",
+                  f"/contents/{status_path}",
+                  {
+                      "message": f"Reconcile spec {spec} after PR #{merged_pr}",
+                      "content": base64.b64encode(updated.encode()).decode(),
+                      "sha": branch_status["sha"],
+                      "branch": branch,
+                  },
+              )
+
+          pulls = request("GET", f"/pulls?state=open&head={urllib.parse.quote(repo.split('/')[0] + ':' + branch, safe=':')}")
+          if pulls:
+              print(f"reconciliation PR already open: #{pulls[0]['number']}")
+              raise SystemExit(0)
+
+          pr = request(
+              "POST",
+              "/pulls",
+              {
+                  "title": f"Reconcile spec {spec} after #{merged_pr}",
+                  "head": branch,
+                  "base": "master",
+                  "body": (
+                      "**Spec gate:** N/A\n\n"
+                      f"Mechanical post-merge reconciliation for implementation PR #{merged_pr}.\n\n"
+                      f"- exact merged PR: #{merged_pr}\n"
+                      f"- observed master before branch creation: `{master}`\n"
+                      "- only canonical transition: `in_review` -> `merged` in `docs/specs/STATUS.md`\n"
+                      "- no semantic roadmap inference, direct master push, merge authority, or ruleset bypass\n"
+                  ),
+              },
+          )
+          print(f"opened reconciliation PR #{pr['number']}")
+          PY
