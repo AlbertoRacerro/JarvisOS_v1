@@ -59,6 +59,20 @@ jobs:
               with urllib.request.urlopen(request, timeout=30) as response:
                   return json.load(response)
 
+          def api_pages(path, *, item_key=None):
+              items = []
+              page = 1
+              separator = "&" if "?" in path else "?"
+              while True:
+                  payload = api(f"{path}{separator}per_page=100&page={page}")
+                  page_items = payload.get(item_key, []) if item_key else payload
+                  if not isinstance(page_items, list):
+                      raise SystemExit(f"unexpected paginated API shape: {path}")
+                  items.extend(page_items)
+                  if len(page_items) < 100:
+                      return items
+                  page += 1
+
           # The review is allowed to see semantic content only after the two
           # deterministic exact-head guardrails required by V3.2 are green.
           checks = api(f"/commits/{sha}/check-runs?per_page=100")["check_runs"]
@@ -76,7 +90,10 @@ jobs:
           # A marker is trusted for deduplication only when its run_id belongs
           # to a previously successful invocation of this workflow on this exact
           # SHA. A copied/pre-seeded PR comment therefore cannot suppress review.
-          runs = api("/actions/workflows/claude-review.yml/runs?event=pull_request&per_page=100").get("workflow_runs", [])
+          runs = api_pages(
+              "/actions/workflows/claude-review.yml/runs?event=pull_request",
+              item_key="workflow_runs",
+          )
           successful_run_ids = {
               int(run["id"])
               for run in runs
@@ -84,7 +101,7 @@ jobs:
               and run.get("conclusion") == "success"
               and int(run["id"]) != current_run_id
           }
-          comments = api(f"/issues/{pr}/comments?per_page=100")
+          comments = api_pages(f"/issues/{pr}/comments")
           for comment in comments:
               for line in (comment.get("body") or "").splitlines():
                   if not line.startswith(marker_prefix):
