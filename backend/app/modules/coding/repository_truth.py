@@ -24,6 +24,7 @@ MAX_SEARCH_CANDIDATES = 100
 MAX_SEARCH_MATCHES = 100
 MAX_COMPARE_FILES = 100
 MAX_COLLECTION_ITEMS = 100
+MAX_COMMENT_BODY_CHARS = 8_192
 MAX_PAGES = 10
 CONNECT_TIMEOUT_SECONDS = 5.0
 READ_TIMEOUT_SECONDS = 10.0
@@ -981,11 +982,20 @@ class RepositoryTruthService:
                 )
             user = comment.get("user")
             author = user.get("login") if isinstance(user, dict) else None
+            raw_body = comment.get("body")
+            if raw_body is not None and not isinstance(raw_body, str):
+                raise RepositoryTruthError(
+                    "malformed_provider_response", "provider text field had the wrong type"
+                )
+            body_truncated = isinstance(raw_body, str) and len(raw_body) > MAX_COMMENT_BODY_CHARS
+            if body_truncated:
+                partial = True
             projected.append(
                 {
                     "id": comment.get("id") if isinstance(comment.get("id"), int) else None,
                     "author": _project_text(author, max_chars=128),
-                    "body": _project_text(comment.get("body"), max_chars=8_192),
+                    "body": _project_text(raw_body, max_chars=MAX_COMMENT_BODY_CHARS),
+                    "body_truncated": body_truncated,
                 }
             )
         return self._result(
