@@ -93,3 +93,25 @@ def test_final_exact_ref_refresh_failure_is_closed_missing_evidence() -> None:
         "state": "refused",
         "reason": "missing_evidence",
     }
+
+
+def test_current_secret_owner_path_is_rejected_before_provider_dispatch() -> None:
+    calls = 0
+
+    def forbidden_ai(**_: object) -> AiTaskOutcome:
+        nonlocal calls
+        calls += 1
+        raise AssertionError("provider must not run for credential-bearing targets")
+
+    service = CodingActionsService(
+        TruthThatFailsFinalRefresh(),  # type: ignore[arg-type]
+        ai_runner=forbidden_ai,
+    )
+    request = _request().model_copy(
+        update={"target_paths": ["backend/app/modules/secrets/storage.py"]}
+    )
+    assert service.suggest_modification(request) == {
+        "state": "refused",
+        "reason": "unsupported_target",
+    }
+    assert calls == 0
