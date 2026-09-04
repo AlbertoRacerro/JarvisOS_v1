@@ -39,7 +39,14 @@ _FORBIDDEN_DIFF_MARKERS = (
     "Subproject commit ",
 )
 _PROTECTED_EXACT = {"AGENTS.md", "CODEOWNERS"}
-_PROTECTED_PREFIXES = (".git/", ".github/", "data/", "secrets/", ".env")
+_PROTECTED_PREFIXES = (
+    ".git/",
+    ".github/",
+    "data/",
+    "secrets/",
+    "backend/app/modules/secrets/",
+    ".env",
+)
 _BINARY_SUFFIXES = {
     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".pdf", ".zip", ".gz",
     ".7z", ".exe", ".dll", ".so", ".dylib", ".woff", ".woff2", ".ttf", ".bin",
